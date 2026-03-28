@@ -33,3 +33,5 @@ The agent may **read** `.env.coolify.local` from the workspace when present inst
 ## Deploy reminder
 
 After Dockerfile or entrypoint changes, use **Redeploy** (rebuild), not only **Restart**. See the Next.js + Coolify hardening rule for health checks and proxy behavior.
+
+If the repo defines **`npm run deploy:coolify`**, it POSTs **`COOLIFY_DEPLOY_WEBHOOK_URL`** (set in the shell or `.env` when running the command). Use the Coolify UI if the webhook is not configured.

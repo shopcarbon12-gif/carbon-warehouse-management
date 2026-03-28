@@ -56,7 +56,11 @@ Do **not** use the default seed password in production.
 
 ---
 
-**Also in Coolify:** set **`SESSION_SECRET`**, **`WMS_DEVICE_KEY`**, **`SHOPIFY_WEBHOOK_SECRET`** as needed (see [`.env.example`](.env.example)).
+**Also in Coolify:** set **`SESSION_SECRET`**, **`WMS_DEVICE_KEY`**, **`SHOPIFY_WEBHOOK_SECRET`**, **`NODE_ENV=production`**, **`WMS_APP_PUBLIC_BASE_URL`**, **`SHOPIFY_REDIRECT_URI`**, **`SHOPIFY_SCOPES`**, and any R2 / Lightspeed / email vars you use (see [`.env.example`](.env.example)).  
+**`SHOPIFY_REDIRECT_URI`** must match a **Redirect URL** in your Shopify Partner app exactly (including `https` and path).
+
+After you **push** to the branch Coolify builds from, either wait for automatic deploy (if enabled) or trigger one from the Coolify UI.  
+Optional: set **`COOLIFY_DEPLOY_WEBHOOK_URL`** to the app’s deploy webhook and run **`npm run deploy:coolify`** from a shell that has that variable.
 
 Optional: set **`WMS_BASE_PATH`** at **build time** if the app is served under a subpath (see `next.config.ts`).
 

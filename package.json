@@ -10,7 +10,8 @@
     "db:migrate": "npx tsx scripts/migrate.ts",
     "db:seed": "npx tsx scripts/seed.ts",
     "worker": "npx tsx scripts/worker.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "deploy:coolify": "node scripts/trigger-coolify-deploy.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
