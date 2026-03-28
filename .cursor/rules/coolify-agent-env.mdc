@@ -1,0 +1,33 @@
+---
+description: Use MCP browser for Coolify; read gitignored .env snapshot for secrets Coolify masks
+alwaysApply: true
+---
+
+# Coolify access and env for the agent
+
+The user wants the agent to use **Coolify whenever needed**, including copying environment values for deploy, DB, or debugging.
+
+## MCP browser (cursor-ide-browser)
+
+When production or Coolify context is required:
+
+1. Open the Coolify UI (user’s instance URL), navigate to **Projects → environment → application** (or **Database**).
+2. Use **Environment variables**, **Logs**, **Deploy / Redeploy**, and connection details as appropriate.
+3. Follow the browser MCP workflow: navigate → lock → snapshot → interact → unlock.
+
+## When the UI masks secrets
+
+Coolify often shows **`••••`** for values. The agent **cannot** infer them from the page.
+
+**Preferred:** The user maintains a **gitignored** file at the repo root, for example **`.env.coolify.local`**, with the vars the agent needs (e.g. `DATABASE_URL`, `SESSION_SECRET`). The repo already ignores **`.env*`** except **`.env.example`** — so this file is **not** committed.
+
+The agent may **read** `.env.coolify.local` from the workspace when present instead of asking for pastes in chat.
+
+## Security
+
+- **Never** commit production secrets or weaken `.gitignore` to allow them.
+- If credentials appeared in chat or a shared transcript, **rotate** them in Coolify and update the local snapshot.
+
+## Deploy reminder
+
+After Dockerfile or entrypoint changes, use **Redeploy** (rebuild), not only **Restart**. See the Next.js + Coolify hardening rule for health checks and proxy behavior.
