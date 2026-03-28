@@ -14,6 +14,8 @@ const basePath = resolveBasePath();
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  /** Native driver — do not bundle; avoids dev "Can't resolve 'pg'" / bad traces */
+  serverExternalPackages: ["pg"],
   ...(basePath ? { basePath } : {}),
   async redirects() {
     if (!basePath) return [];
