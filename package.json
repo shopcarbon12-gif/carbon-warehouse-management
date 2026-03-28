@@ -3,24 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3040",
-    "build": "next build",
-    "start": "next start",
+    "build": "next build --webpack && node -e \"const fs=require('fs');const path=require('path');const root=process.cwd();const src=path.join(root,'.next','static');const out=path.join(root,'.next','standalone','.next','static');if(fs.existsSync(src)){fs.mkdirSync(out,{recursive:true});fs.cpSync(src,out,{recursive:true,force:true});}const pub=path.join(root,'public');const pubOut=path.join(root,'.next','standalone','public');if(fs.existsSync(pub)){fs.mkdirSync(pubOut,{recursive:true});fs.cpSync(pub,pubOut,{recursive:true,force:true});}console.log('[build] standalone static/public synced');\"",
+    "dev": "next dev --webpack -p 3040",
+    "start": "node .next/standalone/server.js -H 0.0.0.0",
     "lint": "eslint"
   },
   "dependencies": {
-    "next": "16.2.1",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "dotenv": "^17.3.1",
+    "next": "16.1.6",
+    "pg": "^8.20.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "recharts": "^3.7.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.18.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.2.1",
+    "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
