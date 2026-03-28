@@ -22,7 +22,10 @@ export function SyncPanel() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const t = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => clearTimeout(t);
   }, [load]);
 
   async function enqueue(t: "lightspeed_pull" | "shopify_push" | "reconcile") {

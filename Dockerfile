@@ -3,15 +3,23 @@
 FROM node:20-alpine AS base
 
 FROM base AS deps
+# musl + prebuilt native deps (e.g. sharp) — avoids intermittent install/build failures on Alpine.
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json package-lock.json ./
+# Some hosts set NODE_ENV/NPM_CONFIG_PRODUCTION during build; devDependencies are required for `next build`.
+ENV NPM_CONFIG_PRODUCTION=false
 RUN npm ci
 
 FROM base AS builder
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NPM_CONFIG_PRODUCTION=false
+# Coolify small builders often OOM during Next compile; raise heap before lowering VPS RAM.
+ENV NODE_OPTIONS=--max-old-space-size=6144
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM base AS runner
@@ -20,7 +28,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs \
-  && apk add --no-cache postgresql-client su-exec
+  && apk add --no-cache libc6-compat postgresql-client su-exec
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
