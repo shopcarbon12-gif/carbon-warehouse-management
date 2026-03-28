@@ -1,21 +1,15 @@
 import { NextResponse } from "next/server";
-import { getPool } from "@/lib/db";
-import { WAREHOUSE } from "@/lib/zones";
 
+/**
+ * Liveness only (Docker / Coolify / Traefik). Must stay fast and must not depend on Postgres —
+ * otherwise a slow or restarting DB marks the whole app unhealthy.
+ */
 export async function GET() {
-  const pool = getPool();
-  let db = "disconnected";
-  if (pool) {
-    try {
-      await pool.query("SELECT 1");
-      db = "ok";
-    } catch {
-      db = "error";
-    }
-  }
-  return NextResponse.json({
-    ok: true,
-    warehouse: WAREHOUSE,
-    database: db,
-  });
+  return NextResponse.json(
+    { ok: true },
+    {
+      status: 200,
+      headers: { "Cache-Control": "no-store" },
+    },
+  );
 }
