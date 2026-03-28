@@ -23,6 +23,8 @@ Coolify often shows **`••••`** for values. The agent **cannot** infer th
 
 The agent may **read** `.env.coolify.local` from the workspace when present instead of asking for pastes in chat.
 
+**Separation:** `DATABASE_URL` and any Coolify-only URLs must come from the **CARBON WMS** Coolify project (this repo’s app and its linked Postgres). Do not copy database connection strings or deploy URLs from other apps (e.g. another Next project on the same server). Shared vendor APIs (Shopify, Lightspeed, R2, email) may be the same keys as other internal apps when intentional.
+
 ## Security
 
 - **Never** commit production secrets or weaken `.gitignore` to allow them.
