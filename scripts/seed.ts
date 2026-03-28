@@ -132,6 +132,18 @@ async function main() {
 }
 
 main().catch((e) => {
+  const refused =
+    (e as { code?: string })?.code === "ECONNREFUSED" ||
+    (e as { errors?: { code?: string }[] })?.errors?.some(
+      (x) => x?.code === "ECONNREFUSED",
+    );
+  if (refused) {
+    console.error(
+      "Postgres refused the connection (nothing listening on DATABASE_URL).\n" +
+        "  Start local DB: docker compose up -d\n" +
+        "  Then: npm run db:migrate && npm run db:seed",
+    );
+  }
   console.error(e);
   process.exit(1);
 });

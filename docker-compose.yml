@@ -1,0 +1,22 @@
+# Local Postgres only — matches DATABASE_URL in .env.example (postgres/postgres, db carbon_wms).
+# Start: docker compose up -d
+# Then: npm run db:migrate && npm run db:seed
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: carbon_wms
+    ports:
+      - "5432:5432"
+    volumes:
+      - carbon_wms_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d carbon_wms"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  carbon_wms_pgdata:

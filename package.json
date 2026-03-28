@@ -7,8 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "db:up": "docker compose up -d",
     "db:migrate": "npx tsx scripts/migrate.ts",
     "db:seed": "npx tsx scripts/seed.ts",
+    "db:setup": "npm run db:migrate && npm run db:seed",
     "worker": "npx tsx scripts/worker.ts",
     "test:e2e": "playwright test",
     "deploy:coolify": "node scripts/trigger-coolify-deploy.mjs"

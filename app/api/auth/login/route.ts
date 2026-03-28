@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { signSession } from "@/lib/auth";
-import { withDb } from "@/lib/db";
+import { getSql, isDatabaseUnreachable } from "@/lib/db";
 import { findUserWithTenantLocation } from "@/lib/queries/session-user";
 
 export async function POST(req: Request) {
@@ -16,10 +16,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email and password required" }, { status: 400 });
   }
 
-  const payload = await withDb(
-    (sql) => findUserWithTenantLocation(sql, email, password),
-    null,
-  );
+  const sql = getSql();
+  if (!sql) {
+    return NextResponse.json(
+      { error: "DATABASE_URL is not set. Copy .env.example to .env." },
+      { status: 503 },
+    );
+  }
+
+  let payload;
+  try {
+    payload = await findUserWithTenantLocation(sql, email, password);
+  } catch (e) {
+    console.error("[login]", e);
+    if (isDatabaseUnreachable(e)) {
+      return NextResponse.json(
+        {
+          error:
+            "Cannot reach PostgreSQL. Start it (e.g. docker compose up -d), then npm run db:migrate && npm run db:seed.",
+        },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({ error: "Login temporarily unavailable" }, { status: 503 });
+  }
+
   if (!payload) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }

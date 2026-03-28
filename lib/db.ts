@@ -35,3 +35,11 @@ export async function withDb<T>(
     return fallback;
   }
 }
+
+/** True when the driver failed to connect (local dev: Postgres not running). */
+export function isDatabaseUnreachable(e: unknown): boolean {
+  const err = e as { code?: string; errors?: { code?: string }[] };
+  const codes = ["ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND"];
+  if (err?.code && codes.includes(err.code)) return true;
+  return err?.errors?.some((x) => x?.code && codes.includes(x.code)) ?? false;
+}
