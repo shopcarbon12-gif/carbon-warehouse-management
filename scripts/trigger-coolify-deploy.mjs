@@ -1,5 +1,6 @@
 /**
- * POSTs Coolify’s deploy API URL (Application → Configuration → Webhooks).
+ * Calls Coolify’s deploy webhook (Application → Configuration → Webhooks): POST first,
+ * then GET if POST returns 401/405 (some instances expect GET).
  * Loads COOLIFY_DEPLOY_WEBHOOK_URL and COOLIFY_API_TOKEN from process env, or from
  * repo-root `.env.coolify.local` if unset (same keys only).
  * @see README.md
@@ -53,12 +54,35 @@ if (token) {
   headers.Authorization = `Bearer ${token}`;
 }
 
-const res = await fetch(url, { method: "POST", headers });
-const body = await res.text();
+/** Coolify accepts POST; some setups / docs use GET on the same webhook URL. */
+async function trigger(method) {
+  return fetch(url, { method, headers });
+}
+
+let res = await trigger("POST");
+let body = await res.text();
+if (!res.ok && (res.status === 401 || res.status === 405)) {
+  const r2 = await trigger("GET");
+  const b2 = await r2.text();
+  if (r2.ok) {
+    res = r2;
+    body = b2;
+  } else if (res.status === 405) {
+    res = r2;
+    body = b2;
+  }
+}
+
 console.log(res.status, res.statusText, body ? body.slice(0, 300) : "");
-if (res.status === 401 && !token) {
-  console.error(
-    "401: add COOLIFY_API_TOKEN to .env.coolify.local (Coolify → Security → API Tokens, deploy scope).",
-  );
+if (res.status === 401) {
+  if (!token) {
+    console.error(
+      "401: add COOLIFY_API_TOKEN to .env.coolify.local (Coolify → Security → API Tokens, deploy or root).",
+    );
+  } else {
+    console.error(
+      "401: token rejected — create a new API token in Coolify, paste into COOLIFY_API_TOKEN (shown once).",
+    );
+  }
 }
 process.exit(res.ok ? 0 : 1);
