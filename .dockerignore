@@ -3,3 +3,13 @@ node_modules
 .git
 *.md
 .env*.local
+# Local/machine env must not be baked in; Coolify injects DATABASE_URL at runtime.
+# Without this, next build inside Docker can hit localhost Postgres and fail or hang.
+.env
+.env.*
+!.env.example
+e2e
+playwright-report
+test-results
+.cursor
+coverage
