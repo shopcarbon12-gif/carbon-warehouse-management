@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 /**
- * Optional subpath deploy: set WMS_BASE_PATH=/prefix at build time.
- * Coolify: serve at / on dedicated host (recommended).
+ * Optional subpath deploy only: set WMS_BASE_PATH=/some/prefix at build time.
+ * Default: app served at / (dedicated Coolify host or localhost).
  */
 function resolveBasePath(): string | undefined {
   const v = process.env.WMS_BASE_PATH;
@@ -13,9 +13,8 @@ function resolveBasePath(): string | undefined {
 const basePath = resolveBasePath();
 
 const nextConfig: NextConfig = {
+  reactCompiler: true,
   output: "standalone",
-  /** Native driver — do not bundle; avoids dev "Can't resolve 'pg'" / bad traces */
-  serverExternalPackages: ["pg"],
   ...(basePath ? { basePath } : {}),
   async redirects() {
     if (!basePath) return [];

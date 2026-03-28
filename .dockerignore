@@ -1,10 +1,5 @@
 node_modules
 .next
 .git
-.env
-.env.*
-!.env.example
-npm-debug.log*
-README.md
 *.md
-!package.json
+.env*.local

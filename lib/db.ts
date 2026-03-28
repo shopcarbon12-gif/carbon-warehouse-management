@@ -1,30 +1,37 @@
-import { Pool } from "pg";
+import postgres from "postgres";
 
-let pool: Pool | null = null;
+export type Sql = ReturnType<typeof postgres>;
 
-export function getPool(): Pool | null {
+let client: Sql | null = null;
+
+function getConnectionString(): string | undefined {
   const url = process.env.DATABASE_URL?.trim();
-  if (!url) return null;
-  if (!pool) {
-    pool = new Pool({
-      connectionString: url,
-      max: 10,
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 10_000,
-    });
-  }
-  return pool;
+  return url && url.length > 0 ? url : undefined;
 }
 
+/** Singleton Postgres client (Coolify / long-running Node). */
+export function getSql(): Sql | null {
+  const url = getConnectionString();
+  if (!url) return null;
+  if (!client) {
+    client = postgres(url, { max: 10, prepare: false });
+  }
+  return client;
+}
+
+/**
+ * Run a query with SQL, or return fallback when DATABASE_URL is unset or query fails.
+ */
 export async function withDb<T>(
-  fn: (p: Pool) => Promise<T>,
-  fallback: T
+  fn: (sql: Sql) => Promise<T>,
+  fallback: T,
 ): Promise<T> {
-  const p = getPool();
-  if (!p) return fallback;
+  const sql = getSql();
+  if (!sql) return fallback;
   try {
-    return await fn(p);
-  } catch {
+    return await fn(sql);
+  } catch (e) {
+    console.error("[db]", e);
     return fallback;
   }
 }

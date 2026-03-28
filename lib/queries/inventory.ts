@@ -1,36 +1,65 @@
-import type { Pool } from "pg";
+import type { Sql } from "@/lib/db";
 
 export type InventoryRow = {
+  id: string;
+  asset_id: string;
   sku: string;
-  title: string | null;
-  zone_code: string;
-  quantity: number;
-  shopify_variant_id: string | null;
-  lightspeed_item_id: string | null;
+  name: string;
+  zone: string;
+  qty: number;
 };
 
-export async function listInventory(pool: Pool): Promise<InventoryRow[]> {
-  const { rows } = await pool.query<InventoryRow>(
-    `SELECT s.sku, s.title, il.zone_code, il.quantity,
-            s.shopify_variant_id, s.lightspeed_item_id
-     FROM inventory_levels il
-     JOIN skus s ON s.id = il.sku_id
-     ORDER BY il.zone_code, s.sku`
-  );
-  return rows;
-}
+export async function listInventory(
+  sql: Sql,
+  locationId: string,
+  opts: { q?: string; zone?: string; limit: number; offset: number },
+): Promise<InventoryRow[]> {
+  const q = opts.q?.trim().toLowerCase();
+  const zone = opts.zone?.trim();
 
-export async function inventoryTotalsByZone(
-  pool: Pool
-): Promise<{ zone_code: string; total: number }[]> {
-  const { rows } = await pool.query<{ zone_code: string; total: string }>(
-    `SELECT il.zone_code, SUM(il.quantity)::bigint AS total
-     FROM inventory_levels il
-     GROUP BY il.zone_code
-     ORDER BY il.zone_code`
-  );
-  return rows.map((r) => ({
-    zone_code: r.zone_code,
-    total: Number(r.total),
-  }));
+  if (q && zone) {
+    return sql<InventoryRow[]>`
+      SELECT id, asset_id, sku, name, zone, qty
+      FROM inventory_items
+      WHERE location_id = ${locationId}::uuid
+        AND zone = ${zone}
+        AND (
+          lower(asset_id) LIKE ${"%" + q + "%"}
+          OR lower(sku) LIKE ${"%" + q + "%"}
+          OR lower(name) LIKE ${"%" + q + "%"}
+        )
+      ORDER BY sku ASC
+      LIMIT ${opts.limit} OFFSET ${opts.offset}
+    `;
+  }
+  if (q) {
+    return sql<InventoryRow[]>`
+      SELECT id, asset_id, sku, name, zone, qty
+      FROM inventory_items
+      WHERE location_id = ${locationId}::uuid
+        AND (
+          lower(asset_id) LIKE ${"%" + q + "%"}
+          OR lower(sku) LIKE ${"%" + q + "%"}
+          OR lower(name) LIKE ${"%" + q + "%"}
+        )
+      ORDER BY sku ASC
+      LIMIT ${opts.limit} OFFSET ${opts.offset}
+    `;
+  }
+  if (zone) {
+    return sql<InventoryRow[]>`
+      SELECT id, asset_id, sku, name, zone, qty
+      FROM inventory_items
+      WHERE location_id = ${locationId}::uuid AND zone = ${zone}
+      ORDER BY sku ASC
+      LIMIT ${opts.limit} OFFSET ${opts.offset}
+    `;
+  }
+  return sql<InventoryRow[]>`
+    SELECT id, asset_id, sku, name, zone, qty
+    FROM inventory_items
+    WHERE location_id = ${locationId}::uuid
+    ORDER BY sku ASC
+    LIMIT ${opts.limit} OFFSET ${opts.offset}
+  `;
 }

@@ -1,0 +1,58 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+
+type Loc = { id: string; code: string; name: string };
+
+export function LocationSwitcher({
+  activeLocationId,
+}: {
+  activeLocationId: string;
+}) {
+  const router = useRouter();
+  const [locations, setLocations] = useState<Loc[]>([]);
+
+  const load = useCallback(async () => {
+    const res = await fetch("/api/locations");
+    if (!res.ok) return;
+    const data = (await res.json()) as Loc[];
+    setLocations(data);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const locationId = e.target.value;
+    if (!locationId || locationId === activeLocationId) return;
+    const res = await fetch("/api/session/location", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locationId }),
+    });
+    if (res.ok) router.refresh();
+  }
+
+  return (
+    <label className="mx-4 mb-2 mt-2 block">
+      <span className="sr-only">Active location</span>
+      <select
+        className="w-full rounded-md border border-[var(--surface-border)] bg-[var(--background)] px-3 py-2 font-mono text-sm text-[var(--foreground)]"
+        value={activeLocationId}
+        onChange={onChange}
+      >
+        {locations.length === 0 ? (
+          <option value={activeLocationId}>Loading…</option>
+        ) : (
+          locations.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.code} · {l.name}
+            </option>
+          ))
+        )}
+      </select>
+    </label>
+  );
+}

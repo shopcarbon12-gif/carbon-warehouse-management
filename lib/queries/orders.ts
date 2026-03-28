@@ -1,7 +1,7 @@
-import type { Pool } from "pg";
+import type { Sql } from "@/lib/db";
 
 export type OrderRow = {
-  id: number;
+  id: string;
   external_ref: string | null;
   source: string;
   status: string;
@@ -9,25 +9,33 @@ export type OrderRow = {
   created_at: string;
 };
 
-export async function listOrders(pool: Pool): Promise<OrderRow[]> {
-  const { rows } = await pool.query<OrderRow>(
-    `SELECT id, external_ref, source, status, line_count,
-            to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at
-     FROM orders
-     ORDER BY created_at DESC
-     LIMIT 200`
-  );
-  return rows;
-}
+type OrderRowDb = {
+  id: string;
+  external_ref: string | null;
+  source: string;
+  status: string;
+  line_count: number;
+  created_at: Date;
+};
 
-export async function ordersCountByStatus(
-  pool: Pool
-): Promise<{ status: string; count: number }[]> {
-  const { rows } = await pool.query<{ status: string; count: string }>(
-    `SELECT status, COUNT(*)::bigint AS count
-     FROM orders
-     GROUP BY status
-     ORDER BY count DESC`
-  );
-  return rows.map((r) => ({ status: r.status, count: Number(r.count) }));
+/** Lists recent orders for the first tenant (dev / single-tenant). */
+export async function listOrders(sql: Sql): Promise<OrderRow[]> {
+  const rows = await sql<OrderRowDb[]>`
+    SELECT o.id, o.external_ref, o.source, o.status, o.line_count, o.created_at
+    FROM orders o
+    INNER JOIN locations l ON o.location_id = l.id
+    INNER JOIN tenants t ON l.tenant_id = t.id
+    WHERE t.id = (SELECT id FROM tenants ORDER BY created_at ASC LIMIT 1)
+    ORDER BY o.created_at DESC
+    LIMIT 100
+  `;
+
+  return rows.map((r) => ({
+    id: r.id,
+    external_ref: r.external_ref,
+    source: r.source,
+    status: r.status,
+    line_count: r.line_count,
+    created_at: r.created_at.toISOString(),
+  }));
 }

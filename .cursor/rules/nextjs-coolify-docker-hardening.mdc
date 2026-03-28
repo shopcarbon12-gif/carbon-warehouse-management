@@ -1,0 +1,94 @@
+---
+description: Next.js standalone + Docker + Coolify hardening (permissions, health, proxy, deploys)
+alwaysApply: true
+---
+
+# Next.js standalone, Docker, and Coolify (hardening)
+
+Follow these whenever you touch **`Dockerfile`**, **production runtime**, **health routes**, or **Coolify-related** troubleshooting.
+
+## 1. Writable `.next/cache` (mandatory for non-root user)
+
+**Symptom:** `EACCES: permission denied, mkdir '/app/.next/cache'` in container logs; app unstable, **Exited (137)** possible (OOM/kill combined with restarts).
+
+**Cause:** `COPY` from the build stage leaves files **owned by root**; the app runs as **`USER nextjs`** (uid 1001). Next.js image optimization writes under **`.next/cache`** at runtime.
+
+**Fix (runner stage):** After **all** `COPY` lines into `/app`, **before** `USER nextjs`:
+
+```dockerfile
+RUN mkdir -p /app/.next/cache && chown -R nextjs:nodejs /app
+```
+
+Match **`nextjs:nodejs`** to this image’s actual `USER` / `groupadd` / `useradd` names. On Alpine the user might still be `nextjs` with group `nodejs`.
+
+**Do not** skip this for Next **standalone** images that run as non-root.
+
+---
+
+## 2. Liveness vs readiness (`/api/health`)
+
+- **`GET /api/health`** = **liveness** only: return **200** quickly, **no database**, no external HTTP. Used by **Docker HEALTHCHECK** and Coolify when possible.
+- **`GET /api/health/ready`** (or similar) = **readiness**: optional `select 1` / DB check for humans or a **separate** probe — **not** for Docker `HEALTHCHECK` if DB restarts independently.
+
+**Why:** A slow or restarting Postgres must not mark the **whole web container** unhealthy (yellow / restart loops in Coolify).
+
+If **`middleware.ts`** protects routes, allow the **`/api/health`** prefix (e.g. `pathname.startsWith("/api/health")`) so **`/api/health`** and **`/api/health/ready`** are not redirected to login.
+
+---
+
+## 3. Docker `HEALTHCHECK`
+
+- **Path:** `http://127.0.0.1:${PORT:-3000}/api/health` (use Node **`fetch`** in `node -e` — slim images may lack `curl`).
+- **Timing:** generous **`--start-period=90s`**, `--interval=30s`, `--timeout=8s`, `--retries=5` so small VPS instances can boot before failing.
+
+---
+
+## 4. Ports and process
+
+- This stack expects **container port `3000`** unless **`PORT`** is changed **everywhere** (Dockerfile, Coolify UI, health URL).
+- **CMD** must bind **`0.0.0.0`** (not only `localhost`) so the proxy can reach the app.
+
+---
+
+## 5. Coolify operations
+
+- **Redeploy / Deploy** = rebuild from Git and roll out a **new** image. Use this after Dockerfile or app fixes.
+- **Restart** = restart **existing** container only — **no** rebuild; **not** enough to pick up pushed `main` changes.
+- **Stuck “In progress”** deploys: **Stop** the application, **cancel** stuck/queued deployments, then **one** clean **Redeploy**. Do not stack many concurrent deploys.
+- **Pushing to GitHub** does not update production until Coolify **finishes a successful deploy**.
+
+---
+
+## 6. HTTP errors (quick map)
+
+| Code | Usually means |
+|------|----------------|
+| **502** | Proxy cannot get a valid response from the app (container **down**, **wrong port**, crash loop). Check **`docker ps`**, **app logs**. |
+| **504** | Proxy **timed out** waiting for the app (often Traefik **~60s** default). Fix in **Coolify → Server → Proxy** (Traefik `respondingTimeouts`), or speed up / stream long routes. |
+| **503** | App answered “unavailable” (e.g. intentional readiness failure). |
+
+Official Coolify doc: [Gateway Timeout (504)](https://coolify.io/docs/troubleshoot/applications/gateway-timeout).
+
+---
+
+## 7. Where to run diagnostics
+
+- **`docker ps`**, **`docker logs`**, **`dmesg`** run on the **Linux VPS** over **SSH**, not in **Windows PowerShell** unless Docker Desktop is explicitly used locally.
+- **`Exit 137`** often means **SIGKILL** — check **`dmesg`** / kernel logs for **Out of memory**; consider **more RAM** in Coolify or VPS.
+
+---
+
+## 8. Agent / automation boundaries
+
+- Do **not** treat **`npm run deploy:coolify`** (webhook) as fixing a **broken Coolify host** or **proxy** — it only queues an app deploy when the **Coolify API** is healthy.
+- The **Cursor agent terminal** often **cannot SSH** to the user’s VPS; ask the user to paste **`docker ps`** / **logs** when remote access is required.
+
+---
+
+## 9. Checklist before merging Docker or production changes
+
+- [ ] Runner stage: **`mkdir -p /app/.next/cache`** and **`chown -R`** to the runtime user after `COPY`.
+- [ ] **`/api/health`** is DB-free; DB checks only on **`/api/health/ready`** (or a dedicated readiness route).
+- [ ] **`HEALTHCHECK`** targets **`/api/health`** with adequate **`start-period`**.
+- [ ] **Port 3000** / **`PORT`** / Coolify mapping aligned.
+- [ ] **Middleware** does not block **`/api/health`**.

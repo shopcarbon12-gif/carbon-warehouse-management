@@ -3,28 +3,36 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build --webpack && node -e \"const fs=require('fs');const path=require('path');const root=process.cwd();const src=path.join(root,'.next','static');const out=path.join(root,'.next','standalone','.next','static');if(fs.existsSync(src)){fs.mkdirSync(out,{recursive:true});fs.cpSync(src,out,{recursive:true,force:true});}const pub=path.join(root,'public');const pubOut=path.join(root,'.next','standalone','public');if(fs.existsSync(pub)){fs.mkdirSync(pubOut,{recursive:true});fs.cpSync(pub,pubOut,{recursive:true,force:true});}console.log('[build] standalone static/public synced');\"",
-    "dev": "next dev --webpack -p 3040",
-    "start": "node .next/standalone/server.js -H 0.0.0.0",
-    "lint": "eslint"
+    "dev": "next dev -p 3040",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:migrate": "npx tsx scripts/migrate.ts",
+    "db:seed": "npx tsx scripts/seed.ts",
+    "worker": "npx tsx scripts/worker.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
-    "dotenv": "^17.3.1",
-    "next": "16.1.6",
-    "pg": "^8.20.0",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "recharts": "^3.7.0"
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.2",
+    "next": "16.2.1",
+    "postgres": "^3.4.8",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
-    "@types/pg": "^8.18.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "16.2.1",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

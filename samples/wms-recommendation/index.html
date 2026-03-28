@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Carbon WMS — sample shell (recommended IA)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0c0f14;
+        --surface: #141a22;
+        --surface2: #1c2430;
+        --border: #2a3544;
+        --text: #e8edf4;
+        --muted: #8b9cb3;
+        --accent: #3d9a78;
+        --accent-dim: #2d7a5e;
+        --warn: #c9a227;
+        --danger: #c45c5c;
+        --info: #5b8fd9;
+        --sidebar-w: 15.5rem;
+        --radius: 10px;
+        --font: "DM Sans", system-ui, sans-serif;
+        --mono: "JetBrains Mono", ui-monospace, monospace;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.45;
+      }
+      a {
+        color: var(--info);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .app {
+        display: flex;
+        min-height: 100%;
+      }
+      .sidebar {
+        width: var(--sidebar-w);
+        flex-shrink: 0;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        position: sticky;
+        top: 0;
+        align-self: flex-start;
+        height: 100vh;
+        overflow-y: auto;
+      }
+      .brand {
+        padding: 1.25rem 1rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .brand strong {
+        display: block;
+        font-size: 1rem;
+        letter-spacing: -0.02em;
+      }
+      .brand span {
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      .loc-select {
+        margin: 0.75rem 1rem;
+        padding: 0.5rem 0.65rem;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 0.85rem;
+        width: calc(100% - 2rem);
+      }
+      nav {
+        padding: 0.5rem 0 1rem;
+        flex: 1;
+      }
+      nav .group {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        padding: 0.75rem 1rem 0.35rem;
+      }
+      nav a {
+        display: block;
+        padding: 0.45rem 1rem;
+        color: var(--text);
+        text-decoration: none;
+        font-size: 0.9rem;
+        border-left: 3px solid transparent;
+      }
+      nav a:hover {
+        background: rgba(61, 154, 120, 0.08);
+        text-decoration: none;
+      }
+      nav a.active {
+        border-left-color: var(--accent);
+        background: rgba(61, 154, 120, 0.12);
+        color: #fff;
+      }
+      .sidebar-foot {
+        padding: 1rem;
+        font-size: 0.75rem;
+        color: var(--muted);
+        border-top: 1px solid var(--border);
+      }
+      .main {
+        flex: 1;
+        min-width: 0;
+        padding: 1.25rem 1.5rem 2rem;
+      }
+      .topbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+      }
+      .breadcrumb {
+        font-size: 0.8rem;
+        color: var(--muted);
+        flex: 1;
+      }
+      .breadcrumb a {
+        color: var(--muted);
+      }
+      .breadcrumb a:hover {
+        color: var(--info);
+      }
+      .menu-btn {
+        display: none;
+        padding: 0.4rem 0.65rem;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 8px;
+        cursor: pointer;
+        font-family: var(--font);
+      }
+      h1 {
+        font-size: 1.35rem;
+        font-weight: 600;
+        margin: 0 0 0.25rem;
+        letter-spacing: -0.02em;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin-bottom: 1.25rem;
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1rem 1.15rem;
+        margin-bottom: 1rem;
+      }
+      .panel h2 {
+        margin: 0 0 0.75rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+      }
+      .grid-kpi {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
+      .kpi {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.85rem 1rem;
+      }
+      .kpi .val {
+        font-size: 1.5rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .kpi .lbl {
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin-top: 0.2rem;
+      }
+      .kpi.warn .val {
+        color: var(--warn);
+      }
+      .kpi.danger .val {
+        color: var(--danger);
+      }
+      .kpi a {
+        color: inherit;
+        text-decoration: none;
+      }
+      .kpi a:hover {
+        color: var(--info);
+      }
+      .callout {
+        border-left: 4px solid var(--accent);
+        padding: 0.65rem 0.85rem;
+        background: rgba(61, 154, 120, 0.1);
+        border-radius: 0 var(--radius) var(--radius) 0;
+        font-size: 0.88rem;
+        margin-bottom: 1rem;
+      }
+      .callout strong {
+        color: var(--accent);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.5rem 0.6rem;
+        border-bottom: 1px solid var(--border);
+      }
+      th {
+        color: var(--muted);
+        font-weight: 500;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      tr:hover td {
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .tag {
+        display: inline-block;
+        padding: 0.15rem 0.45rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+      }
+      .tag.ok {
+        background: rgba(61, 154, 120, 0.25);
+        color: #8fd4b8;
+      }
+      .tag.warn {
+        background: rgba(201, 162, 39, 0.2);
+        color: #e6c96b;
+      }
+      .tag.bad {
+        background: rgba(196, 92, 92, 0.2);
+        color: #e89898;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+        align-items: center;
+      }
+      input[type="search"],
+      input[type="text"],
+      select {
+        padding: 0.45rem 0.6rem;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface2);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 0.85rem;
+      }
+      button {
+        padding: 0.45rem 0.85rem;
+        border-radius: 8px;
+        border: 1px solid var(--accent-dim);
+        background: var(--accent);
+        color: #061208;
+        font-weight: 600;
+        font-family: var(--font);
+        font-size: 0.82rem;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--text);
+        border-color: var(--border);
+      }
+      button:hover {
+        filter: brightness(1.08);
+      }
+      .page {
+        display: none;
+      }
+      .page.active {
+        display: block;
+      }
+      .mono {
+        font-family: var(--mono);
+        font-size: 0.78rem;
+      }
+      .two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+      }
+      @media (max-width: 900px) {
+        .two-col {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 768px) {
+        .menu-btn {
+          display: inline-block;
+        }
+        .sidebar {
+          position: fixed;
+          z-index: 40;
+          left: 0;
+          transform: translateX(-100%);
+          transition: transform 0.2s ease;
+          box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+        }
+        .sidebar.open {
+          transform: translateX(0);
+        }
+        .main {
+          padding: 1rem;
+        }
+      }
+      .backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 30;
+      }
+      .backdrop.show {
+        display: block;
+      }
+      ul.improve {
+        margin: 0;
+        padding-left: 1.2rem;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+      ul.improve li {
+        margin-bottom: 0.35rem;
+      }
+      footer.sample-foot {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.75rem;
+        color: var(--muted);
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+    <div class="app">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <strong>Carbon WMS</strong>
+          <span>Sample shell — recommended IA</span>
+        </div>
+        <label class="visually-hidden" for="loc">Location</label>
+        <select class="loc-select" id="loc" title="Active location">
+          <option value="001">001 · Orlando Warehouse</option>
+          <option value="003">003 · Elementi Florida Mall</option>
+        </select>
+        <nav id="nav">
+          <div class="group">Overview</div>
+          <a href="#/dashboard" data-route="dashboard">Dashboard</a>
+          <a href="#/locations" data-route="locations">Locations</a>
+          <div class="group">Operations</div>
+          <a href="#/inventory" data-route="inventory">Inventory</a>
+          <a href="#/alerts" data-route="alerts">Alerts &amp; exceptions</a>
+          <a href="#/compare" data-route="compare">RFID ↔ POS compare</a>
+          <a href="#/rfid" data-route="rfid">RFID workflows</a>
+          <div class="group">Channels</div>
+          <a href="#/integrations" data-route="integrations">Integrations</a>
+          <a href="#/sync" data-route="sync">Sync &amp; reconciliation</a>
+          <div class="group">Field</div>
+          <a href="#/handheld" data-route="handheld">Handheld (future app)</a>
+          <div class="group">Admin</div>
+          <a href="#/settings" data-route="settings">Settings</a>
+        </nav>
+        <div class="sidebar-foot">
+          Static demo · Hash routing · No backend<br />
+          <a href="https://nextjs.org/" target="_blank" rel="noopener">Next.js</a>
+          is a good fit for production.
+        </div>
+      </aside>
+      <main class="main">
+        <div class="topbar">
+          <button type="button" class="menu-btn" id="menuBtn" aria-expanded="false">
+            Menu
+          </button>
+          <div class="breadcrumb" id="breadcrumb">
+            <a href="#/dashboard">Home</a> <span id="crumbTrail"></span>
+          </div>
+        </div>
+
+        <!-- Dashboard -->
+        <section class="page active" id="page-dashboard" data-page="dashboard">
+          <h1>Dashboard</h1>
+          <p class="sub" id="dashSub">
+            Location <span class="mono" id="dashLocLabel">001</span> — RFID truth + channel alignment
+          </p>
+          <div class="callout">
+            <strong>Recommendation:</strong> Keep Senitron/Athena for deep RFID encode &amp; LS PO
+            flows; use this WMS for multi-channel orchestration, exceptions, Shopify, and your
+            Android uploads — one integration layer (queue, idempotency, audit).
+          </div>
+          <div class="grid-kpi">
+            <div class="kpi">
+              <a href="#/inventory"><div class="val" id="kpiSku">23,747</div></a>
+              <div class="lbl">Active RFID units (sample)</div>
+            </div>
+            <div class="kpi">
+              <a href="#/compare"><div class="val" id="kpiMatch">95%</div></a>
+              <div class="lbl">Matched to POS / Ext (sample)</div>
+            </div>
+            <div class="kpi warn">
+              <a href="#/alerts"><div class="val" id="kpiExc">12</div></a>
+              <div class="lbl">Open exceptions</div>
+            </div>
+            <div class="kpi danger">
+              <a href="#/sync"><div class="val" id="kpiQueue">3</div></a>
+              <div class="lbl">Sync jobs pending / failed</div>
+            </div>
+          </div>
+          <div class="two-col">
+            <div class="panel">
+              <h2>Improvements vs. “clone Athena”</h2>
+              <ul class="improve">
+                <li>First-class <strong>Shopify</strong> + <strong>Lightspeed</strong> in one reconciliation view.</li>
+                <li><strong>Exception inbox</strong> (unknown EPC, wrong zone, POS mismatch) with owner + SLA.</li>
+                <li><strong>Handheld API</strong>: batch upload, offline queue, server-side rules.</li>
+                <li><strong>Coolify-friendly</strong> deploy; optional <code class="mono">WMS_BASE_PATH</code> for subpaths.</li>
+              </ul>
+            </div>
+            <div class="panel">
+              <h2>Quick links (all wired)</h2>
+              <p class="sub" style="margin-top: 0">
+                <a href="#/inventory">Inventory</a> ·
+                <a href="#/compare">Compare</a> ·
+                <a href="#/integrations">Integrations</a> ·
+                <a href="#/handheld">Handheld</a>
+              </p>
+              <p style="font-size: 0.85rem; color: var(--muted); margin: 0">
+                External:
+                <a href="https://app.senitron.net/" target="_blank" rel="noopener">Senitron app</a>
+                (opens live site; login required).
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Locations -->
+        <section class="page" id="page-locations" data-page="locations">
+          <h1>Locations</h1>
+          <p class="sub">Mirror of tenant location list — gateway into warehouse context.</p>
+          <div class="panel">
+            <h2>Sites</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Units</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono">001</td>
+                  <td>Orlando Warehouse</td>
+                  <td>23,747</td>
+                  <td><a href="#/dashboard" class="open-loc" data-loc="001">Open</a></td>
+                </tr>
+                <tr>
+                  <td class="mono">003</td>
+                  <td>Elementi Florida Mall</td>
+                  <td>2,405</td>
+                  <td><a href="#/dashboard" class="open-loc" data-loc="003">Open</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Inventory -->
+        <section class="page" id="page-inventory" data-page="inventory">
+          <h1>Inventory</h1>
+          <p class="sub">Filters + grid; your API would back this — pattern from Athena inventory_logs.</p>
+          <div class="toolbar">
+            <input type="search" id="invSearch" placeholder="SKU, UPC, name…" />
+            <select id="invZone">
+              <option value="">All zones</option>
+              <option value="rfid">RFID zone</option>
+              <option value="bin">Bin location</option>
+            </select>
+            <button type="button" id="invFilterBtn">Apply</button>
+            <button type="button" class="secondary" id="invResetBtn">Clear</button>
+            <button type="button" class="secondary" data-nav="alerts">View exceptions</button>
+          </div>
+          <div class="panel" style="padding: 0; overflow-x: auto">
+            <table id="invTable">
+              <thead>
+                <tr>
+                  <th>Asset ID</th>
+                  <th>SKU</th>
+                  <th>Name</th>
+                  <th>Zone</th>
+                  <th>Qty</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Alerts -->
+        <section class="page" id="page-alerts" data-page="alerts">
+          <h1>Alerts &amp; exceptions</h1>
+          <p class="sub">Unified queue: RFID + POS + Shopify conflicts (sample rows).</p>
+          <div class="panel" style="padding: 0; overflow-x: auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Detail</th>
+                  <th>Severity</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>POS mismatch</td>
+                  <td class="mono">210000007117 · RFID 24 vs Ext 0</td>
+                  <td><span class="tag warn">Review</span></td>
+                  <td><a href="#/compare">Open compare</a></td>
+                </tr>
+                <tr>
+                  <td>Unknown EPC</td>
+                  <td class="mono">E280 1160…</td>
+                  <td><span class="tag bad">Block</span></td>
+                  <td><a href="#/rfid">Encode / resolve</a></td>
+                </tr>
+                <tr>
+                  <td>Shopify oversell risk</td>
+                  <td>Variant gid://shopify/…</td>
+                  <td><span class="tag warn">Review</span></td>
+                  <td><a href="#/sync">Queue sync</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Compare -->
+        <section class="page" id="page-compare" data-page="compare">
+          <h1>RFID ↔ POS compare</h1>
+          <p class="sub">Analog to <span class="mono">comparev2</span> — side-by-side counts, exclude flags, export.</p>
+          <div class="toolbar">
+            <button type="button" id="btnRefreshCompare">Simulate refresh</button>
+            <button type="button" class="secondary" data-nav="sync">Reconciliation log</button>
+          </div>
+          <div class="panel">
+            <h2>Summary <span class="tag ok" id="compareBadge">95.0% matched</span></h2>
+            <p style="font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem">
+              Sample endpoint idea: <span class="mono">GET …/compare-preview-data</span> (your API, not Senitron’s).
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Name</th>
+                  <th>RFID</th>
+                  <th>Ext</th>
+                  <th>Δ</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono">C125311010701</td>
+                  <td>AVA MINI DRESS BLACK S</td>
+                  <td>2</td>
+                  <td>2</td>
+                  <td><span class="tag ok">0</span></td>
+                </tr>
+                <tr>
+                  <td class="mono">—</td>
+                  <td>ISLA KNIT BLACK OS</td>
+                  <td>24</td>
+                  <td>0</td>
+                  <td><span class="tag warn">+24</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- RFID -->
+        <section class="page" id="page-rfid" data-page="rfid">
+          <h1>RFID workflows</h1>
+          <p class="sub">Deep encode/PO print can stay in Athena; shortcuts here for your operators.</p>
+          <div class="grid-kpi">
+            <div class="kpi">
+              <a href="https://app.senitron.net/" target="_blank" rel="noopener"><div class="val">↗</div></a>
+              <div class="lbl">Open Senitron (encode LS, PO print)</div>
+            </div>
+            <div class="kpi">
+              <a href="#/handheld"><div class="val">📱</div></a>
+              <div class="lbl">Handheld upload queue</div>
+            </div>
+            <div class="kpi">
+              <a href="#/inventory"><div class="val">⌕</div></a>
+              <div class="lbl">Search inventory</div>
+            </div>
+          </div>
+          <div class="panel">
+            <h2>Sample actions (wired to hash routes)</h2>
+            <p style="font-size: 0.88rem; color: var(--muted)">
+              <a href="#/inventory">Bulk status update</a> (filter) ·
+              <a href="#/alerts">Receiving concerns</a> ·
+              <a href="#/sync">Transfer slip export</a> (log)
+            </p>
+          </div>
+        </section>
+
+        <!-- Integrations -->
+        <section class="page" id="page-integrations" data-page="integrations">
+          <h1>Integrations</h1>
+          <p class="sub">Lightspeed + Shopify + Senitron connector health (mock).</p>
+          <div class="panel">
+            <h2>Connections</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>System</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Senitron / RFID</td>
+                  <td><span class="tag ok">Connected</span></td>
+                  <td>Session or API key — your choice</td>
+                </tr>
+                <tr>
+                  <td>Lightspeed</td>
+                  <td><span class="tag ok">OAuth</span></td>
+                  <td>R-Series / POS account mapping per location</td>
+                </tr>
+                <tr>
+                  <td>Shopify</td>
+                  <td><span class="tag warn">Configure</span></td>
+                  <td>Admin API + webhooks for inventory</td>
+                </tr>
+              </tbody>
+            </table>
+            <p style="font-size: 0.82rem; color: var(--muted); margin: 0.75rem 0 0">
+              Docs:
+              <a href="https://shopify.dev/docs/api/admin-rest" target="_blank" rel="noopener">Shopify Admin API</a>
+              ·
+              <a href="https://developers.lightspeedhq.com/" target="_blank" rel="noopener">Lightspeed dev</a>
+            </p>
+          </div>
+        </section>
+
+        <!-- Sync -->
+        <section class="page" id="page-sync" data-page="sync">
+          <h1>Sync &amp; reconciliation</h1>
+          <p class="sub">Job queue, retries, dead-letter — sample list updates when you click.</p>
+          <div class="toolbar">
+            <button type="button" id="btnRunSync">Run sample sync</button>
+            <button type="button" class="secondary" data-nav="compare">Back to compare</button>
+          </div>
+          <div class="panel">
+            <h2>Recent jobs</h2>
+            <table id="syncTable">
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Target</th>
+                  <th>Status</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>inventory.pull</td>
+                  <td>Lightspeed</td>
+                  <td><span class="tag ok">ok</span></td>
+                  <td class="mono">2m ago</td>
+                </tr>
+                <tr>
+                  <td>inventory.push</td>
+                  <td>Shopify</td>
+                  <td><span class="tag warn">retry</span></td>
+                  <td class="mono">5m ago</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Handheld -->
+        <section class="page" id="page-handheld" data-page="handheld">
+          <h1>Handheld (Android)</h1>
+          <p class="sub">Thin client: scan batches → your API → validate → forward to Senitron/LS/Shopify rules.</p>
+          <div class="panel">
+            <h2>Sample upload batch</h2>
+            <p style="font-size: 0.85rem; color: var(--muted)">
+              Button appends a row to the table (simulates device POST).
+            </p>
+            <div class="toolbar">
+              <button type="button" id="btnSimUpload">Simulate handheld upload</button>
+              <button type="button" class="secondary" data-nav="inventory">View inventory</button>
+            </div>
+            <table id="uploadTable">
+              <thead>
+                <tr>
+                  <th>Batch ID</th>
+                  <th>EPCs</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono">b-1001</td>
+                  <td>120</td>
+                  <td><span class="tag ok">accepted</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section class="page" id="page-settings" data-page="settings">
+          <h1>Settings</h1>
+          <p class="sub">Tenant + location + EPC profile concepts.</p>
+          <div class="panel">
+            <h2>Sample toggles</h2>
+            <label style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem">
+              <input type="checkbox" id="toggleOffline" checked />
+              <span>Allow handheld offline queue</span>
+            </label>
+            <label style="display: flex; gap: 0.5rem; align-items: center">
+              <input type="checkbox" id="toggleNeg" />
+              <span>Sync zero-RFID items to external (dangerous)</span>
+            </label>
+            <p style="font-size: 0.8rem; color: var(--muted); margin: 0.75rem 0 0">
+              Mirrors Senitron “sync” options — your policy engine should own this in production.
+            </p>
+          </div>
+        </section>
+
+        <footer class="sample-foot">
+          Sample only — not connected to Senitron, Lightspeed, or Shopify. Open this file via a static
+          server if you prefer (<span class="mono">npx serve samples/wms-recommendation</span>).
+        </footer>
+      </main>
+    </div>
+
+    <script>
+      (function () {
+        var inventoryRows = [
+          { id: "210000001206", sku: "C125311010701", name: "AVA MINI DRESS BLACK S", zone: "rfid", qty: 2 },
+          { id: "210000001212", sku: "C125311030201", name: "SAPPHIRE TROPICS BLUE S", zone: "rfid", qty: 4 },
+          { id: "210000007117", sku: "—", name: "ISLA KNIT BLACK OS", zone: "bin", qty: 24 },
+          { id: "210000003247", sku: "YZ-30", name: "DENIM SHORTS BLUE 30", zone: "rfid", qty: 10 },
+        ];
+
+        var routes = {
+          dashboard: { title: "Dashboard", crumb: " / Dashboard" },
+          locations: { title: "Locations", crumb: " / Locations" },
+          inventory: { title: "Inventory", crumb: " / Inventory" },
+          alerts: { title: "Alerts", crumb: " / Alerts" },
+          compare: { title: "Compare", crumb: " / RFID ↔ POS" },
+          rfid: { title: "RFID", crumb: " / RFID" },
+          integrations: { title: "Integrations", crumb: " / Integrations" },
+          sync: { title: "Sync", crumb: " / Sync" },
+          handheld: { title: "Handheld", crumb: " / Handheld" },
+          settings: { title: "Settings", crumb: " / Settings" },
+        };
+
+        function normalizeHash() {
+          var h = location.hash.replace(/^#\/?/, "");
+          if (!h || h === "") return "dashboard";
+          var parts = h.split("/");
+          return parts[0] || "dashboard";
+        }
+
+        function renderNav(route) {
+          document.querySelectorAll("nav a[data-route]").forEach(function (a) {
+            a.classList.toggle("active", a.getAttribute("data-route") === route);
+          });
+        }
+
+        function showPage(route) {
+          if (!routes[route]) route = "dashboard";
+          document.querySelectorAll(".page").forEach(function (p) {
+            p.classList.toggle("active", p.getAttribute("data-page") === route);
+          });
+          document.title = "Carbon WMS — " + routes[route].title;
+          document.getElementById("crumbTrail").textContent = routes[route].crumb;
+          renderNav(route);
+        }
+
+        function renderInventory() {
+          var q = (document.getElementById("invSearch").value || "").toLowerCase();
+          var z = document.getElementById("invZone").value;
+          var tb = document.querySelector("#invTable tbody");
+          tb.innerHTML = "";
+          inventoryRows.forEach(function (row) {
+            var hay = (row.id + " " + row.sku + " " + row.name).toLowerCase();
+            if (q && hay.indexOf(q) === -1) return;
+            if (z && row.zone !== z) return;
+            var tr = document.createElement("tr");
+            tr.innerHTML =
+              "<td class='mono'>" +
+              row.id +
+              "</td><td class='mono'>" +
+              row.sku +
+              "</td><td>" +
+              row.name +
+              "</td><td>" +
+              row.zone +
+              "</td><td>" +
+              row.qty +
+              "</td>";
+            tb.appendChild(tr);
+          });
+        }
+
+        function onHashChange() {
+          var route = normalizeHash();
+          showPage(route);
+        }
+
+        document.getElementById("loc").addEventListener("change", function () {
+          var v = this.value;
+          document.getElementById("dashLocLabel").textContent = v;
+          document.getElementById("dashSub").innerHTML =
+            'Location <span class="mono" id="dashLocLabel">' +
+            v +
+            "</span> — RFID truth + channel alignment";
+        });
+
+        document.getElementById("nav").addEventListener("click", function (e) {
+          var t = e.target;
+          if (t.tagName === "A" && t.getAttribute("data-route")) {
+            e.preventDefault();
+            var route = t.getAttribute("data-route");
+            location.hash = "#/" + route;
+            showPage(route);
+            closeSidebar();
+          }
+        });
+
+        document.querySelector("main.main").addEventListener("click", function (e) {
+          var btn = e.target.closest("[data-nav]");
+          if (!btn) return;
+          var route = btn.getAttribute("data-nav");
+          if (!routes[route]) return;
+          e.preventDefault();
+          location.hash = "#/" + route;
+          showPage(route);
+          closeSidebar();
+        });
+
+        document.getElementById("invFilterBtn").addEventListener("click", renderInventory);
+        document.getElementById("invResetBtn").addEventListener("click", function () {
+          document.getElementById("invSearch").value = "";
+          document.getElementById("invZone").value = "";
+          renderInventory();
+        });
+
+        document.querySelectorAll(".open-loc").forEach(function (a) {
+          a.addEventListener("click", function (e) {
+            var loc = a.getAttribute("data-loc");
+            document.getElementById("loc").value = loc;
+            document.getElementById("loc").dispatchEvent(new Event("change"));
+          });
+        });
+
+        document.getElementById("btnRefreshCompare").addEventListener("click", function () {
+          var el = document.getElementById("compareBadge");
+          var pct = (94 + Math.random() * 4).toFixed(1);
+          el.textContent = pct + "% matched";
+        });
+
+        var syncN = 0;
+        document.getElementById("btnRunSync").addEventListener("click", function () {
+          syncN++;
+          var tb = document.querySelector("#syncTable tbody");
+          var tr = document.createElement("tr");
+          tr.innerHTML =
+            "<td class='mono'>reconcile.manual</td><td>multi</td><td><span class='tag ok'>queued</span></td><td class='mono'>now</td>";
+          tb.insertBefore(tr, tb.firstChild);
+        });
+
+        var batchN = 1002;
+        document.getElementById("btnSimUpload").addEventListener("click", function () {
+          batchN++;
+          var tb = document.querySelector("#uploadTable tbody");
+          var tr = document.createElement("tr");
+          tr.innerHTML =
+            "<td class='mono'>b-" +
+            batchN +
+            "</td><td>" +
+            (40 + Math.floor(Math.random() * 80)) +
+            "</td><td><span class='tag ok'>accepted</span></td>";
+          tb.insertBefore(tr, tb.firstChild);
+        });
+
+        var sidebar = document.getElementById("sidebar");
+        var backdrop = document.getElementById("backdrop");
+        function closeSidebar() {
+          sidebar.classList.remove("open");
+          backdrop.classList.remove("show");
+          document.getElementById("menuBtn").setAttribute("aria-expanded", "false");
+        }
+        function openSidebar() {
+          sidebar.classList.add("open");
+          backdrop.classList.add("show");
+          document.getElementById("menuBtn").setAttribute("aria-expanded", "true");
+        }
+        document.getElementById("menuBtn").addEventListener("click", function () {
+          if (sidebar.classList.contains("open")) closeSidebar();
+          else openSidebar();
+        });
+        backdrop.addEventListener("click", closeSidebar);
+
+        window.addEventListener("hashchange", onHashChange);
+
+        if (!location.hash || location.hash === "#") {
+          location.hash = "#/dashboard";
+        } else {
+          showPage(normalizeHash());
+        }
+        renderInventory();
+      })();
+    </script>
+  </body>
+</html>
