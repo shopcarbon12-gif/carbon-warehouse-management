@@ -59,8 +59,17 @@ Do **not** use the default seed password in production.
 **Also in Coolify:** set **`SESSION_SECRET`**, **`WMS_DEVICE_KEY`**, **`SHOPIFY_WEBHOOK_SECRET`**, **`NODE_ENV=production`**, **`WMS_APP_PUBLIC_BASE_URL`**, **`SHOPIFY_REDIRECT_URI`**, **`SHOPIFY_SCOPES`**, and any R2 / Lightspeed / email vars you use (see [`.env.example`](.env.example)).  
 **`SHOPIFY_REDIRECT_URI`** must match a **Redirect URL** in your Shopify Partner app exactly (including `https` and path).
 
-After you **push** to the branch Coolify builds from, either wait for automatic deploy (if enabled) or trigger one from the Coolify UI.  
-Optional: set **`COOLIFY_DEPLOY_WEBHOOK_URL`** to the app’s deploy webhook and run **`npm run deploy:coolify`** from a shell that has that variable.
+After you **push** to the branch Coolify builds from, either wait for automatic deploy (if enabled) or click **Redeploy** on the application in Coolify.
+
+**CLI deploy (`npm run deploy:coolify`):** In Coolify open the WMS app → **Configuration** → **Webhooks** and copy **Deploy Webhook** into **`COOLIFY_DEPLOY_WEBHOOK_URL`**. The API returns **401** without auth; create **Keys & Tokens** → **API Tokens** with the **deploy** permission, copy the token once into **`COOLIFY_API_TOKEN`**, then run:
+
+```bash
+set COOLIFY_DEPLOY_WEBHOOK_URL=...   # Windows CMD; use $env:... in PowerShell
+set COOLIFY_API_TOKEN=...
+npm run deploy:coolify
+```
+
+Keep both values in gitignored **`.env.coolify.local`** (not in git).
 
 Optional: set **`WMS_BASE_PATH`** at **build time** if the app is served under a subpath (see `next.config.ts`).
 

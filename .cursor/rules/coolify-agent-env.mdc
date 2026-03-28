@@ -34,4 +34,4 @@ The agent may **read** `.env.coolify.local` from the workspace when present inst
 
 After Dockerfile or entrypoint changes, use **Redeploy** (rebuild), not only **Restart**. See the Next.js + Coolify hardening rule for health checks and proxy behavior.
 
-If the repo defines **`npm run deploy:coolify`**, it POSTs **`COOLIFY_DEPLOY_WEBHOOK_URL`** (set in the shell or `.env` when running the command). Use the Coolify UI if the webhook is not configured.
+If the repo defines **`npm run deploy:coolify`**, it POSTs **`COOLIFY_DEPLOY_WEBHOOK_URL`** with optional **`Authorization: Bearer COOLIFY_API_TOKEN`**. Copy the deploy URL from **Application → Configuration → Webhooks → Deploy Webhook**. Create the token at **`/security/api-tokens`** with **deploy** permission. Without a token the API returns **401**; use **Redeploy** in the UI instead.
