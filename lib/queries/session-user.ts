@@ -13,7 +13,13 @@ export async function findUserWithTenantLocation(
   );
   const user = u.rows[0];
   if (!user) return null;
-  const ok = await bcrypt.compare(password, user.password_hash);
+  let ok = false;
+  try {
+    ok = await bcrypt.compare(password, user.password_hash);
+  } catch {
+    // Malformed `password_hash` (not a bcrypt string) — treat as failed auth, not 503.
+    return null;
+  }
   if (!ok) return null;
 
   const loc = await pool.query<{ tid: string; lid: string; role: string }>(

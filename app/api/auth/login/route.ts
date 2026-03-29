@@ -34,8 +34,16 @@ export async function POST(req: Request) {
     if (isDatabaseUnreachable(e)) {
       const error =
         process.env.NODE_ENV === "production"
-          ? "Cannot reach PostgreSQL. Verify DATABASE_URL in Coolify and that the database container is running."
+          ? "Cannot connect to PostgreSQL. Check DATABASE_URL (internal host, database name, and password from your Coolify Postgres resource), save, and redeploy."
           : "Cannot reach PostgreSQL. Start it (e.g. docker compose up -d), then npm run db:migrate && npm run db:seed.";
+      return NextResponse.json({ error }, { status: 503 });
+    }
+    const pgCode = (e as { code?: string })?.code;
+    if (pgCode === "42P01" || pgCode === "42703") {
+      const error =
+        process.env.NODE_ENV === "production"
+          ? "Database schema is missing or outdated. Run migrations on the server (e.g. npm run db:migrate in deploy) and ensure DATABASE_URL points at the correct database."
+          : "Database schema is missing or outdated. Run npm run db:migrate && npm run db:seed.";
       return NextResponse.json({ error }, { status: 503 });
     }
     return NextResponse.json({ error: "Login temporarily unavailable" }, { status: 503 });
@@ -45,7 +53,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  const token = await signSession(payload);
+  let token: string;
+  try {
+    token = await signSession(payload);
+  } catch (e) {
+    console.error("[login] signSession", e);
+    const error =
+      process.env.NODE_ENV === "production"
+        ? "Session signing failed. Set SESSION_SECRET to a long random string (32+ characters) in Coolify and redeploy."
+        : "Session signing failed. Set SESSION_SECRET in .env.";
+    return NextResponse.json({ error }, { status: 503 });
+  }
   const res = NextResponse.json({ ok: true });
   res.cookies.set("wms_session", token, {
     httpOnly: true,

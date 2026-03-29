@@ -1,8 +1,13 @@
 /**
  * Sets DATABASE_URL on a Coolify application via API (bulk env PATCH).
  *
- * Requires an API token with **read** + **write** (or root) on applications — a
- * deploy-only token returns 403 on GET and usually cannot PATCH envs.
+ * API: PATCH /applications/{uuid}/envs/bulk → 201 on success
+ * @see https://coolify.io/docs/api-reference/api/operations/update-envs-by-application-uuid
+ *
+ * Token: must be allowed to **modify** application envs. A **deploy-only** token is not enough
+ * (403 on GET/PATCH). Per Coolify authorization docs, read-only / read:sensitive cannot create
+ * or update; use a token with full access (*) or whatever your UI exposes for write/API updates.
+ * @see https://coolify.io/docs/api-reference/authorization
  *
  * Usage:
  *   1. Put in .env.coolify.local (or export):
@@ -10,6 +15,9 @@
  *        COOLIFY_API_TOKEN=...   # token with write env permission
  *        COOLIFY_APP_UUID=...     # WMS application UUID (from Webhooks URL)
  *        COOLIFY_DATABASE_URL=postgresql://user:pass@internal-host:5432/dbname
+ *   Optional (first boot / empty DB):
+ *        COOLIFY_WMS_BOOTSTRAP=1  — also sets WMS_AUTO_MIGRATE=1 and WMS_AUTO_SEED=1
+ *        (entrypoint runs schema + migrations + seed-bootstrap.sql on container start)
  *   2. node scripts/coolify-set-database-url.mjs
  *   3. Redeploy the app in Coolify (or npm run deploy:coolify).
  */
@@ -82,6 +90,32 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
+const bulk = [
+  {
+    key: "DATABASE_URL",
+    value: databaseUrl,
+    is_literal: true,
+    is_multiline: false,
+  },
+];
+if (process.env.COOLIFY_WMS_BOOTSTRAP === "1") {
+  bulk.push(
+    {
+      key: "WMS_AUTO_MIGRATE",
+      value: "1",
+      is_literal: true,
+      is_multiline: false,
+    },
+    {
+      key: "WMS_AUTO_SEED",
+      value: "1",
+      is_literal: true,
+      is_multiline: false,
+    },
+  );
+  console.log("COOLIFY_WMS_BOOTSTRAP=1: patching WMS_AUTO_MIGRATE, WMS_AUTO_SEED");
+}
+
 const url = `${base}/applications/${appUuid}/envs/bulk`;
 const res = await fetch(url, {
   method: "PATCH",
@@ -90,19 +124,13 @@ const res = await fetch(url, {
     Accept: "application/json",
     "Content-Type": "application/json",
   },
-  body: JSON.stringify({
-    data: [
-      {
-        key: "DATABASE_URL",
-        value: databaseUrl,
-        is_literal: true,
-        is_multiline: false,
-      },
-    ],
-  }),
+  body: JSON.stringify({ data: bulk }),
 });
 
 const text = await res.text();
 console.log(res.status, text.slice(0, 500));
 if (!res.ok) process.exit(1);
+if (res.status !== 201 && res.status !== 200) {
+  console.warn("Note: docs expect 201 for bulk env update; got", res.status);
+}
 console.log("\nDone. Redeploy the WMS app in Coolify so the container picks up DATABASE_URL.");
