@@ -46,6 +46,10 @@ flutter.sdk=D:/cwm/.tools/flutter
 
 Open/build from `D:\cwm\mobile\carbon_wms` (or keep using the junction paths in `local.properties` only).
 
+## Gradle
+
+- **`gradle-*-src.zip`** (e.g. from Downloads) is **source code** only — the Android build needs a **binary** distribution (`-bin` or `-all`). The wrapper is set to use **`D:\Downloads\gradle-8.14-all.zip`** (on **D:**). To use another path or version, edit `distributionUrl` in `android/gradle/wrapper/gradle-wrapper.properties` (or use the official `https://services.gradle.org/distributions/gradle-8.14-all.zip` URL).
+
 ## D: only (no new build files on C:)
 
 Keep the repo on **`D:`** (e.g. junction `D:\cwm` → your clone). The release script enforces that and redirects:
