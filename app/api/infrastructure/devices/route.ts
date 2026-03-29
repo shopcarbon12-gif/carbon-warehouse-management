@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { SCOPES } from "@/lib/auth/roles";
 import { getSession } from "@/lib/get-session";
 import { getPool } from "@/lib/db";
+import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import {
   listDevicesForTenant,
   upsertDevice,
@@ -53,6 +55,9 @@ export async function POST(req: Request) {
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
+
+  const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
+  if (denied) return denied;
 
   const client = await pool.connect();
   try {

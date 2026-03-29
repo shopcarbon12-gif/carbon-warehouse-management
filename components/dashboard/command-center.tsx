@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import Link from "next/link";
+import { useCallback, useState } from "react";
 import {
   Activity,
   Cpu,
@@ -12,6 +13,7 @@ import {
   Wifi,
 } from "lucide-react";
 import type { AuditLogListRow } from "@/lib/queries/dashboard-command";
+import { LiveStreamHandler } from "@/components/rfid/live-stream-handler";
 
 type CommandPayload = {
   kpis: {
@@ -123,6 +125,12 @@ function formatAuditLine(row: AuditLogListRow): string {
 }
 
 export function CommandCenter() {
+  const [liveScanCount, setLiveScanCount] = useState(0);
+
+  const onLiveScan = useCallback((delta: number) => {
+    setLiveScanCount((c) => c + Math.max(0, delta));
+  }, []);
+
   const { data, error, isLoading, isValidating } = useSWR(
     "/api/dashboard/command",
     fetcher,
@@ -138,6 +146,8 @@ export function CommandCenter() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
+      <LiveStreamHandler onLiveScanCount={onLiveScan} />
+
       <div className="flex flex-col gap-2 border-b border-slate-800 pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-slate-500">
@@ -150,8 +160,8 @@ export function CommandCenter() {
             Operations overview
           </h1>
           <p className="mt-1 max-w-xl font-mono text-xs text-slate-500">
-            Live KPIs refresh every 15s. Hardware pulse reflects fixed edge layout (Senitron-style
-            density).
+            Live KPIs refresh every 15s. RFID edge events for your location stream in over SSE;
+            session counter below tracks tags seen this visit.
           </p>
         </div>
         <div className="flex items-center gap-2 font-mono text-[0.65rem] text-slate-500">
@@ -168,6 +178,11 @@ export function CommandCenter() {
           Hardware pulse
         </h2>
         <div className="flex flex-wrap gap-2">
+          <PulsePill
+            label="Live scans (session)"
+            count={liveScanCount}
+            Icon={Radio}
+          />
           {hardware.map((h) => (
             <PulsePill key={h.label} label={h.label} count={h.count} Icon={h.icon} />
           ))}

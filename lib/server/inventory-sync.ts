@@ -60,7 +60,8 @@ export async function listSyncJobLogs(
   const countR = await pool.query<{ c: string }>(
     `SELECT COUNT(*)::text AS c
      FROM sync_jobs
-     WHERE tenant_id = $1::uuid AND job_type = 'lightspeed_catalog'`,
+     WHERE tenant_id = $1::uuid
+       AND job_type IN ('lightspeed_catalog', 'lightspeed_reconcile')`,
     [tenantId],
   );
   const total = Number(countR.rows[0]?.c ?? 0);
@@ -76,7 +77,8 @@ export async function listSyncJobLogs(
   }>(
     `SELECT id::text, status, job_type, error, payload, created_at, updated_at
      FROM sync_jobs
-     WHERE tenant_id = $1::uuid AND job_type = 'lightspeed_catalog'
+     WHERE tenant_id = $1::uuid
+       AND job_type IN ('lightspeed_catalog', 'lightspeed_reconcile')
      ORDER BY created_at DESC
      LIMIT $2 OFFSET $3`,
     [tenantId, safeLimit, offset],

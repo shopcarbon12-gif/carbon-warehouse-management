@@ -1,0 +1,11 @@
+name: carbon_zebra_driver
+description: Zebra RFD8500 Bluetooth / API3 integration (Android — to be wired).
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter

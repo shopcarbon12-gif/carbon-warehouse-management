@@ -7,6 +7,8 @@ export type SessionPayload = {
   email: string;
   tid: string;
   lid: string;
+  /** `memberships.role` at login / location switch (default `member`). */
+  role: string;
 };
 
 function getSecret(): Uint8Array {
@@ -25,6 +27,7 @@ export async function signSession(p: SessionPayload): Promise<string> {
     tid: p.tid,
     lid: p.lid,
     email: p.email,
+    role: p.role,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(p.sub)
@@ -41,8 +44,10 @@ export async function verifySessionToken(
     const tid = payload.tid as string | undefined;
     const lid = payload.lid as string | undefined;
     const email = payload.email as string | undefined;
+    const roleRaw = payload.role as string | undefined;
     if (!sub || !tid || !lid || !email) return null;
-    return { sub, tid, lid, email };
+    const role = roleRaw?.trim() || "member";
+    return { sub, tid, lid, email, role };
   } catch {
     return null;
   }

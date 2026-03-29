@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { SCOPES } from "@/lib/auth/roles";
 import { getSession } from "@/lib/get-session";
 import { getPool } from "@/lib/db";
-import { performLightspeedCatalogSync } from "@/lib/server/inventory-sync";
+import { requireSessionScopes } from "@/lib/server/api-require-scopes";
+import { performLightspeedCatalogSync } from "@/lib/server/lightspeed-sync";
 import { randomUUID } from "node:crypto";
 
 export async function POST() {
@@ -14,6 +16,9 @@ export async function POST() {
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
+
+  const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
+  if (denied) return denied;
 
   const idempotency_key = `ls-cat-${randomUUID()}`;
   try {

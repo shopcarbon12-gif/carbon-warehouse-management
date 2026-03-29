@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { SCOPES } from "@/lib/auth/roles";
 import { getSession } from "@/lib/get-session";
 import { getPool } from "@/lib/db";
+import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { deleteDevice } from "@/lib/server/infrastructure-devices";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -20,6 +22,9 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
+
+  const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
+  if (denied) return denied;
 
   const client = await pool.connect();
   try {

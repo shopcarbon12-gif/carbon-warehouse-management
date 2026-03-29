@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifySessionToken } from "@/lib/auth";
+import {
+  isAdminOnlyPath,
+  isAdminRole,
+  isWarehouseFloorAllowedPath,
+  isWarehouseFloorRole,
+} from "@/lib/auth/dashboard-rbac";
 
 function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/docs")) return true;
@@ -9,6 +15,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/api/auth/")) return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
   if (pathname.startsWith("/api/handheld")) return true;
+  /* Handheld edge firehose (API key + device registry; no browser session). */
+  if (pathname === "/api/edge/ingest") return true;
   return false;
 }
 
@@ -41,6 +49,22 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  const role = session.role ?? "member";
+
+  if (!isAdminRole(role) && isAdminOnlyPath(pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/dashboard";
+    url.searchParams.set("forbidden", "admin");
+    return NextResponse.redirect(url);
+  }
+
+  if (isWarehouseFloorRole(role) && !isWarehouseFloorAllowedPath(pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/dashboard";
+    url.searchParams.set("forbidden", "floor");
     return NextResponse.redirect(url);
   }
 

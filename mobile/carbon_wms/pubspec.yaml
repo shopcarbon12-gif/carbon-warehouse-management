@@ -1,0 +1,28 @@
+name: carbon_wms
+description: Carbon WMS rugged handheld client (Chainway & Zebra HAL).
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  carbon_chainway_driver:
+    path: packages/carbon_chainway_driver
+  carbon_zebra_driver:
+    path: packages/carbon_zebra_driver
+  google_fonts: ^6.2.1
+  lucide_icons: ^0.257.0
+  provider: ^6.1.2
+  http: ^1.2.2
+  shared_preferences: ^2.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

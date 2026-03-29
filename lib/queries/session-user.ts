@@ -16,8 +16,8 @@ export async function findUserWithTenantLocation(
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return null;
 
-  const loc = await pool.query<{ tid: string; lid: string }>(
-    `SELECT m.tenant_id AS tid, l.id AS lid
+  const loc = await pool.query<{ tid: string; lid: string; role: string }>(
+    `SELECT m.tenant_id AS tid, l.id AS lid, m.role
      FROM memberships m
      JOIN locations l ON l.tenant_id = m.tenant_id
      WHERE m.user_id = $1::uuid
@@ -33,6 +33,7 @@ export async function findUserWithTenantLocation(
     email,
     tid: row.tid,
     lid: row.lid,
+    role: row.role?.trim() || "member",
   };
 }
 

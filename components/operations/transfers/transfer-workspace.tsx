@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Radio, ScanLine, Shuffle } from "lucide-react";
 import { TransferCommitModal, type StagedRow } from "./transfer-commit-modal";
@@ -61,6 +61,35 @@ export function TransferWorkspace() {
     for (const r of incoming) map.set(r.epc, r);
     return [...map.values()];
   }, []);
+
+  useEffect(() => {
+    const es = new EventSource("/api/edge/stream");
+    es.onmessage = (ev) => {
+      if (!ev.data?.trim() || ev.data.startsWith(":")) return;
+      let p: { scanContext?: string; epcs?: string[] };
+      try {
+        p = JSON.parse(ev.data) as { scanContext?: string; epcs?: string[] };
+      } catch {
+        return;
+      }
+      if ((p.scanContext ?? "").toUpperCase() !== "TRANSFER") return;
+      const list = (p.epcs ?? [])
+        .map((e) => e.replace(/\s/g, "").toUpperCase())
+        .filter((e) => /^[0-9A-F]{24}$/.test(e));
+      if (list.length === 0) return;
+      void (async () => {
+        try {
+          const rows = await postLookup(list);
+          if (rows.length === 0) return;
+          setStaged((s) => mergeRows(s, rows));
+          setScanning(true);
+        } catch {
+          /* ignore transient lookup errors */
+        }
+      })();
+    };
+    return () => es.close();
+  }, [mergeRows]);
 
   const simulateScan = useCallback(async () => {
     setToast(null);
@@ -233,9 +262,11 @@ export function TransferWorkspace() {
           </button>
         </div>
         <p className="mt-2 font-mono text-[0.6rem] text-slate-600">
-          Simulated reads use in-stock tags at your active session location. Commit moves all staged
-          EPCs to the destination bin and logs <span className="text-orange-400/80">rfid_transfer</span>{" "}
-          with source/destination and full epcs[] for the tracker.
+          Live handheld batches with scanContext{" "}
+          <span className="text-teal-400/90">TRANSFER</span> (same location as your session) stream in
+          over SSE and stage here. Simulated reads use in-stock tags at your active session location.
+          Commit moves staged EPCs to the destination bin and logs{" "}
+          <span className="text-orange-400/80">rfid_transfer</span>.
         </p>
       </div>
 
@@ -266,7 +297,7 @@ export function TransferWorkspace() {
           </table>
           {staged.length === 0 ? (
             <p className="p-6 text-center font-mono text-xs text-slate-600">
-              Stage tags via simulate, manual EPC, or future reader SDK.
+              Stage tags via edge stream, simulate, manual EPC, or reader SDK.
             </p>
           ) : null}
         </div>

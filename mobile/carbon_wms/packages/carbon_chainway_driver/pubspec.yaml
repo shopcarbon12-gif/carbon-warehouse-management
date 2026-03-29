@@ -1,0 +1,11 @@
+name: carbon_chainway_driver
+description: Chainway RSCJA sled integration (Android method channels — to be wired).
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter

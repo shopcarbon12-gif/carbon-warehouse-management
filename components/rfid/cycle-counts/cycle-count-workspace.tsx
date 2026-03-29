@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Radio, ScanLine, Shuffle } from "lucide-react";
 import {
@@ -101,6 +101,45 @@ export function CycleCountWorkspace() {
     setMisplacedSeed(new Set());
     setUnrecognizedSeed(new Set());
   }, []);
+
+  const cycleStreamContexts = useMemo(
+    () =>
+      new Set([
+        "CYCLE_COUNT",
+        "GEIGER_FIND",
+        "INVENTORY_LOOKUP",
+        "COMMISSIONING",
+        "STATUS_CHANGE",
+      ]),
+    [],
+  );
+
+  useEffect(() => {
+    const es = new EventSource("/api/edge/stream");
+    es.onmessage = (ev) => {
+      if (!ev.data?.trim() || ev.data.startsWith(":")) return;
+      let p: { scanContext?: string; epcs?: string[] };
+      try {
+        p = JSON.parse(ev.data) as { scanContext?: string; epcs?: string[] };
+      } catch {
+        return;
+      }
+      const ctx = (p.scanContext ?? "").toUpperCase();
+      if (ctx === "TRANSFER") return;
+      if (!cycleStreamContexts.has(ctx)) return;
+      const list = (p.epcs ?? [])
+        .map((e) => e.replace(/\s/g, "").toUpperCase())
+        .filter((e) => /^[0-9A-F]{24}$/.test(e));
+      if (list.length === 0) return;
+      setScanned((prev) => {
+        const s = new Set(prev.map((x) => x.replace(/\s/g, "").toUpperCase()));
+        for (const e of list) s.add(e);
+        return [...s];
+      });
+      setScanning(true);
+    };
+    return () => es.close();
+  }, [cycleStreamContexts]);
 
   const c = useMemo(
     () => classify(expected, scanned, misplacedSeed, unrecognizedSeed),
