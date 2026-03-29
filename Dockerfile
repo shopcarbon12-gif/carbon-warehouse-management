@@ -20,7 +20,9 @@ ENV NPM_CONFIG_PRODUCTION=false
 ENV NODE_OPTIONS=--max-old-space-size=6144
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+# Avoid `npm run build` here: package.json runs db:migrate first, which needs DATABASE_URL.
+# Migrations run at container start via docker-entrypoint (WMS_AUTO_MIGRATE) or Coolify hooks.
+RUN npx next build
 
 FROM base AS runner
 WORKDIR /app
@@ -33,6 +35,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY scripts/schema.sql scripts/seed-bootstrap.sql /app/scripts/
+COPY scripts/migrations /app/scripts/migrations
 COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 # Writable .next/cache; entrypoint runs as root for optional psql migrate/seed, then su-exec nextjs.
 RUN chmod +x /app/docker-entrypoint.sh \

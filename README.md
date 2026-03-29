@@ -42,7 +42,7 @@ Pick **one** approach:
   `DATABASE_URL="postgresql://..." npm run db:migrate`
 - **Custom Coolify command:** Only if your command runs in an environment that has the **full repo** + `node_modules` (e.g. a separate “migrate” service or a build step), run `npm run db:migrate` there.
 
-`db:migrate` applies [`scripts/schema.sql`](scripts/schema.sql). It is **not** fully idempotent on re-run (plain `CREATE TABLE`); run it **once** per empty database.
+`db:migrate` applies [`scripts/schema.sql`](scripts/schema.sql), then every `*.sql` in [`scripts/migrations/`](scripts/migrations/) in sorted order (currently RFID core in [`001_rfid_core.sql`](scripts/migrations/001_rfid_core.sql)). The baseline schema is **not** fully idempotent on re-run (plain `CREATE TABLE`); migration files use `IF NOT EXISTS` / guarded `ALTER` so they are safe to repeat. For an **empty** database, run the full flow once; for an **existing** database, run `db:migrate` from a dev machine against `DATABASE_URL` so new migration files apply (or rely on `WMS_AUTO_MIGRATE=1` in Docker, which runs migrations even when the baseline was already applied).
 
 ### 3. Optional seed (staging only)
 

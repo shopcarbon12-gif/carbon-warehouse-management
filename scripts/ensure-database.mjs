@@ -2,7 +2,7 @@
  * Creates the database named in DATABASE_URL if it does not exist (connects to `postgres` first).
  */
 import nextEnv from "@next/env";
-import postgres from "postgres";
+import pg from "pg";
 
 nextEnv.loadEnvConfig(process.cwd());
 const raw = process.env.DATABASE_URL?.trim();
@@ -23,14 +23,19 @@ if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(dbName)) {
   process.exit(1);
 }
 
-const sql = postgres(adminUrl, { max: 1, prepare: false });
-const [exists] = await sql`
-  SELECT 1 AS ok FROM pg_database WHERE datname = ${dbName}
-`;
-if (!exists) {
-  await sql.unsafe(`CREATE DATABASE ${dbName}`);
-  console.log("Created database:", dbName);
-} else {
-  console.log("Database already exists:", dbName);
+const client = new pg.Client({ connectionString: adminUrl });
+await client.connect();
+try {
+  const r = await client.query(
+    `SELECT 1 AS ok FROM pg_database WHERE datname = $1`,
+    [dbName],
+  );
+  if (r.rows.length === 0) {
+    await client.query(`CREATE DATABASE ${dbName}`);
+    console.log("Created database:", dbName);
+  } else {
+    console.log("Database already exists:", dbName);
+  }
+} finally {
+  await client.end();
 }
-await sql.end();

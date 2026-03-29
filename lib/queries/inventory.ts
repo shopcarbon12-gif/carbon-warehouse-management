@@ -1,4 +1,4 @@
-import type { Sql } from "@/lib/db";
+import type { Pool } from "pg";
 
 export type InventoryRow = {
   id: string;
@@ -10,56 +10,38 @@ export type InventoryRow = {
 };
 
 export async function listInventory(
-  sql: Sql,
+  pool: Pool,
   locationId: string,
   opts: { q?: string; zone?: string; limit: number; offset: number },
 ): Promise<InventoryRow[]> {
   const q = opts.q?.trim().toLowerCase();
   const zone = opts.zone?.trim();
+  const params: unknown[] = [locationId];
+  let p = 2;
+  const where: string[] = [`location_id = $1::uuid`];
 
-  if (q && zone) {
-    return sql<InventoryRow[]>`
-      SELECT id, asset_id, sku, name, zone, qty
-      FROM inventory_items
-      WHERE location_id = ${locationId}::uuid
-        AND zone = ${zone}
-        AND (
-          lower(asset_id) LIKE ${"%" + q + "%"}
-          OR lower(sku) LIKE ${"%" + q + "%"}
-          OR lower(name) LIKE ${"%" + q + "%"}
-        )
-      ORDER BY sku ASC
-      LIMIT ${opts.limit} OFFSET ${opts.offset}
-    `;
+  if (zone) {
+    where.push(`zone = $${p}`);
+    params.push(zone);
+    p += 1;
   }
   if (q) {
-    return sql<InventoryRow[]>`
-      SELECT id, asset_id, sku, name, zone, qty
-      FROM inventory_items
-      WHERE location_id = ${locationId}::uuid
-        AND (
-          lower(asset_id) LIKE ${"%" + q + "%"}
-          OR lower(sku) LIKE ${"%" + q + "%"}
-          OR lower(name) LIKE ${"%" + q + "%"}
-        )
-      ORDER BY sku ASC
-      LIMIT ${opts.limit} OFFSET ${opts.offset}
-    `;
+    const like = `%${q}%`;
+    where.push(
+      `(lower(asset_id) LIKE $${p} OR lower(sku) LIKE $${p + 1} OR lower(name) LIKE $${p + 2})`,
+    );
+    params.push(like, like, like);
+    p += 3;
   }
-  if (zone) {
-    return sql<InventoryRow[]>`
-      SELECT id, asset_id, sku, name, zone, qty
-      FROM inventory_items
-      WHERE location_id = ${locationId}::uuid AND zone = ${zone}
-      ORDER BY sku ASC
-      LIMIT ${opts.limit} OFFSET ${opts.offset}
-    `;
-  }
-  return sql<InventoryRow[]>`
+
+  params.push(opts.limit, opts.offset);
+  const sql = `
     SELECT id, asset_id, sku, name, zone, qty
     FROM inventory_items
-    WHERE location_id = ${locationId}::uuid
+    WHERE ${where.join(" AND ")}
     ORDER BY sku ASC
-    LIMIT ${opts.limit} OFFSET ${opts.offset}
+    LIMIT $${p} OFFSET $${p + 1}
   `;
+  const r = await pool.query<InventoryRow>(sql, params);
+  return r.rows;
 }

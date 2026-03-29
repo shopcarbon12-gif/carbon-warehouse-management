@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { signSession } from "@/lib/auth";
-import { getSql, isDatabaseUnreachable } from "@/lib/db";
+import { getPool, isDatabaseUnreachable } from "@/lib/db";
 import { findUserWithTenantLocation } from "@/lib/queries/session-user";
 
 export async function POST(req: Request) {
@@ -16,8 +16,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email and password required" }, { status: 400 });
   }
 
-  const sql = getSql();
-  if (!sql) {
+  const pool = getPool();
+  if (!pool) {
     return NextResponse.json(
       { error: "DATABASE_URL is not set. Copy .env.example to .env." },
       { status: 503 },
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
   let payload;
   try {
-    payload = await findUserWithTenantLocation(sql, email, password);
+    payload = await findUserWithTenantLocation(pool, email, password);
   } catch (e) {
     console.error("[login]", e);
     if (isDatabaseUnreachable(e)) {

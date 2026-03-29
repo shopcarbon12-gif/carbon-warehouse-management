@@ -27,6 +27,22 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async headers() {
+    if (process.env.NODE_ENV !== "development") {
+      return [];
+    }
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=0",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

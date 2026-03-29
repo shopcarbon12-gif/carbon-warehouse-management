@@ -42,7 +42,7 @@ export function LocationSwitcher({
     <label className="mx-4 mb-2 mt-2 block">
       <span className="sr-only">Active location</span>
       <select
-        className="w-full rounded-md border border-[var(--surface-border)] bg-[var(--background)] px-3 py-2 font-mono text-sm text-[var(--foreground)]"
+        className="w-full rounded-md border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-200 focus:border-teal-500/60 focus:outline-none focus:ring-1 focus:ring-teal-500/40"
         value={activeLocationId}
         onChange={onChange}
       >

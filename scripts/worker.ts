@@ -1,5 +1,6 @@
 import { loadEnvConfig } from "@next/env";
-import postgres from "postgres";
+import { Pool } from "pg";
+import { executeLightspeedCatalogJob } from "@/lib/server/inventory-sync";
 
 loadEnvConfig(process.cwd());
 
@@ -18,30 +19,35 @@ type JobRow = {
   attempts: number;
 };
 
-async function claimJob(sql: ReturnType<typeof postgres>): Promise<JobRow | null> {
-  const rows = await sql<JobRow[]>`
-    UPDATE sync_jobs
-    SET
-      status = 'running',
-      updated_at = now(),
-      attempts = attempts + 1
-    WHERE id = (
-      SELECT id FROM sync_jobs
-      WHERE status = 'queued'
-      ORDER BY created_at ASC
-      FOR UPDATE SKIP LOCKED
-      LIMIT 1
-    )
-    RETURNING id, job_type, tenant_id, location_id, attempts
-  `;
-  return rows[0] ?? null;
+async function claimJob(pool: Pool): Promise<JobRow | null> {
+  const rows = await pool.query<JobRow>(
+    `UPDATE sync_jobs
+     SET
+       status = 'running',
+       updated_at = now(),
+       attempts = attempts + 1
+     WHERE id = (
+       SELECT id FROM sync_jobs
+       WHERE status = 'queued'
+       ORDER BY created_at ASC
+       FOR UPDATE SKIP LOCKED
+       LIMIT 1
+     )
+     RETURNING id, job_type, tenant_id, location_id, attempts`,
+  );
+  return rows.rows[0] ?? null;
 }
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function processStub(job: JobRow): Promise<void> {
+async function processStub(pool: Pool, job: JobRow): Promise<void> {
+  if (job.job_type === "lightspeed_catalog") {
+    await executeLightspeedCatalogJob(pool, job.id);
+    /* Terminal status + payload are set inside the catalog sync (no generic completed UPDATE). */
+    return;
+  }
   // Stub: real Lightspeed/Shopify calls go here. Idempotency is enforced by idempotency_key on insert.
   await sleep(50 + Math.floor(Math.random() * 80));
   if (job.job_type === "shopify_push" && job.attempts > 2) {
@@ -50,7 +56,7 @@ async function processStub(job: JobRow): Promise<void> {
 }
 
 async function main() {
-  const sql = postgres(databaseUrl, { max: 2, prepare: false });
+  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   console.log("WMS worker started (Ctrl+C to stop)");
 
   let running = true;
@@ -63,25 +69,29 @@ async function main() {
 
   while (running) {
     try {
-      const job = await claimJob(sql);
+      const job = await claimJob(pool);
       if (!job) {
         await sleep(800);
         continue;
       }
       try {
-        await processStub(job);
-        await sql`
-          UPDATE sync_jobs
-          SET status = 'completed', error = NULL, updated_at = now()
-          WHERE id = ${job.id}::uuid
-        `;
+        await processStub(pool, job);
+        if (job.job_type !== "lightspeed_catalog") {
+          await pool.query(
+            `UPDATE sync_jobs
+             SET status = 'completed', error = NULL, updated_at = now()
+             WHERE id = $1::uuid`,
+            [job.id],
+          );
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        await sql`
-          UPDATE sync_jobs
-          SET status = 'failed', error = ${msg}, updated_at = now()
-          WHERE id = ${job.id}::uuid
-        `;
+        await pool.query(
+          `UPDATE sync_jobs
+           SET status = 'failed', error = $1, updated_at = now()
+           WHERE id = $2::uuid`,
+          [msg, job.id],
+        );
       }
     } catch (e) {
       console.error("[worker loop]", e);
@@ -89,7 +99,7 @@ async function main() {
     }
   }
 
-  await sql.end();
+  await pool.end();
   console.log("WMS worker stopped");
 }
 

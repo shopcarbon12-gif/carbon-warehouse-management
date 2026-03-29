@@ -1,4 +1,4 @@
-import type { Sql } from "@/lib/db";
+import type { Pool } from "pg";
 
 export type ExceptionRow = {
   id: string;
@@ -10,58 +10,53 @@ export type ExceptionRow = {
 };
 
 export async function listExceptions(
-  sql: Sql,
+  pool: Pool,
   tenantId: string,
   locationId: string,
 ): Promise<ExceptionRow[]> {
-  const rows = await sql<
-    {
-      id: string;
-      type: string;
-      severity: string;
-      state: string;
-      detail: string;
-      created_at: Date;
-    }[]
-  >`
-    SELECT id, type, severity, state, detail, created_at
-    FROM exceptions
-    WHERE tenant_id = ${tenantId}::uuid AND location_id = ${locationId}::uuid
-    ORDER BY created_at DESC
-    LIMIT 200
-  `;
-  return rows.map((r) => ({
-    ...r,
-    created_at: r.created_at.toISOString(),
+  const r = await pool.query<{
+    id: string;
+    type: string;
+    severity: string;
+    state: string;
+    detail: string;
+    created_at: Date;
+  }>(
+    `SELECT id, type, severity, state, detail, created_at
+     FROM exceptions
+     WHERE tenant_id = $1::uuid AND location_id = $2::uuid
+     ORDER BY created_at DESC
+     LIMIT 200`,
+    [tenantId, locationId],
+  );
+  return r.rows.map((row) => ({
+    ...row,
+    created_at: row.created_at.toISOString(),
   }));
 }
 
 export async function updateExceptionState(
-  sql: Sql,
+  pool: Pool,
   tenantId: string,
   id: string,
   state: string,
   userId: string,
 ): Promise<boolean> {
   const resolved = state === "resolved" || state === "ignored";
-  const [row] = await sql<{ id: string }[]>`
-    UPDATE exceptions
-    SET
-      state = ${state},
-      resolved_at = CASE WHEN ${resolved} THEN now() ELSE resolved_at END
-    WHERE id = ${id}::uuid AND tenant_id = ${tenantId}::uuid
-    RETURNING id
-  `;
-  if (!row) return false;
-  await sql`
-    INSERT INTO audit_log (tenant_id, user_id, action, entity, metadata)
-    VALUES (
-      ${tenantId}::uuid,
-      ${userId}::uuid,
-      'exception_state',
-      ${id},
-      ${sql.json({ state })}
-    )
-  `;
+  const upd = await pool.query<{ id: string }>(
+    `UPDATE exceptions
+     SET
+       state = $1,
+       resolved_at = CASE WHEN $2 THEN now() ELSE resolved_at END
+     WHERE id = $3::uuid AND tenant_id = $4::uuid
+     RETURNING id`,
+    [state, resolved, id, tenantId],
+  );
+  if (!upd.rows[0]) return false;
+  await pool.query(
+    `INSERT INTO audit_log (tenant_id, user_id, action, entity, metadata)
+     VALUES ($1::uuid, $2::uuid, 'exception_state', $3, $4::jsonb)`,
+    [tenantId, userId, id, JSON.stringify({ state })],
+  );
   return true;
 }

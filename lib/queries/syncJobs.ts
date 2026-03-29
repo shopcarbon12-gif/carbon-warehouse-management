@@ -1,4 +1,4 @@
-import type { Sql } from "@/lib/db";
+import type { Pool } from "pg";
 
 export type SyncJobRow = {
   id: string;
@@ -12,7 +12,7 @@ export type SyncJobRow = {
 };
 
 export async function enqueueSyncJob(
-  sql: Sql,
+  pool: Pool,
   input: {
     tenantId: string;
     locationId: string | null;
@@ -24,72 +24,66 @@ export async function enqueueSyncJob(
   const payloadJson = JSON.stringify(input.payload ?? {});
   try {
     if (input.locationId) {
-      const [row] = await sql<{ id: string }[]>`
-        INSERT INTO sync_jobs (tenant_id, location_id, job_type, status, idempotency_key, payload)
-        VALUES (
-          ${input.tenantId}::uuid,
-          ${input.locationId}::uuid,
-          ${input.jobType},
-          'queued',
-          ${input.idempotencyKey},
-          ${payloadJson}::jsonb
-        )
-        RETURNING id
-      `;
-      return { id: row!.id, duplicate: false };
+      const r = await pool.query<{ id: string }>(
+        `INSERT INTO sync_jobs (tenant_id, location_id, job_type, status, idempotency_key, payload)
+         VALUES ($1::uuid, $2::uuid, $3, 'queued', $4, $5::jsonb)
+         RETURNING id`,
+        [
+          input.tenantId,
+          input.locationId,
+          input.jobType,
+          input.idempotencyKey,
+          payloadJson,
+        ],
+      );
+      return { id: r.rows[0]!.id, duplicate: false };
     }
-    const [row] = await sql<{ id: string }[]>`
-      INSERT INTO sync_jobs (tenant_id, location_id, job_type, status, idempotency_key, payload)
-      VALUES (
-        ${input.tenantId}::uuid,
-        NULL,
-        ${input.jobType},
-        'queued',
-        ${input.idempotencyKey},
-        ${payloadJson}::jsonb
-      )
-      RETURNING id
-    `;
-    return { id: row!.id, duplicate: false };
+    const r = await pool.query<{ id: string }>(
+      `INSERT INTO sync_jobs (tenant_id, location_id, job_type, status, idempotency_key, payload)
+       VALUES ($1::uuid, NULL, $2, 'queued', $3, $4::jsonb)
+       RETURNING id`,
+      [input.tenantId, input.jobType, input.idempotencyKey, payloadJson],
+    );
+    return { id: r.rows[0]!.id, duplicate: false };
   } catch {
-    const [existing] = await sql<{ id: string }[]>`
-      SELECT id FROM sync_jobs WHERE idempotency_key = ${input.idempotencyKey} LIMIT 1
-    `;
-    return { id: existing?.id ?? "", duplicate: true };
+    const ex = await pool.query<{ id: string }>(
+      `SELECT id FROM sync_jobs WHERE idempotency_key = $1 LIMIT 1`,
+      [input.idempotencyKey],
+    );
+    return { id: ex.rows[0]?.id ?? "", duplicate: true };
   }
 }
 
 export async function listSyncJobs(
-  sql: Sql,
+  pool: Pool,
   tenantId: string,
   limit: number,
 ): Promise<SyncJobRow[]> {
-  const rows = await sql<
-    {
-      id: string;
-      job_type: string;
-      status: string;
-      idempotency_key: string;
-      error: string | null;
-      attempts: number;
-      created_at: Date;
-      updated_at: Date;
-    }[]
-  >`
-    SELECT id, job_type, status, idempotency_key, error, attempts, created_at, updated_at
-    FROM sync_jobs
-    WHERE tenant_id = ${tenantId}::uuid
-    ORDER BY created_at DESC
-    LIMIT ${limit}
-  `;
-  return rows.map((r) => ({
-    id: r.id,
-    job_type: r.job_type,
-    status: r.status,
-    idempotency_key: r.idempotency_key,
-    error: r.error,
-    attempts: r.attempts,
-    created_at: r.created_at.toISOString(),
-    updated_at: r.updated_at.toISOString(),
+  const r = await pool.query<{
+    id: string;
+    job_type: string;
+    status: string;
+    idempotency_key: string;
+    error: string | null;
+    attempts: number;
+    created_at: Date;
+    updated_at: Date;
+  }>(
+    `SELECT id, job_type, status, idempotency_key, error, attempts, created_at, updated_at
+     FROM sync_jobs
+     WHERE tenant_id = $1::uuid
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [tenantId, limit],
+  );
+  return r.rows.map((row) => ({
+    id: row.id,
+    job_type: row.job_type,
+    status: row.status,
+    idempotency_key: row.idempotency_key,
+    error: row.error,
+    attempts: row.attempts,
+    created_at: row.created_at.toISOString(),
+    updated_at: row.updated_at.toISOString(),
   }));
 }

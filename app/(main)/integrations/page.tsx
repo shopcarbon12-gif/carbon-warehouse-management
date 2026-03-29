@@ -31,24 +31,32 @@ export default async function IntegrationsPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr
-                key={r.id}
-                className="border-b border-[var(--surface-border)]/60 hover:bg-[var(--surface)]/40"
-              >
-                <td className="px-4 py-2 font-mono text-xs capitalize">{r.provider}</td>
-                <td className="px-4 py-2 font-mono text-xs">{r.status}</td>
-                <td className="px-4 py-2 font-mono text-xs text-[var(--muted)]">
-                  {r.location_code ?? "tenant"}
-                </td>
-                <td className="px-4 py-2 font-mono text-xs text-[var(--muted)]">
-                  {r.last_ok_at?.slice(0, 19) ?? "—"}
-                </td>
-                <td className="px-4 py-2 font-mono text-xs text-[var(--muted)]">
-                  {r.last_job_at?.slice(0, 19) ?? "—"}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center font-mono text-[var(--muted)]">
+                  No integration rows — connect Shopify / Lightspeed or seed data.
                 </td>
               </tr>
-            ))}
+            ) : (
+              rows.map((r) => (
+                <tr
+                  key={r.id}
+                  className="border-b border-[var(--surface-border)]/60 hover:bg-[var(--surface)]/40"
+                >
+                  <td className="px-4 py-2 font-mono text-xs capitalize">{r.provider}</td>
+                  <td className="px-4 py-2 font-mono text-xs">{r.status}</td>
+                  <td className="px-4 py-2 font-mono text-xs text-[var(--muted)]">
+                    {r.location_code ?? "tenant"}
+                  </td>
+                  <td className="px-4 py-2 font-mono text-xs text-[var(--muted)]">
+                    {r.last_ok_at?.slice(0, 19) ?? "—"}
+                  </td>
+                  <td className="px-4 py-2 font-mono text-xs text-[var(--muted)]">
+                    {r.last_job_at?.slice(0, 19) ?? "—"}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

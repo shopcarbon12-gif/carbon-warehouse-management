@@ -28,22 +28,26 @@ export async function POST(req: Request) {
   }
 
   const { batch_id, location_id, epcs } = parsed.data;
-  const result = await withDb(async (sql) => {
-    const [loc] = await sql<{ tenant_id: string }[]>`
-      SELECT tenant_id FROM locations WHERE id = ${location_id}::uuid LIMIT 1
-    `;
-    if (!loc) return { error: "location_not_found" as const };
+  const result = await withDb(async (pool) => {
+    const loc = await pool.query<{ tenant_id: string }>(
+      `SELECT tenant_id FROM locations WHERE id = $1::uuid LIMIT 1`,
+      [location_id],
+    );
+    const row = loc.rows[0];
+    if (!row) return { error: "location_not_found" as const };
 
     try {
-      await sql`
-        INSERT INTO handheld_batches (location_id, batch_id, epc_count, status)
-        VALUES (${location_id}::uuid, ${batch_id}, ${epcs.length}, 'accepted')
-      `;
+      await pool.query(
+        `INSERT INTO handheld_batches (location_id, batch_id, epc_count, status)
+         VALUES ($1::uuid, $2, $3, 'accepted')`,
+        [location_id, batch_id, epcs.length],
+      );
     } catch {
-      const [existing] = await sql<{ id: string }[]>`
-        SELECT id FROM handheld_batches WHERE batch_id = ${batch_id} LIMIT 1
-      `;
-      if (existing) {
+      const ex = await pool.query<{ id: string }>(
+        `SELECT id FROM handheld_batches WHERE batch_id = $1 LIMIT 1`,
+        [batch_id],
+      );
+      if (ex.rows[0]) {
         return {
           ok: true as const,
           duplicate: true,
@@ -54,8 +58,8 @@ export async function POST(req: Request) {
       throw new Error("handheld insert failed");
     }
 
-    await enqueueSyncJob(sql, {
-      tenantId: loc.tenant_id,
+    await enqueueSyncJob(pool, {
+      tenantId: row.tenant_id,
       locationId: location_id,
       jobType: "handheld_process",
       idempotencyKey: `handheld:${batch_id}`,
