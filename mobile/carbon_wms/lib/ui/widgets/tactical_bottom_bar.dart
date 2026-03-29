@@ -128,9 +128,12 @@ class _TacticalButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
-            onLongPressStart: (_) => onLongPressStart?.call(),
-            onLongPressEnd: (_) => onLongPressEnd?.call(),
-            child: child,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onLongPressStart: (_) => onLongPressStart?.call(),
+              onLongPressEnd: (_) => onLongPressEnd?.call(),
+              child: child,
+            ),
           ),
         ),
       );

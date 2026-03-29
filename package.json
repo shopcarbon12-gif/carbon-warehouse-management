@@ -15,7 +15,6 @@
     "migrate": "npm run db:migrate",
     "migrate:incremental": "npm run db:migrate:incremental",
     "seed": "npm run db:seed",
-    "db:seed:inventory": "npx tsx scripts/seed-inventory.ts",
     "db:setup": "npm run db:ensure && npm run db:migrate && npm run db:seed",
     "worker": "npx tsx scripts/worker.ts",
     "test:e2e": "playwright test",

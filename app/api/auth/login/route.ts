@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { signSession } from "@/lib/auth";
+import { sessionCookieSecure, signSession } from "@/lib/auth";
 import { getPool, isDatabaseUnreachable } from "@/lib/db";
 import { findUserWithTenantLocation } from "@/lib/queries/session-user";
 
 export async function POST(req: Request) {
+  const secureCookie = sessionCookieSecure(req);
   let body: { email?: string; password?: string };
   try {
     body = await req.json();
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
-    secure: process.env.NODE_ENV === "production",
+    secure: secureCookie,
   });
   return res;
 }

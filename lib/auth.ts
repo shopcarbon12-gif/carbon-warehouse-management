@@ -22,6 +22,22 @@ export function sessionCookieName(): string {
   return COOKIE_NAME;
 }
 
+/**
+ * Use Secure on `wms_session` only when the client used HTTPS. In production,
+ * `secure: true` on plain HTTP makes browsers ignore Set-Cookie, so login returns
+ * 200 but the next navigation has no session. Coolify/Traefik send
+ * `X-Forwarded-Proto`; override with `WMS_SESSION_COOKIE_SECURE=0|1` if needed.
+ */
+export function sessionCookieSecure(req: Request): boolean {
+  if (process.env.NODE_ENV !== "production") return false;
+  const override = process.env.WMS_SESSION_COOKIE_SECURE?.trim();
+  if (override === "0" || override === "false") return false;
+  if (override === "1" || override === "true") return true;
+  const raw = req.headers.get("x-forwarded-proto");
+  const proto = raw?.split(",")[0]?.trim().toLowerCase();
+  return proto === "https";
+}
+
 export async function signSession(p: SessionPayload): Promise<string> {
   return new SignJWT({
     tid: p.tid,

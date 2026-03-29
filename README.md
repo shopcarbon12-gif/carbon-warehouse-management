@@ -57,7 +57,8 @@ Do **not** use the default seed password in production.
 ---
 
 **Also in Coolify:** set **`SESSION_SECRET`**, **`WMS_DEVICE_KEY`**, **`SHOPIFY_WEBHOOK_SECRET`**, **`NODE_ENV=production`**, **`WMS_APP_PUBLIC_BASE_URL`**, **`SHOPIFY_REDIRECT_URI`**, **`SHOPIFY_SCOPES`**, and any R2 / Lightspeed / email vars you use (see [`.env.example`](.env.example)).  
-**`SHOPIFY_REDIRECT_URI`** must match a **Redirect URL** in your Shopify Partner app exactly (including `https` and path).
+Production URL for this app is **`https://wms.shopcarbon.com`**: set **`WMS_APP_PUBLIC_BASE_URL=https://wms.shopcarbon.com`** (no trailing slash). In DNS, add a **`wms`** record (usually **CNAME** to the hostname Coolify shows for the app, or **A** to the server IP if you use that flow). In Coolify → your WMS application → **Configuration** → **General** → **Domains**, enter **`https://wms.shopcarbon.com`** (include the **`https://`** prefix — Coolify uses it to request Let’s Encrypt and configure Traefik; a bare hostname can yield `ERR_CERT_AUTHORITY_INVALID` and “no available server”). Add **`https://www.wms.shopcarbon.com`** in the same field (comma-separated) only if that hostname exists in DNS; otherwise Let’s Encrypt can fail. Then **Save** and **Redeploy**.  
+**`SHOPIFY_REDIRECT_URI`** must match a **Redirect URL** in your Shopify Partner app exactly (including `https` and path), e.g. **`https://wms.shopcarbon.com/api/shopify/callback`**.
 
 After you **push** to the branch Coolify builds from, either wait for automatic deploy (if enabled) or click **Redeploy** on the application in Coolify.
 

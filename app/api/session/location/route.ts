@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { signSession, verifySessionToken } from "@/lib/auth";
+import { sessionCookieSecure, signSession, verifySessionToken } from "@/lib/auth";
 import { withDb } from "@/lib/db";
 import { assertLocationForTenant } from "@/lib/queries/session-user";
 
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
-    secure: process.env.NODE_ENV === "production",
+    secure: sessionCookieSecure(req),
   });
   return res;
 }
