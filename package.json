@@ -20,6 +20,8 @@
     "test:e2e": "playwright test",
     "deploy:coolify": "node scripts/trigger-coolify-deploy.mjs",
     "coolify:set-db": "node scripts/coolify-set-database-url.mjs",
+    "coolify:sync-postgres-url": "node scripts/coolify-sync-postgres-url.mjs",
+    "coolify:api-check": "node scripts/coolify-api-check.mjs",
     "epc:validate": "npx tsx scripts/validate-epc-encoding.ts",
     "printer:test": "npx tsx scripts/test-printer-connection.ts"
   },
