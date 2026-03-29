@@ -43,7 +43,8 @@ export function LiveStreamHandler({
     es.onmessage = (ev) => {
       if (!ev.data || ev.data.startsWith(":")) return;
       const p = parseData(ev.data);
-      if (!p?.epcs?.length && (p?.rowsAffected ?? 0) === 0 && !p?.scanContext) return;
+      if (!p) return;
+      if (!p.epcs?.length && (p.rowsAffected ?? 0) === 0 && !p.scanContext) return;
       const n = p.epcs?.length ?? 0;
       const ctx = p.scanContext ?? "scan";
       const rows = p.rowsAffected ?? 0;
