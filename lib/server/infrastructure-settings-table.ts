@@ -64,10 +64,21 @@ export async function getLightspeedCredentialsForSync(
   };
 }
 
-export function credentialsLookUsableForLiveFetch(c: LightspeedSyncCredentialRow): boolean {
-  if (!c.domainPrefix) return false;
-  if (c.personalToken) return true;
+/** R-Series (`api.lightspeedapp.com`): account id + OAuth refresh — same as carbon-gen. */
+export function credentialsLookUsableForRSeries(c: LightspeedSyncCredentialRow): boolean {
+  const account = c.accountId.trim();
+  return Boolean(account && c.clientId && c.clientSecret && c.refreshToken);
+}
+
+/** Retail X-Series (`*.retail.lightspeed.app` / `LS_PERSONAL_TOKEN`). */
+export function credentialsLookUsableForRetailXSeries(c: LightspeedSyncCredentialRow): boolean {
+  if (!c.domainPrefix.trim()) return false;
+  if (c.personalToken.trim()) return true;
   return Boolean(c.clientId && c.clientSecret && c.refreshToken);
+}
+
+export function credentialsLookUsableForLiveFetch(c: LightspeedSyncCredentialRow): boolean {
+  return credentialsLookUsableForRSeries(c) || credentialsLookUsableForRetailXSeries(c);
 }
 
 /** Upsert Lightspeed identifiers into `infrastructure_settings` after tenant JSON patch. */

@@ -13,6 +13,9 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/login") return true;
   if (pathname.startsWith("/api/health")) return true;
   if (pathname.startsWith("/api/auth/")) return true;
+  /* Lightspeed R-Series OAuth: browser hits these without WMS session. */
+  if (pathname.startsWith("/api/lightspeed/auth")) return true;
+  if (pathname.startsWith("/api/lightspeed/callback")) return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
   if (pathname.startsWith("/api/handheld")) return true;
   /* Handheld edge firehose (API key + device registry; no browser session). */

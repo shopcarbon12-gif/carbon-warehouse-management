@@ -18,6 +18,8 @@ export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname.startsWith("/inventory/sync")) return true;
   if (pathname.startsWith("/api/infrastructure")) return true;
   if (pathname.startsWith("/api/inventory/sync")) return true;
+  if (pathname.startsWith("/infrastructure/lightspeed-sales")) return true;
+  if (pathname.startsWith("/api/lightspeed/sales")) return true;
   return false;
 }
 

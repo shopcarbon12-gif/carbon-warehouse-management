@@ -1,25 +1,27 @@
 #Requires -Version 5.1
 <#
   Build a release APK for Carbon WMS.
-  Prerequisites: Flutter SDK + Android SDK (Android Studio).
+  Prerequisites: Flutter SDK + Android SDK on D:; repo root on D: (junction D:\cwm if needed).
 
   Usage (PowerShell):
-    cd <repo>\mobile\carbon_wms
+    cd D:\cwm\mobile\carbon_wms
     .\scripts\build-apk.ps1
 
   Optional:
-    $env:FLUTTER_ROOT = "C:\path\to\flutter"
-    $env:ANDROID_HOME = "C:\path\to\Android\sdk"
+    $env:FLUTTER_ROOT = "D:\path\to\flutter"
+    $env:ANDROID_HOME = "D:\path\to\Android\sdk"
     .\scripts\build-apk.ps1
 
-  If the repo lives under a path with spaces (e.g. "My project"), some Dart native-asset
-  hooks can fail. Fix: create junctions without spaces and point android/local.properties
-  at them, then build from the junction path (see mobile/carbon_wms/README.md).
+  TEMP, Pub, Gradle, and JVM tmpdir are forced under <repo>\.tools\ (not C:).
+
+  If the repo path has spaces, use a no-space junction and android/local.properties — README.md.
 #>
 $ErrorActionPreference = "Stop"
 $here = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 Set-Location $here
+
+. (Join-Path $PSScriptRoot "_carbon_wms_d_env.ps1") -RepoRoot $repoRoot -RequireRepoOnDDrive
 
 function Find-FlutterBin {
   $repoFlutter = Join-Path $repoRoot ".tools\flutter\bin\flutter.bat"
@@ -30,9 +32,9 @@ function Find-FlutterBin {
   $cmd = Get-Command flutter -ErrorAction SilentlyContinue
   if ($cmd) { return $cmd.Source }
   foreach ($p in @(
-      "$env:USERPROFILE\flutter\bin\flutter.bat",
-      "C:\src\flutter\bin\flutter.bat",
-      "C:\flutter\bin\flutter.bat"
+      "D:\flutter\bin\flutter.bat",
+      "D:\src\flutter\bin\flutter.bat",
+      "$env:USERPROFILE\flutter\bin\flutter.bat"
     )) {
     if (Test-Path $p) { return $p }
   }
@@ -42,11 +44,15 @@ function Find-FlutterBin {
 $flutter = Find-FlutterBin
 if (-not $flutter) {
   Write-Error @"
-Could not find Flutter. Either extract the SDK to <repo>\.tools\flutter, or:
-  - Add flutter to PATH, or
-  - Set FLUTTER_ROOT to your SDK folder (containing bin\flutter.bat)
+Could not find Flutter. Put the SDK on drive D under <repo>\.tools\flutter, or set
+FLUTTER_ROOT to a Flutter folder on drive D (must contain bin\flutter.bat).
 Android Studio: Settings → Languages & Frameworks → Flutter → Flutter SDK path.
 "@
+}
+
+$flutterSdkRoot = (Resolve-Path (Join-Path (Split-Path $flutter -Parent) "..")).Path
+if ((Get-CarbonWmsPathDriveLetter $flutterSdkRoot) -ne 'D:') {
+  Write-Error "Flutter SDK must be on D: (no new tooling files on C:). Current SDK: $flutterSdkRoot"
 }
 
 if ($here -match "\s") {
@@ -56,14 +62,35 @@ use directory junctions without spaces and android/local.properties — see READ
 "@
 }
 
-# Prefer caches on the same drive as the repo to avoid C: full-disk issues.
-$toolPub = Join-Path $repoRoot ".tools\pub-cache"
-$toolGradle = Join-Path $repoRoot ".tools\gradle-user-home"
-New-Item -ItemType Directory -Force -Path $toolPub, $toolGradle | Out-Null
-$env:PUB_CACHE = $toolPub
-$env:GRADLE_USER_HOME = $toolGradle
+$localProps = Join-Path $here "android\local.properties"
+if (Test-Path $localProps) {
+  foreach ($line in Get-Content -LiteralPath $localProps) {
+    if ($line -match '^\s*sdk\.dir\s*=\s*(.+)\s*$') {
+      $sdkDir = $matches[1].Trim() -replace '\\\\', '\' -replace '/', '\'
+      if ($sdkDir) {
+        try { $sdkDir = (Resolve-Path -LiteralPath $sdkDir -ErrorAction Stop).Path } catch { }
+        if (-not (Test-Path $sdkDir)) {
+          Write-Error "android/local.properties sdk.dir not found: $sdkDir"
+        }
+        if ((Get-CarbonWmsPathDriveLetter $sdkDir) -ne 'D:') {
+          Write-Error "Android SDK must be on D:. sdk.dir=$sdkDir"
+        }
+        $env:ANDROID_HOME = $sdkDir
+        $env:ANDROID_SDK_ROOT = $sdkDir
+      }
+      break
+    }
+  }
+}
+if (-not $env:ANDROID_HOME) {
+  Write-Error "No Android SDK. Set sdk.dir in android/local.properties (D: path, e.g. D:/asdk) or set ANDROID_HOME."
+}
 
 Write-Host "Using: $flutter"
+Write-Host "ANDROID_HOME=$env:ANDROID_HOME"
+Write-Host "PUB_CACHE=$env:PUB_CACHE"
+Write-Host "GRADLE_USER_HOME=$env:GRADLE_USER_HOME"
+Write-Host "TEMP=$env:TEMP"
 & $flutter --version
 
 $androidGradle = Join-Path $here "android\app\build.gradle.kts"

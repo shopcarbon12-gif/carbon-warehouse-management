@@ -9,9 +9,11 @@ export default function InventorySyncPage() {
         </h1>
         <p className="mt-1 font-mono text-xs text-slate-500">
           Manual trigger runs immediately (credentials from{" "}
-          <code className="text-slate-600">infrastructure_settings</code> + env), upserting{" "}
-          <code className="text-teal-500/90">matrices</code> and{" "}
-          <code className="text-teal-500/90">custom_skus</code>. History below reads from{" "}
+          <code className="text-slate-600">infrastructure_settings</code> + env). Live pull tries{" "}
+          <strong className="text-slate-400">R-Series</strong> (Account ID + OAuth, carbon-gen style)
+          first, then Retail X-Series <code className="text-slate-600">/api/2.0/products</code>, then
+          simulated data. Upserts <code className="text-teal-500/90">matrices</code> and{" "}
+          <code className="text-teal-500/90">custom_skus</code>. History reads from{" "}
           <code className="text-slate-600">sync_jobs</code>.
         </p>
       </div>

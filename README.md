@@ -72,6 +72,8 @@ npm run deploy:coolify
 
 Keep both values in gitignored **`.env.coolify.local`** (not in git).
 
+**API sanity check (`npm run coolify:api-check`):** calls **GET** `/api/v1/applications/{uuid}` using **`COOLIFY_API_TOKEN`** and the same base/uuid resolution as **`coolify:set-db`**. Official reference: [Authorization](https://coolify.io/docs/api-reference/authorization), [Get application](https://coolify.io/docs/api-reference/api/operations/get-application-by-uuid), [Bulk update envs](https://coolify.io/docs/api-reference/api/operations/update-envs-by-application-uuid) (**PATCH** returns **201** on success).
+
 Optional: set **`WMS_BASE_PATH`** at **build time** if the app is served under a subpath (see `next.config.ts`).
 
 Background worker (sync jobs): **`npm run worker`** — run as a second process or Coolify service with the same **`DATABASE_URL`**.

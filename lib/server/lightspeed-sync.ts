@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import {
-  credentialsLookUsableForLiveFetch,
+  credentialsLookUsableForRetailXSeries,
   getLightspeedCredentialsForSync,
 } from "@/lib/server/infrastructure-settings-table";
 import { performLightspeedCatalogSync } from "@/lib/server/inventory-sync";
@@ -55,7 +55,7 @@ export async function queueLightspeedReconciliationAfterWmsChange(
   input: LightspeedReconcilePayload,
 ): Promise<void> {
   const creds = await getLightspeedCredentialsForSync(pool, input.tenantId);
-  if (!credentialsLookUsableForLiveFetch(creds)) return;
+  if (!credentialsLookUsableForRetailXSeries(creds)) return;
 
   const base = retailBaseUrl(creds.domainPrefix);
   const delays = [800, 1600, 3200, 6400, 12_800];

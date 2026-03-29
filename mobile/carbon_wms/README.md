@@ -46,6 +46,23 @@ flutter.sdk=D:/cwm/.tools/flutter
 
 Open/build from `D:\cwm\mobile\carbon_wms` (or keep using the junction paths in `local.properties` only).
 
+## D: only (no new build files on C:)
+
+Keep the repo on **`D:`** (e.g. junction `D:\cwm` → your clone). The release script enforces that and redirects:
+
+- `PUB_CACHE`, `GRADLE_USER_HOME` → `<repo>/.tools/…`
+- `TEMP` / `TMP` and JVM `java.io.tmpdir` → `<repo>/.tools/tmp`
+
+**Android Studio from the same policy:** in PowerShell, from `mobile/carbon_wms`:
+
+```powershell
+. .\scripts\env-d-drive.ps1
+```
+
+Then start Studio from that terminal (or run Gradle/Flutter there) so the same env applies.
+
+Flutter SDK and Android SDK paths should also be on **`D:`** (e.g. `local.properties` with `D:/asdk` and `D:/cwm/.tools/flutter`).
+
 ## Other
 
-- **C: drive full:** Flutter may fail writing `%APPDATA%\.flutter_settings`. Free space on `C:`, or move caches; the build script sets `PUB_CACHE` and `GRADLE_USER_HOME` under `<repo>/.tools/` to reduce pressure on `C:`.
+- **C: drive full:** Some tools still write small prefs under `%APPDATA%` on `C:`; free space there if installs fail. APK/Gradle/Pub/temp for this project are kept under `<repo>/.tools/` via `build-apk.ps1` / `env-d-drive.ps1`.

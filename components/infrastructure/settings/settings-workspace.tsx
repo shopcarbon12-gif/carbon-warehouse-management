@@ -38,6 +38,17 @@ export function SettingsWorkspace() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const err = sp.get("ls_error");
+    if (err) {
+      setToast(`Lightspeed OAuth: ${decodeURIComponent(err)}`);
+      setTab("integrations");
+      window.history.replaceState({}, "", "/infrastructure/settings");
+    }
+  }, []);
+
+  useEffect(() => {
     if (!data) return;
     setRfidForm({
       company_prefix: String(data.rfid.company_prefix),
@@ -200,7 +211,10 @@ export function SettingsWorkspace() {
             <strong className="text-slate-400">Client secret and refresh token</strong> should live
             in Coolify / <code className="text-slate-600">.env</code> (
             <code className="text-slate-600">LS_CLIENT_SECRET</code>,{" "}
-            <code className="text-slate-600">LS_REFRESH_TOKEN</code>) — never commit them.
+            <code className="text-slate-600">LS_REFRESH_TOKEN</code>) — never commit them. Catalog
+            sync uses <strong className="text-slate-400">R-Series</strong> (Account ID + OAuth, same
+            as carbon-gen) when those are set; domain prefix is only required for Retail X-Series
+            storefront API.
           </p>
           <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
             Client ID
@@ -235,6 +249,22 @@ export function SettingsWorkspace() {
             ) : (
               <span className="text-amber-400/90">not set</span>
             )}
+          </div>
+          <div className="rounded border border-slate-800 bg-zinc-900/50 px-3 py-3 font-mono text-[0.65rem] leading-relaxed text-slate-400">
+            <strong className="text-slate-300">Connect Lightspeed (redirect flow)</strong> — sends you
+            to Lightspeed login, then returns a page with a <code className="text-slate-500">refresh token</code>{" "}
+            to paste as <code className="text-slate-500">LS_REFRESH_TOKEN</code>. In the Lightspeed dev app,
+            register redirect URL{" "}
+            <code className="text-violet-400/90">…/api/lightspeed/callback</code> (same as{" "}
+            <code className="text-slate-500">LS_REDIRECT_URI</code> if you set it).
+            <div className="mt-2">
+              <a
+                href="/api/lightspeed/auth"
+                className="inline-flex rounded-md border border-violet-600/50 bg-violet-950/30 px-3 py-1.5 text-violet-200 hover:bg-violet-900/25"
+              >
+                Start OAuth
+              </a>
+            </div>
           </div>
           <button
             type="button"

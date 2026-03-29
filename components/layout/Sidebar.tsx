@@ -7,6 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   ArrowRightLeft,
+  Banknote,
   LayoutDashboard,
   Map,
   Package,
@@ -70,6 +71,7 @@ const groupInfrastructure: { label: string; items: NavItem[] } = {
   label: "Infrastructure",
   items: [
     { href: "/infrastructure/devices", label: "Devices", icon: Router },
+    { href: "/infrastructure/lightspeed-sales", label: "LS Sales", icon: Banknote },
     { href: "/infrastructure/settings", label: "Settings", icon: Settings },
   ],
 };
