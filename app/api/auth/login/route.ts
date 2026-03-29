@@ -19,10 +19,11 @@ export async function POST(req: Request) {
 
   const pool = getPool();
   if (!pool) {
-    return NextResponse.json(
-      { error: "DATABASE_URL is not set. Copy .env.example to .env." },
-      { status: 503 },
-    );
+    const error =
+      process.env.NODE_ENV === "production"
+        ? "DATABASE_URL is not set on the server. In Coolify: WMS app → Environment variables → add DATABASE_URL (use the internal URL from your linked PostgreSQL resource), save, then redeploy."
+        : "DATABASE_URL is not set. Copy .env.example to .env.";
+    return NextResponse.json({ error }, { status: 503 });
   }
 
   let payload;
@@ -31,13 +32,11 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error("[login]", e);
     if (isDatabaseUnreachable(e)) {
-      return NextResponse.json(
-        {
-          error:
-            "Cannot reach PostgreSQL. Start it (e.g. docker compose up -d), then npm run db:migrate && npm run db:seed.",
-        },
-        { status: 503 },
-      );
+      const error =
+        process.env.NODE_ENV === "production"
+          ? "Cannot reach PostgreSQL. Verify DATABASE_URL in Coolify and that the database container is running."
+          : "Cannot reach PostgreSQL. Start it (e.g. docker compose up -d), then npm run db:migrate && npm run db:seed.";
+      return NextResponse.json({ error }, { status: 503 });
     }
     return NextResponse.json({ error: "Login temporarily unavailable" }, { status: 503 });
   }
