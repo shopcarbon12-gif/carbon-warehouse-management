@@ -12,7 +12,8 @@
     $env:ANDROID_HOME = "D:\path\to\Android\sdk"
     .\scripts\build-apk.ps1
 
-  TEMP, Pub, Gradle, and JVM tmpdir are forced under <repo>\.tools\ (not C:).
+  TEMP, Pub, Gradle, JVM tmpdir, and XDG cache roots are forced under <repo>\.tools\ (not C:).
+  Runs `flutter test` before the release APK build.
 
   If the repo path has spaces, use a no-space junction and android/local.properties — README.md.
 #>
@@ -54,6 +55,7 @@ $flutterSdkRoot = (Resolve-Path (Join-Path (Split-Path $flutter -Parent) "..")).
 if ((Get-CarbonWmsPathDriveLetter $flutterSdkRoot) -ne 'D:') {
   Write-Error "Flutter SDK must be on D: (no new tooling files on C:). Current SDK: $flutterSdkRoot"
 }
+$env:FLUTTER_ROOT = $flutterSdkRoot
 
 if ($here -match "\s") {
   Write-Warning @"
@@ -102,6 +104,11 @@ if (-not (Test-Path $androidGradle)) {
 
 & $flutter pub get
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Host "Running flutter test..."
+& $flutter test
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 & $flutter build apk --release
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

@@ -1,5 +1,5 @@
 /**
- * Path rules for `middleware.ts` (Edge runs before RSC; no DB round-trip).
+ * Path rules for `proxy.ts` (runs before RSC; no DB round-trip).
  * Roles come from the signed session JWT (`memberships.role` at login).
  */
 

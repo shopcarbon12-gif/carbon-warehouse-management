@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "node ./node_modules/next/dist/bin/next dev -p 3040",
-    "build": "npm run db:migrate && next build",
-    "start": "next start",
+    "build": "npm run db:migrate && node ./node_modules/next/dist/bin/next build",
+    "start": "node ./node_modules/next/dist/bin/next start",
     "lint": "eslint",
     "db:up": "docker compose up -d",
     "db:ensure": "node scripts/ensure-database.mjs",

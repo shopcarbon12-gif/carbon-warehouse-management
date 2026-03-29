@@ -32,7 +32,7 @@ Match **`nextjs:nodejs`** to this image’s actual `USER` / `groupadd` / `userad
 
 **Why:** A slow or restarting Postgres must not mark the **whole web container** unhealthy (yellow / restart loops in Coolify).
 
-If **`middleware.ts`** protects routes, allow the **`/api/health`** prefix (e.g. `pathname.startsWith("/api/health")`) so **`/api/health`** and **`/api/health/ready`** are not redirected to login.
+If **`proxy.ts`** (Next.js request proxy) protects routes, allow the **`/api/health`** prefix (e.g. `pathname.startsWith("/api/health")`) so **`/api/health`** and **`/api/health/ready`** are not redirected to login.
 
 ---
 
@@ -91,4 +91,4 @@ Official Coolify doc: [Gateway Timeout (504)](https://coolify.io/docs/troublesho
 - [ ] **`/api/health`** is DB-free; DB checks only on **`/api/health/ready`** (or a dedicated readiness route).
 - [ ] **`HEALTHCHECK`** targets **`/api/health`** with adequate **`start-period`**.
 - [ ] **Port 3000** / **`PORT`** / Coolify mapping aligned.
-- [ ] **Middleware** does not block **`/api/health`**.
+- [ ] **Proxy** (`proxy.ts`) does not block **`/api/health`**.
