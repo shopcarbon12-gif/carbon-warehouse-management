@@ -20,6 +20,14 @@
 # production
 /build
 
+# local tooling (e.g. Flutter SDK clone for scripts)
+/.tools/
+
+# Flutter (carbon_wms)
+/mobile/carbon_wms/build/
+/mobile/carbon_wms/.dart_tool/
+/mobile/carbon_wms/.flutter-plugins-dependencies
+
 # misc
 .DS_Store
 *.pem
