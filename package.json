@@ -19,6 +19,7 @@
     "worker": "npx tsx scripts/worker.ts",
     "test:e2e": "playwright test",
     "deploy:coolify": "node scripts/trigger-coolify-deploy.mjs",
+    "coolify:set-db": "node scripts/coolify-set-database-url.mjs",
     "epc:validate": "npx tsx scripts/validate-epc-encoding.ts",
     "printer:test": "npx tsx scripts/test-printer-connection.ts"
   },
