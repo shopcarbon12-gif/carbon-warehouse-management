@@ -70,7 +70,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       actions: [
         Consumer<MobileSettingsRepository>(
           builder: (context, settings, _) {
-            final p = settings.config.transferOutAntennaPower.toDouble().clamp(0, 300);
+            final p = settings.config.transferOutAntennaPower
+                .toDouble()
+                .clamp(0.0, 300.0);
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [

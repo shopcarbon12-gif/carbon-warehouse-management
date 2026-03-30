@@ -61,7 +61,7 @@ class WmsApiClient {
         'X-Carbon-Mobile': '1',
       },
       body: jsonEncode({'email': email, 'password': password}),
-    });
+    );
     final decoded = jsonDecode(res.body);
     if (res.statusCode < 200 || res.statusCode >= 300) {
       final err = decoded is Map ? decoded['error']?.toString() : null;

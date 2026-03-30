@@ -10,13 +10,18 @@
   Optional:
     $env:FLUTTER_ROOT = "D:\path\to\flutter"
     $env:ANDROID_HOME = "D:\path\to\Android\sdk"
-    .\scripts\build-apk.ps1
+    .\scripts\build-apk.ps1 -ReleaseRoot "D:\CarbonWmsRelease"
 
   TEMP, Pub, Gradle, JVM tmpdir, and XDG cache roots are forced under <repo>\.tools\ (not C:).
+  After success, copies app-release.apk and app-release.apk.sha1 to D:\CarbonWmsRelease (override with -ReleaseRoot).
+
   Runs `flutter test` before the release APK build.
 
   If the repo path has spaces, use a no-space junction and android/local.properties — README.md.
 #>
+param(
+  [string] $ReleaseRoot = "D:\CarbonWmsRelease"
+)
 $ErrorActionPreference = "Stop"
 $here = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
@@ -115,4 +120,22 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $apk = Join-Path $here "build\app\outputs\flutter-apk\app-release.apk"
 Write-Host ""
 Write-Host "APK: $apk"
-if (Test-Path $apk) { Get-Item $apk | Format-List FullName, Length, LastWriteTime }
+if (-not (Test-Path -LiteralPath $apk)) {
+  Write-Error "Expected APK missing: $apk"
+}
+Get-Item -LiteralPath $apk | Format-List FullName, Length, LastWriteTime
+
+if ($ReleaseRoot) {
+  $destDir = $ReleaseRoot.TrimEnd('\', '/')
+  New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+  $destApk = Join-Path $destDir "app-release.apk"
+  $destSha = Join-Path $destDir "app-release.apk.sha1"
+  Copy-Item -LiteralPath $apk -Destination $destApk -Force
+  $sha1 = (Get-FileHash -Algorithm SHA1 -LiteralPath $apk).Hash.ToLowerInvariant()
+  [System.IO.File]::WriteAllText($destSha, $sha1)
+  Write-Host ""
+  Write-Host "Copied release to D: drop folder:"
+  Write-Host "  $destApk"
+  Write-Host "  $destSha"
+  Get-Item -LiteralPath $destApk | Format-List FullName, Length, LastWriteTime
+}

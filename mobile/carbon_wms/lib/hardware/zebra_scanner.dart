@@ -42,6 +42,9 @@ class ZebraScanner implements RfidScanner {
   Stream<RfidTagRead> get tagReadStream => _reads.stream;
 
   @override
+  Stream<String> get epcStream => tagReadStream.map((r) => r.epcHex24);
+
+  @override
   Future<void> connect() async {
     await Future<void>.delayed(const Duration(milliseconds: 50));
     _connected = true;
