@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Flutter APK — rebuild after mobile changes
 
-**Git / Coolify:** Running `build-apk.ps1` does **not** include commit, push, or deploy. Those require an explicit user request (see **`git-push-deploy-user-only.mdc`**).
+**After mobile work:** Per **`git-push-deploy-user-only.mdc`**, **commit and push** when the task is done if there are changes. **Do not** run Coolify **`deploy:coolify`** unless the user asks to deploy.
 
 When **this session** changes any file under **`mobile/carbon_wms/`** (including `packages/carbon_*_driver`, `android/`, `pubspec.yaml`, `lib/**/*.dart`, or `scripts/build-apk.ps1` / `_carbon_wms_d_env.ps1`), **before finishing the turn** you must:
 

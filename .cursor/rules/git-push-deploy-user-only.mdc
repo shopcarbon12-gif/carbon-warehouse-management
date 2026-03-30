@@ -1,14 +1,20 @@
 ---
-description: Never git commit, push, or Coolify deploy unless the user explicitly asks in that message
+description: Commit and push after finishing tasks when there are changes; Coolify deploy only on explicit user command
 alwaysApply: true
 ---
 
-# Git commit, push, and Coolify deploy — user command only
+# Git: commit + push after tasks; deploy on command only
 
-Do **not** run **`git commit`**, **`git push`**, or **`npm run deploy:coolify`** (or any Coolify deploy webhook) unless the user **explicitly** requests that action **in the current message** (e.g. “commit and push”, “deploy to Coolify”, “push and deploy”, “commit push deploy”).
+## Commit and push (default after tasks)
 
-**Without being asked, you may still:** edit files, run tests, run **`.\scripts\build-apk.ps1`**, run **`npm run build`** locally, read logs, and use Coolify MCP/UI for inspection.
+When you **finish a task** (code/config fixes, mobile or web changes, scripts, Cursor rules, etc.) and the working tree has **uncommitted changes** from that work, **`git commit`** and **`git push`** to **`origin`** on the **current branch** before ending the turn.
 
-**If** the user asks to **deploy** but there are **uncommitted** changes they care about, **say so** and ask whether to **commit** first — unless they already asked to **commit and deploy** in the same message.
+**Skip commit/push** only if: the working tree is **clean**, or the user **explicitly** asked you not to commit in that message.
 
-This rule overrides any habit of auto-committing or auto-deploying after other tasks.
+Use a concise, accurate commit message. Never commit secrets or gitignored env files.
+
+## Coolify deploy (user command only)
+
+Do **not** run **`npm run deploy:coolify`** or any deploy webhook unless the user **explicitly** asks to **deploy** in the current message.
+
+If they ask to **deploy** and the tree is dirty, **commit and push first**, then run **`npm run deploy:coolify`** only after their deploy request (same message or follow-up).
