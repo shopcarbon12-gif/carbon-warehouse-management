@@ -53,15 +53,13 @@ export function EpcTrackerWorkspace() {
 
   const searchResult = searchJson?.result;
 
-  useEffect(() => {
-    if (searchResult?.mode === "direct") {
-      setSelectedEpc(searchResult.item.epc);
-    }
-  }, [searchResult]);
+  const directEpc = searchResult?.mode === "direct" ? searchResult.item.epc : null;
+  const focusedEpc =
+      selectedEpc ?? (directEpc && isHex24(directEpc) ? directEpc : null);
 
   const detailUrl =
-    selectedEpc && isHex24(selectedEpc)
-      ? `/api/rfid/tracker/search?q=${encodeURIComponent(selectedEpc)}`
+    focusedEpc && isHex24(focusedEpc)
+      ? `/api/rfid/tracker/search?q=${encodeURIComponent(focusedEpc)}`
       : null;
 
   const {
@@ -76,13 +74,13 @@ export function EpcTrackerWorkspace() {
     detailJson?.result?.mode === "direct" ? detailJson.result.item : null;
 
   const detailMissing =
-    selectedEpc &&
+    focusedEpc &&
     !detailLoading &&
     detailJson?.result?.mode === "pick" &&
     (detailJson.result.matches?.length ?? 0) === 0;
 
-  const historyUrl = selectedEpc
-    ? `/api/rfid/tracker/${encodeURIComponent(selectedEpc)}/history?limit=100`
+  const historyUrl = focusedEpc
+    ? `/api/rfid/tracker/${encodeURIComponent(focusedEpc)}/history?limit=100`
     : null;
 
   const { data: histJson, isLoading: histLoading } = useSWR<{ history: HistoryRow[] }>(
@@ -92,9 +90,9 @@ export function EpcTrackerWorkspace() {
   );
 
   const decoded = useMemo(() => {
-    if (!selectedEpc) return null;
-    return decodeSGTIN96(selectedEpc);
-  }, [selectedEpc]);
+    if (!focusedEpc) return null;
+    return decodeSGTIN96(focusedEpc);
+  }, [focusedEpc]);
 
   const pickMatches =
     searchResult?.mode === "pick" ? searchResult.matches : [];
@@ -129,7 +127,7 @@ export function EpcTrackerWorkspace() {
                   type="button"
                   onClick={() => setSelectedEpc(m.epc)}
                   className={`w-full rounded-md px-3 py-2 text-left font-mono text-xs hover:bg-zinc-800 ${
-                    selectedEpc === m.epc ? "bg-teal-950/40 text-teal-200" : "text-slate-300"
+                    focusedEpc === m.epc ? "bg-teal-950/40 text-teal-200" : "text-slate-300"
                   }`}
                 >
                   <span className="text-teal-400/90">{m.epc}</span>
@@ -158,11 +156,11 @@ export function EpcTrackerWorkspace() {
 
       {detailMissing ? (
         <p className="font-mono text-xs text-amber-500/90">
-          No item row for EPC <span className="text-teal-400/80">{selectedEpc}</span>.
+          No item row for EPC <span className="text-teal-400/80">{focusedEpc}</span>.
         </p>
       ) : null}
 
-      {selectedEpc && item ? (
+      {focusedEpc && item ? (
         <div className="grid gap-4 rounded-lg border border-slate-800 bg-zinc-950/80 p-4 lg:grid-cols-2">
           <div>
             <h3 className="font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">

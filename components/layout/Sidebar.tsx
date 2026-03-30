@@ -158,8 +158,11 @@ function NavAccordion({
   const activeInSection = section.isActiveSection(pathname);
   const [open, setOpen] = useState(activeInSection);
 
+  /* Expand drawer when route enters this section (nav UX). */
   useEffect(() => {
-    if (activeInSection) setOpen(true);
+    if (!activeInSection) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync accordion open state with active route
+    setOpen(true);
   }, [activeInSection]);
 
   return (

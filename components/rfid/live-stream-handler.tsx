@@ -29,7 +29,10 @@ export function LiveStreamHandler({
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countCb = useRef(onLiveScanCount);
-  countCb.current = onLiveScanCount;
+
+  useEffect(() => {
+    countCb.current = onLiveScanCount;
+  }, [onLiveScanCount]);
 
   useEffect(() => {
     const es = new EventSource("/api/edge/stream");

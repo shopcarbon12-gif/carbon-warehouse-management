@@ -59,6 +59,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useLayoutEffect(() => {
     const s = readStored();
+    /* One-time read from localStorage on client; avoids SSR/localStorage mismatch flash. */
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional hydration from localStorage
     setColorMode(s.color);
     setFontScale(s.font);
     applyDom(s);

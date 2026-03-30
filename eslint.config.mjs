@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local SDKs / caches (eslint was scanning Gradle + pub-cache → OOM)
+    ".tools/**",
+    "mobile/carbon_wms/build/**",
+    "mobile/carbon_wms/.dart_tool/**",
+    "mobile/carbon_wms/android/.gradle/**",
+    "coverage/**",
   ]),
 ]);
 
