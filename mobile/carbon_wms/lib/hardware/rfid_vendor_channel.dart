@@ -61,10 +61,13 @@ class RfidVendorChannel {
     }
   }
 
-  static Future<RfidNativeConnectResult> connectZebra() async {
+  /// Optional [readerName] substring to pick one reader when multiple are paired (e.g. `RFD8500`).
+  static Future<RfidNativeConnectResult> connectZebra({String? readerName}) async {
     if (!_isAndroid) return RfidNativeConnectResult.useStub;
     try {
-      await _method.invokeMethod<void>('zebra.connect');
+      await _method.invokeMethod<void>('zebra.connect', <String, dynamic>{
+        if (readerName != null && readerName.trim().isNotEmpty) 'readerName': readerName.trim(),
+      });
       return RfidNativeConnectResult.linked;
     } on PlatformException catch (e) {
       if (e.code == 'NO_SDK' || e.code == 'NOT_IMPLEMENTED') {

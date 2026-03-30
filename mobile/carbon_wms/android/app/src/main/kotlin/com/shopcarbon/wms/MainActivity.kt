@@ -7,25 +7,33 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * RFID MethodChannel (`carbon_wms/rfid`) + EventChannel (`carbon_wms/rfid_tag_stream`).
- * Vendor SDKs are optional: when AARs are added, replace NOT_IMPLEMENTED branches with real calls
- * and push maps `{"epc": "HEX24", "rssi": int}` to [tagEventSink].
+ * Flutter channels:
+ * - [MethodChannel] `carbon_wms/rfid`
+ * - [EventChannel] `carbon_wms/rfid_tag_stream` — maps `{"epc","rssi"}` per tag
  */
 class MainActivity : FlutterActivity() {
-  private var tagEventSink: EventChannel.EventSink? = null
+  private var zebraController: CarbonZebraRfidController? = null
+  private var chainwayController: CarbonChainwayRfidController? = null
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
     val messenger = flutterEngine.dartExecutor.binaryMessenger
 
+    val zebra = CarbonZebraRfidController(this)
+    val chainway = CarbonChainwayRfidController(this)
+    zebraController = zebra
+    chainwayController = chainway
+
     EventChannel(messenger, "carbon_wms/rfid_tag_stream").setStreamHandler(
       object : EventChannel.StreamHandler {
         override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-          tagEventSink = events
+          zebra.setTagSink(events)
+          chainway.setTagSink(events)
         }
 
         override fun onCancel(arguments: Any?) {
-          tagEventSink = null
+          zebra.setTagSink(null)
+          chainway.setTagSink(null)
         }
       },
     )
@@ -35,53 +43,74 @@ class MainActivity : FlutterActivity() {
         "ping" -> result.success("ok")
         "device.manufacturer" -> result.success(Build.MANUFACTURER ?: "")
         "zebra.sdkPresent" -> result.success(classPresent(ZEBRA_RFID_READER))
-        "chainway.sdkPresent" -> result.success(classPresent(CHAINWAY_UHF_A) || classPresent(CHAINWAY_UHF_B))
-        "zebra.connect" ->
-          when {
-            !classPresent(ZEBRA_RFID_READER) ->
-              result.error(
-                "NO_SDK",
-                "Zebra RFID API3 (com.zebra.rfid.api3) not on classpath. Add vendor AAR + Gradle dependency.",
-                null,
-              )
-            else ->
-              result.error(
-                "NOT_IMPLEMENTED",
-                "SDK present: implement reader connection in MainActivity (RFIDReader / Readers).",
-                null,
-              )
+        "chainway.sdkPresent" -> {
+          val c = chainway.resolveUhfClass()
+          result.success(c != null)
+        }
+        "zebra.connect" -> {
+          val args = call.arguments as? Map<*, *>
+          val name = args?.get("readerName") as? String
+          chainway.disconnectAsync()
+          zebra.setReaderNameHint(name)
+          zebra.connectAsync { err ->
+            if (err != null) {
+              result.error("CONNECT_FAILED", err.message ?: "zebra_connect", null)
+            } else {
+              result.success(mapOf("ok" to true))
+            }
           }
-        "zebra.disconnect", "zebra.stopInventory" -> result.success(null)
-        "zebra.startInventory" ->
-          when {
-            !classPresent(ZEBRA_RFID_READER) -> result.error("NO_SDK", "Zebra RFID API3 not present.", null)
-            else -> result.error("NOT_IMPLEMENTED", "Wire inventory start; emit EPCs to rfid_tag_stream.", null)
+        }
+        "zebra.disconnect" -> {
+          zebra.disconnectAsync()
+          result.success(null)
+        }
+        "zebra.stopInventory" -> {
+          zebra.stopInventoryAsync()
+          result.success(null)
+        }
+        "zebra.startInventory" -> {
+          if (!classPresent(ZEBRA_RFID_READER)) {
+            result.error("NO_SDK", "Zebra RFID API3 not present.", null)
+            return@setMethodCallHandler
           }
-        "chainway.connect" ->
-          when {
-            !classPresent(CHAINWAY_UHF_A) && !classPresent(CHAINWAY_UHF_B) ->
-              result.error(
-                "NO_SDK",
-                "Chainway deviceapi UHF class not found. Add vendor SDK for your device.",
-                null,
-              )
-            else ->
-              result.error(
-                "NOT_IMPLEMENTED",
-                "Chainway SDK present: implement RFIDWithUHFUART bridge and stream tags.",
-                null,
-              )
+          zebra.startInventoryFlutterResult(result)
+        }
+        "chainway.connect" -> {
+          zebra.disconnectAsync()
+          chainway.connectAsync { err ->
+            if (err != null) {
+              result.error("CONNECT_FAILED", err.message ?: "chainway_connect", null)
+            } else {
+              result.success(mapOf("ok" to true))
+            }
           }
-        "chainway.disconnect", "chainway.stopInventory" -> result.success(null)
-        "chainway.startInventory" ->
-          when {
-            !classPresent(CHAINWAY_UHF_A) && !classPresent(CHAINWAY_UHF_B) ->
-              result.error("NO_SDK", "Chainway deviceapi not present.", null)
-            else -> result.error("NOT_IMPLEMENTED", "Wire UHF inventory start.", null)
+        }
+        "chainway.disconnect" -> {
+          chainway.disconnectAsync()
+          result.success(null)
+        }
+        "chainway.stopInventory" -> {
+          chainway.stopInventoryAsync()
+          result.success(null)
+        }
+        "chainway.startInventory" -> {
+          if (chainway.resolveUhfClass() == null) {
+            result.error("NO_SDK", "Chainway DeviceAPI not present.", null)
+            return@setMethodCallHandler
           }
+          chainway.startInventoryFlutterResult(result)
+        }
         else -> result.notImplemented()
       }
     }
+  }
+
+  override fun onDestroy() {
+    zebraController?.dispose()
+    chainwayController?.dispose()
+    zebraController = null
+    chainwayController = null
+    super.onDestroy()
   }
 
   private fun classPresent(name: String): Boolean =
@@ -94,7 +123,5 @@ class MainActivity : FlutterActivity() {
 
   private companion object {
     const val ZEBRA_RFID_READER = "com.zebra.rfid.api3.RFIDReader"
-    const val CHAINWAY_UHF_A = "com.rscja.deviceapi.RFIDWithUHFUART"
-    const val CHAINWAY_UHF_B = "com.rscja.deviceapi.module.RFIDWithUHFUART"
   }
 }

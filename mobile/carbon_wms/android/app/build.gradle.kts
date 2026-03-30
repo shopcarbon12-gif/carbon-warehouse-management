@@ -24,7 +24,7 @@ android {
         applicationId = "com.shopcarbon.wms"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = maxOf(flutter.minSdkVersion, 29)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -32,9 +32,15 @@ android {
 
     buildTypes {
         release {
+            // Zebra API3 AAR references optional Apache/SLF4J/BouncyCastle stacks; R8 fails if minify strips them.
+            isMinifyEnabled = false
+            isShrinkResources = false
             // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
@@ -43,6 +49,9 @@ flutter {
     source = "../.."
 }
 
-// Optional vendor RFID: add `android/app/libs/*.aar` then:
-// dependencies { implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar")))) }
-// Zebra: RFID API3 (rfidhostlib); Chainway: deviceapi for your model — then implement MainActivity handlers.
+dependencies {
+    // Zebra RFID API3 — AAR from ZebraDevs/RFID-Android-Inventory-Sample (see app/libs/THIRD_PARTY.txt).
+    implementation(files("libs/API3_LIB-release-2.0.2.82.aar"))
+    // Optional: drop Chainway DeviceAPI JAR/AAR here; reflection bridge loads at runtime.
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
+}

@@ -1,0 +1,7 @@
+Zebra RFID API3 for Android
+- File: API3_LIB-release-2.0.2.82.aar
+- Source: ZebraDevs/RFID-Android-Inventory-Sample (GitHub)
+- License: See ZEBRA_EULA in that repository; https://github.com/ZebraDevs/RFID-Android-Inventory-Sample/blob/master/ZEBRA_EULA_LICENSE.md
+
+Chainway DeviceAPI (optional)
+- Not redistributed here. Add DeviceAPI JAR/AAR + native .so from Chainway support for your handset model to this folder, then rebuild.
