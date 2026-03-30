@@ -41,6 +41,7 @@ export function isWarehouseFloorAllowedPath(pathname: string): boolean {
   if (pathname.startsWith("/reports")) return true;
 
   if (pathname.startsWith("/api/dashboard")) return true;
+  if (pathname.startsWith("/api/overview")) return true;
   if (pathname.startsWith("/api/locations")) return true;
   if (pathname.startsWith("/api/operations")) return true;
   if (pathname.startsWith("/api/inventory/catalog")) return true;
