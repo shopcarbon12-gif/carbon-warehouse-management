@@ -26,6 +26,8 @@
     "coolify:set-lightspeed": "node scripts/coolify-set-lightspeed-env.mjs",
     "coolify:sync-postgres-url": "node scripts/coolify-sync-postgres-url.mjs",
     "coolify:api-check": "node scripts/coolify-api-check.mjs",
+    "coolify:list-env-keys": "node scripts/coolify-list-env-keys.mjs",
+    "coolify:patch-env": "node scripts/coolify-patch-env-bulk.mjs",
     "epc:validate": "npx tsx scripts/validate-epc-encoding.ts",
     "printer:test": "npx tsx scripts/test-printer-connection.ts"
   },
