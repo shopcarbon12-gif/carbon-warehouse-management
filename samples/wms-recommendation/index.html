@@ -434,7 +434,7 @@
             Location <span class="mono" id="dashLocLabel">001</span> — RFID truth + channel alignment
           </p>
           <div class="callout">
-            <strong>Recommendation:</strong> Keep Senitron/Athena for deep RFID encode &amp; LS PO
+            <strong>Recommendation:</strong> Keep Carbon WMS for deep RFID encode &amp; LS PO
             flows; use this WMS for multi-channel orchestration, exceptions, Shopify, and your
             Android uploads — one integration layer (queue, idempotency, audit).
           </div>
@@ -476,7 +476,7 @@
               </p>
               <p style="font-size: 0.85rem; color: var(--muted); margin: 0">
                 External:
-                <a href="https://app.senitron.net/" target="_blank" rel="noopener">Senitron app</a>
+                <a href="https://app.senitron.net/" target="_blank" rel="noopener">Legacy encode app</a>
                 (opens live site; login required).
               </p>
             </div>
@@ -596,7 +596,7 @@
           <div class="panel">
             <h2>Summary <span class="tag ok" id="compareBadge">95.0% matched</span></h2>
             <p style="font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem">
-              Sample endpoint idea: <span class="mono">GET …/compare-preview-data</span> (your API, not Senitron’s).
+              Sample endpoint idea: <span class="mono">GET …/compare-preview-data</span> (your API, not a vendor SaaS).
             </p>
             <table>
               <thead>
@@ -635,7 +635,7 @@
           <div class="grid-kpi">
             <div class="kpi">
               <a href="https://app.senitron.net/" target="_blank" rel="noopener"><div class="val">↗</div></a>
-              <div class="lbl">Open Senitron (encode LS, PO print)</div>
+              <div class="lbl">Open encode portal (LS, PO print)</div>
             </div>
             <div class="kpi">
               <a href="#/handheld"><div class="val">📱</div></a>
@@ -659,7 +659,7 @@
         <!-- Integrations -->
         <section class="page" id="page-integrations" data-page="integrations">
           <h1>Integrations</h1>
-          <p class="sub">Lightspeed + Shopify + Senitron connector health (mock).</p>
+          <p class="sub">Lightspeed + Shopify + Carbon WMS connector health (mock).</p>
           <div class="panel">
             <h2>Connections</h2>
             <table>
@@ -672,7 +672,7 @@
               </thead>
               <tbody>
                 <tr>
-                  <td>Senitron / RFID</td>
+                  <td>Carbon WMS / RFID</td>
                   <td><span class="tag ok">Connected</span></td>
                   <td>Session or API key — your choice</td>
                 </tr>
@@ -737,7 +737,7 @@
         <!-- Handheld -->
         <section class="page" id="page-handheld" data-page="handheld">
           <h1>Handheld (Android)</h1>
-          <p class="sub">Thin client: scan batches → your API → validate → forward to Senitron/LS/Shopify rules.</p>
+          <p class="sub">Thin client: scan batches → your API → validate → forward to Carbon WMS/LS/Shopify rules.</p>
           <div class="panel">
             <h2>Sample upload batch</h2>
             <p style="font-size: 0.85rem; color: var(--muted)">
@@ -781,13 +781,13 @@
               <span>Sync zero-RFID items to external (dangerous)</span>
             </label>
             <p style="font-size: 0.8rem; color: var(--muted); margin: 0.75rem 0 0">
-              Mirrors Senitron “sync” options — your policy engine should own this in production.
+              Mirrors Carbon WMS “sync” options — your policy engine should own this in production.
             </p>
           </div>
         </section>
 
         <footer class="sample-foot">
-          Sample only — not connected to Senitron, Lightspeed, or Shopify. Open this file via a static
+          Sample only — not connected to live Carbon WMS, Lightspeed, or Shopify. Open this file via a static
           server if you prefer (<span class="mono">npx serve samples/wms-recommendation</span>).
         </footer>
       </main>

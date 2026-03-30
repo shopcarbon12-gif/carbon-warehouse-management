@@ -129,6 +129,48 @@ class WmsApiClient {
     }
   }
 
+  /// Status-label ghost filter (`hide_in_search_filters` / `hide_in_item_details` / `!auto_display`).
+  Future<List<EpcVisibilityResult>> postEpcVisibility({
+    required String deviceId,
+    required List<String> epcs,
+  }) async {
+    if (epcs.isEmpty) return [];
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/epc-visibility');
+    final p = await SharedPreferences.getInstance();
+    final edgeKey = p.getString(_prefsKeyEdge)?.trim();
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      if (edgeKey != null && edgeKey.isNotEmpty) ...{
+        'x-edge-api-key': edgeKey,
+        'X-WMS-Edge-Key': edgeKey,
+      },
+    };
+    final res = await _http.post(
+      uri,
+      headers: headers,
+      body: jsonEncode({'deviceId': deviceId, 'epcs': epcs}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return [];
+    final raw = decoded['results'];
+    if (raw is! List) return [];
+    final out = <EpcVisibilityResult>[];
+    for (final item in raw) {
+      if (item is Map<String, dynamic>) {
+        final epc = (item['epc'] as String? ?? '').trim().toUpperCase();
+        final visible = item['visible'] == true;
+        if (epc.isNotEmpty) {
+          out.add(EpcVisibilityResult(epc: epc, visible: visible));
+        }
+      }
+    }
+    return out;
+  }
+
   Future<void> downloadAndInstallApk(String relativeOrAbsoluteUrl) async {
     if (kIsWeb) return;
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
@@ -287,6 +329,12 @@ class WmsApiClient {
   }
 
   void close() => _http.close();
+}
+
+class EpcVisibilityResult {
+  EpcVisibilityResult({required this.epc, required this.visible});
+  final String epc;
+  final bool visible;
 }
 
 class WmsApiException implements Exception {

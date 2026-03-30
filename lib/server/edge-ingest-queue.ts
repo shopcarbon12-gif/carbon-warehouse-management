@@ -36,7 +36,10 @@ async function flushQueue(): Promise<void> {
     const batch = queue.splice(0, queue.length);
     for (const job of batch) {
       try {
-        await reconcileInventoryFromEdge(pool, job);
+        const out = await reconcileInventoryFromEdge(pool, job);
+        if (out.error) {
+          console.error("[edge-ingest-queue] reconcile", job.scanContext, out.error);
+        }
       } catch (e) {
         console.error("[edge-ingest-queue] reconcile failed", e);
       }

@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { publishEdgeScanEvent } from "@/lib/server/edge-scan-hub";
 import { queueLightspeedReconciliationAfterWmsChange } from "@/lib/server/lightspeed-sync";
+import { findTransferBlockedEpc } from "@/lib/server/status-label-enforcement";
 
 export type ReconcilerBatchInput = {
   tenantId: string;
@@ -101,6 +102,15 @@ export async function reconcileInventoryFromEdge(
     let rowsAffected = 0;
 
     if (ctx === "TRANSFER") {
+      const blocked = await findTransferBlockedEpc(client, input.tenantId, epcs);
+      if (blocked) {
+        await client.query("ROLLBACK");
+        return {
+          rowsAffected: 0,
+          error: `BAD_REQUEST:Item ${blocked} cannot be processed in its current status.`,
+        };
+      }
+
       const destBinId = await resolveDestinationBinId(
         client,
         input.tenantId,

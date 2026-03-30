@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:carbon_wms/hardware/chainway_scanner.dart';
 import 'package:carbon_wms/hardware/manual_csv_row.dart';
 import 'package:carbon_wms/hardware/rfid_scanner.dart';
+import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/zebra_scanner.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
@@ -19,7 +20,7 @@ class RfidManager extends ChangeNotifier {
         _settings = settings {
     _settings.addListener(_onSettingsChanged);
     _flushTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      unawaited(_flush());
+      unawaited(_flushVisibilityThenEdge());
     });
   }
 
@@ -27,13 +28,27 @@ class RfidManager extends ChangeNotifier {
   final MobileSettingsRepository _settings;
 
   RfidScanner? _active;
-  StreamSubscription<String>? _epcSub;
+  StreamSubscription<RfidTagRead>? _epcSub;
+
+  /// Raw reads while [scanContext] is `GEIGER_FIND` (no edge ingest / ghost filter).
+  final StreamController<RfidTagRead> _geigerReads = StreamController<RfidTagRead>.broadcast();
+
+  Stream<RfidTagRead> get geigerTagReads => _geigerReads.stream;
 
   /// EPCs not yet successfully posted to `/api/edge/ingest`.
   final Set<String> _pendingIngest = <String>{};
 
   /// When true, RFID reads are kept local only (manual CSV upload flow).
   bool _suppressEdgeStreaming = false;
+
+  /// EPCs waiting for `/api/mobile/epc-visibility` (status-label ghost filter).
+  final Set<String> _visibilityPending = <String>{};
+
+  /// Cached: server said tag may appear in UI / CSV / edge queue.
+  final Map<String, bool> _ghostPassCache = <String, bool>{};
+
+  /// Cached: server said tag is hidden (silent drop).
+  final Map<String, bool> _ghostDropCache = <String, bool>{};
 
   /// First-seen EPCs with timestamps while [_suppressEdgeStreaming] is on.
   final List<ManualCsvRow> _manualCsvRows = <ManualCsvRow>[];
@@ -100,6 +115,9 @@ class RfidManager extends ChangeNotifier {
     _sessionOrder.clear();
     _sessionSeen.clear();
     _pendingIngest.clear();
+    _visibilityPending.clear();
+    _ghostPassCache.clear();
+    _ghostDropCache.clear();
     notifyListeners();
   }
 
@@ -155,7 +173,7 @@ class RfidManager extends ChangeNotifier {
     await _active?.disconnect();
     _active = next;
     await _active!.connect();
-    _epcSub = _active!.epcStream.listen(_ingestIncoming, onError: (_) {});
+    _epcSub = _active!.tagReadStream.listen(_handleTagRead, onError: (_) {});
     await _active!.applyHandheldRuntimeSettings(_settings.config, scanContext: _scanContext);
     notifyListeners();
   }
@@ -168,9 +186,7 @@ class RfidManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _ingestIncoming(String raw) {
-    final u = raw.trim().toUpperCase();
-    if (!_epcHex24.hasMatch(u)) return;
+  void _commitVisibleEpc(String u) {
     if (!_suppressEdgeStreaming) {
       _pendingIngest.add(u);
     }
@@ -183,9 +199,78 @@ class RfidManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _flushGhostBatch() async {
+    if (_visibilityPending.isEmpty) return;
+    final batch = List<String>.from(_visibilityPending);
+    _visibilityPending.clear();
+    notifyListeners();
+    try {
+      final id = _active != null ? await _active!.getDeviceId() : 'HANDHELD_OFFLINE';
+      final rows = await _api.postEpcVisibility(deviceId: id, epcs: batch);
+      for (final r in rows) {
+        if (r.visible) {
+          _ghostPassCache[r.epc] = true;
+          _commitVisibleEpc(r.epc);
+        } else {
+          _ghostDropCache[r.epc] = true;
+        }
+      }
+    } catch (e, st) {
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('[RfidManager] epc-visibility failed: $e\n$st');
+      }
+      _visibilityPending.addAll(batch);
+      notifyListeners();
+    }
+  }
+
+  Future<void> _flushVisibilityThenEdge() async {
+    await _flushGhostBatch();
+    await _flush();
+  }
+
+  void _handleTagRead(RfidTagRead read) {
+    final u = read.epcHex24;
+    if (!_epcHex24.hasMatch(u)) return;
+
+    if (_scanContext == 'GEIGER_FIND') {
+      if (!_geigerReads.isClosed) _geigerReads.add(read);
+      return;
+    }
+
+    if (_ghostDropCache[u] == true) return;
+    if (_ghostPassCache[u] == true) {
+      _commitVisibleEpc(u);
+      return;
+    }
+    _visibilityPending.add(u);
+    notifyListeners();
+  }
+
+  /// Start continuous inventory on the sled (hold-to-locate).
+  Future<void> startLocateScanning() async {
+    await _active?.startScanning();
+  }
+
+  /// Stop inventory on the sled.
+  Future<void> stopLocateScanning() async {
+    await _active?.stopScanning();
+  }
+
+  /// Demo pulse for locate UI (stub hardware / QA).
+  void debugPulseLocateRead(String hex24, {required int rssi}) {
+    final read = RfidTagRead.tryParse(hex24, rssi: rssi);
+    if (read == null) return;
+    if (_scanContext != 'GEIGER_FIND') return;
+    if (!_geigerReads.isClosed) _geigerReads.add(read);
+  }
+
   /// Demo / hardware-off — same path as a live tag read.
   void addSimulatedEpc(String hex24) {
-    _ingestIncoming(hex24);
+    final read = RfidTagRead.tryParse(hex24);
+    if (read == null) return;
+    _handleTagRead(read);
   }
 
   void clearSessionScans() {
@@ -219,10 +304,11 @@ class RfidManager extends ChangeNotifier {
     }
   }
 
-  Future<void> flushNow() => _flush();
+  Future<void> flushNow() => _flushVisibilityThenEdge();
 
   /// Explicit commit for ops screens (transfer / status) — full session list, once.
   Future<void> ingestSessionSnapshot() async {
+    await _flushGhostBatch();
     if (_sessionOrder.isEmpty) return;
     final batch = List<String>.from(_sessionOrder);
     try {
@@ -253,6 +339,7 @@ class RfidManager extends ChangeNotifier {
     _flushTimer?.cancel();
     _epcSub?.cancel();
     unawaited(_active?.disconnect());
+    unawaited(_geigerReads.close());
     super.dispose();
   }
 }

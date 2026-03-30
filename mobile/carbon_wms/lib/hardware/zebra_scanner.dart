@@ -1,15 +1,18 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:carbon_wms/hardware/rfid_scanner.dart';
+import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/services/handheld_runtime_config.dart';
 
 /// Stub: Zebra API3 + Bluetooth stack will replace this implementation.
 class ZebraScanner implements RfidScanner {
-  ZebraScanner() : _epc = StreamController<String>.broadcast();
+  ZebraScanner() : _reads = StreamController<RfidTagRead>.broadcast();
 
-  final StreamController<String> _epc;
+  final StreamController<RfidTagRead> _reads;
+  final Random _rand = Random();
   bool _connected = false;
   bool _scanning = false;
   HandheldRuntimeConfig _runtime = HandheldRuntimeConfig.fallback;
@@ -36,7 +39,7 @@ class ZebraScanner implements RfidScanner {
   bool get isConnected => _connected;
 
   @override
-  Stream<String> get epcStream => _epc.stream;
+  Stream<RfidTagRead> get tagReadStream => _reads.stream;
 
   @override
   Future<void> connect() async {
@@ -63,10 +66,14 @@ class ZebraScanner implements RfidScanner {
     _scanning = false;
   }
 
-  void debugEmitEpc(String hex24) {
-    if (_connected && _scanning) {
-      _epc.add(hex24);
-    }
+  void debugEmitEpc(String hex24, {int? rssi}) {
+    if (!(_connected && _scanning)) return;
+    final read = RfidTagRead.tryParse(
+      hex24,
+      rssi: rssi ?? -58 - _rand.nextInt(28),
+    );
+    if (read == null) return;
+    _reads.add(read);
   }
 
   /// Last applied config (for native API3 wiring).

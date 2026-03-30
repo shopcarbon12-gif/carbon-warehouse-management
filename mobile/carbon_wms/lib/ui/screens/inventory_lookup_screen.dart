@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/util/template_substitution.dart';
 
@@ -17,6 +18,8 @@ class InventoryLookupScreen extends StatefulWidget {
 class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
   final _ctrl = TextEditingController();
   _LookupRow? _row;
+
+  static final RegExp _epc24 = RegExp(r'^[0-9A-F]{24}$');
 
   @override
   void initState() {
@@ -75,11 +78,32 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            if (_row != null)
+            if (_row != null) ...[
               _LookupCard(
                 row: _row!,
                 template: context.watch<MobileSettingsRepository>().config.itemDetailsTemplate,
               ),
+              if (_epc24.hasMatch(_row!.code.trim().toUpperCase())) ...[
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () {
+                    final epc = _row!.code.trim().toUpperCase();
+                    Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => LocateTagScreen(targetEpc: epc),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.sensors),
+                  label: const Text('LOCATE TAG (GEIGER)'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.background,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ],
+            ],
           ],
         ),
       ),

@@ -40,7 +40,7 @@ export function WmsShellClient({
             <Menu className="h-5 w-5" strokeWidth={1.75} />
           </button>
           <span className="truncate text-sm font-semibold text-[var(--wms-fg)]">
-            Carbon WMS
+            CarbonWMS
           </span>
         </header>
           <main className="flex flex-1 flex-col p-4 md:p-6">

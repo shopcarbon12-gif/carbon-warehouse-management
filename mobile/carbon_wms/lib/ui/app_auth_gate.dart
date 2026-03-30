@@ -127,7 +127,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
       barrierDismissible: true,
       builder: (ctx) => AlertDialog(
         title: const Text('Update available'),
-        content: const Text('A newer Carbon WMS build is published. Install when convenient.'),
+        content: const Text('A newer CarbonWMS build is published. Install when convenient.'),
         actions: [
           IconButton(
             icon: const Icon(Icons.close),

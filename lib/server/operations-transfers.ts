@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
+import { findTransferBlockedEpc } from "@/lib/server/status-label-enforcement";
 
 function normalizeEpc(s: string): string {
   return s.replace(/\s/g, "").toUpperCase();
@@ -155,6 +156,11 @@ export async function commitTransfer(
   );
   const db = destBin.rows[0];
   if (!db) throw new Error("BAD_REQUEST:Destination bin not in destination location");
+
+  const blocked = await findTransferBlockedEpc(client, session.tid, epcs);
+  if (blocked) {
+    throw new Error(`BAD_REQUEST:Item ${blocked} cannot be processed in its current status.`);
+  }
 
   const rows = await client.query<{
     epc: string;

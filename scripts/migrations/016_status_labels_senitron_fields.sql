@@ -1,4 +1,4 @@
--- Senitron parity: optional UI label + extended status behavior flags.
+-- Carbon WMS: optional UI label + extended status behavior flags (column names renamed in 018).
 ALTER TABLE status_labels
   ADD COLUMN IF NOT EXISTS display_label TEXT NOT NULL DEFAULT '';
 --> statement-breakpoint

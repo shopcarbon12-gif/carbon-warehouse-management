@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 
-/// Persistent shell: Carbon WMS title + optional back navigation.
+/// Persistent shell: CarbonWMS title + optional back navigation.
 class CarbonScaffold extends StatelessWidget {
   const CarbonScaffold({
     super.key,
@@ -22,7 +22,7 @@ class CarbonScaffold extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Carbon WMS'),
+        title: const Text('CarbonWMS'),
         actions: actions,
         leading: canPop
             ? IconButton(

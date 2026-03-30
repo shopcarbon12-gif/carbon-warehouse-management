@@ -12,7 +12,7 @@ export default async function RfidGeneralSettingsPage() {
       <div className="border-b border-slate-800 pb-3">
         <h1 className="text-lg font-semibold tracking-tight text-slate-100">RFID EPC settings</h1>
         <p className="mt-1 font-mono text-xs text-slate-500">
-          Encoding standard and company prefix for this tenant (Senitron-style defaults).
+          Encoding standard and company prefix for this tenant (Carbon WMS defaults).
         </p>
       </div>
       <RfidGeneralWorkspace />

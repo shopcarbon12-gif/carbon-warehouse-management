@@ -237,7 +237,7 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
       _syncing = false;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Offline encodes pushed to Carbon WMS (stub)')),
+      const SnackBar(content: Text('Offline encodes pushed to CarbonWMS (stub)')),
     );
   }
 

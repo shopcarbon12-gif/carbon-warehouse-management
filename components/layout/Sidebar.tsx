@@ -266,7 +266,7 @@ export function Sidebar({
               WMS
             </span>
             <span className="mt-0.5 block truncate text-base font-semibold tracking-tight text-[var(--wms-fg)]">
-              Carbon WMS
+              CarbonWMS
             </span>
             <span className="mt-0.5 block font-mono text-[0.65rem] text-[var(--wms-muted)]">
               RFID operations

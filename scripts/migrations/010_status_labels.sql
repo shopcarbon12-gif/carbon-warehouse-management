@@ -1,4 +1,4 @@
--- Status labels (Senitron parity, slim schema — no legacy API/transfer/audit columns).
+-- Status labels (Carbon WMS / legacy parity, slim schema — no legacy API/transfer/audit columns).
 CREATE TABLE IF NOT EXISTS status_labels (
   id SERIAL PRIMARY KEY,
   legacy_id INTEGER UNIQUE,

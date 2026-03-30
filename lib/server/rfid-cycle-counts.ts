@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
+import { findAuditBlockedEpc } from "@/lib/server/status-label-enforcement";
 
 const epcHex24 = z
   .string()
@@ -166,6 +167,12 @@ export async function commitCycleCount(
 
   if (missingSet.some((e) => misplacedSet.includes(e))) {
     throw new Error("BAD_REQUEST:EPC cannot appear in both missing and misplaced");
+  }
+
+  const auditEpcs = [...new Set([...missingSet, ...misplacedSet])];
+  const blocked = await findAuditBlockedEpc(client, session.tid, auditEpcs);
+  if (blocked) {
+    throw new Error(`BAD_REQUEST:Item ${blocked} cannot be processed in its current status.`);
   }
 
   let updatedMissing = 0;

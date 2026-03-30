@@ -14,17 +14,6 @@ const fetcher = async (url: string) => {
   return res.json() as Promise<StatusLabelRow[]>;
 };
 
-function Hint({ text }: { text: string }) {
-  return (
-    <span
-      className="ml-1 inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full bg-blue-600 text-[0.55rem] font-bold leading-none text-white dark:bg-blue-600"
-      title={text}
-    >
-      i
-    </span>
-  );
-}
-
 function FlagCell({ on }: { on: boolean }) {
   return (
     <span
@@ -40,15 +29,15 @@ type FormState = {
   name: string;
   legacyId: string;
   displayLabel: string;
-  includeInInventory: boolean;
+  autoDisplay: boolean;
   hideInSearchFilters: boolean;
   hideInItemDetails: boolean;
+  includeInInventory: boolean;
   displayInGroupPage: boolean;
-  autoDisplayIfTagsPresent: boolean;
-  allowInstantStolenApi: boolean;
-  preventLiveOnTransferReceive: boolean;
-  preventChangeDuringAuditRequest: boolean;
-  preventLiveAfterInventoryUploadScript: boolean;
+  allowStolenApi: boolean;
+  preventTransfer: boolean;
+  preventAudit: boolean;
+  preventUploadToLive: boolean;
 };
 
 function emptyForm(): FormState {
@@ -56,15 +45,15 @@ function emptyForm(): FormState {
     name: "",
     legacyId: "",
     displayLabel: "",
-    includeInInventory: false,
+    autoDisplay: false,
     hideInSearchFilters: false,
     hideInItemDetails: false,
+    includeInInventory: false,
     displayInGroupPage: false,
-    autoDisplayIfTagsPresent: false,
-    allowInstantStolenApi: false,
-    preventLiveOnTransferReceive: false,
-    preventChangeDuringAuditRequest: false,
-    preventLiveAfterInventoryUploadScript: false,
+    allowStolenApi: false,
+    preventTransfer: false,
+    preventAudit: false,
+    preventUploadToLive: false,
   };
 }
 
@@ -73,15 +62,15 @@ function rowToForm(row: StatusLabelRow): FormState {
     name: row.name,
     legacyId: row.legacy_id != null ? String(row.legacy_id) : "",
     displayLabel: row.display_label ?? "",
-    includeInInventory: row.include_in_inventory,
+    autoDisplay: row.auto_display,
     hideInSearchFilters: row.hide_in_search_filters,
     hideInItemDetails: row.hide_in_item_details,
+    includeInInventory: row.include_in_inventory,
     displayInGroupPage: row.display_in_group_page,
-    autoDisplayIfTagsPresent: row.auto_display_if_tags_present,
-    allowInstantStolenApi: row.allow_instant_stolen_api,
-    preventLiveOnTransferReceive: row.prevent_live_on_transfer_receive,
-    preventChangeDuringAuditRequest: row.prevent_change_during_audit_request,
-    preventLiveAfterInventoryUploadScript: row.prevent_live_after_inventory_upload_script,
+    allowStolenApi: row.allow_stolen_api,
+    preventTransfer: row.prevent_transfer,
+    preventAudit: row.prevent_audit,
+    preventUploadToLive: row.prevent_upload_to_live,
   };
 }
 
@@ -90,15 +79,15 @@ function buildPayload(form: FormState, legacy: number | null) {
     name: form.name.trim(),
     legacyId: legacy,
     displayLabel: form.displayLabel.trim(),
-    includeInInventory: form.includeInInventory,
+    autoDisplay: form.autoDisplay,
     hideInSearchFilters: form.hideInSearchFilters,
     hideInItemDetails: form.hideInItemDetails,
+    includeInInventory: form.includeInInventory,
     displayInGroupPage: form.displayInGroupPage,
-    autoDisplayIfTagsPresent: form.autoDisplayIfTagsPresent,
-    allowInstantStolenApi: form.allowInstantStolenApi,
-    preventLiveOnTransferReceive: form.preventLiveOnTransferReceive,
-    preventChangeDuringAuditRequest: form.preventChangeDuringAuditRequest,
-    preventLiveAfterInventoryUploadScript: form.preventLiveAfterInventoryUploadScript,
+    allowStolenApi: form.allowStolenApi,
+    preventTransfer: form.preventTransfer,
+    preventAudit: form.preventAudit,
+    preventUploadToLive: form.preventUploadToLive,
   };
 }
 
@@ -322,61 +311,20 @@ export function StatusLabelsWorkspace() {
               </label>
             )}
             <div className="space-y-2.5 border-t border-[var(--wms-border)] pt-3 dark:border-[var(--wms-border)]">
-              {chk("autoDisplayIfTagsPresent", "Auto display if tags present")}
-              {chk("hideInSearchFilters", "Hide in search filters")}
-              {chk("hideInItemDetails", "Hide in Item Details")}
-            </div>
-            <fieldset className="space-y-2 border-t border-[var(--wms-border)] pt-3 dark:border-[var(--wms-border)]">
-              <legend className="mb-1 font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
-                Inventory
-              </legend>
-              <label className="flex cursor-pointer items-center gap-2 font-mono text-xs text-[var(--wms-fg)]">
-                <input
-                  type="radio"
-                  name="inv"
-                  checked={form.includeInInventory}
-                  onChange={() => setForm((f) => ({ ...f, includeInInventory: true }))}
-                  className="border-[var(--wms-border)] text-[var(--wms-accent)]"
-                />
-                Include in Inventory
-              </label>
-              <label className="flex cursor-pointer items-center gap-2 font-mono text-xs text-[var(--wms-fg)]">
-                <input
-                  type="radio"
-                  name="inv"
-                  checked={!form.includeInInventory}
-                  onChange={() => setForm((f) => ({ ...f, includeInInventory: false }))}
-                  className="border-[var(--wms-border)] text-[var(--wms-accent)]"
-                />
-                Do not include in Inventory
-              </label>
-            </fieldset>
-            <div className="space-y-2.5 border-t border-[var(--wms-border)] pt-3 dark:border-[var(--wms-border)]">
+              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
+                Flags (9 columns)
+              </p>
+              {chk("autoDisplay", "AUTO — Auto display if tags present")}
+              {chk("hideInSearchFilters", "H.SRCH — Hide in search filters")}
+              {chk("hideInItemDetails", "H.DTL — Hide in item details")}
+              {chk("includeInInventory", "INV — Include in inventory")}
+              {chk("displayInGroupPage", "GRP — Display in group page")}
+              {chk("allowStolenApi", "STOLEN — Allow change status via API")}
+              {chk("preventTransfer", "XFER — Prevent change status during transfer")}
+              {chk("preventAudit", "AUD — Prevent change status during audit")}
               {chk(
-                "displayInGroupPage",
-                "Display in Group Page - Ignore Inv. Status",
-              )}
-              {chk(
-                "allowInstantStolenApi",
-                "Allow status change via instant stolen API even if not considered in-inventory",
-              )}
-              {chk(
-                "preventLiveOnTransferReceive",
-                <>
-                  Prevent this status from changing to Live during transfer receiving
-                  <Hint text="When receiving a transfer, this status will not auto-change to Live." />
-                </>,
-              )}
-              {chk(
-                "preventChangeDuringAuditRequest",
-                <>
-                  Prevent this status from changing during the Audit Inventory Request module
-                  <Hint text="Audit workflows will not alter items in this status." />
-                </>,
-              )}
-              {chk(
-                "preventLiveAfterInventoryUploadScript",
-                "Prevent this status from changing to Live when the post-script runs after the inventory upload",
+                "preventUploadToLive",
+                "UPLD — Prevent change to Live after post-script (inventory upload)",
               )}
             </div>
             {formError ? (
@@ -447,36 +395,36 @@ export function StatusLabelsWorkspace() {
         <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] dark:border-[var(--wms-border)]">
-              <th className={`${th} pl-3 text-left`} title="System ID (legacy)">
-                System ID
+              <th className={`${th} min-w-[8rem] pl-3 text-left`}>Status name</th>
+              <th className={`${th} text-left`} title="Legacy system ID">
+                Sys ID
               </th>
-              <th className={`${th} min-w-[8rem] text-left`}>Status name</th>
               <th className={th} title="Auto display if tags present">
-                Auto
+                AUTO
               </th>
               <th className={th} title="Hide in search filters">
-                H.Srch
+                H.SRCH
               </th>
               <th className={th} title="Hide in item details">
-                H.Dtl
+                H.DTL
               </th>
               <th className={th} title="Include in inventory">
-                Inv
+                INV
               </th>
               <th className={th} title="Display in group page">
-                Grp
+                GRP
               </th>
-              <th className={th} title="Instant stolen API">
-                Stolen
+              <th className={th} title="Allow change status via API">
+                STOLEN
               </th>
-              <th className={th} title="Prevent Live on transfer receive">
-                Xfer
+              <th className={th} title="Prevent change status during transfer">
+                XFER
               </th>
-              <th className={th} title="Prevent change during audit">
-                Aud
+              <th className={th} title="Prevent change status during audit">
+                AUD
               </th>
-              <th className={th} title="Prevent Live after upload script">
-                Upld
+              <th className={th} title="Prevent change to Live after post-script">
+                UPLD
               </th>
               <th className={`${th} pr-3 text-right`}>Actions</th>
             </tr>
@@ -484,12 +432,12 @@ export function StatusLabelsWorkspace() {
           <tbody className="divide-y divide-[var(--wms-border)]/80 dark:divide-[var(--wms-border)]/80">
             {data.map((row) => (
               <tr key={row.id} className="text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/50">
-                <td className="px-3 py-2 font-mono text-xs tabular-nums text-[var(--wms-muted)]">
+                <td className="px-3 py-2 font-medium">{row.name}</td>
+                <td className="px-2 py-2 font-mono text-xs tabular-nums text-[var(--wms-muted)]">
                   {row.legacy_id ?? "—"}
                 </td>
-                <td className="px-2 py-2 font-medium">{row.name}</td>
                 <td className="px-2 py-2 text-center">
-                  <FlagCell on={row.auto_display_if_tags_present} />
+                  <FlagCell on={row.auto_display} />
                 </td>
                 <td className="px-2 py-2 text-center">
                   <FlagCell on={row.hide_in_search_filters} />
@@ -504,16 +452,16 @@ export function StatusLabelsWorkspace() {
                   <FlagCell on={row.display_in_group_page} />
                 </td>
                 <td className="px-2 py-2 text-center">
-                  <FlagCell on={row.allow_instant_stolen_api} />
+                  <FlagCell on={row.allow_stolen_api} />
                 </td>
                 <td className="px-2 py-2 text-center">
-                  <FlagCell on={row.prevent_live_on_transfer_receive} />
+                  <FlagCell on={row.prevent_transfer} />
                 </td>
                 <td className="px-2 py-2 text-center">
-                  <FlagCell on={row.prevent_change_during_audit_request} />
+                  <FlagCell on={row.prevent_audit} />
                 </td>
                 <td className="px-2 py-2 text-center">
-                  <FlagCell on={row.prevent_live_after_inventory_upload_script} />
+                  <FlagCell on={row.prevent_upload_to_live} />
                 </td>
                 <td className="px-3 py-2 text-right">
                   <button

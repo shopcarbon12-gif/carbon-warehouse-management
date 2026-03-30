@@ -9,7 +9,7 @@ import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/barcode_intake_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
-import 'package:carbon_wms/ui/screens/geiger_screen.dart';
+import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_csv_session_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
@@ -195,9 +195,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               delegate: SliverChildListDelegate([
                 _DashCard(
                   icon: LucideIcons.radio,
-                  label: 'Geiger (Find)',
+                  label: 'Locate tag (Geiger)',
                   onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute<void>(builder: (_) => const GeigerScreen()),
+                    MaterialPageRoute<void>(builder: (_) => const LocateTagScreen()),
                   ),
                 ),
                 _DashCard(

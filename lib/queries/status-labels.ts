@@ -9,11 +9,11 @@ export type StatusLabelRow = {
   hide_in_search_filters: boolean;
   hide_in_item_details: boolean;
   display_in_group_page: boolean;
-  auto_display_if_tags_present: boolean;
-  allow_instant_stolen_api: boolean;
-  prevent_live_on_transfer_receive: boolean;
-  prevent_change_during_audit_request: boolean;
-  prevent_live_after_inventory_upload_script: boolean;
+  auto_display: boolean;
+  allow_stolen_api: boolean;
+  prevent_transfer: boolean;
+  prevent_audit: boolean;
+  prevent_upload_to_live: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -28,18 +28,17 @@ export async function listStatusLabels(pool: Pool): Promise<StatusLabelRow[]> {
     hide_in_search_filters: boolean;
     hide_in_item_details: boolean;
     display_in_group_page: boolean;
-    auto_display_if_tags_present: boolean;
-    allow_instant_stolen_api: boolean;
-    prevent_live_on_transfer_receive: boolean;
-    prevent_change_during_audit_request: boolean;
-    prevent_live_after_inventory_upload_script: boolean;
+    auto_display: boolean;
+    allow_stolen_api: boolean;
+    prevent_transfer: boolean;
+    prevent_audit: boolean;
+    prevent_upload_to_live: boolean;
     created_at: Date;
     updated_at: Date;
   }>(
     `SELECT id, legacy_id, name, display_label, include_in_inventory, hide_in_search_filters,
-            hide_in_item_details, display_in_group_page, auto_display_if_tags_present,
-            allow_instant_stolen_api, prevent_live_on_transfer_receive,
-            prevent_change_during_audit_request, prevent_live_after_inventory_upload_script,
+            hide_in_item_details, display_in_group_page, auto_display,
+            allow_stolen_api, prevent_transfer, prevent_audit, prevent_upload_to_live,
             created_at, updated_at
      FROM status_labels
      ORDER BY legacy_id NULLS LAST, name ASC`,
@@ -53,11 +52,11 @@ export async function listStatusLabels(pool: Pool): Promise<StatusLabelRow[]> {
     hide_in_search_filters: row.hide_in_search_filters,
     hide_in_item_details: row.hide_in_item_details,
     display_in_group_page: row.display_in_group_page,
-    auto_display_if_tags_present: row.auto_display_if_tags_present,
-    allow_instant_stolen_api: row.allow_instant_stolen_api,
-    prevent_live_on_transfer_receive: row.prevent_live_on_transfer_receive,
-    prevent_change_during_audit_request: row.prevent_change_during_audit_request,
-    prevent_live_after_inventory_upload_script: row.prevent_live_after_inventory_upload_script,
+    auto_display: row.auto_display,
+    allow_stolen_api: row.allow_stolen_api,
+    prevent_transfer: row.prevent_transfer,
+    prevent_audit: row.prevent_audit,
+    prevent_upload_to_live: row.prevent_upload_to_live,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
   }));
@@ -98,11 +97,11 @@ export type StatusLabelWriteInput = {
   hide_in_search_filters: boolean;
   hide_in_item_details: boolean;
   display_in_group_page: boolean;
-  auto_display_if_tags_present: boolean;
-  allow_instant_stolen_api: boolean;
-  prevent_live_on_transfer_receive: boolean;
-  prevent_change_during_audit_request: boolean;
-  prevent_live_after_inventory_upload_script: boolean;
+  auto_display: boolean;
+  allow_stolen_api: boolean;
+  prevent_transfer: boolean;
+  prevent_audit: boolean;
+  prevent_upload_to_live: boolean;
 };
 
 export async function insertStatusLabel(
@@ -114,9 +113,8 @@ export async function insertStatusLabel(
       `INSERT INTO status_labels (
          legacy_id, name, display_label,
          include_in_inventory, hide_in_search_filters, hide_in_item_details, display_in_group_page,
-         auto_display_if_tags_present, allow_instant_stolen_api,
-         prevent_live_on_transfer_receive, prevent_change_during_audit_request,
-         prevent_live_after_inventory_upload_script
+         auto_display, allow_stolen_api,
+         prevent_transfer, prevent_audit, prevent_upload_to_live
        )
        VALUES ($1::int, $2, $3, $4::boolean, $5::boolean, $6::boolean, $7::boolean,
                $8::boolean, $9::boolean, $10::boolean, $11::boolean, $12::boolean)
@@ -129,11 +127,11 @@ export async function insertStatusLabel(
         input.hide_in_search_filters,
         input.hide_in_item_details,
         input.display_in_group_page,
-        input.auto_display_if_tags_present,
-        input.allow_instant_stolen_api,
-        input.prevent_live_on_transfer_receive,
-        input.prevent_change_during_audit_request,
-        input.prevent_live_after_inventory_upload_script,
+        input.auto_display,
+        input.allow_stolen_api,
+        input.prevent_transfer,
+        input.prevent_audit,
+        input.prevent_upload_to_live,
       ],
     );
     const id = r.rows[0]?.id;
@@ -180,11 +178,11 @@ export async function updateStatusLabelFull(
        hide_in_search_filters = $6::boolean,
        hide_in_item_details = $7::boolean,
        display_in_group_page = $8::boolean,
-       auto_display_if_tags_present = $9::boolean,
-       allow_instant_stolen_api = $10::boolean,
-       prevent_live_on_transfer_receive = $11::boolean,
-       prevent_change_during_audit_request = $12::boolean,
-       prevent_live_after_inventory_upload_script = $13::boolean,
+       auto_display = $9::boolean,
+       allow_stolen_api = $10::boolean,
+       prevent_transfer = $11::boolean,
+       prevent_audit = $12::boolean,
+       prevent_upload_to_live = $13::boolean,
        updated_at = now()
      WHERE id = $1::int`,
     [
@@ -196,11 +194,11 @@ export async function updateStatusLabelFull(
       input.hide_in_search_filters,
       input.hide_in_item_details,
       input.display_in_group_page,
-      input.auto_display_if_tags_present,
-      input.allow_instant_stolen_api,
-      input.prevent_live_on_transfer_receive,
-      input.prevent_change_during_audit_request,
-      input.prevent_live_after_inventory_upload_script,
+      input.auto_display,
+      input.allow_stolen_api,
+      input.prevent_transfer,
+      input.prevent_audit,
+      input.prevent_upload_to_live,
     ],
   );
   if ((r.rowCount ?? 0) === 0) return { ok: false, code: "not_found" };
