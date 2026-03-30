@@ -33,7 +33,7 @@ const fetcher = async (url: string): Promise<CommandPayload> => {
 };
 
 const hardware = [
-  { label: "Reader", count: 1, icon: Radio },
+  { label: "Readers", count: 1, icon: Radio },
   { label: "Antennas", count: 9, icon: Wifi },
   { label: "Printers", count: 1, icon: Printer },
   { label: "Handhelds", count: 0, icon: Smartphone },
@@ -51,15 +51,15 @@ function PulsePill({
   const live = count > 0;
   return (
     <div
-      className={`flex min-w-[7.5rem] items-center gap-2 rounded-md border px-3 py-2 font-mono text-xs ${
+      className={`flex min-w-[6.5rem] flex-1 items-center gap-2 rounded-lg border px-3 py-2.5 font-mono text-xs sm:min-w-[7.5rem] ${
         live
           ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-          : "border-slate-700/80 bg-zinc-900/60 text-slate-500"
+          : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-muted)]"
       }`}
     >
       <span
         className={`relative flex h-2 w-2 shrink-0 rounded-full ${
-          live ? "bg-emerald-400" : "bg-slate-600"
+          live ? "bg-emerald-400" : "bg-[var(--wms-muted)]"
         }`}
         aria-hidden
       >
@@ -69,8 +69,8 @@ function PulsePill({
       </span>
       <Icon className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={2} />
       <div className="min-w-0 leading-tight">
-        <div className="text-[0.65rem] uppercase tracking-wide text-slate-500">{label}</div>
-        <div className="tabular-nums text-sm font-semibold text-slate-100">{count}</div>
+        <div className="text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">{label}</div>
+        <div className="tabular-nums text-sm font-semibold text-[var(--wms-fg)]">{count}</div>
       </div>
     </div>
   );
@@ -89,23 +89,23 @@ function KpiTile({
 }) {
   const ring =
     accent === "teal"
-      ? "hover:border-teal-500/40 hover:shadow-[0_0_0_1px_rgba(45,212,191,0.15)]"
+      ? "hover:border-[var(--wms-accent)]/50"
       : accent === "amber"
-        ? "hover:border-amber-500/35 hover:shadow-[0_0_0_1px_rgba(251,191,36,0.12)]"
-        : "hover:border-violet-500/35 hover:shadow-[0_0_0_1px_rgba(167,139,250,0.12)]";
+        ? "hover:border-amber-500/40"
+        : "hover:border-violet-500/40";
   const num =
     accent === "teal"
-      ? "text-teal-300"
+      ? "text-[var(--wms-accent)]"
       : accent === "amber"
         ? "text-amber-200"
         : "text-violet-200";
   return (
     <Link
       href={href}
-      className={`block rounded-lg border border-slate-800 bg-zinc-950/80 p-5 transition-colors ${ring}`}
+      className={`block rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-sm transition-colors ${ring}`}
     >
       <div className={`text-3xl font-bold tabular-nums ${num}`}>{value}</div>
-      <div className="mt-2 font-mono text-[0.7rem] uppercase tracking-wider text-slate-500">
+      <div className="mt-2 font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
         {title}
       </div>
     </Link>
@@ -148,131 +148,141 @@ export function CommandCenter() {
     <div className="mx-auto max-w-6xl space-y-8">
       <LiveStreamHandler onLiveScanCount={onLiveScan} />
 
-      <div className="flex flex-col gap-2 border-b border-slate-800 pb-6 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-slate-500">
-            <Cpu className="h-4 w-4" strokeWidth={2} />
-            <span className="font-mono text-[0.65rem] uppercase tracking-[0.2em]">
-              Command center
-            </span>
+      <header className="border-b border-[var(--wms-border)] pb-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-[var(--wms-muted)]">
+              <Cpu className="h-4 w-4" strokeWidth={2} />
+              <span className="font-mono text-[0.65rem] uppercase tracking-[0.2em]">Command center</span>
+            </div>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--wms-fg)]">
+              Operations overview
+            </h1>
+            <p className="mt-1 max-w-xl font-mono text-xs text-[var(--wms-muted)]">
+              KPIs refresh every 15s. RFID edge stream (SSE) updates the live scan counter for this session.
+            </p>
           </div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-100">
-            Operations overview
-          </h1>
-          <p className="mt-1 max-w-xl font-mono text-xs text-slate-500">
-            Live KPIs refresh every 15s. RFID edge events for your location stream in over SSE;
-            session counter below tracks tags seen this visit.
-          </p>
+          <div className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
+            {isValidating && !isLoading ? <span className="text-[var(--wms-accent)]">Syncing…</span> : null}
+            {error ? <span className="text-red-500/90">KPI load error</span> : null}
+          </div>
         </div>
-        <div className="flex items-center gap-2 font-mono text-[0.65rem] text-slate-500">
-          {isValidating && !isLoading ? (
-            <span className="text-teal-500/80">Syncing…</span>
-          ) : null}
-          {error ? <span className="text-red-400/90">KPI load error</span> : null}
-        </div>
-      </div>
+      </header>
 
-      <section>
-        <h2 className="mb-3 flex items-center gap-2 font-mono text-[0.7rem] font-medium uppercase tracking-wider text-slate-400">
-          <Activity className="h-3.5 w-3.5" strokeWidth={2} />
+      {/* Top: KPI cards */}
+      <section aria-label="Key metrics">
+        {isLoading && !data ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-32 animate-pulse rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <KpiTile
+              title="Total active inventory"
+              value={kpis.total_items}
+              href="/inventory/catalog"
+              accent="teal"
+            />
+            <KpiTile
+              title="Receiving concerns"
+              value={kpis.receiving_concerns}
+              href="/alerts"
+              accent="amber"
+            />
+            <KpiTile
+              title="Unknown assets"
+              value={kpis.unknown_assets}
+              href="/inventory"
+              accent="violet"
+            />
+          </div>
+        )}
+      </section>
+
+      {/* Middle: hardware pulse */}
+      <section aria-label="Hardware pulse">
+        <h2 className="mb-3 flex items-center gap-2 font-mono text-[0.7rem] font-medium uppercase tracking-wider text-[var(--wms-muted)]">
+          <Radio className="h-3.5 w-3.5" strokeWidth={2} />
           Hardware pulse
         </h2>
-        <div className="flex flex-wrap gap-2">
-          <PulsePill
-            label="Live scans (session)"
-            count={liveScanCount}
-            Icon={Radio}
-          />
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <PulsePill label="Live scans (session)" count={liveScanCount} Icon={Radio} />
           {hardware.map((h) => (
             <PulsePill key={h.label} label={h.label} count={h.count} Icon={h.icon} />
           ))}
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
-        <section className="space-y-3">
-          <h2 className="font-mono text-[0.7rem] font-medium uppercase tracking-wider text-slate-400">
-            KPI grid
-          </h2>
-          {isLoading && !data ? (
-            <div className="grid gap-3 sm:grid-cols-3">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-28 animate-pulse rounded-lg border border-slate-800 bg-zinc-900/50"
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <KpiTile
-                title="Total active inventory"
-                value={kpis.total_items}
-                href="/inventory/catalog"
-                accent="teal"
-              />
-              <KpiTile
-                title="Receiving concerns"
-                value={kpis.receiving_concerns}
-                href="/alerts"
-                accent="amber"
-              />
-              <KpiTile
-                title="Unknown assets"
-                value={kpis.unknown_assets}
-                href="/inventory"
-                accent="violet"
-              />
-            </div>
-          )}
-
-          <div className="rounded-lg border border-slate-800 bg-zinc-950/60 px-4 py-3 font-mono text-xs text-slate-500">
-            <Link className="text-teal-500/90 hover:underline" href="/inventory">
-              Inventory
-            </Link>
-            {" · "}
-            <Link className="text-teal-500/90 hover:underline" href="/compare">
-              Compare
-            </Link>
-            {" · "}
-            <Link className="text-teal-500/90 hover:underline" href="/integrations">
-              Integrations
-            </Link>
-            {" · "}
-            <Link className="text-teal-500/90 hover:underline" href="/rfid/commissioning">
-              Commissioning
-            </Link>
+      {/* Bottom: recent activity timeline */}
+      <section aria-label="Recent activity">
+        <h2 className="mb-3 flex items-center gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-wider text-[var(--wms-fg)]">
+          <Activity className="h-3.5 w-3.5 text-[var(--wms-muted)]" strokeWidth={2} />
+          Recent activity
+        </h2>
+        <div className="rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]">
+          <div className="border-b border-[var(--wms-border)] px-4 py-3">
+            <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
+              Last 10 audit events ·{" "}
+              <Link href="/reports/activity" className="text-[var(--wms-accent)] hover:underline">
+                View all
+              </Link>
+            </p>
           </div>
-        </section>
-
-        <aside className="rounded-lg border border-slate-800 bg-zinc-950/80">
-          <div className="border-b border-slate-800 px-4 py-3">
-            <h2 className="flex items-center gap-2 font-mono text-[0.7rem] font-semibold uppercase tracking-wider text-slate-300">
-              <Package className="h-3.5 w-3.5 text-slate-500" strokeWidth={2} />
-              Recent activity
-            </h2>
-            <p className="mt-1 font-mono text-[0.65rem] text-slate-600">Last 10 audit rows</p>
-          </div>
-          <ul className="max-h-[min(70vh,28rem)] divide-y divide-slate-800/80 overflow-y-auto p-2">
+          <ul className="divide-y divide-[var(--wms-border)]/80">
             {activity.length === 0 ? (
-              <li className="px-2 py-8 text-center font-mono text-xs text-slate-600">
+              <li className="px-4 py-10 text-center font-mono text-xs text-[var(--wms-muted)]">
                 No audit events yet.
               </li>
             ) : (
-              activity.map((row) => (
-                <li key={row.id} className="px-2 py-2.5">
-                  <p className="font-mono text-[0.7rem] leading-snug text-slate-300">
-                    {formatAuditLine(row)}
-                  </p>
-                  <p className="mt-1 font-mono text-[0.6rem] tabular-nums text-slate-600">
-                    {new Date(row.created_at).toLocaleString()}
-                  </p>
+              activity.map((row, i) => (
+                <li key={row.id} className="relative flex gap-4 px-4 py-3 pl-8">
+                  <span
+                    className="absolute left-3 top-4 h-2 w-2 rounded-full bg-[var(--wms-accent)] ring-4 ring-[var(--wms-surface)]"
+                    aria-hidden
+                  />
+                  {i < activity.length - 1 ? (
+                    <span
+                      className="absolute bottom-0 left-[0.8rem] top-8 w-px bg-[var(--wms-border)]"
+                      aria-hidden
+                    />
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-mono text-xs leading-snug text-[var(--wms-fg)]">
+                      {formatAuditLine(row)}
+                    </p>
+                    <p className="mt-1 font-mono text-[0.6rem] tabular-nums text-[var(--wms-muted)]">
+                      {new Date(row.created_at).toLocaleString()}
+                    </p>
+                  </div>
                 </li>
               ))
             )}
           </ul>
-        </aside>
-      </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-3 font-mono text-xs text-[var(--wms-muted)]">
+          <Link className="text-[var(--wms-accent)] hover:underline" href="/inventory">
+            Inventory
+          </Link>
+          {" · "}
+          <Link className="text-[var(--wms-accent)] hover:underline" href="/compare">
+            Compare
+          </Link>
+          {" · "}
+          <Link className="text-[var(--wms-accent)] hover:underline" href="/integrations">
+            Integrations
+          </Link>
+          {" · "}
+          <Link className="text-[var(--wms-accent)] hover:underline" href="/rfid/commissioning">
+            Commissioning
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }

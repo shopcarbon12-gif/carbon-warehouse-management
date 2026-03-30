@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:carbon_wms/hardware/chainway_scanner.dart';
+import 'package:carbon_wms/hardware/manual_csv_row.dart';
 import 'package:carbon_wms/hardware/rfid_scanner.dart';
 import 'package:carbon_wms/hardware/zebra_scanner.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
@@ -28,6 +29,12 @@ class RfidManager extends ChangeNotifier {
 
   /// EPCs not yet successfully posted to `/api/edge/ingest`.
   final Set<String> _pendingIngest = <String>{};
+
+  /// When true, RFID reads are kept local only (manual CSV upload flow).
+  bool _suppressEdgeStreaming = false;
+
+  /// First-seen EPCs with timestamps while [_suppressEdgeStreaming] is on.
+  final List<ManualCsvRow> _manualCsvRows = <ManualCsvRow>[];
 
   /// Ordered, deduped tags for the current operation (transfer, status, etc.).
   final List<String> _sessionOrder = <String>[];
@@ -62,6 +69,37 @@ class RfidManager extends ChangeNotifier {
   List<String> get sessionEpcs => List<String>.unmodifiable(_sessionOrder);
 
   int get sessionCount => _sessionOrder.length;
+
+  bool get suppressEdgeStreaming => _suppressEdgeStreaming;
+
+  set suppressEdgeStreaming(bool v) {
+    if (v == _suppressEdgeStreaming) return;
+    _suppressEdgeStreaming = v;
+    if (v) {
+      _manualCsvRows.clear();
+      _pendingIngest.clear();
+    }
+    notifyListeners();
+  }
+
+  List<ManualCsvRow> get manualCsvRows => List<ManualCsvRow>.unmodifiable(_manualCsvRows);
+
+  /// CSV with header `epc,timestamp,bin` for [POST /api/inventory/upload].
+  String buildManualUploadCsv({String binColumn = ''}) {
+    final b = StringBuffer('epc,timestamp,bin\n');
+    for (final r in _manualCsvRows) {
+      b.writeln('${r.epc},${r.at.toUtc().toIso8601String()},$binColumn');
+    }
+    return b.toString();
+  }
+
+  void clearManualCsvSession() {
+    _manualCsvRows.clear();
+    _sessionOrder.clear();
+    _sessionSeen.clear();
+    _pendingIngest.clear();
+    notifyListeners();
+  }
 
   void setIngestMetadata(Map<String, dynamic> meta) {
     _ingestMetadata = Map<String, dynamic>.from(meta);
@@ -111,9 +149,14 @@ class RfidManager extends ChangeNotifier {
   void _ingestIncoming(String raw) {
     final u = raw.trim().toUpperCase();
     if (!_epcHex24.hasMatch(u)) return;
-    _pendingIngest.add(u);
+    if (!_suppressEdgeStreaming) {
+      _pendingIngest.add(u);
+    }
     if (_sessionSeen.add(u)) {
       _sessionOrder.add(u);
+      if (_suppressEdgeStreaming) {
+        _manualCsvRows.add(ManualCsvRow(epc: u, at: DateTime.now().toUtc()));
+      }
     }
     notifyListeners();
   }
@@ -126,6 +169,7 @@ class RfidManager extends ChangeNotifier {
   void clearSessionScans() {
     _sessionOrder.clear();
     _sessionSeen.clear();
+    _manualCsvRows.clear();
     notifyListeners();
   }
 

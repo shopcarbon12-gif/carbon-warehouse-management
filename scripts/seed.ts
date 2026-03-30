@@ -84,6 +84,40 @@ async function main() {
     throw new Error("Expected locations 001 and 003 after seed");
   }
 
+  /** Orlando (001) physical bins: {Aisle}{Section}{Position}, sections 01–05, L/C/R. */
+  function generateOrlandoWarehouseBinCodes(): string[] {
+    const out: string[] = [];
+    const rows: { row: string; aisleCount: number }[] = [
+      { row: "1", aisleCount: 11 },
+      { row: "2", aisleCount: 8 },
+      { row: "3", aisleCount: 8 },
+      { row: "4", aisleCount: 8 },
+      { row: "5", aisleCount: 8 },
+      { row: "6", aisleCount: 2 },
+    ];
+    const sections = ["01", "02", "03", "04", "05"] as const;
+    const positions = ["L", "C", "R"] as const;
+    for (const { row, aisleCount } of rows) {
+      for (let i = 0; i < aisleCount; i++) {
+        const aisle = `${row}${String.fromCharCode(65 + i)}`;
+        for (const sec of sections) {
+          for (const pos of positions) {
+            out.push(`${aisle}${sec}${pos}`);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  const orlandoBins = generateOrlandoWarehouseBinCodes();
+  await pool.query(
+    `INSERT INTO bins (location_id, code)
+     SELECT $1::uuid, unnest($2::text[])
+     ON CONFLICT (location_id, code) DO NOTHING`,
+    [loc001.id, orlandoBins],
+  );
+
   await pool.query(
     `INSERT INTO tenant_settings (tenant_id, epc_settings, epc_profiles, handheld_settings)
      VALUES ($1::uuid, $2::jsonb, $3::jsonb, $4::jsonb)

@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* class-based dark variant for Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #0c0f12;
   --foreground: #e8eaed;
@@ -8,6 +11,34 @@
   --surface-border: #243040;
   --accent: #2dd4bf;
   --accent-dim: #115e59;
+  --wms-bg: #0c0f12;
+  --wms-fg: #e8eaed;
+  --wms-muted: #8b939e;
+  --wms-surface: #09090b;
+  --wms-surface-elevated: #18181b;
+  --wms-border: #1e293b;
+  --wms-accent: #2dd4bf;
+}
+
+html[data-theme="light"] {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --muted: #64748b;
+  --surface: #ffffff;
+  --surface-border: #cbd5e1;
+  --accent: #0d9488;
+  --accent-dim: #115e59;
+  --wms-bg: #f8fafc;
+  --wms-fg: #0f172a;
+  --wms-muted: #64748b;
+  --wms-surface: #ffffff;
+  --wms-surface-elevated: #f1f5f9;
+  --wms-border: #cbd5e1;
+  --wms-accent: #0d9488;
+}
+
+html.wms-text-lg {
+  font-size: 1.125rem;
 }
 
 @theme inline {
@@ -18,7 +49,7 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--wms-bg);
+  color: var(--wms-fg);
   font-family: var(--font-wms-sans), system-ui, sans-serif;
 }

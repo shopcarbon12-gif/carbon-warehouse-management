@@ -31,14 +31,18 @@ export function isAdminOnlyPath(pathname: string): boolean {
 export function isWarehouseFloorAllowedPath(pathname: string): boolean {
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return true;
   if (pathname.startsWith("/operations")) return true;
+  if (pathname.startsWith("/overview")) return true;
+  if (pathname.startsWith("/rfid")) return true;
   if (pathname.startsWith("/inventory/catalog")) return true;
   if (pathname.startsWith("/handheld")) return true;
+  if (pathname.startsWith("/reports")) return true;
 
   if (pathname.startsWith("/api/dashboard")) return true;
   if (pathname.startsWith("/api/locations")) return true;
   if (pathname.startsWith("/api/operations")) return true;
   if (pathname.startsWith("/api/inventory/catalog")) return true;
   if (pathname.startsWith("/api/rfid/cycle-counts")) return true;
+  if (pathname.startsWith("/api/reports")) return true;
   if (pathname.startsWith("/api/edge/stream")) return true;
   if (pathname.startsWith("/api/session")) return true;
   if (pathname.startsWith("/api/auth")) return true;

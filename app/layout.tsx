@@ -27,7 +27,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${wmsSans.variable} ${wmsMono.variable} h-full antialiased`}
+      className={`${wmsSans.variable} ${wmsMono.variable} h-full antialiased dark`}
+      data-theme="dark"
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

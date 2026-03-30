@@ -8,7 +8,9 @@ import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/barcode_intake_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
+import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
 import 'package:carbon_wms/ui/screens/geiger_screen.dart';
+import 'package:carbon_wms/ui/screens/inventory_csv_session_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_screen.dart';
@@ -110,6 +112,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   label: 'Non-RFID Intake',
                   onTap: () => Navigator.of(context).push<void>(
                     MaterialPageRoute<void>(builder: (_) => const BarcodeIntakeScreen()),
+                  ),
+                ),
+                _DashCard(
+                  icon: LucideIcons.layers,
+                  label: 'Fast bin putaway',
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(builder: (_) => const FastPutawayScreen()),
+                  ),
+                ),
+                _DashCard(
+                  icon: LucideIcons.fileUp,
+                  label: 'CSV cycle session',
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(builder: (_) => const InventoryCsvSessionScreen()),
                   ),
                 ),
               ]),
