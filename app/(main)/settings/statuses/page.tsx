@@ -9,10 +9,10 @@ export default async function StatusLabelsSettingsPage() {
 
   return (
     <div className="mx-auto flex min-w-0 max-w-6xl flex-col gap-6">
-      <div className="border-b border-slate-800 pb-3">
-        <h1 className="text-lg font-semibold tracking-tight text-slate-100">Manage status labels</h1>
-        <p className="mt-1 font-mono text-xs text-slate-500">
-          Senitron-style status flags · toggles persist to <code className="text-slate-600">status_labels</code>.
+      <div className="border-b border-[var(--wms-border)] pb-3 dark:border-[var(--wms-border)]">
+        <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Manage Asset Status</h1>
+        <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
+          System ID = legacy integration id · stored in <code className="text-[var(--wms-fg)]/80">status_labels</code>.
         </p>
       </div>
       <StatusLabelsWorkspace />

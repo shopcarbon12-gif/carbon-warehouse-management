@@ -101,10 +101,16 @@ export async function PATCH(req: Request) {
 const postSchema = z.object({
   name: z.string().min(1).max(512).trim(),
   legacyId: z.union([z.number().int().positive(), z.null()]).optional(),
+  displayLabel: z.string().max(512).optional().default(""),
   includeInInventory: z.boolean().optional(),
   hideInSearchFilters: z.boolean().optional(),
   hideInItemDetails: z.boolean().optional(),
   displayInGroupPage: z.boolean().optional(),
+  autoDisplayIfTagsPresent: z.boolean().optional(),
+  allowInstantStolenApi: z.boolean().optional(),
+  preventLiveOnTransferReceive: z.boolean().optional(),
+  preventChangeDuringAuditRequest: z.boolean().optional(),
+  preventLiveAfterInventoryUploadScript: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {
@@ -126,10 +132,16 @@ export async function POST(req: Request) {
   const input = {
     legacy_id: b.legacyId ?? null,
     name: b.name,
+    display_label: b.displayLabel ?? "",
     include_in_inventory: b.includeInInventory ?? false,
     hide_in_search_filters: b.hideInSearchFilters ?? false,
     hide_in_item_details: b.hideInItemDetails ?? false,
     display_in_group_page: b.displayInGroupPage ?? false,
+    auto_display_if_tags_present: b.autoDisplayIfTagsPresent ?? false,
+    allow_instant_stolen_api: b.allowInstantStolenApi ?? false,
+    prevent_live_on_transfer_receive: b.preventLiveOnTransferReceive ?? false,
+    prevent_change_during_audit_request: b.preventChangeDuringAuditRequest ?? false,
+    prevent_live_after_inventory_upload_script: b.preventLiveAfterInventoryUploadScript ?? false,
   };
 
   try {
@@ -153,10 +165,16 @@ const putSchema = z.object({
   id: z.number().int().positive(),
   name: z.string().min(1).max(512).trim(),
   legacyId: z.union([z.number().int().positive(), z.null()]).optional(),
+  displayLabel: z.string().max(512).optional().default(""),
   includeInInventory: z.boolean(),
   hideInSearchFilters: z.boolean(),
   hideInItemDetails: z.boolean(),
   displayInGroupPage: z.boolean(),
+  autoDisplayIfTagsPresent: z.boolean(),
+  allowInstantStolenApi: z.boolean(),
+  preventLiveOnTransferReceive: z.boolean(),
+  preventChangeDuringAuditRequest: z.boolean(),
+  preventLiveAfterInventoryUploadScript: z.boolean(),
 });
 
 export async function PUT(req: Request) {
@@ -178,10 +196,16 @@ export async function PUT(req: Request) {
   const input = {
     legacy_id: b.legacyId ?? null,
     name: b.name,
+    display_label: b.displayLabel ?? "",
     include_in_inventory: b.includeInInventory,
     hide_in_search_filters: b.hideInSearchFilters,
     hide_in_item_details: b.hideInItemDetails,
     display_in_group_page: b.displayInGroupPage,
+    auto_display_if_tags_present: b.autoDisplayIfTagsPresent,
+    allow_instant_stolen_api: b.allowInstantStolenApi,
+    prevent_live_on_transfer_receive: b.preventLiveOnTransferReceive,
+    prevent_change_during_audit_request: b.preventChangeDuringAuditRequest,
+    prevent_live_after_inventory_upload_script: b.preventLiveAfterInventoryUploadScript,
   };
 
   try {
