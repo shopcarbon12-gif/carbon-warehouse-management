@@ -1,35 +1,60 @@
 import 'dart:convert';
-import 'dart:io' show File;
+import 'dart:io' show File, HttpClient;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:install_plugin/install_plugin.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Edge ingest payload to Carbon WMS (`POST /api/edge/ingest`).
 class WmsApiClient {
-  WmsApiClient({http.Client? httpClient}) : _http = httpClient ?? http.Client();
+  WmsApiClient({http.Client? httpClient}) : _http = httpClient ?? _createDefaultHttpClient();
 
   static const String _prefsKeyBase = 'wms_server_base';
   static const String _prefsKeyEdge = 'wms_edge_api_key';
   static const String _prefsKeySession = 'wms_session_token';
 
-  /// Default: Android emulator → host machine. Physical device: set to `http://<LAN-IP>:3040`.
-  static const String kDefaultBase = 'http://10.0.2.2:3040';
+  /// Debug: Android emulator → host dev server. Release: empty until user sets server on login.
+  static String get kDefaultBase =>
+      kDebugMode ? 'http://10.0.2.2:3040' : '';
 
   final http.Client _http;
 
+  static http.Client _createDefaultHttpClient() {
+    if (kIsWeb) return http.Client();
+    final hc = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 20)
+      ..idleTimeout = const Duration(seconds: 60);
+    return IOClient(hc);
+  }
+
+  /// Trim, add https if no scheme, strip trailing slashes.
+  static String normalizeBaseUrl(String raw) {
+    var s = raw.trim();
+    if (s.isEmpty) return '';
+    if (!s.contains('://')) {
+      s = 'https://$s';
+    }
+    return s.replaceAll(RegExp(r'/+$'), '');
+  }
+
   Future<String> resolveBaseUrl() async {
     final p = await SharedPreferences.getInstance();
-    return p.getString(_prefsKeyBase)?.trim().isNotEmpty == true
-        ? p.getString(_prefsKeyBase)!.trim()
-        : kDefaultBase;
+    final saved = p.getString(_prefsKeyBase)?.trim();
+    if (saved != null && saved.isNotEmpty) return saved;
+    return kDefaultBase;
   }
 
   Future<void> setBaseUrl(String url) async {
     final p = await SharedPreferences.getInstance();
-    await p.setString(_prefsKeyBase, url.trim());
+    final n = normalizeBaseUrl(url);
+    if (n.isEmpty) {
+      await p.remove(_prefsKeyBase);
+      return;
+    }
+    await p.setString(_prefsKeyBase, n);
   }
 
   /// Must match server `WMS_EDGE_INGEST_KEY` or `WMS_DEVICE_KEY`.

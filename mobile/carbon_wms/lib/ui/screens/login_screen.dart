@@ -14,13 +14,31 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _serverUrl = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _busy = false;
   String? _err;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSavedServerUrl());
+  }
+
+  Future<void> _loadSavedServerUrl() async {
+    if (!mounted) return;
+    final api = context.read<WmsApiClient>();
+    final u = await api.resolveBaseUrl();
+    if (!mounted) return;
+    setState(() {
+      if (u.isNotEmpty) _serverUrl.text = u;
+    });
+  }
+
+  @override
   void dispose() {
+    _serverUrl.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
@@ -32,14 +50,35 @@ class _LoginScreenState extends State<LoginScreen> {
       _err = null;
     });
     final api = context.read<WmsApiClient>();
-    final r = await api.login(email: _email.text.trim(), password: _password.text);
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (!r.ok) {
-      setState(() => _err = r.error ?? 'Login failed');
+    final base = WmsApiClient.normalizeBaseUrl(_serverUrl.text);
+    if (base.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _err = 'Enter your WMS server URL (e.g. https://wms.shopcarbon.com).';
+      });
       return;
     }
-    await widget.onSuccess();
+    await api.setBaseUrl(base);
+    try {
+      final r = await api
+          .login(email: _email.text.trim(), password: _password.text)
+          .timeout(const Duration(seconds: 45));
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (!r.ok) {
+        setState(() => _err = r.error ?? 'Login failed');
+        return;
+      }
+      await widget.onSuccess();
+    } on Object catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _err =
+            'Cannot reach server. Check the URL (https), Wi‑Fi, and that the site is up.\n${e.runtimeType}';
+      });
+    }
   }
 
   @override
@@ -58,7 +97,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 'Sign in with your web admin credentials. The device will register its Android ID for approval.',
                 style: TextStyle(color: AppColors.textMuted, fontSize: 12, fontFamily: 'monospace'),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _serverUrl,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Server URL',
+                  hintText: 'https://wms.shopcarbon.com',
+                  helperText: 'Your production or LAN WMS base URL (no path after .com)',
+                ),
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
