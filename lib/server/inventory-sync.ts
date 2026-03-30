@@ -61,7 +61,7 @@ export async function listSyncJobLogs(
     `SELECT COUNT(*)::text AS c
      FROM sync_jobs
      WHERE tenant_id = $1::uuid
-       AND job_type IN ('lightspeed_catalog', 'lightspeed_reconcile')`,
+       AND job_type IN ('lightspeed_catalog', 'lightspeed_reconcile', 'lightspeed_push')`,
     [tenantId],
   );
   const total = Number(countR.rows[0]?.c ?? 0);
@@ -78,7 +78,7 @@ export async function listSyncJobLogs(
     `SELECT id::text, status, job_type, error, payload, created_at, updated_at
      FROM sync_jobs
      WHERE tenant_id = $1::uuid
-       AND job_type IN ('lightspeed_catalog', 'lightspeed_reconcile')
+       AND job_type IN ('lightspeed_catalog', 'lightspeed_reconcile', 'lightspeed_push')
      ORDER BY created_at DESC
      LIMIT $2 OFFSET $3`,
     [tenantId, safeLimit, offset],

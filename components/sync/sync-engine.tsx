@@ -13,6 +13,8 @@ type SyncCompareRow = {
 
 type SyncComparePayload = {
   lsLocationId: string;
+  lsInventorySource?: "live_catalog" | "simulated";
+  lsInventoryDetail?: string;
   over: SyncCompareRow[];
   short: SyncCompareRow[];
   matched: SyncCompareRow[];
@@ -74,10 +76,26 @@ export function SyncEngine() {
             Lightspeed ↔ RFID
           </p>
           {data ? (
-            <p className="mt-1 font-mono text-xs text-slate-500">
-              LS location key:{" "}
-              <span className="text-teal-500/90">{data.lsLocationId}</span>
-            </p>
+            <div className="mt-1 space-y-1 font-mono text-xs text-slate-500">
+              <p>
+                LS location key: <span className="text-teal-500/90">{data.lsLocationId}</span>
+              </p>
+              {data.lsInventorySource ? (
+                <p>
+                  POS qty source:{" "}
+                  <span
+                    className={
+                      data.lsInventorySource === "live_catalog" ? "text-emerald-400/90" : "text-amber-400/85"
+                    }
+                  >
+                    {data.lsInventorySource === "live_catalog" ? "live catalog API" : "simulated demo"}
+                  </span>
+                </p>
+              ) : null}
+              {data.lsInventoryDetail ? (
+                <p className="max-w-xl text-[0.65rem] leading-relaxed text-slate-600">{data.lsInventoryDetail}</p>
+              ) : null}
+            </div>
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">

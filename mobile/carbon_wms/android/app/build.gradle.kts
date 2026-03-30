@@ -42,3 +42,7 @@ android {
 flutter {
     source = "../.."
 }
+
+// Optional vendor RFID: add `android/app/libs/*.aar` then:
+// dependencies { implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar")))) }
+// Zebra: RFID API3 (rfidhostlib); Chainway: deviceapi for your model — then implement MainActivity handlers.

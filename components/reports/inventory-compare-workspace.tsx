@@ -18,6 +18,11 @@ type Summary = {
   missing_total: number;
   extra_total: number;
   rows: Row[];
+  meta?: {
+    expected_qty_source?: string;
+    hint?: string;
+    endpoints?: { pull?: string; catalog_sync?: string };
+  };
 };
 
 const fetcher = async (url: string) => {
@@ -47,6 +52,7 @@ function rowsToCsv(rows: Row[]) {
 export function InventoryCompareWorkspace() {
   const { data, error, mutate } = useSWR("/api/reports/pos-compare", fetcher);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [integrationMsg, setIntegrationMsg] = useState<string | null>(null);
 
   const toggle = (sku: string) => {
     setSelected((prev) => {
@@ -60,18 +66,40 @@ export function InventoryCompareWorkspace() {
   const varianceRows = useMemo(() => (data?.rows ?? []).filter((r) => r.missing > 0 || r.extra > 0), [data]);
 
   const pullLs = async () => {
-    await fetch("/api/integrations/lightspeed/pull", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    await mutate();
+    setIntegrationMsg(null);
+    try {
+      const res = await fetch("/api/integrations/lightspeed/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string; source?: string };
+      if (!res.ok) throw new Error(j.error ?? "Pull failed");
+      setIntegrationMsg(
+        [j.message ?? "Pull finished.", j.source ? `Source: ${j.source}.` : null].filter(Boolean).join(" "),
+      );
+      await mutate();
+    } catch (e) {
+      setIntegrationMsg(e instanceof Error ? e.message : "Pull failed");
+    }
   };
 
   const pushLs = async () => {
+    setIntegrationMsg(null);
     const skus = varianceRows.filter((r) => selected.has(r.sku)).map((r) => r.sku);
-    await fetch("/api/integrations/lightspeed/push", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ skus: skus.length ? skus : varianceRows.map((r) => r.sku) }),
-    });
-    await mutate();
+    try {
+      const res = await fetch("/api/integrations/lightspeed/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skus: skus.length ? skus : varianceRows.map((r) => r.sku) }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string; stub?: boolean };
+      if (!res.ok) throw new Error(j.error ?? "Push failed");
+      setIntegrationMsg(j.message ?? (j.stub ? "Recorded stub push in sync history." : "Push OK"));
+      await mutate();
+    } catch (e) {
+      setIntegrationMsg(e instanceof Error ? e.message : "Push failed");
+    }
   };
 
   const importCsv = () => {
@@ -124,6 +152,24 @@ export function InventoryCompareWorkspace() {
           </div>
         ))}
       </div>
+
+      {data.meta?.hint ? (
+        <p className="font-mono text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">
+          {data.meta.hint}
+          {data.meta.expected_qty_source ? (
+            <>
+              {" "}
+              (<span className="text-teal-600/90 dark:text-teal-400/90">{data.meta.expected_qty_source}</span>)
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
+      {integrationMsg ? (
+        <p className="font-mono text-[0.65rem] text-[var(--wms-fg)]" role="status">
+          {integrationMsg}
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => void pullLs()} className="rounded-lg border border-[var(--wms-border)] px-3 py-1.5 font-mono text-xs dark:border-[var(--wms-border)]">

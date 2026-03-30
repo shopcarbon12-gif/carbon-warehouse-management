@@ -5,9 +5,10 @@ import 'package:flutter/foundation.dart';
 
 import 'package:carbon_wms/hardware/rfid_scanner.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
+import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/services/handheld_runtime_config.dart';
 
-/// Stub: Zebra API3 + Bluetooth stack will replace this implementation.
+/// Tries Android **Zebra RFID API3** via [RfidVendorChannel]; falls back to simulated reads.
 class ZebraScanner implements RfidScanner {
   ZebraScanner() : _reads = StreamController<RfidTagRead>.broadcast();
 
@@ -15,6 +16,8 @@ class ZebraScanner implements RfidScanner {
   final Random _rand = Random();
   bool _connected = false;
   bool _scanning = false;
+  bool _nativeLinked = false;
+  StreamSubscription<RfidTagRead>? _nativeSub;
   HandheldRuntimeConfig _runtime = HandheldRuntimeConfig.fallback;
 
   @override
@@ -46,14 +49,33 @@ class ZebraScanner implements RfidScanner {
 
   @override
   Future<void> connect() async {
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await _tryNativeBridge();
+    if (!_nativeLinked) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
     _connected = true;
+  }
+
+  Future<void> _tryNativeBridge() async {
+    if (!(!kIsWeb && defaultTargetPlatform == TargetPlatform.android)) return;
+    final r = await RfidVendorChannel.connectZebra();
+    if (r != RfidNativeConnectResult.linked) return;
+    _nativeLinked = true;
+    await _nativeSub?.cancel();
+    _nativeSub = RfidVendorChannel.tagReadStream().listen(_reads.add, onError: (_) {});
   }
 
   @override
   Future<void> disconnect() async {
     _scanning = false;
     _connected = false;
+    await _nativeSub?.cancel();
+    _nativeSub = null;
+    if (_nativeLinked) {
+      await RfidVendorChannel.stopZebraInventory();
+      await RfidVendorChannel.disconnectZebra();
+      _nativeLinked = false;
+    }
   }
 
   @override
@@ -62,11 +84,25 @@ class ZebraScanner implements RfidScanner {
   @override
   Future<void> startScanning() async {
     _scanning = true;
+    if (_nativeLinked) {
+      try {
+        await RfidVendorChannel.startZebraInventory();
+      } catch (_) {
+        /* native bridge optional */
+      }
+    }
   }
 
   @override
   Future<void> stopScanning() async {
     _scanning = false;
+    if (_nativeLinked) {
+      try {
+        await RfidVendorChannel.stopZebraInventory();
+      } catch (_) {
+        /* optional */
+      }
+    }
   }
 
   void debugEmitEpc(String hex24, {int? rssi}) {

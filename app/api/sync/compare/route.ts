@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/get-session";
 import { getPool } from "@/lib/db";
 import { listPhysicalEpcCountsBySku } from "@/lib/queries/sync-compare";
-import { getLightspeedInventory } from "@/lib/services/lightspeed";
+import { resolveLightspeedInventoryForCompare } from "@/lib/services/lightspeed";
 
 export type SyncCompareRow = {
   sku: string;
@@ -14,6 +14,9 @@ export type SyncCompareRow = {
 
 export type SyncComparePayload = {
   lsLocationId: string;
+  /** `live_catalog` when Lightspeed HTTP catalog returned rows; else `simulated` demo. */
+  lsInventorySource: "live_catalog" | "simulated";
+  lsInventoryDetail?: string;
   over: SyncCompareRow[];
   short: SyncCompareRow[];
   matched: SyncCompareRow[];
@@ -58,10 +61,15 @@ export async function GET() {
   }
 
   let lsLines: { sku: string; quantity: number }[] = [];
+  let lsInventorySource: "live_catalog" | "simulated" = "simulated";
+  let lsInventoryDetail: string | undefined;
   try {
-    lsLines = await getLightspeedInventory(lsLocationId);
+    const resolved = await resolveLightspeedInventoryForCompare(pool, session.tid, lsLocationId);
+    lsLines = resolved.lines;
+    lsInventorySource = resolved.source;
+    lsInventoryDetail = resolved.detail;
   } catch (e) {
-    console.error("[sync/compare] Lightspeed mock failed", e);
+    console.error("[sync/compare] Lightspeed inventory resolve failed", e);
     return NextResponse.json({ error: "Lightspeed fetch failed" }, { status: 502 });
   }
 
@@ -112,6 +120,8 @@ export async function GET() {
 
   const payload: SyncComparePayload = {
     lsLocationId,
+    lsInventorySource,
+    lsInventoryDetail,
     over,
     short,
     matched,

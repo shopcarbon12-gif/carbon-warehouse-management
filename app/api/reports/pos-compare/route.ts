@@ -30,7 +30,20 @@ export async function GET(req: Request) {
 
   try {
     const data = await getPosCompareForLocation(pool, session.tid, locationId);
-    return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(
+      {
+        ...data,
+        meta: {
+          expected_qty_source: "custom_skus.ls_on_hand_total",
+          hint: "Expected counts come from the last catalog / sync that populated POS on-hand. Use Pull from LS or Inventory → Sync to refresh.",
+          endpoints: {
+            pull: "/api/integrations/lightspeed/pull",
+            catalog_sync: "/api/inventory/sync/trigger",
+          },
+        },
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (e) {
     console.error("[reports/pos-compare]", e);
     return NextResponse.json({ error: "Query failed" }, { status: 500 });

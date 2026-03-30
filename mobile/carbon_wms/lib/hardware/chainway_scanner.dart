@@ -5,9 +5,10 @@ import 'package:flutter/foundation.dart';
 
 import 'package:carbon_wms/hardware/rfid_scanner.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
+import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/services/handheld_runtime_config.dart';
 
-/// Stub: Android `MethodChannel` to Chainway RSCJA will replace this implementation.
+/// Tries Android **Chainway deviceapi** UHF via [RfidVendorChannel]; falls back to simulated reads.
 class ChainwayScanner implements RfidScanner {
   ChainwayScanner() : _reads = StreamController<RfidTagRead>.broadcast();
 
@@ -15,6 +16,8 @@ class ChainwayScanner implements RfidScanner {
   final Random _rand = Random();
   bool _connected = false;
   bool _scanning = false;
+  bool _nativeLinked = false;
+  StreamSubscription<RfidTagRead>? _nativeSub;
   HandheldRuntimeConfig _runtime = HandheldRuntimeConfig.fallback;
 
   @override
@@ -46,14 +49,33 @@ class ChainwayScanner implements RfidScanner {
 
   @override
   Future<void> connect() async {
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await _tryNativeBridge();
+    if (!_nativeLinked) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
     _connected = true;
+  }
+
+  Future<void> _tryNativeBridge() async {
+    if (!(!kIsWeb && defaultTargetPlatform == TargetPlatform.android)) return;
+    final r = await RfidVendorChannel.connectChainway();
+    if (r != RfidNativeConnectResult.linked) return;
+    _nativeLinked = true;
+    await _nativeSub?.cancel();
+    _nativeSub = RfidVendorChannel.tagReadStream().listen(_reads.add, onError: (_) {});
   }
 
   @override
   Future<void> disconnect() async {
     _scanning = false;
     _connected = false;
+    await _nativeSub?.cancel();
+    _nativeSub = null;
+    if (_nativeLinked) {
+      await RfidVendorChannel.stopChainwayInventory();
+      await RfidVendorChannel.disconnectChainway();
+      _nativeLinked = false;
+    }
   }
 
   @override
@@ -62,12 +84,21 @@ class ChainwayScanner implements RfidScanner {
   @override
   Future<void> startScanning() async {
     _scanning = true;
-    // Native layer will push EPCs via channel; stub stays quiet.
+    if (_nativeLinked) {
+      try {
+        await RfidVendorChannel.startChainwayInventory();
+      } catch (_) {}
+    }
   }
 
   @override
   Future<void> stopScanning() async {
     _scanning = false;
+    if (_nativeLinked) {
+      try {
+        await RfidVendorChannel.stopChainwayInventory();
+      } catch (_) {}
+    }
   }
 
   /// Test hook: simulate a tag read (remove when channel is live).
