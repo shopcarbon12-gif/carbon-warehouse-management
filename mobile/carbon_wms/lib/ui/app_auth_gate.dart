@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'package:device_info_plus/device_info_plus.dart';
+import 'package:android_id/android_id.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -39,8 +39,8 @@ class _AppAuthGateState extends State<AppAuthGate> {
     if (kIsWeb) return '';
     if (!Platform.isAndroid) return 'non-android';
     try {
-      final a = await DeviceInfoPlugin().androidInfo;
-      return a.id.trim();
+      final raw = await const AndroidId().getId();
+      return raw?.trim() ?? '';
     } catch (_) {
       return '';
     }
