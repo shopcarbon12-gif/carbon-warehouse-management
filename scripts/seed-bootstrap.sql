@@ -60,15 +60,6 @@ WHERE t.slug = 'cj'
   AND NOT EXISTS (SELECT 1 FROM inventory_items WHERE asset_id = '210000007117' LIMIT 1);
 
 INSERT INTO integration_connections (tenant_id, location_id, provider, status, last_ok_at)
-SELECT t.id, NULL, 'senitron', 'connected', now()
-FROM tenants t
-WHERE t.slug = 'cj'
-  AND NOT EXISTS (
-    SELECT 1 FROM integration_connections ic
-    WHERE ic.tenant_id = t.id AND ic.provider = 'senitron'
-  );
-
-INSERT INTO integration_connections (tenant_id, location_id, provider, status, last_ok_at)
 SELECT t.id, l.id, 'lightspeed', 'connected', now()
 FROM tenants t
 JOIN locations l ON l.tenant_id = t.id AND l.code = '001'

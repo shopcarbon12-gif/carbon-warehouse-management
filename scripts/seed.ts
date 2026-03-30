@@ -109,7 +109,6 @@ async function main() {
     await pool.query(
       `INSERT INTO integration_connections (tenant_id, location_id, provider, status, last_ok_at)
        VALUES
-         ($1::uuid, NULL, 'senitron', 'connected', now()),
          ($1::uuid, $2::uuid, 'lightspeed', 'connected', now()),
          ($1::uuid, $2::uuid, 'shopify', 'configure', NULL)`,
       [t.id, loc001.id],

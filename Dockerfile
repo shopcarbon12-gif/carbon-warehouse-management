@@ -22,7 +22,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Avoid `npm run build` here: package.json runs db:migrate first, which needs DATABASE_URL.
 # Migrations run at container start via docker-entrypoint (WMS_AUTO_MIGRATE) or Coolify hooks.
-RUN npx next build
+# Webpack build: Turbopack in Docker/Coolify often OOMs or errors on small builders (Next 16+).
+RUN node ./node_modules/next/dist/bin/next build --webpack
 
 FROM base AS runner
 WORKDIR /app

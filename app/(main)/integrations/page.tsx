@@ -16,8 +16,10 @@ export default async function IntegrationsPage() {
     <div className="mx-auto max-w-4xl">
       <h1 className="text-xl font-semibold text-[var(--foreground)]">Integrations</h1>
       <p className="mt-1 font-mono text-sm text-[var(--muted)]">
-        Status from <code className="text-[var(--accent)]">integration_connections</code> plus last
-        related sync job time (read-only).
+        Read-only: every <code className="text-[var(--accent)]">integration_connections</code> row for this
+        tenant. Location is the linked warehouse code,
+        or <code className="text-[var(--accent)]">tenant</code> when <code className="text-[var(--accent)]">location_id</code>{" "}
+        is null.
       </p>
       <div className="mt-6 overflow-x-auto rounded-lg border border-[var(--surface-border)]">
         <table className="w-full min-w-[520px] text-left text-sm">
