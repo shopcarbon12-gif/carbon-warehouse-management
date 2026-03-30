@@ -56,9 +56,22 @@ Do **not** use the default seed password in production.
 
 ---
 
-**Also in Coolify:** set **`SESSION_SECRET`**, **`WMS_DEVICE_KEY`**, **`SHOPIFY_WEBHOOK_SECRET`**, **`NODE_ENV=production`**, **`WMS_APP_PUBLIC_BASE_URL`**, **`SHOPIFY_REDIRECT_URI`**, **`SHOPIFY_SCOPES`**, and any R2 / Lightspeed / email vars you use (see [`.env.example`](.env.example)).  
-Production URL for this app is **`https://wms.shopcarbon.com`**: set **`WMS_APP_PUBLIC_BASE_URL=https://wms.shopcarbon.com`** (no trailing slash). In DNS, add a **`wms`** record (usually **CNAME** to the hostname Coolify shows for the app, or **A** to the server IP if you use that flow). In Coolify → your WMS application → **Configuration** → **General** → **Domains**, enter **`https://wms.shopcarbon.com`** (include the **`https://`** prefix — Coolify uses it to request Let’s Encrypt and configure Traefik; a bare hostname can yield `ERR_CERT_AUTHORITY_INVALID` and “no available server”). Add **`https://www.wms.shopcarbon.com`** in the same field (comma-separated) only if that hostname exists in DNS; otherwise Let’s Encrypt can fail. Then **Save** and **Redeploy**.  
-**`SHOPIFY_REDIRECT_URI`** must match a **Redirect URL** in your Shopify Partner app exactly (including `https` and path), e.g. **`https://wms.shopcarbon.com/api/shopify/callback`**.
+**Also in Coolify:** set **`SESSION_SECRET`**, **`WMS_DEVICE_KEY`**, **`SHOPIFY_WEBHOOK_SECRET`**, **`NODE_ENV=production`**, **`NEXT_PUBLIC_BASE_URL`**, **`WMS_APP_PUBLIC_BASE_URL`**, **`SHOPIFY_REDIRECT_URI`**, **`SHOPIFY_SCOPES`**, and any R2 / Lightspeed / email vars you use (see [`.env.example`](.env.example)).
+
+### Public URL checklist (prod + local + OAuth)
+
+| Where | Variables | Value |
+|--------|-----------|--------|
+| **Coolify (production)** | `NEXT_PUBLIC_BASE_URL`, `WMS_APP_PUBLIC_BASE_URL` | `https://wms.shopcarbon.com` (no trailing slash) |
+| **Local** | same keys in gitignored **`.env.local`** | `http://localhost:3040` — or run **`npm run env:ensure-local`** |
+
+**CLI (Coolify):** With write-capable **`COOLIFY_API_TOKEN`** + app UUID in **`.env.coolify.local`**, run **`npm run coolify:set-public-urls`** to PATCH both production URLs, then **`npm run deploy:coolify`** (rebuild so `NEXT_PUBLIC_*` is baked in). One shot: **`npm run sync:public-urls`** (local `.env.local` + Coolify patch if creds exist + deploy webhook).
+
+Production hostname: **`https://wms.shopcarbon.com`**. In DNS, add a **`wms`** record (usually **CNAME** to the hostname Coolify shows for the app, or **A** to the server IP). In Coolify → WMS → **Configuration** → **General** → **Domains**, enter **`https://wms.shopcarbon.com`** (include **`https://`** for Let’s Encrypt / Traefik). Add **`https://www.wms.shopcarbon.com`** only if that host exists in DNS. Then **Save** and **Redeploy**.
+
+**Shopify / Lightspeed:** Register redirect URLs for **both** origins you use, e.g. **`https://wms.shopcarbon.com/api/shopify/callback`** and **`http://localhost:3040/api/shopify/callback`** (and the Lightspeed callback path if you use OAuth).  
+
+**Full DB mirror (local copy of prod data):** see **`scripts/db-mirror-coolify.example.sh`** — `pg_dump` from Coolify Postgres (SSH tunnel if needed) → `pg_restore` into local `carbon_wms`. Do not commit dumps or passwords.
 
 After you **push** to the branch Coolify builds from, either wait for automatic deploy (if enabled) or click **Redeploy** on the application in Coolify.
 
