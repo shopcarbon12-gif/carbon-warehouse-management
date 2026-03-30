@@ -378,10 +378,11 @@ class WmsApiClient {
     return null;
   }
 
-  /// Logs a receiving line to `inventory_audit_logs` (session Bearer).
+  /// Bumps WMS on-hand for the resolved custom SKU (`ls_on_hand_total`) and writes `inventory_audit_logs`.
   Future<void> postBarcodeIntakeLog({
     required String barcode,
-    required String sku,
+    String? sku,
+    String? customSkuId,
     required int qty,
     String? title,
   }) async {
@@ -389,8 +390,9 @@ class WmsApiClient {
     final uri = Uri.parse('$base/api/mobile/barcode-intake');
     final body = <String, dynamic>{
       'barcode': barcode,
-      'sku': sku,
       'qty': qty,
+      if (sku != null && sku.isNotEmpty) 'sku': sku,
+      if (customSkuId != null && customSkuId.isNotEmpty) 'customSkuId': customSkuId,
       if (title != null && title.isNotEmpty) 'title': title,
     };
     final res = await _http.post(

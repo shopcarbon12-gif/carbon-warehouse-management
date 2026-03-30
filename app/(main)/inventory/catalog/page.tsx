@@ -9,6 +9,7 @@ export default async function ProductCatalogPage() {
   if (!session) return null;
 
   const canTriggerLightspeedSync = session.role?.trim().toLowerCase() === "admin";
+  const canManageCatalog = canTriggerLightspeedSync;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
@@ -28,7 +29,10 @@ export default async function ProductCatalogPage() {
         </Link>
       </div>
 
-      <CatalogWorkspace canTriggerLightspeedSync={canTriggerLightspeedSync} />
+      <CatalogWorkspace
+        canTriggerLightspeedSync={canTriggerLightspeedSync}
+        canManageCatalog={canManageCatalog}
+      />
     </div>
   );
 }

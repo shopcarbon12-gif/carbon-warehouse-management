@@ -95,7 +95,13 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
 
 type TabId = "lightspeed" | "rfid";
 
-export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTriggerLightspeedSync?: boolean }) {
+export function CatalogWorkspace({
+  canTriggerLightspeedSync = false,
+  canManageCatalog = false,
+}: {
+  canTriggerLightspeedSync?: boolean;
+  canManageCatalog?: boolean;
+}) {
   const [tab, setTab] = useState<TabId>("lightspeed");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -106,6 +112,20 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
   const [catalogMenuOpen, setCatalogMenuOpen] = useState<null | "lightspeed" | "more">(null);
   const [newItemOpen, setNewItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [manualMatrixUpc, setManualMatrixUpc] = useState("");
+  const [manualDesc, setManualDesc] = useState("");
+  const [manualSku, setManualSku] = useState("");
+  const [manualVendor, setManualVendor] = useState("");
+  const [manualColor, setManualColor] = useState("");
+  const [manualSize, setManualSize] = useState("");
+  const [manualRetail, setManualRetail] = useState("");
+  const [manualVariantUpc, setManualVariantUpc] = useState("");
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualErr, setManualErr] = useState<string | null>(null);
+  const [importCsvText, setImportCsvText] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importErr, setImportErr] = useState<string | null>(null);
+  const [importSummary, setImportSummary] = useState<string | null>(null);
   const catalogToolbarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -140,6 +160,87 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
   );
 
   const closeModal = useCallback(() => setModalSku(null), []);
+
+  const submitManualCatalogLine = useCallback(async () => {
+    setManualErr(null);
+    setManualBusy(true);
+    try {
+      const res = await fetch("/api/inventory/catalog/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matrixUpc: manualMatrixUpc.trim(),
+          matrixDescription: manualDesc.trim(),
+          sku: manualSku.trim(),
+          vendor: manualVendor.trim() || null,
+          color: manualColor.trim() || null,
+          size: manualSize.trim() || null,
+          retailPrice: manualRetail.trim() || null,
+          variantUpc: manualVariantUpc.trim() || null,
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? "Create failed");
+      setManualMatrixUpc("");
+      setManualDesc("");
+      setManualSku("");
+      setManualVendor("");
+      setManualColor("");
+      setManualSize("");
+      setManualRetail("");
+      setManualVariantUpc("");
+      setNewItemOpen(false);
+      setSyncMsg("Manual catalog line created.");
+      await mutate();
+    } catch (e) {
+      setManualErr(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setManualBusy(false);
+    }
+  }, [
+    manualMatrixUpc,
+    manualDesc,
+    manualSku,
+    manualVendor,
+    manualColor,
+    manualSize,
+    manualRetail,
+    manualVariantUpc,
+    mutate,
+  ]);
+
+  const runCatalogCsvImport = useCallback(async () => {
+    setImportErr(null);
+    setImportSummary(null);
+    setImportBusy(true);
+    try {
+      const res = await fetch("/api/inventory/catalog/import-csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csvText: importCsvText }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        rowsCreated?: number;
+        rowResults?: { line: number; ok: boolean; error?: string }[];
+      };
+      if (!res.ok) throw new Error(j.error ?? "Import failed");
+      const failed = (j.rowResults ?? []).filter((r) => !r.ok);
+      const failNote =
+        failed.length > 0
+          ? ` ${failed.length} row(s) failed. First errors: ${failed
+              .slice(0, 5)
+              .map((r) => `L${r.line}: ${r.error ?? "?"}`)
+              .join("; ")}`
+          : "";
+      setImportSummary(`Imported ${j.rowsCreated ?? 0} line(s).${failNote}`);
+      await mutate();
+    } catch (e) {
+      setImportErr(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setImportBusy(false);
+    }
+  }, [importCsvText, mutate]);
 
   const triggerLightspeedSync = useCallback(async () => {
     setSyncBusy(true);
@@ -270,20 +371,35 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
             ref={catalogToolbarRef}
             className="flex flex-wrap items-center justify-end gap-2 border-b border-slate-800/80 pb-3"
           >
-            <button
-              type="button"
-              onClick={() => setNewItemOpen(true)}
-              className="rounded-md bg-emerald-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-emerald-500"
-            >
-              New
-            </button>
-            <button
-              type="button"
-              onClick={() => setImportOpen(true)}
-              className="rounded-md bg-blue-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-blue-500"
-            >
-              Import
-            </button>
+            {canManageCatalog ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualErr(null);
+                    setNewItemOpen(true);
+                  }}
+                  className="rounded-md bg-emerald-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-emerald-500"
+                >
+                  New
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportErr(null);
+                    setImportSummary(null);
+                    setImportOpen(true);
+                  }}
+                  className="rounded-md bg-blue-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-blue-500"
+                >
+                  Import
+                </button>
+              </>
+            ) : (
+              <span className="font-mono text-[0.6rem] text-slate-600" title="Admin scope required">
+                New / Import · admin only
+              </span>
+            )}
             <button
               type="button"
               onClick={() => exportLightspeedCatalogCsv(rows)}
@@ -574,20 +690,107 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
             className="fixed inset-0 z-[60] bg-black/70"
             onClick={() => setNewItemOpen(false)}
           />
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="w-full max-w-md rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
+          <div className="fixed inset-0 z-[70] flex max-h-screen items-center justify-center overflow-y-auto p-4">
+            <div className="my-4 w-full max-w-lg rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
               <h3 className="text-sm font-semibold text-slate-100">New catalog item</h3>
               <p className="mt-2 font-mono text-xs leading-relaxed text-slate-500">
-                Placeholder: manual matrix / custom SKU creation is not wired yet. This will create items
-                without EPCs in WMS once the API exists.
+                Creates or updates a matrix by UPC and adds a custom SKU (synthetic negative Lightspeed id).
+                No EPCs until you encode tags.
               </p>
-              <div className="mt-6 flex justify-end">
+              <div className="mt-4 grid gap-3 font-mono text-xs">
+                <label className="grid gap-1">
+                  <span className="text-slate-500">Matrix UPC (required)</span>
+                  <input
+                    value={manualMatrixUpc}
+                    onChange={(e) => setManualMatrixUpc(e.target.value)}
+                    className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-slate-500">Description (required)</span>
+                  <input
+                    value={manualDesc}
+                    onChange={(e) => setManualDesc(e.target.value)}
+                    className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-slate-500">Custom SKU (required)</span>
+                  <input
+                    value={manualSku}
+                    onChange={(e) => setManualSku(e.target.value)}
+                    className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-slate-500">Variant UPC (optional)</span>
+                  <input
+                    value={manualVariantUpc}
+                    onChange={(e) => setManualVariantUpc(e.target.value)}
+                    className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="grid gap-1">
+                    <span className="text-slate-500">Vendor</span>
+                    <input
+                      value={manualVendor}
+                      onChange={(e) => setManualVendor(e.target.value)}
+                      className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-slate-500">Retail price</span>
+                    <input
+                      value={manualRetail}
+                      onChange={(e) => setManualRetail(e.target.value)}
+                      placeholder="29.99"
+                      className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                    />
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="grid gap-1">
+                    <span className="text-slate-500">Color</span>
+                    <input
+                      value={manualColor}
+                      onChange={(e) => setManualColor(e.target.value)}
+                      className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-slate-500">Size</span>
+                    <input
+                      value={manualSize}
+                      onChange={(e) => setManualSize(e.target.value)}
+                      className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                    />
+                  </label>
+                </div>
+              </div>
+              {manualErr ? (
+                <p className="mt-3 font-mono text-xs text-red-400/90">{manualErr}</p>
+              ) : null}
+              <div className="mt-6 flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setNewItemOpen(false)}
                   className="rounded-md border border-slate-600 px-4 py-2 font-mono text-xs text-slate-300 hover:bg-zinc-800"
                 >
-                  Close
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    manualBusy ||
+                    !manualMatrixUpc.trim() ||
+                    !manualDesc.trim() ||
+                    !manualSku.trim()
+                  }
+                  onClick={() => void submitManualCatalogLine()}
+                  className="rounded-md bg-emerald-600 px-4 py-2 font-mono text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
+                >
+                  {manualBusy ? "Creating…" : "Create"}
                 </button>
               </div>
             </div>
@@ -603,27 +806,55 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
             className="fixed inset-0 z-[60] bg-black/70"
             onClick={() => setImportOpen(false)}
           />
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="w-full max-w-md rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
-              <h3 className="text-sm font-semibold text-slate-100">Import catalog</h3>
-              <p className="mt-2 font-mono text-xs text-slate-500">
-                Upload a file (CSV / XLSX) — processing is a placeholder.
+          <div className="fixed inset-0 z-[70] flex max-h-screen items-center justify-center overflow-y-auto p-4">
+            <div className="my-4 w-full max-w-2xl rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
+              <h3 className="text-sm font-semibold text-slate-100">Import catalog (CSV)</h3>
+              <p className="mt-2 font-mono text-xs leading-relaxed text-slate-500">
+                Headers must include <span className="text-teal-500/90">matrix_upc</span> (or upc),{" "}
+                <span className="text-teal-500/90">sku</span>, and{" "}
+                <span className="text-teal-500/90">name</span> (or description). Optional: vendor, color,
+                size, retail_price.
               </p>
               <input
                 type="file"
-                className="mt-4 block w-full font-mono text-xs text-slate-400 file:mr-3 file:rounded file:border file:border-slate-600 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-slate-200"
-                accept=".csv,.xlsx,.xls"
-                onChange={() => {
-                  /* Parsing pipeline not wired — file pick is UI-only until ingest API lands. */
+                className="mt-3 block w-full font-mono text-xs text-slate-400 file:mr-3 file:rounded file:border file:border-slate-600 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-slate-200"
+                accept=".csv,text/csv"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  const reader = new FileReader();
+                  reader.onload = () => setImportCsvText(String(reader.result ?? ""));
+                  reader.readAsText(f, "UTF-8");
                 }}
               />
-              <div className="mt-6 flex justify-end">
+              <textarea
+                value={importCsvText}
+                onChange={(e) => setImportCsvText(e.target.value)}
+                placeholder="Or paste CSV here…"
+                rows={10}
+                className="mt-3 w-full resize-y rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-[0.65rem] text-slate-200 placeholder:text-slate-600"
+              />
+              {importErr ? (
+                <p className="mt-2 font-mono text-xs text-red-400/90">{importErr}</p>
+              ) : null}
+              {importSummary ? (
+                <p className="mt-2 font-mono text-xs text-slate-400">{importSummary}</p>
+              ) : null}
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setImportOpen(false)}
                   className="rounded-md border border-slate-600 px-4 py-2 font-mono text-xs text-slate-300 hover:bg-zinc-800"
                 >
                   Close
+                </button>
+                <button
+                  type="button"
+                  disabled={importBusy || !importCsvText.trim()}
+                  onClick={() => void runCatalogCsvImport()}
+                  className="rounded-md bg-blue-600 px-4 py-2 font-mono text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-40"
+                >
+                  {importBusy ? "Importing…" : "Run import"}
                 </button>
               </div>
             </div>

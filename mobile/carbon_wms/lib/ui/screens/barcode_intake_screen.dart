@@ -67,10 +67,12 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
       final sku = row['sku']?.toString() ?? '';
       final name = row['name']?.toString() ?? '';
       final upc = (row['sku_upc'] ?? row['matrix_upc'])?.toString() ?? b;
+      final customSkuId = row['custom_sku_id']?.toString();
       setState(() {
         _preview = _LookupRow(
           code: b,
           sku: sku.isNotEmpty ? sku : upc,
+          customSkuId: customSkuId != null && customSkuId.isNotEmpty ? customSkuId : null,
           name: name.isNotEmpty ? name : '—',
           bin: '—',
         );
@@ -94,7 +96,8 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
     try {
       await context.read<WmsApiClient>().postBarcodeIntakeLog(
             barcode: p.code,
-            sku: p.sku,
+            sku: p.customSkuId == null ? p.sku : null,
+            customSkuId: p.customSkuId,
             qty: qty,
             title: p.name == '—' ? null : p.name,
           );
@@ -204,12 +207,14 @@ class _LookupRow {
   const _LookupRow({
     required this.code,
     required this.sku,
+    this.customSkuId,
     required this.name,
     required this.bin,
   });
 
   final String code;
   final String sku;
+  final String? customSkuId;
   final String name;
   final String bin;
 }

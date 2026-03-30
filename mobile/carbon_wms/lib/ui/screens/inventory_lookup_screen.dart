@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/epc_tenant_sync.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
@@ -19,8 +23,11 @@ class InventoryLookupScreen extends StatefulWidget {
 class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
   final _ctrl = TextEditingController();
   _LookupRow? _row;
+  bool _busyLookup = false;
+  String? _lookupErr;
 
   static final RegExp _epc24 = RegExp(r'^[0-9A-F]{24}$');
+  static final RegExp _hexBody = RegExp(r'^[0-9A-F]{4,}$');
 
   @override
   void initState() {
@@ -36,11 +43,96 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
     super.dispose();
   }
 
-  void _lookup() {
+  static String? _epcProfileHint(TenantEpcProfile p) {
+    return '${p.name} · prefix ${p.epcPrefix} · item @${p.itemStartBit}+${p.itemLength} · serial @${p.serialStartBit}+${p.serialLength}';
+  }
+
+  Future<void> _performLookup() async {
     final raw = _ctrl.text.trim().toUpperCase();
+    if (raw.isEmpty) {
+      setState(() {
+        _row = null;
+        _lookupErr = null;
+      });
+      return;
+    }
+
     setState(() {
-      _row = raw.isEmpty ? null : _mockRowForKey(raw);
+      _busyLookup = true;
+      _lookupErr = null;
     });
+
+    final cleaned = raw.replaceAll(RegExp(r'\s'), '');
+    final profiles = context.read<MobileSettingsRepository>().epcProfiles;
+    TenantEpcProfile? prof;
+    if (_hexBody.hasMatch(cleaned)) {
+      prof = matchingEpcProfile(cleaned, profiles);
+    }
+
+    try {
+      final api = context.read<WmsApiClient>();
+      final map = await api.catalogGridSearchFirstRow(raw);
+      if (!mounted) return;
+
+      if (map != null) {
+        final sku = map['sku']?.toString() ?? '';
+        final name = map['name']?.toString() ?? '';
+        final upc = (map['sku_upc'] ?? map['matrix_upc'])?.toString() ?? '';
+        final vendor = map['vendor']?.toString() ?? '';
+        final color = map['color']?.toString() ?? '';
+        final size = map['size']?.toString() ?? '';
+        final price = map['retail_price']?.toString() ?? '';
+        final qty = map['ls_on_hand_total']?.toString() ?? '';
+
+        setState(() {
+          _row = _LookupRow(
+            code: raw,
+            sku: sku.isNotEmpty ? sku : upc,
+            name: name.isNotEmpty ? name : '—',
+            bin: '—',
+            upc: upc,
+            vendor: vendor,
+            color: color,
+            size: size,
+            price: price,
+            quantity: qty,
+            epcDecodeHint: prof != null ? _epcProfileHint(prof) : null,
+          );
+          _busyLookup = false;
+        });
+        return;
+      }
+
+      if (prof != null) {
+        final hint = _epcProfileHint(prof);
+        setState(() {
+          _row = _LookupRow(
+            code: raw,
+            sku: '—',
+            name: 'No catalog row for this scan',
+            bin: '—',
+            epcDecodeHint: hint,
+          );
+          _lookupErr = null;
+          _busyLookup = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _row = null;
+        _lookupErr =
+            'No catalog match. Sync handheld settings (EPC profiles) or try SKU / UPC.';
+        _busyLookup = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _row = null;
+        _lookupErr = 'Lookup failed — check network and login.';
+        _busyLookup = false;
+      });
+    }
   }
 
   @override
@@ -63,7 +155,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
               decoration: const InputDecoration(
                 hintText: 'EPC, UPC, or internal code',
               ),
-              onSubmitted: (_) => _lookup(),
+              onSubmitted: (_) => unawaited(_performLookup()),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -74,22 +166,30 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                 );
                 if (!mounted || code == null || code.isEmpty) return;
                 _ctrl.text = code;
-                _lookup();
+                unawaited(_performLookup());
               },
               icon: const Icon(Icons.photo_camera_outlined),
               label: const Text('Scan with camera'),
             ),
             const SizedBox(height: 12),
+            if (_lookupErr != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  _lookupErr!,
+                  style: const TextStyle(color: Color(0xFFf87171), fontSize: 12, fontFamily: 'monospace'),
+                ),
+              ),
             FilledButton(
-              onPressed: _lookup,
+              onPressed: _busyLookup ? null : () => unawaited(_performLookup()),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.background,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: const Text(
-                'LOOKUP',
-                style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
+              child: Text(
+                _busyLookup ? 'LOOKUP…' : 'LOOKUP',
+                style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
               ),
             ),
             const SizedBox(height: 24),
@@ -98,11 +198,11 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                 row: _row!,
                 template: context.watch<MobileSettingsRepository>().config.itemDetailsTemplate,
               ),
-              if (_epc24.hasMatch(_row!.code.trim().toUpperCase())) ...[
+              if (_epc24.hasMatch(_row!.code.trim().toUpperCase().replaceAll(RegExp(r'\s'), ''))) ...[
                 const SizedBox(height: 16),
                 FilledButton.icon(
                   onPressed: () {
-                    final epc = _row!.code.trim().toUpperCase();
+                    final epc = _row!.code.trim().toUpperCase().replaceAll(RegExp(r'\s'), '');
                     Navigator.of(context).push<void>(
                       MaterialPageRoute<void>(
                         builder: (_) => LocateTagScreen(targetEpc: epc),
@@ -138,6 +238,7 @@ class _LookupRow {
     this.size = '',
     this.price = '',
     this.quantity = '',
+    this.epcDecodeHint,
   });
 
   final String code;
@@ -150,22 +251,7 @@ class _LookupRow {
   final String size;
   final String price;
   final String quantity;
-}
-
-_LookupRow _mockRowForKey(String key) {
-  final suffix = key.length >= 6 ? key.substring(key.length - 6) : key;
-  return _LookupRow(
-    code: key,
-    sku: 'SKU-$suffix',
-    name: 'Carbon floor stock $suffix',
-    bin: 'BULK-A-${suffix.codeUnitAt(0) % 12 + 1}',
-    upc: '00$suffix',
-    vendor: 'Carbon',
-    color: 'BLK',
-    size: 'M',
-    price: '129.00',
-    quantity: '12',
-  );
+  final String? epcDecodeHint;
 }
 
 class _LookupCard extends StatelessWidget {
@@ -221,6 +307,10 @@ class _LookupCard extends StatelessWidget {
             _line('SKU', row.sku),
             _line('NAME', row.name),
             _line('CURRENT BIN', row.bin),
+            if (row.epcDecodeHint != null && row.epcDecodeHint!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _line('EPC PROFILE (TENANT)', row.epcDecodeHint!),
+            ],
           ],
         ),
       ),
