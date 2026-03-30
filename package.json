@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node ./node_modules/next/dist/bin/next dev -p 3040",
-    "build": "npm run db:migrate && node ./node_modules/next/dist/bin/next build",
+    "dev": "node ./node_modules/next/dist/bin/next dev -p 3040 --webpack",
+    "dev:turbo": "node ./node_modules/next/dist/bin/next dev -p 3040",
+    "build": "npm run db:migrate && node ./node_modules/next/dist/bin/next build --webpack",
     "start": "node ./node_modules/next/dist/bin/next start",
     "lint": "eslint",
     "db:up": "docker compose up -d",

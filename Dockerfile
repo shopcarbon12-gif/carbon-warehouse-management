@@ -16,13 +16,18 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NPM_CONFIG_PRODUCTION=false
-# Coolify small builders often OOM during Next compile; raise heap before lowering VPS RAM.
+# CI + low parallelism: fewer concurrent webpack units → lower peak RAM on 2–4GB build hosts.
+ENV CI=true
+ENV DOCKER_BUILD=1
+# React Compiler off in image build (saves large amounts of compile RAM); runtime unchanged.
+ENV NEXT_REACT_COMPILER=0
+# Heap cap: raise on Coolify only if the build host has RAM (e.g. 8192); 6144 is a common default.
 ENV NODE_OPTIONS=--max-old-space-size=6144
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Avoid `npm run build` here: package.json runs db:migrate first, which needs DATABASE_URL.
 # Migrations run at container start via docker-entrypoint (WMS_AUTO_MIGRATE) or Coolify hooks.
-# Webpack build: Turbopack in Docker/Coolify often OOMs or errors on small builders (Next 16+).
+# Always webpack in Docker (not Turbopack); matches `next build --webpack` recommendations for CI.
 RUN node ./node_modules/next/dist/bin/next build --webpack
 
 FROM base AS runner

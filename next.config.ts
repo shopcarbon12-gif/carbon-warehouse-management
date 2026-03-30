@@ -12,8 +12,15 @@ function resolveBasePath(): string | undefined {
 
 const basePath = resolveBasePath();
 
+/** Docker/Coolify builders often OOM with React Compiler + webpack; disable when NEXT_REACT_COMPILER=0. */
+const useReactCompiler =
+  process.env.NEXT_REACT_COMPILER !== "0" && process.env.NEXT_REACT_COMPILER !== "false";
+
+/** Lower webpack parallelism during image build to reduce peak RAM (DOCKER_BUILD=1 in Dockerfile). */
+const dockerBuild = process.env.DOCKER_BUILD === "1" || process.env.DOCKER_BUILD === "true";
+
 const nextConfig: NextConfig = {
-  reactCompiler: true,
+  reactCompiler: useReactCompiler,
   output: "standalone",
   ...(basePath ? { basePath } : {}),
   async redirects() {
@@ -43,6 +50,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  ...(dockerBuild
+    ? {
+        webpack: (config: { parallelism?: number }) => {
+          config.parallelism = 1;
+          return config;
+        },
+      }
+    : {}),
 };
 
 export default nextConfig;
