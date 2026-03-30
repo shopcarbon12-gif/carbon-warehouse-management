@@ -106,7 +106,7 @@ class _TransferScreenState extends State<TransferScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             sliver: SliverToBoxAdapter(
               child: DropdownButtonFormField<String>(
-                value: _origin,
+                initialValue: _origin,
                 decoration: const InputDecoration(labelText: 'Origin location'),
                 items: _bins
                     .map((b) => DropdownMenuItem(value: b, child: Text(b)))
@@ -123,7 +123,7 @@ class _TransferScreenState extends State<TransferScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             sliver: SliverToBoxAdapter(
               child: DropdownButtonFormField<String>(
-                value: _destination,
+                initialValue: _destination,
                 decoration: const InputDecoration(labelText: 'Destination location'),
                 items: _bins
                     .map((b) => DropdownMenuItem(value: b, child: Text(b)))
