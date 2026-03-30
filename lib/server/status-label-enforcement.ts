@@ -1,74 +1,56 @@
 import type { Pool, PoolClient } from "pg";
 import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
 
-export type StatusLabelBehaviorRow = {
+export type StatusLabelBrainRow = {
   name: string;
-  auto_display: boolean;
-  hide_in_search_filters: boolean;
-  hide_in_item_details: boolean;
-  prevent_transfer: boolean;
-  prevent_audit: boolean;
+  is_sellable: boolean;
+  is_visible_to_scanner: boolean;
+  is_visible_in_ui: boolean;
+  super_admin_locked: boolean;
+  is_system_only: boolean;
 };
 
-/** Ghost read: drop from handheld UI / session when any of these apply. */
-export function shouldGhostDropLabel(flags: StatusLabelBehaviorRow | undefined): boolean {
+/** Handheld + stationary antenna: drop reads when scanner visibility is off. */
+export function shouldGhostDropLabel(flags: StatusLabelBrainRow | undefined): boolean {
   if (!flags) return false;
-  return (
-    flags.hide_in_search_filters ||
-    flags.hide_in_item_details ||
-    flags.auto_display === false
-  );
+  return !flags.is_visible_to_scanner;
 }
 
-export async function loadStatusLabelBehaviorMap(
+export async function loadStatusLabelBrainMap(
   db: Pool | PoolClient,
-): Promise<Map<string, StatusLabelBehaviorRow>> {
-  const r = await db.query<{
-    name: string;
-    auto_display: boolean;
-    hide_in_search_filters: boolean;
-    hide_in_item_details: boolean;
-    prevent_transfer: boolean;
-    prevent_audit: boolean;
-  }>(
+): Promise<Map<string, StatusLabelBrainRow>> {
+  const r = await db.query<StatusLabelBrainRow>(
     `SELECT name,
-            auto_display,
-            hide_in_search_filters,
-            hide_in_item_details,
-            prevent_transfer,
-            prevent_audit
+            is_sellable,
+            is_visible_to_scanner,
+            is_visible_in_ui,
+            super_admin_locked,
+            is_system_only
      FROM status_labels`,
   );
-  const m = new Map<string, StatusLabelBehaviorRow>();
+  const m = new Map<string, StatusLabelBrainRow>();
   for (const row of r.rows) {
-    m.set(row.name.trim().toLowerCase(), {
-      name: row.name,
-      auto_display: row.auto_display,
-      hide_in_search_filters: row.hide_in_search_filters,
-      hide_in_item_details: row.hide_in_item_details,
-      prevent_transfer: row.prevent_transfer,
-      prevent_audit: row.prevent_audit,
-    });
+    m.set(row.name.trim().toLowerCase(), row);
   }
   return m;
 }
 
 function flagsForWmsStatus(
-  map: Map<string, StatusLabelBehaviorRow>,
+  map: Map<string, StatusLabelBrainRow>,
   wmsStatus: string,
-): StatusLabelBehaviorRow | undefined {
+): StatusLabelBrainRow | undefined {
   const labelName = labelNameForWmsStatus(wmsStatus);
   return map.get(labelName.trim().toLowerCase());
 }
 
-/** First EPC that cannot move during transfer (web or edge). */
+/** First EPC that must not move via transfer (ghost / non-scanner-visible inventory). */
 export async function findTransferBlockedEpc(
   db: Pool | PoolClient,
   tenantId: string,
   epcs: string[],
 ): Promise<string | null> {
   if (epcs.length === 0) return null;
-  const map = await loadStatusLabelBehaviorMap(db);
+  const map = await loadStatusLabelBrainMap(db);
   const r = await db.query<{ epc: string; status: string }>(
     `SELECT i.epc, i.status
      FROM items i
@@ -78,19 +60,19 @@ export async function findTransferBlockedEpc(
   );
   for (const row of r.rows) {
     const f = flagsForWmsStatus(map, row.status);
-    if (f?.prevent_transfer) return row.epc.trim().toUpperCase();
+    if (f && !f.is_visible_to_scanner) return row.epc.trim().toUpperCase();
   }
   return null;
 }
 
-/** First EPC that cannot be changed during cycle-count / audit commit. */
+/** First EPC that cannot be adjusted during cycle-count commit without Super Admin policy. */
 export async function findAuditBlockedEpc(
   db: Pool | PoolClient,
   tenantId: string,
   epcs: string[],
 ): Promise<string | null> {
   if (epcs.length === 0) return null;
-  const map = await loadStatusLabelBehaviorMap(db);
+  const map = await loadStatusLabelBrainMap(db);
   const r = await db.query<{ epc: string; status: string }>(
     `SELECT i.epc, i.status
      FROM items i
@@ -100,7 +82,7 @@ export async function findAuditBlockedEpc(
   );
   for (const row of r.rows) {
     const f = flagsForWmsStatus(map, row.status);
-    if (f?.prevent_audit) return row.epc.trim().toUpperCase();
+    if (f?.super_admin_locked) return row.epc.trim().toUpperCase();
   }
   return null;
 }
@@ -108,7 +90,7 @@ export async function findAuditBlockedEpc(
 export type EpcVisibilityRow = { epc: string; visible: boolean };
 
 /**
- * Per-EPC visibility for handheld ghost-read rule. Unknown EPC → visible (commissioning).
+ * Per-EPC visibility for handheld ghost filter. Unknown EPC → visible (commissioning).
  */
 export async function resolveEpcVisibilityForTenant(
   db: Pool | PoolClient,
@@ -119,7 +101,7 @@ export async function resolveEpcVisibilityForTenant(
     /^[0-9A-F]{24}$/.test(e),
   );
   if (norm.length === 0) return [];
-  const map = await loadStatusLabelBehaviorMap(db);
+  const map = await loadStatusLabelBrainMap(db);
   const r = await db.query<{ epc: string; status: string | null }>(
     `SELECT i.epc, i.status
      FROM items i

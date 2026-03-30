@@ -1,19 +1,16 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
+import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
 
 export type StatusLabelRow = {
   id: number;
   legacy_id: number | null;
   name: string;
   display_label: string;
-  include_in_inventory: boolean;
-  hide_in_search_filters: boolean;
-  hide_in_item_details: boolean;
-  display_in_group_page: boolean;
-  auto_display: boolean;
-  allow_stolen_api: boolean;
-  prevent_transfer: boolean;
-  prevent_audit: boolean;
-  prevent_upload_to_live: boolean;
+  is_sellable: boolean;
+  is_visible_to_scanner: boolean;
+  is_visible_in_ui: boolean;
+  super_admin_locked: boolean;
+  is_system_only: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -24,21 +21,17 @@ export async function listStatusLabels(pool: Pool): Promise<StatusLabelRow[]> {
     legacy_id: number | null;
     name: string;
     display_label: string;
-    include_in_inventory: boolean;
-    hide_in_search_filters: boolean;
-    hide_in_item_details: boolean;
-    display_in_group_page: boolean;
-    auto_display: boolean;
-    allow_stolen_api: boolean;
-    prevent_transfer: boolean;
-    prevent_audit: boolean;
-    prevent_upload_to_live: boolean;
+    is_sellable: boolean;
+    is_visible_to_scanner: boolean;
+    is_visible_in_ui: boolean;
+    super_admin_locked: boolean;
+    is_system_only: boolean;
     created_at: Date;
     updated_at: Date;
   }>(
-    `SELECT id, legacy_id, name, display_label, include_in_inventory, hide_in_search_filters,
-            hide_in_item_details, display_in_group_page, auto_display,
-            allow_stolen_api, prevent_transfer, prevent_audit, prevent_upload_to_live,
+    `SELECT id, legacy_id, name, display_label,
+            is_sellable, is_visible_to_scanner, is_visible_in_ui,
+            super_admin_locked, is_system_only,
             created_at, updated_at
      FROM status_labels
      ORDER BY legacy_id NULLS LAST, name ASC`,
@@ -47,165 +40,74 @@ export async function listStatusLabels(pool: Pool): Promise<StatusLabelRow[]> {
     id: row.id,
     legacy_id: row.legacy_id,
     name: row.name,
-    display_label: row.display_label,
-    include_in_inventory: row.include_in_inventory,
-    hide_in_search_filters: row.hide_in_search_filters,
-    hide_in_item_details: row.hide_in_item_details,
-    display_in_group_page: row.display_in_group_page,
-    auto_display: row.auto_display,
-    allow_stolen_api: row.allow_stolen_api,
-    prevent_transfer: row.prevent_transfer,
-    prevent_audit: row.prevent_audit,
-    prevent_upload_to_live: row.prevent_upload_to_live,
+    display_label: row.display_label ?? "",
+    is_sellable: row.is_sellable,
+    is_visible_to_scanner: row.is_visible_to_scanner,
+    is_visible_in_ui: row.is_visible_in_ui,
+    super_admin_locked: row.super_admin_locked,
+    is_system_only: row.is_system_only,
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
   }));
 }
 
-export type StatusLabelBooleanKey =
-  | "include_in_inventory"
-  | "hide_in_search_filters"
-  | "hide_in_item_details"
-  | "display_in_group_page";
+/** Resolve label row for an `items.status` value (WMS side). */
+export async function getStatusLabelForWmsItemStatus(
+  pool: Pool | PoolClient,
+  wmsItemStatus: string,
+): Promise<StatusLabelRow | null> {
+  const labelName = labelNameForWmsStatus(wmsItemStatus);
+  const r = await pool.query<{
+    id: number;
+    legacy_id: number | null;
+    name: string;
+    display_label: string;
+    is_sellable: boolean;
+    is_visible_to_scanner: boolean;
+    is_visible_in_ui: boolean;
+    super_admin_locked: boolean;
+    is_system_only: boolean;
+    created_at: Date;
+    updated_at: Date;
+  }>(
+    `SELECT id, legacy_id, name, display_label,
+            is_sellable, is_visible_to_scanner, is_visible_in_ui,
+            super_admin_locked, is_system_only,
+            created_at, updated_at
+     FROM status_labels
+     WHERE lower(trim(name)) = lower(trim($1))
+     LIMIT 1`,
+    [labelName],
+  );
+  const row = r.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    legacy_id: row.legacy_id,
+    name: row.name,
+    display_label: row.display_label ?? "",
+    is_sellable: row.is_sellable,
+    is_visible_to_scanner: row.is_visible_to_scanner,
+    is_visible_in_ui: row.is_visible_in_ui,
+    super_admin_locked: row.super_admin_locked,
+    is_system_only: row.is_system_only,
+    created_at: row.created_at.toISOString(),
+    updated_at: row.updated_at.toISOString(),
+  };
+}
 
-const BOOL_COL: Record<StatusLabelBooleanKey, string> = {
-  include_in_inventory: "include_in_inventory",
-  hide_in_search_filters: "hide_in_search_filters",
-  hide_in_item_details: "hide_in_item_details",
-  display_in_group_page: "display_in_group_page",
-};
-
-export async function updateStatusLabelBoolean(
+export async function updateStatusLabelPresentation(
   pool: Pool,
   id: number,
-  key: StatusLabelBooleanKey,
-  value: boolean,
+  input: { display_label: string; legacy_id: number | null },
 ): Promise<boolean> {
-  const col = BOOL_COL[key];
   const r = await pool.query(
-    `UPDATE status_labels SET ${col} = $2::boolean, updated_at = now() WHERE id = $1::int`,
-    [id, value],
-  );
-  return (r.rowCount ?? 0) > 0;
-}
-
-export type StatusLabelWriteInput = {
-  legacy_id: number | null;
-  name: string;
-  display_label: string;
-  include_in_inventory: boolean;
-  hide_in_search_filters: boolean;
-  hide_in_item_details: boolean;
-  display_in_group_page: boolean;
-  auto_display: boolean;
-  allow_stolen_api: boolean;
-  prevent_transfer: boolean;
-  prevent_audit: boolean;
-  prevent_upload_to_live: boolean;
-};
-
-export async function insertStatusLabel(
-  pool: Pool,
-  input: StatusLabelWriteInput,
-): Promise<{ ok: true; id: number } | { ok: false; code: "duplicate_name" | "duplicate_legacy" }> {
-  try {
-    const r = await pool.query<{ id: number }>(
-      `INSERT INTO status_labels (
-         legacy_id, name, display_label,
-         include_in_inventory, hide_in_search_filters, hide_in_item_details, display_in_group_page,
-         auto_display, allow_stolen_api,
-         prevent_transfer, prevent_audit, prevent_upload_to_live
-       )
-       VALUES ($1::int, $2, $3, $4::boolean, $5::boolean, $6::boolean, $7::boolean,
-               $8::boolean, $9::boolean, $10::boolean, $11::boolean, $12::boolean)
-       RETURNING id`,
-      [
-        input.legacy_id,
-        input.name.trim(),
-        input.display_label.trim(),
-        input.include_in_inventory,
-        input.hide_in_search_filters,
-        input.hide_in_item_details,
-        input.display_in_group_page,
-        input.auto_display,
-        input.allow_stolen_api,
-        input.prevent_transfer,
-        input.prevent_audit,
-        input.prevent_upload_to_live,
-      ],
-    );
-    const id = r.rows[0]?.id;
-    if (id == null) throw new Error("insertStatusLabel: missing id");
-    return { ok: true, id };
-  } catch (e) {
-    const code = (e as { code?: string }).code;
-    if (code === "23505") {
-      const msg = String((e as { detail?: string }).detail ?? "");
-      if (/legacy_id/i.test(msg)) return { ok: false, code: "duplicate_legacy" };
-      return { ok: false, code: "duplicate_name" };
-    }
-    throw e;
-  }
-}
-
-export async function updateStatusLabelFull(
-  pool: Pool,
-  id: number,
-  input: StatusLabelWriteInput,
-): Promise<{ ok: true } | { ok: false; code: "not_found" | "duplicate_name" | "duplicate_legacy" }> {
-  const dup = await pool.query<{ c: string }>(
-    `SELECT count(*)::text AS c FROM status_labels WHERE lower(name) = lower($1) AND id <> $2::int`,
-    [input.name.trim(), id],
-  );
-  if (Number(dup.rows[0]?.c ?? 0) > 0) {
-    return { ok: false, code: "duplicate_name" };
-  }
-  if (input.legacy_id != null) {
-    const dupL = await pool.query<{ c: string }>(
-      `SELECT count(*)::text AS c FROM status_labels WHERE legacy_id = $1::int AND id <> $2::int`,
-      [input.legacy_id, id],
-    );
-    if (Number(dupL.rows[0]?.c ?? 0) > 0) {
-      return { ok: false, code: "duplicate_legacy" };
-    }
-  }
-  const r = await pool.query(
-    `UPDATE status_labels SET
-       legacy_id = $2::int,
-       name = $3,
-       display_label = $4,
-       include_in_inventory = $5::boolean,
-       hide_in_search_filters = $6::boolean,
-       hide_in_item_details = $7::boolean,
-       display_in_group_page = $8::boolean,
-       auto_display = $9::boolean,
-       allow_stolen_api = $10::boolean,
-       prevent_transfer = $11::boolean,
-       prevent_audit = $12::boolean,
-       prevent_upload_to_live = $13::boolean,
-       updated_at = now()
+    `UPDATE status_labels
+     SET display_label = $2::text,
+         legacy_id = $3::int,
+         updated_at = now()
      WHERE id = $1::int`,
-    [
-      id,
-      input.legacy_id,
-      input.name.trim(),
-      input.display_label.trim(),
-      input.include_in_inventory,
-      input.hide_in_search_filters,
-      input.hide_in_item_details,
-      input.display_in_group_page,
-      input.auto_display,
-      input.allow_stolen_api,
-      input.prevent_transfer,
-      input.prevent_audit,
-      input.prevent_upload_to_live,
-    ],
+    [id, input.display_label.trim(), input.legacy_id],
   );
-  if ((r.rowCount ?? 0) === 0) return { ok: false, code: "not_found" };
-  return { ok: true };
-}
-
-export async function deleteStatusLabelById(pool: Pool, id: number): Promise<boolean> {
-  const r = await pool.query(`DELETE FROM status_labels WHERE id = $1::int`, [id]);
   return (r.rowCount ?? 0) > 0;
 }

@@ -2,7 +2,17 @@
 
 export type LocationType = "warehouse" | "retail";
 
-export type ItemStatus = "in-stock" | "sold" | "in-transit" | "missing";
+export type ItemStatus =
+  | "in-stock"
+  | "return"
+  | "damaged"
+  | "sold"
+  | "stolen"
+  | "tag_killed"
+  | "UNKNOWN"
+  | "pending_visibility"
+  | "in-transit"
+  | "pending_transaction";
 
 export interface LocationRow {
   id: string;

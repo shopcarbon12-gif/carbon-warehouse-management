@@ -45,3 +45,8 @@ export function scopesForMembershipRole(role: string): Set<AppScope> {
 export function hasAllScopes(granted: Set<AppScope>, required: readonly AppScope[]): boolean {
   return required.every((s) => granted.has(s));
 }
+
+/** Browser session `memberships.role` — full tenant Super Admin (status locks, overrides). */
+export function isSuperAdminRole(role: string): boolean {
+  return role.trim().toLowerCase() === "admin";
+}

@@ -14,7 +14,7 @@ const bodySchema = z.object({
 });
 
 /**
- * Handheld: resolve ghost-read filtering (hide_in_search_filters / hide_in_item_details / !auto_display).
+ * Handheld: ghost-read filtering when `is_visible_to_scanner` is false (Clean 10 brain).
  */
 export async function POST(req: Request) {
   const apiKey = extractEdgeApiKey(req);

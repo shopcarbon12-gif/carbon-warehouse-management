@@ -1,7 +1,10 @@
 import type { Pool, PoolClient } from "pg";
 import { publishEdgeScanEvent } from "@/lib/server/edge-scan-hub";
 import { queueLightspeedReconciliationAfterWmsChange } from "@/lib/server/lightspeed-sync";
-import { findTransferBlockedEpc } from "@/lib/server/status-label-enforcement";
+import {
+  findTransferBlockedEpc,
+  resolveEpcVisibilityForTenant,
+} from "@/lib/server/status-label-enforcement";
 
 export type ReconcilerBatchInput = {
   tenantId: string;
@@ -72,11 +75,23 @@ function mapStatusMetadata(metadata: Record<string, unknown>): string | null {
     asNonEmptyString(metadata.status) ??
     asNonEmptyString(metadata.status_bucket);
   if (!raw) return null;
-  const u = raw.toUpperCase().replace(/-/g, "_");
-  if (u === "MISSING") return "missing";
-  if (u === "DAMAGED") return "damaged";
-  if (u === "IN_STOCK" || u === "INSTOCK") return "in-stock";
-  return null;
+  const u = raw.toUpperCase().replace(/-/g, "_").replace(/\s+/g, "_");
+  const m: Record<string, string> = {
+    MISSING: "UNKNOWN",
+    UNKNOWN: "UNKNOWN",
+    DAMAGED: "damaged",
+    IN_STOCK: "in-stock",
+    INSTOCK: "in-stock",
+    LIVE: "in-stock",
+    SOLD: "sold",
+    RETURN: "return",
+    STOLEN: "stolen",
+    TAG_KILLED: "tag_killed",
+    PENDING_VISIBILITY: "pending_visibility",
+    IN_TRANSIT: "in-transit",
+    PENDING_TRANSACTION: "pending_transaction",
+  };
+  return m[u] ?? null;
 }
 
 /**
@@ -101,8 +116,14 @@ export async function reconcileInventoryFromEdge(
 
     let rowsAffected = 0;
 
+    let workEpcs = epcs;
+    if (ctx === "TRANSFER" || ctx === "STATUS_CHANGE") {
+      const vis = await resolveEpcVisibilityForTenant(client, input.tenantId, epcs);
+      workEpcs = vis.filter((v) => v.visible).map((v) => v.epc);
+    }
+
     if (ctx === "TRANSFER") {
-      const blocked = await findTransferBlockedEpc(client, input.tenantId, epcs);
+      const blocked = await findTransferBlockedEpc(client, input.tenantId, workEpcs);
       if (blocked) {
         await client.query("ROLLBACK");
         return {
@@ -130,7 +151,7 @@ export async function reconcileInventoryFromEdge(
            AND i.location_id = $3::uuid
            AND loc.id = i.location_id
            AND loc.tenant_id = $4::uuid`,
-        [destBinId, epcs, input.locationId, input.tenantId],
+        [destBinId, workEpcs, input.locationId, input.tenantId],
       );
       rowsAffected = u.rowCount ?? 0;
     } else if (ctx === "STATUS_CHANGE") {
@@ -147,7 +168,7 @@ export async function reconcileInventoryFromEdge(
            AND i.location_id = $3::uuid
            AND loc.id = i.location_id
            AND loc.tenant_id = $4::uuid`,
-        [status, epcs, input.locationId, input.tenantId],
+        [status, workEpcs, input.locationId, input.tenantId],
       );
       rowsAffected = u.rowCount ?? 0;
     } else if (ctx === "EXCEPTION_ALARM") {
@@ -172,11 +193,13 @@ export async function reconcileInventoryFromEdge(
 
     await client.query("COMMIT");
 
+    const epcsForEvent = ctx === "TRANSFER" || ctx === "STATUS_CHANGE" ? workEpcs : epcs;
+
     publishEdgeScanEvent(input.tenantId, input.locationId, {
       deviceId: input.deviceId,
       locationId: input.locationId,
       scanContext: input.scanContext,
-      epcs,
+      epcs: epcsForEvent,
       timestamp: input.timestamp,
       rowsAffected,
     });
@@ -187,7 +210,7 @@ export async function reconcileInventoryFromEdge(
         locationId: input.locationId,
         deviceId: input.deviceId,
         scanContext: ctx,
-        epcs,
+        epcs: epcsForEvent,
         metadata: input.metadata,
       });
     }

@@ -124,7 +124,7 @@ export async function rfidCommissionPrepare(
     throw new Error("SERVER:Invalid ls_system_id on SKU");
   }
 
-  const statusFinal = addToInventory ? "in-stock" : "COMMISSIONED";
+  const statusFinal = addToInventory ? "in-stock" : "pending_visibility";
   const inserted: { epc: string; serial_number: number }[] = [];
   const zplRows: RfidReftagZplLabel[] = [];
   const dateStr = new Date().toISOString().slice(0, 10);

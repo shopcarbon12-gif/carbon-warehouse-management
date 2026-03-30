@@ -2,20 +2,12 @@
 
 import { useState } from "react";
 
-const STATUSES = [
-  "in-stock",
-  "sold",
-  "in-transit",
-  "missing",
-  "damaged",
-  "INCOMPLETE",
-  "UNKNOWN",
-  "COMMISSIONED",
-] as const;
+import { bulkStatusOptionsForUi } from "@/lib/inventory/bulk-wms-status-options";
 
-export function BulkStatusWorkspace() {
+export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [raw, setRaw] = useState("");
-  const [target, setTarget] = useState<string>("in-stock");
+  const options = bulkStatusOptionsForUi(isSuperAdmin);
+  const [target, setTarget] = useState<string>(options[0]?.value ?? "in-stock");
   const [override, setOverride] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -37,7 +29,11 @@ export function BulkStatusWorkspace() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ epcs, targetStatus: target, override }),
       });
-      const j = (await res.json().catch(() => ({}))) as { error?: string; updated?: number };
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        updated?: number;
+        code?: string;
+      };
       if (!res.ok) throw new Error(j.error ?? "Request failed");
       setMsg(`Updated ${j.updated ?? 0} EPC(s) at the active location.`);
     } catch (e) {
@@ -50,46 +46,48 @@ export function BulkStatusWorkspace() {
   return (
     <div className="flex max-w-3xl flex-col gap-4">
       <p className="font-mono text-xs text-[var(--wms-muted)]">
-        Changes apply to the <strong className="text-[var(--wms-fg)]">current location</strong> from the sidebar. Risky
-        transitions (for example sold → in-stock) require the override checkbox.
+        {!isSuperAdmin
+          ? "System workflow targets (in transit, pending visibility, pending transaction) are hidden — Super Admin only. Items in Super Admin–locked statuses cannot be changed here."
+          : "Super Admin: all Clean 10 targets are available; use Override for risky transitions."}
       </p>
-      <label className="font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
+      <label className="flex flex-col gap-2 font-mono text-xs text-[var(--wms-muted)]">
         Target status
         <select
+          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
           value={target}
           onChange={(e) => setTarget(e.target.value)}
-          className="mt-1 w-full max-w-xs rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm"
         >
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
             </option>
           ))}
         </select>
       </label>
       <label className="flex items-center gap-2 font-mono text-xs text-[var(--wms-muted)]">
-        <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} />
-        Allow override for blocked transitions
-      </label>
-      <label className="font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
-        EPC list
-        <textarea
-          value={raw}
-          onChange={(e) => setRaw(e.target.value)}
-          rows={12}
-          placeholder="E280..."
-          className="mt-1 w-full rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs"
+        <input
+          type="checkbox"
+          checked={override}
+          onChange={(e) => setOverride(e.target.checked)}
+          disabled={!isSuperAdmin}
         />
+        Allow risky transitions (Super Admin only)
       </label>
+      <textarea
+        className="min-h-[180px] rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 font-mono text-sm text-[var(--wms-fg)]"
+        placeholder="EPCs…"
+        value={raw}
+        onChange={(e) => setRaw(e.target.value)}
+      />
       <button
         type="button"
         disabled={busy}
         onClick={() => void run()}
-        className="w-fit rounded-lg bg-[var(--wms-accent)] px-4 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] disabled:opacity-50"
+        className="rounded-md bg-emerald-600 px-4 py-2 font-mono text-sm font-semibold text-white disabled:opacity-50"
       >
-        {busy ? "Applying…" : "Apply status"}
+        {busy ? "Working…" : "Apply bulk status"}
       </button>
-      {msg ? <p className="font-mono text-xs text-[var(--wms-muted)]">{msg}</p> : null}
+      {msg ? <p className="font-mono text-sm text-[var(--wms-fg)]">{msg}</p> : null}
     </div>
   );
 }

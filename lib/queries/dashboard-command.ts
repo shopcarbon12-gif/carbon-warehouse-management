@@ -24,7 +24,7 @@ export async function getCommandCenterKpis(
   );
   const incomplete = await pool.query<{ c: string }>(
     `SELECT count(*)::text AS c FROM items
-     WHERE location_id = $1::uuid AND status = 'INCOMPLETE'`,
+     WHERE location_id = $1::uuid AND status = 'pending_visibility'`,
     [locationId],
   );
   const unknown = await pool.query<{ c: string }>(
