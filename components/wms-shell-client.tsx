@@ -6,9 +6,11 @@ import { Sidebar } from "@/components/layout/Sidebar";
 
 export function WmsShellClient({
   activeLocationId,
+  banner,
   children,
 }: {
   activeLocationId: string;
+  banner?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -39,7 +41,10 @@ export function WmsShellClient({
             Carbon WMS
           </span>
         </header>
-        <main className="flex flex-1 flex-col p-4 md:p-6">{children}</main>
+        <main className="flex flex-1 flex-col p-4 md:p-6">
+          {banner}
+          {children}
+        </main>
       </div>
     </div>
   );

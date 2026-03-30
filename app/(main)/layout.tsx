@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { DevLocalDbBanner } from "@/components/dev-local-db-banner";
 import { WmsShell } from "@/components/wms-shell";
 import { getSession } from "@/lib/get-session";
 
@@ -13,6 +14,8 @@ export default async function MainLayout({
   }
 
   return (
-    <WmsShell activeLocationId={session.lid}>{children}</WmsShell>
+    <WmsShell activeLocationId={session.lid} banner={<DevLocalDbBanner />}>
+      {children}
+    </WmsShell>
   );
 }

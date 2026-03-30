@@ -7,7 +7,7 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
   const router = useRouter();
   const next =
     nextPath && nextPath.startsWith("/") ? nextPath : "/dashboard";
-  const [email, setEmail] = useState("admin@example.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -43,6 +43,7 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
         <input
           type="email"
           autoComplete="username"
+          placeholder="e.g. admin@example.com (local seed)"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="mt-1 w-full rounded-md border border-[var(--surface-border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)]"
