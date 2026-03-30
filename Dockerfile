@@ -1,5 +1,7 @@
 # Carbon WMS — standalone Next image; map port 3000 in Coolify and set env in the dashboard.
 # Runtime: set DATABASE_URL (and other secrets) in Coolify from your linked Postgres resource.
+# If WMS_AUTO_MIGRATE=1, migration/sql errors no longer kill the container (see docker-entrypoint.sh)
+# so /api/health can pass; fix DB logs and redeploy. Prefer running migrations in CI if possible.
 FROM node:20-alpine AS base
 
 FROM base AS deps
