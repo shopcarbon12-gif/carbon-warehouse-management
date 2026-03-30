@@ -42,8 +42,10 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+const CATALOG_SYNC_JOB_TYPES = new Set(["lightspeed_catalog", "lightspeed_pull"]);
+
 async function processStub(pool: Pool, job: JobRow): Promise<void> {
-  if (job.job_type === "lightspeed_catalog") {
+  if (CATALOG_SYNC_JOB_TYPES.has(job.job_type)) {
     await executeLightspeedCatalogJob(pool, job.id);
     /* Terminal status + payload are set inside the catalog sync (no generic completed UPDATE). */
     return;
@@ -76,7 +78,7 @@ async function main() {
       }
       try {
         await processStub(pool, job);
-        if (job.job_type !== "lightspeed_catalog") {
+        if (!CATALOG_SYNC_JOB_TYPES.has(job.job_type)) {
           await pool.query(
             `UPDATE sync_jobs
              SET status = 'completed', error = NULL, updated_at = now()

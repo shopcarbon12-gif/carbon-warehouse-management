@@ -39,13 +39,18 @@ export function SyncPanel() {
 
   return (
     <div className="mt-6 space-y-4">
+      <p className="font-mono text-[0.6rem] text-slate-500">
+        Queued <code className="text-slate-400">lightspeed_pull</code> jobs run the same matrix catalog sync as{" "}
+        <strong className="text-slate-400">Trigger manual sync</strong> when the WMS worker (
+        <code className="text-slate-400">npm run worker</code>) is running.
+      </p>
       <div className="flex flex-wrap gap-2 font-mono text-xs">
         <button
           type="button"
           className="rounded-md border border-teal-600/50 bg-teal-950/30 px-3 py-2 font-semibold text-teal-200 hover:bg-teal-900/25"
           onClick={() => void enqueue("lightspeed_pull")}
         >
-          Enqueue Lightspeed pull (stub)
+          Enqueue Lightspeed catalog pull
         </button>
         <button
           type="button"

@@ -321,6 +321,91 @@ class WmsApiClient {
     return <String, dynamic>{};
   }
 
+  Future<Map<String, String>> sessionAuthHeaders() async {
+    final t = await getSessionToken();
+    final h = <String, String>{};
+    if (t != null && t.isNotEmpty) {
+      h['Authorization'] = 'Bearer $t';
+    }
+    return h;
+  }
+
+  /// Active location codes for the signed-in user (`GET /api/locations`).
+  Future<List<String>> fetchSessionLocationCodes() async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/locations');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      return [];
+    }
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) return [];
+    final out = <String>[];
+    for (final item in decoded) {
+      if (item is Map && item['code'] != null) {
+        out.add(item['code'].toString());
+      }
+    }
+    return out;
+  }
+
+  /// First page of catalog grid rows for search (session Bearer).
+  Future<Map<String, dynamic>?> catalogGridSearchFirstRow(String q) async {
+    final qt = q.trim();
+    if (qt.isEmpty) return null;
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/catalog').replace(
+      queryParameters: {
+        'view': 'grid',
+        'page': '1',
+        'limit': '8',
+        'q': qt,
+      },
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      return null;
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return null;
+    final rows = decoded['rows'];
+    if (rows is! List || rows.isEmpty) return null;
+    final first = rows.first;
+    if (first is Map<String, dynamic>) return first;
+    return null;
+  }
+
+  /// Logs a receiving line to `inventory_audit_logs` (session Bearer).
+  Future<void> postBarcodeIntakeLog({
+    required String barcode,
+    required String sku,
+    required int qty,
+    String? title,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/barcode-intake');
+    final body = <String, dynamic>{
+      'barcode': barcode,
+      'sku': sku,
+      'qty': qty,
+      if (title != null && title.isNotEmpty) 'title': title,
+    };
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+  }
+
   Future<Map<String, dynamic>> postPutawayAssign({
     required String deviceId,
     required String binCode,

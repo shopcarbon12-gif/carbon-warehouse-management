@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import {
   listCatalogCustomSkus,
@@ -15,7 +15,7 @@ import { listCatalogGrid } from "@/lib/server/inventory-catalog";
  * GET (no params) — matrix aggregate list (legacy).
  */
 export async function GET(req: Request) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

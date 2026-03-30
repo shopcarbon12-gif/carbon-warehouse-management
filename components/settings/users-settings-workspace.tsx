@@ -38,6 +38,7 @@ type Tab = "users" | "roles";
 export function UsersSettingsWorkspace() {
   const [tab, setTab] = useState<Tab>("users");
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [editUser, setEditUser] = useState<TenantUserListRow | null>(null);
   const [roleModal, setRoleModal] = useState<null | { mode: "add" } | { mode: "edit"; row: UserRoleRow }>(
@@ -54,6 +55,23 @@ export function UsersSettingsWorkspace() {
     fetcher,
     { revalidateOnFocus: false },
   );
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (!users?.length) return;
+    setSelectedIds((prev) => {
+      if (prev.size === users.length) return new Set();
+      return new Set(users.map((u) => u.id));
+    });
+  }, [users]);
 
   const exportUsersCsv = useCallback(() => {
     if (!users?.length) return;
@@ -77,6 +95,51 @@ export function UsersSettingsWorkspace() {
     a.click();
     URL.revokeObjectURL(a.href);
   }, [users]);
+
+  const exportSelectedEmailsCsv = useCallback(() => {
+    if (!users?.length) return;
+    const subset = users.filter((u) => selectedIds.has(u.id));
+    if (!subset.length) {
+      window.alert("Select at least one user.");
+      return;
+    }
+    const esc = (s: string) => (/[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+    const lines = [["Email"].map(esc).join(","), ...subset.map((u) => esc(u.email))];
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `wms-users-selected-emails-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setBulkOpen(false);
+  }, [users, selectedIds]);
+
+  const bulkDeactivate = useCallback(async () => {
+    if (!users?.length) return;
+    const subset = users.filter((u) => selectedIds.has(u.id));
+    if (!subset.length) {
+      window.alert("Select at least one user.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Remove ${subset.length} user(s) from this tenant? They will lose access to this WMS tenant.`,
+      )
+    ) {
+      return;
+    }
+    setBulkOpen(false);
+    let failed = 0;
+    for (const u of subset) {
+      const res = await fetch(`/api/settings/access/users/${u.id}`, { method: "DELETE" });
+      if (!res.ok) failed++;
+    }
+    setSelectedIds(new Set());
+    void muUsers();
+    if (failed > 0) {
+      window.alert(`${subset.length - failed} removed, ${failed} failed (check permissions or last admin).`);
+    }
+  }, [users, selectedIds, muUsers]);
 
   useEffect(() => {
     if (!bulkOpen) return;
@@ -150,22 +213,16 @@ export function UsersSettingsWorkspace() {
                   <button
                     type="button"
                     className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
-                    onClick={() => {
-                      console.log("[users] Bulk: deactivate selected (placeholder)");
-                      setBulkOpen(false);
-                    }}
+                    onClick={() => void bulkDeactivate()}
                   >
-                    Deactivate selected (placeholder)
+                    Remove selected from tenant
                   </button>
                   <button
                     type="button"
                     className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
-                    onClick={() => {
-                      console.log("[users] Bulk: email export (placeholder)");
-                      setBulkOpen(false);
-                    }}
+                    onClick={() => exportSelectedEmailsCsv()}
                   >
-                    Email export (placeholder)
+                    Export selected emails (CSV)
                   </button>
                 </div>
               ) : null}
@@ -182,6 +239,15 @@ export function UsersSettingsWorkspace() {
             <table className="w-full min-w-[720px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-800 bg-zinc-900/80 font-mono text-[0.6rem] uppercase text-slate-500">
+                  <th className="w-10 px-2 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all users"
+                      checked={Boolean(users?.length) && selectedIds.size === (users?.length ?? 0)}
+                      onChange={() => toggleSelectAll()}
+                      className="rounded border-slate-600 bg-zinc-900"
+                    />
+                  </th>
                   <th className="px-3 py-3">Email</th>
                   <th className="px-3 py-3">Role</th>
                   <th className="px-3 py-3">Locations</th>
@@ -191,13 +257,22 @@ export function UsersSettingsWorkspace() {
               <tbody className="divide-y divide-slate-800/90">
                 {!users ? (
                   <tr>
-                    <td colSpan={4} className="px-3 py-8 text-center font-mono text-xs text-slate-500">
+                    <td colSpan={5} className="px-3 py-8 text-center font-mono text-xs text-slate-500">
                       Loading…
                     </td>
                   </tr>
                 ) : (
                   users.map((u) => (
                     <tr key={u.id} className="text-slate-200">
+                      <td className="px-2 py-2.5">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${u.email}`}
+                          checked={selectedIds.has(u.id)}
+                          onChange={() => toggleSelect(u.id)}
+                          className="rounded border-slate-600 bg-zinc-900"
+                        />
+                      </td>
                       <td className="px-3 py-2.5 font-mono text-xs text-slate-100">{u.email}</td>
                       <td className="px-3 py-2.5 text-slate-400">{u.role_name ?? "—"}</td>
                       <td className="max-w-[280px] px-3 py-2.5 font-mono text-[0.65rem] text-slate-500">

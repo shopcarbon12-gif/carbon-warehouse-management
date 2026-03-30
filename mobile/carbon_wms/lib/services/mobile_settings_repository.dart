@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/epc_tenant_sync.dart';
 import 'package:carbon_wms/services/handheld_runtime_config.dart';
 
 /// Cached tenant handheld + EPC payload from `GET /api/settings/mobile-sync`.
@@ -15,10 +16,22 @@ class MobileSettingsRepository extends ChangeNotifier {
 
   HandheldRuntimeConfig _config = HandheldRuntimeConfig.fallback;
   Map<String, dynamic>? _lastSyncRoot;
+  TenantEpcSettings? _epcSettings;
+  List<TenantEpcProfile> _epcProfiles = const [];
 
   HandheldRuntimeConfig get config => _config;
 
   Map<String, dynamic>? get lastSyncRoot => _lastSyncRoot;
+
+  TenantEpcSettings? get epcSettings => _epcSettings;
+
+  List<TenantEpcProfile> get epcProfiles => List.unmodifiable(_epcProfiles);
+
+  void _applySyncRoot(Map<String, dynamic>? root) {
+    _lastSyncRoot = root;
+    _epcSettings = TenantEpcSettings.fromMobileSyncRoot(root);
+    _epcProfiles = TenantEpcProfile.listFromMobileSyncRoot(root);
+  }
 
   /// Runtime-only global power (0–300) for both transfer directions until next server sync.
   Future<void> setGlobalAntennaPower(int power) async {
@@ -40,9 +53,9 @@ class MobileSettingsRepository extends ChangeNotifier {
     final syncRaw = p.getString(_prefsKeySyncRaw);
     if (syncRaw != null && syncRaw.isNotEmpty) {
       try {
-        _lastSyncRoot = jsonDecode(syncRaw) as Map<String, dynamic>;
+        _applySyncRoot(jsonDecode(syncRaw) as Map<String, dynamic>);
       } catch (_) {
-        _lastSyncRoot = null;
+        _applySyncRoot(null);
       }
     }
   }
@@ -52,7 +65,7 @@ class MobileSettingsRepository extends ChangeNotifier {
       final root = await api.fetchMobileSync(deviceId: deviceId);
       if (root == null) return;
 
-      _lastSyncRoot = root;
+      _applySyncRoot(root);
       _config = HandheldRuntimeConfig.fromMobileSyncJson(root);
 
       final p = await SharedPreferences.getInstance();

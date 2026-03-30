@@ -272,30 +272,21 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
           >
             <button
               type="button"
-              onClick={() => {
-                console.log("[catalog] New — manual item creation (placeholder)");
-                setNewItemOpen(true);
-              }}
+              onClick={() => setNewItemOpen(true)}
               className="rounded-md bg-emerald-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-emerald-500"
             >
               New
             </button>
             <button
               type="button"
-              onClick={() => {
-                console.log("[catalog] Import — open file modal (placeholder)");
-                setImportOpen(true);
-              }}
+              onClick={() => setImportOpen(true)}
               className="rounded-md bg-blue-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-blue-500"
             >
               Import
             </button>
             <button
               type="button"
-              onClick={() => {
-                console.log("[catalog] Export CSV");
-                exportLightspeedCatalogCsv(rows);
-              }}
+              onClick={() => exportLightspeedCatalogCsv(rows)}
               className="rounded-md bg-emerald-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-emerald-500"
             >
               Export
@@ -322,7 +313,6 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
                     role="menuitem"
                     disabled={syncBusy || !canTriggerLightspeedSync}
                     onClick={() => {
-                      console.log("[catalog] Lightspeed → Sync Lightspeed");
                       setCatalogMenuOpen(null);
                       void triggerLightspeedSync();
                     }}
@@ -330,28 +320,22 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
                   >
                     {syncBusy ? "Syncing…" : "Sync Lightspeed"}
                   </button>
-                  <button
-                    type="button"
+                  <Link
+                    href="/inventory/sync"
                     role="menuitem"
-                    onClick={() => {
-                      console.log("[catalog] Lightspeed placeholder: reconcile draft SKUs");
-                      setCatalogMenuOpen(null);
-                    }}
+                    onClick={() => setCatalogMenuOpen(null)}
                     className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
                   >
-                    Reconcile draft SKUs (placeholder)
-                  </button>
-                  <button
-                    type="button"
+                    Open Lightspeed sync workspace
+                  </Link>
+                  <Link
+                    href="/inventory/sync"
                     role="menuitem"
-                    onClick={() => {
-                      console.log("[catalog] Lightspeed placeholder: open sync history");
-                      setCatalogMenuOpen(null);
-                    }}
+                    onClick={() => setCatalogMenuOpen(null)}
                     className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
                   >
-                    Open sync history (placeholder)
-                  </button>
+                    Job queue &amp; history
+                  </Link>
                 </div>
               ) : null}
             </div>
@@ -373,24 +357,22 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={() => {
-                      console.log("[catalog] More: bulk tag assign (placeholder)");
-                      setCatalogMenuOpen(null);
-                    }}
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                    disabled
+                    title="Not implemented yet"
+                    onClick={() => setCatalogMenuOpen(null)}
+                    className="block w-full cursor-not-allowed px-3 py-2 text-left font-mono text-xs text-slate-600"
                   >
-                    Bulk tag assign (placeholder)
+                    Bulk tag assign (soon)
                   </button>
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={() => {
-                      console.log("[catalog] More: bulk archive (placeholder)");
-                      setCatalogMenuOpen(null);
-                    }}
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                    disabled
+                    title="Not implemented yet"
+                    onClick={() => setCatalogMenuOpen(null)}
+                    className="block w-full cursor-not-allowed px-3 py-2 text-left font-mono text-xs text-slate-600"
                   >
-                    Bulk archive (placeholder)
+                    Bulk archive (soon)
                   </button>
                 </div>
               ) : null}
@@ -631,9 +613,8 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
                 type="file"
                 className="mt-4 block w-full font-mono text-xs text-slate-400 file:mr-3 file:rounded file:border file:border-slate-600 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-slate-200"
                 accept=".csv,.xlsx,.xls"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  console.log("[catalog] Import file selected (placeholder)", f?.name ?? "(none)");
+                onChange={() => {
+                  /* Parsing pipeline not wired — file pick is UI-only until ingest API lands. */
                 }}
               />
               <div className="mt-6 flex justify-end">

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
@@ -18,6 +21,8 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
   final _barcodeCtrl = TextEditingController();
   final _qtyCtrl = TextEditingController(text: '1');
   _LookupRow? _preview;
+  bool _busyLookup = false;
+  String? _lookupErr;
 
   @override
   void initState() {
@@ -34,22 +39,77 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
     super.dispose();
   }
 
-  void _resolvePreview() {
+  Future<void> _resolvePreview() async {
     final b = _barcodeCtrl.text.trim().toUpperCase();
+    if (b.isEmpty) {
+      setState(() {
+        _preview = null;
+        _lookupErr = null;
+      });
+      return;
+    }
     setState(() {
-      _preview = b.isEmpty ? null : _mockIntakeRow(b);
+      _busyLookup = true;
+      _lookupErr = null;
     });
+    try {
+      final api = context.read<WmsApiClient>();
+      final row = await api.catalogGridSearchFirstRow(b);
+      if (!mounted) return;
+      if (row == null) {
+        setState(() {
+          _preview = null;
+          _lookupErr = 'No catalog match. Try SKU or UPC from matrix.';
+          _busyLookup = false;
+        });
+        return;
+      }
+      final sku = row['sku']?.toString() ?? '';
+      final name = row['name']?.toString() ?? '';
+      final upc = (row['sku_upc'] ?? row['matrix_upc'])?.toString() ?? b;
+      setState(() {
+        _preview = _LookupRow(
+          code: b,
+          sku: sku.isNotEmpty ? sku : upc,
+          name: name.isNotEmpty ? name : '—',
+          bin: '—',
+        );
+        _busyLookup = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _preview = null;
+        _lookupErr = 'Lookup failed — check network and login.';
+        _busyLookup = false;
+      });
+    }
   }
 
-  void _commitIntake() {
-    if (_preview == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Intake logged locally (${_qtyCtrl.text}× ${_preview!.sku}) — sync to WMS pending.',
+  Future<void> _commitIntake() async {
+    final p = _preview;
+    if (p == null) return;
+    final qty = int.tryParse(_qtyCtrl.text.trim()) ?? 1;
+    if (qty < 1) return;
+    try {
+      await context.read<WmsApiClient>().postBarcodeIntakeLog(
+            barcode: p.code,
+            sku: p.sku,
+            qty: qty,
+            title: p.name == '—' ? null : p.name,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Intake logged ($qty× ${p.sku})'),
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Server rejected intake — try again')),
+      );
+    }
   }
 
   @override
@@ -72,7 +132,7 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
               decoration: const InputDecoration(
                 hintText: 'Scan UPC / EAN / Code-128',
               ),
-              onSubmitted: (_) => _resolvePreview(),
+              onSubmitted: (_) => unawaited(_resolvePreview()),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -83,7 +143,7 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
                 );
                 if (!mounted || code == null || code.isEmpty) return;
                 _barcodeCtrl.text = code;
-                _resolvePreview();
+                unawaited(_resolvePreview());
               },
               icon: const Icon(Icons.photo_camera_outlined),
               label: const Text('Scan with camera'),
@@ -96,16 +156,24 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
               decoration: const InputDecoration(labelText: 'Quantity'),
             ),
             const SizedBox(height: 12),
+            if (_lookupErr != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  _lookupErr!,
+                  style: const TextStyle(color: Color(0xFFf87171), fontSize: 12, fontFamily: 'monospace'),
+                ),
+              ),
             FilledButton(
-              onPressed: _resolvePreview,
+              onPressed: _busyLookup ? null : () => unawaited(_resolvePreview()),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.background,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: const Text(
-                'RESOLVE',
-                style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
+              child: Text(
+                _busyLookup ? 'RESOLVING…' : 'RESOLVE',
+                style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
               ),
             ),
             const SizedBox(height: 24),
@@ -113,7 +181,7 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
               _IntakePreviewCard(row: _preview!),
               const SizedBox(height: 16),
               FilledButton(
-                onPressed: _commitIntake,
+                onPressed: () => unawaited(_commitIntake()),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.slateActionDark,
                   foregroundColor: AppColors.textMain,
@@ -144,16 +212,6 @@ class _LookupRow {
   final String sku;
   final String name;
   final String bin;
-}
-
-_LookupRow _mockIntakeRow(String barcode) {
-  final tail = barcode.length >= 4 ? barcode.substring(barcode.length - 4) : barcode;
-  return _LookupRow(
-    code: barcode,
-    sku: 'UPC-$tail',
-    name: 'Vendor carton mix $tail',
-    bin: 'RCV-STAGE',
-  );
 }
 
 class _IntakePreviewCard extends StatelessWidget {

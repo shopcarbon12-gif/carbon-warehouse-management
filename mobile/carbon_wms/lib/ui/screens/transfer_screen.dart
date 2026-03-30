@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/util/demo_epc.dart';
@@ -19,7 +20,7 @@ class TransferScreen extends StatefulWidget {
 }
 
 class _TransferScreenState extends State<TransferScreen> {
-  static const _bins = <String>[
+  static const _fallbackBins = <String>[
     'RCV-STAGE',
     'BULK-A-01',
     'BULK-A-02',
@@ -27,8 +28,9 @@ class _TransferScreenState extends State<TransferScreen> {
     'SHIP-DOCK-3',
   ];
 
-  String _origin = _bins.first;
-  String _destination = _bins[2];
+  List<String> _bins = List<String>.from(_fallbackBins);
+  late String _origin = _bins.first;
+  late String _destination = _bins.length > 2 ? _bins[2] : _bins.last;
 
   void _syncMeta(RfidManager m) {
     m.setIngestMetadata({
@@ -40,10 +42,23 @@ class _TransferScreenState extends State<TransferScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final m = context.read<RfidManager>();
       m.scanContext = 'TRANSFER';
       _syncMeta(m);
+      try {
+        final codes = await context.read<WmsApiClient>().fetchSessionLocationCodes();
+        if (codes.isNotEmpty && mounted) {
+          setState(() {
+            _bins = codes;
+            _origin = _bins.first;
+            _destination = _bins.length > 2 ? _bins[2] : _bins.last;
+          });
+          _syncMeta(m);
+        }
+      } catch (_) {
+        /* keep demo bins */
+      }
     });
   }
 
@@ -109,7 +124,8 @@ class _TransferScreenState extends State<TransferScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             sliver: SliverToBoxAdapter(
               child: DropdownButtonFormField<String>(
-                initialValue: _origin,
+                key: ValueKey<String>('o-${_bins.join('|')}'),
+                initialValue: _bins.contains(_origin) ? _origin : _bins.first,
                 decoration: const InputDecoration(labelText: 'Origin location'),
                 items: _bins
                     .map((b) => DropdownMenuItem(value: b, child: Text(b)))
@@ -126,7 +142,8 @@ class _TransferScreenState extends State<TransferScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             sliver: SliverToBoxAdapter(
               child: DropdownButtonFormField<String>(
-                initialValue: _destination,
+                key: ValueKey<String>('d-${_bins.join('|')}'),
+                initialValue: _bins.contains(_destination) ? _destination : _bins.last,
                 decoration: const InputDecoration(labelText: 'Destination location'),
                 items: _bins
                     .map((b) => DropdownMenuItem(value: b, child: Text(b)))
