@@ -83,7 +83,11 @@ function LightspeedLiveReadiness({
           Lightspeed dev app redirect URL must match:{" "}
           <code className="break-all text-violet-300">{callback}</code>
         </li>
-        <li>Optional: LS_REDIRECT_URI = same callback; WMS_APP_PUBLIC_BASE_URL = your public WMS URL.</li>
+        <li>
+          Optional: LS_REDIRECT_URI = same callback. Public base (carbon-gen order):{" "}
+          <code className="text-slate-500">NEXT_PUBLIC_BASE_URL</code> then{" "}
+          <code className="text-slate-500">WMS_APP_PUBLIC_BASE_URL</code>.
+        </li>
         <li>Save integration fields below, then Redeploy WMS in Coolify so the container loads secrets.</li>
         <li>Start OAuth → copy refresh token into LS_REFRESH_TOKEN → Redeploy again if needed.</li>
       </ol>

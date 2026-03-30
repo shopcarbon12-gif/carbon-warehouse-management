@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { lightspeedOAuthPublicBase } from "@/lib/server/lightspeed-oauth-public-base";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,17 +15,9 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function publicAppBase(): string {
-  const fromEnv =
-    normalizeText(process.env.WMS_APP_PUBLIC_BASE_URL) ||
-    normalizeText(process.env.NEXT_PUBLIC_BASE_URL) ||
-    normalizeText(process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-  return fromEnv.replace(/\/$/, "") || "http://localhost:3000";
-}
-
 export async function GET() {
   const clientId = normalizeText(process.env.LS_CLIENT_ID);
-  const base = publicAppBase();
+  const base = lightspeedOAuthPublicBase();
   const redirectUri =
     normalizeText(process.env.LS_REDIRECT_URI) || `${base}/api/lightspeed/callback`;
 
@@ -36,7 +29,8 @@ export async function GET() {
   const cookieStore = await cookies();
   cookieStore.set("ls_oauth_state", state, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    /* carbon-gen uses `secure: true` (always HTTPS). WMS: secure only when public base is HTTPS so local http://localhost:3040 OAuth still works. */
+    secure: base.startsWith("https://"),
     sameSite: "lax",
     maxAge: 600,
     path: "/",

@@ -7,14 +7,14 @@
  * Usage:
  *   1. Fill values in gitignored `.env.coolify.local` (or export):
  *        COOLIFY_BASE_URL, COOLIFY_API_TOKEN, COOLIFY_APP_UUID (or COOLIFY_DEPLOY_WEBHOOK_URL)
- *        WMS_APP_PUBLIC_BASE_URL
+ *        NEXT_PUBLIC_BASE_URL and/or WMS_APP_PUBLIC_BASE_URL (carbon-gen uses the former; both are synced)
  *        LS_CLIENT_ID, LS_CLIENT_SECRET, LS_REFRESH_TOKEN, LS_ACCOUNT_ID, LS_DOMAIN_PREFIX
  *        optional: LS_API_BASE, LS_OAUTH_TOKEN_URL, LS_MAX_CATALOG_PAGES, LS_PERSONAL_TOKEN, LS_REDIRECT_URI
  *   2. npm run coolify:set-lightspeed
  *   3. npm run deploy:coolify   (or Redeploy in Coolify UI)
  *
- * If LS_REDIRECT_URI is unset locally but WMS_APP_PUBLIC_BASE_URL is set, the script sends
- * LS_REDIRECT_URI = {WMS_APP_PUBLIC_BASE_URL}/api/lightspeed/callback so it matches the OAuth routes.
+ * If LS_REDIRECT_URI is unset, it is derived from NEXT_PUBLIC_BASE_URL or WMS_APP_PUBLIC_BASE_URL
+ * (same order as carbon-gen OAuth: NEXT_PUBLIC first).
  */
 import fs from "fs";
 import path from "path";
@@ -68,6 +68,7 @@ const KEYS_OPTIONAL = [
 ];
 
 const KEYS_CORE = [
+  "NEXT_PUBLIC_BASE_URL",
   "WMS_APP_PUBLIC_BASE_URL",
   "LS_CLIENT_ID",
   "LS_CLIENT_SECRET",
@@ -114,7 +115,29 @@ for (const key of KEYS_OPTIONAL) {
   pushedNames.push(key);
 }
 
-const publicBase = trimEnv("WMS_APP_PUBLIC_BASE_URL").replace(/\/$/, "");
+const nextPublic = trimEnv("NEXT_PUBLIC_BASE_URL").replace(/\/$/, "");
+const wmsPublic = trimEnv("WMS_APP_PUBLIC_BASE_URL").replace(/\/$/, "");
+/* Mirror carbon-gen: if only one public URL is set, push the other with the same value. */
+if (nextPublic && !wmsPublic && !pushedNames.includes("WMS_APP_PUBLIC_BASE_URL")) {
+  bulk.push({
+    key: "WMS_APP_PUBLIC_BASE_URL",
+    value: nextPublic,
+    is_literal: true,
+    is_multiline: false,
+  });
+  pushedNames.push("WMS_APP_PUBLIC_BASE_URL");
+}
+if (wmsPublic && !nextPublic && !pushedNames.includes("NEXT_PUBLIC_BASE_URL")) {
+  bulk.push({
+    key: "NEXT_PUBLIC_BASE_URL",
+    value: wmsPublic,
+    is_literal: true,
+    is_multiline: false,
+  });
+  pushedNames.push("NEXT_PUBLIC_BASE_URL");
+}
+
+const publicBase = nextPublic || wmsPublic;
 const explicitRedirect = trimEnv("LS_REDIRECT_URI");
 if (publicBase && !explicitRedirect) {
   const derived = `${publicBase}/api/lightspeed/callback`;
@@ -127,13 +150,16 @@ if (publicBase && !explicitRedirect) {
   if (!pushedNames.includes("LS_REDIRECT_URI")) pushedNames.push("LS_REDIRECT_URI");
 }
 
-const requiredForLive = ["WMS_APP_PUBLIC_BASE_URL", "LS_CLIENT_ID", "LS_CLIENT_SECRET", "LS_REFRESH_TOKEN", "LS_ACCOUNT_ID"];
+const requiredForLive = ["LS_CLIENT_ID", "LS_CLIENT_SECRET", "LS_REFRESH_TOKEN", "LS_ACCOUNT_ID"];
 const missing = requiredForLive.filter((k) => !trimEnv(k));
+if (!nextPublic && !wmsPublic) {
+  missing.push("NEXT_PUBLIC_BASE_URL or WMS_APP_PUBLIC_BASE_URL (OAuth / redirect base)");
+}
 
 if (bulk.length === 0) {
   console.error(
     "No Lightspeed-related env vars found to push. Set at least:\n" +
-      "  WMS_APP_PUBLIC_BASE_URL, LS_CLIENT_ID, LS_CLIENT_SECRET, LS_REFRESH_TOKEN, LS_ACCOUNT_ID\n" +
+      "  NEXT_PUBLIC_BASE_URL or WMS_APP_PUBLIC_BASE_URL, LS_CLIENT_ID, LS_CLIENT_SECRET, LS_REFRESH_TOKEN, LS_ACCOUNT_ID\n" +
       "in .env.coolify.local (or export them), then re-run.",
   );
   process.exit(1);
@@ -170,4 +196,7 @@ if (!res.ok) {
 
 console.log("\nPatched keys (values not shown):", pushedNames.join(", "));
 console.log("Next: npm run deploy:coolify — or Redeploy in Coolify — so the container loads new env.");
-console.log("Lightspeed dev app: add redirect URL = " + (explicitRedirect || (publicBase ? `${publicBase}/api/lightspeed/callback` : "(set WMS_APP_PUBLIC_BASE_URL)")));
+console.log(
+  "Lightspeed dev app: add redirect URL = " +
+    (explicitRedirect || (publicBase ? `${publicBase}/api/lightspeed/callback` : "(set NEXT_PUBLIC_BASE_URL or WMS_APP_PUBLIC_BASE_URL)")),
+);

@@ -4,25 +4,20 @@
  */
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { lightspeedOAuthPublicBase } from "@/lib/server/lightspeed-oauth-public-base";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function publicAppBase(): string {
-  const fromEnv =
-    String(process.env.WMS_APP_PUBLIC_BASE_URL || "").trim() ||
-    String(process.env.NEXT_PUBLIC_BASE_URL || "").trim() ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-  return fromEnv.replace(/\/$/, "") || "http://localhost:3000";
-}
-
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get("code");
+  /* carbon-gen reads this from the query for parity (optional Lightspeed hint). */
+  void searchParams.get("domain_prefix");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 
-  const base = publicAppBase();
+  const base = lightspeedOAuthPublicBase();
   const redirectUri =
     String(process.env.LS_REDIRECT_URI || "").trim() || `${base}/api/lightspeed/callback`;
 
