@@ -81,6 +81,7 @@ Official Coolify doc: [Gateway Timeout (504)](https://coolify.io/docs/troublesho
 ## 8. Agent / automation boundaries
 
 - Do **not** treat **`npm run deploy:coolify`** (webhook) as fixing a **broken Coolify host** or **proxy** — it only queues an app deploy when the **Coolify API** is healthy.
+- **`npm run deploy:coolify:watch`** triggers **one** deploy then **polls** the Coolify API until that deployment finishes (or fails), with optional retries — use when you want end-to-end confirmation; avoid firing **`deploy:coolify`** twice in a row (stacks two deploys).
 - The **Cursor agent terminal** often **cannot SSH** to the user’s VPS; ask the user to paste **`docker ps`** / **logs** when remote access is required.
 
 ---

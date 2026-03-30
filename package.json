@@ -20,6 +20,7 @@
     "worker": "npx tsx scripts/worker.ts",
     "test:e2e": "playwright test",
     "deploy:coolify": "node scripts/trigger-coolify-deploy.mjs",
+    "deploy:coolify:watch": "node scripts/deploy-coolify-watch.mjs",
     "coolify:poll-deployment": "node scripts/poll-coolify-deployment.mjs",
     "coolify:set-db": "node scripts/coolify-set-database-url.mjs",
     "coolify:set-lightspeed": "node scripts/coolify-set-lightspeed-env.mjs",
