@@ -23,12 +23,41 @@ export type BinContentLineRow = {
 export async function listLocationsForTenant(
   pool: Pool,
   tenantId: string,
+  options?: { userId?: string; bypassUserLocationFilter?: boolean },
 ): Promise<LocationRow[]> {
+  const userId = options?.userId;
+  const bypass = options?.bypassUserLocationFilter === true;
+
+  let assignmentSql = "true";
+  const params: unknown[] = [tenantId];
+  let p = 2;
+  if (!bypass && userId) {
+    assignmentSql = `(
+      NOT EXISTS (
+        SELECT 1
+        FROM user_locations ul
+        JOIN locations lx ON lx.id = ul.location_id
+        WHERE ul.user_id = $${p}::uuid
+          AND lx.tenant_id = $1::uuid
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM user_locations ul
+        WHERE ul.user_id = $${p}::uuid
+          AND ul.location_id = locations.id
+      )
+    )`;
+    params.push(userId);
+    p += 1;
+  }
+
   const r = await pool.query<LocationRow>(
     `SELECT id, code, name FROM locations
      WHERE tenant_id = $1::uuid
+       AND is_active = true
+       AND ${assignmentSql}
      ORDER BY code ASC`,
-    [tenantId],
+    params,
   );
   return r.rows;
 }

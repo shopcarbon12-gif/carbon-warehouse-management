@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { sessionCookieSecure, signSession, verifySessionToken } from "@/lib/auth";
+import { isAdminRole } from "@/lib/auth/dashboard-rbac";
 import { withDb } from "@/lib/db";
 import { assertLocationForTenant } from "@/lib/queries/session-user";
 
@@ -27,7 +28,13 @@ export async function POST(req: Request) {
   }
 
   const allowed = await withDb(
-    (sql) => assertLocationForTenant(sql, cur.tid, locationId),
+    (sql) =>
+      assertLocationForTenant(
+        sql,
+        cur.tid,
+        locationId,
+        isAdminRole(cur.role ?? "") ? undefined : cur.sub,
+      ),
     false,
   );
   if (!allowed) {

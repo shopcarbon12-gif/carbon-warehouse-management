@@ -46,6 +46,29 @@ async function main() {
     [t.id],
   );
 
+  await pool.query(
+    `UPDATE locations
+     SET lightspeed_shop_id = 1, is_active = true
+     WHERE tenant_id = $1::uuid AND code = '001'`,
+    [t.id],
+  );
+  await pool.query(
+    `UPDATE locations
+     SET lightspeed_shop_id = NULL, is_active = true
+     WHERE tenant_id = $1::uuid AND code = '003'`,
+    [t.id],
+  );
+
+  await pool.query(`
+    INSERT INTO user_roles (name, permissions)
+    VALUES
+      ('Super Admin', '{}'::jsonb),
+      ('Retail- Limited acess', '{}'::jsonb),
+      ('Warehouse - Limited Access', '{}'::jsonb)
+    ON CONFLICT (name) DO UPDATE SET
+      updated_at = now()
+  `);
+
   const locs = await pool.query<{ id: string; code: string }>(
     `SELECT id, code FROM locations WHERE tenant_id = $1 AND code IN ('001', '003')`,
     [t.id],
@@ -73,6 +96,23 @@ async function main() {
     `INSERT INTO memberships (user_id, tenant_id, role)
      VALUES ($1::uuid, $2::uuid, 'admin')
      ON CONFLICT (user_id, tenant_id) DO NOTHING`,
+    [user.id, t.id],
+  );
+
+  await pool.query(
+    `UPDATE users u
+     SET role_id = ur.id
+     FROM user_roles ur
+     WHERE u.id = $1::uuid AND ur.name = 'Super Admin'`,
+    [user.id],
+  );
+
+  await pool.query(
+    `INSERT INTO user_locations (user_id, location_id)
+     SELECT $1::uuid, l.id
+     FROM locations l
+     WHERE l.tenant_id = $2::uuid
+     ON CONFLICT DO NOTHING`,
     [user.id, t.id],
   );
 

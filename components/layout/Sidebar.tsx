@@ -18,6 +18,8 @@ import {
   Search,
   Settings,
   Tags,
+  Users,
+  Warehouse,
   X,
 } from "lucide-react";
 import { LocationSwitcher } from "@/components/location-switcher";
@@ -75,6 +77,8 @@ const groupInfrastructure: { label: string; items: NavItem[] } = {
     { href: "/infrastructure/lightspeed-sales", label: "LS Sales", icon: Banknote },
     { href: "/infrastructure/settings", label: "Settings", icon: Settings },
     { href: "/settings/statuses", label: "Status labels", icon: Tags },
+    { href: "/settings/users", label: "Users & roles", icon: Users },
+    { href: "/settings/locations", label: "Locations", icon: Warehouse },
   ],
 };
 
