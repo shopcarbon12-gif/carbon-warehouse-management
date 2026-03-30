@@ -20,6 +20,7 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/api/handheld")) return true;
   /* Handheld edge firehose (API key + device registry; no browser session). */
   if (pathname === "/api/edge/ingest") return true;
+  if (pathname === "/api/settings/mobile-sync") return true;
   return false;
 }
 

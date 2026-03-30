@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/tactical_bottom_bar.dart';
@@ -45,6 +46,7 @@ class _GeigerScreenState extends State<GeigerScreen> {
         _level = _rand.nextDouble();
       });
     });
+    setState(() {});
   }
 
   void _stopSim() {
@@ -55,14 +57,28 @@ class _GeigerScreenState extends State<GeigerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final holdRelease = context.watch<MobileSettingsRepository>().config.triggerModeHoldRelease;
+
     return CarbonScaffold(
       bottomBar: TacticalBottomBar(
         children: [
-          TacticalEmeraldButton(
-            label: 'HOLD TO SCAN',
-            onLongPressStart: _startSim,
-            onLongPressEnd: _stopSim,
-          ),
+          if (holdRelease)
+            TacticalEmeraldButton(
+              label: 'HOLD TO SCAN',
+              onLongPressStart: _startSim,
+              onLongPressEnd: _stopSim,
+            )
+          else
+            TacticalEmeraldButton(
+              label: _sim != null ? 'STOP SCAN' : 'TAP TO SCAN',
+              onPressed: () {
+                if (_sim != null) {
+                  _stopSim();
+                } else {
+                  _startSim();
+                }
+              },
+            ),
         ],
       ),
       body: Padding(

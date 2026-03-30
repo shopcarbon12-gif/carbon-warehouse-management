@@ -1,6 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:carbon_wms/hardware/rfid_scanner.dart';
+import 'package:carbon_wms/services/handheld_runtime_config.dart';
 
 /// Stub: Zebra API3 + Bluetooth stack will replace this implementation.
 class ZebraScanner implements RfidScanner {
@@ -9,6 +12,25 @@ class ZebraScanner implements RfidScanner {
   final StreamController<String> _epc;
   bool _connected = false;
   bool _scanning = false;
+  HandheldRuntimeConfig _runtime = HandheldRuntimeConfig.fallback;
+
+  @override
+  Future<void> applyHandheldRuntimeSettings(
+    HandheldRuntimeConfig config, {
+    String scanContext = 'TRANSFER',
+  }) async {
+    _runtime = config;
+    final useOut =
+        config.transferOutPowerLock && scanContext.toUpperCase().contains('TRANSFER');
+    final power = useOut ? config.transferOutAntennaPower : config.transferInAntennaPower;
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print(
+        '[ZebraScanner] ctx=$scanContext power=$power (outLock=${config.transferOutPowerLock}) '
+        'hold=${config.triggerModeHoldRelease}',
+      );
+    }
+  }
 
   @override
   bool get isConnected => _connected;
@@ -46,4 +68,7 @@ class ZebraScanner implements RfidScanner {
       _epc.add(hex24);
     }
   }
+
+  /// Last applied config (for native API3 wiring).
+  HandheldRuntimeConfig get lastRuntime => _runtime;
 }

@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/util/demo_epc.dart';
+import 'package:carbon_wms/util/template_substitution.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/tactical_bottom_bar.dart';
 
@@ -73,6 +75,7 @@ class _TransferScreenState extends State<TransferScreen> {
   @override
   Widget build(BuildContext context) {
     final manager = context.watch<RfidManager>();
+    final settings = context.watch<MobileSettingsRepository>();
     final items = manager.sessionEpcs;
 
     return CarbonScaffold(
@@ -159,6 +162,12 @@ class _TransferScreenState extends State<TransferScreen> {
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   final epc = items[index];
+                  final tagLine = applyMustacheTemplate(settings.config.tagDetailsTemplate, {
+                    'epc.id': epc,
+                    'epc.status': 'UNKNOWN',
+                    'epc.lastSeen': '—',
+                    'epc.zone': _origin,
+                  });
                   return ListTile(
                     title: Text(
                       epc,
@@ -167,6 +176,15 @@ class _TransferScreenState extends State<TransferScreen> {
                         letterSpacing: 0.8,
                       ),
                     ),
+                    subtitle: Text(
+                      tagLine,
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                    isThreeLine: tagLine.contains('\n'),
                     tileColor: index.isEven ? AppColors.background : AppColors.surface,
                   );
                 },

@@ -79,6 +79,33 @@ class WmsApiClient {
     }
   }
 
+  /// `GET /api/settings/mobile-sync?deviceId=` — same key headers as edge ingest.
+  Future<Map<String, dynamic>?> fetchMobileSync({required String deviceId}) async {
+    final base = await resolveBaseUrl();
+    final uri = Uri.parse('$base/api/settings/mobile-sync').replace(
+      queryParameters: {'deviceId': deviceId},
+    );
+    final p = await SharedPreferences.getInstance();
+    final edgeKey = p.getString(_prefsKeyEdge)?.trim();
+    final headers = <String, String>{
+      if (edgeKey != null && edgeKey.isNotEmpty) ...{
+        'x-edge-api-key': edgeKey,
+        'X-WMS-Edge-Key': edgeKey,
+      },
+    };
+
+    final res = await _http.get(uri, headers: headers);
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      return null;
+    }
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return null;
+  }
+
   void close() => _http.close();
 }
 

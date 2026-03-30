@@ -6,17 +6,22 @@ import 'package:carbon_wms/hardware/chainway_scanner.dart';
 import 'package:carbon_wms/hardware/rfid_scanner.dart';
 import 'package:carbon_wms/hardware/zebra_scanner.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_settings_repository.dart';
 
 /// Selects the active sled, dedupes EPCs, surfaces session lists for ops screens,
 /// and batches edge ingest every 500ms (pending queue only — session list is unchanged).
 class RfidManager extends ChangeNotifier {
-  RfidManager({required WmsApiClient api}) : _api = api {
+  RfidManager({required WmsApiClient api, required MobileSettingsRepository settings})
+      : _api = api,
+        _settings = settings {
+    _settings.addListener(_onSettingsChanged);
     _flushTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       unawaited(_flush());
     });
   }
 
   final WmsApiClient _api;
+  final MobileSettingsRepository _settings;
 
   RfidScanner? _active;
   StreamSubscription<String>? _epcSub;
@@ -29,7 +34,17 @@ class RfidManager extends ChangeNotifier {
   final Set<String> _sessionSeen = <String>{};
 
   /// Current UI module context (`TRANSFER`, `GEIGER_FIND`, …).
-  String scanContext = 'TRANSFER';
+  String _scanContext = 'TRANSFER';
+
+  String get scanContext => _scanContext;
+
+  set scanContext(String value) {
+    final v = value.trim();
+    if (v.isEmpty || v == _scanContext) return;
+    _scanContext = v;
+    notifyListeners();
+    unawaited(reapplyHandheldHardwareSettings());
+  }
 
   /// Merged into each edge ingest POST (e.g. origin/destination, status bucket).
   Map<String, dynamic> _ingestMetadata = <String, dynamic>{};
@@ -37,6 +52,10 @@ class RfidManager extends ChangeNotifier {
   Timer? _flushTimer;
 
   static final RegExp _epcHex24 = RegExp(r'^[0-9A-F]{24}$');
+
+  void _onSettingsChanged() {
+    unawaited(reapplyHandheldHardwareSettings());
+  }
 
   RfidScanner? get activeScanner => _active;
 
@@ -77,6 +96,15 @@ class RfidManager extends ChangeNotifier {
     _active = next;
     await _active!.connect();
     _epcSub = _active!.epcStream.listen(_ingestIncoming, onError: (_) {});
+    await _active!.applyHandheldRuntimeSettings(_settings.config, scanContext: _scanContext);
+    notifyListeners();
+  }
+
+  /// Re-apply antenna power / trigger hints after mobile-sync or prefs load.
+  Future<void> reapplyHandheldHardwareSettings() async {
+    final s = _active;
+    if (s == null) return;
+    await s.applyHandheldRuntimeSettings(_settings.config, scanContext: _scanContext);
     notifyListeners();
   }
 
@@ -111,7 +139,7 @@ class RfidManager extends ChangeNotifier {
       final id = _active != null ? await _active!.getDeviceId() : 'HANDHELD_OFFLINE';
       await _api.postEdgeIngest(
         deviceId: id,
-        scanContext: scanContext,
+        scanContext: _scanContext,
         epcs: batch,
         metadata: Map<String, dynamic>.from(_ingestMetadata),
       );
@@ -135,7 +163,7 @@ class RfidManager extends ChangeNotifier {
       final id = _active != null ? await _active!.getDeviceId() : 'HANDHELD_OFFLINE';
       await _api.postEdgeIngest(
         deviceId: id,
-        scanContext: scanContext,
+        scanContext: _scanContext,
         epcs: batch,
         metadata: Map<String, dynamic>.from(_ingestMetadata),
       );
@@ -155,6 +183,7 @@ class RfidManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _settings.removeListener(_onSettingsChanged);
     _flushTimer?.cancel();
     _epcSub?.cancel();
     unawaited(_active?.disconnect());

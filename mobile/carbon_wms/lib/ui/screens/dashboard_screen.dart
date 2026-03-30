@@ -3,6 +3,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/barcode_intake_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
@@ -12,8 +14,28 @@ import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncMobileSettings());
+  }
+
+  Future<void> _syncMobileSettings() async {
+    if (!mounted) return;
+    final api = context.read<WmsApiClient>();
+    final repo = context.read<MobileSettingsRepository>();
+    final rfid = context.read<RfidManager>();
+    final id = await rfid.activeScanner?.getDeviceId() ?? 'HANDHELD_OFFLINE';
+    await repo.syncFromServer(api, deviceId: id);
+  }
 
   @override
   Widget build(BuildContext context) {

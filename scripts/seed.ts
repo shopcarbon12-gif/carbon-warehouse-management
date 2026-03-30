@@ -1,6 +1,11 @@
 import { loadEnvConfig } from "@next/env";
 import bcrypt from "bcryptjs";
 import { Pool } from "pg";
+import {
+  DEFAULT_EPC_PROFILES,
+  DEFAULT_EPC_SETTINGS,
+  DEFAULT_HANDHELD_SETTINGS,
+} from "../lib/settings/tenant-settings-defaults";
 
 loadEnvConfig(process.cwd());
 
@@ -78,6 +83,18 @@ async function main() {
   if (!loc001 || !loc003) {
     throw new Error("Expected locations 001 and 003 after seed");
   }
+
+  await pool.query(
+    `INSERT INTO tenant_settings (tenant_id, epc_settings, epc_profiles, handheld_settings)
+     VALUES ($1::uuid, $2::jsonb, $3::jsonb, $4::jsonb)
+     ON CONFLICT (tenant_id) DO NOTHING`,
+    [
+      t.id,
+      JSON.stringify(DEFAULT_EPC_SETTINGS),
+      JSON.stringify(DEFAULT_EPC_PROFILES),
+      JSON.stringify(DEFAULT_HANDHELD_SETTINGS),
+    ],
+  );
 
   await pool.query(
     `INSERT INTO users (email, password_hash)
