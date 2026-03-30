@@ -18,6 +18,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
           color: "Black",
           size: "S",
           retailPrice: "79.00",
+          onHandTotal: 8,
         },
         {
           lsSystemId: 9_001_000_012,
@@ -26,6 +27,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
           color: "Black",
           size: "M",
           retailPrice: "79.00",
+          onHandTotal: 4,
         },
       ],
     },
@@ -44,6 +46,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
           color: "Navy",
           size: "38",
           retailPrice: "148.00",
+          onHandTotal: 3,
         },
         {
           lsSystemId: 9_001_000_022,
@@ -52,6 +55,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
           color: "Navy",
           size: "40",
           retailPrice: "148.00",
+          onHandTotal: 2,
         },
       ],
     },
@@ -70,6 +74,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
           color: "White",
           size: "XS",
           retailPrice: "34.00",
+          onHandTotal: 14,
         },
         {
           lsSystemId: 9_001_000_032,
@@ -78,6 +83,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
           color: "White",
           size: "S",
           retailPrice: "34.00",
+          onHandTotal: 22,
         },
       ],
     },
@@ -96,6 +102,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
           color: "Heather",
           size: "S",
           retailPrice: "24.00",
+          onHandTotal: 50,
         },
         {
           lsSystemId: 9_001_000_042,
@@ -104,6 +111,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
           color: "Heather",
           size: "M",
           retailPrice: "24.00",
+          onHandTotal: 40,
         },
       ],
     },
@@ -122,6 +130,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
           color: "Sand",
           size: "4",
           retailPrice: "62.00",
+          onHandTotal: 7,
         },
         {
           lsSystemId: 9_001_000_052,
@@ -130,6 +139,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
           color: "Sand",
           size: "6",
           retailPrice: "62.00",
+          onHandTotal: 5,
         },
       ],
     },
@@ -149,7 +159,28 @@ type LsProduct = {
   brand?: { name?: string } | string;
   supplier?: { name?: string } | string;
   categories?: { name?: string }[];
+  /** X-Series: shape varies by account / API version */
+  inventory_level?: unknown;
+  inventory_in_stock?: unknown;
+  stock_on_hand?: unknown;
 };
+
+function extractXSeriesOnHand(p: LsProduct): number | null {
+  const candidates = [p.inventory_in_stock, p.stock_on_hand];
+  for (const c of candidates) {
+    const n = typeof c === "number" ? c : Number.parseInt(String(c ?? "").trim(), 10);
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+  }
+  const inv = p.inventory_level;
+  if (inv && typeof inv === "object" && !Array.isArray(inv)) {
+    const o = inv as Record<string, unknown>;
+    for (const key of ["available", "quantity", "stock_on_hand", "in_stock"]) {
+      const n = Number.parseInt(String(o[key] ?? "").trim(), 10);
+      if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+    }
+  }
+  return null;
+}
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
@@ -229,6 +260,7 @@ export function mapLightspeedProductJsonToCatalog(
       color,
       size,
       retailPrice: null,
+      onHandTotal: extractXSeriesOnHand(p),
     };
   };
 

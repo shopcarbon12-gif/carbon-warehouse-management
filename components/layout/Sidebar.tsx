@@ -17,6 +17,7 @@ import {
   ScanLine,
   Search,
   Settings,
+  Tags,
   X,
 } from "lucide-react";
 import { LocationSwitcher } from "@/components/location-switcher";
@@ -61,7 +62,7 @@ const groupsMain: { label: string; items: NavItem[] }[] = [
   {
     label: "Inventory & Sync",
     items: [
-      { href: "/inventory/catalog", label: "Matrix catalog", icon: Package },
+      { href: "/inventory/catalog", label: "Catalog", icon: Package },
       { href: "/inventory/sync", label: "Lightspeed Sync", icon: RefreshCw },
     ],
   },
@@ -73,6 +74,7 @@ const groupInfrastructure: { label: string; items: NavItem[] } = {
     { href: "/infrastructure/devices", label: "Devices", icon: Router },
     { href: "/infrastructure/lightspeed-sales", label: "LS Sales", icon: Banknote },
     { href: "/infrastructure/settings", label: "Settings", icon: Settings },
+    { href: "/settings/statuses", label: "Status labels", icon: Tags },
   ],
 };
 

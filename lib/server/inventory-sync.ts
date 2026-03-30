@@ -193,16 +193,24 @@ async function upsertCustomSkuRow(
       : null;
   const priceParam = price != null && Number.isFinite(price) ? String(price) : null;
 
+  const qty = v.onHandTotal;
+  const qtyParam = qty != null && Number.isFinite(qty) ? Math.max(0, Math.floor(qty)) : null;
+
   await client.query(
-    `INSERT INTO custom_skus (matrix_id, sku, ls_system_id, color_code, size, retail_price, upc)
-     VALUES ($1::uuid, $2, $3, $4, $5, $6::numeric, $7)
+    `INSERT INTO custom_skus (
+       matrix_id, sku, ls_system_id, color_code, size, retail_price, upc,
+       ls_on_hand_total, ls_qty_synced_at
+     )
+     VALUES ($1::uuid, $2, $3, $4, $5, $6::numeric, $7, $8::integer, now())
      ON CONFLICT (ls_system_id) DO UPDATE SET
        matrix_id = EXCLUDED.matrix_id,
        sku = EXCLUDED.sku,
        color_code = EXCLUDED.color_code,
        size = EXCLUDED.size,
        retail_price = COALESCE(EXCLUDED.retail_price, custom_skus.retail_price),
-       upc = COALESCE(EXCLUDED.upc, custom_skus.upc)`,
+       upc = COALESCE(EXCLUDED.upc, custom_skus.upc),
+       ls_on_hand_total = COALESCE(EXCLUDED.ls_on_hand_total, custom_skus.ls_on_hand_total),
+       ls_qty_synced_at = now()`,
     [
       matrixId,
       v.sku.trim(),
@@ -211,6 +219,7 @@ async function upsertCustomSkuRow(
       v.size?.trim() || null,
       priceParam,
       v.upc?.trim() || null,
+      qtyParam,
     ],
   );
 }

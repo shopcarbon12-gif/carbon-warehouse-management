@@ -5,6 +5,8 @@ export type CatalogSyncVariantPayload = {
   color: string | null;
   size: string | null;
   retailPrice: string | null;
+  /** Total on-hand from Lightspeed when the API exposes it (R-Series qoh / shops, X-Series inventory fields). */
+  onHandTotal: number | null;
 };
 
 export type CatalogSyncMatrixPayload = {

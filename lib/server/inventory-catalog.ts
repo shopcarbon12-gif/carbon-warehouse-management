@@ -10,9 +10,12 @@ export type CatalogGridRow = {
   sku_upc: string | null;
   matrix_upc: string;
   name: string;
+  vendor: string | null;
   color: string | null;
   size: string | null;
   retail_price: string | null;
+  /** Last total on-hand from Lightspeed catalog sync (not RFID). */
+  ls_on_hand_total: number | null;
   active_epc_count: number;
 };
 
@@ -43,6 +46,7 @@ function buildWhere(
         OR cs.sku ILIKE $${i}
         OR m.upc ILIKE $${i}
         OR COALESCE(cs.upc, '') ILIKE $${i}
+        OR COALESCE(m.vendor, '') ILIKE $${i}
       )`,
     );
     params.push(`%${qt}%`);
@@ -131,9 +135,11 @@ export async function listCatalogGrid(
     sku_upc: string | null;
     matrix_upc: string;
     name: string;
+    vendor: string | null;
     color: string | null;
     size: string | null;
     retail_price: string | null;
+    ls_on_hand_total: string | null;
     active_epc_count: string;
   }>(
     `SELECT
@@ -144,9 +150,11 @@ export async function listCatalogGrid(
        cs.upc AS sku_upc,
        m.upc AS matrix_upc,
        m.description AS name,
+       m.vendor,
        cs.color_code AS color,
        cs.size,
        cs.retail_price::text AS retail_price,
+       cs.ls_on_hand_total::text AS ls_on_hand_total,
        (
          SELECT COUNT(*)::text
          FROM items i
@@ -173,9 +181,15 @@ export async function listCatalogGrid(
       sku_upc: row.sku_upc,
       matrix_upc: row.matrix_upc,
       name: row.name,
+      vendor: row.vendor,
       color: row.color,
       size: row.size,
       retail_price: row.retail_price,
+      ls_on_hand_total: (() => {
+        if (row.ls_on_hand_total == null || row.ls_on_hand_total === "") return null;
+        const n = Number(row.ls_on_hand_total);
+        return Number.isFinite(n) ? n : null;
+      })(),
       active_epc_count: Number(row.active_epc_count ?? 0),
     })),
     total,

@@ -15,8 +15,10 @@ export function isWarehouseFloorRole(role: string): boolean {
 /** Pages + APIs reserved for tenant admins (Devices, vendor sync UI, infra settings). */
 export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname.startsWith("/infrastructure")) return true;
+  if (pathname.startsWith("/settings")) return true;
   if (pathname.startsWith("/inventory/sync")) return true;
   if (pathname.startsWith("/api/infrastructure")) return true;
+  if (pathname.startsWith("/api/settings")) return true;
   if (pathname.startsWith("/api/inventory/sync")) return true;
   if (pathname.startsWith("/infrastructure/lightspeed-sales")) return true;
   if (pathname.startsWith("/api/lightspeed/sales")) return true;

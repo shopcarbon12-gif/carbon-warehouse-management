@@ -63,7 +63,25 @@ type NormalizedRow = {
   retailPrice: string | null;
   category: string | null;
   brand: string | null;
+  onHandTotal: number | null;
 };
+
+function extractRseriesOnHandTotal(item: Record<string, unknown>): number | null {
+  const qoh = Number.parseInt(normalizeText(item.qoh), 10);
+  if (Number.isFinite(qoh) && qoh >= 0) return qoh;
+  const roots = item.ItemShops as Record<string, unknown> | undefined;
+  const shops = toArray(roots?.ItemShop) as Record<string, unknown>[];
+  let sum = 0;
+  let found = false;
+  for (const sh of shops) {
+    const n = Number.parseInt(normalizeText(sh.qoh), 10);
+    if (Number.isFinite(n) && n >= 0) {
+      sum += n;
+      found = true;
+    }
+  }
+  return found ? sum : null;
+}
 
 function normalizeRawItem(
   item: Record<string, unknown>,
@@ -101,6 +119,7 @@ function normalizeRawItem(
     retailPrice: extractDefaultRetailPrice(item),
     category,
     brand,
+    onHandTotal: extractRseriesOnHandTotal(item),
   };
 }
 
@@ -149,6 +168,7 @@ export function mapRseriesRawItemsToCatalogSync(
       color: v.color,
       size: v.size,
       retailPrice: v.retailPrice,
+      onHandTotal: v.onHandTotal,
     }));
 
     out.push({

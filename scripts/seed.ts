@@ -133,6 +133,40 @@ async function main() {
     );
   }
 
+  await pool.query(`
+    INSERT INTO status_labels (
+      legacy_id, name, include_in_inventory, hide_in_search_filters, hide_in_item_details, display_in_group_page
+    )
+    VALUES
+      (2624, 'Unknown', false, true, false, false),
+      (2625, 'Live', true, false, false, false),
+      (2626, 'Damaged', false, false, false, false),
+      (2627, 'Display', true, true, false, false),
+      (2628, 'Sold', false, false, false, false),
+      (2629, 'Stolen', false, true, false, false),
+      (2630, 'Pending Visibility', false, true, true, false),
+      (2631, 'Waiting To Ship', false, true, false, false),
+      (2632, 'Return To Factory', false, true, true, false),
+      (2633, 'Removed', false, true, false, false),
+      (2634, 'Shipped', false, true, false, false),
+      (2635, 'Tag Killed', false, true, false, false),
+      (2636, 'Pending Visibility - Single Count', false, true, false, false),
+      (2637, 'Pending Visibility - Unknown', true, true, false, false),
+      (2638, 'Transferred Out', false, true, false, false),
+      (2639, 'Checked In', true, true, false, false),
+      (2640, 'Checked Out', true, true, false, false),
+      (2641, 'In Transit', false, true, false, true),
+      (2642, 'Return', false, true, false, false),
+      (3529, 'Transfer Out', false, true, false, false)
+    ON CONFLICT (name) DO UPDATE SET
+      legacy_id = EXCLUDED.legacy_id,
+      include_in_inventory = EXCLUDED.include_in_inventory,
+      hide_in_search_filters = EXCLUDED.hide_in_search_filters,
+      hide_in_item_details = EXCLUDED.hide_in_item_details,
+      display_in_group_page = EXCLUDED.display_in_group_page,
+      updated_at = now()
+  `);
+
   await pool.end();
   console.log("Seed complete.");
   console.log("  Tenant:", t.slug, t.id);
