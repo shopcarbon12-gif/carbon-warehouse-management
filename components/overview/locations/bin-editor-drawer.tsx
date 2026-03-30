@@ -93,6 +93,7 @@ export function BinEditorDrawer({
 
       const res = await fetch("/api/locations/bins", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -120,6 +121,7 @@ export function BinEditorDrawer({
     try {
       const res = await fetch(`/api/locations/bins/${encodeURIComponent(editingBin.id)}`, {
         method: "DELETE",
+        credentials: "same-origin",
       });
       const j = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(j.error ?? "Archive failed");

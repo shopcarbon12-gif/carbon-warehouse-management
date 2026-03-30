@@ -5,8 +5,9 @@
 export function sessionRoleFromUserRoleName(name: string | null | undefined): string | null {
   const n = (name ?? "").trim();
   if (!n) return null;
-  if (n === "Super Admin") return "admin";
+  const key = n.toLowerCase().replace(/\s+/g, " ");
+  if (key === "super admin" || key === "superadmin") return "admin";
   if (n === "Retail- Limited acess") return "manager";
-  if (n === "Warehouse - Limited Access") return "warehouse_ops";
+  if (key === "warehouse - limited access") return "warehouse_ops";
   return null;
 }

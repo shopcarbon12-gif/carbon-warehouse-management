@@ -6,7 +6,7 @@ import { MapPin, PackagePlus, Pencil, Trash2 } from "lucide-react";
 import { BinEditorDrawer, type BinRow } from "./bin-editor-drawer";
 
 const fetcher = async (url: string) => {
-  const res = await fetch(url);
+  const res = await fetch(url, { credentials: "same-origin" });
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(j.error ?? res.statusText);
@@ -23,11 +23,24 @@ type Loc = {
 
 type DrawerMode = "add" | "edit";
 
-export function LocationsManager({ canCleanBins = false }: { canCleanBins?: boolean }) {
+/** Server-fetched seed (RSC) so locations/bins render without relying on a second client round-trip. */
+export type InitialOverviewLocations = Loc[];
+
+export function LocationsManager({
+  canCleanBins = false,
+  initialLocations,
+}: {
+  canCleanBins?: boolean;
+  initialLocations?: InitialOverviewLocations;
+}) {
   const { data, error, mutate } = useSWR<{ locations: Loc[] }>(
     "/api/overview/locations",
     fetcher,
-    { revalidateOnFocus: false },
+    {
+      revalidateOnFocus: false,
+      fallbackData:
+        initialLocations !== undefined ? { locations: initialLocations } : undefined,
+    },
   );
 
   const locations = data?.locations ?? [];
@@ -77,7 +90,10 @@ export function LocationsManager({ canCleanBins = false }: { canCleanBins?: bool
     setCleanBusy(binId);
     setCleanNotice(null);
     try {
-      const res = await fetch(`/api/locations/bins/${binId}/clean`, { method: "POST" });
+      const res = await fetch(`/api/locations/bins/${binId}/clean`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
       const j = (await res.json().catch(() => ({}))) as { error?: string; cleared?: number };
       if (!res.ok) throw new Error(j.error ?? "Clean failed");
       await mutate();
