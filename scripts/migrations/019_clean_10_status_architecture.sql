@@ -1,4 +1,4 @@
--- Clean 10: void legacy Senitron checkbox columns; hard-wired Carbon WMS status brain.
+-- Clean 10: void legacy checkbox columns; hard-wired Carbon WMS status brain.
 -- Destructive: truncates status_labels and remaps items.status to the new WMS vocabulary.
 
 --> statement-breakpoint
