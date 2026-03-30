@@ -1,6 +1,9 @@
 node_modules
 .next
 .git
+# Flutter app — not part of the Next.js production image; keeps Coolify context small/fast.
+mobile
+.tools
 *.md
 .env*.local
 # Local/machine env must not be baked in; Coolify injects DATABASE_URL at runtime.
