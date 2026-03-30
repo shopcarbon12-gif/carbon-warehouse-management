@@ -131,23 +131,29 @@ class WmsApiClient {
     return <String, dynamic>{};
   }
 
-  Future<void> postDevicePing({required String androidId, String? label}) async {
+  Future<void> postDevicePing({
+    required String androidId,
+    String? label,
+    Map<String, dynamic>? clientInfo,
+  }) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/mobile/device-ping');
     final t = await getSessionToken();
     if (t == null || t.isEmpty) {
       throw WmsApiException(401, 'No session');
     }
+    final body = <String, dynamic>{
+      'androidId': androidId,
+      if (label != null && label.isNotEmpty) 'label': label,
+      if (clientInfo != null && clientInfo.isNotEmpty) 'clientInfo': clientInfo,
+    };
     final res = await _http.post(
       uri,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $t',
       },
-      body: jsonEncode({
-        'androidId': androidId,
-        if (label != null && label.isNotEmpty) 'label': label,
-      }),
+      body: jsonEncode(body),
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);

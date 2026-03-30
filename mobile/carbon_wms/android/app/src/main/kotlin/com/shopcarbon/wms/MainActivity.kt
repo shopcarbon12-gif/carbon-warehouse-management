@@ -18,6 +18,7 @@ class MainActivity : FlutterActivity() {
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
     val messenger = flutterEngine.dartExecutor.binaryMessenger
+    DeviceTelemetryChannel.register(flutterEngine, this)
 
     val zebra = CarbonZebraRfidController(this)
     val chainway = CarbonChainwayRfidController(this)

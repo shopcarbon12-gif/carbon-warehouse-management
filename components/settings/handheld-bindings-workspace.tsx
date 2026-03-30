@@ -3,14 +3,33 @@
 import useSWR from "swr";
 import { useState } from "react";
 
+type HandheldClientInfo = {
+  serialNumber?: string;
+  wifiMac?: string;
+  bluetoothMac?: string;
+  radioVersion?: string;
+  androidRelease?: string;
+  appVersion?: string;
+  model?: string;
+  manufacturer?: string;
+};
+
 type DeviceRow = {
   id: string;
   name: string;
   device_type: string;
   android_id: string | null;
+  network_address?: string | null;
   is_authorized: boolean;
   location_code: string;
+  config?: Record<string, unknown>;
 };
+
+function readClientInfo(config: Record<string, unknown> | undefined): HandheldClientInfo | null {
+  const raw = config?.handheld_client_info;
+  if (!raw || typeof raw !== "object") return null;
+  return raw as HandheldClientInfo;
+}
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -47,12 +66,15 @@ export function HandheldBindingsWorkspace() {
 
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] dark:border-[var(--wms-border)]">
-      <table className="w-full min-w-[720px] text-left text-sm">
+      <table className="w-full min-w-[960px] text-left text-sm">
         <thead>
           <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
             <th className="px-3 py-2">Location</th>
             <th className="px-3 py-2">Name</th>
             <th className="px-3 py-2">Android ID</th>
+            <th className="px-3 py-2">Network / MAC</th>
+            <th className="px-3 py-2">Serial</th>
+            <th className="px-3 py-2">OS / radio</th>
             <th className="px-3 py-2">Authorized</th>
             <th className="px-3 py-2 text-right"> </th>
           </tr>
@@ -60,7 +82,7 @@ export function HandheldBindingsWorkspace() {
         <tbody className="divide-y divide-[var(--wms-border)]/80">
           {pending.length === 0 ? (
             <tr>
-              <td colSpan={5} className="px-3 py-6 text-center text-[var(--wms-muted)]">
+              <td colSpan={8} className="px-3 py-6 text-center text-[var(--wms-muted)]">
                 No pending handheld registrations. Open the mobile app once (device ping) after login.
               </td>
             </tr>
@@ -70,6 +92,20 @@ export function HandheldBindingsWorkspace() {
                 <td className="px-3 py-2 font-mono text-xs">{d.location_code}</td>
                 <td className="px-3 py-2">{d.name}</td>
                 <td className="px-3 py-2 font-mono text-xs">{d.android_id ?? "—"}</td>
+                <td className="max-w-[140px] truncate px-3 py-2 font-mono text-xs" title={d.network_address ?? ""}>
+                  {d.network_address ?? "—"}
+                </td>
+                <td className="max-w-[120px] truncate px-3 py-2 font-mono text-xs" title={readClientInfo(d.config)?.serialNumber ?? ""}>
+                  {readClientInfo(d.config)?.serialNumber ?? "—"}
+                </td>
+                <td className="max-w-[180px] truncate px-3 py-2 font-mono text-[0.65rem] leading-tight text-[var(--wms-muted)]" title="">
+                  {(() => {
+                    const c = readClientInfo(d.config);
+                    if (!c) return "—";
+                    const parts = [c.androidRelease && `A${c.androidRelease}`, c.radioVersion].filter(Boolean);
+                    return parts.length ? parts.join(" · ") : "—";
+                  })()}
+                </td>
                 <td className="px-3 py-2">{d.is_authorized ? "Yes" : "No"}</td>
                 <td className="px-3 py-2 text-right">
                   <button

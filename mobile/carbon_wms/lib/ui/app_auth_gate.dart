@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/handheld_client_info.dart';
 import 'package:carbon_wms/ui/screens/dashboard_screen.dart';
 import 'package:carbon_wms/ui/screens/device_lock_screen.dart';
 import 'package:carbon_wms/ui/screens/login_screen.dart';
@@ -70,7 +71,8 @@ class _AppAuthGateState extends State<AppAuthGate> {
 
     try {
       if (_androidId.isNotEmpty) {
-        await api.postDevicePing(androidId: _androidId);
+        final clientInfo = await HandheldClientInfo.collect();
+        await api.postDevicePing(androidId: _androidId, clientInfo: clientInfo);
       }
     } catch (_) {
       /* ping is best-effort; status below is authoritative */
