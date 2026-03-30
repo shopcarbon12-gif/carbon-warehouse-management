@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { extractEdgeApiKey, verifyEdgeApiKey } from "@/lib/auth/edge-auth";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { insertDeviceUploadLog } from "@/lib/queries/device-upload-logs";
 import { applyInventoryCsvToItems } from "@/lib/server/inventory-csv-ingest";
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid body", issues: parsed.error.issues }, { status: 400 });
   }
 
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   let tenantId: string;
   let locationId: string;
   let deviceId: string;

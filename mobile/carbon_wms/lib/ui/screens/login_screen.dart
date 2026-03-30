@@ -19,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _password = TextEditingController();
   bool _busy = false;
   String? _err;
+  List<String> _recentServers = const [];
 
   @override
   void initState() {
@@ -30,10 +31,20 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     final api = context.read<WmsApiClient>();
     final u = await api.resolveBaseUrl();
+    final recent = await api.listRecentServerUrls();
     if (!mounted) return;
     setState(() {
-      if (u.isNotEmpty) _serverUrl.text = u;
+      _recentServers = recent;
+      if (u.isNotEmpty) {
+        _serverUrl.text = u;
+      }
     });
+  }
+
+  void _applyServerChip(String url) {
+    final n = WmsApiClient.normalizeBaseUrl(url);
+    if (n.isEmpty) return;
+    setState(() => _serverUrl.text = n);
   }
 
   @override
@@ -106,9 +117,35 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Server URL',
                   hintText: 'https://wms.shopcarbon.com',
-                  helperText: 'Your production or LAN WMS base URL (no path after .com)',
+                  helperText: 'Saved after sign-in. Emulator dev: --dart-define=CARBON_WMS_DEV_HOST=http://10.0.2.2:3040',
                 ),
               ),
+              if (_recentServers.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Recent',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontFamily: 'monospace'),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _recentServers
+                      .map(
+                        (s) => ActionChip(
+                          label: Text(
+                            s.replaceFirst(RegExp('^https?://'), ''),
+                            style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                          ),
+                          onPressed: _busy ? null : () => _applyServerChip(s),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
               const SizedBox(height: 16),
               TextField(
                 controller: _email,

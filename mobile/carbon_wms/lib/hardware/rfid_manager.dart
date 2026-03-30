@@ -10,6 +10,7 @@ import 'package:carbon_wms/hardware/rfid_scanner.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/zebra_scanner.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 
 /// Selects the active sled, dedupes EPCs, surfaces session lists for ops screens,
@@ -205,7 +206,7 @@ class RfidManager extends ChangeNotifier {
     _visibilityPending.clear();
     notifyListeners();
     try {
-      final id = _active != null ? await _active!.getDeviceId() : 'HANDHELD_OFFLINE';
+      final id = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       final rows = await _api.postEpcVisibility(deviceId: id, epcs: batch);
       for (final r in rows) {
         if (r.visible) {
@@ -287,7 +288,7 @@ class RfidManager extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final id = _active != null ? await _active!.getDeviceId() : 'HANDHELD_OFFLINE';
+      final id = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       await _api.postEdgeIngest(
         deviceId: id,
         scanContext: _scanContext,
@@ -312,7 +313,7 @@ class RfidManager extends ChangeNotifier {
     if (_sessionOrder.isEmpty) return;
     final batch = List<String>.from(_sessionOrder);
     try {
-      final id = _active != null ? await _active!.getDeviceId() : 'HANDHELD_OFFLINE';
+      final id = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       await _api.postEdgeIngest(
         deviceId: id,
         scanContext: _scanContext,

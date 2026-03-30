@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { extractEdgeApiKey, verifyEdgeApiKey } from "@/lib/auth/edge-auth";
 import { getPool } from "@/lib/db";
-import { resolveEdgeDeviceCached } from "@/lib/server/edge-device-cache";
+import { authorizeHandheldDeviceRequest } from "@/lib/server/handheld-request-auth";
 import { enqueueEdgeIngestJob } from "@/lib/server/edge-ingest-queue";
 
 export const runtime = "nodejs";
@@ -17,15 +16,10 @@ const bodySchema = z.object({
 });
 
 /**
- * Handheld firehose: validate API key + registered device, enqueue work, **202** immediately.
+ * Handheld firehose: edge API key **or** mobile Bearer session + registered device, **202** immediately.
  * Heavy work runs in `lib/server/edge-ingest-queue.ts` → `inventory-reconciler.ts`.
  */
 export async function POST(req: Request) {
-  const apiKey = extractEdgeApiKey(req);
-  if (!verifyEdgeApiKey(apiKey)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   let raw: unknown;
   try {
     raw = await req.json();
@@ -47,10 +41,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
 
-  const device = await resolveEdgeDeviceCached(pool, parsed.data.deviceId);
-  if (!device) {
-    return NextResponse.json({ error: "Device not registered" }, { status: 403 });
+  const auth = await authorizeHandheldDeviceRequest(pool, req, parsed.data.deviceId);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const device = auth.device;
 
   const epcsDeduped = [
     ...new Set(
@@ -61,7 +56,7 @@ export async function POST(req: Request) {
   enqueueEdgeIngestJob({
     tenantId: device.tenantId,
     locationId: device.locationId,
-    deviceId: parsed.data.deviceId.trim(),
+    deviceId: parsed.data.deviceId.trim(), // android_id or UUID — reconciler stores as sent
     scanContext: parsed.data.scanContext.trim(),
     epcs: epcsDeduped,
     metadata: parsed.data.metadata ?? {},

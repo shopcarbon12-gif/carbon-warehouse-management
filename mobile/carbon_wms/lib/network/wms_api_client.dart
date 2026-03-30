@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io' show File, HttpClient;
 
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:install_plugin/install_plugin.dart';
@@ -15,10 +15,15 @@ class WmsApiClient {
   static const String _prefsKeyBase = 'wms_server_base';
   static const String _prefsKeyEdge = 'wms_edge_api_key';
   static const String _prefsKeySession = 'wms_session_token';
+  static const String _prefsRecentServers = 'wms_recent_servers_v1';
 
-  /// Debug: Android emulator → host `npm run dev` (port **3040**, same as web). Release: user sets server (e.g. https://wms.shopcarbon.com) on login.
-  static String get kDefaultBase =>
-      kDebugMode ? 'http://10.0.2.2:3040' : '';
+  /// Optional: `flutter run --dart-define=CARBON_WMS_DEV_HOST=http://10.0.2.2:3040` for emulator.
+  /// Otherwise empty — user enters production URL on login (e.g. https://wms.shopcarbon.com).
+  static String get kDefaultBase {
+    const fromDefine = String.fromEnvironment('CARBON_WMS_DEV_HOST', defaultValue: '');
+    if (fromDefine.isNotEmpty) return fromDefine;
+    return '';
+  }
 
   final http.Client _http;
 
@@ -55,6 +60,46 @@ class WmsApiClient {
       return;
     }
     await p.setString(_prefsKeyBase, n);
+    await rememberServerUrl(n);
+  }
+
+  Future<List<String>> listRecentServerUrls() async {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString(_prefsRecentServers);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final j = jsonDecode(raw);
+      if (j is List) {
+        return j.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).cast<String>().toList();
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return [];
+  }
+
+  Future<void> rememberServerUrl(String url) async {
+    final n = normalizeBaseUrl(url);
+    if (n.isEmpty) return;
+    final prev = await listRecentServerUrls();
+    final next = <String>[n, ...prev.where((s) => s != n)].take(5).toList();
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_prefsRecentServers, jsonEncode(next));
+  }
+
+  Future<Map<String, String>> handheldAuthHeaders() async {
+    final h = <String, String>{};
+    final p = await SharedPreferences.getInstance();
+    final edgeKey = p.getString(_prefsKeyEdge)?.trim();
+    if (edgeKey != null && edgeKey.isNotEmpty) {
+      h['x-edge-api-key'] = edgeKey;
+      h['X-WMS-Edge-Key'] = edgeKey;
+    }
+    final t = await getSessionToken();
+    if (t != null && t.isNotEmpty) {
+      h['Authorization'] = 'Bearer $t';
+    }
+    return h;
   }
 
   /// Must match server `WMS_EDGE_INGEST_KEY` or `WMS_DEVICE_KEY`.
@@ -168,14 +213,9 @@ class WmsApiClient {
     if (epcs.isEmpty) return [];
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/mobile/epc-visibility');
-    final p = await SharedPreferences.getInstance();
-    final edgeKey = p.getString(_prefsKeyEdge)?.trim();
     final headers = <String, String>{
       'Content-Type': 'application/json',
-      if (edgeKey != null && edgeKey.isNotEmpty) ...{
-        'x-edge-api-key': edgeKey,
-        'X-WMS-Edge-Key': edgeKey,
-      },
+      ...await handheldAuthHeaders(),
     };
     final res = await _http.post(
       uri,
@@ -240,8 +280,6 @@ class WmsApiClient {
 
     final base = await resolveBaseUrl();
     final uri = Uri.parse('$base/api/edge/ingest');
-    final p = await SharedPreferences.getInstance();
-    final edgeKey = p.getString(_prefsKeyEdge)?.trim();
     final body = jsonEncode({
       'deviceId': deviceId,
       'scanContext': scanContext,
@@ -252,10 +290,7 @@ class WmsApiClient {
 
     final headers = <String, String>{
       'Content-Type': 'application/json',
-      if (edgeKey != null && edgeKey.isNotEmpty) ...{
-        'x-edge-api-key': edgeKey,
-        'X-WMS-Edge-Key': edgeKey,
-      },
+      ...await handheldAuthHeaders(),
     };
 
     final res = await _http.post(
@@ -276,14 +311,7 @@ class WmsApiClient {
     final uri = Uri.parse('$base/api/settings/mobile-sync').replace(
       queryParameters: {'deviceId': deviceId},
     );
-    final p = await SharedPreferences.getInstance();
-    final edgeKey = p.getString(_prefsKeyEdge)?.trim();
-    final headers = <String, String>{
-      if (edgeKey != null && edgeKey.isNotEmpty) ...{
-        'x-edge-api-key': edgeKey,
-        'X-WMS-Edge-Key': edgeKey,
-      },
-    };
+    final headers = await handheldAuthHeaders();
 
     final res = await _http.get(uri, headers: headers);
     if (res.statusCode == 401 || res.statusCode == 403) {
@@ -304,8 +332,6 @@ class WmsApiClient {
   }) async {
     final base = await resolveBaseUrl();
     final uri = Uri.parse('$base/api/inventory/upload');
-    final p = await SharedPreferences.getInstance();
-    final edgeKey = p.getString(_prefsKeyEdge)?.trim();
     final body = jsonEncode({
       'deviceId': deviceId,
       'mode': mode,
@@ -313,10 +339,7 @@ class WmsApiClient {
     });
     final headers = <String, String>{
       'Content-Type': 'application/json',
-      if (edgeKey != null && edgeKey.isNotEmpty) ...{
-        'x-edge-api-key': edgeKey,
-        'X-WMS-Edge-Key': edgeKey,
-      },
+      ...await handheldAuthHeaders(),
     };
     final res = await _http.post(uri, headers: headers, body: body);
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -422,8 +445,6 @@ class WmsApiClient {
   }) async {
     final base = await resolveBaseUrl();
     final uri = Uri.parse('$base/api/inventory/putaway-assign');
-    final p = await SharedPreferences.getInstance();
-    final edgeKey = p.getString(_prefsKeyEdge)?.trim();
     final body = jsonEncode({
       'deviceId': deviceId,
       'binCode': binCode,
@@ -432,10 +453,7 @@ class WmsApiClient {
     });
     final headers = <String, String>{
       'Content-Type': 'application/json',
-      if (edgeKey != null && edgeKey.isNotEmpty) ...{
-        'x-edge-api-key': edgeKey,
-        'X-WMS-Edge-Key': edgeKey,
-      },
+      ...await handheldAuthHeaders(),
     };
     final res = await _http.post(uri, headers: headers, body: body);
     if (res.statusCode < 200 || res.statusCode >= 300) {

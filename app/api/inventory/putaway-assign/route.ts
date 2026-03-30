@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { extractEdgeApiKey, verifyEdgeApiKey } from "@/lib/auth/edge-auth";
 import { getPool } from "@/lib/db";
 import { assignItemsToBinBySkuScan } from "@/lib/queries/putaway-assign";
-import { resolveEdgeDeviceCached } from "@/lib/server/edge-device-cache";
+import { authorizeHandheldDeviceRequest } from "@/lib/server/handheld-request-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,11 +15,6 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const apiKey = extractEdgeApiKey(req);
-  if (!verifyEdgeApiKey(apiKey)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   let raw: unknown;
   try {
     raw = await req.json();
@@ -37,15 +31,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
 
-  const device = await resolveEdgeDeviceCached(pool, parsed.data.deviceId);
-  if (!device) {
-    return NextResponse.json({ error: "Device not registered" }, { status: 403 });
+  const auth = await authorizeHandheldDeviceRequest(pool, req, parsed.data.deviceId);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   try {
     const { updated } = await assignItemsToBinBySkuScan(
       pool,
-      device.locationId,
+      auth.device.locationId,
       parsed.data.binCode,
       parsed.data.skuScanned,
       parsed.data.scope,

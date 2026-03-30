@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { extractEdgeApiKey, verifyEdgeApiKey } from "@/lib/auth/edge-auth";
 import { getPool } from "@/lib/db";
-import { resolveEdgeDeviceCached } from "@/lib/server/edge-device-cache";
+import { authorizeHandheldDeviceRequest } from "@/lib/server/handheld-request-auth";
 import { resolveEpcVisibilityForTenant } from "@/lib/server/status-label-enforcement";
 
 export const runtime = "nodejs";
@@ -17,11 +16,6 @@ const bodySchema = z.object({
  * Handheld: ghost-read filtering when `is_visible_to_scanner` is false (Clean 10 brain).
  */
 export async function POST(req: Request) {
-  const apiKey = extractEdgeApiKey(req);
-  if (!verifyEdgeApiKey(apiKey)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   let raw: unknown;
   try {
     raw = await req.json();
@@ -39,13 +33,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
 
-  const device = await resolveEdgeDeviceCached(pool, parsed.data.deviceId.trim());
-  if (!device) {
-    return NextResponse.json({ error: "Device not registered" }, { status: 403 });
+  const auth = await authorizeHandheldDeviceRequest(pool, req, parsed.data.deviceId.trim());
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   try {
-    const results = await resolveEpcVisibilityForTenant(pool, device.tenantId, parsed.data.epcs);
+    const results = await resolveEpcVisibilityForTenant(pool, auth.device.tenantId, parsed.data.epcs);
     return NextResponse.json({ results }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("[mobile/epc-visibility]", e);

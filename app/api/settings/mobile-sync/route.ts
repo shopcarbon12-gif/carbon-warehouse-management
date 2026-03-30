@@ -1,22 +1,17 @@
 import { NextResponse } from "next/server";
-import { extractEdgeApiKey, verifyEdgeApiKey } from "@/lib/auth/edge-auth";
 import { getPool } from "@/lib/db";
 import { ensureTenantSettings } from "@/lib/queries/tenant-settings";
-import { resolveEdgeDeviceCached } from "@/lib/server/edge-device-cache";
+import { authorizeHandheldDeviceRequest } from "@/lib/server/handheld-request-auth";
 import type { EpcProfile } from "@/lib/settings/tenant-settings-defaults";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Handheld config sync: same API key family as `/api/edge/ingest`, scoped by registered `deviceId`.
+ * Handheld config sync: edge API key **or** mobile Bearer session + `deviceId`
+ * (android_id, devices.id UUID, name, or config aliases).
  */
 export async function GET(req: Request) {
-  const apiKey = extractEdgeApiKey(req);
-  if (!verifyEdgeApiKey(apiKey)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const url = new URL(req.url);
   const deviceId = url.searchParams.get("deviceId")?.trim() ?? "";
   if (!deviceId) {
@@ -28,13 +23,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
 
-  const device = await resolveEdgeDeviceCached(pool, deviceId);
-  if (!device) {
-    return NextResponse.json({ error: "Device not registered" }, { status: 403 });
+  const auth = await authorizeHandheldDeviceRequest(pool, req, deviceId);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   try {
-    const row = await ensureTenantSettings(pool, device.tenantId);
+    const row = await ensureTenantSettings(pool, auth.device.tenantId);
     const activeProfiles: EpcProfile[] = row.epc_profiles.filter((p) => p.isActive);
     return NextResponse.json(
       {

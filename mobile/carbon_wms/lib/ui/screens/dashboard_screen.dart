@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/barcode_intake_screen.dart';
@@ -38,7 +39,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final api = context.read<WmsApiClient>();
     final repo = context.read<MobileSettingsRepository>();
     final rfid = context.read<RfidManager>();
-    final id = await rfid.activeScanner?.getDeviceId() ?? 'HANDHELD_OFFLINE';
+    final id = await HandheldDeviceIdentity.primaryDeviceIdForServer();
     await repo.syncFromServer(api, deviceId: id);
   }
 
@@ -114,6 +115,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ],
       body: CustomScrollView(
         slivers: [
+          SliverToBoxAdapter(
+            child: FutureBuilder<String>(
+              future: context.read<WmsApiClient>().resolveBaseUrl(),
+              builder: (ctx, snap) {
+                final u = snap.data ?? '';
+                if (u.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Text(
+                    'Server · $u',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textMuted,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
             sliver: SliverToBoxAdapter(

@@ -24,6 +24,8 @@ export async function resolveEdgeDevice(
        lower(trim(d.name)) = lower(trim($1::text))
        OR lower(trim(d.config->>'deviceId')) = lower(trim($1::text))
        OR lower(trim(d.config->>'edgeDeviceId')) = lower(trim($1::text))
+       OR lower(trim(coalesce(d.android_id, ''))) = lower(trim($1::text))
+       OR d.id::text = trim($1::text)
      )
      LIMIT 1`,
     [raw],

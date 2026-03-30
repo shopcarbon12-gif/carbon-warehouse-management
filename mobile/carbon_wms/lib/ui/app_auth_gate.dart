@@ -29,6 +29,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
   bool _pending = false;
   String? _otaUrl;
   bool _otaDismissed = false;
+  int _loginKey = 0;
 
   @override
   void initState() {
@@ -84,6 +85,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
     } catch (_) {
       if (mounted) {
         setState(() {
+          _loginKey++;
           _phase = _Phase.login;
         });
       }
@@ -159,6 +161,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
         );
       case _Phase.login:
         return LoginScreen(
+          key: ValueKey(_loginKey),
           onSuccess: () async {
             setState(() => _phase = _Phase.booting);
             await _evaluateSession();
@@ -170,7 +173,12 @@ class _AppAuthGateState extends State<AppAuthGate> {
           pendingApproval: _pending,
           onLogout: () async {
             await context.read<WmsApiClient>().setSessionToken(null);
-            if (mounted) setState(() => _phase = _Phase.login);
+            if (mounted) {
+              setState(() {
+                _loginKey++;
+                _phase = _Phase.login;
+              });
+            }
           },
         );
       case _Phase.dashboard:
@@ -180,6 +188,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
             await context.read<WmsApiClient>().setSessionToken(null);
             if (mounted) {
               setState(() {
+                _loginKey++;
                 _phase = _Phase.login;
                 _otaUrl = null;
               });

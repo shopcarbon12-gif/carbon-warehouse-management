@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/tactical_bottom_bar.dart';
@@ -56,7 +57,7 @@ class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
       _status = null;
     });
     try {
-      final deviceId = await m.activeScanner?.getDeviceId() ?? 'HANDHELD_OFFLINE';
+      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       final binCol = _defaultBinCtrl.text.trim();
       final csv = m.buildManualUploadCsv(binColumn: binCol);
       final res = await api.postInventoryUpload(

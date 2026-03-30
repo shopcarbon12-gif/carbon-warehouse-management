@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
@@ -113,8 +113,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     setState(() => _busy = true);
     try {
       final api = context.read<WmsApiClient>();
-      final rfid = context.read<RfidManager>();
-      final deviceId = await rfid.activeScanner?.getDeviceId() ?? 'HANDHELD_OFFLINE';
+      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       await api.postPutawayAssign(
         deviceId: deviceId,
         binCode: bin,
