@@ -1,0 +1,20 @@
+---
+description: After editing Carbon WMS Flutter (mobile/carbon_wms), run release APK build and report output path
+alwaysApply: true
+---
+
+# Flutter APK — rebuild after mobile changes
+
+When **this session** changes any file under **`mobile/carbon_wms/`** (including `packages/carbon_*_driver`, `android/`, `pubspec.yaml`, `lib/**/*.dart`, or `scripts/build-apk.ps1` / `_carbon_wms_d_env.ps1`), **before finishing the turn** you must:
+
+1. **Run a release APK build** so the user always gets an up-to-date `app-release.apk`, unless they explicitly asked to skip the build.
+2. Use **D:** for temp/caches (full C: disk): set `$env:TEMP` and `$env:TMP` to `D:\cwm\.tools\tmp` (or `<repo>\.tools\tmp`), then from **`D:\cwm\mobile\carbon_wms`** (junction) or the repo’s `mobile\carbon_wms` on **D:** run:
+   ```powershell
+   .\scripts\build-apk.ps1
+   ```
+3. **Confirm** exit success and report the APK path, size, and last modified time:
+   - **`D:\cwm\mobile\carbon_wms\build\app\outputs\flutter-apk\app-release.apk`** when using the junction.
+
+**Exceptions (no build required):** edits that touch **only** `mobile/carbon_wms/README.md` or other docs with **no** code/config change.
+
+**Do not** tell the user to run the build manually if you can run it here; use a long timeout or background terminal and poll until Gradle/Flutter finishes.
