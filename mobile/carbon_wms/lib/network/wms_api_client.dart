@@ -16,7 +16,7 @@ class WmsApiClient {
   static const String _prefsKeyEdge = 'wms_edge_api_key';
   static const String _prefsKeySession = 'wms_session_token';
 
-  /// Debug: Android emulator → host dev server. Release: empty until user sets server on login.
+  /// Debug: Android emulator → host `npm run dev` (port **3040**, same as web). Release: user sets server (e.g. https://wms.shopcarbon.com) on login.
   static String get kDefaultBase =>
       kDebugMode ? 'http://10.0.2.2:3040' : '';
 

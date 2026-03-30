@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node ./node_modules/next/dist/bin/next dev -p 3040 --webpack",
-    "dev:turbo": "node ./node_modules/next/dist/bin/next dev -p 3040",
+    "dev": "node scripts/run-next-dev.mjs",
+    "dev:turbo": "node scripts/run-next-dev.mjs --turbo",
     "build": "npm run db:migrate && node ./node_modules/next/dist/bin/next build --webpack",
     "start": "node ./node_modules/next/dist/bin/next start",
     "lint": "eslint",

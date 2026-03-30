@@ -4,6 +4,8 @@
  * then WMS-specific `WMS_APP_PUBLIC_BASE_URL` for Coolify parity.
  */
 
+import { WMS_LOCAL_DEV_ORIGIN } from "@/lib/constants/wms-public-origin";
+
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -15,5 +17,5 @@ export function lightspeedOAuthPublicBase(): string {
     normalizeText(process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
   const base = fromEnv.replace(/\/$/, "");
   if (base) return base;
-  return "http://localhost:3040";
+  return WMS_LOCAL_DEV_ORIGIN;
 }

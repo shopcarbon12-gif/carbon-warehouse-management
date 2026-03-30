@@ -8,6 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "list",
   use: {
+    /* Port matches `lib/constants/wms-public-origin.ts` and `npm run dev`. */
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3040",
     trace: "on-first-retry",
   },

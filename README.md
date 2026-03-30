@@ -15,7 +15,7 @@ npm run db:seed      # optional sample tenant, locations, orders, admin@example.
 npm run dev
 ```
 
-Open [http://localhost:3040](http://localhost:3040).
+Open [http://localhost:3040](http://localhost:3040). `npm run dev` sets `WMS_APP_PUBLIC_BASE_URL` and `NEXT_PUBLIC_BASE_URL` to that origin when omitted, matching the **same env keys** you use in production with `https://wms.shopcarbon.com` (see `.env.example` header).
 
 ## Coolify + PostgreSQL
 
