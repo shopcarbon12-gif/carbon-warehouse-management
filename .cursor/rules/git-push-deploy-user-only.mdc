@@ -1,0 +1,14 @@
+---
+description: Never git commit, push, or Coolify deploy unless the user explicitly asks in that message
+alwaysApply: true
+---
+
+# Git commit, push, and Coolify deploy — user command only
+
+Do **not** run **`git commit`**, **`git push`**, or **`npm run deploy:coolify`** (or any Coolify deploy webhook) unless the user **explicitly** requests that action **in the current message** (e.g. “commit and push”, “deploy to Coolify”, “push and deploy”, “commit push deploy”).
+
+**Without being asked, you may still:** edit files, run tests, run **`.\scripts\build-apk.ps1`**, run **`npm run build`** locally, read logs, and use Coolify MCP/UI for inspection.
+
+**If** the user asks to **deploy** but there are **uncommitted** changes they care about, **say so** and ask whether to **commit** first — unless they already asked to **commit and deploy** in the same message.
+
+This rule overrides any habit of auto-committing or auto-deploying after other tasks.
