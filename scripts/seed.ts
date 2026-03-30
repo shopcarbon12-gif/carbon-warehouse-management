@@ -157,7 +157,8 @@ async function main() {
       (2640, 'Checked Out', true, true, false, false),
       (2641, 'In Transit', false, true, false, true),
       (2642, 'Return', false, true, false, false),
-      (3529, 'Transfer Out', false, true, false, false)
+      (3529, 'Transfer Out', false, true, false, false),
+      (5152, 'Pending Transaction', false, true, false, false)
     ON CONFLICT (name) DO UPDATE SET
       legacy_id = EXCLUDED.legacy_id,
       include_in_inventory = EXCLUDED.include_in_inventory,

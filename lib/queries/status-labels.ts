@@ -68,3 +68,96 @@ export async function updateStatusLabelBoolean(
   );
   return (r.rowCount ?? 0) > 0;
 }
+
+export type StatusLabelWriteInput = {
+  legacy_id: number | null;
+  name: string;
+  include_in_inventory: boolean;
+  hide_in_search_filters: boolean;
+  hide_in_item_details: boolean;
+  display_in_group_page: boolean;
+};
+
+export async function insertStatusLabel(
+  pool: Pool,
+  input: StatusLabelWriteInput,
+): Promise<{ ok: true; id: number } | { ok: false; code: "duplicate_name" | "duplicate_legacy" }> {
+  try {
+    const r = await pool.query<{ id: number }>(
+      `INSERT INTO status_labels (
+         legacy_id, name, include_in_inventory, hide_in_search_filters, hide_in_item_details, display_in_group_page
+       )
+       VALUES ($1::int, $2, $3::boolean, $4::boolean, $5::boolean, $6::boolean)
+       RETURNING id`,
+      [
+        input.legacy_id,
+        input.name.trim(),
+        input.include_in_inventory,
+        input.hide_in_search_filters,
+        input.hide_in_item_details,
+        input.display_in_group_page,
+      ],
+    );
+    const id = r.rows[0]?.id;
+    if (id == null) throw new Error("insertStatusLabel: missing id");
+    return { ok: true, id };
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code === "23505") {
+      const msg = String((e as { detail?: string }).detail ?? "");
+      if (/legacy_id/i.test(msg)) return { ok: false, code: "duplicate_legacy" };
+      return { ok: false, code: "duplicate_name" };
+    }
+    throw e;
+  }
+}
+
+export async function updateStatusLabelFull(
+  pool: Pool,
+  id: number,
+  input: StatusLabelWriteInput,
+): Promise<{ ok: true } | { ok: false; code: "not_found" | "duplicate_name" | "duplicate_legacy" }> {
+  const dup = await pool.query<{ c: string }>(
+    `SELECT count(*)::text AS c FROM status_labels WHERE lower(name) = lower($1) AND id <> $2::int`,
+    [input.name.trim(), id],
+  );
+  if (Number(dup.rows[0]?.c ?? 0) > 0) {
+    return { ok: false, code: "duplicate_name" };
+  }
+  if (input.legacy_id != null) {
+    const dupL = await pool.query<{ c: string }>(
+      `SELECT count(*)::text AS c FROM status_labels WHERE legacy_id = $1::int AND id <> $2::int`,
+      [input.legacy_id, id],
+    );
+    if (Number(dupL.rows[0]?.c ?? 0) > 0) {
+      return { ok: false, code: "duplicate_legacy" };
+    }
+  }
+  const r = await pool.query(
+    `UPDATE status_labels SET
+       legacy_id = $2::int,
+       name = $3,
+       include_in_inventory = $4::boolean,
+       hide_in_search_filters = $5::boolean,
+       hide_in_item_details = $6::boolean,
+       display_in_group_page = $7::boolean,
+       updated_at = now()
+     WHERE id = $1::int`,
+    [
+      id,
+      input.legacy_id,
+      input.name.trim(),
+      input.include_in_inventory,
+      input.hide_in_search_filters,
+      input.hide_in_item_details,
+      input.display_in_group_page,
+    ],
+  );
+  if ((r.rowCount ?? 0) === 0) return { ok: false, code: "not_found" };
+  return { ok: true };
+}
+
+export async function deleteStatusLabelById(pool: Pool, id: number): Promise<boolean> {
+  const r = await pool.query(`DELETE FROM status_labels WHERE id = $1::int`, [id]);
+  return (r.rowCount ?? 0) > 0;
+}

@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { RefreshCw, Radio, X } from "lucide-react";
+import { ChevronDown, Radio, X } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import type { CatalogItemRow } from "@/lib/queries/catalog";
 
@@ -47,6 +47,52 @@ function formatPrice(raw: string | null): string {
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(n);
 }
 
+function escapeCsvCell(v: string): string {
+  if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+  return v;
+}
+
+function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
+  const headers = [
+    "Item Name",
+    "Custom SKU",
+    "UPC",
+    "Vendor",
+    "Color",
+    "Size",
+    "Retail Price",
+    "Quantity (LS)",
+  ];
+  const lines = [
+    headers.map(escapeCsvCell).join(","),
+    ...rows.map((r) =>
+      [
+        r.name,
+        r.sku,
+        displayUpc(r),
+        r.vendor?.trim() ?? "",
+        r.color?.trim() ?? "",
+        r.size?.trim() ?? "",
+        r.retail_price?.trim() ?? "",
+        r.ls_on_hand_total != null && Number.isFinite(r.ls_on_hand_total)
+          ? String(r.ls_on_hand_total)
+          : "",
+      ]
+        .map((c) => escapeCsvCell(String(c)))
+        .join(","),
+    ),
+  ];
+  const blob = new Blob(["\ufeff" + lines.join("\r\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `lightspeed-catalog-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 type TabId = "lightspeed" | "rfid";
 
 export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTriggerLightspeedSync?: boolean }) {
@@ -57,6 +103,10 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
   const [modalSku, setModalSku] = useState<CatalogGridRow | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [catalogMenuOpen, setCatalogMenuOpen] = useState<null | "lightspeed" | "more">(null);
+  const [newItemOpen, setNewItemOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const catalogToolbarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebounced(search.trim()), 320);
@@ -114,6 +164,17 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
       setSyncBusy(false);
     }
   }, [mutate]);
+
+  useEffect(() => {
+    if (!catalogMenuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const el = catalogToolbarRef.current;
+      if (!el || !(e.target instanceof Node) || el.contains(e.target)) return;
+      setCatalogMenuOpen(null);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [catalogMenuOpen]);
 
   useEffect(() => {
     if (!modalSku) return;
@@ -195,7 +256,7 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
 
       {tab === "lightspeed" ? (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <input
               type="search"
               value={search}
@@ -203,28 +264,150 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
               placeholder="Search name, SKU, UPC, vendor…"
               className="w-full max-w-md rounded-md border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100 placeholder:text-slate-600 md:max-w-lg"
             />
-            {canTriggerLightspeedSync ? (
+          </div>
+
+          <div
+            ref={catalogToolbarRef}
+            className="flex flex-wrap items-center justify-end gap-2 border-b border-slate-800/80 pb-3"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                console.log("[catalog] New — manual item creation (placeholder)");
+                setNewItemOpen(true);
+              }}
+              className="rounded-md bg-emerald-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-emerald-500"
+            >
+              New
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                console.log("[catalog] Import — open file modal (placeholder)");
+                setImportOpen(true);
+              }}
+              className="rounded-md bg-blue-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-blue-500"
+            >
+              Import
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                console.log("[catalog] Export CSV");
+                exportLightspeedCatalogCsv(rows);
+              }}
+              className="rounded-md bg-emerald-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-emerald-500"
+            >
+              Export
+            </button>
+
+            <div className="relative">
               <button
                 type="button"
-                disabled={syncBusy}
-                onClick={() => void triggerLightspeedSync()}
-                className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-violet-600/45 bg-violet-950/25 px-4 py-2 font-mono text-xs font-medium text-violet-200 hover:bg-violet-900/20 disabled:opacity-50"
+                onClick={() =>
+                  setCatalogMenuOpen((m) => (m === "lightspeed" ? null : "lightspeed"))
+                }
+                className="inline-flex items-center gap-1 rounded-md border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-xs font-medium text-slate-100 hover:bg-slate-700"
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${syncBusy ? "animate-spin" : ""}`} />
-                {syncBusy ? "Syncing…" : "Sync Lightspeed"}
+                Lightspeed
+                <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
               </button>
-            ) : (
-              <p className="font-mono text-[0.6rem] text-slate-600">
-                Sync requires admin · use{" "}
-                <Link href="/inventory/sync" className="text-teal-500 hover:underline">
-                  Lightspeed sync
-                </Link>
-              </p>
-            )}
+              {catalogMenuOpen === "lightspeed" ? (
+                <div
+                  className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-slate-700 bg-zinc-900 py-1 shadow-xl"
+                  role="menu"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={syncBusy || !canTriggerLightspeedSync}
+                    onClick={() => {
+                      console.log("[catalog] Lightspeed → Sync Lightspeed");
+                      setCatalogMenuOpen(null);
+                      void triggerLightspeedSync();
+                    }}
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-teal-200 hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {syncBusy ? "Syncing…" : "Sync Lightspeed"}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      console.log("[catalog] Lightspeed placeholder: reconcile draft SKUs");
+                      setCatalogMenuOpen(null);
+                    }}
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                  >
+                    Reconcile draft SKUs (placeholder)
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      console.log("[catalog] Lightspeed placeholder: open sync history");
+                      setCatalogMenuOpen(null);
+                    }}
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                  >
+                    Open sync history (placeholder)
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setCatalogMenuOpen((m) => (m === "more" ? null : "more"))}
+                className="inline-flex items-center gap-1 rounded-md bg-orange-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-orange-500"
+              >
+                More
+                <ChevronDown className="h-3.5 w-3.5 opacity-90" aria-hidden />
+              </button>
+              {catalogMenuOpen === "more" ? (
+                <div
+                  className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-slate-700 bg-zinc-900 py-1 shadow-xl"
+                  role="menu"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      console.log("[catalog] More: bulk tag assign (placeholder)");
+                      setCatalogMenuOpen(null);
+                    }}
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                  >
+                    Bulk tag assign (placeholder)
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      console.log("[catalog] More: bulk archive (placeholder)");
+                      setCatalogMenuOpen(null);
+                    }}
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                  >
+                    Bulk archive (placeholder)
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
+
           {syncMsg ? (
             <p className="font-mono text-xs text-slate-500" role="status">
               {syncMsg}
+            </p>
+          ) : null}
+          {!canTriggerLightspeedSync ? (
+            <p className="font-mono text-[0.6rem] text-slate-600">
+              Full sync API may require admin.{" "}
+              <Link href="/inventory/sync" className="text-teal-500 hover:underline">
+                Lightspeed sync
+              </Link>
             </p>
           ) : null}
         </>
@@ -400,6 +583,72 @@ export function CatalogWorkspace({ canTriggerLightspeedSync = false }: { canTrig
           {pagination}
         </>
       )}
+
+      {newItemOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-black/70"
+            onClick={() => setNewItemOpen(false)}
+          />
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
+              <h3 className="text-sm font-semibold text-slate-100">New catalog item</h3>
+              <p className="mt-2 font-mono text-xs leading-relaxed text-slate-500">
+                Placeholder: manual matrix / custom SKU creation is not wired yet. This will create items
+                without EPCs in WMS once the API exists.
+              </p>
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setNewItemOpen(false)}
+                  className="rounded-md border border-slate-600 px-4 py-2 font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {importOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-black/70"
+            onClick={() => setImportOpen(false)}
+          />
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
+              <h3 className="text-sm font-semibold text-slate-100">Import catalog</h3>
+              <p className="mt-2 font-mono text-xs text-slate-500">
+                Upload a file (CSV / XLSX) — processing is a placeholder.
+              </p>
+              <input
+                type="file"
+                className="mt-4 block w-full font-mono text-xs text-slate-400 file:mr-3 file:rounded file:border file:border-slate-600 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-slate-200"
+                accept=".csv,.xlsx,.xls"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  console.log("[catalog] Import file selected (placeholder)", f?.name ?? "(none)");
+                }}
+              />
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setImportOpen(false)}
+                  className="rounded-md border border-slate-600 px-4 py-2 font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {modalSku ? (
         <>
