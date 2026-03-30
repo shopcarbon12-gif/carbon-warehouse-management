@@ -18,6 +18,7 @@ class InventoryCsvSessionScreen extends StatefulWidget {
 }
 
 class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
+  final _defaultBinCtrl = TextEditingController();
   bool _uploading = false;
   String? _status;
 
@@ -34,6 +35,7 @@ class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
 
   @override
   void dispose() {
+    _defaultBinCtrl.dispose();
     try {
       context.read<RfidManager>().suppressEdgeStreaming = false;
     } catch (_) {
@@ -55,7 +57,8 @@ class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
     });
     try {
       final deviceId = await m.activeScanner?.getDeviceId() ?? 'HANDHELD_OFFLINE';
-      final csv = m.buildManualUploadCsv();
+      final binCol = _defaultBinCtrl.text.trim();
+      final csv = m.buildManualUploadCsv(binColumn: binCol);
       final res = await api.postInventoryUpload(
         deviceId: deviceId,
         mode: 'Cycle Count',
@@ -104,6 +107,17 @@ class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
             const Text(
               'RFID reads stay on device until you tap Upload. Edge streaming is paused on this screen.',
               style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _defaultBinCtrl,
+              style: const TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600),
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                labelText: 'Default bin for this upload (optional)',
+                hintText: 'e.g. 1A01C — applied to every row in CSV',
+                helperText: 'Leave empty if bins are unknown or parsed server-side only.',
+              ),
             ),
             if (_status != null) ...[
               const SizedBox(height: 12),

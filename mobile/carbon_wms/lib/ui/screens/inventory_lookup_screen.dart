@@ -5,6 +5,7 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
+import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/util/template_substitution.dart';
 
@@ -63,6 +64,20 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                 hintText: 'EPC, UPC, or internal code',
               ),
               onSubmitted: (_) => _lookup(),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final code = await openCameraBarcodeScanner(
+                  context,
+                  title: 'Scan barcode / QR',
+                );
+                if (!mounted || code == null || code.isEmpty) return;
+                _ctrl.text = code;
+                _lookup();
+              },
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: const Text('Scan with camera'),
             ),
             const SizedBox(height: 12),
             FilledButton(

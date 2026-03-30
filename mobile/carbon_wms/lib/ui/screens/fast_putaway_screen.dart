@@ -6,9 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
-/// Fast 2D bin putaway: scan custom SKU (wedge / camera), choose color scope, scan bin label.
+/// Fast 2D bin putaway: hardware wedge, device camera, or manual entry.
 class FastPutawayScreen extends StatefulWidget {
   const FastPutawayScreen({super.key});
 
@@ -158,9 +159,28 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               const SizedBox(height: 8),
               Text(
                 _phase == _PutawayPhase.scanItem
-                    ? '2D wedge or keyboard — custom SKU from label.'
-                    : 'Scan bin label (e.g. 1A01C).',
+                    ? 'Hardware scanner (wedge), camera, or type below — custom SKU from label.'
+                    : 'Hardware scanner, camera, or type bin label (e.g. 1A01C).',
                 style: const TextStyle(color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () async {
+                        final title = _phase == _PutawayPhase.scanItem
+                            ? 'Scan item barcode'
+                            : 'Scan bin label';
+                        final code = await openCameraBarcodeScanner(context, title: title);
+                        if (!mounted || code == null || code.isEmpty) return;
+                        if (_phase == _PutawayPhase.scanItem) {
+                          await _onItemSubmit(code);
+                        } else {
+                          await _onBinSubmit(code);
+                        }
+                      },
+                icon: const Icon(Icons.photo_camera_outlined),
+                label: const Text('Scan with camera'),
               ),
               if (_pendingSku.isNotEmpty && _phase == _PutawayPhase.scanBin)
                 Padding(
@@ -191,7 +211,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               const SizedBox(height: 16),
               TextField(
                 decoration: const InputDecoration(
-                  labelText: 'Manual entry (dev)',
+                  labelText: 'Manual entry',
                   hintText: 'Type code + Enter',
                 ),
                 onSubmitted: (v) {

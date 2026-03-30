@@ -66,5 +66,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>CarbonWMS uses the camera to scan 2D barcodes for putaway and intake.</string>
 </dict>
 </plist>

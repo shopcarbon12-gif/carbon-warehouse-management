@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 /// Non-RFID receiving — same edge context family as lookup for Carbon WMS.
@@ -72,6 +73,20 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
                 hintText: 'Scan UPC / EAN / Code-128',
               ),
               onSubmitted: (_) => _resolvePreview(),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final code = await openCameraBarcodeScanner(
+                  context,
+                  title: 'Scan barcode',
+                );
+                if (!mounted || code == null || code.isEmpty) return;
+                _barcodeCtrl.text = code;
+                _resolvePreview();
+              },
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: const Text('Scan with camera'),
             ),
             const SizedBox(height: 12),
             TextField(
