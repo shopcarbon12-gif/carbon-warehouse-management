@@ -271,18 +271,25 @@ export async function performLightspeedCatalogSync(
     const warnings: string[] = [];
     let records_updated = 0;
 
+    /* Per-row failures must not abort the whole transaction (PostgreSQL 25P02). */
     for (const m of matrices) {
+      await client.query("SAVEPOINT catalog_matrix");
       try {
         const matrixId = await upsertMatrixRow(client, m);
         for (const v of m.variants) {
+          await client.query("SAVEPOINT catalog_variant");
           try {
             await upsertCustomSkuRow(client, matrixId, v);
             records_updated += 1;
+            await client.query("RELEASE SAVEPOINT catalog_variant");
           } catch (err) {
+            await client.query("ROLLBACK TO SAVEPOINT catalog_variant");
             warnings.push(`Variant ${v.sku} (ls ${v.lsSystemId}): ${pgErrorDetail(err)}`);
           }
         }
+        await client.query("RELEASE SAVEPOINT catalog_matrix");
       } catch (err) {
+        await client.query("ROLLBACK TO SAVEPOINT catalog_matrix");
         warnings.push(`Matrix ${m.upc} (${m.description}): ${pgErrorDetail(err)}`);
       }
     }
