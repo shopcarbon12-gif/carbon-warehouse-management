@@ -4,7 +4,11 @@ ALTER TABLE bins DROP CONSTRAINT IF EXISTS bins_status_check;
 --> statement-breakpoint
 ALTER TABLE bins ADD COLUMN IF NOT EXISTS status varchar(16) NOT NULL DEFAULT 'active';
 --> statement-breakpoint
-ALTER TABLE bins ADD CONSTRAINT bins_status_check CHECK (status IN ('active', 'inactive'));
+DO $$ BEGIN
+  ALTER TABLE bins ADD CONSTRAINT bins_status_check CHECK (status IN ('active', 'inactive'));
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS devices (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
