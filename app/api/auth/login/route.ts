@@ -64,7 +64,12 @@ export async function POST(req: Request) {
         : "Session signing failed. Set SESSION_SECRET in .env.";
     return NextResponse.json({ error }, { status: 503 });
   }
-  const res = NextResponse.json({ ok: true });
+  const mobileClient = req.headers.get("x-carbon-mobile") === "1";
+  const res = NextResponse.json({
+    ok: true,
+    bypassDeviceLock: Boolean(payload.bypassDeviceLock),
+    ...(mobileClient ? { token } : {}),
+  });
   res.cookies.set("wms_session", token, {
     httpOnly: true,
     sameSite: "lax",

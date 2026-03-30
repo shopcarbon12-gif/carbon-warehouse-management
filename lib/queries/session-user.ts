@@ -3,6 +3,13 @@ import type { Pool } from "pg";
 import type { SessionPayload } from "@/lib/auth";
 import { sessionRoleFromUserRoleName } from "@/lib/auth/user-role-map";
 
+function parseDeviceBypass(permissions: unknown): boolean {
+  if (!permissions || typeof permissions !== "object") return false;
+  const ds = (permissions as Record<string, unknown>).device_security;
+  if (!ds || typeof ds !== "object") return false;
+  return Boolean((ds as Record<string, unknown>).can_bypass_device_lock);
+}
+
 export async function findUserWithTenantLocation(
   pool: Pool,
   email: string,
@@ -22,12 +29,19 @@ export async function findUserWithTenantLocation(
   }
   if (!ok) return null;
 
-  const loc = await pool.query<{ tid: string; lid: string; role: string; role_name: string | null }>(
+  const loc = await pool.query<{
+    tid: string;
+    lid: string;
+    role: string;
+    role_name: string | null;
+    permissions: unknown;
+  }>(
     `SELECT
        m.tenant_id AS tid,
        l.id AS lid,
        m.role,
-       ur.name AS role_name
+       ur.name AS role_name,
+       ur.permissions AS permissions
      FROM memberships m
      JOIN users u0 ON u0.id = m.user_id
      JOIN locations l ON l.tenant_id = m.tenant_id AND l.is_active = true
@@ -57,6 +71,7 @@ export async function findUserWithTenantLocation(
 
   const mapped = sessionRoleFromUserRoleName(row.role_name);
   const role = mapped ?? (row.role?.trim() || "member");
+  const bypassDeviceLock = parseDeviceBypass(row.permissions);
 
   return {
     sub: user.id,
@@ -64,6 +79,7 @@ export async function findUserWithTenantLocation(
     tid: row.tid,
     lid: row.lid,
     role,
+    ...(bypassDeviceLock ? { bypassDeviceLock: true } : {}),
   };
 }
 

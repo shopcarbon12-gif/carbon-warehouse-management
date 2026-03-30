@@ -20,6 +20,15 @@ class MobileSettingsRepository extends ChangeNotifier {
 
   Map<String, dynamic>? get lastSyncRoot => _lastSyncRoot;
 
+  /// Runtime-only global power (0–300) for both transfer directions until next server sync.
+  Future<void> setGlobalAntennaPower(int power) async {
+    final p = power.clamp(0, 300);
+    _config = _config.copyWith(transferOutAntennaPower: p, transferInAntennaPower: p);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKeyConfig, _config.toJsonString());
+    notifyListeners();
+  }
+
   Future<void> loadFromPrefs() async {
     final p = await SharedPreferences.getInstance();
     final raw = p.getString(_prefsKeyConfig);

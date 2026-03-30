@@ -17,7 +17,10 @@ import 'package:carbon_wms/ui/screens/transfer_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.onLogout, this.otaDownloadUrl});
+
+  final Future<void> Function()? onLogout;
+  final String? otaDownloadUrl;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -39,35 +42,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await repo.syncFromServer(api, deviceId: id);
   }
 
+  Future<void> _installOta(BuildContext context) async {
+    final url = widget.otaDownloadUrl;
+    if (url == null || url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No OTA URL — check server active release.')),
+      );
+      return;
+    }
+    try {
+      await context.read<WmsApiClient>().downloadAndInstallApk(url);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Installer started — approve prompts if shown.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
       actions: [
-        PopupMenuButton<String>(
-          tooltip: 'Scanner',
-          onSelected: (value) {
-            final m = context.read<RfidManager>();
-            switch (value) {
-              case 'chainway':
-                m.useChainway();
-                break;
-              case 'zebra':
-                m.useZebra();
-                break;
-              case 'none':
-                m.clearScanner();
-                break;
-            }
+        Consumer<MobileSettingsRepository>(
+          builder: (context, settings, _) {
+            final p = settings.config.transferOutAntennaPower.toDouble().clamp(0, 300);
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Tooltip(
+                  message: 'RF power (0–300)',
+                  child: Icon(Icons.settings_input_antenna, size: 20),
+                ),
+                SizedBox(
+                  width: 130,
+                  child: Slider(
+                    value: p,
+                    min: 0,
+                    max: 300,
+                    divisions: 30,
+                    label: '${p.round()}',
+                    onChanged: (v) async {
+                      await settings.setGlobalAntennaPower(v.round());
+                      if (context.mounted) {
+                        await context.read<RfidManager>().reapplyHandheldHardwareSettings();
+                      }
+                    },
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Download & install update',
+                  icon: const Icon(Icons.system_update_alt),
+                  onPressed: () => _installOta(context),
+                ),
+                if (widget.onLogout != null)
+                  IconButton(
+                    tooltip: 'Sign out',
+                    icon: const Icon(Icons.logout),
+                    onPressed: () => widget.onLogout!(),
+                  ),
+              ],
+            );
           },
-          itemBuilder: (context) => const [
-            PopupMenuItem(value: 'chainway', child: Text('Use Chainway sled')),
-            PopupMenuItem(value: 'zebra', child: Text('Use Zebra RFD8500')),
-            PopupMenuItem(value: 'none', child: Text('Disconnect scanner')),
-          ],
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Icon(Icons.settings_input_antenna),
-          ),
         ),
       ],
       body: CustomScrollView(

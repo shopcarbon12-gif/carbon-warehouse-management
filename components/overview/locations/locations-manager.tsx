@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { MapPin, PackagePlus, Pencil } from "lucide-react";
+import { MapPin, PackagePlus, Pencil, Trash2 } from "lucide-react";
 import { BinEditorDrawer, type BinRow } from "./bin-editor-drawer";
 
 const fetcher = async (url: string) => {
@@ -23,7 +23,7 @@ type Loc = {
 
 type DrawerMode = "add" | "edit";
 
-export function LocationsManager() {
+export function LocationsManager({ canCleanBins = false }: { canCleanBins?: boolean }) {
   const { data, error, mutate } = useSWR<{ locations: Loc[] }>(
     "/api/overview/locations",
     fetcher,
@@ -68,8 +68,34 @@ export function LocationsManager() {
     setDrawerBin(null);
   };
 
+  const [cleanBusy, setCleanBusy] = useState<string | null>(null);
+  const [cleanNotice, setCleanNotice] = useState<string | null>(null);
+
+  const cleanBin = async (binId: string) => {
+    if (!canCleanBins) return;
+    if (!window.confirm("Unassign all in-stock EPCs from this bin? This is logged as clean_bin.")) return;
+    setCleanBusy(binId);
+    setCleanNotice(null);
+    try {
+      const res = await fetch(`/api/locations/bins/${binId}/clean`, { method: "POST" });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; cleared?: number };
+      if (!res.ok) throw new Error(j.error ?? "Clean failed");
+      await mutate();
+      setCleanNotice(`Cleared ${j.cleared ?? 0} EPC(s) from bin.`);
+    } catch (e) {
+      setCleanNotice(e instanceof Error ? e.message : "Clean failed");
+    } finally {
+      setCleanBusy(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {cleanNotice ? (
+        <p className="font-mono text-xs text-slate-400" role="status">
+          {cleanNotice}
+        </p>
+      ) : null}
       {error ? (
         <p className="font-mono text-xs text-red-400/90">
           {error instanceof Error ? error.message : "Failed to load locations"}
@@ -164,7 +190,7 @@ export function LocationsManager() {
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2 text-right tabular-nums">Capacity</th>
                     <th className="px-3 py-2 text-right tabular-nums">In-stock EPCs</th>
-                    <th className="px-3 py-2 w-28"> </th>
+                    <th className="px-3 py-2 w-36"> </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/80 font-mono text-[0.65rem] text-slate-300">
@@ -189,14 +215,28 @@ export function LocationsManager() {
                         {b.in_stock_count}
                       </td>
                       <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(b)}
-                          className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-[0.6rem] text-slate-300 hover:bg-zinc-800"
-                        >
-                          <Pencil className="h-3 w-3" />
-                          Edit
-                        </button>
+                        <div className="flex flex-wrap items-center justify-end gap-1">
+                          {canCleanBins ? (
+                            <button
+                              type="button"
+                              title="Clean bin — unassign all items"
+                              disabled={cleanBusy === b.id || (b.in_stock_count ?? 0) === 0}
+                              onClick={() => void cleanBin(b.id)}
+                              className="inline-flex items-center gap-1 rounded border border-amber-900/50 px-2 py-1 text-[0.6rem] text-amber-200/90 hover:bg-amber-950/40 disabled:opacity-40"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              Clean
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => openEdit(b)}
+                            className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-[0.6rem] text-slate-300 hover:bg-zinc-800"
+                          >
+                            <Pencil className="h-3 w-3" />
+                            Edit
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

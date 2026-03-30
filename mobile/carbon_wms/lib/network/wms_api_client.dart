@@ -1,6 +1,10 @@
 import 'dart:convert';
+import 'dart:io' show File;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
+import 'package:install_plugin/install_plugin.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Edge ingest payload to Carbon WMS (`POST /api/edge/ingest`).
@@ -9,6 +13,7 @@ class WmsApiClient {
 
   static const String _prefsKeyBase = 'wms_server_base';
   static const String _prefsKeyEdge = 'wms_edge_api_key';
+  static const String _prefsKeySession = 'wms_session_token';
 
   /// Default: Android emulator → host machine. Physical device: set to `http://<LAN-IP>:3040`.
   static const String kDefaultBase = 'http://10.0.2.2:3040';
@@ -28,6 +33,119 @@ class WmsApiClient {
   }
 
   /// Must match server `WMS_EDGE_INGEST_KEY` or `WMS_DEVICE_KEY`.
+  Future<String?> getSessionToken() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(_prefsKeySession)?.trim();
+  }
+
+  Future<void> setSessionToken(String? token) async {
+    final p = await SharedPreferences.getInstance();
+    final t = token?.trim();
+    if (t == null || t.isEmpty) {
+      await p.remove(_prefsKeySession);
+    } else {
+      await p.setString(_prefsKeySession, t);
+    }
+  }
+
+  Future<({bool ok, bool bypass, String? error})> login({
+    required String email,
+    required String password,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/auth/login');
+    final res = await _http.post(
+      uri,
+      headers: const {
+        'Content-Type': 'application/json',
+        'X-Carbon-Mobile': '1',
+      },
+      body: jsonEncode({'email': email, 'password': password}),
+    });
+    final decoded = jsonDecode(res.body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      final err = decoded is Map ? decoded['error']?.toString() : null;
+      return (ok: false, bypass: false, error: err ?? 'Login failed');
+    }
+    if (decoded is! Map<String, dynamic>) {
+      return (ok: false, bypass: false, error: 'Bad response');
+    }
+    final token = decoded['token'] as String?;
+    if (token != null && token.isNotEmpty) {
+      await setSessionToken(token);
+    }
+    return (
+      ok: true,
+      bypass: decoded['bypassDeviceLock'] == true,
+      error: null,
+    );
+  }
+
+  /// Device gate + OTA hints. Sends Bearer when a mobile session token exists.
+  Future<Map<String, dynamic>> fetchMobileStatus({
+    required String version,
+    String? androidId,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final q = <String, String>{'version': version};
+    if (androidId != null && androidId.isNotEmpty) {
+      q['androidId'] = androidId;
+    }
+    final uri = Uri.parse('$base/api/mobile/status').replace(queryParameters: q);
+    final headers = <String, String>{};
+    final t = await getSessionToken();
+    if (t != null && t.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $t';
+    }
+    final res = await _http.get(uri, headers: headers);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final out = jsonDecode(res.body);
+    if (out is Map<String, dynamic>) return out;
+    return <String, dynamic>{};
+  }
+
+  Future<void> postDevicePing({required String androidId, String? label}) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/device-ping');
+    final t = await getSessionToken();
+    if (t == null || t.isEmpty) {
+      throw WmsApiException(401, 'No session');
+    }
+    final res = await _http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $t',
+      },
+      body: jsonEncode({
+        'androidId': androidId,
+        if (label != null && label.isNotEmpty) 'label': label,
+      }),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+  }
+
+  Future<void> downloadAndInstallApk(String relativeOrAbsoluteUrl) async {
+    if (kIsWeb) return;
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final url = relativeOrAbsoluteUrl.startsWith('http')
+        ? relativeOrAbsoluteUrl
+        : '$base${relativeOrAbsoluteUrl.startsWith('/') ? '' : '/'}$relativeOrAbsoluteUrl';
+    final uri = Uri.parse(url);
+    final res = await _http.get(uri);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/carbon-wms-update.apk');
+    await file.writeAsBytes(res.bodyBytes);
+    await InstallPlugin.installApk(file.path, appId: 'com.shopcarbon.wms');
+  }
+
   Future<void> setEdgeApiKey(String? key) async {
     final p = await SharedPreferences.getInstance();
     final t = key?.trim();

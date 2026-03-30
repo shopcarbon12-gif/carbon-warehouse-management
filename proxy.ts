@@ -23,6 +23,7 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/settings/mobile-sync") return true;
   if (pathname === "/api/inventory/upload") return true;
   if (pathname === "/api/inventory/putaway-assign") return true;
+  if (pathname === "/api/mobile/status") return true;
   return false;
 }
 

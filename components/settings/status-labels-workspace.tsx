@@ -444,7 +444,7 @@ export function StatusLabelsWorkspace() {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] dark:border-[var(--wms-border)]">
-        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] dark:border-[var(--wms-border)]">
               <th className={`${th} pl-3 text-left`} title="System ID (legacy)">
@@ -465,6 +465,18 @@ export function StatusLabelsWorkspace() {
               </th>
               <th className={th} title="Display in group page">
                 Grp
+              </th>
+              <th className={th} title="Instant stolen API">
+                Stolen
+              </th>
+              <th className={th} title="Prevent Live on transfer receive">
+                Xfer
+              </th>
+              <th className={th} title="Prevent change during audit">
+                Aud
+              </th>
+              <th className={th} title="Prevent Live after upload script">
+                Upld
               </th>
               <th className={`${th} pr-3 text-right`}>Actions</th>
             </tr>
@@ -490,6 +502,18 @@ export function StatusLabelsWorkspace() {
                 </td>
                 <td className="px-2 py-2 text-center">
                   <FlagCell on={row.display_in_group_page} />
+                </td>
+                <td className="px-2 py-2 text-center">
+                  <FlagCell on={row.allow_instant_stolen_api} />
+                </td>
+                <td className="px-2 py-2 text-center">
+                  <FlagCell on={row.prevent_live_on_transfer_receive} />
+                </td>
+                <td className="px-2 py-2 text-center">
+                  <FlagCell on={row.prevent_change_during_audit_request} />
+                </td>
+                <td className="px-2 py-2 text-center">
+                  <FlagCell on={row.prevent_live_after_inventory_upload_script} />
                 </td>
                 <td className="px-3 py-2 text-right">
                   <button

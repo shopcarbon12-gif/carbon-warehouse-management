@@ -10,6 +10,8 @@ export type DeviceGridRow = {
   name: string;
   network_address: string | null;
   status_online: boolean;
+  android_id: string | null;
+  is_authorized: boolean;
   location_id: string;
   location_code: string;
   location_name: string;
@@ -72,6 +74,8 @@ export async function listDevicesForTenant(pool: Pool, tenantId: string): Promis
     name: string;
     network_address: string | null;
     status_online: boolean;
+    android_id: string | null;
+    is_authorized: boolean;
     location_id: string;
     location_code: string;
     location_name: string;
@@ -85,6 +89,8 @@ export async function listDevicesForTenant(pool: Pool, tenantId: string): Promis
        d.name,
        d.network_address,
        d.status_online,
+       d.android_id,
+       COALESCE(d.is_authorized, false) AS is_authorized,
        d.location_id::text,
        l.code AS location_code,
        l.name AS location_name,
@@ -105,6 +111,8 @@ export async function listDevicesForTenant(pool: Pool, tenantId: string): Promis
     name: row.name,
     network_address: row.network_address,
     status_online: row.status_online,
+    android_id: row.android_id,
+    is_authorized: row.is_authorized,
     location_id: row.location_id,
     location_code: row.location_code,
     location_name: row.location_name,

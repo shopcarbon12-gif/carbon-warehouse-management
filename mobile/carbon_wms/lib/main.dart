@@ -5,7 +5,7 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
-import 'package:carbon_wms/ui/screens/dashboard_screen.dart';
+import 'package:carbon_wms/ui/app_auth_gate.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,12 +25,10 @@ class CarbonWmsRoot extends StatelessWidget {
         ),
         ChangeNotifierProvider<RfidManager>(
           create: (context) {
-            final m = RfidManager(
+            return RfidManager(
               api: context.read<WmsApiClient>(),
               settings: context.read<MobileSettingsRepository>(),
             );
-            Future.microtask(() => m.useChainway());
-            return m;
           },
         ),
       ],
@@ -38,7 +36,7 @@ class CarbonWmsRoot extends StatelessWidget {
         title: 'Carbon WMS',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.dark,
-        home: const DashboardScreen(),
+        home: const AppAuthGate(),
       ),
     );
   }

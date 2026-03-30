@@ -19,6 +19,24 @@ class HandheldRuntimeConfig {
   final String itemDetailsTemplate;
   final String tagDetailsTemplate;
 
+  HandheldRuntimeConfig copyWith({
+    bool? triggerModeHoldRelease,
+    int? transferOutAntennaPower,
+    int? transferInAntennaPower,
+    bool? transferOutPowerLock,
+    String? itemDetailsTemplate,
+    String? tagDetailsTemplate,
+  }) {
+    return HandheldRuntimeConfig(
+      triggerModeHoldRelease: triggerModeHoldRelease ?? this.triggerModeHoldRelease,
+      transferOutAntennaPower: transferOutAntennaPower ?? this.transferOutAntennaPower,
+      transferInAntennaPower: transferInAntennaPower ?? this.transferInAntennaPower,
+      transferOutPowerLock: transferOutPowerLock ?? this.transferOutPowerLock,
+      itemDetailsTemplate: itemDetailsTemplate ?? this.itemDetailsTemplate,
+      tagDetailsTemplate: tagDetailsTemplate ?? this.tagDetailsTemplate,
+    );
+  }
+
   static const HandheldRuntimeConfig fallback = HandheldRuntimeConfig(
     triggerModeHoldRelease: true,
     transferOutAntennaPower: 270,

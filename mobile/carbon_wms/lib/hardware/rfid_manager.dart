@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:carbon_wms/hardware/chainway_scanner.dart';
@@ -109,6 +111,26 @@ class RfidManager extends ChangeNotifier {
   void clearIngestMetadata() {
     _ingestMetadata = <String, dynamic>{};
     notifyListeners();
+  }
+
+  /// Chainway manufacturer → native UHF; otherwise prefer Zebra BT RFD8500 path.
+  Future<void> autoDetectHardware() async {
+    if (kIsWeb) return;
+    if (!Platform.isAndroid) {
+      await useZebra();
+      return;
+    }
+    try {
+      final info = await DeviceInfoPlugin().androidInfo;
+      final m = info.manufacturer.toLowerCase();
+      if (m.contains('chainway')) {
+        await useChainway();
+        return;
+      }
+    } catch (_) {
+      /* fall through */
+    }
+    await useZebra();
   }
 
   Future<void> useChainway() async {

@@ -10,6 +10,7 @@ import {
   ArrowRightLeft,
   Banknote,
   ChevronDown,
+  Download,
   FolderInput,
   LayoutDashboard,
   Layers,
@@ -25,6 +26,7 @@ import {
   ScanLine,
   Search,
   Settings,
+  Shield,
   SlidersHorizontal,
   Smartphone,
   Tags,
@@ -58,6 +60,8 @@ const sections: NavSection[] = [
     label: "Inventory",
     isActiveSection: (p) =>
       p.startsWith("/inventory/catalog") ||
+      p.startsWith("/inventory/transfers") ||
+      p.startsWith("/inventory/bulk-status") ||
       p.startsWith("/overview/locations") ||
       p.startsWith("/rfid/cycle-counts") ||
       p.startsWith("/operations/transfers"),
@@ -65,7 +69,10 @@ const sections: NavSection[] = [
       { href: "/inventory/catalog", label: "Catalog", icon: Package },
       { href: "/overview/locations", label: "Locations & Bins", icon: Map },
       { href: "/rfid/cycle-counts", label: "Cycle Counts", icon: ScanLine },
-      { href: "/operations/transfers", label: "Transfers", icon: ArrowRightLeft },
+      { href: "/inventory/transfers/out", label: "Transfer out", icon: ArrowRightLeft },
+      { href: "/inventory/transfers/in", label: "Transfer in", icon: FolderInput },
+      { href: "/inventory/bulk-status", label: "Bulk status", icon: SlidersHorizontal },
+      { href: "/operations/transfers", label: "Transfers (legacy)", icon: Route },
     ],
   },
   {
@@ -93,6 +100,7 @@ const sections: NavSection[] = [
     label: "Reports",
     isActiveSection: (p) => p.startsWith("/reports/"),
     items: [
+      { href: "/reports/inventory-compare", label: "POS compare", icon: Banknote },
       { href: "/reports/uploads", label: "Device upload logs", icon: Upload },
       { href: "/reports/activity", label: "Activity history", icon: Activity },
       { href: "/reports/asset-movements", label: "Asset movements", icon: Route },
@@ -121,6 +129,8 @@ const sections: NavSection[] = [
       { href: "/infrastructure/settings", label: "General settings", icon: Settings },
       { href: "/settings/theme", label: "Theme & style", icon: Palette },
       { href: "/settings/handheld", label: "Handheld settings", icon: Smartphone },
+      { href: "/settings/updates", label: "Mobile OTA", icon: Download },
+      { href: "/settings/devices", label: "Device binding", icon: Shield },
       { href: "/settings/statuses", label: "Status labels", icon: Tags },
       { href: "/settings/general", label: "RFID EPC (general)", icon: Radio },
       { href: "/settings/epc-profiles", label: "EPC profiles", icon: Layers },

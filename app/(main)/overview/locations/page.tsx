@@ -1,6 +1,11 @@
+import { getSession } from "@/lib/get-session";
+import { isAdminRole } from "@/lib/auth/dashboard-rbac";
 import { LocationsManager } from "@/components/overview/locations/locations-manager";
 
-export default function OverviewLocationsPage() {
+export default async function OverviewLocationsPage() {
+  const session = await getSession();
+  const canCleanBins = session ? isAdminRole(session.role ?? "") : false;
+
   return (
     <div className="mx-auto flex min-w-0 max-w-5xl flex-col gap-6">
       <div className="border-b border-slate-800 pb-3">
@@ -12,7 +17,7 @@ export default function OverviewLocationsPage() {
           in-stock EPCs reference a bin. Switch the active site from the sidebar for RFID ops.
         </p>
       </div>
-      <LocationsManager />
+      <LocationsManager canCleanBins={canCleanBins} />
     </div>
   );
 }

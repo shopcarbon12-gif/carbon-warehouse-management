@@ -9,6 +9,8 @@ export type SessionPayload = {
   lid: string;
   /** `memberships.role` at login / location switch (default `member`). */
   role: string;
+  /** Super Admin JSON flag `device_security.can_bypass_device_lock` (JWT claim `bdl`). */
+  bypassDeviceLock?: boolean;
 };
 
 function getSecret(): Uint8Array {
@@ -44,6 +46,7 @@ export async function signSession(p: SessionPayload): Promise<string> {
     lid: p.lid,
     email: p.email,
     role: p.role,
+    ...(p.bypassDeviceLock ? { bdl: true } : {}),
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(p.sub)
@@ -61,9 +64,17 @@ export async function verifySessionToken(
     const lid = payload.lid as string | undefined;
     const email = payload.email as string | undefined;
     const roleRaw = payload.role as string | undefined;
+    const bdl = payload.bdl as boolean | undefined;
     if (!sub || !tid || !lid || !email) return null;
     const role = roleRaw?.trim() || "member";
-    return { sub, tid, lid, email, role };
+    return {
+      sub,
+      tid,
+      lid,
+      email,
+      role,
+      bypassDeviceLock: Boolean(bdl),
+    };
   } catch {
     return null;
   }
