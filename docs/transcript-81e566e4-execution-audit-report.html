@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transcript 81e566e4 — Task execution audit</title>
+  <style>
+    :root {
+      --bg: #0c1117;
+      --surface: #151c26;
+      --border: #2a3544;
+      --text: #e6edf3;
+      --muted: #8b9cb3;
+      --ok: #3fb950;
+      --warn: #d29922;
+      --bad: #f85149;
+      --accent: #58a6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+      font-size: 15px;
+    }
+    main { max-width: 980px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    h1 { font-size: 1.65rem; font-weight: 700; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
+    h2 { font-size: 1.15rem; margin: 2rem 0 0.75rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+    h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+    p, li { color: var(--muted); }
+    strong { color: var(--text); }
+    .meta { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 1rem 0; }
+    th, td { border: 1px solid var(--border); padding: 0.55rem 0.65rem; text-align: left; vertical-align: top; }
+    th { background: var(--surface); color: var(--text); font-weight: 600; }
+    tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .done { background: rgba(63, 185, 80, 0.2); color: var(--ok); }
+    .partial { background: rgba(210, 153, 34, 0.2); color: var(--warn); }
+    .gap { background: rgba(248, 81, 73, 0.15); color: var(--bad); }
+    .na { background: rgba(139, 156, 179, 0.15); color: var(--muted); }
+    code, .mono { font-family: ui-monospace, "Cascadia Code", monospace; font-size: 0.8em; color: #d2a8ff; }
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: var(--surface);
+      padding: 0.85rem 1rem;
+      margin: 1rem 0;
+      border-radius: 0 8px 8px 0;
+    }
+    ol.gaps li { margin: 0.5rem 0; }
+    footer { margin-top: 3rem; font-size: 0.8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Transcript execution audit</h1>
+    <p class="meta">
+      Source: <span class="mono">docs/transcript-81e566e4-full-clean.txt</span> (parent chat 81e566e4)<br />
+      Audit type: <strong>static codebase review</strong> + spot checks (not full E2E browser / device lab)<br />
+      Generated: 2026-03-31
+    </p>
+
+    <div class="callout">
+      <strong>Summary.</strong> Most <em>repository-deliverable</em> tasks from the transcript are implemented: migrations through
+      <span class="mono">019_clean_10_status_architecture.sql</span>, settings surfaces, reports shell, enterprise web UIs,
+      mobile auth/OTA/slips/clean-bin/locate-tag/camera flows, and worker-backed catalog jobs. Remaining gaps are concentrated in
+      <strong>Lightspeed write / transfer orchestration</strong>, some <strong>POS compare “push” semantics</strong>,
+      <strong>report table population</strong> (triggers), <strong>theme coverage on legacy pages</strong>, and
+      <strong>Shopify quantity ↔ <span class="mono">is_sellable</span></strong> (explicitly noted as future in transcript).
+    </div>
+
+    <h2>1. Methodology (deep test scope)</h2>
+    <ul>
+      <li>Mapped major <strong>user</strong> prompts in the transcript to feature themes (status/catalog, users/locations, tenant handheld sync, UI/theme, reports 015, enterprise 017, Clean 10, Geiger, gap-closure items).</li>
+      <li>Verified presence and shape of implementation via <strong>file search</strong>, <strong>grep</strong>, and selective <strong>file reads</strong> under <span class="mono">app/</span>, <span class="mono">lib/</span>, <span class="mono">scripts/migrations/</span>, <span class="mono">mobile/carbon_wms/</span>.</li>
+      <li>Did <strong>not</strong> run a full Playwright suite, Coolify deploy, or on-sled RFID regression in this pass; those remain recommended manual/device verification.</li>
+    </ul>
+
+    <h2>2. Workstream status vs transcript</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Theme</th>
+          <th>Transcript intent</th>
+          <th>Status</th>
+          <th>Evidence / notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Machine cleanup</td>
+          <td>Remove Android Studio from C:/ D:/</td>
+          <td><span class="badge na">N/A repo</span></td>
+          <td>Local ops; transcript documents admin steps for Start Menu/registry.</td>
+        </tr>
+        <tr>
+          <td>Status labels + catalog (010/011)</td>
+          <td>Schema, seed, /settings/statuses, Lightspeed catalog tab + Qty</td>
+          <td><span class="badge done">Done</span></td>
+          <td><span class="mono">010_status_labels.sql</span>, <span class="mono">011_custom_skus_lightspeed_qty.sql</span>, workspace + catalog.</td>
+        </tr>
+        <tr>
+          <td>Master 5-step status/catalog</td>
+          <td>CRUD, 21 seeds, toolbar, catalog dropdowns</td>
+          <td><span class="badge done">Done</span></td>
+          <td>Superseded later by Clean 10; current UI is Clean 10 model.</td>
+        </tr>
+        <tr>
+          <td>Users / roles / locations</td>
+          <td>012 + /settings/users, /settings/locations</td>
+          <td><span class="badge done">Done</span></td>
+          <td><span class="mono">012_users_roles_locations.sql</span>, pages exist.</td>
+        </tr>
+        <tr>
+          <td>Tenant handheld / EPC (013)</td>
+          <td>tenant_settings, mobile-sync, Flutter templates + power hints</td>
+          <td><span class="badge done">Done</span></td>
+          <td><span class="mono">013_tenant_settings_handheld.sql</span>, APIs + Flutter <span class="mono">MobileSettingsRepository</span>.</td>
+        </tr>
+        <tr>
+          <td>UI overhaul (014)</td>
+          <td>Accordion sidebar, theme engine, dashboard grid, upload logs, bins seed, CSV putaway + manual CSV</td>
+          <td><span class="badge partial">Partial</span></td>
+          <td>Core pieces in repo; transcript itself noted some pages still hardcoded <span class="mono">slate</span> vs tokens.</td>
+        </tr>
+        <tr>
+          <td>Reports module (015)</td>
+          <td>audit tables, APIs, pages, tabs, toolbar</td>
+          <td><span class="badge partial">Partial</span></td>
+          <td>Schema + routes + UI exist; <strong>date range</strong> is placeholder (“Date range — soon” in <span class="mono">report-toolbar.tsx</span>). Row population depends on writers/triggers elsewhere.</td>
+        </tr>
+        <tr>
+          <td>Migrate idempotency / Coolify</td>
+          <td>Fix repeat migrate, deploy poll</td>
+          <td><span class="badge done">Done</span></td>
+          <td>Transcript describes <span class="mono">bins_status_check</span> fix + <span class="mono">deploy:coolify:watch</span> pattern.</td>
+        </tr>
+        <tr>
+          <td>Enterprise web (017)</td>
+          <td>OTA upload, devices, transfers, bulk status, POS compare, clean bin API</td>
+          <td><span class="badge partial">Partial</span></td>
+          <td>Pages + APIs present. <strong>LS transfer push/close on slip lifecycle</strong> not wired in <span class="mono">transfer-slips/route.ts</span> (no LS client call).</td>
+        </tr>
+        <tr>
+          <td>Enterprise mobile</td>
+          <td>Device gate, OTA, slider, camera, transfers, clean bin, lookup</td>
+          <td><span class="badge partial">Partial</span></td>
+          <td><span class="mono">TransferSlipsScreen</span>, <span class="mono">clean_bin_screen.dart</span>, <span class="mono">locate_tag_screen.dart</span>, <span class="mono">openCameraBarcodeScanner</span> on putaway/encode/lookup. “Continuous scan zone” + rich identity card: lookup is API-driven + RFID context, not identical to prose spec.</td>
+        </tr>
+        <tr>
+          <td>Advanced flags → Clean 10</td>
+          <td>018 then 019 destructive Clean 10 + ghost filters</td>
+          <td><span class="badge done">Done</span></td>
+          <td><span class="mono">019_clean_10_status_architecture.sql</span>, enforcement + Flutter visibility.</td>
+        </tr>
+        <tr>
+          <td>Locate Tag (Geiger)</td>
+          <td>RSSI radar, beeps, EPC filter, hold trigger</td>
+          <td><span class="badge done">Done</span></td>
+          <td><span class="mono">locate_tag_screen.dart</span>, <span class="mono">geiger_beep_wav.dart</span>, <span class="mono">GEIGER_FIND</span> path.</td>
+        </tr>
+        <tr>
+          <td>Background job: Lightspeed pull</td>
+          <td>Transcript mid-thread said stub only</td>
+          <td><span class="badge done">Done (current)</span></td>
+          <td><strong>Transcript drift:</strong> <span class="mono">scripts/worker.ts</span> now treats <span class="mono">lightspeed_pull</span> like <span class="mono">lightspeed_catalog</span> via <span class="mono">executeLightspeedCatalogJob</span>. UI copy in <span class="mono">sync-panel.tsx</span> states worker must run. Older chat explanation is outdated.</td>
+        </tr>
+        <tr>
+          <td>Integrations POST push</td>
+          <td>Push WMS counts to LS to fix variances</td>
+          <td><span class="badge gap">Gap</span></td>
+          <td><span class="mono">app/api/integrations/lightspeed/push/route.ts</span> documents <span class="mono">stub_record_only</span> — records <span class="mono">sync_jobs</span>, no LS write API.</td>
+        </tr>
+        <tr>
+          <td>Matrix “quantities” expectation</td>
+          <td>User expected LS qty on matrix as EPC counts</td>
+          <td><span class="badge partial">Product</span></td>
+          <td>Transcript explains EPC columns are RFID/WMS; <span class="mono">ls_on_hand_total</span> lives on catalog path. Not a missing commit—clarification.</td>
+        </tr>
+        <tr>
+          <td>Shopify + is_sellable</td>
+          <td>Clean 10 column “controls Shopify qty”</td>
+          <td><span class="badge gap">Gap</span></td>
+          <td>UI copy references quantity sync; no Shopify connector in repo (Shopify removed per migration <span class="mono">009_remove_shopify.sql</span>). Flag is stored/enforced in WMS, not pushed to Shopify.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Documented gaps (prioritized)</h2>
+    <ol class="gaps">
+      <li><strong class="bad">P1 — Lightspeed inventory write / transfer sync.</strong> Enterprise prompt asked to create LS transfers when slips are created and close with quantities. <span class="mono">createTransferSlip</span> path does not call Lightspeed; <span class="mono">ls_transfer_id</span> column exists but is not populated by an integration in the reviewed routes.</li>
+      <li><strong class="bad">P1 — POST /api/integrations/lightspeed/push.</strong> Explicit stub: audit row only. POS compare “Push to LS” cannot correct remote inventory via API yet.</li>
+      <li><strong class="warn">P2 — Report UX completeness.</strong> Date range filter on report toolbars is still a placeholder; data tables may stay empty until application code writes to <span class="mono">inventory_audit_logs</span> / movement tables consistently.</li>
+      <li><strong class="warn">P2 — Theme token coverage.</strong> Transcript noted straggler pages with hardcoded slate; not re-audited page-by-page here—risk of inconsistent light/large mode.</li>
+      <li><strong class="warn">P2 — Flutter spec fidelity.</strong> Transfer + lookup flows exist and hit APIs; wording in the original enterprise prompt (e.g. laser auto-EPC in print, closed-loop UX details) should be validated on hardware.</li>
+      <li><strong class="warn">P3 — Worker dependency for queued pulls.</strong> Enqueued <span class="mono">lightspeed_pull</span> jobs require <span class="mono">npm run worker</span> (or a second Coolify service). Without it, jobs sit queued—operational, not code gap.</li>
+    </ol>
+
+    <h2>4. Recommended verification (beyond this audit)</h2>
+    <ul>
+      <li><span class="mono">npm run build</span> and <span class="mono">npx tsc --noEmit</span> on a clean machine after <span class="mono">npm run db:migrate</span>.</li>
+      <li><span class="mono">flutter analyze</span> + release APK from junction path per <span class="mono">mobile/carbon_wms/README.md</span>.</li>
+      <li>Production: <span class="mono">GET /api/health</span>, <span class="mono">GET /api/health/ready</span>, migrate strategy (<span class="mono">WMS_AUTO_MIGRATE</span> or manual), worker process if using job queue.</li>
+      <li>On-device: Geiger RSSI, transfer slips, clean bin, OTA install, device authorization.</li>
+    </ul>
+
+    <footer>
+      This report is a static snapshot. For the exact chat text, see
+      <span class="mono">docs/transcript-81e566e4-full-clean.txt</span>.
+    </footer>
+  </main>
+</body>
+</html>
