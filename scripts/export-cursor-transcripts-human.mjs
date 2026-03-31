@@ -41,6 +41,14 @@ function walkJsonlFiles(dir) {
   return out;
 }
 
+/** Oldest first: use transcript file birthtime (Windows: Creation time), else mtime. */
+function transcriptSortKey(filePath) {
+  const st = fs.statSync(filePath);
+  const birth = st.birthtimeMs;
+  if (birth && birth > 0) return birth;
+  return st.mtimeMs;
+}
+
 function cleanUserText(text) {
   if (!text) return "";
   let t = String(text).trim();
@@ -81,8 +89,8 @@ const outFile =
   process.argv[3] ||
   path.join(repoRoot, "combined-cursor-conversations-user-cursor.txt");
 
-const files = walkJsonlFiles(transcriptDir).sort((a, b) =>
-  path.basename(a).localeCompare(path.basename(b)),
+const files = walkJsonlFiles(transcriptDir).sort(
+  (a, b) => transcriptSortKey(a) - transcriptSortKey(b),
 );
 
 if (files.length === 0) {
@@ -99,6 +107,7 @@ const header = [
   `Generated: ${new Date().toISOString()}`,
   `Source: ${transcriptDir}`,
   `Chats (files): ${files.length}`,
+  "Chats: oldest → newest (by transcript .jsonl file creation time on this machine).",
   "Format: User / Cursor (chronological within each chat).",
   "",
 ].join("\n");
@@ -107,8 +116,15 @@ const sections = [header];
 
 for (const file of files) {
   const id = path.basename(file, ".jsonl");
+  const st = fs.statSync(file);
+  const created = st.birthtimeMs > 0 ? st.birthtime : st.mtime;
+  const createdLabel = created.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  });
   sections.push("=".repeat(80));
   sections.push(`Chat: ${id}`);
+  sections.push(`Transcript file created: ${createdLabel}`);
   sections.push("=".repeat(80));
   sections.push("");
 
