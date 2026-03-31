@@ -1,23 +1,68 @@
 /**
- * Reads combined-cursor-conversations-user-cursor.txt and writes a slimmer file:
- * only User messages that look like project dev work (WMS / mobile / deploy / repo),
- * excluding drive cleanup, personal SDK-on-D setup, OneDrive, 123Scan PC choice, etc.
+ * Extracts project-oriented User prompts from Cursor parent-chat transcripts.
  *
- * Order: same as source (oldest → newest). Consecutive duplicate prompts are collapsed.
+ * **Source:** Reads `*.jsonl` directly (full message text as stored by Cursor).
+ * Does not use combined-cursor-conversations-user-cursor.txt — that intermediate
+ * format cannot add text missing from JSONL. If a prompt ends mid-sentence in
+ * the export, Cursor’s log for that turn is incomplete; there is nothing else
+ * to pull from these files.
+ *
+ * Order: oldest chat → newest (by .jsonl file birthtime), then line order within each file.
+ * Consecutive duplicate prompts (after sanitize) are collapsed.
  *
  * Usage:
- *   node scripts/extract-project-prompts-from-transcript.mjs [input.txt] [output.txt]
+ *   node scripts/extract-project-prompts-from-transcript.mjs [agentTranscriptsDir] [output.txt]
+ *
+ * Env:
+ *   CURSOR_AGENT_TRANSCRIPTS_DIR
  */
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 
-const defaultIn = path.join(repoRoot, "combined-cursor-conversations-user-cursor.txt");
+const defaultTranscriptRoot = path.join(
+  os.homedir(),
+  ".cursor",
+  "projects",
+  "d-Projects-My-project-carbon-warehouse-management",
+  "agent-transcripts",
+);
+
 const defaultOut = path.join(repoRoot, "project-dev-prompts-chronological.txt");
+
+function walkJsonlFiles(dir) {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, ent.name);
+    if (ent.isDirectory()) out.push(...walkJsonlFiles(p));
+    else if (ent.isFile() && ent.name.endsWith(".jsonl")) out.push(p);
+  }
+  return out;
+}
+
+function transcriptSortKey(filePath) {
+  const st = fs.statSync(filePath);
+  if (st.birthtimeMs > 0) return st.birthtimeMs;
+  return st.mtimeMs;
+}
+
+function textFromContent(content) {
+  if (!Array.isArray(content)) return "";
+  const parts = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    if (block.type === "text" && typeof block.text === "string") {
+      parts.push(block.text);
+    }
+  }
+  return parts.join("\n").trim();
+}
 
 /** Non–project housekeeping / machine setup — drop if any matches (case-insensitive). */
 const EXCLUDE_BODY = [
@@ -48,10 +93,10 @@ const EXCLUDE_BODY = [
   /^clean it all\s*$/i,
 ];
 
-/** Drop whole message if it looks like only Cursor/system scaffolding with no real ask. */
 function isNoiseOnly(body) {
   const t = body.trim();
-  if (t.length < 8) return true;
+  if (t.length === 0) return true;
+  if (t.length < 8 && !/\S{4,}/.test(t)) return true;
   if (/^\[Attached image\(s\)\]\s*$/i.test(t)) return true;
   if (/^<git_status>[\s\S]*<\/git_status>\s*$/i.test(t) && !/<user_query>[\s\S]*\S/.test(t))
     return true;
@@ -60,9 +105,6 @@ function isNoiseOnly(body) {
 
 function shouldExclude(body) {
   if (isNoiseOnly(body)) return true;
-  const oneLine = body.replace(/\s+/g, " ").trim();
-  if (oneLine.length < 12 && !/(deploy|migrate|wms|api|fix|build|apk|commit|push)/i.test(oneLine))
-    return true;
   return EXCLUDE_BODY.some((re) => re.test(body));
 }
 
@@ -70,98 +112,93 @@ function normalizeForDedupe(body) {
   return body
     .replace(/\r\n/g, "\n")
     .split("\n")
-    .map((l) => l.replace(/^\s{2}/, "").trimEnd())
+    .map((l) => l.trimEnd())
     .join("\n")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
 }
 
-function formatBody(body) {
-  return body
-    .split("\n")
-    .map((l) => (l.startsWith("  ") ? l.slice(2) : l))
-    .join("\n")
-    .trim();
-}
-
-/** Remove Cursor-injected context blobs; keep the user’s actual words when tagged. */
+/**
+ * Strip Cursor-injected blobs. Prefer inner <user_query> when present.
+ * Removes <attached_files> blocks (file paths / selections) but keeps surrounding text.
+ */
 function sanitizeBody(body) {
   let t = body;
   t = t.replace(/<external_links>[\s\S]*?<\/external_links>\s*/gi, "");
   t = t.replace(/<git_status>[\s\S]*?<\/git_status>\s*/gi, "");
   t = t.replace(/<agent_transcripts>[\s\S]*?<\/agent_transcripts>\s*/gi, "");
   t = t.replace(/<attached_folders>[\s\S]*?<\/attached_folders>\s*/gi, "");
+  t = t.replace(/<attached_files>[\s\S]*?<\/attached_files>\s*/gi, "");
   const uq = t.match(/<user_query>\s*([\s\S]*?)\s*<\/user_query>/i);
   if (uq) t = uq[1].trim();
   t = t.replace(/^\[Image\]\s*/i, "").trim();
   return t.trim();
 }
 
-function parseUserMessages(text) {
-  const lines = text.split(/\n/);
-  const messages = [];
-  let collecting = false;
-  let buf = [];
-
-  const flush = () => {
-    if (!collecting || buf.length === 0) return;
-    const raw = buf.join("\n");
-    const formatted = formatBody(raw);
-    if (formatted) messages.push(formatted);
-    buf = [];
-  };
-
-  for (const line of lines) {
-    if (line === "User:") {
-      flush();
-      collecting = true;
+function extractUserPromptsFromJsonl(filePath) {
+  const raw = fs.readFileSync(filePath, "utf8");
+  const out = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let rec;
+    try {
+      rec = JSON.parse(trimmed);
+    } catch {
       continue;
     }
-    if (collecting && (line === "Cursor:" || line.startsWith("="))) {
-      flush();
-      collecting = false;
-      continue;
-    }
-    if (collecting) buf.push(line);
+    if (rec.role !== "user") continue;
+    const blob = textFromContent(rec.message?.content);
+    if (!blob) continue;
+    const body = sanitizeBody(blob);
+    if (!body) continue;
+    if (shouldExclude(body)) continue;
+    out.push({
+      body,
+      chatId: path.basename(filePath, ".jsonl"),
+      sourceFile: filePath,
+    });
   }
-  flush();
-  return messages;
+  return out;
 }
 
-const inputPath = process.argv[2] || defaultIn;
+const transcriptDir =
+  process.argv[2] || process.env.CURSOR_AGENT_TRANSCRIPTS_DIR || defaultTranscriptRoot;
 const outputPath = process.argv[3] || defaultOut;
 
-if (!fs.existsSync(inputPath)) {
-  console.error("Input not found:", inputPath);
-  console.error("Run: node scripts/export-cursor-transcripts-human.mjs");
+if (!fs.existsSync(transcriptDir)) {
+  console.error("Transcripts directory not found:", transcriptDir);
+  console.error("Set CURSOR_AGENT_TRANSCRIPTS_DIR or pass the path to agent-transcripts.");
   process.exit(1);
 }
 
-const text = fs.readFileSync(inputPath, "utf8");
-const allUser = parseUserMessages(text);
+const files = walkJsonlFiles(transcriptDir).sort(
+  (a, b) => transcriptSortKey(a) - transcriptSortKey(b),
+);
+
+const merged = [];
+for (const file of files) {
+  merged.push(...extractUserPromptsFromJsonl(file));
+}
 
 const kept = [];
 let lastKey = null;
-for (const raw of allUser) {
-  const body = sanitizeBody(raw);
-  if (!body) continue;
-  if (shouldExclude(body)) continue;
+for (const { body, chatId, sourceFile } of merged) {
   const key = normalizeForDedupe(body);
-  if (key.length < 20 && !/\b(wms|deploy|migrate|lightspeed|inventory|rfid|flutter|api|docker|coolify|next|sql|tenant)\b/i.test(body))
-    continue;
   if (key === lastKey) continue;
   lastKey = key;
-  kept.push(body);
+  kept.push({ body, chatId, sourceFile });
 }
 
-// Relax: some valid short prompts ("deploy", "yes do it") — second pass: re-include if we were too aggressive
-// For bodies 12-19 chars, allow if project keyword
 const header = [
   "Carbon WMS — project development prompts (User only)",
   `Extracted: ${new Date().toISOString()}`,
-  `Source: ${inputPath}`,
-  `Included: ${kept.length} prompts (consecutive duplicates removed; drive/SDK/PC-only cleanup excluded; websearch/git_status wrappers stripped).`,
+  `Source: ${transcriptDir} (*.jsonl, oldest → newest by file creation time)`,
+  `Included: ${kept.length} prompts (consecutive duplicates removed; drive/SDK/PC-only cleanup excluded).`,
+  "",
+  "Note: Text is exactly what Cursor stored per user turn. If a line ends abruptly,",
+  "that turn was incomplete in the chat log — reruns cannot recover missing words.",
   "",
   "---",
   "",
@@ -169,8 +206,9 @@ const header = [
 
 const chunks = [header];
 let n = 1;
-for (const body of kept) {
+for (const { body, chatId, sourceFile } of kept) {
   chunks.push(`${n}.`);
+  chunks.push(`Chat: ${chatId}`);
   chunks.push("");
   chunks.push(body);
   chunks.push("");
@@ -180,4 +218,6 @@ for (const body of kept) {
 }
 
 fs.writeFileSync(outputPath, chunks.join("\n"), "utf8");
-console.log("Wrote", outputPath, "prompts:", kept.length, "bytes:", fs.statSync(outputPath).size);
+console.log("Wrote", outputPath);
+console.log("Prompts:", kept.length, "bytes:", fs.statSync(outputPath).size);
+console.log("JSONL files:", files.length);
