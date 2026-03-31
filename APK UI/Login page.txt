@@ -137,7 +137,7 @@
 <label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">USER EMAIL</label>
 <div class="login-email-row h-16 bg-surface-container-low field-row flex items-center min-w-0 px-4 rounded-md">
 <span class="material-symbols-outlined text-outline" data-icon="person">person</span>
-<input class="login-email-field bg-transparent border-none min-w-0 flex-1 font-label text-base font-medium text-on-surface placeholder:text-on-surface focus:ring-0 pl-0 shadow-none" type="email" value="" placeholder="operator@carbonjeanscompany.com" autocomplete="email">
+<input class="login-email-field bg-transparent border-none min-w-0 flex-1 font-label text-base font-medium text-on-surface placeholder:text-on-surface focus:ring-0 pl-0 shadow-none" type="email" value="" placeholder="user@carbonjeanscompany.com" autocomplete="email">
 </div>
 </div>
 <!-- Password -->
