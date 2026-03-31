@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CarbonWMS — Localhost vs wms.shopcarbon.com</title>
+  <style>
+    :root {
+      --bg: #0a0d12;
+      --surface: #121820;
+      --border: #243044;
+      --text: #e7ebf0;
+      --muted: #8b97a8;
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --info: #60a5fa;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; font-size: 14px; }
+    main { max-width: 1080px; margin: 0 auto; padding: 2rem 1.25rem 3.5rem; }
+    h1 { font-size: 1.45rem; margin: 0 0 0.35rem; letter-spacing: -0.02em; }
+    h2 { font-size: 1.08rem; margin: 2rem 0 0.65rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+    h3 { font-size: 0.95rem; color: var(--muted); margin: 1.1rem 0 0.4rem; }
+    .muted { color: var(--muted); font-size: 0.88rem; }
+    .meta { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.6rem 0; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.55rem; text-align: left; vertical-align: top; }
+    th { background: var(--surface); color: var(--muted); }
+    code { font-family: ui-monospace, monospace; font-size: 0.88em; color: #a5c4e8; }
+    .pill { display: inline-block; padding: 0.12rem 0.4rem; border-radius: 4px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .p-ok { background: rgba(52, 211, 153, 0.14); color: var(--ok); }
+    .p-warn { background: rgba(251, 191, 36, 0.12); color: var(--warn); }
+    .p-bad { background: rgba(248, 113, 113, 0.12); color: var(--bad); }
+    ul.tight li { margin-bottom: 0.35rem; }
+    .file { color: #93c5fd; }
+    footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
+    pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; overflow-x: auto; font-size: 0.78rem; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>CarbonWMS — Localhost vs <code>wms.shopcarbon.com</code></h1>
+    <p class="muted">Generated from repository state. <strong>Bins are not “synced” between environments</strong> by the application — they live in PostgreSQL. This report explains why localhost can show bins that production does not, how to verify deploy parity, and how to align data safely.</p>
+
+    <div class="meta">
+      <strong>TL;DR — Why bins show on localhost but not on production</strong>
+      <ul class="tight">
+        <li><span class="pill p-ok">Expected</span> <strong>Two separate databases.</strong> Local <code>npm run dev</code> uses <code>DATABASE_URL</code> from your machine (often Docker Postgres on <code>localhost:5432</code>). Production uses the Postgres instance linked in Coolify for the WMS app.</li>
+        <li>Bins are rows in the <code>bins</code> table, scoped by <code>location_id</code> → <code>locations.tenant_id</code>. The UI loads them via server components and <code>GET /api/locations/bins</code> using your session’s tenant (<code>session.tid</code>).</li>
+        <li>Running <code>npm run seed</code> (or bootstrap) on <strong>local only</strong> inserts Orlando-style bins into <strong>local</strong> Postgres — production never sees that unless you run equivalent SQL or use the WMS UI on production.</li>
+        <li>There is <strong>no</strong> built-in “push bins to cloud” job. The repo includes <span class="file">scripts/db-mirror-ssh-dump-restore.mjs</span> for <strong>production → local</strong> mirror, not the reverse.</li>
+      </ul>
+    </div>
+
+    <h2>1. Architecture: where bins live</h2>
+    <table>
+      <thead>
+        <tr><th>Layer</th><th>Localhost (<code>http://localhost:3040</code>)</th><th>Production (<code>https://wms.shopcarbon.com</code>)</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>App code</strong></td>
+          <td colspan="2">Same Next.js app from Git when you deploy. Differences are <strong>only</strong> env + database contents + optional build-time vars (<code>WMS_BASE_PATH</code>, etc.).</td>
+        </tr>
+        <tr>
+          <td><strong>PostgreSQL</strong></td>
+          <td>Your <code>.env</code> / <code>.env.local</code> <code>DATABASE_URL</code> (e.g. <code>localhost:5432/carbon_wms</code>).</td>
+          <td>Coolify-injected <code>DATABASE_URL</code> to the WMS-linked Postgres container (internal hostname on Docker network).</td>
+        </tr>
+        <tr>
+          <td><strong>Bins data</strong></td>
+          <td>Whatever was inserted on <strong>this</strong> DB: seed, manual Overview → Locations, imports, migrations.</td>
+          <td>Whatever exists on <strong>production</strong> DB only.</td>
+        </tr>
+        <tr>
+          <td><strong>Tenant</strong></td>
+          <td colspan="2">Same email can exist in both DBs with <strong>different</strong> <code>tenant_id</code> UUIDs. Always compare data under the tenant your session uses (see §4).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>1.1 Code paths (reference)</h3>
+    <ul class="tight">
+      <li><span class="file">app/(main)/overview/locations/page.tsx</span> — server-rendered list via <code>listTenantLocationsWithBins</code>.</li>
+      <li><span class="file">lib/server/overview-locations.ts</span> — <code>upsertBin</code>, listing with counts.</li>
+      <li><span class="file">app/api/locations/bins/route.ts</span> — JSON API for bins (session + location).</li>
+      <li><span class="file">scripts/seed.ts</span> — generates many bin codes for location <code>001</code> (Orlando grid) on the DB pointed to by <code>DATABASE_URL</code> when you run seed.</li>
+    </ul>
+
+    <h2>2. Live checks performed from the dev environment</h2>
+    <table>
+      <thead>
+        <tr><th>Check</th><th>Result</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>GET https://wms.shopcarbon.com/api/health</code></td>
+          <td><span class="pill p-ok">200</span> (at report time)</td>
+          <td>Liveness only; does not prove DB contents or git SHA.</td>
+        </tr>
+        <tr>
+          <td><code>GET http://localhost:3040/api/health</code></td>
+          <td><span class="pill p-ok">200</span> (when dev server running)</td>
+          <td>Same as above.</td>
+        </tr>
+        <tr>
+          <td>Production deployed git commit</td>
+          <td><span class="pill p-warn">Not verified here</span></td>
+          <td>Coolify UI → WMS app → latest successful deployment shows build context; compare to <code>git rev-parse HEAD</code> on <code>main</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Recent <code>main</code> commits (code not live until Coolify deploy succeeds)</h2>
+    <p class="muted">If production was last deployed days ago, everything below may be “in Git but not on wms.shopcarbon.com” until you redeploy. Ordered newest first.</p>
+    <pre>c17ffff chore: npm run clean:next to fix corrupted Next dev cache (ENOENT uploads/login)
+7fadc55 fix(mobile-ota): lowercase APK filename on disk for Linux; clarify 404 message
+9eab6f6 fix(mobile): shorten WmsApiException when server returns HTML (404 page)
+1a1d880 fix(settings): auto-fill Mobile OTA version label from APK filename (e.g. v0.1.10+14)
+4855027 fix(coolify): ensure-uploads-volume success path only on list OK; clean exit on 404 (Windows)
+8533605 chore(coolify): script to ensure-uploads-volume; handle pre-storages API 404
+2e38265 docs(rules): Coolify persistent uploads path; add Coolify API debug scripts
+1e38c72 fix(ota): document persistent volume for uploads; clearer APK 404 on handheld
+ee7ed4e chore(rules): flutter APK rule references versioned CarbonWMS V*.apk drop
+fde1c68 chore(rules): mandate versioned APK filename CarbonWMS V{pubspec}.apk; build script copies to release folder
+d9d8dba fix(ota): allow anonymous GET for /uploads/mobile-apk; validate APK bytes on device
+c707b30 docs(ui): clarify Device binding is pending-only; point to Infrastructure Devices
+86c34ee fix(next): raise proxyClientMaxBodySize for large APK multipart uploads
+5315d46 fix(coolify): sync DATABASE_URL at runtime; docs + Mobile OTA error hint
+ce40de7 chore: upload script reads .env.coolify.local; WORKER Coolify steps; hub links on orders/compare/alerts
+8bd5a3c feat(mobile+docs): encode retry queue, server ZPL scan tab, refresh audits, APK upload CLI
+0f8ec50 docs: note Coolify deploy in gap-closure report footer
+60824c7 feat(web+mobile): close audit gaps — Bearer API auth, transfer slips receive, mobile clean-bin/item-detail, Flutter flows, gap report</pre>
+    <p class="muted">Replace with <code>git log -30 --oneline</code> anytime to refresh this list in a new export.</p>
+
+    <h2>4. Environment variable differences (names only)</h2>
+    <table>
+      <thead>
+        <tr><th>Variable</th><th>Typical localhost</th><th>Typical production (Coolify)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>DATABASE_URL</code></td><td>Local / Docker Postgres host</td><td>Internal Postgres service URL</td></tr>
+        <tr><td><code>WMS_APP_PUBLIC_BASE_URL</code> / <code>NEXT_PUBLIC_BASE_URL</code></td><td><code>http://localhost:3040</code> (often set by <span class="file">scripts/run-next-dev.mjs</span>)</td><td><code>https://wms.shopcarbon.com</code></td></tr>
+        <tr><td><code>WMS_AUTO_MIGRATE</code> / <code>WMS_AUTO_SEED</code></td><td>Often off after first setup</td><td>Often <code>0</code> in production (per <span class="file">.env.example</span> guidance)</td></tr>
+        <tr><td><code>NODE_ENV</code></td><td><code>development</code></td><td><code>production</code></td></tr>
+      </tbody>
+    </table>
+    <p class="muted">Never commit real secrets. Use Coolify UI + gitignored <code>.env.coolify.local</code> for mirrors.</p>
+
+    <h2>5. How to make production bins match local (or vice versa)</h2>
+    <h3>5.1 Recommended: use the WMS UI on production</h3>
+    <p>Log in to <strong>https://wms.shopcarbon.com</strong> → <strong>Overview → Locations &amp; bins</strong> and create the same bin codes you need. This avoids UUID / tenant mistakes.</p>
+
+    <h3>5.2 Copy data with SQL (advanced)</h3>
+    <p>Export <code>locations</code> / <code>bins</code> (and related rows if needed) from one DB and import into the other, <strong>rewriting <code>tenant_id</code> / <code>location_id</code> to match production’s UUIDs</strong>. Wrong IDs will create orphan rows or violate FKs. Prefer a one-off migration script reviewed by someone who knows your tenant layout.</p>
+
+    <h3>5.3 Mirror production → laptop (see bins as on live)</h3>
+    <p>Use <span class="file">scripts/db-mirror-ssh-dump-restore.mjs</span> (documented in the script header) to replace <strong>local</strong> Postgres with a dump from the Coolify host. After that, localhost shows <strong>production’s</strong> bins, not the other way around.</p>
+
+    <h2>6. Troubleshooting checklist</h2>
+    <ul class="tight">
+      <li><span class="pill p-warn">Different tenant</span> Confirm you’re logged into the same logical warehouse/tenant on both hosts (memberships can differ per DB).</li>
+      <li><span class="pill p-warn">Stale deploy</span> Redeploy WMS on Coolify after pushing <code>main</code> if you expect new API/UI behavior.</li>
+      <li><span class="pill p-warn">Production DB empty</span> If production never ran seed/bootstrap, locations/bins tables may simply have fewer rows.</li>
+      <li><span class="pill p-bad">DATABASE_URL wrong in Coolify</span> App may fall back to empty data or errors on overview pages — check <code>/api/health/ready</code> if you use DB readiness separately from liveness.</li>
+    </ul>
+
+    <h2>7. Summary table</h2>
+    <table>
+      <thead>
+        <tr><th>Question</th><th>Answer</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Are bins “synced” to wms.shopcarbon.com automatically?</td><td><strong>No.</strong> Each environment reads its own Postgres.</td></tr>
+        <tr><td>Why do I see bins only locally?</td><td>They were inserted into your <strong>local</strong> database (seed/UI), not into production’s database.</td></tr>
+        <tr><td>How do I know code is live on production?</td><td>Confirm latest Coolify deployment commit matches <code>main</code> (or the tag you expect).</td></tr>
+        <tr><td>Quick dev fix for corrupted Next cache</td><td><code>npm run clean:next</code> then <code>npm run dev</code> (see <span class="file">scripts/clean-next-cache.mjs</span>).</td></tr>
+      </tbody>
+    </table>
+
+    <footer>
+      Report path: <span class="file">docs/localhost-vs-wms-shopcarbon-report.html</span> — open in a browser. Regenerate or append <code>git log</code> when auditing deploy drift. Do not embed production secrets in copies of this file.
+    </footer>
+  </main>
+</body>
+</html>
