@@ -2,6 +2,8 @@
  * Canonical defaults for `tenant_settings` JSONB columns (keep seed + mobile fallbacks aligned).
  */
 
+import { normalizeAntennaPowerDbm } from "@/lib/settings/antenna-power";
+
 export type EncodingStandard = "SENITRON" | "CUSTOM";
 
 export type EpcSettings = {
@@ -80,8 +82,9 @@ export const DEFAULT_HANDHELD_SETTINGS: HandheldSettings = {
   },
   transfer: {
     transferOutPowerLock: true,
-    transferOutAntennaPower: 270,
-    transferInAntennaPower: 240,
+    /** dBm 0–30 (defaults ~90% / 80% of max) */
+    transferOutAntennaPower: 27,
+    transferInAntennaPower: 24,
   },
   encoding: {
     validateEpcChecksum: true,
@@ -154,13 +157,9 @@ export function normalizeHandheldSettings(raw: unknown): HandheldSettings {
     if (typeof t.transferOutPowerLock === "boolean")
       base.transfer.transferOutPowerLock = t.transferOutPowerLock;
     if (typeof t.transferOutAntennaPower === "number" && Number.isFinite(t.transferOutAntennaPower))
-      base.transfer.transferOutAntennaPower = Math.round(
-        Math.min(300, Math.max(0, t.transferOutAntennaPower)),
-      );
+      base.transfer.transferOutAntennaPower = normalizeAntennaPowerDbm(t.transferOutAntennaPower);
     if (typeof t.transferInAntennaPower === "number" && Number.isFinite(t.transferInAntennaPower))
-      base.transfer.transferInAntennaPower = Math.round(
-        Math.min(300, Math.max(0, t.transferInAntennaPower)),
-      );
+      base.transfer.transferInAntennaPower = normalizeAntennaPowerDbm(t.transferInAntennaPower);
   }
   if (o.encoding && typeof o.encoding === "object") {
     const e = o.encoding as Record<string, unknown>;

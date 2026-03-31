@@ -101,6 +101,14 @@ class MainActivity : FlutterActivity() {
           }
           chainway.startInventoryFlutterResult(result)
         }
+        "rfid.setAntennaPower" -> {
+          val args = call.arguments as? Map<*, *>
+          val dbm = (args?.get("dbm") as? Number)?.toInt() ?: 30
+          val p = dbm.coerceIn(0, 30)
+          zebra.setAntennaPowerDbm(p)
+          chainway.setAntennaPowerDbm(p)
+          result.success(null)
+        }
         else -> result.notImplemented()
       }
     }

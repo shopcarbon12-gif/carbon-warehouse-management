@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/handheld_runtime_config.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/barcode_intake_screen.dart';
@@ -154,12 +155,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           builder: (context, settings, _) {
             final p = settings.config.transferOutAntennaPower
                 .toDouble()
-                .clamp(0.0, 300.0);
+                .clamp(0.0, kAntennaPowerDbmMax.toDouble());
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Tooltip(
-                  message: 'RF power (0–300)',
+                  message: 'RF power (0–30 dBm)',
                   child: Icon(Icons.settings_input_antenna, size: 20),
                 ),
                 SizedBox(
@@ -167,9 +168,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Slider(
                     value: p,
                     min: 0,
-                    max: 300,
-                    divisions: 30,
-                    label: '${p.round()}',
+                    max: kAntennaPowerDbmMax.toDouble(),
+                    divisions: kAntennaPowerDbmMax,
+                    label: '${p.round()} dBm',
                     onChanged: (v) async {
                       await settings.setGlobalAntennaPower(v.round());
                       if (context.mounted) {

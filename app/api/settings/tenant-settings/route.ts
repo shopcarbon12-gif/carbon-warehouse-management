@@ -5,6 +5,7 @@ import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
 import { ensureTenantSettings, updateTenantSettingsPartial } from "@/lib/queries/tenant-settings";
+import { normalizeAntennaPowerDbm } from "@/lib/settings/antenna-power";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,14 @@ const epcProfileSchema = z.object({
   serialLength: z.number().int().min(1).max(128),
   isActive: z.boolean(),
 });
+
+/** Accepts legacy 0–300 UI values and normalizes to 0–30 dBm. */
+const antennaPowerDbmSchema = z
+  .number()
+  .int()
+  .min(0)
+  .max(300)
+  .transform((n) => normalizeAntennaPowerDbm(n));
 
 const patchSchema = z.object({
   epc_settings: z
@@ -46,8 +55,8 @@ const patchSchema = z.object({
       transfer: z
         .object({
           transferOutPowerLock: z.boolean().optional(),
-          transferOutAntennaPower: z.number().int().min(0).max(300).optional(),
-          transferInAntennaPower: z.number().int().min(0).max(300).optional(),
+          transferOutAntennaPower: antennaPowerDbmSchema.optional(),
+          transferInAntennaPower: antennaPowerDbmSchema.optional(),
         })
         .optional(),
       encoding: z

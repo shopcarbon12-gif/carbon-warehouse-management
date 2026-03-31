@@ -7,6 +7,7 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Chainway UHF via reflection so the app compiles without vendor JARs.
@@ -24,8 +25,18 @@ class CarbonChainwayRfidController(
   private val scanning = AtomicBoolean(false)
   private var pollThread: Thread? = null
 
+  /** Output power in dBm (0–30); applied via reflection when DeviceAPI exposes setPower. */
+  private val requestedPowerDbm = AtomicInteger(30)
+
   fun setTagSink(sink: EventChannel.EventSink?) {
     tagSink = sink
+  }
+
+  fun setAntennaPowerDbm(dbm: Int) {
+    executor.execute {
+      requestedPowerDbm.set(dbm.coerceIn(0, 30))
+      tryApplyChainwayPower()
+    }
   }
 
   fun resolveUhfClass(): Class<*>? {
@@ -77,6 +88,7 @@ class CarbonChainwayRfidController(
           mainHandler.post { result.error("NOT_CONNECTED", "Chainway not connected", null) }
           return@execute
         }
+        tryApplyChainwayPower()
         val m0 = runCatching { cls.getMethod("startInventoryTag") }.getOrNull()
         val m2 =
           runCatching {
@@ -152,6 +164,19 @@ class CarbonChainwayRfidController(
       runCatching {
         cls.getDeclaredField("INSTANCE").apply { isAccessible = true }.get(null)
       }.getOrNull()
+    }
+  }
+
+  /** Best-effort: common Chainway UHF APIs use `setPower(int)` in dBm (often 0–30). */
+  private fun tryApplyChainwayPower() {
+    val cls = uhfClass ?: return
+    val inst = uhfInstance ?: return
+    val p = requestedPowerDbm.get().coerceIn(0, 30)
+    val names = listOf("setPower", "SetPower", "setOutputPower", "SetOutputPower")
+    for (name in names) {
+      val m = runCatching { cls.getMethod(name, Int::class.javaPrimitiveType) }.getOrNull() ?: continue
+      runCatching { m.invoke(inst, p) }
+      return
     }
   }
 

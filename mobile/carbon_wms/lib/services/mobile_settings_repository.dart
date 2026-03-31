@@ -33,9 +33,9 @@ class MobileSettingsRepository extends ChangeNotifier {
     _epcProfiles = TenantEpcProfile.listFromMobileSyncRoot(root);
   }
 
-  /// Runtime-only global power (0–300) for both transfer directions until next server sync.
+  /// Runtime-only global power (0–30 dBm) for both transfer directions until next server sync.
   Future<void> setGlobalAntennaPower(int power) async {
-    final p = power.clamp(0, 300);
+    final p = normalizeAntennaPowerDbm(power);
     _config = _config.copyWith(transferOutAntennaPower: p, transferInAntennaPower: p);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKeyConfig, _config.toJsonString());

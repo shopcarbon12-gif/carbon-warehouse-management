@@ -28,11 +28,15 @@ class ChainwayScanner implements RfidScanner {
     _runtime = config;
     final useOut =
         config.transferOutPowerLock && scanContext.toUpperCase().contains('TRANSFER');
-    final power = useOut ? config.transferOutAntennaPower : config.transferInAntennaPower;
+    final power =
+        normalizeAntennaPowerDbm(useOut ? config.transferOutAntennaPower : config.transferInAntennaPower);
+    if (_nativeLinked) {
+      unawaited(RfidVendorChannel.setAntennaPowerDbm(power));
+    }
     if (kDebugMode) {
       // ignore: avoid_print
       print(
-        '[ChainwayScanner] ctx=$scanContext power=$power (outLock=${config.transferOutPowerLock}) '
+        '[ChainwayScanner] ctx=$scanContext power=${power}dBm (outLock=${config.transferOutPowerLock}) '
         'hold=${config.triggerModeHoldRelease}',
       );
     }

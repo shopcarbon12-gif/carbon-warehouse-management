@@ -23,6 +23,8 @@ import com.zebra.rfid.api3.TriggerInfo
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.abs
 
 /**
  * Zebra RFID API3: prefers Bluetooth, then USB service transport.
@@ -36,6 +38,9 @@ class CarbonZebraRfidController(
 
   @Volatile private var tagSink: EventChannel.EventSink? = null
   @Volatile private var readerNameHint: String? = null
+
+  /** Requested output power in dBm (0–30), forwarded to the reader’s transmit power table. */
+  private val requestedPowerDbm = AtomicInteger(30)
 
   private var readers: Readers? = null
   private var readersAttached: Boolean = false
@@ -70,6 +75,13 @@ class CarbonZebraRfidController(
     executor.execute { disconnectSync() }
   }
 
+  fun setAntennaPowerDbm(dbm: Int) {
+    executor.execute {
+      requestedPowerDbm.set(dbm.coerceIn(0, 30))
+      reader?.takeIf { it.isConnected }?.let { applyTransmitPowerDbm(it) }
+    }
+  }
+
   fun startInventoryFlutterResult(result: MethodChannel.Result) {
     executor.execute {
       try {
@@ -78,6 +90,7 @@ class CarbonZebraRfidController(
           mainHandler.post { result.error("NOT_CONNECTED", "Zebra reader not connected", null) }
           return@execute
         }
+        applyTransmitPowerDbm(r)
         r.Actions.Inventory.perform()
         mainHandler.post { result.success(null) }
       } catch (e: InvalidUsageException) {
@@ -100,6 +113,44 @@ class CarbonZebraRfidController(
 
   fun dispose() {
     executor.execute { disconnectSync() }
+  }
+
+  /**
+   * Map requested dBm (0–30) to [RFIDReader.Config.Antennas] transmit power index.
+   * Zebra tables are often centi-dBm (value/100); otherwise treat entries as dBm.
+   */
+  private fun applyTransmitPowerDbm(r: RFIDReader) {
+    try {
+      val levels = r.ReaderCapabilities.transmitPowerLevelValues ?: return
+      if (levels.isEmpty()) return
+      val tgt = requestedPowerDbm.get().coerceIn(0, 30)
+      val idx = indexClosestToDbm(levels, tgt).coerceIn(0, levels.size - 1)
+      val config = r.Config.Antennas.getAntennaRfConfig(1)
+      config.setTransmitPowerIndex(idx)
+      config.setTari(0L)
+      config.setrfModeTableIndex(0L)
+      r.Config.Antennas.setAntennaRfConfig(1, config)
+    } catch (_: Exception) {
+      /* optional on some firmware */
+    }
+  }
+
+  private fun indexClosestToDbm(levels: IntArray, targetDbm: Int): Int {
+    val tgt = targetDbm.coerceIn(0, 30)
+    val maxRaw = levels.maxOrNull() ?: return 0
+    val useCenti = maxRaw > 33
+    var bestIdx = 0
+    var bestErr = Int.MAX_VALUE
+    for (i in levels.indices) {
+      val v = levels[i]
+      val dbm = if (useCenti) v / 100 else v
+      val err = abs(dbm - tgt)
+      if (err < bestErr) {
+        bestErr = err
+        bestIdx = i
+      }
+    }
+    return bestIdx
   }
 
   private fun openReaders() {
@@ -168,13 +219,7 @@ class CarbonZebraRfidController(
     r.Config.setStartTrigger(triggerInfo.StartTrigger)
     r.Config.setStopTrigger(triggerInfo.StopTrigger)
 
-    val levels = r.ReaderCapabilities.transmitPowerLevelValues
-    val maxIdx = ((levels?.size ?: 1) - 1).coerceAtLeast(0)
-    val config = r.Config.Antennas.getAntennaRfConfig(1)
-    config.setTransmitPowerIndex(maxIdx)
-    config.setTari(0L)
-    config.setrfModeTableIndex(0L)
-    r.Config.Antennas.setAntennaRfConfig(1, config)
+    applyTransmitPowerDbm(r)
 
     val sing = r.Config.Antennas.getSingulationControl(1)
     sing.setSession(SESSION.SESSION_S1)

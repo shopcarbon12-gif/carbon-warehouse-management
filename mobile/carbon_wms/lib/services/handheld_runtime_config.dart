@@ -1,5 +1,15 @@
 import 'dart:convert';
 
+/// UHF output power in **dBm**, valid range **0–30**. Legacy APIs used 0–300; scale on ingest.
+const int kAntennaPowerDbmMax = 30;
+
+int normalizeAntennaPowerDbm(int raw) {
+  if (raw > kAntennaPowerDbmMax) {
+    return ((raw * kAntennaPowerDbmMax) / 300).round().clamp(0, kAntennaPowerDbmMax);
+  }
+  return raw.clamp(0, kAntennaPowerDbmMax);
+}
+
 /// Subset of server `handheld_settings` applied to RFID drivers + UI templates.
 class HandheldRuntimeConfig {
   const HandheldRuntimeConfig({
@@ -39,8 +49,8 @@ class HandheldRuntimeConfig {
 
   static const HandheldRuntimeConfig fallback = HandheldRuntimeConfig(
     triggerModeHoldRelease: true,
-    transferOutAntennaPower: 270,
-    transferInAntennaPower: 240,
+    transferOutAntennaPower: 27,
+    transferInAntennaPower: 24,
     transferOutPowerLock: true,
     itemDetailsTemplate: '{{item.customSku}} - {{item.name}}',
     tagDetailsTemplate: '{{epc.id}}\n{{epc.status}} · {{epc.zone}}',
@@ -100,8 +110,12 @@ class HandheldRuntimeConfig {
       final m = jsonDecode(raw) as Map<String, dynamic>;
       return HandheldRuntimeConfig(
         triggerModeHoldRelease: m['triggerModeHoldRelease'] != false,
-        transferOutAntennaPower: (m['transferOutAntennaPower'] as num?)?.round().clamp(0, 300) ?? 270,
-        transferInAntennaPower: (m['transferInAntennaPower'] as num?)?.round().clamp(0, 300) ?? 240,
+        transferOutAntennaPower: normalizeAntennaPowerDbm(
+          (m['transferOutAntennaPower'] as num?)?.round() ?? fallback.transferOutAntennaPower,
+        ),
+        transferInAntennaPower: normalizeAntennaPowerDbm(
+          (m['transferInAntennaPower'] as num?)?.round() ?? fallback.transferInAntennaPower,
+        ),
         transferOutPowerLock: m['transferOutPowerLock'] != false,
         itemDetailsTemplate: m['itemDetailsTemplate'] as String? ?? fallback.itemDetailsTemplate,
         tagDetailsTemplate: m['tagDetailsTemplate'] as String? ?? fallback.tagDetailsTemplate,

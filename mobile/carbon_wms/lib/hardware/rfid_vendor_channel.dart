@@ -136,6 +136,19 @@ class RfidVendorChannel {
     } catch (_) {}
   }
 
+  /// Forward **0–30 dBm** to native Zebra/Chainway controllers (no scaling).
+  static Future<void> setAntennaPowerDbm(int dbm) async {
+    if (!_isAndroid) return;
+    final p = dbm.clamp(0, 30);
+    try {
+      await _method.invokeMethod<void>('rfid.setAntennaPower', <String, dynamic>{'dbm': p});
+    } on MissingPluginException {
+      /* iOS / unit tests */
+    } catch (_) {
+      /* optional vendor bridge */
+    }
+  }
+
   /// Tag reads from native layer (`epc` hex string, optional `rssi`).
   static Stream<RfidTagRead> tagReadStream() {
     return _events.receiveBroadcastStream().map((dynamic e) {

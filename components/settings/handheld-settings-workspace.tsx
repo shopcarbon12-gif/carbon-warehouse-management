@@ -151,11 +151,11 @@ export function HandheldSettingsWorkspace() {
           label="Transfer-out power lock (high power for outbound)"
         />
         <label className="block py-2 font-mono text-xs text-slate-500">
-          Transfer-out antenna power (0–300)
+          Transfer-out antenna power (0–30 dBm)
           <input
             type="number"
             min={0}
-            max={300}
+            max={30}
             value={h.transfer.transferOutAntennaPower}
             onChange={(e) =>
               setH((s) =>
@@ -164,7 +164,7 @@ export function HandheldSettingsWorkspace() {
                       ...s,
                       transfer: {
                         ...s.transfer,
-                        transferOutAntennaPower: Math.min(300, Math.max(0, Number(e.target.value) || 0)),
+                        transferOutAntennaPower: Math.min(30, Math.max(0, Number(e.target.value) || 0)),
                       },
                     }
                   : s,
@@ -174,11 +174,11 @@ export function HandheldSettingsWorkspace() {
           />
         </label>
         <label className="block py-2 font-mono text-xs text-slate-500">
-          Transfer-in antenna power (0–300)
+          Transfer-in antenna power (0–30 dBm)
           <input
             type="number"
             min={0}
-            max={300}
+            max={30}
             value={h.transfer.transferInAntennaPower}
             onChange={(e) =>
               setH((s) =>
@@ -187,7 +187,7 @@ export function HandheldSettingsWorkspace() {
                       ...s,
                       transfer: {
                         ...s.transfer,
-                        transferInAntennaPower: Math.min(300, Math.max(0, Number(e.target.value) || 0)),
+                        transferInAntennaPower: Math.min(30, Math.max(0, Number(e.target.value) || 0)),
                       },
                     }
                   : s,
