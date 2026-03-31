@@ -181,6 +181,22 @@ export async function addTransferItems(
 /**
  * Mark scanned EPCs on a slip as received or missing (receiving / closed-loop handheld).
  */
+/** Persist Lightspeed R-Series `Inventory/Transfer` id after a successful create. */
+export async function setTransferSlipLsTransferId(
+  pool: Pool,
+  tenantId: string,
+  slipNumber: number,
+  lsTransferId: string,
+): Promise<boolean> {
+  const r = await pool.query(
+    `UPDATE transfer_slips
+     SET ls_transfer_id = $3, updated_at = now()
+     WHERE tenant_id = $1::uuid AND slip_number = $2::int`,
+    [tenantId, slipNumber, lsTransferId.trim()],
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
 export async function setTransferItemsOutcome(
   pool: Pool,
   tenantId: string,

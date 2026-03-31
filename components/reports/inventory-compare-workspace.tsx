@@ -186,6 +186,14 @@ export function InventoryCompareWorkspace() {
         </button>
       </div>
       <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
+        <strong className="text-[var(--wms-fg)]">Push to LS</strong> records intent only (no per-SKU Lightspeed write yet). To create a real R-Series{" "}
+        <span className="text-[var(--wms-fg)]">Inventory/Transfer</span> and attach it to a WMS slip, admins use{" "}
+        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">POST /api/integrations/lightspeed/sync-slip-transfer</code> with{" "}
+        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">slipNumber</code>,{" "}
+        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">sendingShopID</code>,{" "}
+        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">receivingShopID</code> (OAuth scope <code className="px-1">employee:transfers</code>).
+      </p>
+      <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
         Push uses variance rows only. With row checkboxes, only selected SKUs are sent in the payload; if none selected, all variance rows go.
       </p>
 

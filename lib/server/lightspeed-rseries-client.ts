@@ -28,6 +28,50 @@ export function buildRSeriesAccountResourceUrl(
   return url.toString();
 }
 
+/** V3 paths e.g. `Inventory/Transfer` → `…/API/V3/Account/{id}/Inventory/Transfer.json` */
+export function buildRSeriesV3AccountResourceUrl(accountId: string, resourcePath: string): string {
+  const base = normalizeText(process.env.LS_API_BASE || "https://api.lightspeedapp.com").replace(
+    /\/+$/,
+    "",
+  );
+  const apiPath = /\/API\/?V3$/i.test(base) ? base : `${base}/API/V3`;
+  const path = resourcePath.replace(/^\/+/, "").replace(/\/+$/, "");
+  return `${apiPath}/Account/${accountId}/${path}.json`;
+}
+
+export async function rseriesPostJsonV3(
+  creds: LightspeedSyncCredentialRow,
+  resourcePath: string,
+  jsonBody: Record<string, unknown>,
+  timeoutMs = 35_000,
+): Promise<{ ok: boolean; status: number; body: unknown }> {
+  const accountId = creds.accountId.trim();
+  if (!accountId) {
+    return { ok: false, status: 400, body: { error: "Missing LS_ACCOUNT_ID" } };
+  }
+
+  const token = await refreshLightspeedRSeriesAccessToken(creds, false);
+  const url = buildRSeriesV3AccountResourceUrl(accountId, resourcePath);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(jsonBody),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const raw = await res.text();
+  let body: unknown = {};
+  try {
+    body = JSON.parse(raw) as unknown;
+  } catch {
+    body = { raw: raw.slice(0, 2000) };
+  }
+  return { ok: res.ok, status: res.status, body };
+}
+
 export async function rseriesGetJson(
   creds: LightspeedSyncCredentialRow,
   resource: string,

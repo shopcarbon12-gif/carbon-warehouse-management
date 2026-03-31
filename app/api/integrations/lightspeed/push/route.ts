@@ -5,6 +5,7 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
+import { insertExternalSystemLog } from "@/lib/queries/external-system-logs";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,9 @@ const bodySchema = z.object({
 });
 
 /**
- * Records a **push intent** in `sync_jobs` for audit / future LS inventory API wiring.
- * Does not call Lightspeed write APIs yet (account-specific inventory endpoints).
+ * Records a **push intent** in `sync_jobs` and `external_system_logs`.
+ * Does not adjust per-SKU Lightspeed qty (ItemShop) yet — use **POST /api/integrations/lightspeed/sync-slip-transfer**
+ * to create a real R-Series **Inventory/Transfer** and link `transfer_slips.ls_transfer_id`.
  */
 export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -58,10 +60,21 @@ export async function POST(req: Request) {
           user_id: session.sub,
           implementation: "stub_record_only",
           stub_message:
-            "Awaiting R-Series inventory write integration per Lightspeed R-Series API docs (no outbound call yet).",
+            "SKU-level qty push not implemented. For shop-to-shop transfers use POST /api/integrations/lightspeed/sync-slip-transfer.",
         }),
       ],
     );
+
+    try {
+      await insertExternalSystemLog(pool, session.tid, {
+        system_name: "lightspeed",
+        direction: "OUTBOUND",
+        payload_summary: `lightspeed_push stub sku_count=${skus.length} job=${idempotency_key}`,
+        status: "recorded",
+      });
+    } catch (e) {
+      console.warn("[integrations/lightspeed/push] external_system_logs", e);
+    }
 
     return NextResponse.json({
       ok: true,
@@ -69,7 +82,7 @@ export async function POST(req: Request) {
       job_key: idempotency_key,
       sku_count: skus.length,
       message:
-        "Recorded push request in sync history. No outbound Lightspeed API call yet — wire account-specific inventory endpoints when ready.",
+        "Recorded push intent in sync history and external logs. Per-SKU Lightspeed qty write is not implemented. To create a real R-Series inventory transfer and link a WMS slip, call POST /api/integrations/lightspeed/sync-slip-transfer (Admin) with slipNumber, sendingShopID, receivingShopID.",
     });
   } catch (e) {
     console.error("[integrations/lightspeed/push]", e);
