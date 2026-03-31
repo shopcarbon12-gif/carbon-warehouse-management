@@ -16,6 +16,7 @@ When **this session** changes any file under **`mobile/carbon_wms/`** (including
    ```
 3. **Confirm** exit success and report the APK path, size, and last modified time:
    - **`D:\cwm\mobile\carbon_wms\build\app\outputs\flutter-apk\app-release.apk`** when using the junction.
+   - **Required:** the script also copies a **versioned** release to **`D:\CarbonWmsRelease\CarbonWMS V{pubspec-version}.apk`** (see **`carbonwms-apk-versioned-filename.mdc`**). Report that path too.
 
 **Exceptions (no build required):** edits that touch **only** `mobile/carbon_wms/README.md` or other docs with **no** code/config change.
 
