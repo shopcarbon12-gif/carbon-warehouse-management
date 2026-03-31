@@ -31,6 +31,7 @@
     "coolify:ensure-uploads-volume": "node scripts/coolify-ensure-uploads-volume.mjs",
     "coolify:list-env-keys": "node scripts/coolify-list-env-keys.mjs",
     "coolify:patch-env": "node scripts/coolify-patch-env-bulk.mjs",
+    "diagnose:db": "node scripts/diagnose-wms-db.mjs",
     "coolify:set-public-urls": "node scripts/coolify-set-public-urls.mjs",
     "env:ensure-local": "node scripts/ensure-local-public-env.mjs",
     "env:parity-local": "node scripts/ensure-production-parity-local.mjs",
