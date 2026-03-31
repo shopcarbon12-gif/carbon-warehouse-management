@@ -27,6 +27,7 @@
     "coolify:set-lightspeed": "node scripts/coolify-set-lightspeed-env.mjs",
     "coolify:sync-postgres-url": "node scripts/coolify-sync-postgres-url.mjs",
     "coolify:api-check": "node scripts/coolify-api-check.mjs",
+    "coolify:ensure-uploads-volume": "node scripts/coolify-ensure-uploads-volume.mjs",
     "coolify:list-env-keys": "node scripts/coolify-list-env-keys.mjs",
     "coolify:patch-env": "node scripts/coolify-patch-env-bulk.mjs",
     "coolify:set-public-urls": "node scripts/coolify-set-public-urls.mjs",

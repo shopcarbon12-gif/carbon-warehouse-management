@@ -42,4 +42,6 @@ The app stores uploaded files under **`public/uploads/`** (e.g. **`mobile-apk/`*
 
 Add a **Volume** (or **Add Volume Mount** with **Source Path** empty for a Docker-managed named volume): **Name** e.g. `wms-public-uploads`, **Destination Path** **`/app/public/uploads`**. **Save**, then **Redeploy** so the mount applies; **re-upload** the APK if it was only on the old layer.
 
-**MCP browser note:** `GET /api/v1/applications/{uuid}` does not reliably return persistent-storage fields; the UI is Livewire. **cursor-ide-browser** snapshots often list modal labels without fillable input **refs**, so agents may need the user to submit **Persistent Storage** forms manually in the browser tab.
+**MCP browser note:** `GET /api/v1/applications/{uuid}` does not return persistent-storage rows; the UI is Livewire. **cursor-ide-browser** snapshots often list modal labels without fillable input **refs**, so automating **+ Add → Volume** is unreliable.
+
+**API (when available):** `GET|POST /api/v1/applications/{uuid}/storages` (see Coolify OpenAPI). Some instances still return **404** on `.../storages` (e.g. **4.0.0-beta.463**): upgrade Coolify to a build that includes the storage endpoints, then run **`npm run coolify:ensure-uploads-volume`** (or add the mount in the UI).
