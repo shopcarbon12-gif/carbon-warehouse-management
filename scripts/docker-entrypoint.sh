@@ -11,14 +11,13 @@ fi
 # container on every deploy (restart loop).
 if [ -n "$DATABASE_URL" ] && [ "${WMS_AUTO_MIGRATE:-}" = "1" ]; then
   set +e
-  if psql "$DATABASE_URL" -tAc "select 1 from information_schema.tables where table_schema='public' and table_name='users'" 2>/dev/null | grep -q 1; then
-    echo "wms: baseline schema present (users table), skipping scripts/schema.sql"
-  else
-    echo "wms: applying baseline schema (WMS_AUTO_MIGRATE=1)"
-    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /app/scripts/schema.sql
-    _s=$?
-    if [ "$_s" -ne 0 ]; then echo "wms: WARNING schema.sql exited $_s — fix DB and redeploy; starting app anyway" >&2; fi
-  fi
+  # Always apply schema.sql first: it is idempotent (CREATE IF NOT EXISTS). Do **not** gate on
+  # `users` alone — another DB or partial bootstrap can have `users` without `locations`/`bins`,
+  # which skips baseline, breaks migration 001 (ALTER locations), and yields 42P01 in the app.
+  echo "wms: applying baseline scripts/schema.sql (idempotent, WMS_AUTO_MIGRATE=1)"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /app/scripts/schema.sql
+  _s=$?
+  if [ "$_s" -ne 0 ]; then echo "wms: WARNING schema.sql exited $_s — fix DB and redeploy; starting app anyway" >&2; fi
   if [ -d /app/scripts/migrations ]; then
     for f in /app/scripts/migrations/*.sql; do
       [ -f "$f" ] || continue
