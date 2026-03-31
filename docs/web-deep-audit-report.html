@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CarbonWMS — Deep web (Next.js) audit</title>
+  <style>
+    :root {
+      --bg: #0a0d12;
+      --surface: #121820;
+      --border: #243044;
+      --text: #e7ebf0;
+      --muted: #8b97a8;
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --info: #60a5fa;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; font-size: 14px; }
+    main { max-width: 1024px; margin: 0 auto; padding: 2rem 1.25rem 3.5rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.35rem; letter-spacing: -0.02em; }
+    h2 { font-size: 1.1rem; margin: 2rem 0 0.65rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+    h3 { font-size: 0.95rem; color: var(--muted); margin: 1.1rem 0 0.4rem; }
+    .muted { color: var(--muted); font-size: 0.88rem; }
+    .meta { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.6rem 0; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.55rem; text-align: left; vertical-align: top; }
+    th { background: var(--surface); color: var(--muted); }
+    code { font-family: ui-monospace, monospace; font-size: 0.88em; color: #a5c4e8; }
+    .pill { display: inline-block; padding: 0.12rem 0.4rem; border-radius: 4px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .p-ok { background: rgba(52, 211, 153, 0.14); color: var(--ok); }
+    .p-warn { background: rgba(251, 191, 36, 0.12); color: var(--warn); }
+    .p-bad { background: rgba(248, 113, 113, 0.12); color: var(--bad); }
+    .p-info { background: rgba(96, 165, 250, 0.12); color: var(--info); }
+    ul.tight li { margin-bottom: 0.35rem; }
+    .file { color: #93c5fd; }
+    footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
+    .cols2 { column-count: 1; }
+    @media (min-width: 720px) {
+      .cols2 { column-count: 2; column-gap: 1.5rem; }
+      .cols2 li { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>CarbonWMS — Deep web audit (Next.js App Router)</h1>
+    <p class="muted">Static review of the desktop/admin app under <code>app/</code>, <code>lib/</code>, <code>components/</code>, and production tooling. No production smoke run is implied.</p>
+
+    <div class="meta">
+      <strong>Stack snapshot</strong>
+      <ul class="tight">
+        <li><strong>Framework:</strong> Next.js <code>16.2.1</code>, React <code>19.2.4</code>, TypeScript, Tailwind v4 (<code>package.json</code>).</li>
+        <li><strong>Data:</strong> PostgreSQL via <code>pg</code> pool (<code>lib/db.ts</code>) — no Prisma/Drizzle.</li>
+        <li><strong>Auth:</strong> JWT session in cookie <code>wms_session</code>; mobile uses <code>Authorization: Bearer</code> on API routes (<code>lib/get-session-from-request.ts</code>).</li>
+        <li><strong>Output:</strong> <code>output: &quot;standalone&quot;</code> for Docker (<code>next.config.ts</code>).</li>
+        <li><strong>UI shell:</strong> <code>app/(main)/layout.tsx</code> → <code>WmsShell</code> + sidebar; root <code>app/layout.tsx</code> fonts + dark <code>html</code>.</li>
+      </ul>
+    </div>
+
+    <h2>1. Request gate &amp; RBAC</h2>
+    <table>
+      <thead>
+        <tr><th>Mechanism</th><th>Role</th><th>Source</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>proxy.ts</code></td>
+          <td>Cookie session check, redirects to <code>/login</code>; public allowlist for health, auth, edge/handheld paths, Lightspeed OAuth callbacks.</td>
+          <td class="file">proxy.ts</td>
+        </tr>
+        <tr>
+          <td><code>dashboard-rbac.ts</code></td>
+          <td>Admin-only vs warehouse-floor paths (string role from JWT: <code>admin</code>, <code>warehouse_ops</code>, <code>handheld</code>, etc.).</td>
+          <td class="file">lib/auth/dashboard-rbac.ts</td>
+        </tr>
+        <tr>
+          <td><code>user-role-map.ts</code></td>
+          <td>DB role names (e.g. “Super Admin”) → session role token (<code>super admin</code> → <code>admin</code>).</td>
+          <td class="file">lib/auth/user-role-map.ts</td>
+        </tr>
+        <tr>
+          <td>Main layout</td>
+          <td>Server <code>getSession()</code>; redirect if no session (defense in depth vs proxy).</td>
+          <td class="file">app/(main)/layout.tsx</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="muted"><span class="pill p-warn">Verify</span> The proxy only inspects the <strong>cookie</strong> for navigation. Mobile clients that call APIs with <strong>Bearer only</strong> must either hit routes on the <code>isPublicPath</code> list or the proxy must accept Bearer for those paths — otherwise the matcher may redirect API calls to HTML login. Confirmed public: <code>/api/mobile/status</code>, <code>/api/mobile/epc-visibility</code>, <code>/api/edge/ingest</code>, <code>/api/settings/mobile-sync</code>, <code>/api/inventory/upload</code>, <code>/api/inventory/putaway-assign</code>. <strong>Not</strong> on the list today: <code>/api/mobile/device-ping</code>, <code>/api/mobile/barcode-intake</code>, and other Bearer-only mobile routes — test from a real handset or <code>curl</code> without cookies.</p>
+
+    <h2>2. Health, config &amp; production image</h2>
+    <ul class="tight">
+      <li><span class="pill p-ok">Liveness</span> — <code>GET /api/health</code> returns JSON quickly, no DB (<code>app/api/health/route.ts</code>).</li>
+      <li><span class="pill p-ok">Readiness</span> — <code>GET /api/health/ready</code> runs <code>SELECT 1</code> when <code>DATABASE_URL</code> is set (<code>app/api/health/ready/route.ts</code>).</li>
+      <li><span class="pill p-ok">Dev HSTS</span> — <code>Strict-Transport-Security: max-age=0</code> only in development (<code>next.config.ts</code>).</li>
+      <li><span class="pill p-ok">Docker</span> — Multi-stage build, standalone output, non-root <code>nextjs</code>, writable <code>.next/cache</code>, <code>HEALTHCHECK</code> → <code>/api/health</code>, entrypoint migrations (<code>Dockerfile</code>, <code>docker-entrypoint.sh</code>).</li>
+      <li><span class="pill p-info">Base path</span> — Optional <code>WMS_BASE_PATH</code> for subpath deploy + redirect from <code>/</code> (<code>next.config.ts</code>).</li>
+    </ul>
+
+    <h2>3. App pages (<code>app/(main)</code> and related)</h2>
+    <p class="muted">Representative inventory; legacy URLs <code>/locations</code> and <code>/sync</code> redirect to canonical routes.</p>
+    <table>
+      <thead>
+        <tr><th>Area</th><th>Routes / notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Core</td>
+          <td><code>/dashboard</code>, <code>/login</code>, root <code>/</code> → redirect to dashboard or login (<code>proxy.ts</code>).</td>
+        </tr>
+        <tr>
+          <td>Inventory</td>
+          <td><code>/inventory/catalog</code>, <code>/inventory/bulk-status</code>, <code>/inventory/transfers/out|in</code>, <code>/inventory/sync</code>, <code>/inventory</code> hub.</td>
+        </tr>
+        <tr>
+          <td>Overview / locations</td>
+          <td><code>/overview/locations</code>; legacy <code>/locations</code> → redirect.</td>
+        </tr>
+        <tr>
+          <td>RFID</td>
+          <td><code>/rfid/cycle-counts</code>, <code>/rfid/epc-tracker</code>, <code>/rfid/commissioning</code>, <code>/rfid</code> hub.</td>
+        </tr>
+        <tr>
+          <td>Operations</td>
+          <td><code>/operations/exceptions</code>, <code>/operations/transfers</code> (legacy workspace).</td>
+        </tr>
+        <tr>
+          <td>Reports</td>
+          <td><code>/reports/*</code> — uploads, activity, asset movements, status logs, adjustments, replenishments, bulk imports, external systems, <code>inventory-compare</code> (POS).</td>
+        </tr>
+        <tr>
+          <td>Integrations / infra</td>
+          <td><code>/integrations</code>, <code>/infrastructure/devices</code>, <code>/infrastructure/settings</code>, <code>/infrastructure/lightspeed-sales</code>.</td>
+        </tr>
+        <tr>
+          <td>Settings</td>
+          <td><code>/settings/*</code> — general, theme, handheld, epc-profiles, statuses, users, locations, devices, updates (OTA).</td>
+        </tr>
+        <tr>
+          <td>Misc</td>
+          <td><code>/orders</code>, <code>/alerts</code>, <code>/handheld</code>, <code>/compare</code>, <code>/docs/handheld-api</code> — depth varies; some are hubs or docs.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. API routes (grouped)</h2>
+    <p class="muted">~79 <code>route.ts</code> handlers under <code>app/api/</code>. Grouped by domain.</p>
+    <table>
+      <thead>
+        <tr><th>Domain</th><th>Examples</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Auth / session</td><td><code>/api/auth/login</code>, <code>logout</code>, <code>/api/session/location</code></td></tr>
+        <tr><td>Health</td><td><code>/api/health</code>, <code>/api/health/ready</code></td></tr>
+        <tr><td>Dashboard</td><td><code>/api/dashboard/summary</code>, <code>command</code></td></tr>
+        <tr><td>Inventory &amp; catalog</td><td><code>/api/inventory/catalog</code> (+ import-csv, manual), <code>bulk-status</code>, <code>upload</code>, <code>putaway-assign</code>, <code>transfer-slips</code> (+ by slip), generic <code>/api/inventory</code></td></tr>
+        <tr><td>Locations &amp; bins</td><td><code>/api/locations</code>, <code>bins</code>, <code>bins/[id]</code>, <code>bins/[id]/clean</code>, <code>bins/contents</code>, <code>/api/overview/locations</code></td></tr>
+        <tr><td>RFID</td><td><code>commission</code>, <code>next-serial</code>, <code>print-logs</code>, <code>catalog-search</code>, cycle-counts (expected, commit, sim-seeds), tracker (search, history)</td></tr>
+        <tr><td>Operations</td><td>exceptions (+ resolve, simulate), transfers (lookup, sim-seeds, commit)</td></tr>
+        <tr><td>Sync &amp; compare</td><td><code>/api/sync/compare</code>, <code>jobs</code>, inventory sync trigger/status/logs, <code>/api/compare/runs</code></td></tr>
+        <tr><td>Lightspeed</td><td><code>/api/lightspeed/auth|callback|sales</code>, <code>/api/integrations/lightspeed/pull|push</code>, <code>/api/integrations</code></td></tr>
+        <tr><td>Reports</td><td>upload-logs (+ by id), audit, inventory-audit-logs, asset-movements, replenishment-logs, external-system-logs, <code>pos-compare</code></td></tr>
+        <tr><td>Settings / access</td><td>tenant-settings, status-labels, access users/roles/locations CRUD</td></tr>
+        <tr><td>Infrastructure</td><td>devices list + <code>[id]</code>, infrastructure settings</td></tr>
+        <tr><td>Edge &amp; handheld</td><td><code>/api/edge/ingest</code>, <code>/api/edge/stream</code> (SSE), <code>/api/handheld/batches</code>, mobile: <code>status</code>, <code>device-ping</code>, <code>epc-visibility</code>, <code>barcode-intake</code>, <code>upload-apk</code>, <code>releases/set-active</code></td></tr>
+        <tr><td>Legacy / misc</td><td><code>/api/exceptions</code>, webhooks path reserved in proxy</td></tr>
+      </tbody>
+    </table>
+
+    <h2>5. Data &amp; migrations</h2>
+    <ul class="tight">
+      <li><strong>Runner:</strong> <code>npm run db:migrate</code> → <code>scripts/migrate-incremental.ts</code> → shared migrator applies <code>scripts/schema.sql</code> baseline + ordered files in <code>scripts/migrations/</code> (20 SQL files including RFID matrix, tenant settings, reports, enterprise v2, Clean 10 statuses, Shopify removal, etc.).</li>
+      <li><strong>Seed:</strong> <code>npm run db:seed</code> → <code>scripts/seed.ts</code>.</li>
+      <li><strong>Types:</strong> <code>types/db.ts</code> and query modules under <code>lib/queries/</code> align with evolving schema.</li>
+      <li><span class="pill p-warn">Ordering</span> — Two files share prefix <code>009_*.sql</code>; ensure deployment order is correct on greenfield DBs.</li>
+    </ul>
+
+    <h2>6. Background worker</h2>
+    <p><code>npm run worker</code> — <span class="file">scripts/worker.ts</span> claims <code>sync_jobs</code> rows; processes <code>lightspeed_catalog</code> / <code>lightspeed_pull</code> via <code>executeLightspeedCatalogJob</code>; other job types currently stubbed with sleep + completed update. <span class="pill p-info">Separate process</span> from Next — must run in production if queued catalog sync should complete without hitting an API trigger path.</p>
+
+    <h2>7. Integrations (Lightspeed)</h2>
+    <ul class="tight">
+      <li><span class="pill p-ok">Surface area</span> — OAuth routes, R-Series client helpers, catalog fetch/mappers, inventory sync engine, POS compare pull/push API routes, sales UI page.</li>
+      <li><span class="pill p-warn">Live validation</span> — Tokens, retailer IDs, and rate limits need a real tenant; transfer slip <code>ls_transfer_id</code> columns exist — end-to-end LS transfer workflow should be validated per account.</li>
+      <li><span class="pill p-ok">Shopify</span> — No TypeScript references; DB cleanup in <code>009_remove_shopify.sql</code>.</li>
+    </ul>
+
+    <h2>8. UI / UX patterns</h2>
+    <ul class="tight">
+      <li><strong>Theming:</strong> <code>ThemeProvider</code> + <code>/settings/theme</code> (dark/light, font scale); Tailwind <code>dark</code> class on root.</li>
+      <li><strong>Data fetching:</strong> SWR in many client workspaces (settings, statuses, dashboard-related components).</li>
+      <li><strong>Status system:</strong> Clean 10 architecture — <code>019_clean_10_status_architecture.sql</code>, enforcement in <code>lib/server/status-label-enforcement.ts</code>, tooltips, statuses workspace with read-only rule summary.</li>
+      <li><strong>Sidebar:</strong> Collapsible sections in <code>components/layout/Sidebar.tsx</code> (Inventory, RFID &amp; Hardware, Reports, Integrations, Settings).</li>
+    </ul>
+
+    <h2>9. Automated tests</h2>
+    <p><span class="file">e2e/smoke.spec.ts</span> — Login page heading visible; <code>GET /api/health</code> returns <code>ok</code>. <span class="pill p-warn">Narrow coverage</span> — no authenticated dashboard flow, no API contract tests for inventory/Lightspeed.</p>
+
+    <h2>10. Gaps &amp; risks (prioritized)</h2>
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Severity</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Proxy vs Bearer-only mobile APIs</td>
+          <td><span class="pill p-warn">high if unverified</span></td>
+          <td>Confirm <code>device-ping</code>, <code>barcode-intake</code>, and any other mobile Bearer routes either bypass cookie redirect or receive cookies.</td>
+        </tr>
+        <tr>
+          <td>E2E &amp; integration tests</td>
+          <td><span class="pill p-warn">medium</span></td>
+          <td>Expand Playwright (login → dashboard → one inventory path) and optional API tests with test DB.</td>
+        </tr>
+        <tr>
+          <td>Worker deployment</td>
+          <td><span class="pill p-warn">medium</span></td>
+          <td>If Coolify only runs the web container, queue jobs may stall unless worker is a second service or sync is inline-only.</td>
+        </tr>
+        <tr>
+          <td>Peripheral pages</td>
+          <td><span class="pill p-info">low</span></td>
+          <td><code>/orders</code>, <code>/compare</code>, <code>/alerts</code> may be thin vs main WMS flows — confirm product intent.</td>
+        </tr>
+        <tr>
+          <td>Lightspeed production matrix</td>
+          <td><span class="pill p-info">ops</span></td>
+          <td>Env vars, OAuth redirect URLs, and Traefik body limits for APK upload documented in settings UI copy.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>11. Suggested next steps (engineering)</h2>
+    <ol>
+      <li>Audit <code>proxy.ts</code> public paths against every mobile/Bearer <code>route.ts</code> that uses <code>getSessionFromRequest</code>; add missing prefixes or centralize Bearer-aware gate.</li>
+      <li>Add one Playwright test: sign in (test user) → open catalog or locations → assert table or heading.</li>
+      <li>Document Coolify services: web + optional worker + Postgres; link to <code>docs/WORKER.md</code>.</li>
+      <li>Run load/regression on Lightspeed pull/push and POS compare in a staging tenant.</li>
+      <li>Consolidate or document legacy vs canonical URLs (already redirected: <code>/locations</code>, <code>/sync</code>).</li>
+    </ol>
+
+    <footer>
+      Generated from repository structure and key source files. Re-run after large refactors to <code>app/</code>, <code>proxy.ts</code>, or <code>lib/server/</code>.
+    </footer>
+  </main>
+</body>
+</html>
