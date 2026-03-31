@@ -58,7 +58,7 @@ export async function POST(req: Request) {
           user_id: session.sub,
           implementation: "stub_record_only",
           stub_message:
-            "Awaiting Lightspeed inventory write API integration (adjustments / transfers / shop-scoped qty).",
+            "Awaiting R-Series inventory write integration per Lightspeed R-Series API docs (no outbound call yet).",
         }),
       ],
     );

@@ -10,7 +10,8 @@ import { fetchLightspeedBearer, retailBaseUrl } from "@/lib/server/lightspeed-au
 import { tryFetchLightspeedRSeriesCatalogProducts } from "@/lib/services/lightspeed-rseries-catalog-fetch";
 
 /**
- * Live catalog: R-Series (`api.lightspeedapp.com`, carbon-gen style) first, then Retail X-Series `/api/2.0/products`.
+ * Live catalog: **R-Series** (`api.lightspeedapp.com`, carbon-gen style) first — primary product for this repo.
+ * Falls back to Retail X-Series `/api/2.0/products` only when R-Series creds are unusable and X-Series creds are set.
  * Returns `null` if credentials are incomplete, HTTP fails, or the payload cannot be mapped.
  */
 export async function tryFetchLightspeedCatalogProducts(

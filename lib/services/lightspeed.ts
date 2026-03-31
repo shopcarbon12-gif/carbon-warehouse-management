@@ -120,6 +120,6 @@ export async function resolveLightspeedInventoryForCompare(
     lines,
     source: "simulated",
     detail:
-      "Demo SKUs — set Lightspeed credentials (R-Series or Retail X) and ensure catalog API returns stock fields.",
+      "Demo SKUs — set R-Series OAuth (LS_ACCOUNT_ID + LS_CLIENT_* + LS_REFRESH_TOKEN) or X-Series fallback; ensure catalog API returns stock fields.",
   };
 }

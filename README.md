@@ -69,6 +69,8 @@ Do **not** use the default seed password in production.
 
 Production hostname: **`https://wms.shopcarbon.com`**. In DNS, add a **`wms`** record (usually **CNAME** to the hostname Coolify shows for the app, or **A** to the server IP). In Coolify → WMS → **Configuration** → **General** → **Domains**, enter **`https://wms.shopcarbon.com`** (include **`https://`** for Let’s Encrypt / Traefik). Add **`https://www.wms.shopcarbon.com`** only if that host exists in DNS. Then **Save** and **Redeploy**.
 
+**Lightspeed:** This app is built around **Lightspeed R-Series** (`api.lightspeedapp.com`, OAuth + `LS_ACCOUNT_ID`). Catalog sync and **`/api/lightspeed/sales`** use the R-Series JSON API first; **Retail (X-Series)** is an optional fallback if you set shop **`LS_DOMAIN_PREFIX`** and **`LS_PERSONAL_TOKEN`** (or X OAuth) — see **`.env.example`**.
+
 **Lightspeed OAuth:** Register **`…/api/lightspeed/callback`** for **both** production and **`http://localhost:3040`** if you use local OAuth (must match **`LS_REDIRECT_URI`** / public base).
 
 **Full DB mirror (local copy of prod data):** run **`npm run db:mirror:ssh`** if you have non-interactive **`ssh root@<Coolify host>`** access (uses `docker exec` on the WMS Postgres container, then `pg_restore` into **`docker compose`** — keep local Postgres major version aligned with prod, e.g. **18**). Details: **`scripts/db-mirror-coolify.example.sh`**. Do not commit dumps or passwords.
