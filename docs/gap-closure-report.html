@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CarbonWMS — Gap closure report (web + APK)</title>
+  <style>
+    :root {
+      --bg: #0a0d12;
+      --surface: #121820;
+      --border: #243044;
+      --text: #e7ebf0;
+      --muted: #8b97a8;
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --info: #60a5fa;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; font-size: 14px; }
+    main { max-width: 1024px; margin: 0 auto; padding: 2rem 1.25rem 3.5rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.35rem; letter-spacing: -0.02em; }
+    h2 { font-size: 1.1rem; margin: 2rem 0 0.65rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+    h3 { font-size: 0.95rem; color: var(--muted); margin: 1.1rem 0 0.4rem; }
+    .muted { color: var(--muted); font-size: 0.88rem; }
+    .meta { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.6rem 0; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.55rem; text-align: left; vertical-align: top; }
+    th { background: var(--surface); color: var(--muted); }
+    code { font-family: ui-monospace, monospace; font-size: 0.88em; color: #a5c4e8; }
+    .pill { display: inline-block; padding: 0.12rem 0.4rem; border-radius: 4px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .p-ok { background: rgba(52, 211, 153, 0.14); color: var(--ok); }
+    .p-warn { background: rgba(251, 191, 36, 0.12); color: var(--warn); }
+    ul.tight li { margin-bottom: 0.35rem; }
+    .file { color: #93c5fd; }
+    footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
+    pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; overflow-x: auto; font-size: 0.78rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>CarbonWMS — Gap closure report</h1>
+    <p class="muted">This document records work performed to align the <strong>Next.js web app</strong> and the <strong>Flutter handheld APK</strong> with the findings in <span class="file">docs/web-deep-audit-report.html</span>, <span class="file">docs/apk-deep-audit-report.html</span>, and the chronological prompt audit. No intentional reverts of features landed after those baselines.</p>
+
+    <div class="meta">
+      <strong>Scope &amp; outcome</strong>
+      <ul class="tight">
+        <li><span class="pill p-ok">Closed</span> API authentication for mobile (<code>Bearer</code> + cookie), JSON <code>401</code> on <code>/api/*</code> without session (no HTML redirect to login).</li>
+        <li><span class="pill p-ok">Closed</span> Transfer slips: receive / missing outcomes, manager-scoped list/detail, append EPCs; dashboard RBAC for warehouse floor on <code>/inventory/transfers</code>.</li>
+        <li><span class="pill p-ok">Closed</span> Mobile endpoints: clean bin by code, item detail by EPC; Flutter screens and <code>WmsApiClient</code> methods.</li>
+        <li><span class="pill p-ok">Closed</span> Broad codemod: protected API routes use <code>getSessionFromRequest(req)</code> so Bearer tokens work consistently.</li>
+        <li><span class="pill p-ok">Closed</span> Handheld: bulk status, RFID catalog search + commission wiring, inventory lookup bin enrichment, Chainway RSSI via reflection on tag reads.</li>
+        <li><span class="pill p-warn">Note</span> Encode suite “Upload” queue tab remains a lighter UX than full server sync; Search/commission path is the primary gap closure for encoding.</li>
+      </ul>
+    </div>
+
+    <h2>1. Web (Next.js)</h2>
+
+    <h3>1.1 <code class="file">proxy.ts</code></h3>
+    <ul class="tight">
+      <li>All <code>/api/*</code> routes not on the public allowlist now require a valid session from <strong>either</strong> <code>Authorization: Bearer &lt;jwt&gt;</code> <strong>or</strong> the <code>wms_session</code> cookie.</li>
+      <li>Missing auth returns <code>401</code> with JSON <code>{ "error": "Unauthorized" }</code> — never a redirect to <code>/login</code> (fixes mobile <code>fetch</code> parsing and tooling).</li>
+      <li>Page routes keep the previous cookie-only flow: unauthenticated users redirect to <code>/login</code>; RBAC for admin-only and warehouse-floor paths unchanged except where noted below.</li>
+      <li>Public allowlist unchanged for health, auth, webhooks, handheld edge paths, and other entries already listed in file.</li>
+    </ul>
+
+    <h3>1.2 RBAC — <code class="file">lib/auth/dashboard-rbac.ts</code></h3>
+    <ul class="tight">
+      <li><code>/inventory/transfers</code> is allowed for warehouse floor roles (not admin-only), matching operational use of transfer slips in the warehouse.</li>
+    </ul>
+
+    <h3>1.3 Transfer slips — <code class="file">lib/queries/transfer-slips.ts</code></h3>
+    <ul class="tight">
+      <li>Added <code>setTransferItemsOutcome</code> (and related query support) to mark slip line items as <code>received</code> or <code>missing</code> for IN/receive flows.</li>
+    </ul>
+
+    <h3>1.4 API routes</h3>
+    <table>
+      <thead>
+        <tr><th>Path</th><th>Change</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>GET/POST …/api/inventory/transfer-slips</code></td>
+          <td>Session via <code>getSessionFromRequest</code>; listing/creation scoped to <strong>MANAGER</strong> (aligned with floor managers, not only ADMIN).</td>
+        </tr>
+        <tr>
+          <td><code>GET/PATCH …/api/inventory/transfer-slips/[slipNumber]</code></td>
+          <td>Same session helper; POST body supports discriminated actions: <code>append_epcs</code>, <code>receive</code> (with per-line <code>outcome</code>).</td>
+        </tr>
+        <tr>
+          <td><code>POST …/api/mobile/clean-bin</code></td>
+          <td>New. Body <code>{ "binCode": string }</code>; MANAGER; resolves bin in an active location and clears contents per server rules.</td>
+        </tr>
+        <tr>
+          <td><code>GET …/api/mobile/item-detail?epc=</code></td>
+          <td>New. MANAGER or WAREHOUSE_OPS (membership scopes); returns item/bin detail for a 24-hex EPC.</td>
+        </tr>
+        <tr>
+          <td><code>app/api/**/route.ts</code> (wide)</td>
+          <td>Migrated from <code>getSession()</code> to <code>getSessionFromRequest(request)</code> so the same handlers accept Bearer tokens from the handheld app.</td>
+        </tr>
+        <tr>
+          <td><code>app/api/settings/status-labels/route.ts</code></td>
+          <td>Admin paths use <code>requireAdmin(req)</code> with the incoming <code>Request</code> for Bearer-aware checks.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>1.5 Tests — <code class="file">e2e/smoke.spec.ts</code></h3>
+    <ul class="tight">
+      <li>Added assertion that <code>GET /api/dashboard/summary</code> without credentials returns <strong>401</strong> and JSON with an <code>error</code> field.</li>
+      <li>Full Playwright smoke (login + health) requires a healthy dev server with a valid <code>.next</code> build; a broken or partial <code>.next/dev</code> tree can yield <code>500</code> unrelated to these changes.</li>
+    </ul>
+
+    <h3>1.6 Verification</h3>
+    <ul class="tight">
+      <li><code>npx tsc --noEmit</code> — clean at time of report generation.</li>
+    </ul>
+
+    <h2>2. Handheld APK (Flutter + Android)</h2>
+
+    <h3>2.1 <code class="file">lib/network/wms_api_client.dart</code></h3>
+    <ul class="tight">
+      <li>Transfer slip helpers: list/create, get detail, append EPCs, post receive with outcomes.</li>
+      <li><code>postCleanBinByCode</code>, <code>fetchItemDetailByEpc</code>.</li>
+      <li><code>postBulkStatus</code>, <code>fetchRfidCatalogSearch</code>, <code>postRfidCommission</code>.</li>
+      <li>Comments aligned with server behavior (including EPC visibility / clean-bin wording where applicable).</li>
+    </ul>
+
+    <h3>2.2 Screens</h3>
+    <table>
+      <thead>
+        <tr><th>Screen</th><th>Role</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code class="file">transfer_slips_screen.dart</code> (new)</td>
+          <td>OUT: create slip + append scans. IN: select slip + mark lines received/missing.</td>
+        </tr>
+        <tr>
+          <td><code class="file">clean_bin_screen.dart</code> (new)</td>
+          <td>Clean bin by code: camera via <code>openCameraBarcodeScanner</code>, wedge/manual entry.</td>
+        </tr>
+        <tr>
+          <td><code class="file">transfer_screen.dart</code></td>
+          <td>Removed; flow replaced by transfer slips screen.</td>
+        </tr>
+        <tr>
+          <td><code class="file">dashboard_screen.dart</code></td>
+          <td>Entries for “Transfer slips” and “Clean bin”; navigation updated.</td>
+        </tr>
+        <tr>
+          <td><code class="file">status_change_screen.dart</code></td>
+          <td>Bulk status via <code>postBulkStatus</code> with target status dropdown and override switch.</td>
+        </tr>
+        <tr>
+          <td><code class="file">inventory_lookup_screen.dart</code></td>
+          <td>For 24-hex EPC, calls <code>fetchItemDetailByEpc</code> to show bin (and related fields).</td>
+        </tr>
+        <tr>
+          <td><code class="file">encode_suite_screens.dart</code></td>
+          <td>Search tab wired to catalog search + commission APIs (stateful flow).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>2.3 Android — Chainway RFID</h3>
+    <ul class="tight">
+      <li><code class="file">CarbonChainwayRfidController.kt</code>: RSSI read via reflection on vendor tag objects; <code>emitEpc(hex, rssi?)</code> with a safe default when RSSI is unknown (e.g. <code>-55</code>).</li>
+    </ul>
+
+    <h3>2.4 Verification</h3>
+    <ul class="tight">
+      <li><code>flutter analyze</code> — no errors; remaining messages are <code>info</code> level in various screens (const, deprecated dropdown API in status screen, etc.).</li>
+      <li>Release APK: built via <code>mobile/carbon_wms/scripts/build-apk.ps1</code>. On Windows, run from a path <strong>without spaces</strong> (e.g. junction <code>D:\cwm\mobile\carbon_wms</code>) so Dart native-asset hooks do not fail. Artifact: <code>build/app/outputs/flutter-apk/app-release.apk</code> (mirrors the repo path via the junction).</li>
+    </ul>
+
+    <h2>3. Repository hygiene</h2>
+    <ul class="tight">
+      <li><code class="file">.gitignore</code>: ignore Playwright <code>/test-results/</code> and <code>/playwright-report/</code> so local e2e runs do not dirty commits.</li>
+      <li>One-off codemod script for API session migration was removed after use (not part of long-term tooling).</li>
+    </ul>
+
+    <h2>4. Deploy &amp; operations</h2>
+    <ul class="tight">
+      <li>Production rollout: push to <code>main</code> and trigger Coolify <strong>Redeploy</strong> (rebuild) if Docker or app entrypoints change; <code>npm run deploy:coolify</code> may be used when <code>COOLIFY_DEPLOY_WEBHOOK_URL</code> (and optional API token) are configured locally.</li>
+      <li><code>GET /api/health</code> remains DB-free for container health; readiness stays on <code>/api/health/ready</code> if used.</li>
+    </ul>
+
+    <footer>
+      Generated as part of gap-closure work against the deep audit HTML reports and prompt chronology. For architecture background, see <span class="file">docs/web-deep-audit-report.html</span> and <span class="file">docs/apk-deep-audit-report.html</span>.
+    </footer>
+  </main>
+</body>
+</html>

@@ -177,3 +177,38 @@ export async function addTransferItems(
     );
   }
 }
+
+/**
+ * Mark scanned EPCs on a slip as received or missing (receiving / closed-loop handheld).
+ */
+export async function setTransferItemsOutcome(
+  pool: Pool,
+  tenantId: string,
+  slipNumber: number,
+  epcs: string[],
+  outcome: "received" | "missing",
+): Promise<number> {
+  const ok = await pool.query(
+    `SELECT 1 FROM transfer_slips WHERE tenant_id = $1::uuid AND slip_number = $2::int LIMIT 1`,
+    [tenantId, slipNumber],
+  );
+  if (!ok.rows[0]) throw new Error("NOT_FOUND");
+  const status = outcome === "received" ? "received" : "missing";
+  let updated = 0;
+  for (const raw of epcs) {
+    const e = raw.trim();
+    if (!e) continue;
+    const r = await pool.query(
+      `UPDATE transfer_items ti
+       SET status = $4
+       FROM transfer_slips ts
+       WHERE ti.slip_number = ts.slip_number
+         AND ts.tenant_id = $1::uuid
+         AND ts.slip_number = $2::int
+         AND upper(trim(ti.epc)) = upper(trim($3))`,
+      [tenantId, slipNumber, e, status],
+    );
+    updated += r.rowCount ?? 0;
+  }
+  return updated;
+}

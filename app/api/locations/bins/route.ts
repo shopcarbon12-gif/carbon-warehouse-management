@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { listBinsWithCounts } from "@/lib/queries/locations";
 import {
@@ -8,7 +8,7 @@ import {
 } from "@/lib/server/overview-locations";
 
 export async function GET(req: Request) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -56,7 +56,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { listAuditHistoryForEpc } from "@/lib/server/rfid-tracker";
 
 type RouteCtx = { params: Promise<{ epc: string }> };
 
 export async function GET(req: Request, ctx: RouteCtx) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

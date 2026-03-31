@@ -43,6 +43,25 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  /**
+   * All `/api/*` (except public allowlist above): authenticate with Bearer **or** cookie.
+   * Return JSON 401 — never redirect to `/login` HTML (breaks mobile + `fetch` error handling).
+   * RBAC lives inside each route handler (scopes), not here.
+   */
+  if (pathname.startsWith("/api/")) {
+    const auth = req.headers.get("authorization");
+    const bearer = auth?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+    let session = bearer ? await verifySessionToken(bearer) : null;
+    if (!session) {
+      const token = req.cookies.get("wms_session")?.value;
+      session = token ? await verifySessionToken(token) : null;
+    }
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.next();
+  }
+
   if (pathname === "/") {
     const token = req.cookies.get("wms_session")?.value;
     const session = token ? await verifySessionToken(token) : null;

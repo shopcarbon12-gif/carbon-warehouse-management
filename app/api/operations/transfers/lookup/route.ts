@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { lookupTransferEpcs } from "@/lib/server/operations-transfers";
 
@@ -9,7 +9,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

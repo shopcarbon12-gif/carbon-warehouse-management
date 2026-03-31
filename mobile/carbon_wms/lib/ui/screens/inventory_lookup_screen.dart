@@ -84,12 +84,26 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
         final price = map['retail_price']?.toString() ?? '';
         final qty = map['ls_on_hand_total']?.toString() ?? '';
 
+        var binStr = '—';
+        if (_epc24.hasMatch(cleaned)) {
+          try {
+            final detail = await api.fetchItemDetailByEpc(cleaned);
+            final item = detail?['item'];
+            if (item is Map<String, dynamic>) {
+              final bc = item['bin_code']?.toString().trim();
+              if (bc != null && bc.isNotEmpty) binStr = bc;
+            }
+          } catch (_) {
+            /* optional enrichment */
+          }
+        }
+
         setState(() {
           _row = _LookupRow(
             code: raw,
             sku: sku.isNotEmpty ? sku : upc,
             name: name.isNotEmpty ? name : '—',
-            bin: '—',
+            bin: binStr,
             upc: upc,
             vendor: vendor,
             color: color,

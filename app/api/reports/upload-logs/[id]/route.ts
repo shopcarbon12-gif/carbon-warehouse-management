@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { getDeviceUploadLogCsv } from "@/lib/queries/device-upload-logs";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(_req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });

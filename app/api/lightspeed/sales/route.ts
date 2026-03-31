@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import {
@@ -22,7 +22,7 @@ function toArray<T>(value: T | T[] | null | undefined): T[] {
  * Recent Lightspeed R-Series sales (read-only). Query: `limit` (default 25, max 100), `offset`.
  */
 export async function GET(req: Request) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

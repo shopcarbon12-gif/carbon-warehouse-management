@@ -23,7 +23,6 @@ export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname.startsWith("/infrastructure/lightspeed-sales")) return true;
   if (pathname.startsWith("/api/lightspeed/sales")) return true;
   if (pathname === "/api/mobile/upload-apk") return true;
-  if (pathname.startsWith("/inventory/transfers")) return true;
   if (pathname.startsWith("/reports/inventory-compare")) return true;
   return false;
 }
@@ -37,6 +36,7 @@ export function isWarehouseFloorAllowedPath(pathname: string): boolean {
   if (pathname.startsWith("/overview")) return true;
   if (pathname.startsWith("/rfid")) return true;
   if (pathname.startsWith("/inventory/catalog")) return true;
+  if (pathname.startsWith("/inventory/transfers")) return true;
   if (pathname.startsWith("/handheld")) return true;
   if (pathname.startsWith("/reports")) return true;
 

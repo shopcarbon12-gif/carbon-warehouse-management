@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/util/demo_epc.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/tactical_bottom_bar.dart';
 
-enum _StatusBucket { missing, damaged, inStock }
-
+/// Clean 10 bulk status via `POST /api/inventory/bulk-status` (server-enforced locks).
 class StatusChangeScreen extends StatefulWidget {
   const StatusChangeScreen({super.key});
 
@@ -18,50 +18,62 @@ class StatusChangeScreen extends StatefulWidget {
   State<StatusChangeScreen> createState() => _StatusChangeScreenState();
 }
 
-class _StatusChangeScreenState extends State<StatusChangeScreen> {
-  _StatusBucket _bucket = _StatusBucket.inStock;
+class _Opt {
+  const _Opt(this.value, this.label);
+  final String value;
+  final String label;
+}
 
-  String get _bucketCode => switch (_bucket) {
-        _StatusBucket.missing => 'MISSING',
-        _StatusBucket.damaged => 'DAMAGED',
-        _StatusBucket.inStock => 'IN_STOCK',
-      };
+const _options = <_Opt>[
+  _Opt('in-stock', 'Live (in-stock)'),
+  _Opt('return', 'Return'),
+  _Opt('damaged', 'Damaged'),
+  _Opt('sold', 'Sold'),
+  _Opt('stolen', 'Stolen'),
+  _Opt('tag_killed', 'Tag killed'),
+  _Opt('UNKNOWN', 'Unknown'),
+  _Opt('pending_visibility', 'Pending visibility (system)'),
+  _Opt('in-transit', 'In transit (system)'),
+  _Opt('pending_transaction', 'Pending transaction (system)'),
+];
+
+class _StatusChangeScreenState extends State<StatusChangeScreen> {
+  String _target = 'in-stock';
+  bool _override = false;
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final m = context.read<RfidManager>();
-      m.scanContext = 'STATUS_CHANGE';
-      m.setIngestMetadata({'statusBucket': _bucketCode});
+      context.read<RfidManager>().scanContext = 'STATUS_CHANGE';
     });
   }
 
-  void _applyMeta(RfidManager m) {
-    m.setIngestMetadata({'statusBucket': _bucketCode});
-  }
-
-  Future<void> _commitStatus(BuildContext context) async {
+  Future<void> _commit(BuildContext context) async {
     final m = context.read<RfidManager>();
-    _applyMeta(m);
-    m.setIngestMetadata({
-      'statusBucket': _bucketCode,
-      'committed': true,
-    });
+    final epcs = m.sessionEpcs;
+    if (epcs.isEmpty) return;
+    setState(() => _busy = true);
     try {
-      await m.ingestSessionSnapshot();
+      final j = await context.read<WmsApiClient>().postBulkStatus(
+            epcs: epcs,
+            targetStatus: _target,
+            override: _override,
+          );
+      final updated = j['updated'];
       if (context.mounted) {
         m.clearSessionScans();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Status update sent ($_bucketCode)')),
+          SnackBar(content: Text('Updated ${updated ?? epcs.length} item(s) → $_target')),
         );
       }
-    } catch (_) {
+    } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Commit failed — check network')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
       }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -75,17 +87,11 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
         children: [
           TacticalEmeraldButton(
             label: 'SIMULATE SCAN',
-            onPressed: () {
-              final m = context.read<RfidManager>();
-              _applyMeta(m);
-              m.addSimulatedEpc(randomDemoEpc());
-            },
+            onPressed: () => manager.addSimulatedEpc(randomDemoEpc()),
           ),
           TacticalSlateButton(
-            label: 'COMMIT STATUS',
-            onPressed: items.isEmpty
-                ? null
-                : () => unawaited(_commitStatus(context)),
+            label: _busy ? '…' : 'APPLY BULK STATUS',
+            onPressed: (items.isEmpty || _busy) ? null : () => unawaited(_commit(context)),
           ),
         ],
       ),
@@ -94,31 +100,31 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('STATUS', style: AppTheme.headline(context)),
-            const SizedBox(height: 12),
-            SegmentedButton<_StatusBucket>(
-              segments: const [
-                ButtonSegment(
-                  value: _StatusBucket.missing,
-                  label: Text('MISSING'),
-                ),
-                ButtonSegment(
-                  value: _StatusBucket.damaged,
-                  label: Text('DAMAGED'),
-                ),
-                ButtonSegment(
-                  value: _StatusBucket.inStock,
-                  label: Text('IN-STOCK'),
-                ),
-              ],
-              selected: {_bucket},
-              onSelectionChanged: (s) {
-                setState(() => _bucket = s.first);
-                _applyMeta(context.read<RfidManager>());
+            Text('TARGET STATUS', style: AppTheme.headline(context)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              key: ValueKey(_target),
+              initialValue: _target,
+              decoration: const InputDecoration(labelText: 'Clean 10 WMS status'),
+              items: _options
+                  .map(
+                    (o) => DropdownMenuItem(
+                      value: o.value,
+                      child: Text(o.label, style: const TextStyle(fontSize: 13)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _target = v);
               },
             ),
-            const SizedBox(height: 16),
-            Text('SCANNED EPCS', style: AppTheme.headline(context)),
+            SwitchListTile(
+              title: const Text('Super Admin override (risky transitions)'),
+              value: _override,
+              onChanged: (v) => setState(() => _override = v),
+            ),
+            const SizedBox(height: 8),
+            Text('SCANNED EPCS (${items.length})', style: AppTheme.headline(context)),
             const SizedBox(height: 8),
             Expanded(
               child: items.isEmpty
@@ -136,10 +142,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
                         return ListTile(
                           title: Text(
                             items[index],
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.8,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w600, letterSpacing: 0.8),
                           ),
                         );
                       },

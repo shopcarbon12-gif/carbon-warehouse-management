@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
 import { listStatusLabels, updateStatusLabelPresentation } from "@/lib/queries/status-labels";
 
-async function requireAdmin() {
-  const session = await getSession();
+async function requireAdmin(req: Request) {
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
@@ -20,8 +20,8 @@ async function requireAdmin() {
   return { session, pool };
 }
 
-export async function GET() {
-  const gate = await requireAdmin();
+export async function GET(req: Request) {
+  const gate = await requireAdmin(req);
   if ("response" in gate) return gate.response;
   const { pool } = gate;
 
@@ -42,7 +42,7 @@ const patchSchema = z.object({
 
 /** Clean 10: only presentation fields (display label + legacy id) are editable. */
 export async function PATCH(req: Request) {
-  const gate = await requireAdmin();
+  const gate = await requireAdmin(req);
   if ("response" in gate) return gate.response;
   const { pool } = gate;
 

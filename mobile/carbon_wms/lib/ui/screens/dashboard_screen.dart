@@ -18,7 +18,8 @@ import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_csv_session_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
-import 'package:carbon_wms/ui/screens/transfer_screen.dart';
+import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
+import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -265,6 +266,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                       _DashCard(
+                        icon: LucideIcons.trash2,
+                        label: 'Clean bin',
+                        onTap: () => Navigator.of(context).push<void>(
+                          MaterialPageRoute<void>(builder: (_) => const CleanBinScreen()),
+                        ),
+                      ),
+                      _DashCard(
                         icon: LucideIcons.fileUp,
                         label: 'CSV cycle session',
                         onTap: () => Navigator.of(context).push<void>(
@@ -305,9 +313,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       _DashCard(
                         icon: LucideIcons.arrowLeftRight,
-                        label: 'Transfer',
+                        label: 'Transfer slips',
                         onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(builder: (_) => const TransferScreen()),
+                          MaterialPageRoute<void>(builder: (_) => const TransferSlipsScreen()),
                         ),
                       ),
                       _DashCard(

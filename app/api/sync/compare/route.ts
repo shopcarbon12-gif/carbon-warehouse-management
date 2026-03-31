@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { listPhysicalEpcCountsBySku } from "@/lib/queries/sync-compare";
 import { resolveLightspeedInventoryForCompare } from "@/lib/services/lightspeed";
@@ -37,8 +37,8 @@ function buildRow(
   };
 }
 
-export async function GET() {
-  const session = await getSession();
+export async function GET(req: Request) {
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

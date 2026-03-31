@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { subscribeEdgeScanStream } from "@/lib/server/edge-scan-hub";
 
 export const runtime = "nodejs";
@@ -7,8 +7,8 @@ export const dynamic = "force-dynamic";
 /**
  * Authenticated SSE: only events whose **location** matches the user’s session `lid` are delivered.
  */
-export async function GET() {
-  const session = await getSession();
+export async function GET(req: Request) {
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,

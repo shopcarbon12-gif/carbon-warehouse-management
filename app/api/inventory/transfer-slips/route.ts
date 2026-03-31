@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
@@ -14,12 +14,12 @@ const createSchema = z.object({
   epcs: z.array(z.string().min(4).max(64)).optional(),
 });
 
-export async function GET() {
-  const session = await getSession();
+export async function GET(req: Request) {
+  const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
-  const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
+  const denied = await requireSessionScopes(pool, session, [SCOPES.MANAGER]);
   if (denied) return denied;
   try {
     const slips = await listTransferSlips(pool, session.tid);
@@ -31,11 +31,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
-  const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
+  const denied = await requireSessionScopes(pool, session, [SCOPES.MANAGER]);
   if (denied) return denied;
 
   let raw: unknown;

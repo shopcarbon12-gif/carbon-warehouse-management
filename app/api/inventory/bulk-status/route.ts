@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES, isSuperAdminRole } from "@/lib/auth/roles";
@@ -33,7 +33,7 @@ const bodySchema = z.object({
  * Super Admin (`admin` role) bypasses status locks; other staff cannot change super-admin-locked rows or set system-only targets.
  */
 export async function POST(req: Request) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });

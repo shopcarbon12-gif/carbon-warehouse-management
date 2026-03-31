@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/util/demo_epc.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
@@ -78,56 +79,114 @@ class _EncodeSuiteScreenState extends State<EncodeSuiteScreen>
   }
 }
 
-class _CatalogRow {
-  const _CatalogRow({required this.sku, required this.title, required this.qty});
-
-  final String sku;
-  final String title;
-  final int qty;
-}
-
-class _SearchEncodeTab extends StatelessWidget {
+class _SearchEncodeTab extends StatefulWidget {
   const _SearchEncodeTab();
 
-  static const _rows = <_CatalogRow>[
-    _CatalogRow(sku: 'SKU-884210', title: 'Carbon tube 31mm', qty: 6),
-    _CatalogRow(sku: 'SKU-441902', title: 'Binder post M5', qty: 14),
-    _CatalogRow(sku: 'SKU-102233', title: 'Fork seal kit', qty: 3),
-  ];
+  @override
+  State<_SearchEncodeTab> createState() => _SearchEncodeTabState();
+}
+
+class _SearchEncodeTabState extends State<_SearchEncodeTab> {
+  final _q = TextEditingController();
+  List<dynamic> _matches = [];
+  bool _busy = false;
+  String? _err;
+  final _qty = TextEditingController(text: '1');
+
+  Future<void> _search() async {
+    final qt = _q.text.trim();
+    if (qt.length < 2) return;
+    setState(() {
+      _busy = true;
+      _err = null;
+    });
+    try {
+      final rows = await context.read<WmsApiClient>().fetchRfidCatalogSearch(qt);
+      if (mounted) setState(() => _matches = rows);
+    } catch (e) {
+      if (mounted) setState(() => _err = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _commission(String customSkuId) async {
+    final n = int.tryParse(_qty.text.trim()) ?? 1;
+    if (n < 1) return;
+    setState(() => _busy = true);
+    try {
+      final j = await context.read<WmsApiClient>().postRfidCommission(
+            customSkuId: customSkuId,
+            qty: n,
+            addToInventory: false,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Commission: inserted=${j['inserted'] ?? '?'} printer_ok=${j['printer_ok']}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _q.dispose();
+    _qty.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
+    return ListView(
       padding: const EdgeInsets.all(16),
-      itemCount: _rows.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final r = _rows[index];
-        return Card(
-          child: ListTile(
-            title: Text(
-              r.title.toUpperCase(),
-              style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.6),
-            ),
-            subtitle: Text(
-              '${r.sku}  ·  QTY ${r.qty}',
-              style: const TextStyle(color: AppColors.textMuted),
-            ),
-            trailing: FilledButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Encode queued for ${r.sku} (stub)')),
-                );
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.background,
-              ),
-              child: const Text('WRITE'),
-            ),
+      children: [
+        TextField(
+          controller: _q,
+          style: const TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600),
+          decoration: const InputDecoration(
+            labelText: 'Search SKU / UPC / description',
+            hintText: 'Min 2 characters',
           ),
-        );
-      },
+          onSubmitted: (_) => unawaited(_search()),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _qty,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Qty to encode'),
+        ),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: _busy ? null : () => unawaited(_search()),
+          child: Text(_busy ? '…' : 'SEARCH CATALOG'),
+        ),
+        if (_err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_err!, style: const TextStyle(color: Colors.redAccent, fontSize: 12))),
+        const SizedBox(height: 12),
+        ..._matches.map((row) {
+          if (row is! Map) return const SizedBox.shrink();
+          final id = row['id']?.toString() ?? '';
+          final sku = row['sku']?.toString() ?? '';
+          final title = row['description']?.toString() ?? '';
+          return Card(
+            child: ListTile(
+              title: Text(title.isNotEmpty ? title.toUpperCase() : sku, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+              subtitle: Text('$sku · id $id', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              trailing: FilledButton(
+                onPressed: id.isEmpty || _busy ? null : () => unawaited(_commission(id)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.background,
+                ),
+                child: const Text('WRITE'),
+              ),
+            ),
+          );
+        }),
+      ],
     );
   }
 }

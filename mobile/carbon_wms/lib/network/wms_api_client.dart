@@ -205,7 +205,7 @@ class WmsApiClient {
     }
   }
 
-  /// Status-label ghost filter (`hide_in_search_filters` / `hide_in_item_details` / `!auto_display`).
+  /// Status-label ghost filter (server uses `is_visible_to_scanner` / Clean 10 rules).
   Future<List<EpcVisibilityResult>> postEpcVisibility({
     required String deviceId,
     required List<String> epcs,
@@ -456,6 +456,190 @@ class WmsApiClient {
       ...await handheldAuthHeaders(),
     };
     final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  // --- Transfer slips (session Bearer; requires manager+ on server) ---
+
+  Future<List<dynamic>> fetchTransferSlips() async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/transfer-slips');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is List) return decoded;
+    return [];
+  }
+
+  Future<Map<String, dynamic>> createTransferSlip({
+    required String sourceLoc,
+    required String destLoc,
+    List<String>? epcs,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/transfer-slips');
+    final body = <String, dynamic>{
+      'sourceLoc': sourceLoc,
+      'destLoc': destLoc,
+      if (epcs != null && epcs.isNotEmpty) 'epcs': epcs,
+    };
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> getTransferSlip(int slipNumber) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/transfer-slips/$slipNumber');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> postTransferSlipAction(
+    int slipNumber,
+    Map<String, dynamic> body,
+  ) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/transfer-slips/$slipNumber');
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> postCleanBinByCode(String binCode) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/clean-bin');
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'binCode': binCode.trim()}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>?> fetchItemDetailByEpc(String epc) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/item-detail').replace(
+      queryParameters: {'epc': epc.trim()},
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode == 404) return null;
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return null;
+    return decoded;
+  }
+
+  Future<Map<String, dynamic>> postBulkStatus({
+    required List<String> epcs,
+    required String targetStatus,
+    bool override = false,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/bulk-status');
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'epcs': epcs,
+        'targetStatus': targetStatus,
+        if (override) 'override': true,
+      }),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  Future<List<dynamic>> fetchRfidCatalogSearch(String q) async {
+    final qt = q.trim();
+    if (qt.length < 2) return [];
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/rfid/catalog-search').replace(
+      queryParameters: {'q': qt},
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    final m = decoded is Map<String, dynamic> ? decoded['matches'] : null;
+    if (m is List) return m;
+    return [];
+  }
+
+  Future<Map<String, dynamic>> postRfidCommission({
+    required String customSkuId,
+    required int qty,
+    bool addToInventory = false,
+    String? binId,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/rfid/commission');
+    final body = <String, dynamic>{
+      'customSkuId': customSkuId,
+      'qty': qty,
+      'addToInventory': addToInventory,
+      if (binId != null && binId.isNotEmpty) 'binId': binId,
+    };
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);
     }

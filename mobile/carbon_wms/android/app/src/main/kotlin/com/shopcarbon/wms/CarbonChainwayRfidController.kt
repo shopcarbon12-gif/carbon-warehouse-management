@@ -181,18 +181,80 @@ class CarbonChainwayRfidController(
     when (raw) {
       is Array<*> -> {
         for (t in raw) {
-          val s = t?.toString()?.trim() ?: continue
-          if (s.isNotEmpty()) emitEpc(maybeConvertUiiToEpc(cls, inst, s))
+          if (t == null) continue
+          if (t is String) {
+            val s = t.trim()
+            if (s.isNotEmpty()) emitEpc(maybeConvertUiiToEpc(cls, inst, s), null)
+          } else {
+            emitFromTagObject(cls, inst, t)
+          }
         }
       }
       is Iterable<*> -> {
         for (t in raw) {
-          val s = t?.toString()?.trim() ?: continue
-          if (s.isNotEmpty()) emitEpc(maybeConvertUiiToEpc(cls, inst, s))
+          if (t == null) continue
+          if (t is String) {
+            val s = t.trim()
+            if (s.isNotEmpty()) emitEpc(maybeConvertUiiToEpc(cls, inst, s), null)
+          } else {
+            emitFromTagObject(cls, inst, t)
+          }
         }
       }
-      is String -> if (raw.isNotBlank()) emitEpc(maybeConvertUiiToEpc(cls, inst, raw.trim()))
+      is String -> if (raw.isNotBlank()) emitEpc(maybeConvertUiiToEpc(cls, inst, raw.trim()), null)
+      else -> emitFromTagObject(cls, inst, raw)
     }
+  }
+
+  /** Try to read RSSI from Chainway tag objects (UHFTAGInfo, etc.) via reflection. */
+  private fun extractRssi(tag: Any): Int? {
+    val c = tag.javaClass
+    val methodNames = listOf("getRssi", "getRSSI", "getRssiValue", "getPeakRssi", "getPeakRSSI")
+    for (name in methodNames) {
+      val v =
+        runCatching {
+          val m = c.getMethod(name)
+          when (val o = m.invoke(tag)) {
+            is Int -> o
+            is Short -> o.toInt()
+            is Byte -> o.toInt()
+            is String -> o.trim().toIntOrNull()
+            else -> null
+          }
+        }.getOrNull()
+      if (v != null) return v
+    }
+    for (f in c.declaredFields) {
+      if (!f.name.contains("rssi", ignoreCase = true)) continue
+      runCatching {
+        f.isAccessible = true
+        when (val o = f.get(tag)) {
+          is Int -> return o
+          is Short -> return o.toInt()
+        }
+      }
+    }
+    return null
+  }
+
+  private fun extractEpcStringFromTag(cls: Class<*>, inst: Any, tag: Any): String? {
+    val c = tag.javaClass
+    for (name in listOf("getEPC", "getEpc", "getUid", "getUII")) {
+      val s =
+        runCatching {
+          val m = c.getMethod(name)
+          (m.invoke(tag) as? String)?.trim()
+        }.getOrNull()
+      if (!s.isNullOrEmpty()) return maybeConvertUiiToEpc(cls, inst, s)
+    }
+    val raw = tag.toString().trim()
+    return if (raw.isNotEmpty()) maybeConvertUiiToEpc(cls, inst, raw) else null
+  }
+
+  private fun emitFromTagObject(cls: Class<*>, inst: Any, tag: Any) {
+    val hex = extractEpcStringFromTag(cls, inst, tag) ?: return
+    val rssi = extractRssi(tag)
+    emitEpc(hex, rssi)
   }
 
   private fun maybeConvertUiiToEpc(cls: Class<*>, inst: Any, uii: String): String {
@@ -205,9 +267,10 @@ class CarbonChainwayRfidController(
     return uii.trim().uppercase()
   }
 
-  private fun emitEpc(hex: String) {
+  private fun emitEpc(hex: String, rssi: Int?) {
     val sink = tagSink ?: return
-    val payload = mapOf("epc" to hex.uppercase(), "rssi" to -55)
+    val r = rssi ?: -55
+    val payload = mapOf("epc" to hex.uppercase(), "rssi" to r)
     mainHandler.post { sink.success(payload) }
   }
 }

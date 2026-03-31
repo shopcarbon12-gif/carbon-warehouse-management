@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
-import { getSession } from "@/lib/get-session";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { performLightspeedCatalogSync } from "@/lib/server/lightspeed-sync";
 import { randomUUID } from "node:crypto";
 
-export async function POST() {
-  const session = await getSession();
+export async function POST(req: Request) {
+  const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
