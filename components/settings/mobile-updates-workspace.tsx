@@ -11,6 +11,14 @@ export type MobileReleaseRow = {
   created_at: string;
 };
 
+/** e.g. `CarbonWMS v0.1.10+14.apk` → `v0.1.10+14` (Flutter-style version+build). */
+function guessVersionLabelFromApkName(fileName: string): string | null {
+  const m = fileName.match(/(v\d+\.\d+\.\d+\+\d+|\d+\.\d+\.\d+\+\d+)/i);
+  if (!m) return null;
+  const raw = m[1];
+  return raw.startsWith("v") || raw.startsWith("V") ? raw.replace(/^V/, "v") : raw;
+}
+
 export function MobileUpdatesWorkspace({ initialReleases }: { initialReleases: MobileReleaseRow[] }) {
   const router = useRouter();
   const inputId = useId();
@@ -28,6 +36,10 @@ export function MobileUpdatesWorkspace({ initialReleases }: { initialReleases: M
     if (f?.name.toLowerCase().endsWith(".apk")) {
       setFile(f);
       setMsg(`${f.name} (${(f.size / (1024 * 1024)).toFixed(1)} MiB)`);
+      const guess = guessVersionLabelFromApkName(f.name);
+      if (guess) {
+        setVersionLabel((prev) => (prev.trim() ? prev : guess));
+      }
     } else {
       setMsg("Drop a single .apk file.");
     }
@@ -167,6 +179,12 @@ export function MobileUpdatesWorkspace({ initialReleases }: { initialReleases: M
             const f = e.target.files?.[0] ?? null;
             setFile(f);
             setMsg(f ? `${f.name} (${(f.size / (1024 * 1024)).toFixed(1)} MiB)` : null);
+            if (f) {
+              const guess = guessVersionLabelFromApkName(f.name);
+              if (guess) {
+                setVersionLabel((prev) => (prev.trim() ? prev : guess));
+              }
+            }
           }}
         />
         {file ? (
@@ -180,7 +198,7 @@ export function MobileUpdatesWorkspace({ initialReleases }: { initialReleases: M
         <input
           value={versionLabel}
           onChange={(e) => setVersionLabel(e.target.value)}
-          placeholder="e.g. 0.1.9 or v0.1.10"
+          placeholder="e.g. v0.1.10+14 (filled from filename when possible)"
           className="mt-1 w-full max-w-md rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm dark:border-[var(--wms-border)]"
         />
       </label>
