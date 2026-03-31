@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { listBinsWithCounts } from "@/lib/queries/locations";
+import { getPgErrorMeta, hintForPgCode } from "@/lib/server/pg-error";
 import {
   upsertBinSchema,
   upsertBin,
@@ -50,8 +51,17 @@ export async function GET(req: Request) {
 
     return NextResponse.json(rows);
   } catch (e) {
-    console.error("[locations/bins]", e);
-    return NextResponse.json({ error: "Query failed" }, { status: 500 });
+    const meta = getPgErrorMeta(e);
+    console.error("[locations/bins]", meta.code ?? "", meta.message, e);
+    const expose = String(process.env.WMS_EXPOSE_DB_ERRORS ?? "").trim() === "1";
+    return NextResponse.json(
+      {
+        error: "Query failed",
+        hint: hintForPgCode(meta.code),
+        ...(expose ? { db: { code: meta.code ?? null, message: meta.message.slice(0, 800) } } : {}),
+      },
+      { status: 500 },
+    );
   }
 }
 

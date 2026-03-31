@@ -8,8 +8,9 @@ import { BinEditorDrawer, type BinRow } from "./bin-editor-drawer";
 const fetcher = async (url: string) => {
   const res = await fetch(url, { credentials: "same-origin" });
   if (!res.ok) {
-    const j = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(j.error ?? res.statusText);
+    const j = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
+    const parts = [j.error, j.hint].filter((x): x is string => Boolean(x?.trim()));
+    throw new Error(parts.length ? parts.join(" — ") : res.statusText);
   }
   return res.json();
 };

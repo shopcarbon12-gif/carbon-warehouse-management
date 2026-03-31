@@ -2,6 +2,10 @@
 set -e
 cd /app
 
+if [ -n "$DATABASE_URL" ] && [ "${WMS_AUTO_MIGRATE:-}" != "1" ]; then
+  echo "wms: NOTE: DATABASE_URL is set but WMS_AUTO_MIGRATE is not 1 — SQL migrations will NOT run at startup. Missing columns (e.g. bins.status) cause API Query failed until you migrate." >&2
+fi
+
 # Optional DB bootstrap: failures must NOT exit the script — Coolify/Docker health checks
 # need Node listening; a bad DATABASE_URL or a conflicting migration otherwise kills the
 # container on every deploy (restart loop).

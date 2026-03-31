@@ -75,7 +75,7 @@ export async function listBinsWithCounts(
     status: string;
   }>(
     `SELECT
-       b.id,
+       b.id::text AS id,
        b.code,
        b.capacity::text AS capacity,
        b.status,
