@@ -1,0 +1,21 @@
+---
+description: Hard rule — every release APK must be saved with versioned filename CarbonWMS Vx.y.z+build.apk from pubspec
+alwaysApply: true
+---
+
+# CarbonWMS APK — versioned filename (mandatory for all agents)
+
+Whenever you **generate a new release APK** for Carbon WMS (`mobile/carbon_wms`):
+
+1. Read **`mobile/carbon_wms/pubspec.yaml`** → field **`version:`** (Flutter format **`x.y.z+build`**, e.g. **`0.1.10+14`**).
+2. **You must** persist the artifact under this **exact naming pattern** (space after `CarbonWMS`, capital **V**, then full pubspec version including `+build`):
+
+   **`CarbonWMS V0.1.10+14.apk`**
+
+   (Replace `0.1.10+14` with the current `version:` value.)
+
+3. **`app-release.apk`** alone is **not** sufficient as the only drop — it is **not version-specific** and is easy to confuse across builds. The **versioned** name is the **canonical** file for humans, OTA upload labels, and archives.
+4. **Implementation:** run **`mobile/carbon_wms/scripts/build-apk.ps1`** (from `D:\cwm\mobile\carbon_wms` junction when the path has spaces). It copies the versioned APK to **`D:\CarbonWmsRelease\`** by default (`-ReleaseRoot` to override) **and** writes a matching **`.sha1`** file.
+5. When you finish a mobile build turn, **report** the versioned path (and size / last modified), not only `app-release.apk`.
+
+**No exceptions** unless the user explicitly asked to skip the versioned copy for that turn.

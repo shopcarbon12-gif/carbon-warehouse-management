@@ -13,7 +13,8 @@
     .\scripts\build-apk.ps1 -ReleaseRoot "D:\CarbonWmsRelease"
 
   TEMP, Pub, Gradle, JVM tmpdir, and XDG cache roots are forced under <repo>\.tools\ (not C:).
-  After success, copies app-release.apk and app-release.apk.sha1 to D:\CarbonWmsRelease (override with -ReleaseRoot).
+  After success, copies app-release.apk + app-release.apk.sha1 and a versioned
+  CarbonWMS V{pubspec-version}.apk (+ .sha1) to D:\CarbonWmsRelease (override with -ReleaseRoot).
 
   Runs `flutter test` before the release APK build.
 
@@ -128,6 +129,20 @@ Get-Item -LiteralPath $apk | Format-List FullName, Length, LastWriteTime
 if ($ReleaseRoot) {
   $destDir = $ReleaseRoot.TrimEnd('\', '/')
   New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+  $pubspecPath = Join-Path $here "pubspec.yaml"
+  $pubVersion = $null
+  if (Test-Path -LiteralPath $pubspecPath) {
+    foreach ($pl in Get-Content -LiteralPath $pubspecPath) {
+      if ($pl -match '^\s*version:\s*(.+?)\s*$') {
+        $pubVersion = $matches[1].Trim().Trim('"').Trim("'")
+        break
+      }
+    }
+  }
+  if (-not $pubVersion) {
+    Write-Warning "Could not parse version: from pubspec.yaml; versioned CarbonWMS V*.apk copy skipped."
+  }
+
   $destApk = Join-Path $destDir "app-release.apk"
   $destSha = Join-Path $destDir "app-release.apk.sha1"
   Copy-Item -LiteralPath $apk -Destination $destApk -Force
@@ -138,4 +153,17 @@ if ($ReleaseRoot) {
   Write-Host "  $destApk"
   Write-Host "  $destSha"
   Get-Item -LiteralPath $destApk | Format-List FullName, Length, LastWriteTime
+
+  if ($pubVersion) {
+    $versionedName = "CarbonWMS V$pubVersion.apk"
+    $versionedPath = Join-Path $destDir $versionedName
+    $versionedShaPath = Join-Path $destDir "$versionedName.sha1"
+    Copy-Item -LiteralPath $apk -Destination $versionedPath -Force
+    [System.IO.File]::WriteAllText($versionedShaPath, $sha1)
+    Write-Host ""
+    Write-Host "Canonical versioned APK (required by project rules):"
+    Write-Host "  $versionedPath"
+    Write-Host "  $versionedShaPath"
+    Get-Item -LiteralPath $versionedPath | Format-List FullName, Length, LastWriteTime
+  }
 }
