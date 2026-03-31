@@ -25,6 +25,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/inventory/putaway-assign") return true;
   if (pathname === "/api/mobile/status") return true;
   if (pathname === "/api/mobile/epc-visibility") return true;
+  /* OTA: handheld downloads APK with plain GET (no cookies). Else proxy redirects to /login HTML. */
+  if (pathname.startsWith("/uploads/mobile-apk/")) return true;
   return false;
 }
 

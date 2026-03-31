@@ -242,6 +242,12 @@ class WmsApiClient {
     return out;
   }
 
+  /// APK files are ZIP archives and must start with local file header `PK\x03\x04`.
+  static bool _looksLikeApkBytes(List<int> bytes) {
+    if (bytes.length < 4) return false;
+    return bytes[0] == 0x50 && bytes[1] == 0x4b && bytes[2] == 0x03 && bytes[3] == 0x04;
+  }
+
   Future<void> downloadAndInstallApk(String relativeOrAbsoluteUrl) async {
     if (kIsWeb) return;
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
@@ -253,9 +259,17 @@ class WmsApiClient {
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);
     }
+    final body = res.bodyBytes;
+    if (!_looksLikeApkBytes(body)) {
+      final head = String.fromCharCodes(body.take(120).where((b) => b >= 32 && b < 127));
+      final hint = head.startsWith('<!') || head.startsWith('<h')
+          ? ' (server returned HTML — often a login page; redeploy WMS with /uploads/mobile-apk public in proxy).'
+          : '';
+      throw StateError('Download is not a valid APK (wrong file signature).$hint');
+    }
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/carbon-wms-update.apk');
-    await file.writeAsBytes(res.bodyBytes);
+    await file.writeAsBytes(body);
     await InstallPlugin.installApk(file.path, appId: 'com.shopcarbon.wms');
   }
 
