@@ -76,8 +76,9 @@ function LightspeedLiveReadiness({
       ) : null}
       <ol className="mt-3 list-inside list-decimal space-y-1 border-t border-white/10 pt-2 text-slate-300/90 sm:list-outside sm:pl-4">
         <li>
-          In Coolify → WMS → Environment: LS_CLIENT_ID, LS_CLIENT_SECRET, LS_REFRESH_TOKEN,
-          LS_ACCOUNT_ID, LS_DOMAIN_PREFIX (often us — same as carbon-gen).
+          In Coolify → WMS → Environment: LS_CLIENT_ID, LS_CLIENT_SECRET, LS_REFRESH_TOKEN, LS_ACCOUNT_ID
+          (R-Series OAuth + account id — not the X-Series shop subdomain flow). Optional: LS_DOMAIN_PREFIX
+          (e.g. us) for extra token URL candidates only.
         </li>
         <li>
           Lightspeed dev app redirect URL must match:{" "}
