@@ -5,10 +5,31 @@
  * execute 002’s DROP TABLE on every boot).
  *
  * Run from docker-entrypoint when WMS_AUTO_MIGRATE=1. CWD must be /app (Dockerfile WORKDIR).
+ *
+ * Load `pg` via createRequire(package.json): ESM `import pg` can fail or miss hoisted deps in
+ * `.next/standalone` traces. Dockerfile also merges `pg` + subtree from the full `npm ci` layer.
  */
+import { createRequire } from "node:module";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import pg from "pg";
+
+const appRoot = process.cwd();
+const pkgPath = join(appRoot, "package.json");
+if (!existsSync(pkgPath)) {
+  console.error("wms: docker-migrate: missing package.json at", pkgPath);
+  process.exit(1);
+}
+let Pool;
+try {
+  const require = createRequire(pkgPath);
+  ({ Pool } = require("pg"));
+} catch (e) {
+  console.error(
+    "wms: docker-migrate: cannot load pg — ensure node-postgres is in /app/node_modules (see Dockerfile).",
+    e?.message || e,
+  );
+  process.exit(1);
+}
 
 function requireDatabaseUrl() {
   const u = process.env.DATABASE_URL?.trim();
@@ -85,13 +106,12 @@ async function applyRfidMigrations(pool, cwd) {
 }
 
 async function main() {
-  const cwd = process.cwd();
-  const pool = new pg.Pool({ connectionString: requireDatabaseUrl(), max: 1 });
+  const pool = new Pool({ connectionString: requireDatabaseUrl(), max: 1 });
   try {
     console.log("wms: docker-migrate.mjs — baseline schema.sql + gated migrations (pg)");
-    let total = await applySqlFile(pool, "scripts/schema.sql", join(cwd, "scripts/schema.sql"));
-    total += await applyRfidMigrations(pool, cwd);
-    console.log(`wms: docker-migrate finished (${total} SQL statement(s) total).`);
+    let total = await applySqlFile(pool, "scripts/schema.sql", join(appRoot, "scripts/schema.sql"));
+    total += await applyRfidMigrations(pool, appRoot);
+    console.log(`wms: docker-migrate OK — ${total} SQL statement(s) applied.`);
   } finally {
     await pool.end();
   }

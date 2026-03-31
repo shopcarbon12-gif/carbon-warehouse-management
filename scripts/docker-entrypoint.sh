@@ -16,6 +16,7 @@ if [ -n "$DATABASE_URL" ] && [ "${WMS_AUTO_MIGRATE:-}" = "1" ]; then
   # migration file on every boot — including 002’s DROP TABLE — and could fail differently than
   # the app’s TLS/URL handling.
   echo "wms: running node /app/scripts/docker-migrate.mjs (WMS_AUTO_MIGRATE=1)"
+  export NODE_PATH="${NODE_PATH:-/app/node_modules}"
   node /app/scripts/docker-migrate.mjs
   _s=$?
   if [ "$_s" -ne 0 ]; then echo "wms: WARNING docker-migrate.mjs exited $_s — fix DB; starting app anyway" >&2; fi

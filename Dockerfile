@@ -1,5 +1,6 @@
 # Carbon WMS — standalone Next image; map port 3000 in Coolify and set env in the dashboard.
 # Runtime: set DATABASE_URL (and other secrets) in Coolify from your linked Postgres resource.
+# Do not override Docker ENTRYPOINT in Coolify (custom start command only replaces CMD after entrypoint).
 # If WMS_AUTO_MIGRATE=1, `docker-migrate.mjs` runs at start (see docker-entrypoint.sh); failures log WARNING.
 # so /api/health can pass; fix DB logs and redeploy. Prefer running migrations in CI if possible.
 FROM node:20-alpine AS base
@@ -42,6 +43,20 @@ RUN addgroup --system --gid 1001 nodejs \
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# docker-migrate.mjs is not part of the server trace graph; merge full `pg` tree from deps.
+COPY --from=deps /app/node_modules/pg /app/node_modules/pg
+COPY --from=deps /app/node_modules/pg-connection-string /app/node_modules/pg-connection-string
+COPY --from=deps /app/node_modules/pg-pool /app/node_modules/pg-pool
+COPY --from=deps /app/node_modules/pg-protocol /app/node_modules/pg-protocol
+COPY --from=deps /app/node_modules/pg-types /app/node_modules/pg-types
+COPY --from=deps /app/node_modules/pgpass /app/node_modules/pgpass
+COPY --from=deps /app/node_modules/pg-int8 /app/node_modules/pg-int8
+COPY --from=deps /app/node_modules/postgres-array /app/node_modules/postgres-array
+COPY --from=deps /app/node_modules/postgres-bytea /app/node_modules/postgres-bytea
+COPY --from=deps /app/node_modules/postgres-date /app/node_modules/postgres-date
+COPY --from=deps /app/node_modules/postgres-interval /app/node_modules/postgres-interval
+COPY --from=deps /app/node_modules/split2 /app/node_modules/split2
+COPY --from=deps /app/node_modules/xtend /app/node_modules/xtend
 COPY scripts/schema.sql scripts/seed-bootstrap.sql /app/scripts/
 COPY scripts/migrations /app/scripts/migrations
 COPY scripts/docker-migrate.mjs /app/scripts/docker-migrate.mjs
