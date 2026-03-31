@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
-import { getActiveRelease } from "@/lib/queries/app-releases";
+import { getActiveRelease, getLatestAppRelease } from "@/lib/queries/app-releases";
 import { findDeviceByAndroidId } from "@/lib/queries/enterprise-devices";
 import { toAbsolutePublicUrl } from "@/lib/server/resolve-public-origin";
 
@@ -30,7 +30,8 @@ export async function GET(req: Request) {
     let latestVersion: string | null = null;
     let downloadUrl: string | null = null;
     if (pool) {
-      const rel = await getActiveRelease(pool, session.tid);
+      const rel =
+        (await getActiveRelease(pool, session.tid)) ?? (await getLatestAppRelease(pool, session.tid));
       if (rel) {
         latestVersion = rel.version_label;
         downloadUrl = toAbsolutePublicUrl(req, rel.apk_url);
@@ -82,7 +83,8 @@ export async function GET(req: Request) {
     });
   }
 
-  const rel = await getActiveRelease(pool, dev.tenant_id);
+  const rel =
+    (await getActiveRelease(pool, dev.tenant_id)) ?? (await getLatestAppRelease(pool, dev.tenant_id));
   const latestVersion = rel?.version_label ?? null;
   const downloadUrl = rel ? toAbsolutePublicUrl(req, rel.apk_url) : null;
   const lv = latestVersion ?? "";

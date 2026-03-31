@@ -1,8 +1,18 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useId, useRef, useState } from "react";
 
-export function MobileUpdatesWorkspace() {
+export type MobileReleaseRow = {
+  id: number;
+  version_label: string;
+  apk_url: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+export function MobileUpdatesWorkspace({ initialReleases }: { initialReleases: MobileReleaseRow[] }) {
+  const router = useRouter();
   const inputId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [versionLabel, setVersionLabel] = useState("");
@@ -59,6 +69,7 @@ export function MobileUpdatesWorkspace() {
       setMsg(`Saved. Active release: ${abs}. Handhelds will see this on the next /api/mobile/status poll.`);
       setFile(null);
       setInputKey((k) => k + 1);
+      router.refresh();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -66,8 +77,66 @@ export function MobileUpdatesWorkspace() {
     }
   };
 
+  const [activatingId, setActivatingId] = useState<number | null>(null);
+
+  const setActive = async (releaseId: number) => {
+    setActivatingId(releaseId);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/mobile/releases/set-active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ releaseId }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? `HTTP ${res.status}`);
+      setMsg("Marked release as active. Handhelds will pick it up on the next status check.");
+      router.refresh();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Failed to set active");
+    } finally {
+      setActivatingId(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
+      {initialReleases.length > 0 ? (
+        <div className="rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-4 dark:border-[var(--wms-border)]">
+          <h2 className="font-mono text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--wms-muted)]">
+            Releases for this tenant
+          </h2>
+          <ul className="mt-3 divide-y divide-[var(--wms-border)] font-mono text-xs">
+            {initialReleases.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-2 py-2">
+                <span className="text-[var(--wms-fg)]">{r.version_label}</span>
+                {r.is_active ? (
+                  <span className="rounded bg-[var(--wms-accent)]/20 px-2 py-0.5 text-[0.65rem] text-[var(--wms-accent)]">
+                    active
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={activatingId !== null}
+                    onClick={() => void setActive(r.id)}
+                    className="rounded border border-[var(--wms-border)] px-2 py-0.5 text-[0.65rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                  >
+                    {activatingId === r.id ? "…" : "Set active"}
+                  </button>
+                )}
+                <span className="min-w-0 flex-1 truncate text-[var(--wms-muted)]" title={r.apk_url}>
+                  {r.apk_url}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="font-mono text-xs text-[var(--wms-muted)]">
+          No releases in the database for this tenant yet. Upload an APK above (or confirm you are in the correct warehouse /
+          tenant).
+        </p>
+      )}
       <div
         onDragOver={onDragOver}
         onDrop={onDrop}
