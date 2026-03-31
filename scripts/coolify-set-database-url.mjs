@@ -96,6 +96,8 @@ const bulk = [
     value: databaseUrl,
     is_literal: true,
     is_multiline: false,
+    is_runtime: true,
+    is_buildtime: true,
   },
 ];
 if (process.env.COOLIFY_WMS_BOOTSTRAP === "1") {
@@ -105,12 +107,16 @@ if (process.env.COOLIFY_WMS_BOOTSTRAP === "1") {
       value: "1",
       is_literal: true,
       is_multiline: false,
+      is_runtime: true,
+      is_buildtime: true,
     },
     {
       key: "WMS_AUTO_SEED",
       value: "1",
       is_literal: true,
       is_multiline: false,
+      is_runtime: true,
+      is_buildtime: true,
     },
   );
   console.log("COOLIFY_WMS_BOOTSTRAP=1: patching WMS_AUTO_MIGRATE, WMS_AUTO_SEED");

@@ -64,7 +64,14 @@ export function MobileUpdatesWorkspace({ initialReleases }: { initialReleases: M
         }
         throw new Error(text.slice(0, 240) || "Invalid JSON from server");
       }
-      if (!res.ok) throw new Error(j.error ?? `Upload failed (${res.status})`);
+      if (!res.ok) {
+        const base = j.error ?? `Upload failed (${res.status})`;
+        const hint =
+          typeof base === "string" && base.includes("Database unavailable")
+            ? " Set DATABASE_URL on the WMS Coolify app to your Postgres internal URL, save, redeploy. See docs/WORKER.md (Database URL on the WMS web app)."
+            : "";
+        throw new Error(`${base}${hint}`);
+      }
       const abs = j.apkUrlAbsolute ?? j.apkUrl ?? "(ok)";
       setMsg(`Saved. Active release: ${abs}. Handhelds will see this on the next /api/mobile/status poll.`);
       setFile(null);
