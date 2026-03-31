@@ -12,8 +12,9 @@ export const dynamic = "force-dynamic";
 /** Large APK uploads (Coolify/Traefik may still need higher client body limits on the proxy). */
 export const maxDuration = 600;
 
+/** Lowercase so Linux volumes (case-sensitive) always match the URL we store in `app_releases.apk_url`. */
 function safeSegment(s: string): string {
-  return s.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120);
+  return s.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120).toLowerCase();
 }
 
 export async function POST(req: Request) {

@@ -258,8 +258,8 @@ class WmsApiClient {
     final res = await _http.get(uri);
     if (res.statusCode == 404) {
       throw StateError(
-        'APK not found (HTTP 404). On Docker/Coolify without a persistent volume on /app/public/uploads, '
-        'redeploys delete uploaded APKs — re-upload in WMS → Mobile OTA or mount a volume there.',
+        'APK not found (HTTP 404). Re-upload the same build in WMS → Settings → Mobile OTA (Linux paths are case-sensitive; '
+        'URL vs filename mismatch causes this even with a volume). Without /app/public/uploads mounted, redeploys also remove APKs.',
       );
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
