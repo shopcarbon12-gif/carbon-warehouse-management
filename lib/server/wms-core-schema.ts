@@ -1,7 +1,14 @@
 import type { Pool } from "pg";
 
-/** Minimum tables for baseline WMS UI (locations page, auth, tenancy). */
-export const WMS_CORE_TABLES = ["locations", "bins", "tenants", "users"] as const;
+/** Minimum tables for baseline WMS UI (dashboard KPIs, locations/bin counts, auth, audit). */
+export const WMS_CORE_TABLES = [
+  "locations",
+  "bins",
+  "tenants",
+  "users",
+  "items",
+  "audit_log",
+] as const;
 
 export type CoreTableName = (typeof WMS_CORE_TABLES)[number];
 

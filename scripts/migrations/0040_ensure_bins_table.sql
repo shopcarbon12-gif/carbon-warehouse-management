@@ -1,5 +1,5 @@
 -- Idempotent: DBs that have public.matrices (legacy 001–003 skipped) but never ran 002 can lack `bins`.
--- Runs early in the tail migration list so later files (007 status, 021 repair) can ALTER bins safely.
+-- **Must run before** `0041_ensure_items_matrix_table.sql` (items FK → bins) and before `0042_*` ALTER items.
 
 CREATE TABLE IF NOT EXISTS bins (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

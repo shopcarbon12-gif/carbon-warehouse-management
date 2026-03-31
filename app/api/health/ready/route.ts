@@ -6,8 +6,8 @@ import { listMissingCoreTables } from "@/lib/server/wms-core-schema";
  * Readiness: `SELECT 1` + required `public` tables (`locations`, `bins`, `tenants`, `users`).
  * Use for manual checks or a Coolify probe — **not** for Docker HEALTHCHECK (see /api/health).
  *
- * Returns **503** when the DB answers but WMS tables are missing (common when `psql` migrations
- * failed silently or `DATABASE_URL` points at the wrong/empty database).
+ * Returns **503** when the DB answers but WMS tables are missing (common when startup migrations
+ * failed mid-way, `items` was never bootstrapped, or `DATABASE_URL` points at the wrong database).
  */
 export async function GET() {
   const pool = getPool();
@@ -33,7 +33,7 @@ export async function GET() {
           schema: "incomplete",
           missing_tables: missing,
           hint:
-            "Postgres is reachable but WMS tables are missing. In Coolify: set WMS_AUTO_MIGRATE=1, redeploy, read container logs for wms: WARNING (psql) or CRITICAL (missing tables). Confirm DATABASE_URL is the linked Postgres for this app (correct database name).",
+            "Postgres is reachable but WMS tables are missing (includes items + audit_log). In Coolify: set WMS_AUTO_MIGRATE=1, redeploy, read logs for wms: WARNING (docker-migrate) or CRITICAL (missing tables). Confirm DATABASE_URL is the linked Postgres for this app.",
         },
         { status: 503 },
       );

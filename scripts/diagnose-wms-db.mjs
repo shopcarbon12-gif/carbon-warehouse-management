@@ -46,7 +46,7 @@ if (!url) {
   process.exit(1);
 }
 
-const core = ["locations", "bins", "tenants", "users"];
+const core = ["locations", "bins", "tenants", "users", "items", "audit_log"];
 const pool = new pg.Pool({ connectionString: url, max: 1 });
 try {
   await pool.query("SELECT 1");

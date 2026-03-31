@@ -26,7 +26,7 @@ fi
 # Always report core tables (even if WMS_AUTO_MIGRATE was off) — explains "DB up" + broken app.
 if [ -n "$DATABASE_URL" ]; then
   missing=""
-  for t in locations bins tenants users; do
+  for t in locations bins tenants users items audit_log; do
     hit=$(psql "$DATABASE_URL" -tAc "select 1 from information_schema.tables where table_schema='public' and table_name='$t' limit 1" 2>/dev/null | tr -d " \t\r\n")
     if [ "$hit" != "1" ]; then
       missing="${missing}${missing:+ }${t}"
@@ -36,7 +36,7 @@ if [ -n "$DATABASE_URL" ]; then
     echo "wms: CRITICAL — missing public table(s): ${missing}. App APIs will fail (e.g. 42P01)." >&2
     echo "wms: Fix: WMS_AUTO_MIGRATE=1 + redeploy; confirm DATABASE_URL points at this app’s Postgres; DB user must own DB or have CREATE; scroll up for psql WARNING on schema/migrations." >&2
   else
-    echo "wms: core schema OK (locations, bins, tenants, users)" >&2
+    echo "wms: core schema OK (locations, bins, tenants, users, items, audit_log)" >&2
   fi
 fi
 
