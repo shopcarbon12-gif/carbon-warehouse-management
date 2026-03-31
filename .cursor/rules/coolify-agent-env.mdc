@@ -35,3 +35,11 @@ The agent may **read** `.env.coolify.local` from the workspace when present inst
 After Dockerfile or entrypoint changes, use **Redeploy** (rebuild), not only **Restart**. See the Next.js + Coolify hardening rule for health checks and proxy behavior.
 
 If the repo defines **`npm run deploy:coolify`**, it POSTs **`COOLIFY_DEPLOY_WEBHOOK_URL`** with optional **`Authorization: Bearer COOLIFY_API_TOKEN`**. Copy the deploy URL from **Application → Configuration → Webhooks → Deploy Webhook**. Create the token at **`/security/api-tokens`** with **deploy** permission. Without a token the API returns **401**; use **Redeploy** in the UI instead.
+
+## WMS uploads (Mobile OTA / `public/uploads`)
+
+The app stores uploaded files under **`public/uploads/`** (e.g. **`mobile-apk/`**). In the production Docker image the app root is **`/app`**, so the mount point is **`/app/public/uploads`** (minimum: **`/app/public/uploads/mobile-apk`**). Without **Configuration → Persistent Storage**, redeploys replace the container filesystem and files disappear while the database may still reference old URLs.
+
+Add a **Volume** (or **Add Volume Mount** with **Source Path** empty for a Docker-managed named volume): **Name** e.g. `wms-public-uploads`, **Destination Path** **`/app/public/uploads`**. **Save**, then **Redeploy** so the mount applies; **re-upload** the APK if it was only on the old layer.
+
+**MCP browser note:** `GET /api/v1/applications/{uuid}` does not reliably return persistent-storage fields; the UI is Livewire. **cursor-ide-browser** snapshots often list modal labels without fillable input **refs**, so agents may need the user to submit **Persistent Storage** forms manually in the browser tab.
