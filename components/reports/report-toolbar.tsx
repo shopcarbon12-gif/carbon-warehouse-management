@@ -1,12 +1,19 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { CalendarRange, Search } from "lucide-react";
+
+const dateInputClass =
+  "rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--wms-accent)]/40 dark:border-[var(--wms-border)]";
 
 type ReportToolbarProps = {
   search: string;
   onSearchChange: (value: string) => void;
   onExportCsv: () => void;
   exportDisabled?: boolean;
+  dateFrom: string;
+  dateTo: string;
+  onDateFromChange: (value: string) => void;
+  onDateToChange: (value: string) => void;
 };
 
 export function ReportToolbar({
@@ -14,7 +21,17 @@ export function ReportToolbar({
   onSearchChange,
   onExportCsv,
   exportDisabled,
+  dateFrom,
+  dateTo,
+  onDateFromChange,
+  onDateToChange,
 }: ReportToolbarProps) {
+  const hasRange = Boolean(dateFrom || dateTo);
+  const clearRange = () => {
+    onDateFromChange("");
+    onDateToChange("");
+  };
+
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between dark:border-[var(--wms-border)]">
       <label className="relative flex min-w-[12rem] flex-1 items-center gap-2 sm:max-w-md">
@@ -34,10 +51,37 @@ export function ReportToolbar({
       </label>
       <div className="flex flex-wrap items-center gap-2">
         <div
-          className="rounded-lg border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)] dark:border-[var(--wms-border)]"
-          title="Date range filter coming soon"
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 dark:border-[var(--wms-border)]"
+          title="Filter rows by created_at (inclusive end date, server date)"
         >
-          Date range — soon
+          <CalendarRange className="h-3.5 w-3.5 shrink-0 text-[var(--wms-muted)]" aria-hidden />
+          <label className="flex items-center gap-1">
+            <span className="font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)]">From</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => onDateFromChange(e.target.value)}
+              className={dateInputClass}
+            />
+          </label>
+          <label className="flex items-center gap-1">
+            <span className="font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)]">To</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => onDateToChange(e.target.value)}
+              className={dateInputClass}
+            />
+          </label>
+          {hasRange ? (
+            <button
+              type="button"
+              onClick={clearRange}
+              className="rounded-md px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-accent)] hover:underline"
+            >
+              Clear
+            </button>
+          ) : null}
         </div>
         <button
           type="button"

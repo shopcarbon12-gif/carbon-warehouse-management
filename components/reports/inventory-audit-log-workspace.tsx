@@ -25,13 +25,17 @@ export function InventoryAuditLogWorkspace({
   emptyLabel,
 }: InventoryAuditLogWorkspaceProps) {
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const debounced = useDebouncedValue(search, 400);
   const query = useMemo(() => {
     const p = new URLSearchParams();
     p.set("logType", logTypes.join(","));
     if (debounced.trim()) p.set("search", debounced.trim());
+    if (dateFrom.trim()) p.set("dateFrom", dateFrom.trim());
+    if (dateTo.trim()) p.set("dateTo", dateTo.trim());
     return p.toString();
-  }, [logTypes, debounced]);
+  }, [logTypes, debounced, dateFrom, dateTo]);
 
   const { data, error, isLoading } = useSWR(
     `/api/reports/inventory-audit-logs?${query}`,
@@ -77,6 +81,10 @@ export function InventoryAuditLogWorkspace({
         onSearchChange={setSearch}
         onExportCsv={exportCsv}
         exportDisabled={!data?.length}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
       />
       <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] dark:border-[var(--wms-border)]">
         <table className="w-full min-w-[880px] border-collapse text-left text-sm">

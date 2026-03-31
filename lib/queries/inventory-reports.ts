@@ -1,5 +1,27 @@
 import type { Pool } from "pg";
 
+type CreatedAtRangeOpts = { dateFrom?: string; dateTo?: string };
+
+function appendCreatedAtRange(
+  conditions: string[],
+  params: unknown[],
+  startP: number,
+  opts: CreatedAtRangeOpts,
+): number {
+  let p = startP;
+  if (opts.dateFrom) {
+    conditions.push(`created_at >= $${p}::date`);
+    params.push(opts.dateFrom);
+    p++;
+  }
+  if (opts.dateTo) {
+    conditions.push(`created_at < ($${p}::date + interval '1 day')`);
+    params.push(opts.dateTo);
+    p++;
+  }
+  return p;
+}
+
 export type InventoryAuditLogRow = {
   id: number;
   log_type: string;
@@ -43,7 +65,7 @@ export type ExternalSystemLogRow = {
 export async function listInventoryAuditLogs(
   pool: Pool,
   tenantId: string,
-  opts: { logTypes?: string[]; search?: string; limit?: number },
+  opts: { logTypes?: string[]; search?: string; limit?: number; dateFrom?: string; dateTo?: string },
 ): Promise<InventoryAuditLogRow[]> {
   const limit = Math.min(opts.limit ?? 200, 500);
   const conditions: string[] = ["tenant_id = $1::uuid"];
@@ -61,6 +83,8 @@ export async function listInventoryAuditLogs(
     params.push(`%${opts.search.trim()}%`);
     p++;
   }
+
+  p = appendCreatedAtRange(conditions, params, p, opts);
 
   params.push(limit);
   const r = await pool.query<{
@@ -98,7 +122,7 @@ export async function listInventoryAuditLogs(
 export async function listAssetMovements(
   pool: Pool,
   tenantId: string,
-  opts: { search?: string; limit?: number },
+  opts: { search?: string; limit?: number; dateFrom?: string; dateTo?: string },
 ): Promise<AssetMovementRow[]> {
   const limit = Math.min(opts.limit ?? 200, 500);
   const conditions: string[] = ["tenant_id = $1::uuid"];
@@ -110,6 +134,8 @@ export async function listAssetMovements(
     params.push(`%${opts.search.trim()}%`);
     p++;
   }
+
+  p = appendCreatedAtRange(conditions, params, p, opts);
 
   params.push(limit);
   const r = await pool.query<{
@@ -141,7 +167,7 @@ export async function listAssetMovements(
 export async function listReplenishmentLogs(
   pool: Pool,
   tenantId: string,
-  opts: { search?: string; limit?: number },
+  opts: { search?: string; limit?: number; dateFrom?: string; dateTo?: string },
 ): Promise<ReplenishmentLogRow[]> {
   const limit = Math.min(opts.limit ?? 200, 500);
   const conditions: string[] = ["tenant_id = $1::uuid"];
@@ -153,6 +179,8 @@ export async function listReplenishmentLogs(
     params.push(`%${opts.search.trim()}%`);
     p++;
   }
+
+  p = appendCreatedAtRange(conditions, params, p, opts);
 
   params.push(limit);
   const r = await pool.query<{
@@ -186,7 +214,7 @@ export async function listReplenishmentLogs(
 export async function listExternalSystemLogs(
   pool: Pool,
   tenantId: string,
-  opts: { search?: string; limit?: number },
+  opts: { search?: string; limit?: number; dateFrom?: string; dateTo?: string },
 ): Promise<ExternalSystemLogRow[]> {
   const limit = Math.min(opts.limit ?? 200, 500);
   const conditions: string[] = ["tenant_id = $1::uuid"];
@@ -201,6 +229,8 @@ export async function listExternalSystemLogs(
     params.push(q);
     p++;
   }
+
+  p = appendCreatedAtRange(conditions, params, p, opts);
 
   params.push(limit);
   const r = await pool.query<{
