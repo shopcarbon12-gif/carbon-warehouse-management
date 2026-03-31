@@ -186,12 +186,11 @@ export function InventoryCompareWorkspace() {
         </button>
       </div>
       <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
-        <strong className="text-[var(--wms-fg)]">Push to LS</strong> records intent only (no per-SKU Lightspeed write yet). To create a real R-Series{" "}
-        <span className="text-[var(--wms-fg)]">Inventory/Transfer</span> and attach it to a WMS slip, admins use{" "}
-        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">POST /api/integrations/lightspeed/sync-slip-transfer</code> with{" "}
-        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">slipNumber</code>,{" "}
-        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">sendingShopID</code>,{" "}
-        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">receivingShopID</code> (OAuth scope <code className="px-1">employee:transfers</code>).
+        <strong className="text-[var(--wms-fg)]">Push to LS</strong> records intent only (no per-SKU qty write here). Full R-Series transfer flow (admin):{" "}
+        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">sync-slip-transfer</code> (create + optional{" "}
+        <code className="px-1">transferItems</code> + <code className="px-1">send</code>), or{" "}
+        <code className="px-1">slip-transfer-add-items</code> then <code className="px-1">slip-transfer-send</code>. Scope{" "}
+        <code className="px-1">employee:transfers</code>. Use Lightspeed <strong>itemID</strong> values on lines.
       </p>
       <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
         Push uses variance rows only. With row checkboxes, only selected SKUs are sent in the payload; if none selected, all variance rows go.

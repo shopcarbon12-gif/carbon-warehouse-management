@@ -9,16 +9,30 @@ import {
   getLightspeedCredentialsForSync,
 } from "@/lib/server/infrastructure-settings-table";
 import { rseriesPostJsonV3 } from "@/lib/server/lightspeed-rseries-client";
+import {
+  chunkTransferItems,
+  rseriesInventoryTransferAddItems,
+  rseriesInventoryTransferSend,
+} from "@/lib/server/lightspeed-rseries-inventory-transfer";
 import { insertExternalSystemLog } from "@/lib/queries/external-system-logs";
 import { getTransferSlip, setTransferSlipLsTransferId } from "@/lib/queries/transfer-slips";
 
 export const dynamic = "force-dynamic";
+
+const transferLineSchema = z.object({
+  itemID: z.number().int().positive(),
+  toSend: z.number().int().positive().max(999_999),
+});
 
 const bodySchema = z.object({
   slipNumber: z.number().int().positive(),
   sendingShopID: z.number().int().positive(),
   receivingShopID: z.number().int().positive(),
   note: z.string().max(2000).optional(),
+  /** Optional: add up to 500 lines (batched 100/call) after the transfer is created. */
+  transferItems: z.array(transferLineSchema).max(500).optional(),
+  /** Optional: POST Send.json after adds (or immediately if no lines). */
+  send: z.boolean().optional(),
 });
 
 function parseTransferIdFromLightspeedBody(body: unknown): string | null {
@@ -38,10 +52,11 @@ function parseTransferIdFromLightspeedBody(body: unknown): string | null {
 
 /**
  * Creates a Lightspeed R-Series **Inventory → Transfer** (shop-to-shop) and stores `transferID`
- * on `transfer_slips.ls_transfer_id`. WMS `source_loc` / `dest_loc` are not auto-mapped to LS shops;
- * the caller supplies numeric **Shop** ids from Lightspeed.
+ * on `transfer_slips.ls_transfer_id`. Optional **transferItems** (Lightspeed **itemID** + **toSend**) and **send**
+ * run AddItems (100/batch) and Send in the same request. For an existing slip, use **slip-transfer-add-items**
+ * and **slip-transfer-send** instead.
  *
- * OAuth app needs **employee:transfers** scope. See Lightspeed Retail API: Inventory Transfer POST.
+ * OAuth app needs **employee:transfers** scope.
  */
 export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -62,7 +77,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid body", issues: parsed.error.issues }, { status: 400 });
   }
 
-  const { slipNumber, sendingShopID, receivingShopID, note } = parsed.data;
+  const { slipNumber, sendingShopID, receivingShopID, note, transferItems, send } = parsed.data;
 
   const slip = await getTransferSlip(pool, session.tid, slipNumber);
   if (!slip) {
@@ -131,10 +146,83 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to persist ls_transfer_id" }, { status: 500 });
   }
 
-  return NextResponse.json({
+  const out: Record<string, unknown> = {
     ok: true,
     slipNumber,
     ls_transfer_id: transferId,
-    lightspeed: result.body,
-  });
+    lightspeed_create: result.body,
+  };
+
+  if (transferItems?.length) {
+    const batches = chunkTransferItems(transferItems);
+    const batchResults: { batch: number; ok: boolean; status: number }[] = [];
+    for (let b = 0; b < batches.length; b++) {
+      const chunk = batches[b]!;
+      const addRes = await rseriesInventoryTransferAddItems(creds, transferId, chunk);
+      batchResults.push({ batch: b, ok: addRes.ok, status: addRes.status });
+      if (!addRes.ok) {
+        try {
+          await insertExternalSystemLog(pool, session.tid, {
+            system_name: "lightspeed",
+            direction: "OUTBOUND",
+            payload_summary: `AddItems failed after create slip=${slipNumber} ls_transfer=${transferId} batch=${b} http=${addRes.status}`,
+            status: "error",
+          });
+        } catch (e) {
+          console.warn("[sync-slip-transfer] log", e);
+        }
+        return NextResponse.json(
+          {
+            error: "Transfer created and saved, but Lightspeed AddItems failed",
+            slipNumber,
+            ls_transfer_id: transferId,
+            lightspeed_create: result.body,
+            add_items_batch_results: batchResults,
+            add_items_error_body: addRes.body,
+          },
+          { status: 502 },
+        );
+      }
+    }
+    out.add_items_batch_results = batchResults;
+    out.lines_added = transferItems.length;
+    try {
+      await insertExternalSystemLog(pool, session.tid, {
+        system_name: "lightspeed",
+        direction: "OUTBOUND",
+        payload_summary: `Inventory/Transfer/${transferId}/AddItems batches=${batches.length} slip=${slipNumber}`,
+        status: "ok",
+      });
+    } catch (e) {
+      console.warn("[sync-slip-transfer] add items log", e);
+    }
+  }
+
+  if (send) {
+    const sendRes = await rseriesInventoryTransferSend(creds, transferId);
+    out.send_ok = sendRes.ok;
+    out.send_status = sendRes.status;
+    out.lightspeed_send = sendRes.body;
+    try {
+      await insertExternalSystemLog(pool, session.tid, {
+        system_name: "lightspeed",
+        direction: "OUTBOUND",
+        payload_summary: `Inventory/Transfer/${transferId}/Send http=${sendRes.status} slip=${slipNumber}`,
+        status: sendRes.ok ? "ok" : "error",
+      });
+    } catch (e) {
+      console.warn("[sync-slip-transfer] send log", e);
+    }
+    if (!sendRes.ok) {
+      return NextResponse.json(
+        {
+          error: "Transfer created (and items may be added), but Lightspeed Send failed",
+          ...out,
+        },
+        { status: 502 },
+      );
+    }
+  }
+
+  return NextResponse.json(out);
 }
