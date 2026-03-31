@@ -682,6 +682,15 @@ class WmsApiException implements Exception {
   final int statusCode;
   final String body;
 
+  String get _bodySummary {
+    final t = body.trim();
+    if (t.startsWith('<!DOCTYPE') || t.startsWith('<!doctype') || t.startsWith('<html')) {
+      return 'server returned HTML (often a missing API route or deploy in progress), not JSON';
+    }
+    if (t.length > 200) return '${t.substring(0, 200)}…';
+    return t;
+  }
+
   @override
-  String toString() => 'WmsApiException($statusCode): $body';
+  String toString() => 'WmsApiException($statusCode): $_bodySummary';
 }
