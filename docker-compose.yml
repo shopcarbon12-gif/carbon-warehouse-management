@@ -3,7 +3,7 @@
 # Then: npm run db:migrate && npm run db:seed
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

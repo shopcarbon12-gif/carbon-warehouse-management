@@ -71,7 +71,7 @@ Production hostname: **`https://wms.shopcarbon.com`**. In DNS, add a **`wms`** r
 
 **Shopify / Lightspeed:** Register redirect URLs for **both** origins you use, e.g. **`https://wms.shopcarbon.com/api/shopify/callback`** and **`http://localhost:3040/api/shopify/callback`** (and the Lightspeed callback path if you use OAuth).  
 
-**Full DB mirror (local copy of prod data):** see **`scripts/db-mirror-coolify.example.sh`** — `pg_dump` from Coolify Postgres (SSH tunnel if needed) → `pg_restore` into local `carbon_wms`. Do not commit dumps or passwords.
+**Full DB mirror (local copy of prod data):** run **`npm run db:mirror:ssh`** if you have non-interactive **`ssh root@<Coolify host>`** access (uses `docker exec` on the WMS Postgres container, then `pg_restore` into **`docker compose`** — keep local Postgres major version aligned with prod, e.g. **18**). Details: **`scripts/db-mirror-coolify.example.sh`**. Do not commit dumps or passwords.
 
 After you **push** to the branch Coolify builds from, either wait for automatic deploy (if enabled) or click **Redeploy** on the application in Coolify.
 

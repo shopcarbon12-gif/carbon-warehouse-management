@@ -17,6 +17,7 @@
     "migrate:incremental": "npm run db:migrate:incremental",
     "seed": "npm run db:seed",
     "db:setup": "npm run db:ensure && npm run db:migrate && npm run db:seed",
+    "db:mirror:ssh": "node scripts/db-mirror-ssh-dump-restore.mjs",
     "worker": "npx tsx scripts/worker.ts",
     "test:e2e": "playwright test",
     "deploy:coolify": "node scripts/trigger-coolify-deploy.mjs",
