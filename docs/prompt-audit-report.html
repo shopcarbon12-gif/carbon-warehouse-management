@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Carbon WMS — Prompt audit vs current codebase</title>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --surface: #151a22;
+      --border: #2a3344;
+      --text: #e8ecf1;
+      --muted: #8b98a8;
+      --ok: #3ecf8e;
+      --partial: #e8b84a;
+      --no: #f07178;
+      --link: #6cb3ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+      font-size: 15px;
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+    h1 {
+      font-size: 1.65rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.5rem;
+    }
+    h2 {
+      font-size: 1.15rem;
+      margin: 2rem 0 0.75rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 { font-size: 1rem; margin: 1.25rem 0 0.5rem; color: var(--muted); font-weight: 600; }
+    p, li { color: var(--text); }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .meta {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+      margin: 1rem 0 1.5rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 0.75rem 0;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.55rem 0.65rem;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th { background: var(--surface); color: var(--muted); font-weight: 600; }
+    .tag {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tag-applied { background: rgba(62, 207, 142, 0.15); color: var(--ok); }
+    .tag-partial { background: rgba(232, 184, 74, 0.15); color: var(--partial); }
+    .tag-not { background: rgba(240, 113, 120, 0.12); color: var(--no); }
+    .tag-na { background: rgba(139, 152, 168, 0.15); color: var(--muted); }
+    ul.compact li { margin-bottom: 0.35rem; }
+    code, .path { font-family: ui-monospace, monospace; font-size: 0.82em; color: #b8c5d6; }
+    a { color: var(--link); }
+    footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.85rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Carbon WMS — development prompts vs current tree</h1>
+    <p class="muted">Audit of your chronological user prompts against the repository state when this report was generated.</p>
+
+    <div class="meta">
+      <strong>Sources</strong>
+      <ul class="compact" style="margin: 0.5rem 0 0;">
+        <li>Prompt export: <code>c:\Users\Elior\Desktop\project-dev-prompts-chronological.txt</code> (352 prompts, numbered ~107–251; extracted 2026-03-31).</li>
+        <li>Codebase: <code>d:\Projects\My project\carbon-warehouse-management</code></li>
+      </ul>
+      <p class="muted" style="margin: 0.75rem 0 0;">
+        <strong>Method:</strong> Prompts were grouped by theme (not every duplicate “deploy / verify” line is listed).
+        Items marked <span class="tag tag-applied">applied</span> have a clear counterpart in the repo (files, routes, or migrations).
+        <span class="tag tag-partial">partial</span> means implemented but diverging from the original wording or needs manual verification.
+        <span class="tag tag-not">not verified</span> means no clear artifact found or is inherently outside the repo (e.g. “watch deploy until success”).
+      </p>
+    </div>
+
+    <h2>1. Superseded or intentionally dropped (not reported as “missing”)</h2>
+    <p class="muted">You asked to skip tasks that were later reversed or replaced by a newer spec.</p>
+    <ul class="compact">
+      <li><strong>Shopify as a channel (early prompts):</strong> Later work removed Shopify from the data model (<code>scripts/migrations/009_remove_shopify.sql</code>). The net architecture is Lightspeed-centric.</li>
+      <li><strong>Flat <code>products</code> / <code>items</code> only (prompt ~107):</strong> Superseded by the matrix model (<code>002_matrix_architecture.sql</code>, <code>matrices</code> / <code>custom_skus</code>, <code>types/db.ts</code>).</li>
+      <li><strong>21 legacy status labels + nine Senitron-style checkbox columns (~245) vs remove columns (~243):</strong> Both superseded by the <strong>Clean 10</strong> architecture (<code>scripts/migrations/019_clean_10_status_architecture.sql</code>) and the read-only rule summary UI (<code>components/settings/status-labels-workspace.tsx</code>).</li>
+      <li><strong>Standalone root <code>schema.sql</code> only:</strong> Superseded by <code>scripts/schema.sql</code>, incremental migrations, and <code>npm run db:migrate</code> → <code>scripts/migrate-incremental.ts</code>.</li>
+      <li><strong><code>scripts/seed-inventory.ts</code> / <code>db:seed:inventory</code>:</strong> Per later cleanup prompts, inventory seeding is consolidated into <code>scripts/seed.ts</code> only.</li>
+    </ul>
+
+    <h2>2. Consolidated outcomes from the prompt file</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Theme (prompt range)</th>
+          <th>Status</th>
+          <th>Evidence / notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>PostgreSQL RFID core, matrix, Lightspeed naming (<code>001</code>–<code>003</code>, ~107–114)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td>Migrations <code>001_rfid_core.sql</code>, <code>002_matrix_architecture.sql</code>, <code>003_standardize_lightspeed_terms.sql</code>; <code>lib/db.ts</code>, <code>types/db.ts</code> (<code>MatrixRow</code>, etc.).</td>
+        </tr>
+        <tr>
+          <td>Sidebar navigation, industrial UI (~110)</td>
+          <td><span class="tag tag-partial">partial</span></td>
+          <td><code>components/layout/Sidebar.tsx</code> with collapsible sections. <strong>Route drift:</strong> e.g. catalog under <code>/inventory/catalog</code>, locations under <code>/overview/locations</code>, sync under <code>/inventory/sync</code>, dashboard under <code>/dashboard</code> inside <code>(main)</code> — not the exact paths from the earliest spec.</td>
+        </tr>
+        <tr>
+          <td>Product catalog 3-tier UI (~111)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>app/(main)/inventory/catalog/page.tsx</code>, <code>components/inventory/catalog/catalog-workspace.tsx</code>, catalog APIs under <code>app/api/inventory/catalog/</code>.</td>
+        </tr>
+        <tr>
+          <td>Lightspeed sync compare engine (~112)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>lib/services/lightspeed.ts</code>, <code>app/api/sync/compare/route.ts</code>, <code>components/sync/sync-engine.tsx</code>; page at <code>/inventory/sync</code>.</td>
+        </tr>
+        <tr>
+          <td>Locations &amp; bins, bin drawer (~113)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>app/(main)/overview/locations/page.tsx</code>, <code>components/overview/locations/</code>, bin editor drawer.</td>
+        </tr>
+        <tr>
+          <td>Idempotent schema, incremental migrate, dev HSTS (~119–121)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>npm run db:migrate</code> → <code>scripts/migrate-incremental.ts</code> / <code>migrate-shared.ts</code>; Next dev runner and headers per project config (see <code>scripts/run-next-dev.mjs</code> / Next config if present).</td>
+        </tr>
+        <tr>
+          <td>Dashboard “command center”, SWR, audit activity (~121)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>app/(main)/dashboard/page.tsx</code>, SWR usage across settings and dashboard-related components.</td>
+        </tr>
+        <tr>
+          <td>RFID commissioning, ZPL, printers (~122–126)</td>
+          <td><span class="tag tag-partial">partial</span></td>
+          <td><code>app/(main)/rfid/commissioning/page.tsx</code> and related APIs exist; full Zebra/network print path should be validated on real hardware.</td>
+        </tr>
+        <tr>
+          <td>Cycle counts, EPC tracker (~128–129)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>app/(main)/rfid/cycle-counts/page.tsx</code>, <code>app/(main)/rfid/epc-tracker/page.tsx</code>, workspace components under <code>components/rfid/</code>.</td>
+        </tr>
+        <tr>
+          <td>Edge ingest + SSE to dashboard (~140–142)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>app/api/edge/ingest/route.ts</code>, <code>app/api/edge/stream</code> (via <code>lib/server/edge-scan-hub.ts</code>), <code>components/rfid/live-stream-handler.tsx</code>, <code>EventSource</code> in cycle counts / transfers.</td>
+        </tr>
+        <tr>
+          <td>Lightspeed OAuth, catalog pull, push (~130, ~140)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>lib/services/lightspeed.ts</code>, <code>app/api/integrations/lightspeed/pull/route.ts</code>, <code>push/route.ts</code>.</td>
+        </tr>
+        <tr>
+          <td>Warehouse map, infrastructure devices (~133)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>scripts/migrations/007_warehouse_map_devices.sql</code>, <code>app/(main)/infrastructure/devices/page.tsx</code>, device APIs.</td>
+        </tr>
+        <tr>
+          <td>Flutter mobile app (~139+)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>mobile/carbon_wms/</code>, drivers under <code>packages/</code>, API client, screens (dashboard, transfers, putaway, etc.).</td>
+        </tr>
+        <tr>
+          <td>Users, roles, locations settings (~229)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>app/(main)/settings/users/page.tsx</code>, <code>settings/locations/page.tsx</code>, migration <code>012_users_roles_locations.sql</code>.</td>
+        </tr>
+        <tr>
+          <td>Tenant / handheld / EPC settings + <code>GET /api/settings/mobile-sync</code> (~230)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>013_tenant_settings_handheld.sql</code>, <code>settings/general</code>, <code>settings/epc-profiles</code>, <code>settings/handheld</code>, <code>app/api/settings/mobile-sync/route.ts</code>.</td>
+        </tr>
+        <tr>
+          <td>Theme engine (dark/light × standard/large), <code>/settings/theme</code> (~231)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>components/theme/theme-provider.tsx</code>, <code>app/(main)/settings/theme/page.tsx</code>.</td>
+        </tr>
+        <tr>
+          <td>Device upload logs, CSV upload API, reports (~231)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>014_device_upload_logs.sql</code>, <code>app/api/inventory/upload/route.ts</code>, <code>app/(main)/reports/uploads</code> (and related reports routes).</td>
+        </tr>
+        <tr>
+          <td>Fast bin putaway (2D), <code>putaway-assign</code> (~231)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>mobile/.../fast_putaway_screen.dart</code>, <code>app/api/inventory/putaway-assign/route.ts</code>.</td>
+        </tr>
+        <tr>
+          <td>Reports module (asset movements, status logs, etc.) (~232)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>015_inventory_reports.sql</code>, pages under <code>app/(main)/reports/</code>, APIs under <code>app/api/reports/</code>; sidebar entries in <code>Sidebar.tsx</code>.</td>
+        </tr>
+        <tr>
+          <td>Enterprise: OTA APK, device binding, transfer slips, POS compare, bulk status (~244)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>017_enterprise_v2.sql</code> (e.g. <code>app_releases</code>, <code>transfer_slips</code> starting at 70000), <code>settings/updates</code>, <code>settings/devices</code>, transfer slip UI, <code>inventory/bulk-status</code>, <code>reports/inventory-compare</code>, Lightspeed pull/push routes.</td>
+        </tr>
+        <tr>
+          <td>Clean 10 status architecture (~251)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>019_clean_10_status_architecture.sql</code>, tooltips <code>lib/settings/status-label-tooltips.ts</code>, enforcement <code>lib/server/status-label-enforcement.ts</code>, statuses UI.</td>
+        </tr>
+        <tr>
+          <td>Locate tag (Geiger) / RSSI (~247)</td>
+          <td><span class="tag tag-applied">applied</span></td>
+          <td><code>mobile/carbon_wms/lib/ui/screens/locate_tag_screen.dart</code>; <code>rfid_manager.dart</code> documents <code>GEIGER_FIND</code> context.</td>
+        </tr>
+        <tr>
+          <td>Global “Senitron” → “Carbon WMS” scrub (~245, ~251)</td>
+          <td><span class="tag tag-partial">partial</span></td>
+          <td>Most user-facing copy updated. One external link still points at <code>app.senitron.net</code> in <code>app/(main)/rfid/page.tsx</code> (likely intentional legacy portal). Flutter <code>wms_api_client.dart</code> comment still mentions old flag names — comments only.</td>
+        </tr>
+        <tr>
+          <td>Operational: “commit, push, deploy, loop until success” (~233, ~248–250)</td>
+          <td><span class="tag tag-na">n/a</span></td>
+          <td>Not provable from the file tree; depends on Coolify run history and local environment.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Route &amp; naming drift (early prompts vs today)</h2>
+    <p class="muted">Behavior is largely implemented; URLs and labels evolved.</p>
+    <table>
+      <thead>
+        <tr><th>Early prompt</th><th>Current (representative)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>/locations</code></td><td><code>/overview/locations</code></td></tr>
+        <tr><td><code>/sync</code></td><td><code>/inventory/sync</code></td></tr>
+        <tr><td><code>/dashboard</code> in root layout only</td><td><code>app/(main)/dashboard/page.tsx</code> with shell layout</td></tr>
+        <tr><td><code>/infrastructure/devices</code></td><td>Unchanged path segment; grouped under “RFID &amp; Hardware” in sidebar</td></tr>
+        <tr><td>“Variants” / “Matrix” in copy</td><td>DB: <code>custom_skus</code> / <code>matrices</code>; UI may still say “SKU” / “catalog”</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. Work visible in the repo that is not spelled out in the export (or only implied)</h2>
+    <p class="muted">These are reasonable “gaps” between the transcript snapshot and the current tree — newer sessions, follow-ups, or hygiene.</p>
+    <ul class="compact">
+      <li><strong>Shopify removal migration</strong> (<code>009_remove_shopify.sql</code>) — aligns the DB with “Lightspeed only” even though early prompts still mentioned Shopify.</li>
+      <li><strong>Items status extension</strong> (<code>008_items_status_damaged.sql</code>) — extra status vocabulary before Clean 10 normalization in <code>019</code>.</li>
+      <li><strong>Next.js / React versions</strong> in <code>package.json</code> (e.g. Next 16.2.x, React 19.2.x) — ahead of the fixed versions quoted in old prompts.</li>
+      <li><strong>Docker / Coolify production hardening</strong>: standalone image, non-root user, writable <code>.next/cache</code>, <code>HEALTHCHECK</code> on <code>/api/health</code>, entrypoint migrations — see <code>Dockerfile</code>, <code>docker-entrypoint.sh</code>, <code>proxy.ts</code> health bypass.</li>
+      <li><strong>Playwright smoke test</strong> (<code>e2e/smoke.spec.ts</code>) hitting <code>/api/health</code>.</li>
+      <li><strong>Background worker</strong> (<code>scripts/worker.ts</code>, <code>docs/WORKER.md</code>) for sync/job processing — not in the early RFID-only prompts.</li>
+      <li><strong>Mobile API surface growth</strong>: e.g. <code>app/api/mobile/device-ping</code>, <code>releases/set-active</code>, <code>epc-visibility</code>, <code>barcode-intake</code> — enterprise / handheld hardening beyond a single “edge ingest” bullet.</li>
+      <li><strong>Cursor / repo automation rules</strong> (under <code>.cursor/rules/</code>) — process guidance, not user prompts from the export.</li>
+    </ul>
+
+    <h2>5. Residual gaps &amp; manual checks</h2>
+    <ul class="compact">
+      <li><strong>End-to-end Lightspeed</strong>: OAuth credentials, pull/push against a real retailer account, and transfer slip ↔ LS IDs — needs a live environment.</li>
+      <li><strong>Physical hardware</strong>: Chainway vs Zebra auto-detect, RSSI Geiger accuracy, printer ZPL — confirm on devices (code paths exist).</li>
+      <li><strong>Two <code>009_*.sql</code> files</strong>: <code>009_rfid_alarms.sql</code> and <code>009_remove_shopify.sql</code> — both valid; ensure migration runner applies both in the intended order on every environment.</li>
+      <li><strong>Transcript cutoff</strong>: The export’s last numbered prompt is <strong>251</strong>. Any chat after that date is not in the file; this section lists repo artifacts that likely came from later work.</li>
+    </ul>
+
+    <footer>
+      Generated for Carbon WMS. Re-run this audit after large merges by comparing this report’s “evidence” paths to the tree and updating the tables.
+    </footer>
+  </main>
+</body>
+</html>
