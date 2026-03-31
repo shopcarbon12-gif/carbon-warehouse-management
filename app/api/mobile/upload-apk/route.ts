@@ -5,9 +5,12 @@ import { getSession } from "@/lib/get-session";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
-import { deactivateAllReleases, insertAppRelease } from "@/lib/queries/app-releases";
+import { insertAppRelease } from "@/lib/queries/app-releases";
+import { toAbsolutePublicUrl } from "@/lib/server/resolve-public-origin";
 
 export const dynamic = "force-dynamic";
+/** Large APK uploads (Coolify/Traefik may still need higher client body limits on the proxy). */
+export const maxDuration = 600;
 
 function safeSegment(s: string): string {
   return s.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120);
@@ -56,7 +59,8 @@ export async function POST(req: Request) {
       apk_url: apkUrl,
       makeActive: true,
     });
-    return NextResponse.json({ ok: true, id, apkUrl, versionLabel });
+    const apkUrlAbsolute = toAbsolutePublicUrl(req, apkUrl);
+    return NextResponse.json({ ok: true, id, apkUrl, apkUrlAbsolute, versionLabel });
   } catch (e) {
     console.error("[mobile/upload-apk]", e);
     return NextResponse.json({ error: "Failed to save release row" }, { status: 500 });

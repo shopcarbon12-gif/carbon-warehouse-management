@@ -48,6 +48,10 @@ export async function insertAppRelease(
   const r = await pool.query<{ id: string }>(
     `INSERT INTO app_releases (tenant_id, version_label, apk_url, is_active)
      VALUES ($1::uuid, $2, $3, $4)
+     ON CONFLICT (tenant_id, version_label) DO UPDATE SET
+       apk_url = EXCLUDED.apk_url,
+       is_active = EXCLUDED.is_active,
+       updated_at = now()
      RETURNING id::text`,
     [tenantId, input.version_label.trim(), input.apk_url, input.makeActive],
   );

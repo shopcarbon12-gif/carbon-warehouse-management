@@ -3,8 +3,18 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { getActiveRelease } from "@/lib/queries/app-releases";
 import { findDeviceByAndroidId } from "@/lib/queries/enterprise-devices";
+import { toAbsolutePublicUrl } from "@/lib/server/resolve-public-origin";
 
 export const dynamic = "force-dynamic";
+
+/** Compare semver-ish labels: strips leading `v`, ignores build +metadata for availability hint. */
+function normalizeVersionLabel(v: string): string {
+  return v
+    .trim()
+    .replace(/^v+/i, "")
+    .split("+")[0]
+    .trim();
+}
 
 /**
  * Pre-login device gate + OTA hints. Optional session cookie for Super Admin bypass (`bdl`).
@@ -23,11 +33,13 @@ export async function GET(req: Request) {
       const rel = await getActiveRelease(pool, session.tid);
       if (rel) {
         latestVersion = rel.version_label;
-        downloadUrl = rel.apk_url;
+        downloadUrl = toAbsolutePublicUrl(req, rel.apk_url);
       }
     }
+    const lv = latestVersion ?? "";
+    const cv = currentVersion ?? "";
     const updateAvailable =
-      Boolean(latestVersion) && Boolean(currentVersion) && latestVersion !== currentVersion;
+      Boolean(lv) && Boolean(cv) && normalizeVersionLabel(lv) !== normalizeVersionLabel(cv);
     return NextResponse.json({
       authorized: true,
       bypassDeviceLock: true,
@@ -72,9 +84,11 @@ export async function GET(req: Request) {
 
   const rel = await getActiveRelease(pool, dev.tenant_id);
   const latestVersion = rel?.version_label ?? null;
-  const downloadUrl = rel?.apk_url ?? null;
+  const downloadUrl = rel ? toAbsolutePublicUrl(req, rel.apk_url) : null;
+  const lv = latestVersion ?? "";
+  const cv = currentVersion ?? "";
   const updateAvailable =
-    Boolean(latestVersion) && Boolean(currentVersion) && latestVersion !== currentVersion;
+    Boolean(lv) && Boolean(cv) && normalizeVersionLabel(lv) !== normalizeVersionLabel(cv);
 
   return NextResponse.json({
     registered: true,
