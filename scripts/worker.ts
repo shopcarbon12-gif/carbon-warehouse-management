@@ -50,11 +50,8 @@ async function processStub(pool: Pool, job: JobRow): Promise<void> {
     /* Terminal status + payload are set inside the catalog sync (no generic completed UPDATE). */
     return;
   }
-  // Stub: real Lightspeed/Shopify calls go here. Idempotency is enforced by idempotency_key on insert.
+  // Stub: reconcile / future job types. Idempotency is enforced by idempotency_key on insert.
   await sleep(50 + Math.floor(Math.random() * 80));
-  if (job.job_type === "shopify_push" && job.attempts > 2) {
-    throw new Error("simulated transient failure");
-  }
 }
 
 async function main() {

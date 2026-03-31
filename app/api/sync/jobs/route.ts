@@ -14,7 +14,7 @@ export async function GET() {
 }
 
 const postSchema = z.object({
-  jobType: z.enum(["lightspeed_pull", "shopify_push", "reconcile"]),
+  jobType: z.enum(["lightspeed_pull", "reconcile"]),
 });
 
 export async function POST(req: Request) {

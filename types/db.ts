@@ -21,7 +21,6 @@ export interface LocationRow {
   code: string;
   name: string;
   type: LocationType;
-  shopify_location_id: string | null;
   lightspeed_location_id: string | null;
   created_at: Date;
 }

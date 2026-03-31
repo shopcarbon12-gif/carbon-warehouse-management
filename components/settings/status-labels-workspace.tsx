@@ -27,7 +27,7 @@ function RuleSummary({ row }: { row: StatusLabelRow }) {
       </p>
       <ul className="list-inside list-disc space-y-1.5 text-[var(--wms-fg)]/90">
         <li>
-          <strong>Web / Shopify sellable:</strong> {yn(row.is_sellable)} — quantity sync follows this flag.
+          <strong>Web sellable:</strong> {yn(row.is_sellable)} — quantity sync follows this flag.
         </li>
         <li>
           <strong>Handheld / antenna:</strong>{" "}

@@ -36,7 +36,7 @@ export default async function IntegrationsPage() {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center font-mono text-[var(--muted)]">
-                  No integration rows — connect Shopify / Lightspeed or seed data.
+                  No integration rows — connect Lightspeed or seed data.
                 </td>
               </tr>
             ) : (

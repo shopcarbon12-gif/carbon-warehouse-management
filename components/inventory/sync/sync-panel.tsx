@@ -28,7 +28,7 @@ export function SyncPanel() {
     return () => clearTimeout(t);
   }, [load]);
 
-  async function enqueue(t: "lightspeed_pull" | "shopify_push" | "reconcile") {
+  async function enqueue(t: "lightspeed_pull" | "reconcile") {
     await fetch("/api/sync/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -51,13 +51,6 @@ export function SyncPanel() {
           onClick={() => void enqueue("lightspeed_pull")}
         >
           Enqueue Lightspeed catalog pull
-        </button>
-        <button
-          type="button"
-          className="rounded-md border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800/60"
-          onClick={() => void enqueue("shopify_push")}
-        >
-          Enqueue Shopify push (stub)
         </button>
         <button
           type="button"

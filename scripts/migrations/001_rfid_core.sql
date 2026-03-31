@@ -11,7 +11,6 @@ ALTER TABLE locations ALTER COLUMN type SET DEFAULT 'warehouse';
 --> statement-breakpoint
 ALTER TABLE locations ALTER COLUMN type SET NOT NULL;
 --> statement-breakpoint
-ALTER TABLE locations ADD COLUMN IF NOT EXISTS shopify_location_id varchar(128);
 --> statement-breakpoint
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS lightspeed_location_id varchar(128);
 --> statement-breakpoint

@@ -56,7 +56,7 @@ Do **not** use the default seed password in production.
 
 ---
 
-**Also in Coolify:** set **`SESSION_SECRET`**, **`WMS_DEVICE_KEY`**, **`SHOPIFY_WEBHOOK_SECRET`**, **`NODE_ENV=production`**, **`NEXT_PUBLIC_BASE_URL`**, **`WMS_APP_PUBLIC_BASE_URL`**, **`SHOPIFY_REDIRECT_URI`**, **`SHOPIFY_SCOPES`**, and any R2 / Lightspeed / email vars you use (see [`.env.example`](.env.example)).
+**Also in Coolify:** set **`SESSION_SECRET`**, **`WMS_DEVICE_KEY`**, **`NODE_ENV=production`**, **`NEXT_PUBLIC_BASE_URL`**, **`WMS_APP_PUBLIC_BASE_URL`**, and any R2 / Lightspeed / email vars you use (see [`.env.example`](.env.example)).
 
 ### Public URL checklist (prod + local + OAuth)
 
@@ -69,15 +69,15 @@ Do **not** use the default seed password in production.
 
 Production hostname: **`https://wms.shopcarbon.com`**. In DNS, add a **`wms`** record (usually **CNAME** to the hostname Coolify shows for the app, or **A** to the server IP). In Coolify → WMS → **Configuration** → **General** → **Domains**, enter **`https://wms.shopcarbon.com`** (include **`https://`** for Let’s Encrypt / Traefik). Add **`https://www.wms.shopcarbon.com`** only if that host exists in DNS. Then **Save** and **Redeploy**.
 
-**Shopify / Lightspeed:** Register redirect URLs for **both** origins you use, e.g. **`https://wms.shopcarbon.com/api/shopify/callback`** and **`http://localhost:3040/api/shopify/callback`** (and the Lightspeed callback path if you use OAuth).  
+**Lightspeed OAuth:** Register **`…/api/lightspeed/callback`** for **both** production and **`http://localhost:3040`** if you use local OAuth (must match **`LS_REDIRECT_URI`** / public base).
 
 **Full DB mirror (local copy of prod data):** run **`npm run db:mirror:ssh`** if you have non-interactive **`ssh root@<Coolify host>`** access (uses `docker exec` on the WMS Postgres container, then `pg_restore` into **`docker compose`** — keep local Postgres major version aligned with prod, e.g. **18**). Details: **`scripts/db-mirror-coolify.example.sh`**. Do not commit dumps or passwords.
 
-**Local = production parity (real data + real Lightspeed/Shopify, no demo catalog):** keep a gitignored **`.env.coolify.local`** snapshot of Coolify vars, then:
+**Local = production parity (real data + real Lightspeed, no demo catalog):** keep a gitignored **`.env.coolify.local`** snapshot of Coolify vars, then:
 
 1. **`docker compose up -d`**
 2. **`npm run db:mirror:ssh`** — load prod Postgres into local `carbon_wms`
-3. **`npm run env:parity-local`** — writes **`.env.local`** with local URLs, **`DATABASE_URL`** → local docker, **`WMS_LS_STRICT=1`**, and copied **`LS_*` / `SHOPIFY_*`** / session/device keys (not `COOLIFY_*`). Lightspeed/Shopify **redirect URIs** are forced to **`http://localhost:3040/.../callback`** — register those in each provider.
+3. **`npm run env:parity-local`** — writes **`.env.local`** with local URLs, **`DATABASE_URL`** → local docker, **`WMS_LS_STRICT=1`**, and copied **`LS_*`** / R2 / email / session/device keys (not `COOLIFY_*`). **`LS_REDIRECT_URI`** is set to **`http://localhost:3040/api/lightspeed/callback`** — register that in Lightspeed if you OAuth locally.
 4. **`npm run dev`**
 
 Unset **`WMS_LS_STRICT`** (or use **`npm run env:ensure-local`** only) if you prefer the old fallback to simulated Lightspeed SKUs when the API is down.

@@ -11,7 +11,7 @@ export default async function OrdersPage() {
     <div className="mx-auto w-full max-w-6xl">
       <h1 className="text-xl font-semibold text-[var(--foreground)]">Orders & Fulfillment</h1>
       <p className="mt-2 max-w-2xl font-mono text-sm text-[var(--muted)]">
-        {WAREHOUSE.name} — pull from Shopify and Lightspeed; pick by zone, pack, ship.
+        {WAREHOUSE.name} — pull from Lightspeed and internal sources; pick by zone, pack, ship.
       </p>
 
       <div className="mt-8 overflow-x-auto rounded-lg border border-[var(--surface-border)]">
@@ -29,7 +29,7 @@ export default async function OrdersPage() {
             {orders.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center font-mono text-[var(--muted)]">
-                  No orders — connect database or sync from Shopify / Lightspeed.
+                  No orders — connect database or sync from Lightspeed.
                 </td>
               </tr>
             ) : (

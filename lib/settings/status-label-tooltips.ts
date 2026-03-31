@@ -1,6 +1,6 @@
 /** Hover copy for `/settings/statuses` — keyed by `status_labels.name` (Clean 10). */
 export const STATUS_LABEL_NAME_TOOLTIPS: Record<string, string> = {
-  LIVE: "Standard floor stock. Web/Shopify sellable; handheld shows reads and counts.",
+  LIVE: "Standard floor stock. Web sellable; handheld shows reads and counts.",
   RETURN: "Not sellable; still visible in search, reporting, and on the scanner.",
   DAMAGED: "Not sellable. Super Admin must approve return to Live.",
   SOLD: "Not sellable. Super Admin must approve return to Live.",

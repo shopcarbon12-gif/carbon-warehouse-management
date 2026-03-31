@@ -435,7 +435,7 @@
           </p>
           <div class="callout">
             <strong>Recommendation:</strong> Keep Carbon WMS for deep RFID encode &amp; LS PO
-            flows; use this WMS for multi-channel orchestration, exceptions, Shopify, and your
+            flows; use this WMS for multi-channel orchestration, exceptions, Lightspeed alignment, and your
             Android uploads — one integration layer (queue, idempotency, audit).
           </div>
           <div class="grid-kpi">
@@ -460,7 +460,7 @@
             <div class="panel">
               <h2>Improvements vs. “clone Athena”</h2>
               <ul class="improve">
-                <li>First-class <strong>Shopify</strong> + <strong>Lightspeed</strong> in one reconciliation view.</li>
+                <li>First-class <strong>Lightspeed</strong> reconciliation in one view.</li>
                 <li><strong>Exception inbox</strong> (unknown EPC, wrong zone, POS mismatch) with owner + SLA.</li>
                 <li><strong>Handheld API</strong>: batch upload, offline queue, server-side rules.</li>
                 <li><strong>Coolify-friendly</strong> deploy; optional <code class="mono">WMS_BASE_PATH</code> for subpaths.</li>
@@ -550,7 +550,7 @@
         <!-- Alerts -->
         <section class="page" id="page-alerts" data-page="alerts">
           <h1>Alerts &amp; exceptions</h1>
-          <p class="sub">Unified queue: RFID + POS + Shopify conflicts (sample rows).</p>
+          <p class="sub">Unified queue: RFID + POS conflicts (sample rows).</p>
           <div class="panel" style="padding: 0; overflow-x: auto">
             <table>
               <thead>
@@ -575,8 +575,8 @@
                   <td><a href="#/rfid">Encode / resolve</a></td>
                 </tr>
                 <tr>
-                  <td>Shopify oversell risk</td>
-                  <td>Variant gid://shopify/…</td>
+                  <td>Channel oversell risk</td>
+                  <td>Variant QOH &lt; committed</td>
                   <td><span class="tag warn">Review</span></td>
                   <td><a href="#/sync">Queue sync</a></td>
                 </tr>
@@ -659,7 +659,7 @@
         <!-- Integrations -->
         <section class="page" id="page-integrations" data-page="integrations">
           <h1>Integrations</h1>
-          <p class="sub">Lightspeed + Shopify + Carbon WMS connector health (mock).</p>
+          <p class="sub">Lightspeed + Carbon WMS connector health (mock).</p>
           <div class="panel">
             <h2>Connections</h2>
             <table>
@@ -681,17 +681,10 @@
                   <td><span class="tag ok">OAuth</span></td>
                   <td>R-Series / POS account mapping per location</td>
                 </tr>
-                <tr>
-                  <td>Shopify</td>
-                  <td><span class="tag warn">Configure</span></td>
-                  <td>Admin API + webhooks for inventory</td>
-                </tr>
               </tbody>
             </table>
             <p style="font-size: 0.82rem; color: var(--muted); margin: 0.75rem 0 0">
               Docs:
-              <a href="https://shopify.dev/docs/api/admin-rest" target="_blank" rel="noopener">Shopify Admin API</a>
-              ·
               <a href="https://developers.lightspeedhq.com/" target="_blank" rel="noopener">Lightspeed dev</a>
             </p>
           </div>
@@ -724,9 +717,9 @@
                   <td class="mono">2m ago</td>
                 </tr>
                 <tr>
-                  <td>inventory.push</td>
-                  <td>Shopify</td>
-                  <td><span class="tag warn">retry</span></td>
+                  <td>inventory.reconcile</td>
+                  <td>WMS</td>
+                  <td><span class="tag ok">ok</span></td>
                   <td class="mono">5m ago</td>
                 </tr>
               </tbody>
@@ -737,7 +730,7 @@
         <!-- Handheld -->
         <section class="page" id="page-handheld" data-page="handheld">
           <h1>Handheld (Android)</h1>
-          <p class="sub">Thin client: scan batches → your API → validate → forward to Carbon WMS/LS/Shopify rules.</p>
+          <p class="sub">Thin client: scan batches → your API → validate → forward to Carbon WMS / Lightspeed rules.</p>
           <div class="panel">
             <h2>Sample upload batch</h2>
             <p style="font-size: 0.85rem; color: var(--muted)">
@@ -787,7 +780,7 @@
         </section>
 
         <footer class="sample-foot">
-          Sample only — not connected to live Carbon WMS, Lightspeed, or Shopify. Open this file via a static
+          Sample only — not connected to live Carbon WMS or Lightspeed. Open this file via a static
           server if you prefer (<span class="mono">npx serve samples/wms-recommendation</span>).
         </footer>
       </main>

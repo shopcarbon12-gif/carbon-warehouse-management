@@ -175,7 +175,7 @@ async function main() {
       `INSERT INTO orders (tenant_id, location_id, external_ref, source, status, line_count)
        VALUES
          ($1::uuid, $2::uuid, 'LS-10021', 'lightspeed', 'picking', 4),
-         ($1::uuid, $2::uuid, 'SH-55402', 'shopify', 'pending', 2)`,
+         ($1::uuid, $2::uuid, 'LS-10022', 'lightspeed', 'pending', 2)`,
       [t.id, loc001.id],
     );
   }
@@ -200,8 +200,7 @@ async function main() {
     await pool.query(
       `INSERT INTO integration_connections (tenant_id, location_id, provider, status, last_ok_at)
        VALUES
-         ($1::uuid, $2::uuid, 'lightspeed', 'connected', now()),
-         ($1::uuid, $2::uuid, 'shopify', 'configure', NULL)`,
+         ($1::uuid, $2::uuid, 'lightspeed', 'connected', now())`,
       [t.id, loc001.id],
     );
   }

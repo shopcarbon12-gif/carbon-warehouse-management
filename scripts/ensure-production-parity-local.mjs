@@ -1,5 +1,5 @@
 /**
- * Writes gitignored `.env.local` so local dev uses **real** Lightspeed/Shopify/etc. credentials
+ * Writes gitignored `.env.local` so local dev uses **real** Lightspeed (and R2/email) credentials
  * (from `.env.coolify.local`) while keeping **local** public URLs and **local** Postgres.
  *
  * Run after:
@@ -48,7 +48,7 @@ function loadDotenvFile(p) {
 }
 
 /** Prefixes: pull integration secrets from Coolify snapshot into local. */
-const PREFIXES = ["LS_", "SHOPIFY_", "R2_", "RESEND_", "PUSH_NOTIFICATION_"];
+const PREFIXES = ["LS_", "R2_", "RESEND_", "PUSH_NOTIFICATION_"];
 
 /** Exact keys (no prefix match). */
 const EXTRA_KEYS = new Set([
@@ -92,7 +92,6 @@ const lines = [
   `WMS_APP_PUBLIC_BASE_URL=${LOCAL_ORIGIN}`,
   `NEXT_PUBLIC_BASE_URL=${LOCAL_ORIGIN}`,
   `LS_REDIRECT_URI=${LOCAL_ORIGIN}/api/lightspeed/callback`,
-  `SHOPIFY_REDIRECT_URI=${LOCAL_ORIGIN}/api/shopify/callback`,
   "WMS_HIDE_LOCAL_DB_BANNER=1",
   "WMS_PRODUCTION_PARITY_LOCAL=1",
   "WMS_LS_STRICT=1",
@@ -105,7 +104,6 @@ const BLOCK = new Set([
   "COOLIFY_DEPLOY_WEBHOOK_URL",
   "COOLIFY_API_TOKEN",
   "LS_REDIRECT_URI",
-  "SHOPIFY_REDIRECT_URI",
   "NEXT_PUBLIC_BASE_URL",
   "WMS_APP_PUBLIC_BASE_URL",
   "WMS_HIDE_LOCAL_DB_BANNER",
@@ -116,7 +114,7 @@ const BLOCK = new Set([
 ]);
 
 for (const k of Object.keys(pulled).sort()) {
-  if (BLOCK.has(k) || k.startsWith("COOLIFY_")) continue;
+  if (BLOCK.has(k) || k.startsWith("COOLIFY_") || k.startsWith("SHOPIFY_")) continue;
   lines.push(`${k}=${escapeEnvVal(String(pulled[k] ?? ""))}`);
 }
 
@@ -125,6 +123,6 @@ fs.writeFileSync(target, out, "utf8");
 
 console.log("Wrote", target);
 console.log("  DATABASE_URL -> local docker (run db:mirror:ssh if you need prod data)");
-console.log("  Public URLs + LS_/Shopify redirects ->", LOCAL_ORIGIN);
+console.log("  Public URLs + LS redirect ->", LOCAL_ORIGIN);
 console.log("  WMS_LS_STRICT=1 (Lightspeed catalog will not silently use demo SKUs)");
 console.log(`  Pulled ${Object.keys(pulled).length} keys from .env.coolify.local (minus redirects/COOLIFY_*)`);

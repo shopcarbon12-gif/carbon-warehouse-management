@@ -37,12 +37,12 @@ WHERE t.slug = 'cj'
   AND NOT EXISTS (SELECT 1 FROM orders LIMIT 1);
 
 INSERT INTO orders (tenant_id, location_id, external_ref, source, status, line_count)
-SELECT t.id, l.id, 'SH-55402', 'shopify', 'pending', 2
+SELECT t.id, l.id, 'LS-10022', 'lightspeed', 'pending', 2
 FROM tenants t
 JOIN locations l ON l.tenant_id = t.id AND l.code = '001'
 WHERE t.slug = 'cj'
   AND EXISTS (SELECT 1 FROM orders WHERE external_ref = 'LS-10021' LIMIT 1)
-  AND NOT EXISTS (SELECT 1 FROM orders WHERE external_ref = 'SH-55402' LIMIT 1);
+  AND NOT EXISTS (SELECT 1 FROM orders WHERE external_ref = 'LS-10022' LIMIT 1);
 
 INSERT INTO inventory_items (location_id, asset_id, sku, name, zone, qty)
 SELECT l.id, '210000001206', 'C125311010701', 'AVA MINI DRESS BLACK S', 'rfid', 2
@@ -67,16 +67,6 @@ WHERE t.slug = 'cj'
   AND NOT EXISTS (
     SELECT 1 FROM integration_connections ic
     WHERE ic.tenant_id = t.id AND ic.provider = 'lightspeed'
-  );
-
-INSERT INTO integration_connections (tenant_id, location_id, provider, status, last_ok_at)
-SELECT t.id, l.id, 'shopify', 'configure', NULL
-FROM tenants t
-JOIN locations l ON l.tenant_id = t.id AND l.code = '001'
-WHERE t.slug = 'cj'
-  AND NOT EXISTS (
-    SELECT 1 FROM integration_connections ic
-    WHERE ic.tenant_id = t.id AND ic.provider = 'shopify'
   );
 
 INSERT INTO exceptions (tenant_id, location_id, type, severity, state, detail)
