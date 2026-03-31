@@ -13,6 +13,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
+import { setTimeout as delay } from "node:timers/promises";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -114,40 +115,42 @@ if (!listRes.ok) {
       "Destination: /app/public/uploads. Then Redeploy.",
     );
     console.error("Docs: https://coolify.io/docs/knowledge-base/persistent-storage");
+    await delay(150);
     process.exit(3);
-  }
-  console.error("List storages failed:", listRes.status, listText.slice(0, 600));
-  process.exit(1);
-}
-
-if (uploadsAlreadyMounted(listData)) {
-  console.log("Persistent mount under", MOUNT_PATH, "already present; skipping create.");
-} else {
-  const body = {
-    type: "persistent",
-    name: VOLUME_NAME,
-    mount_path: MOUNT_PATH,
-  };
-  const createRes = await fetch(`${base}/applications/${appUuid}/storages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  const createText = await createRes.text();
-  if (!createRes.ok) {
-    console.error("Create storage failed:", createRes.status, createText.slice(0, 800));
+  } else {
+    console.error("List storages failed:", listRes.status, listText.slice(0, 600));
     process.exit(1);
   }
-  console.log("Created persistent storage:", VOLUME_NAME, "→", MOUNT_PATH, createText ? createText.slice(0, 200) : "");
-}
-
-if (!noRedeploy) {
-  console.log("Triggering deploy…");
-  execSync("node scripts/trigger-coolify-deploy.mjs", { cwd: root, stdio: "inherit" });
 } else {
-  console.log("Skipped redeploy (--no-redeploy). Redeploy in Coolify when ready.");
+  if (uploadsAlreadyMounted(listData)) {
+    console.log("Persistent mount under", MOUNT_PATH, "already present; skipping create.");
+  } else {
+    const body = {
+      type: "persistent",
+      name: VOLUME_NAME,
+      mount_path: MOUNT_PATH,
+    };
+    const createRes = await fetch(`${base}/applications/${appUuid}/storages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    const createText = await createRes.text();
+    if (!createRes.ok) {
+      console.error("Create storage failed:", createRes.status, createText.slice(0, 800));
+      process.exit(1);
+    }
+    console.log("Created persistent storage:", VOLUME_NAME, "→", MOUNT_PATH, createText ? createText.slice(0, 200) : "");
+  }
+
+  if (!noRedeploy) {
+    console.log("Triggering deploy…");
+    execSync("node scripts/trigger-coolify-deploy.mjs", { cwd: root, stdio: "inherit" });
+  } else {
+    console.log("Skipped redeploy (--no-redeploy). Redeploy in Coolify when ready.");
+  }
 }
