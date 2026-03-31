@@ -5,6 +5,7 @@
  * Env:
  *   WMS_APP_PUBLIC_BASE_URL or NEXT_PUBLIC_BASE_URL — e.g. https://wms.example.com
  *   WMS_UPLOAD_SESSION_COOKIE — full Cookie header value including wms_session=...
+ *   Optional: put the same keys in gitignored `.env.coolify.local` so you do not export them in the shell.
  *
  * Usage:
  *   node scripts/upload-mobile-apk.mjs <path-to.apk> [versionLabel]
@@ -13,6 +14,36 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+
+/** Fill missing keys from gitignored `.env.coolify.local` (no dependency on dotenv). */
+function loadCoolifyLocal() {
+  const p = path.join(process.cwd(), ".env.coolify.local");
+  if (!fs.existsSync(p)) return;
+  const text = fs.readFileSync(p, "utf8");
+  const keys = new Set([
+    "WMS_UPLOAD_SESSION_COOKIE",
+    "WMS_APP_PUBLIC_BASE_URL",
+    "NEXT_PUBLIC_BASE_URL",
+  ]);
+  for (const line of text.split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const eq = t.indexOf("=");
+    if (eq < 1) continue;
+    const key = t.slice(0, eq).trim();
+    if (!keys.has(key) || process.env[key] !== undefined) continue;
+    let val = t.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    process.env[key] = val;
+  }
+}
+
+loadCoolifyLocal();
 
 const baseRaw =
   process.env.WMS_APP_PUBLIC_BASE_URL?.trim() ||

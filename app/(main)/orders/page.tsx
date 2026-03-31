@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { withDb } from "@/lib/db";
 import { listOrders } from "@/lib/queries/orders";
 import { WAREHOUSE } from "@/lib/zones";
@@ -12,6 +13,17 @@ export default async function OrdersPage() {
       <h1 className="text-xl font-semibold text-[var(--foreground)]">Orders & Fulfillment</h1>
       <p className="mt-2 max-w-2xl font-mono text-sm text-[var(--muted)]">
         {WAREHOUSE.name} — pull from Lightspeed and internal sources; pick by zone, pack, ship.
+      </p>
+      <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-[var(--muted)]">
+        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/integrations">
+          Integrations
+        </Link>
+        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/inventory/sync">
+          Inventory sync
+        </Link>
+        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/dashboard">
+          Dashboard
+        </Link>
       </p>
 
       <div className="mt-8 overflow-x-auto rounded-lg border border-[var(--surface-border)]">
