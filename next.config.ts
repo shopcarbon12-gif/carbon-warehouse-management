@@ -22,6 +22,14 @@ const dockerBuild = process.env.DOCKER_BUILD === "1" || process.env.DOCKER_BUILD
 const nextConfig: NextConfig = {
   reactCompiler: useReactCompiler,
   output: "standalone",
+  /**
+   * `proxy.ts` buffers the request body so it can be read in both proxy and route handlers.
+   * Default limit is 10MB — large APK uploads to `/api/mobile/upload-apk` were truncated,
+   * breaking multipart parsing ("Expected multipart form").
+   */
+  experimental: {
+    proxyClientMaxBodySize: "256mb",
+  },
   ...(basePath ? { basePath } : {}),
   async redirects() {
     if (!basePath) return [];

@@ -66,10 +66,16 @@ export function MobileUpdatesWorkspace({ initialReleases }: { initialReleases: M
       }
       if (!res.ok) {
         const base = j.error ?? `Upload failed (${res.status})`;
-        const hint =
-          typeof base === "string" && base.includes("Database unavailable")
-            ? " Set DATABASE_URL on the WMS Coolify app to your Postgres internal URL, save, redeploy. See docs/WORKER.md (Database URL on the WMS web app)."
-            : "";
+        let hint = "";
+        if (typeof base === "string") {
+          if (base.includes("Database unavailable")) {
+            hint =
+              " Set DATABASE_URL on the WMS Coolify app to your Postgres internal URL, save, redeploy. See docs/WORKER.md (Database URL on the WMS web app).";
+          } else if (base.includes("Expected multipart form")) {
+            hint =
+              " Redeploy after pulling next.config proxyClientMaxBodySize (APK > default proxy buffer). If it persists, raise Traefik/Coolify client max body size.";
+          }
+        }
         throw new Error(`${base}${hint}`);
       }
       const abs = j.apkUrlAbsolute ?? j.apkUrl ?? "(ok)";

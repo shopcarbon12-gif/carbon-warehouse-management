@@ -29,8 +29,15 @@ export async function POST(req: Request) {
   let form: FormData;
   try {
     form = await req.formData();
-  } catch {
-    return NextResponse.json({ error: "Expected multipart form" }, { status: 400 });
+  } catch (e) {
+    console.error("[mobile/upload-apk] formData parse failed", e);
+    return NextResponse.json(
+      {
+        error:
+          "Expected multipart form. Large APKs need a higher Next.js proxy body limit (proxyClientMaxBodySize) and enough Traefik/Coolify max upload size.",
+      },
+      { status: 400 },
+    );
   }
 
   const versionLabel = String(form.get("versionLabel") ?? form.get("version") ?? "").trim();
