@@ -44,6 +44,28 @@
             background: linear-gradient(180deg, #006768 0%, #008284 100%);
         }
         input:focus { outline: none; box-shadow: none; }
+        .field-row input {
+          background-color: transparent;
+          box-shadow: none;
+        }
+        .login-email-row { gap: 0.25rem; }
+        .login-email-row .material-symbols-outlined {
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+          font-size: 20px;
+          width: 1.25rem;
+          min-width: 1.25rem;
+          text-align: center;
+          flex-shrink: 0;
+          line-height: 1;
+        }
+        .login-email-field:placeholder-shown {
+          font-size: 0.8125rem;
+          line-height: 1.25rem;
+        }
+        .login-email-field:not(:placeholder-shown) {
+          font-size: 1rem;
+          line-height: 1.5rem;
+        }
     </style>
 <style>
     body { min-height: max(884px, 100dvh); }
@@ -63,9 +85,9 @@
 <label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">Server URL</label>
 <span class="font-label text-[10px] text-outline uppercase tracking-tighter">Connected via SSL</span>
 </div>
-<div class="h-16 bg-surface-container-low flex items-center gap-1.5 px-3 rounded-md min-w-0">
-<span class="material-symbols-outlined text-outline shrink-0 text-[22px] leading-none">dns</span>
-<input class="bg-transparent border-none min-w-0 flex-1 font-label text-base font-medium text-on-surface focus:ring-0" type="text" value="https://wms.shopcarbon.com" readonly>
+<div class="h-16 bg-surface-container-low field-row flex items-center px-4 rounded-md">
+<span class="material-symbols-outlined text-outline mr-3">dns</span>
+<input class="bg-transparent border-none w-full font-label text-base font-medium text-on-surface focus:ring-0" type="text" value="https://wms.shopcarbon.com" readonly>
 </div>
 <p class="text-center mt-0.5 font-mono text-[15px] font-medium text-black tracking-wide leading-tight">MAC 48:2F:6B:12:34:56</p>
 
@@ -73,16 +95,16 @@
 <div class="space-y-6">
 <div class="space-y-2">
 <label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">USER EMAIL</label>
-<div class="h-16 bg-surface-container-low flex items-center gap-1.5 px-3 rounded-md min-w-0">
-<span class="material-symbols-outlined text-outline shrink-0 text-[22px] leading-none">person</span>
-<input class="bg-transparent border-none min-w-0 flex-1 font-label text-base font-medium text-on-surface focus:ring-0" type="email" value="operator@carbonjeanscompany.com" autocomplete="email">
+<div class="login-email-row h-16 bg-surface-container-low field-row flex items-center min-w-0 px-4 rounded-md">
+<span class="material-symbols-outlined text-outline">person</span>
+<input class="login-email-field bg-transparent border-none min-w-0 flex-1 font-label font-medium text-on-surface focus:ring-0 pl-0 shadow-none" type="email" value="" placeholder="operator@carbonjeanscompany.com" autocomplete="email">
 </div>
 </div>
 <div class="space-y-2">
 <label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">PASSWORD</label>
-<div class="h-16 bg-surface-container-low flex items-center gap-1.5 px-3 rounded-md min-w-0">
-<span class="material-symbols-outlined text-outline shrink-0 text-[22px] leading-none">lock</span>
-<input class="bg-transparent border-none min-w-0 flex-1 font-label text-base font-medium text-on-surface focus:ring-0" type="password" placeholder="••••••••••••">
+<div class="h-16 bg-surface-container-low field-row flex items-center px-4 rounded-md">
+<span class="material-symbols-outlined text-outline mr-3">lock</span>
+<input class="bg-transparent border-none w-full font-label text-base font-medium text-on-surface focus:ring-0" type="password" placeholder="••••••••••••">
 <button type="button" class="text-outline hover:text-primary transition-colors" aria-label="Show password">
 <span class="material-symbols-outlined">visibility</span>
 </button>

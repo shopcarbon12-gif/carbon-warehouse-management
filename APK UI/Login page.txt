@@ -84,6 +84,33 @@
           outline: none;
           box-shadow: none;
         }
+        /* Grey bar fills the row; inputs stay transparent (matches pre–flex-tweak look) */
+        .field-row input {
+          background-color: transparent;
+          box-shadow: none;
+        }
+        /* Tight person icon column — removes empty space between glyph and text */
+        .login-email-row {
+          gap: 0.25rem;
+        }
+        .login-email-row .material-symbols-outlined {
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+          font-size: 20px;
+          width: 1.25rem;
+          min-width: 1.25rem;
+          text-align: center;
+          flex-shrink: 0;
+          line-height: 1;
+        }
+        /* Smaller type only while empty (placeholder visible); normal size when user types */
+        .login-email-field:placeholder-shown {
+          font-size: 0.8125rem;
+          line-height: 1.25rem;
+        }
+        .login-email-field:not(:placeholder-shown) {
+          font-size: 1rem;
+          line-height: 1.5rem;
+        }
     </style>
 <style>
     body {
@@ -107,9 +134,9 @@
 <label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">Server URL</label>
 <span class="font-label text-[10px] text-outline uppercase tracking-tighter">Connected via SSL</span>
 </div>
-<div class="h-16 bg-surface-container-low flex items-center gap-1.5 px-3 rounded-md min-w-0">
-<span class="material-symbols-outlined text-outline shrink-0 text-[22px] leading-none" data-icon="dns">dns</span>
-<input class="bg-transparent border-none min-w-0 flex-1 font-label text-base font-medium text-on-surface focus:ring-0" placeholder="Enter server address" type="text" value="https://wms.shopcarbon.com">
+<div class="h-16 bg-surface-container-low field-row flex items-center px-4 rounded-md">
+<span class="material-symbols-outlined text-outline mr-3" data-icon="dns">dns</span>
+<input class="bg-transparent border-none w-full font-label text-base font-medium text-on-surface focus:ring-0" placeholder="Enter server address" type="text" value="https://wms.shopcarbon.com">
 </div>
 </div>
 <!-- Credentials -->
@@ -117,17 +144,17 @@
 <!-- Email -->
 <div class="space-y-2">
 <label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">USER EMAIL</label>
-<div class="h-16 bg-surface-container-low flex items-center gap-1.5 px-3 rounded-md min-w-0">
-<span class="material-symbols-outlined text-outline shrink-0 text-[22px] leading-none" data-icon="person">person</span>
-<input class="bg-transparent border-none min-w-0 flex-1 font-label text-base font-medium text-on-surface focus:ring-0" type="email" value="operator@carbonjeanscompany.com" autocomplete="email">
+<div class="login-email-row h-16 bg-surface-container-low field-row flex items-center min-w-0 px-4 rounded-md">
+<span class="material-symbols-outlined text-outline" data-icon="person">person</span>
+<input class="login-email-field bg-transparent border-none min-w-0 flex-1 font-label font-medium text-on-surface focus:ring-0 pl-0 shadow-none" type="email" value="" placeholder="operator@carbonjeanscompany.com" autocomplete="email">
 </div>
 </div>
 <!-- Password -->
 <div class="space-y-2">
 <label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">PASSWORD</label>
-<div class="h-16 bg-surface-container-low flex items-center gap-1.5 px-3 rounded-md min-w-0">
-<span class="material-symbols-outlined text-outline shrink-0 text-[22px] leading-none" data-icon="lock">lock</span>
-<input class="bg-transparent border-none min-w-0 flex-1 font-label text-base font-medium text-on-surface focus:ring-0" placeholder="••••••••••••" type="password">
+<div class="h-16 bg-surface-container-low field-row flex items-center px-4 rounded-md">
+<span class="material-symbols-outlined text-outline mr-3" data-icon="lock">lock</span>
+<input class="bg-transparent border-none w-full font-label text-base font-medium text-on-surface focus:ring-0" placeholder="••••••••••••" type="password">
 <button class="text-outline hover:text-primary transition-colors">
 <span class="material-symbols-outlined" data-icon="visibility">visibility</span>
 </button>
