@@ -47,7 +47,7 @@ COPY scripts/migrations /app/scripts/migrations
 COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 # Writable .next/cache; entrypoint runs as root for optional psql migrate/seed, then su-exec nextjs.
 RUN chmod +x /app/docker-entrypoint.sh \
-  && mkdir -p /app/.next/cache \
+  && mkdir -p /app/.next/cache /app/public/uploads/mobile-apk \
   && chown -R nextjs:nodejs /app
 EXPOSE 3000
 ENV PORT=3000

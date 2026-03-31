@@ -93,3 +93,19 @@ Official Coolify doc: [Gateway Timeout (504)](https://coolify.io/docs/troublesho
 - [ ] **`HEALTHCHECK`** targets **`/api/health`** with adequate **`start-period`**.
 - [ ] **Port 3000** / **`PORT`** / Coolify mapping aligned.
 - [ ] **Proxy** (`proxy.ts`) does not block **`/api/health`**.
+- [ ] **Mobile OTA:** APKs under **`/app/public/uploads/`** — use a **persistent volume** (see §10) or handheld downloads **404** after every redeploy.
+
+---
+
+## 10. Mobile OTA APK files (Docker / Coolify)
+
+**Symptom:** Handheld OTA shows **`WmsApiException(404)`** with HTML *“404: This page could not be found”* when downloading the APK URL from **`/uploads/mobile-apk/...`**, or Android *“problem parsing the package”* after a **redeploy**.
+
+**Cause:** Uploads are written to **`public/uploads/mobile-apk/`** inside the container. **`git`** does not ship those files; each **Redeploy** starts a **new** container from the image. Unless that directory is on a **persistent volume**, previously uploaded APKs are **gone** while **`app_releases`** in Postgres still points at the old path → **404**.
+
+**Fix (pick one):**
+
+1. **Coolify persistent storage (recommended):** Application → **Storages** (or **Volumes**) → mount a volume to **`/app/public/uploads`** (or at least **`/app/public/uploads/mobile-apk`**). Then re-upload once; future redeploys keep files.
+2. **Operational:** After each deploy without a volume, open **Settings → Mobile OTA** and **upload the APK again** (same version label is fine).
+
+**Also:** **`proxy.ts`** must allow anonymous **`GET /uploads/mobile-apk/*`** (already required for handheld `http.get` without cookies).

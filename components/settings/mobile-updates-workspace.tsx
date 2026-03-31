@@ -188,6 +188,12 @@ export function MobileUpdatesWorkspace({ initialReleases }: { initialReleases: M
         Re-uploading the <strong>same version label</strong> replaces the stored APK for that label. Large files need
         enough proxy body limit on the VPS (Traefik / Coolify).
       </p>
+      <p className="max-w-2xl font-mono text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">
+        <strong className="text-[var(--wms-fg)]">Docker / Coolify:</strong> APK files live on the container disk. A new
+        deploy without a <strong>persistent volume</strong> on <span className="font-mono">/app/public/uploads</span>{" "}
+        removes old uploads — handhelds then get <strong>404</strong> on the OTA URL until you upload again. Mount a
+        volume on that path (or re-upload after each deploy).
+      </p>
       <button
         type="button"
         disabled={busy}

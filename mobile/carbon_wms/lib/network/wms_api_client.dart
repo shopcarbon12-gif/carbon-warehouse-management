@@ -256,6 +256,12 @@ class WmsApiClient {
         : '$base${relativeOrAbsoluteUrl.startsWith('/') ? '' : '/'}$relativeOrAbsoluteUrl';
     final uri = Uri.parse(url);
     final res = await _http.get(uri);
+    if (res.statusCode == 404) {
+      throw StateError(
+        'APK not found (HTTP 404). On Docker/Coolify without a persistent volume on /app/public/uploads, '
+        'redeploys delete uploaded APKs — re-upload in WMS → Mobile OTA or mount a volume there.',
+      );
+    }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);
     }
