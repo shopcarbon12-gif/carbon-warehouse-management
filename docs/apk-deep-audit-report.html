@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>CarbonWMS — Deep APK / Flutter audit</title>
+  <title>CarbonWMS — Deep APK / Flutter audit (revised)</title>
   <style>
     :root {
       --bg: #0a0d12;
@@ -36,11 +36,15 @@
     ul.tight li { margin-bottom: 0.35rem; }
     .file { color: #93c5fd; }
     footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
+    .banner { background: rgba(52, 211, 153, 0.08); border: 1px solid rgba(52, 211, 153, 0.35); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1.25rem; font-size: 0.9rem; }
   </style>
 </head>
 <body>
   <main>
     <h1>CarbonWMS — Deep APK audit (Flutter + Android)</h1>
+    <div class="banner">
+      <strong>Updated 2026-03-31</strong> — This report was refreshed to match the tree after gap-closure work. Narrative of changes: <span class="file">docs/gap-closure-report.html</span>. Earlier “missing” items in §5–§6 are now implemented unless marked optional below.
+    </div>
     <p class="muted">Static code review of <code>mobile/carbon_wms/</code> and native Kotlin bridges. No device lab run is implied.</p>
 
     <div class="meta">
@@ -48,8 +52,8 @@
       <ul class="tight">
         <li><strong>Package:</strong> <code>com.shopcarbon.wms</code> (<span class="file">android/app/build.gradle.kts</span>)</li>
         <li><strong>Display name:</strong> CarbonWMS (<span class="file">AndroidManifest.xml</span>)</li>
-        <li><strong>Pub version:</strong> <code>0.1.9+13</code> (<span class="file">pubspec.yaml</span>)</li>
-        <li><strong>OTA install target:</strong> <code>InstallPlugin.installApk(..., appId: 'com.shopcarbon.wms')</code> — matches applicationId.</li>
+        <li><strong>Pub version:</strong> <code>0.1.10+14</code> (<span class="file">pubspec.yaml</span>) — bump per release.</li>
+        <li><strong>OTA install target:</strong> <code>InstallPlugin.installApk(..., appId: 'com.shopcarbon.wms')</code> — matches applicationId. Admin upload: <code>npm run upload:mobile-apk</code> + <span class="file">scripts/upload-mobile-apk.mjs</span> (session cookie env).</li>
       </ul>
     </div>
 
@@ -71,7 +75,7 @@
         </tr>
         <tr>
           <td>Networking</td>
-          <td>Bearer session, optional edge keys, JSON APIs</td>
+          <td>Bearer session, optional edge keys, JSON APIs; server <code>proxy.ts</code> accepts Bearer or cookie on all non-public <code>/api/*</code></td>
           <td class="file">lib/network/wms_api_client.dart</td>
         </tr>
         <tr>
@@ -97,18 +101,23 @@
         <tr><td><code>login</code></td><td><code>POST /api/auth/login</code></td><td><span class="pill p-ok">wired</span></td></tr>
         <tr><td><code>fetchMobileStatus</code></td><td><code>GET /api/mobile/status</code></td><td>Authz + OTA URL</td></tr>
         <tr><td><code>postDevicePing</code></td><td><code>POST /api/mobile/device-ping</code></td><td>Telemetry / registration helper</td></tr>
-        <tr><td><code>postEpcVisibility</code></td><td><code>POST /api/mobile/epc-visibility</code></td><td>Clean 10 “ghost” filter</td></tr>
+        <tr><td><code>postEpcVisibility</code></td><td><code>POST /api/mobile/epc-visibility</code></td><td>Clean 10 visibility / “ghost” filter</td></tr>
         <tr><td><code>postEdgeIngest</code></td><td><code>POST /api/edge/ingest</code></td><td>Primary scan pipeline</td></tr>
         <tr><td><code>fetchMobileSync</code></td><td><code>GET /api/settings/mobile-sync</code></td><td>Handheld + EPC profiles</td></tr>
         <tr><td><code>postInventoryUpload</code></td><td><code>POST /api/inventory/upload</code></td><td>Manual CSV session</td></tr>
         <tr><td><code>postPutawayAssign</code></td><td><code>POST /api/inventory/putaway-assign</code></td><td>Fast bin putaway</td></tr>
         <tr><td><code>postBarcodeIntake</code></td><td><code>POST /api/mobile/barcode-intake</code></td><td>Non-RFID intake</td></tr>
         <tr><td><code>catalogGridSearchFirstRow</code></td><td><code>GET /api/inventory/catalog</code></td><td>Lookup / identity-lite</td></tr>
+        <tr><td><code>fetchRfidCatalogSearch</code></td><td><code>GET /api/rfid/catalog-search</code></td><td>Encode suite Search tab</td></tr>
+        <tr><td><code>postRfidCommission</code></td><td><code>POST /api/rfid/commission</code></td><td>DB + server-side ZPL + printer POST</td></tr>
         <tr><td><code>fetchSessionLocationCodes</code></td><td><code>GET /api/locations</code></td><td>Transfer dropdowns</td></tr>
+        <tr><td>transfer slip helpers</td><td><code>/api/inventory/transfer-slips</code> (+ slip number)</td><td>List, create, append EPCs, receive/missing</td></tr>
+        <tr><td><code>postCleanBinByCode</code></td><td><code>POST /api/mobile/clean-bin</code></td><td>Bin code → clear contents</td></tr>
+        <tr><td><code>fetchItemDetailByEpc</code></td><td><code>GET /api/mobile/item-detail?epc=</code></td><td>Rich identity / bin</td></tr>
+        <tr><td><code>postBulkStatus</code></td><td><code>POST /api/inventory/bulk-status</code></td><td>Clean 10 transitions + server validation</td></tr>
         <tr><td><code>downloadAndInstallApk</code></td><td>GET active APK URL (absolute or under base)</td><td><span class="pill p-warn">needs unknown sources / install permission</span></td></tr>
       </tbody>
     </table>
-    <p class="muted"><strong>Not present in Dart client:</strong> no calls to web-only transfer slip APIs (<code>/api/inventory/transfer-slips/...</code>), bulk-status, or clean-bin endpoints — see §5.</p>
 
     <h2>3. Screens &amp; modules (dashboard grid)</h2>
     <table>
@@ -120,7 +129,7 @@
           <td>Item Lookup</td>
           <td class="file">inventory_lookup_screen.dart</td>
           <td><span class="pill p-ok">substantial</span></td>
-          <td>Catalog search, templates, optional camera scan, link to Geiger. Bin line often <code>—</code> unless extended.</td>
+          <td>Catalog search, templates, camera scan, Geiger link; 24-hex EPC uses <code>fetchItemDetailByEpc</code> for bin.</td>
         </tr>
         <tr>
           <td>Non-RFID Intake</td>
@@ -132,132 +141,138 @@
           <td>Fast bin putaway</td>
           <td class="file">fast_putaway_screen.dart</td>
           <td><span class="pill p-ok">substantial</span></td>
-          <td>Wedge/camera/manual; color scope sheet; <code>putaway-assign</code>.</td>
+          <td>Wedge/camera/manual; <code>putaway-assign</code>.</td>
         </tr>
         <tr>
           <td>CSV cycle session</td>
           <td class="file">inventory_csv_session_screen.dart</td>
           <td><span class="pill p-ok">substantial</span></td>
-          <td>Suppresses edge streaming; builds CSV; upload button.</td>
+          <td>CSV build + upload.</td>
         </tr>
         <tr>
           <td>Locate tag (Geiger)</td>
           <td class="file">locate_tag_screen.dart</td>
           <td><span class="pill p-ok">substantial</span></td>
-          <td>RSSI meter, WAV beeps, hold vs tap from settings. See §6 for RSSI fidelity.</td>
+          <td>RSSI meter + audio; Chainway RSSI from native when available (§6).</td>
         </tr>
         <tr>
-          <td>Transfer</td>
-          <td class="file">transfer_screen.dart</td>
-          <td><span class="pill p-warn">legacy pattern</span></td>
-          <td>Origin/dest from session locations; commits via <strong>edge ingest snapshot</strong>, not slip-based transfer API.</td>
+          <td>Transfer slips</td>
+          <td class="file">transfer_slips_screen.dart</td>
+          <td><span class="pill p-ok">wired</span></td>
+          <td>OUT: create + append scans; IN: receive / missing via slip APIs (replaces legacy ingest-only transfer screen).</td>
+        </tr>
+        <tr>
+          <td>Clean bin</td>
+          <td class="file">clean_bin_screen.dart</td>
+          <td><span class="pill p-ok">wired</span></td>
+          <td><code>postCleanBinByCode</code> after bin scan.</td>
         </tr>
         <tr>
           <td>Change Status</td>
           <td class="file">status_change_screen.dart</td>
-          <td><span class="pill p-warn">simplified</span></td>
-          <td>Three buckets (<code>MISSING</code>, <code>DAMAGED</code>, <code>IN_STOCK</code>) → metadata + ingest. Not the web Clean 10 picker / bulk-status API.</td>
+          <td><span class="pill p-ok">wired</span></td>
+          <td>Clean 10 target dropdown + <code>postBulkStatus</code> (+ optional override).</td>
         </tr>
         <tr>
           <td>Encode suite</td>
           <td class="file">encode_suite_screens.dart</td>
-          <td><span class="pill p-bad">mostly stub</span></td>
-          <td>Hardcoded catalog rows; mock ZPL; fake offline sync — not production commissioning.</td>
+          <td><span class="pill p-ok">search + print</span></td>
+          <td>Search → <code>fetchRfidCatalogSearch</code> + <code>postRfidCommission</code>. Scan &amp; Print: UPC/camera → first catalog match → same commission (server ZPL). Upload: persisted retry queue (<span class="file">commission_retry_queue.dart</span>) when WRITE fails.</td>
         </tr>
         <tr>
           <td>Handheld settings</td>
           <td class="file">handheld_settings_screen.dart</td>
           <td><span class="pill p-info">local + sync</span></td>
-          <td>Works with <code>MobileSettingsRepository</code> / prefs.</td>
+          <td><code>MobileSettingsRepository</code> / prefs.</td>
         </tr>
         <tr>
           <td>Login / device lock</td>
           <td class="file">login_screen.dart, device_lock_screen.dart</td>
           <td><span class="pill p-ok">wired</span></td>
-          <td>Android ID gate aligned with server <code>authorized</code> / <code>bypassDeviceLock</code>.</td>
+          <td>Android ID gate vs server <code>authorized</code> / <code>bypassDeviceLock</code>.</td>
         </tr>
       </tbody>
     </table>
 
     <h2>4. Security, OTA, and settings</h2>
     <ul class="tight">
-      <li><span class="pill p-ok">Device ID</span> — <code>HandheldDeviceIdentity</code> uses <strong>Android ID</strong> for <code>deviceId</code> on APIs (matches server <code>devices.android_id</code> design).</li>
-      <li><span class="pill p-ok">Boot sequence</span> — Auto-detect Chainway manufacturer → Chainway scanner, else Zebra path (<code>rfid_manager.dart</code>).</li>
-      <li><span class="pill p-ok">Power slider</span> — Dashboard header slider 0–300; persists via <code>MobileSettingsRepository.setGlobalAntennaPower</code>; reapplied to scanner. Native layer currently logs power in debug; verify it drives API3 / Chainway reflection.</li>
-      <li><span class="pill p-warn">OTA dialog</span> — On boot, update dialog is <strong>dismiss-only</strong> (no in-dialog install). <strong>Download &amp; install</strong> lives in dashboard header — acceptable UX but differs from “single dialog does everything” specs.</li>
-      <li><span class="pill p-ok">OTA polling</span> — Dashboard re-polls <code>fetchMobileStatus</code> every 3 minutes; snackbar when update available.</li>
-      <li><span class="pill p-warn">Release signing</span> — <code>build.gradle.kts</code> uses <code>signingConfig = debug</code> for release — fine for internal QA; not Play Store ready.</li>
+      <li><span class="pill p-ok">Device ID</span> — <strong>Android ID</strong> for <code>deviceId</code> on APIs.</li>
+      <li><span class="pill p-ok">Boot sequence</span> — Chainway vs Zebra autodetect.</li>
+      <li><span class="pill p-ok">Power slider</span> — Dashboard header; persists and reapplies to scanner.</li>
+      <li><span class="pill p-warn">OTA dialog</span> — Dismiss-only on boot; install from header.</li>
+      <li><span class="pill p-ok">OTA polling</span> — <code>fetchMobileStatus</code> every 3 minutes.</li>
+      <li><span class="pill p-warn">Release signing</span> — Debug signing for internal QA; not Play Store ready.</li>
     </ul>
 
-    <h2>5. Gaps vs enterprise / web parity (high impact)</h2>
+    <h2>5. Gaps vs enterprise / web parity (status after 2026-03-31)</h2>
     <table>
       <thead>
-        <tr><th>Topic</th><th>Expected (from product prompts / web)</th><th>APK today</th></tr>
+        <tr><th>Topic</th><th>Expected</th><th>APK today</th></tr>
       </thead>
       <tbody>
         <tr>
           <td>Transfer slips</td>
-          <td>Transfer OUT/IN with slip numbers, closed-loop receive, LS sync</td>
-          <td><span class="pill p-bad">missing</span> No Dart API for <code>transfer_slips</code>; transfer screen uses generic edge ingest only.</td>
+          <td>OUT/IN, receive/missing, slip numbers</td>
+          <td><span class="pill p-ok">closed</span> <code>transfer_slips_screen.dart</code> + client methods.</td>
         </tr>
         <tr>
           <td>Clean bin (handheld)</td>
-          <td>Scan bin → API unassign items + audit log</td>
-          <td><span class="pill p-bad">missing</span> No screen or client method (web has clean-bin API).</td>
+          <td>Scan bin → API clear + audit</td>
+          <td><span class="pill p-ok">closed</span> <code>/api/mobile/clean-bin</code> + screen.</td>
         </tr>
         <tr>
           <td>Bulk status</td>
-          <td>Align with Clean 10 + server enforcement</td>
-          <td><span class="pill p-warn">partial</span> Simplified buckets + ingest; no <code>/api/inventory/bulk-status</code> integration.</td>
+          <td>Clean 10 + server enforcement</td>
+          <td><span class="pill p-ok">closed</span> <code>postBulkStatus</code> + UI.</td>
         </tr>
         <tr>
           <td>Commissioning / encode</td>
-          <td>Real catalog, EPC generation, server persistence, ZPL to printer</td>
-          <td><span class="pill p-bad">stub UI</span> Placeholder list and mock print/sync.</td>
+          <td>Catalog, server persistence, ZPL</td>
+          <td><span class="pill p-ok">search + server print</span> Real APIs; printer reachability is environment-dependent. Optional: extend client with <code>printerIp</code> when API gains stable mobile fields.</td>
         </tr>
         <tr>
           <td>Rich identity card</td>
-          <td>Continuous scan → tap item → image, MSRP, status, bin from WMS</td>
-          <td><span class="pill p-warn">partial</span> Lookup uses first catalog grid row; not a dedicated item-by-EPC identity endpoint.</td>
+          <td>EPC → bin, status, etc.</td>
+          <td><span class="pill p-ok">closed</span> <code>fetchItemDetailByEpc</code> in lookup.</td>
+        </tr>
+        <tr>
+          <td>Encode offline queue</td>
+          <td>Retry after network failure</td>
+          <td><span class="pill p-ok">closed</span> SharedPreferences queue + Upload tab retry.</td>
         </tr>
       </tbody>
     </table>
 
     <h2>6. Hardware &amp; Geiger (RSSI) fidelity</h2>
     <ul class="tight">
-      <li><span class="pill p-ok">Zebra</span> — <code>CarbonZebraRfidController.kt</code> uses API3 tag RSSI (<code>getPeakRSSI()</code> etc.) when linked — suitable for Geiger proximity.</li>
-      <li><span class="pill p-bad">Chainway</span> — <code>CarbonChainwayRfidController.emitEpc</code> sends <strong>hardcoded</strong> <code>rssi: -55</code> for every tag. Geiger mode will <strong>not</strong> reflect real distance on Chainway until RSSI is read from the device API.</li>
-      <li><span class="pill p-info">Stubs</span> — If native bridge fails to link, scanners still “connect” but won’t emit real reads; UI relies on <code>SIMULATE</code> buttons for QA.</li>
+      <li><span class="pill p-ok">Zebra</span> — API3 tag RSSI when linked.</li>
+      <li><span class="pill p-ok">Chainway</span> — <code>CarbonChainwayRfidController</code> extracts RSSI via reflection when the vendor object exposes it; falls back to <code>-55</code> only when unknown.</li>
+      <li><span class="pill p-info">Stubs</span> — SIMULATE buttons for QA if hardware not linked.</li>
     </ul>
 
     <h2>7. Ghost filter &amp; edge streaming</h2>
     <ul class="tight">
-      <li><span class="pill p-ok">Server-driven visibility</span> — EPCs queue to <code>postEpcVisibility</code>; invisible tags never enter session or edge batch (matches Clean 10 “ghost” intent).</li>
-      <li><span class="pill p-ok">Geiger exception</span> — <code>GEIGER_FIND</code> bypasses ghost queue and edge ingest by design (<code>rfid_manager.dart</code>).</li>
-      <li><span class="pill p-warn">Docs drift</span> — Comment on <code>postEpcVisibility</code> still names legacy Senitron flags; server uses <code>is_visible_to_scanner</code> semantics.</li>
+      <li><span class="pill p-ok">Server-driven visibility</span> — <code>postEpcVisibility</code> before session/edge.</li>
+      <li><span class="pill p-ok">Geiger exception</span> — <code>GEIGER_FIND</code> bypasses ghost queue.</li>
+      <li><span class="pill p-warn">Docs drift</span> — Prefer server semantics <code>is_visible_to_scanner</code> in new comments.</li>
     </ul>
 
     <h2>8. Dependencies &amp; native bundles</h2>
     <ul class="tight">
       <li>Flutter: <code>http</code>, <code>provider</code>, <code>shared_preferences</code>, <code>mobile_scanner</code>, <code>audioplayers</code>, <code>install_plugin</code>, <code>android_id</code>, <code>device_info_plus</code>, <code>package_info_plus</code>, <code>google_fonts</code>, <code>lucide_icons</code>.</li>
-      <li>Android: Zebra <code>API3_LIB-release-2.0.2.82.aar</code> in <code>app/libs</code>; optional Chainway JARs via <code>fileTree</code>.</li>
-      <li>Path packages <code>carbon_chainway_driver</code> / <code>carbon_zebra_driver</code> are <strong>placeholders</strong>; real glue is in app Kotlin + Dart <code>RfidVendorChannel</code>.</li>
+      <li>Android: Zebra AAR in <code>app/libs</code>; Chainway JARs optional.</li>
+      <li>Path packages <code>carbon_chainway_driver</code> / <code>carbon_zebra_driver</code> — placeholders; glue in app Kotlin + Dart.</li>
     </ul>
 
-    <h2>9. Recommended next work (prioritized)</h2>
+    <h2>9. Optional next work</h2>
     <ol>
-      <li><strong>Chainway RSSI</strong> — Replace constant <code>-55</code> with real RSSI from DeviceAPI inventory reports (required for Geiger on Chainway hardware).</li>
-      <li><strong>Transfer slips on handset</strong> — New flows + <code>WmsApiClient</code> methods matching web <code>transfer_slips</code> routes; replace or complement generic ingest transfer.</li>
-      <li><strong>Encode suite</strong> — Wire to live catalog APIs and server commissioning endpoints; remove stub rows; real ZPL gateway if printers are network-managed.</li>
-      <li><strong>Status change</strong> — Align buckets with Clean 10 vocabulary and/or call bulk-status API with server validation.</li>
-      <li><strong>Clean bin mobile</strong> — Thin screen calling web’s clean-bin endpoint with bin scan.</li>
-      <li><strong>Identity card</strong> — <code>GET</code> by EPC (or extend catalog API) for bin, status, image, MSRP on handheld.</li>
-      <li><strong>Release signing</strong> — Replace debug signing for production APK distribution.</li>
-      <li><strong>flutter analyze / CI</strong> — Run in CI; fix lints; optional integration test with mock HTTP.</li>
+      <li><strong>Printer overrides from handset</strong> — Pass <code>printerIp</code> / port in <code>postRfidCommission</code> when product requires per-device printer selection.</li>
+      <li><strong>Release signing</strong> — Play / enterprise signing for external distribution.</li>
+      <li><strong>CI</strong> — <code>flutter analyze</code> + widget tests in pipeline.</li>
     </ol>
 
     <footer>
-      Audit scope: repository static analysis only. Re-run after major merges to <code>mobile/carbon_wms/</code> or Kotlin RFID controllers.
+      Revised 2026-03-31 after gap closure. Re-run after major merges to <code>mobile/carbon_wms/</code> or Kotlin RFID controllers.
     </footer>
   </main>
 </body>

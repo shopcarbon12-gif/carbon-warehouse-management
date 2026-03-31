@@ -50,7 +50,7 @@
         <li><span class="pill p-ok">Closed</span> Mobile endpoints: clean bin by code, item detail by EPC; Flutter screens and <code>WmsApiClient</code> methods.</li>
         <li><span class="pill p-ok">Closed</span> Broad codemod: protected API routes use <code>getSessionFromRequest(req)</code> so Bearer tokens work consistently.</li>
         <li><span class="pill p-ok">Closed</span> Handheld: bulk status, RFID catalog search + commission wiring, inventory lookup bin enrichment, Chainway RSSI via reflection on tag reads.</li>
-        <li><span class="pill p-warn">Note</span> Encode suite “Upload” queue tab remains a lighter UX than full server sync; Search/commission path is the primary gap closure for encoding.</li>
+        <li><span class="pill p-ok">Encode suite</span> Search + Scan &amp; Print call live <code>catalog-search</code> and <code>postRfidCommission</code> (server ZPL + printer). Upload tab persists failed WRITE jobs (<span class="file">commission_retry_queue.dart</span>) and retries via <code>RETRY ALL</code>.</li>
       </ul>
     </div>
 
@@ -160,7 +160,7 @@
         </tr>
         <tr>
           <td><code class="file">encode_suite_screens.dart</code></td>
-          <td>Search tab wired to catalog search + commission APIs (stateful flow).</td>
+          <td>Search → commission; Scan &amp; Print → UPC/camera → first catalog match → commission (server print); Upload → SharedPreferences retry queue for failed commissions.</td>
         </tr>
       </tbody>
     </table>
@@ -185,6 +185,7 @@
     <h2>4. Deploy &amp; operations</h2>
     <ul class="tight">
       <li>Production rollout: push to <code>main</code> and trigger Coolify <strong>Redeploy</strong> (rebuild) if Docker or app entrypoints change; <code>npm run deploy:coolify</code> may be used when <code>COOLIFY_DEPLOY_WEBHOOK_URL</code> (and optional API token) are configured locally.</li>
+      <li>OTA APK: build release APK, then <code>npm run upload:mobile-apk</code> with <code>WMS_APP_PUBLIC_BASE_URL</code> and <code>WMS_UPLOAD_SESSION_COOKIE</code> (admin session), or use <strong>Settings → Mobile updates</strong> in the web UI.</li>
       <li><code>GET /api/health</code> remains DB-free for container health; readiness stays on <code>/api/health/ready</code> if used.</li>
     </ul>
 

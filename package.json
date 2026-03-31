@@ -34,7 +34,8 @@
     "env:parity-local": "node scripts/ensure-production-parity-local.mjs",
     "sync:public-urls": "npm run env:ensure-local && npm run coolify:set-public-urls && npm run deploy:coolify",
     "epc:validate": "npx tsx scripts/validate-epc-encoding.ts",
-    "printer:test": "npx tsx scripts/test-printer-connection.ts"
+    "printer:test": "npx tsx scripts/test-printer-connection.ts",
+    "upload:mobile-apk": "node scripts/upload-mobile-apk.mjs"
   },
   "dependencies": {
     "@radix-ui/react-tabs": "^1.1.13",

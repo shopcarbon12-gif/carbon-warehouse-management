@@ -5,11 +5,12 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/commission_retry_queue.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
-import 'package:carbon_wms/util/demo_epc.dart';
+import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart' show openCameraBarcodeScanner;
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
-/// Commissioning suite: catalog encode queue, label print bridge, offline upload queue.
+/// Commissioning suite: catalog encode, UPC → server ZPL print, offline commission retry queue.
 class EncodeSuiteScreen extends StatefulWidget {
   const EncodeSuiteScreen({super.key, this.initialTab = 0});
 
@@ -110,7 +111,7 @@ class _SearchEncodeTabState extends State<_SearchEncodeTab> {
     }
   }
 
-  Future<void> _commission(String customSkuId) async {
+  Future<void> _commission(String customSkuId, String label) async {
     final n = int.tryParse(_qty.text.trim()) ?? 1;
     if (n < 1) return;
     setState(() => _busy = true);
@@ -126,7 +127,17 @@ class _SearchEncodeTabState extends State<_SearchEncodeTab> {
         );
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      await CommissionRetryQueue.enqueue(
+        CommissionQueueJob(customSkuId: customSkuId, qty: n, label: label),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed — queued for Upload tab: $e'),
+            backgroundColor: Colors.orange.shade900,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -171,12 +182,13 @@ class _SearchEncodeTabState extends State<_SearchEncodeTab> {
           final id = row['id']?.toString() ?? '';
           final sku = row['sku']?.toString() ?? '';
           final title = row['description']?.toString() ?? '';
+          final label = title.isNotEmpty ? title : sku;
           return Card(
             child: ListTile(
               title: Text(title.isNotEmpty ? title.toUpperCase() : sku, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
               subtitle: Text('$sku · id $id', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
               trailing: FilledButton(
-                onPressed: id.isEmpty || _busy ? null : () => unawaited(_commission(id)),
+                onPressed: id.isEmpty || _busy ? null : () => unawaited(_commission(id, label)),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: AppColors.background,
@@ -208,23 +220,54 @@ class _ScanPrintTabState extends State<_ScanPrintTab> {
     super.dispose();
   }
 
-  Future<void> _mockPrintZpl() async {
+  /// Server runs ZPL + optional raw print to configured printer (same as web commissioning).
+  Future<void> _printViaCommission() async {
     final upc = _upcCtrl.text.trim();
-    if (upc.isEmpty) {
+    if (upc.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a UPC first')),
+        const SnackBar(content: Text('Enter or scan at least 2 characters (UPC/SKU)')),
       );
       return;
     }
     setState(() => _busy = true);
-    await Future<void>.delayed(const Duration(milliseconds: 650));
-    if (!mounted) return;
-    setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('ZPL label job sent for $upc (mock printer bridge)'),
-      ),
-    );
+    try {
+      final api = context.read<WmsApiClient>();
+      final matches = await api.fetchRfidCatalogSearch(upc);
+      if (!mounted) return;
+      if (matches.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No catalog match — try Search tab')),
+        );
+        return;
+      }
+      final first = matches.first;
+      if (first is! Map) return;
+      final id = first['id']?.toString() ?? '';
+      if (id.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid catalog row')),
+        );
+        return;
+      }
+      final j = await api.postRfidCommission(
+        customSkuId: id,
+        qty: 1,
+        addToInventory: false,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Print job: inserted=${j['inserted'] ?? '?'} printer_ok=${j['printer_ok'] ?? '?'}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -244,26 +287,39 @@ class _ScanPrintTabState extends State<_ScanPrintTab> {
               letterSpacing: 0.9,
             ),
             decoration: const InputDecoration(
-              hintText: 'Scan or type UPC',
+              hintText: 'Scan or type UPC / SKU',
             ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _busy
+                ? null
+                : () async {
+                    final code = await openCameraBarcodeScanner(context, title: 'Scan UPC');
+                    if (code != null && code.isNotEmpty && mounted) {
+                      setState(() => _upcCtrl.text = code.trim());
+                    }
+                  },
+            icon: const Icon(Icons.photo_camera_outlined, size: 20),
+            label: const Text('CAMERA SCAN'),
           ),
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: _busy ? null : () => unawaited(_mockPrintZpl()),
+            onPressed: _busy ? null : () => unawaited(_printViaCommission()),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: AppColors.background,
               padding: const EdgeInsets.symmetric(vertical: 18),
             ),
             child: Text(
-              _busy ? 'PRINTING…' : 'PRINT RFID LABEL (ZPL)',
+              _busy ? 'PRINTING…' : 'PRINT RFID LABEL (SERVER ZPL)',
               textAlign: TextAlign.center,
               style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.8),
             ),
           ),
           const SizedBox(height: 24),
           Text(
-            'Printer profile and DPI are configured on the edge gateway. This handset only submits jobs.',
+            'Resolves the first catalog match, then POST /api/rfid/commission (qty 1). Printer IP/port use server defaults unless you extend the API client.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
           ),
         ],
@@ -280,37 +336,78 @@ class _UploadQueueTab extends StatefulWidget {
 }
 
 class _UploadQueueTabState extends State<_UploadQueueTab> {
-  final List<String> _pending = <String>[
-    randomDemoEpc(),
-    randomDemoEpc(),
-  ];
+  List<CommissionQueueJob> _jobs = [];
+  bool _loading = true;
   bool _syncing = false;
 
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_reload());
+  }
+
+  Future<void> _reload() async {
+    final jobs = await CommissionRetryQueue.load();
+    if (mounted) {
+      setState(() {
+        _jobs = jobs;
+        _loading = false;
+      });
+    }
+  }
+
   Future<void> _syncAll() async {
-    if (_pending.isEmpty) return;
+    if (_jobs.isEmpty) return;
     setState(() => _syncing = true);
-    await Future<void>.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-    setState(() {
-      _pending.clear();
-      _syncing = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Offline encodes pushed to CarbonWMS (stub)')),
-    );
+    final api = context.read<WmsApiClient>();
+    final remaining = <CommissionQueueJob>[];
+    var ok = 0;
+    for (final job in _jobs) {
+      try {
+        await api.postRfidCommission(
+          customSkuId: job.customSkuId,
+          qty: job.qty,
+          addToInventory: false,
+        );
+        ok++;
+      } catch (_) {
+        remaining.add(job);
+      }
+    }
+    await CommissionRetryQueue.save(remaining);
+    if (mounted) {
+      setState(() {
+        _jobs = remaining;
+        _syncing = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Synced $ok job(s); ${remaining.length} still queued')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text('OFFLINE ENCODED TAGS', style: AppTheme.headline(context)),
+          child: Text('FAILED COMMISSION RETRY', style: AppTheme.headline(context)),
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Jobs land here when Search → WRITE fails (e.g. offline). Successful commissions from Search do not use this queue.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          ),
+        ),
+        const SizedBox(height: 8),
         Expanded(
-          child: _pending.isEmpty
+          child: _jobs.isEmpty
               ? const Center(
                   child: Text(
                     'Queue is clear.',
@@ -319,30 +416,51 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
                 )
               : ListView.separated(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _pending.length,
+                  itemCount: _jobs.length,
                   separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF334155)),
-                  itemBuilder: (context, i) => ListTile(
-                    title: Text(
-                      _pending[i],
-                      style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.8),
-                    ),
-                    trailing: const Icon(Icons.cloud_upload_outlined, color: AppColors.textMuted),
-                  ),
+                  itemBuilder: (context, i) {
+                    final j = _jobs[i];
+                    return ListTile(
+                      title: Text(
+                        j.label,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                      subtitle: Text(
+                        'SKU id ${j.customSkuId} · qty ${j.qty}',
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                      ),
+                      trailing: const Icon(Icons.cloud_upload_outlined, color: AppColors.textMuted),
+                    );
+                  },
                 ),
         ),
         Padding(
           padding: const EdgeInsets.all(16),
-          child: FilledButton(
-            onPressed: (_pending.isEmpty || _syncing) ? null : () => unawaited(_syncAll()),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.slateActionDark,
-              foregroundColor: AppColors.textMain,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-            ),
-            child: Text(
-              _syncing ? 'SYNCING…' : 'SYNC NOW',
-              style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1),
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _syncing ? null : () => unawaited(_reload()),
+                  child: const Text('REFRESH'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: FilledButton(
+                  onPressed: (_jobs.isEmpty || _syncing) ? null : () => unawaited(_syncAll()),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.slateActionDark,
+                    foregroundColor: AppColors.textMain,
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                  ),
+                  child: Text(
+                    _syncing ? 'SYNCING…' : 'RETRY ALL',
+                    style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],

@@ -87,7 +87,7 @@
         </tr>
       </tbody>
     </table>
-    <p class="muted"><span class="pill p-warn">Verify</span> The proxy only inspects the <strong>cookie</strong> for navigation. Mobile clients that call APIs with <strong>Bearer only</strong> must either hit routes on the <code>isPublicPath</code> list or the proxy must accept Bearer for those paths — otherwise the matcher may redirect API calls to HTML login. Confirmed public: <code>/api/mobile/status</code>, <code>/api/mobile/epc-visibility</code>, <code>/api/edge/ingest</code>, <code>/api/settings/mobile-sync</code>, <code>/api/inventory/upload</code>, <code>/api/inventory/putaway-assign</code>. <strong>Not</strong> on the list today: <code>/api/mobile/device-ping</code>, <code>/api/mobile/barcode-intake</code>, and other Bearer-only mobile routes — test from a real handset or <code>curl</code> without cookies.</p>
+    <p class="muted"><span class="pill p-ok">Resolved (2026-03)</span> For all <code>/api/*</code> routes <strong>not</strong> on the public allowlist, <code>proxy.ts</code> now accepts <strong>either</strong> <code>Authorization: Bearer</code> <strong>or</strong> the <code>wms_session</code> cookie and returns <strong>401 JSON</strong> when neither is valid (no redirect to HTML login). Page navigation still uses cookie-only redirects. Public allowlist unchanged for health, auth, webhooks, edge ingest, and the other explicit prefixes — see <span class="file">proxy.ts</span>.</p>
 
     <h2>2. Health, config &amp; production image</h2>
     <ul class="tight">
@@ -163,7 +163,7 @@
         <tr><td>Reports</td><td>upload-logs (+ by id), audit, inventory-audit-logs, asset-movements, replenishment-logs, external-system-logs, <code>pos-compare</code></td></tr>
         <tr><td>Settings / access</td><td>tenant-settings, status-labels, access users/roles/locations CRUD</td></tr>
         <tr><td>Infrastructure</td><td>devices list + <code>[id]</code>, infrastructure settings</td></tr>
-        <tr><td>Edge &amp; handheld</td><td><code>/api/edge/ingest</code>, <code>/api/edge/stream</code> (SSE), <code>/api/handheld/batches</code>, mobile: <code>status</code>, <code>device-ping</code>, <code>epc-visibility</code>, <code>barcode-intake</code>, <code>upload-apk</code>, <code>releases/set-active</code></td></tr>
+        <tr><td>Edge &amp; handheld</td><td><code>/api/edge/ingest</code>, <code>/api/edge/stream</code> (SSE), <code>/api/handheld/batches</code>, mobile: <code>status</code>, <code>device-ping</code>, <code>epc-visibility</code>, <code>barcode-intake</code>, <code>clean-bin</code>, <code>item-detail</code>, <code>upload-apk</code>, <code>releases/set-active</code></td></tr>
         <tr><td>Legacy / misc</td><td><code>/api/exceptions</code>, webhooks path reserved in proxy</td></tr>
       </tbody>
     </table>
@@ -177,7 +177,7 @@
     </ul>
 
     <h2>6. Background worker</h2>
-    <p><code>npm run worker</code> — <span class="file">scripts/worker.ts</span> claims <code>sync_jobs</code> rows; processes <code>lightspeed_catalog</code> / <code>lightspeed_pull</code> via <code>executeLightspeedCatalogJob</code>; other job types currently stubbed with sleep + completed update. <span class="pill p-info">Separate process</span> from Next — must run in production if queued catalog sync should complete without hitting an API trigger path.</p>
+    <p><code>npm run worker</code> — <span class="file">scripts/worker.ts</span> claims <code>sync_jobs</code> rows; processes <code>lightspeed_catalog</code> / <code>lightspeed_pull</code> via <code>executeLightspeedCatalogJob</code>; other job types currently stubbed with sleep + completed update. <span class="pill p-info">Separate process</span> from Next — must run in production if queued catalog sync should complete without hitting an API trigger path. Coolify setup: <span class="file">docs/WORKER.md</span>.</p>
 
     <h2>7. Integrations (Lightspeed)</h2>
     <ul class="tight">
@@ -195,7 +195,7 @@
     </ul>
 
     <h2>9. Automated tests</h2>
-    <p><span class="file">e2e/smoke.spec.ts</span> — Login page heading visible; <code>GET /api/health</code> returns <code>ok</code>. <span class="pill p-warn">Narrow coverage</span> — no authenticated dashboard flow, no API contract tests for inventory/Lightspeed.</p>
+    <p><span class="file">e2e/smoke.spec.ts</span> — Login page heading; <code>GET /api/health</code>; protected API returns <strong>401 JSON</strong> without session. Optional: set <code>PLAYWRIGHT_PUBLIC_BASE_URL</code> to probe the same checks against production. <span class="pill p-warn">Still narrow</span> — no authenticated dashboard path, no inventory/Lightspeed contract suite.</p>
 
     <h2>10. Gaps &amp; risks (prioritized)</h2>
     <table>
@@ -205,8 +205,8 @@
       <tbody>
         <tr>
           <td>Proxy vs Bearer-only mobile APIs</td>
-          <td><span class="pill p-warn">high if unverified</span></td>
-          <td>Confirm <code>device-ping</code>, <code>barcode-intake</code>, and any other mobile Bearer routes either bypass cookie redirect or receive cookies.</td>
+          <td><span class="pill p-ok">closed</span></td>
+          <td>Central <code>/api/*</code> gate: Bearer or cookie; 401 JSON. See <span class="file">proxy.ts</span> (2026-03).</td>
         </tr>
         <tr>
           <td>E2E &amp; integration tests</td>
@@ -233,7 +233,7 @@
 
     <h2>11. Suggested next steps (engineering)</h2>
     <ol>
-      <li>Audit <code>proxy.ts</code> public paths against every mobile/Bearer <code>route.ts</code> that uses <code>getSessionFromRequest</code>; add missing prefixes or centralize Bearer-aware gate.</li>
+      <li><s>Audit <code>proxy.ts</code> for Bearer-aware <code>/api/*</code> gate.</s> Done — Bearer + cookie + JSON 401.</li>
       <li>Add one Playwright test: sign in (test user) → open catalog or locations → assert table or heading.</li>
       <li>Document Coolify services: web + optional worker + Postgres; link to <code>docs/WORKER.md</code>.</li>
       <li>Run load/regression on Lightspeed pull/push and POS compare in a staging tenant.</li>
