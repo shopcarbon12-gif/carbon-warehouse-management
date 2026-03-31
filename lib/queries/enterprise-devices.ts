@@ -26,8 +26,8 @@ export async function listPendingHandhelds(pool: Pool, tenantId: string): Promis
        l.code AS location_code,
        l.name AS location_name
      FROM devices d
-     INNER JOIN locations l ON l.id = d.location_id AND l.tenant_id = d.tenant_id
-     WHERE d.tenant_id = $1::uuid
+     INNER JOIN locations l ON l.id = d.location_id
+     WHERE l.tenant_id = $1::uuid
        AND d.device_type = 'handheld_reader'
        AND d.is_authorized = false
      ORDER BY d.updated_at DESC`,
@@ -87,9 +87,10 @@ export async function findDeviceByAndroidId(
     is_authorized: boolean;
     id: string;
   }>(
-    `SELECT tenant_id::text, is_authorized, id::text
-     FROM devices
-     WHERE android_id = $1 AND trim(android_id) <> ''
+    `SELECT l.tenant_id::text, d.is_authorized, d.id::text
+     FROM devices d
+     INNER JOIN locations l ON l.id = d.location_id
+     WHERE d.android_id = $1 AND trim(d.android_id) <> ''
      LIMIT 1`,
     [androidId.trim()],
   );

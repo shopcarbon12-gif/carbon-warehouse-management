@@ -42,8 +42,11 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
         _busy = false;
         _lastStatus = [
           'authorized: $authorized',
-          if (latest != null && latest.isNotEmpty) 'server label: $latest',
-          if (url != null && url.isNotEmpty) 'download: $url' else 'download: (none — upload APK in WMS → Mobile OTA)',
+          if (latest != null && latest.isNotEmpty)
+            'server label: $latest'
+          else
+            'server label: (none — no release row for this device\'s tenant; upload in WMS → Mobile OTA)',
+          if (url != null && url.isNotEmpty) 'download: $url' else 'download: (none)',
           'update flag: $update',
         ].join('\n');
       });

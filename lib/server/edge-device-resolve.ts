@@ -17,9 +17,9 @@ export async function resolveEdgeDevice(
   if (!raw) return null;
 
   const r = await pool.query<{ tenant_id: string; location_id: string }>(
-    `SELECT d.tenant_id::text, d.location_id::text
+    `SELECT l.tenant_id::text, d.location_id::text
      FROM devices d
-     INNER JOIN locations l ON l.id = d.location_id AND l.tenant_id = d.tenant_id
+     INNER JOIN locations l ON l.id = d.location_id
      WHERE (
        lower(trim(d.name)) = lower(trim($1::text))
        OR lower(trim(d.config->>'deviceId')) = lower(trim($1::text))

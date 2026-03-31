@@ -95,6 +95,7 @@ export async function POST(req: Request) {
         `UPDATE devices d
          SET name = $2,
              location_id = $3::uuid,
+             tenant_id = $4::uuid,
              updated_at = now(),
              network_address = COALESCE(NULLIF($5, ''), d.network_address),
              config = CASE
