@@ -96,7 +96,7 @@
 <main class="w-full max-w-[480px] min-h-[884px] flex flex-col px-8 py-12" data-stitch-vh="min-h-[884px]===min-h-screen">
 <!-- Branding Section -->
 <header class="flex flex-col items-center mb-16">
-<img src="carbon_logo.png" alt="CarbonWMS" width="80" height="80" class="w-20 h-20 rounded-xl mb-6 shadow-[0_8px_24px_rgba(0,0,0,0.04)] object-cover" /><h1 class="font-headline font-black text-2xl tracking-widest text-black">CarbonWMS</h1>
+<img src="carbon_logo.png" alt="CarbonWMS" width="128" height="128" class="w-32 h-32 rounded-xl mb-2 shadow-[0_8px_24px_rgba(0,0,0,0.04)] object-cover" /><h1 class="font-headline font-black text-2xl tracking-widest text-black">CarbonWMS</h1>
 <p class="font-label text-sm text-outline mt-2 tracking-widest">WAREHOUSE MANAGEMENT SOFTWARE</p>
 </header>
 <!-- Form Section -->
