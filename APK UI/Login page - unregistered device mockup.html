@@ -49,13 +49,7 @@
     body { min-height: max(884px, 100dvh); }
   </style>
 </head>
-<!--
-  Mock: login when the handheld/phone is not yet approved on the server.
-  The identifier type + value mirror what the app sends (configured server-side + per platform):
-  - Zebra / Chainway: often Wi‑Fi MAC when available
-  - Some builds: Android ID, serial, or last-known LAN IP
-  Replace the sample block below with live data in the real app.
--->
+<!-- Mock: one plain centered line under server URL until device is approved. -->
 <body class="bg-surface-container-lowest font-body text-on-surface min-h-[884px] flex flex-col items-center overflow-x-hidden">
 <main class="w-full max-w-[480px] min-h-[884px] flex flex-col px-8 py-12">
 <header class="flex flex-col items-center mb-16">
@@ -73,23 +67,7 @@
 <span class="material-symbols-outlined text-outline mr-3">dns</span>
 <input class="bg-transparent border-none w-full font-label text-base font-medium text-on-surface focus:ring-0" type="text" value="https://wms.shopcarbon.com" readonly>
 </div>
-
-<!-- Replaces the old red bar: always-visible device approval ID (no red; small + bold value) -->
-<div class="rounded-md border border-outline-variant bg-surface-container-low px-3 py-2.5">
-<div class="flex justify-between items-start gap-2">
-<span class="font-label text-[10px] font-bold uppercase tracking-wider text-on-surface-variant leading-tight">Device approval ID</span>
-<!-- Type label comes from server config + device capability: MAC | IP | Android ID | Serial | … -->
-<span class="font-label text-[10px] font-bold uppercase tracking-wider text-primary shrink-0">MAC</span>
-</div>
-<p class="mt-1 font-mono text-[11px] font-bold leading-snug text-on-surface break-all tracking-wide">48:2F:6B:12:34:56</p>
-<p class="mt-1.5 font-label text-[10px] text-outline leading-snug">Not registered on this server yet. An admin must approve this device using the ID above. This line stays visible until approved.</p>
-</div>
-<!--
-  Other examples (swap type + value only):
-  <span class="...">IP</span>   <p class="...">192.168.4.112</p>
-  <span class="...">Android ID</span>   <p class="...">9774d56d682e549c</p>
-  <span class="...">Serial</span>   <p class="...">CW-2026-004821</p>
--->
+<p class="text-center mt-1.5 font-mono text-[11px] font-normal text-black tracking-wide">MAC 48:2F:6B:12:34:56</p>
 
 </div>
 <div class="space-y-6">
