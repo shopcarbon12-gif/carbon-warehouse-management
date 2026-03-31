@@ -14,9 +14,9 @@ When **this session** changes any file under **`mobile/carbon_wms/`** (including
    ```powershell
    .\scripts\build-apk.ps1
    ```
-3. **Confirm** exit success and report paths, size, and last modified time. **Lead with the hard-lock canonical path** (see **`carbonwms-apk-versioned-filename.mdc`**):
-   - **First (mandatory):** **`D:\CarbonWmsRelease\CarbonWMS V{pubspec-version}.apk`**
-   - Then (optional detail): junction build output **`D:\cwm\mobile\carbon_wms\build\app\outputs\flutter-apk\app-release.apk`** if relevant.
+3. **Confirm** exit success and report paths, sizes, and last modified times. **Lead with `D:\CarbonWmsRelease`** (hard lock — see **`apk-canonical-path-d-carbonwmsrelease.mdc`**):
+   - **`D:\CarbonWmsRelease\CarbonWMS V{pubspec-version}.apk`** and **`D:\CarbonWmsRelease\app-release.apk`** (and `.sha1` siblings).
+   - Then the Flutter output if useful: **`D:\cwm\mobile\carbon_wms\build\app\outputs\flutter-apk\app-release.apk`** (junction) or repo `mobile\carbon_wms\build\...`.
 
 **Exceptions (no build required):** edits that touch **only** `mobile/carbon_wms/README.md` or other docs with **no** code/config change.
 

@@ -1,21 +1,21 @@
 ---
-description: Hard lock — canonical APK path D:\CarbonWmsRelease\CarbonWMS V{version}.apk; all agents must report it
+description: Hard rule — every release APK must be saved with versioned filename CarbonWMS Vx.y.z+build.apk from pubspec
 alwaysApply: true
 ---
 
-# CarbonWMS APK — canonical path (hard lock for all agents)
+# CarbonWMS APK — versioned filename (mandatory for all agents)
 
-**User-facing canonical path (always report this first when an APK was built or updated):**
+Whenever you **generate a new release APK** for Carbon WMS (`mobile/carbon_wms`):
 
-`D:\CarbonWmsRelease\CarbonWMS V{x.y.z+build}.apk`
+1. Read **`mobile/carbon_wms/pubspec.yaml`** → field **`version:`** (Flutter format **`x.y.z+build`**, e.g. **`0.1.10+14`**).
+2. **You must** persist the artifact under this **exact naming pattern** (space after `CarbonWMS`, capital **V**, then full pubspec version including `+build`):
 
-Example: `D:\CarbonWmsRelease\CarbonWMS V0.1.10+14.apk` — use the current **`version:`** from **`mobile/carbon_wms/pubspec.yaml`**.
+   **`CarbonWMS V0.1.10+14.apk`**
 
-Rules:
+   (Replace `0.1.10+14` with the current `version:` value.)
 
-1. **Naming:** Space after `CarbonWMS`, capital **`V`**, full Flutter **`version:`** including **`+build`**. Matching **`.sha1`** alongside is required when the script runs.
-2. **`app-release.apk`** (build output) is **secondary** for user communication — never give it as the only path when a versioned copy exists.
-3. **Implementation:** run **`mobile/carbon_wms/scripts/build-apk.ps1`** (default **`-ReleaseRoot D:\CarbonWmsRelease`**). Do not change the drop root unless the user explicitly asks for a different **`-ReleaseRoot`** for that task.
-4. **End of turn:** After any release APK work, the response **must** state the full **`D:\CarbonWmsRelease\CarbonWMS V…`** path plus **size** and **LastWriteTime** (and note success/failure of the build).
+3. **`app-release.apk`** alone is **not** sufficient as the only drop — it is **not version-specific** and is easy to confuse across builds. The **versioned** name is the **canonical** file for humans, OTA upload labels, and archives.
+4. **Implementation:** run **`mobile/carbon_wms/scripts/build-apk.ps1`** (from `D:\cwm\mobile\carbon_wms` junction when the path has spaces). It copies the versioned APK to **`D:\CarbonWmsRelease\`** by default (`-ReleaseRoot` to override) **and** writes a matching **`.sha1`** file.
+5. When you finish a mobile build turn, **report** paths under **`D:\CarbonWmsRelease`** first (see **`apk-canonical-path-d-carbonwmsrelease.mdc`**), not only `app-release.apk` under `build/`.
 
-**No exceptions** unless the user explicitly asked to skip the versioned copy or the build for that turn.
+**No exceptions** unless the user explicitly asked to skip the versioned copy for that turn.

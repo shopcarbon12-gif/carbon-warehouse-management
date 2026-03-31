@@ -1,0 +1,18 @@
+---
+description: Hard lock — always report D:\CarbonWmsRelease as the canonical APK drop when updating or building release APKs
+alwaysApply: true
+---
+
+# APK canonical path — `D:\CarbonWmsRelease` (all agents)
+
+**Mandatory for every agent** on this project when a **release APK** is built, updated, copied, or you tell the user where to install from:
+
+1. **Always include** the folder **`D:\CarbonWmsRelease`** in your response as the **primary** place the user should look. Do not only mention `build/app/outputs/flutter-apk/app-release.apk` or the junction path without also giving **`D:\CarbonWmsRelease`**.
+2. **Expected files there** (after `mobile/carbon_wms/scripts/build-apk.ps1`, default `-ReleaseRoot`):
+   - **`D:\CarbonWmsRelease\CarbonWMS V{pubspec-version}.apk`** — versioned canonical name (required).
+   - **`D:\CarbonWmsRelease\app-release.apk`** — copy of the same build.
+   - Matching **`.sha1`** files beside each APK.
+3. **Do not** change the default release root away from **`D:\CarbonWmsRelease`** unless the user explicitly asks for a different path in that message.
+4. If a build failed before copy, say so — but still state that the **intended** drop remains **`D:\CarbonWmsRelease`** per project convention.
+
+This rule is **in addition to** `carbonwms-apk-versioned-filename.mdc` and `flutter-apk-after-mobile-edit.mdc`.
