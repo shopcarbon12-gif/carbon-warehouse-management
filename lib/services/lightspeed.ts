@@ -83,8 +83,16 @@ export async function resolveLightspeedInventoryForCompare(
   tenantId: string,
   lsLocationId: string,
 ): Promise<LightspeedCompareInventoryResult> {
+  const lsStrict = String(process.env.WMS_LS_STRICT ?? "").trim() === "1";
   const creds = await getLightspeedCredentialsForSync(pool, tenantId);
-  if (credentialsLookUsableForLiveFetch(creds)) {
+
+  if (!credentialsLookUsableForLiveFetch(creds)) {
+    if (lsStrict) {
+      throw new Error(
+        "WMS_LS_STRICT=1: Lightspeed credentials incomplete for compare (same as catalog sync).",
+      );
+    }
+  } else {
     try {
       const live = await tryFetchLightspeedCatalogProducts(creds);
       if (live && live.length > 0) {
@@ -96,7 +104,13 @@ export async function resolveLightspeedInventoryForCompare(
             "Quantities from Lightspeed catalog response (per-variant on-hand / qoh fields). Not shop-scoped unless the API payload is.",
         };
       }
+      if (lsStrict) {
+        throw new Error("WMS_LS_STRICT=1: Lightspeed catalog API returned no products for compare.");
+      }
     } catch (e) {
+      if (lsStrict) {
+        throw e instanceof Error ? e : new Error(String(e));
+      }
       console.warn("[lightspeed] compare live catalog fetch failed", e);
     }
   }

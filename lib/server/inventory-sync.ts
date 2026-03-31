@@ -261,16 +261,30 @@ export async function performLightspeedCatalogSync(
 
     let source: "live" | "simulated" = "simulated";
     let matrices: CatalogSyncMatrixPayload[] = simulateSyncPayload();
+    const lsStrict = String(process.env.WMS_LS_STRICT ?? "").trim() === "1";
 
-    if (credentialsLookUsableForLiveFetch(creds)) {
+    if (!credentialsLookUsableForLiveFetch(creds)) {
+      if (lsStrict) {
+        throw new Error(
+          "WMS_LS_STRICT=1: Lightspeed credentials incomplete for live catalog (set LS_CLIENT_ID, LS_CLIENT_SECRET, LS_REFRESH_TOKEN, LS_ACCOUNT_ID, LS_DOMAIN_PREFIX as needed, or LS_PERSONAL_TOKEN for X-Series).",
+        );
+      }
+    } else {
       try {
         const live = await tryFetchLightspeedCatalogProducts(creds);
         if (live && live.length > 0) {
           matrices = live;
           source = "live";
+        } else if (lsStrict) {
+          throw new Error(
+            "WMS_LS_STRICT=1: Lightspeed catalog API returned no products (check LS_ACCOUNT_ID, token, API base).",
+          );
         }
-      } catch {
-        /* fall through to simulated */
+      } catch (err) {
+        if (lsStrict) {
+          throw err instanceof Error ? err : new Error(String(err));
+        }
+        /* fall through to simulated when not strict */
       }
     }
 

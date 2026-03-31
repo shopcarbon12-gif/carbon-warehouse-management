@@ -27,6 +27,7 @@ function isLocalDatabaseUrl(databaseUrl: string): boolean {
 export function getDbEnvironmentHint(): DbEnvironmentHint | null {
   if (process.env.NODE_ENV !== "development") return null;
   if (process.env.WMS_HIDE_LOCAL_DB_BANNER === "1") return null;
+  if (process.env.WMS_PRODUCTION_PARITY_LOCAL === "1") return null;
   const url = process.env.DATABASE_URL?.trim() ?? "";
   if (!url || !isLocalDatabaseUrl(url)) return null;
   return {
