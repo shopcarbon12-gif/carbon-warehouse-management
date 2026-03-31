@@ -155,6 +155,73 @@ export async function getTransferSlipExportRows(
   });
 }
 
+/**
+ * Aggregate slip EPCs → Lightspeed **itemID** + **toSend** using `items` → `custom_skus.ls_item_id`.
+ * EPCs with no WMS item or no `ls_item_id` are counted in **unresolved_line_count**.
+ */
+export async function aggregateLightspeedTransferLinesFromSlipEpcs(
+  pool: Pool,
+  tenantId: string,
+  slipNumber: number,
+): Promise<{
+  lines: { itemID: number; toSend: number }[];
+  unresolved_line_count: number;
+}> {
+  const ok = await pool.query(
+    `SELECT 1 FROM transfer_slips WHERE tenant_id = $1::uuid AND slip_number = $2::int LIMIT 1`,
+    [tenantId, slipNumber],
+  );
+  if (!ok.rows[0]) {
+    return { lines: [], unresolved_line_count: 0 };
+  }
+
+  const agg = await pool.query<{ ls_item_id: string; to_send: string }>(
+    `SELECT
+       cs.ls_item_id::text AS ls_item_id,
+       COUNT(*)::text AS to_send
+     FROM transfer_items ti
+     INNER JOIN transfer_slips ts
+       ON ts.slip_number = ti.slip_number AND ts.tenant_id = $1::uuid
+     INNER JOIN items i ON upper(trim(i.epc)) = upper(trim(ti.epc))
+     INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
+     WHERE ti.slip_number = $2::int
+       AND cs.ls_item_id IS NOT NULL
+     GROUP BY cs.ls_item_id`,
+    [tenantId, slipNumber],
+  );
+
+  const lines: { itemID: number; toSend: number }[] = [];
+  for (const row of agg.rows) {
+    const itemID = Number.parseInt(row.ls_item_id, 10);
+    const toSend = Number.parseInt(row.to_send, 10);
+    if (!Number.isFinite(itemID) || itemID <= 0) continue;
+    if (!Number.isFinite(toSend) || toSend <= 0) continue;
+    lines.push({ itemID, toSend: Math.min(999_999, Math.floor(toSend)) });
+  }
+
+  const total = await pool.query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c FROM transfer_items ti
+     INNER JOIN transfer_slips ts ON ts.slip_number = ti.slip_number AND ts.tenant_id = $1::uuid
+     WHERE ti.slip_number = $2::int`,
+    [tenantId, slipNumber],
+  );
+  const matched = await pool.query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c
+     FROM transfer_items ti
+     INNER JOIN transfer_slips ts ON ts.slip_number = ti.slip_number AND ts.tenant_id = $1::uuid
+     INNER JOIN items i ON upper(trim(i.epc)) = upper(trim(ti.epc))
+     INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
+     WHERE ti.slip_number = $2::int
+       AND cs.ls_item_id IS NOT NULL`,
+    [tenantId, slipNumber],
+  );
+  const totalN = Number(total.rows[0]?.c ?? 0) || 0;
+  const matchedN = Number(matched.rows[0]?.c ?? 0) || 0;
+  const unresolved_line_count = Math.max(0, totalN - matchedN);
+
+  return { lines, unresolved_line_count };
+}
+
 export async function addTransferItems(
   pool: Pool,
   tenantId: string,

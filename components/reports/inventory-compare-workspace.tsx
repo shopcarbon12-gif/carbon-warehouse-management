@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 type Row = {
   sku: string;
   name: string;
+  ls_item_id?: string | null;
   expected_ls: number;
   wms_found: number;
   missing: number;
@@ -32,13 +33,14 @@ const fetcher = async (url: string) => {
 };
 
 function rowsToCsv(rows: Row[]) {
-  const h = ["SKU", "Name", "Expected_LS", "Found_WMS", "Missing", "Extra"];
+  const h = ["SKU", "Name", "LS_ITEM_ID", "Expected_LS", "Found_WMS", "Missing", "Extra"];
   const lines = [h.join(",")];
   for (const r of rows) {
     lines.push(
       [
         r.sku,
         `"${(r.name || "").replace(/"/g, '""')}"`,
+        r.ls_item_id ?? "",
         r.expected_ls,
         r.wms_found,
         r.missing,
@@ -93,9 +95,17 @@ export function InventoryCompareWorkspace() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ skus: skus.length ? skus : varianceRows.map((r) => r.sku) }),
       });
-      const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string; stub?: boolean };
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        stub?: boolean;
+        warning?: string;
+      };
       if (!res.ok) throw new Error(j.error ?? "Push failed");
-      setIntegrationMsg(j.message ?? (j.stub ? "Recorded stub push in sync history." : "Push OK"));
+      const parts = [j.message ?? (j.stub ? "Recorded stub push in sync history." : "Push OK"), j.warning].filter(
+        Boolean,
+      );
+      setIntegrationMsg(parts.join(" "));
       await mutate();
     } catch (e) {
       setIntegrationMsg(e instanceof Error ? e.message : "Push failed");
@@ -186,11 +196,14 @@ export function InventoryCompareWorkspace() {
         </button>
       </div>
       <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
-        <strong className="text-[var(--wms-fg)]">Push to LS</strong> records intent only (no per-SKU qty write here). Full R-Series transfer flow (admin):{" "}
-        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">sync-slip-transfer</code> (create + optional{" "}
-        <code className="px-1">transferItems</code> + <code className="px-1">send</code>), or{" "}
-        <code className="px-1">slip-transfer-add-items</code> then <code className="px-1">slip-transfer-send</code>. Scope{" "}
-        <code className="px-1">employee:transfers</code>. Use Lightspeed <strong>itemID</strong> values on lines.
+        <strong className="text-[var(--wms-fg)]">Push to LS</strong>: default is <strong>stub only</strong> (sync history + logs). Live{" "}
+        <code className="rounded bg-[var(--wms-surface-elevated)] px-1">ItemShop qoh</code> PUT requires{" "}
+        <code className="px-1">WMS_LS_PUSH_ITEM_SHOP=1</code>, R-Series OAuth, shop ID on the location, and{" "}
+        <strong>LS ID</strong> on rows (live catalog sync). Zero WMS counts do not PUT unless{" "}
+        <code className="px-1">WMS_LS_PUSH_ALLOW_ZERO_QOH=1</code>. Transfers (admin):{" "}
+        <code className="px-1">sync-slip-transfer</code>, <code className="px-1">slip-transfer-add-items</code>{" "}
+        (<code className="px-1">fromSlipEpcs</code> optional), <code className="px-1">slip-transfer-send</code>; scope{" "}
+        <code className="px-1">employee:transfers</code>. Receive in Lightspeed UI.
       </p>
       <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
         Push uses variance rows only. With row checkboxes, only selected SKUs are sent in the payload; if none selected, all variance rows go.
@@ -203,6 +216,7 @@ export function InventoryCompareWorkspace() {
               <th className="w-10 px-2 py-2"> </th>
               <th className="px-2 py-2">SKU</th>
               <th className="px-2 py-2">Name</th>
+              <th className="w-24 px-2 py-2 text-right tabular-nums">LS ID</th>
               <th className="px-2 py-2 text-right tabular-nums">Expected</th>
               <th className="px-2 py-2 text-right tabular-nums">Found</th>
               <th className="px-2 py-2 text-right tabular-nums">Missing</th>
@@ -221,6 +235,9 @@ export function InventoryCompareWorkspace() {
                   </td>
                   <td className="px-2 py-1.5">{r.sku}</td>
                   <td className="max-w-[240px] truncate px-2 py-1.5 text-[var(--wms-muted)]">{r.name}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums text-[var(--wms-muted)]">
+                    {r.ls_item_id ?? "—"}
+                  </td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{r.expected_ls}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{r.wms_found}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums text-amber-600/90">{r.missing}</td>

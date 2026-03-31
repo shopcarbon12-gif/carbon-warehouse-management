@@ -51,8 +51,17 @@ function matrixLsSystemId(matrixKey: string, hash: (s: string) => number): numbe
   return null;
 }
 
+function parseLsItemIdNumeric(item: Record<string, unknown>): number | null {
+  const raw = normalizeText(item.itemID);
+  if (!raw || raw === "0") return null;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0 || n > Number.MAX_SAFE_INTEGER) return null;
+  return n;
+}
+
 type NormalizedRow = {
   itemId: string;
+  lsItemId: number | null;
   groupKey: string;
   systemSku: string;
   customSku: string;
@@ -89,6 +98,7 @@ function normalizeRawItem(
   manufacturerNameById: Record<string, string>,
 ): NormalizedRow | null {
   const itemId = normalizeText(item.itemID);
+  const lsItemId = parseLsItemIdNumeric(item);
   const systemSku = normalizeText(item.systemSku);
   const customSku = normalizeText(item.customSku);
   if (!itemId && !systemSku && !customSku) return null;
@@ -109,6 +119,7 @@ function normalizeRawItem(
 
   return {
     itemId: itemId || systemSku || customSku,
+    lsItemId,
     groupKey,
     systemSku,
     customSku: customSku || systemSku || itemId,
@@ -163,6 +174,7 @@ export function mapRseriesRawItemsToCatalogSync(
 
     const vPayloads: CatalogSyncVariantPayload[] = variants.map((v) => ({
       lsSystemId: lsSystemIdForVariant(v.itemId, v.systemSku, hash),
+      lsItemId: v.lsItemId,
       sku: v.customSku || v.systemSku || v.itemId,
       upc: v.upc || null,
       color: v.color,

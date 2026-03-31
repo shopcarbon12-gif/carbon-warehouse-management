@@ -1,5 +1,7 @@
 export type CatalogSyncVariantPayload = {
   lsSystemId: number;
+  /** R-Series `Item.itemID` when present (live catalog); used for Item PUT and transfer lines. */
+  lsItemId: number | null;
   sku: string;
   upc: string | null;
   color: string | null;

@@ -72,6 +72,39 @@ export async function rseriesPostJsonV3(
   return { ok: res.ok, status: res.status, body };
 }
 
+export async function rseriesPutJsonV3(
+  creds: LightspeedSyncCredentialRow,
+  resourcePath: string,
+  jsonBody: Record<string, unknown>,
+  timeoutMs = 35_000,
+): Promise<{ ok: boolean; status: number; body: unknown }> {
+  const accountId = creds.accountId.trim();
+  if (!accountId) {
+    return { ok: false, status: 400, body: { error: "Missing LS_ACCOUNT_ID" } };
+  }
+
+  const token = await refreshLightspeedRSeriesAccessToken(creds, false);
+  const url = buildRSeriesV3AccountResourceUrl(accountId, resourcePath);
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(jsonBody),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const raw = await res.text();
+  let body: unknown = {};
+  try {
+    body = JSON.parse(raw) as unknown;
+  } catch {
+    body = { raw: raw.slice(0, 2000) };
+  }
+  return { ok: res.ok, status: res.status, body };
+}
+
 export async function rseriesGetJson(
   creds: LightspeedSyncCredentialRow,
   resource: string,

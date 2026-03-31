@@ -13,6 +13,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
       variants: [
         {
           lsSystemId: 9_001_000_011,
+          lsItemId: null,
           sku: "MILA-BLK-S",
           upc: "810000100011",
           color: "Black",
@@ -22,6 +23,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
         },
         {
           lsSystemId: 9_001_000_012,
+          lsItemId: null,
           sku: "MILA-BLK-M",
           upc: "810000100012",
           color: "Black",
@@ -41,6 +43,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
       variants: [
         {
           lsSystemId: 9_001_000_021,
+          lsItemId: null,
           sku: "OLB-NVY-38",
           upc: "810000100021",
           color: "Navy",
@@ -50,6 +53,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
         },
         {
           lsSystemId: 9_001_000_022,
+          lsItemId: null,
           sku: "OLB-NVY-40",
           upc: "810000100022",
           color: "Navy",
@@ -69,6 +73,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
       variants: [
         {
           lsSystemId: 9_001_000_031,
+          lsItemId: null,
           sku: "ERT-WHT-XS",
           upc: "810000100031",
           color: "White",
@@ -78,6 +83,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
         },
         {
           lsSystemId: 9_001_000_032,
+          lsItemId: null,
           sku: "ERT-WHT-S",
           upc: "810000100032",
           color: "White",
@@ -97,6 +103,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
       variants: [
         {
           lsSystemId: 9_001_000_041,
+          lsItemId: null,
           sku: "CRB-DEMO-S",
           upc: "810000100041",
           color: "Heather",
@@ -106,6 +113,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
         },
         {
           lsSystemId: 9_001_000_042,
+          lsItemId: null,
           sku: "CRB-DEMO-M",
           upc: "810000100042",
           color: "Heather",
@@ -125,6 +133,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
       variants: [
         {
           lsSystemId: 9_001_000_051,
+          lsItemId: null,
           sku: "FMC-SKT-4",
           upc: "810000100051",
           color: "Sand",
@@ -134,6 +143,7 @@ export function simulateSyncPayload(): CatalogSyncMatrixPayload[] {
         },
         {
           lsSystemId: 9_001_000_052,
+          lsItemId: null,
           sku: "FMC-SKT-6",
           upc: "810000100052",
           color: "Sand",
@@ -255,6 +265,7 @@ export function mapLightspeedProductJsonToCatalog(
     const upc = (p.barcode ?? p.product_code ?? "").trim() || null;
     return {
       lsSystemId: hash(`${extId}:variant`),
+      lsItemId: null,
       sku,
       upc,
       color,

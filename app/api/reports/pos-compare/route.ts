@@ -35,7 +35,8 @@ export async function GET(req: Request) {
         ...data,
         meta: {
           expected_qty_source: "custom_skus.ls_on_hand_total",
-          hint: "Expected counts come from the last catalog / sync that populated POS on-hand. Use Pull from LS or Inventory → Sync to refresh.",
+          hint:
+            "Expected counts come from the last catalog / sync that populated POS on-hand (Lightspeed → WMS only; does not write LS QOH). Use Pull from LS or Inventory → Sync to refresh. Column LS ID is custom_skus.ls_item_id after a live R-Series catalog sync — needed for Push to LS and transfer AddItems from EPCs. Inventory transfer receive/complete: Lightspeed Retail UI only.",
           endpoints: {
             pull: "/api/integrations/lightspeed/pull",
             catalog_sync: "/api/inventory/sync/trigger",
