@@ -35,6 +35,7 @@
 # Local export of Cursor parent-chat transcripts (may contain secrets)
 /combined-cursor-agent-transcripts.txt
 /combined-cursor-conversations-user-cursor.txt
+/project-dev-prompts-chronological.txt
 .playwright-mcp/
 _ls*.txt
 
