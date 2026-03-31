@@ -1,0 +1,153 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>CarbonWMS | Secure Authentication</title>
+<!-- Google Fonts: Manrope, Inter, Space Grotesk -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800;900&amp;family=Space+Grotesk:wght@500;700&amp;display=swap" rel="stylesheet">
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary-container": "#bfe7e7",
+              "primary-fixed": "#87f4f5",
+              "surface-dim": "#d6dbda",
+              "secondary": "#3f6565",
+              "on-background": "#171d1d",
+              "tertiary": "#4657a0",
+              "on-tertiary-container": "#fffbff",
+              "surface-container-high": "#e4e9e8",
+              "primary-fixed-dim": "#69d7d9",
+              "surface-container-low": "#f0f5f4",
+              "on-secondary-fixed-variant": "#274d4d",
+              "on-primary": "#ffffff",
+              "surface-container-lowest": "#ffffff",
+              "secondary-fixed": "#c2eaea",
+              "on-tertiary": "#ffffff",
+              "background": "#f5fafa",
+              "tertiary-container": "#6070bb",
+              "on-secondary": "#ffffff",
+              "outline": "#6d7979",
+              "on-error-container": "#93000a",
+              "inverse-surface": "#2c3131",
+              "primary-container": "#008284",
+              "outline-variant": "#bcc9c9",
+              "on-error": "#ffffff",
+              "inverse-primary": "#69d7d9",
+              "error": "#ba1a1a",
+              "surface-container": "#eaefee",
+              "surface-tint": "#00696b",
+              "on-primary-fixed-variant": "#004f51",
+              "surface-variant": "#dee3e3",
+              "on-tertiary-fixed": "#001355",
+              "on-primary-fixed": "#002020",
+              "tertiary-fixed": "#dde1ff",
+              "on-secondary-fixed": "#002020",
+              "secondary-fixed-dim": "#a6cece",
+              "on-surface-variant": "#3d4949",
+              "error-container": "#ffdad6",
+              "tertiary-fixed-dim": "#b8c3ff",
+              "on-primary-container": "#f3fffe",
+              "surface-container-highest": "#dee3e3",
+              "surface-bright": "#f5fafa",
+              "surface": "#f5fafa",
+              "on-secondary-container": "#436969",
+              "inverse-on-surface": "#edf2f1",
+              "primary": "#006768",
+              "on-tertiary-fixed-variant": "#304189",
+              "on-surface": "#171d1d"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Space Grotesk"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .primary-gradient {
+            background: linear-gradient(180deg, #006768 0%, #008284 100%);
+        }
+        /* No-Line Architecture: Removing focus rings that use borders */
+        input:focus {
+          outline: none;
+          box-shadow: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-surface-container-lowest font-body text-on-surface selection:bg-secondary-container min-h-[884px] flex flex-col items-center overflow-x-hidden" data-stitch-vh="min-h-[884px]===min-h-screen" data-mode="connect">
+<!-- Auth Shell -->
+<main class="w-full max-w-[480px] min-h-[884px] flex flex-col px-8 py-12" data-stitch-vh="min-h-[884px]===min-h-screen">
+<!-- Branding Section -->
+<header class="flex flex-col items-center mb-16">
+<img src="carbon_logo.png" alt="CarbonWMS" width="80" height="80" class="w-20 h-20 rounded-xl mb-6 shadow-[0_8px_24px_rgba(0,0,0,0.04)] object-cover" /><h1 class="font-headline font-black text-2xl tracking-widest text-black">CarbonWMS</h1>
+<p class="font-label text-sm text-outline mt-2 tracking-widest">WAREHOUSE MANAGEMENT SOFTWARE</p>
+</header>
+<!-- Form Section -->
+<section class="flex-grow space-y-8">
+<!-- Server Selection -->
+<div class="space-y-4">
+<div class="flex justify-between items-end">
+<label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">Server URL</label>
+<span class="font-label text-[10px] text-outline uppercase tracking-tighter">Connected via SSL</span>
+</div>
+<div class="h-16 bg-surface-container-low flex items-center px-4 rounded-md">
+<span class="material-symbols-outlined text-outline mr-3" data-icon="dns">dns</span>
+<input class="bg-transparent border-none w-full font-label text-base font-medium text-on-surface focus:ring-0" placeholder="Enter server address" type="text" value="https://wms.shopcarbon.com">
+</div>
+</div>
+<!-- Credentials -->
+<div class="space-y-6">
+<!-- Email -->
+<div class="space-y-2">
+<label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">USER EMAIL</label>
+<div class="h-16 bg-surface-container-low flex items-center px-4 rounded-md">
+<span class="material-symbols-outlined text-outline mr-3" data-icon="person">person</span>
+<input class="bg-transparent border-none w-full font-label text-base font-medium text-on-surface focus:ring-0" placeholder="operator@carbonjeanscompany.com" type="email">
+</div>
+</div>
+<!-- Password -->
+<div class="space-y-2">
+<label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">PASSWORD</label>
+<div class="h-16 bg-surface-container-low flex items-center px-4 rounded-md">
+<span class="material-symbols-outlined text-outline mr-3" data-icon="lock">lock</span>
+<input class="bg-transparent border-none w-full font-label text-base font-medium text-on-surface focus:ring-0" placeholder="••••••••••••" type="password">
+<button class="text-outline hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Primary Action -->
+<footer class="mt-auto pt-12 pb-8">
+<button class="w-full h-16 primary-gradient text-on-primary font-headline font-bold text-lg tracking-widest rounded-md shadow-lg active:scale-[0.98] transition-transform">
+                SIGN IN
+            </button>
+</footer>
+</main>
+<!-- Bottom Decorative Surface -->
+<div class="fixed bottom-0 left-0 w-full h-1 bg-primary/20 pointer-events-none"></div>
+<!-- Tonal Overlays for Depth -->
+<div class="fixed top-0 left-0 w-full h-full pointer-events-none z-[-1] overflow-hidden">
+<!-- Subtle industrial visual anchor -->
+<div class="absolute -top-24 -right-24 w-96 h-96 bg-surface-container-low rounded-full opacity-40"></div>
+<div class="absolute -bottom-48 -left-48 w-[600px] h-[600px] bg-surface-container rounded-full opacity-20"></div>
+</div>
+</body></html>

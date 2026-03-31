@@ -102,7 +102,19 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('CARBON WMS', style: AppTheme.headline(context)),
+              Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.asset(
+                    'assets/carbon_logo.png',
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('CARBON WMS', textAlign: TextAlign.center, style: AppTheme.headline(context)),
               const SizedBox(height: 8),
               Text(
                 'Sign in with your web admin credentials. The device will register its Android ID for approval.',
