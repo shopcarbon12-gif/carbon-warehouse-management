@@ -1,6 +1,6 @@
 # Carbon WMS — standalone Next image; map port 3000 in Coolify and set env in the dashboard.
 # Runtime: set DATABASE_URL (and other secrets) in Coolify from your linked Postgres resource.
-# If WMS_AUTO_MIGRATE=1, migration/sql errors no longer kill the container (see docker-entrypoint.sh)
+# If WMS_AUTO_MIGRATE=1, `docker-migrate.mjs` runs at start (see docker-entrypoint.sh); failures log WARNING.
 # so /api/health can pass; fix DB logs and redeploy. Prefer running migrations in CI if possible.
 FROM node:20-alpine AS base
 
@@ -44,6 +44,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY scripts/schema.sql scripts/seed-bootstrap.sql /app/scripts/
 COPY scripts/migrations /app/scripts/migrations
+COPY scripts/docker-migrate.mjs /app/scripts/docker-migrate.mjs
 COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 # Writable .next/cache; entrypoint runs as root for optional psql migrate/seed, then su-exec nextjs.
 RUN chmod +x /app/docker-entrypoint.sh \

@@ -11,22 +11,14 @@ fi
 # container on every deploy (restart loop).
 if [ -n "$DATABASE_URL" ] && [ "${WMS_AUTO_MIGRATE:-}" = "1" ]; then
   set +e
-  # Always apply schema.sql first: it is idempotent (CREATE IF NOT EXISTS). Do **not** gate on
-  # `users` alone — another DB or partial bootstrap can have `users` without `locations`/`bins`,
-  # which skips baseline, breaks migration 001 (ALTER locations), and yields 42P01 in the app.
-  echo "wms: applying baseline scripts/schema.sql (idempotent, WMS_AUTO_MIGRATE=1)"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /app/scripts/schema.sql
+  # Use Node + `pg` (same as the app) and the **same gating** as `npm run db:migrate`:
+  # legacy 001–003 are skipped when `public.matrices` exists. The old `psql` loop ran **every**
+  # migration file on every boot — including 002’s DROP TABLE — and could fail differently than
+  # the app’s TLS/URL handling.
+  echo "wms: running node /app/scripts/docker-migrate.mjs (WMS_AUTO_MIGRATE=1)"
+  node /app/scripts/docker-migrate.mjs
   _s=$?
-  if [ "$_s" -ne 0 ]; then echo "wms: WARNING schema.sql exited $_s — fix DB and redeploy; starting app anyway" >&2; fi
-  if [ -d /app/scripts/migrations ]; then
-    for f in /app/scripts/migrations/*.sql; do
-      [ -f "$f" ] || continue
-      echo "wms: applying migration $f"
-      psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
-      _s=$?
-      if [ "$_s" -ne 0 ]; then echo "wms: WARNING migration $f exited $_s — continuing" >&2; fi
-    done
-  fi
+  if [ "$_s" -ne 0 ]; then echo "wms: WARNING docker-migrate.mjs exited $_s — fix DB; starting app anyway" >&2; fi
   set -e
 fi
 
