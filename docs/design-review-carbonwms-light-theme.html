@@ -24,6 +24,11 @@
       --header-band: linear-gradient(90deg, rgba(11, 149, 151, 0.12) 0%, rgba(11, 149, 151, 0.04) 48%, transparent 100%);
       --radius-md: 0.375rem;
       --radius-sm: 0.125rem;
+      /* Inventory catalog toolbar (reference) — solid fills, no gradients */
+      --act-new: #16a34a;
+      --act-import: #2563eb;
+      --act-more: #ea580c;
+      --act-menu: #475569;
     }
     * { box-sizing: border-box; }
     body {
@@ -162,16 +167,24 @@
       align-items: center;
       justify-content: center;
     }
-    /* Restrained actions: flat neutrals + one solid primary — no gradients or decorative color blocks */
-    .btn-primary {
-      background: var(--on-surface);
+    .btn-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    /* Same language as Inventory catalog: solid role colors, white labels, no gradients */
+    .btn-act {
       color: #fff;
+      font-weight: 600;
     }
-    .btn-secondary { background: var(--surface-mid); color: var(--on-surface); }
-    .btn-outline {
-      background: var(--surface-lowest);
-      color: var(--on-surface);
-      border: 1px solid rgba(26, 29, 31, 0.22);
+    .btn-new { background: var(--act-new); }
+    .btn-import { background: var(--act-import); }
+    .btn-more { background: var(--act-more); }
+    .btn-menu {
+      background: var(--act-menu);
+      color: #fff;
+      gap: 0.35rem;
+    }
+    .btn-menu::after {
+      content: "▾";
+      font-size: 0.7rem;
+      opacity: 0.9;
     }
     .search {
       flex: 1 1 200px;
@@ -259,14 +272,14 @@
     <h1>CarbonWMS light theme — unified direction</h1>
     <p class="lede">
       This document merges your <strong>scheme.png</strong> palette with <strong>DESIGN (2).md</strong> surfaces and spacing ideas.
-      <strong>Constraints you set:</strong> keep the app’s <strong>existing font families and styles</strong> (no switching to new display or data fonts); use <strong>restrained, flat actions</strong> — no gradient or “colorful” button treatments.
-      Focus stays on contrast, consistent light surfaces, and a page header treatment that reads clearly apart from cards.
+      <strong>Clarification (your pic1 — Inventory catalog):</strong> “Not colorful” was <strong>not</strong> a request to grey-out the product. It meant: don’t add extra decorative treatment (e.g. teal <em>gradients</em> from an early mock). The <strong>canonical action style</strong> is the catalog toolbar: <strong>solid</strong> green (New / Export), blue (Import), slate (dropdowns like Lightspeed), orange (More) — white text, no gradients. Light-theme work should make <strong>every page use that same pattern</strong> so the app looks consistent.
+      <strong>Fonts:</strong> keep existing CarbonWMS families; only size/weight/contrast as needed.
     </p>
 
     <section>
       <h2>Reference — scheme.png</h2>
       <img class="scheme-img" src="design-preview-assets/scheme.png" alt="CarbonWMS reference palette: primary teal, secondary slate, tertiary navy, neutral grey, plus UI samples" width="1200" height="675" />
-      <p class="caption">Reference palette: Primary <code>#0B9597</code>, Secondary <code>#587E7E</code>, Tertiary <code>#031A84</code>, Neutral <code>#737878</code>. Implementation uses these for accents and surfaces; actions in the app stay flat/neutral as above, not “poster” buttons.</p>
+      <p class="caption">Reference palette for accents/surfaces. <strong>Toolbar actions</strong> follow Inventory catalog solids (green / blue / orange / slate), not scheme.png’s teal gradient CTA — same look on light backgrounds with readable contrast.</p>
     </section>
 
     <section>
@@ -286,7 +299,7 @@
       <table class="tokens">
         <thead><tr><th>Token / rule</th><th>Value &amp; use</th></tr></thead>
         <tbody>
-          <tr><td>Primary actions</td><td>Flat fill (e.g. <code>on-surface</code> + white text, or existing app button tokens) — <strong>no</strong> gradients or decorative multi-color CTAs. Adequate min height for touch where we already scale UI.</td></tr>
+          <tr><td>Toolbar / CTAs</td><td><strong>Match Inventory catalog:</strong> solid fills per role — green (create / export-style actions), blue (import), slate (menus), orange (overflow / more) — white labels, <strong>no gradients</strong>. Reuse the same tokens everywhere so light pages don’t randomly switch to grey or teal-gradient buttons.</td></tr>
           <tr><td>Page header (distinct from cards)</td><td>Left accent bar + soft wash; title and body use <strong>the same font stack as today</strong>, with weight/size only for hierarchy — never pale teal on pale grey.</td></tr>
           <tr><td>Cards / panels</td><td>White (<code>#FFF</code>) on <code>#F3F3F4</code> app background; separation by shadow + tone — avoid random charcoal “dark theme” slabs on light routes.</td></tr>
           <tr><td>Table headers</td><td>Background <code>#EEEEEE</code>; text <code>#1A1D1F</code> or <code>#3D4548</code> — not faint grey on white.</td></tr>
@@ -299,8 +312,8 @@
     </section>
 
     <section>
-      <h2>Live mock — page header vs content card</h2>
-      <p class="caption" style="margin-top:0;">Headers read as a <strong>banded editorial strip</strong>; everything below is standard surface cards. This is the pattern we will roll across Transfers, RFID, Reports, Integrations, etc.</p>
+      <h2>Live mock — page header vs content card + catalog-style actions</h2>
+      <p class="caption" style="margin-top:0;">Headers read as a <strong>banded strip</strong>; cards use light surfaces. The button row mirrors <strong>pic1</strong> semantics (solid colors, not greyed-out “design system minimal”).</p>
       <div class="mock-page">
         <div class="mock-header">
           <div class="title">Lightspeed sync</div>
@@ -311,8 +324,13 @@
           <p style="margin:0 0 0.5rem;color:var(--on-surface-muted);font-size:0.95rem;">Last success and SKU counts use the same light surfaces as the rest of the app (no orphan dark panels).</p>
           <div class="mock-toolbar">
             <div class="search" aria-hidden="true">🔍 <span>Search SKUs…</span></div>
-            <button type="button" class="btn btn-primary">Trigger sync</button>
-            <button type="button" class="btn btn-outline">Export</button>
+            <div class="btn-row" aria-hidden="true">
+              <button type="button" class="btn btn-act btn-new">New</button>
+              <button type="button" class="btn btn-act btn-import">Import</button>
+              <button type="button" class="btn btn-act btn-new">Export</button>
+              <button type="button" class="btn btn-act btn-menu">Lightspeed</button>
+              <button type="button" class="btn btn-act btn-more">More</button>
+            </div>
           </div>
           <table class="table-mock">
             <thead><tr><th>When</th><th>Status</th><th class="data">Idempotency key</th></tr></thead>
@@ -340,7 +358,7 @@
 
     <section>
       <h2>Handheld / settings — toggle direction</h2>
-      <p class="caption" style="margin-top:0;">Fancy but still industrial: embossed track, lit thumb when on.</p>
+      <p class="caption" style="margin-top:0;">Simple readable on/off; no neon glow unless you ask.</p>
       <div class="toggle-mock toggle-on"><div class="toggle-track"><div class="toggle-thumb"></div></div><span>Stream debug</span></div>
       <div class="toggle-mock" style="margin-top:0.75rem;"><div class="toggle-track"><div class="toggle-thumb"></div></div><span>Off state</span></div>
     </section>
@@ -357,7 +375,7 @@
 
     <footer class="note">
       <strong>Next step after your approval:</strong> implement CSS variables + shared layout primitives (page header component, card shell, table chrome), then sweep routes for hardcoded dark panels and low-contrast text; capture before/after screenshots and the HTML report you requested.
-      Buttons stay neutral / flat; typography stays on current families. Reply if you want any other constraint recorded before implementation.
+      Actions stay <strong>catalog-style solids</strong> (green / blue / slate / orange) app-wide; typography stays on current families. Reply if you want exact hex values locked to production variables.
     </footer>
   </main>
 </body>
