@@ -1,11 +1,13 @@
 import 'dart:convert';
-import 'dart:io' show File, HttpClient;
+import 'dart:io' show File, HttpClient, Platform, exit;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:install_plugin/install_plugin.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:restart_app/restart_app.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Edge ingest payload to Carbon WMS (`POST /api/edge/ingest`).
@@ -302,6 +304,9 @@ class WmsApiClient {
 
   Future<void> downloadAndInstallApk(String relativeOrAbsoluteUrl) async {
     if (kIsWeb) return;
+    if (!Platform.isAndroid) {
+      throw UnsupportedError('In-app APK install is supported on Android only.');
+    }
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final url = relativeOrAbsoluteUrl.startsWith('http')
         ? relativeOrAbsoluteUrl
@@ -333,7 +338,36 @@ class WmsApiClient {
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/carbon-wms-update.apk');
     await file.writeAsBytes(body);
-    await InstallPlugin.installApk(file.path, appId: 'com.shopcarbon.wms');
+
+    final before = await PackageInfo.fromPlatform();
+    final baselineBuild = before.buildNumber;
+    final baselineVersion = before.version;
+
+    final raw = await InstallPlugin.installApk(file.path, appId: 'com.shopcarbon.wms');
+    final ok = raw is Map && (raw['isSuccess'] == true);
+
+    void shutdownWithoutReopen() {
+      exit(0);
+    }
+
+    if (!ok) {
+      shutdownWithoutReopen();
+      return;
+    }
+
+    PackageInfo after = before;
+    for (var i = 0; i < 12; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      after = await PackageInfo.fromPlatform();
+      if (after.buildNumber != baselineBuild || after.version != baselineVersion) {
+        await Restart.restartApp(
+          notificationTitle: 'CarbonWMS',
+          notificationBody: 'Update installed — restarting…',
+        );
+        return;
+      }
+    }
+    shutdownWithoutReopen();
   }
 
   Future<void> setEdgeApiKey(String? key) async {

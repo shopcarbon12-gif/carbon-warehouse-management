@@ -92,7 +92,6 @@ class _AppAuthGateState extends State<AppAuthGate> {
         });
       }
       await api.setSessionToken(null);
-      await LoginCredentialsStore.clearBiometricVaultOnLogout();
       return;
     }
 
@@ -135,14 +134,6 @@ class _AppAuthGateState extends State<AppAuthGate> {
     setState(() => _otaDismissed = true);
     try {
       await context.read<WmsApiClient>().downloadAndInstallApk(url);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Installer opened — approve the Android install prompt. After install, open Carbon WMS again (the app does not auto-restart).',
-          ),
-        ),
-      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -195,7 +186,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
           pendingApproval: _pending,
           onLogout: () async {
             await context.read<WmsApiClient>().setSessionToken(null);
-            await LoginCredentialsStore.clearBiometricVaultOnLogout();
+            await LoginCredentialsStore.onUserLogout();
             if (mounted) {
               setState(() {
                 _loginKey++;
@@ -209,7 +200,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
           otaDownloadUrl: _otaUrl,
           onLogout: () async {
             await context.read<WmsApiClient>().setSessionToken(null);
-            await LoginCredentialsStore.clearBiometricVaultOnLogout();
+            await LoginCredentialsStore.onUserLogout();
             if (mounted) {
               setState(() {
                 _loginKey++;

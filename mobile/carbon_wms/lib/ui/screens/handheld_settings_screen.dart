@@ -212,7 +212,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
               title: const Text('Fingerprint or face sign-in'),
               subtitle: Text(
                 _bioEnrolled
-                    ? 'Biometric sign-in is enabled. Turn off to clear the saved session and require setup again after a future sign-in.'
+                    ? 'Biometric sign-in is enabled. Logging out keeps fingerprint/face sign-in; turn off here to clear the saved session token.'
                     : _offerAfterSignIn
                         ? 'After your next password sign-in, you can confirm to enable fingerprint or face unlock.'
                         : 'Turn on to allow the optional setup prompt after you sign in with password.',

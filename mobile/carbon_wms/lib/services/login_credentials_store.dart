@@ -97,8 +97,14 @@ class LoginCredentialsStore {
 
   static Future<String?> readVaultSessionToken() async => _storage.read(key: _vaultSessionToken);
 
+  /// True when a session token is stored for biometric sign-in.
+  ///
+  /// Does **not** require [LocalAuthentication.isDeviceSupported] — that API is false on some
+  /// phones even though [authenticateWithBiometric] works; gating the login button on it hid
+  /// biometrics after first-time setup.
   static Future<bool> hasVaultedCredentials() async {
-    if (!await canUseBiometricPasswordVault()) return false;
+    if (kIsWeb || !Platform.isAndroid) return false;
+    if (await isRuggedHandheldProfile()) return false;
     final t = await readVaultSessionToken();
     return t != null && t.isNotEmpty;
   }
@@ -142,11 +148,18 @@ class LoginCredentialsStore {
     }
   }
 
+  /// Clears the biometric vault and disables the biometric pref. Use when the **session is
+  /// invalid** (e.g. server revoked the token), not for a normal **user Logout** — users expect
+  /// fingerprint/face sign-in again after logging out while keeping the saved session token.
   static Future<void> clearBiometricVaultOnLogout() async {
     await clearVault();
     final p = await SharedPreferences.getInstance();
     await p.setBool(_prefsBiometric, false);
   }
+
+  /// No-op for secure storage: [WmsApiClient.setSessionToken] already ends the active session.
+  /// Biometric vault + prefs stay so "Biometric sign-in" remains on the login screen.
+  static Future<void> onUserLogout() async {}
 
   static Future<void> enforceRuggedNoPasswordPolicy() async {
     await _storage.delete(key: _vaultPasswordLegacy);

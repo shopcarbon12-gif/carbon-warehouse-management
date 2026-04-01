@@ -123,15 +123,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     try {
       await context.read<WmsApiClient>().downloadAndInstallApk(url);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Installer opened — approve the Android install prompt. After install, open Carbon WMS again (the app does not auto-restart).',
-            ),
-          ),
-        );
-      }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));

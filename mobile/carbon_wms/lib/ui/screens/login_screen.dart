@@ -26,13 +26,17 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   static const String kDefaultLoginEmail = 'user@carbonjeanscompany.com';
   static const String kLockedServerDisplay = 'https://wms.shopcarbon.com';
 
   /// Bundled from brand kit: `Neuzeit Grotesk W01 Regular.otf` (bold via [FontWeight.w700]).
   static const String _kBrandFontFamily = 'NeuzeitGrotesk';
   static const double _logoCornerRadius = 14;
+  /// Smaller on-screen square; [BoxFit.cover] zooms the mark inside the clip.
+  static const double _logoDisplaySize = 120;
+  /// Reserved height for MAC / Android ID so USER EMAIL lines up whether or not the line shows.
+  static const double _deviceLineReserveHeight = 48;
 
   static const double _fieldHeight = 52;
 
@@ -66,9 +70,18 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _emailFocus.addListener(_refocusDecoration);
     _passwordFocus.addListener(_refocusDecoration);
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshVaultUi());
+      unawaited(_loadDeviceApprovalLine());
+    }
   }
 
   void _refocusDecoration() {
@@ -167,6 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _emailFocus.removeListener(_refocusDecoration);
     _passwordFocus.removeListener(_refocusDecoration);
     _emailFocus.dispose();
@@ -225,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> {
         fontFamily: _kBrandFontFamily,
         fontSize: 28,
         fontWeight: FontWeight.w700,
-        letterSpacing: 0.45,
+        letterSpacing: 1.05,
         height: 1.05,
         color: Colors.black,
       );
@@ -574,16 +588,19 @@ class _LoginScreenState extends State<LoginScreen> {
   /// Scroll only when needed (keyboard / short viewport). No [FittedBox] — avoids whole-UI shrink.
   List<Widget> _loginScrollableFormChildren() {
     return [
-      const SizedBox(height: 4),
+      const SizedBox(height: 28),
       Center(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(_logoCornerRadius),
-          child: Image.asset(
-            'assets/carbon_logo.png',
-            width: 152,
-            height: 152,
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
+        child: SizedBox(
+          width: _logoDisplaySize,
+          height: _logoDisplaySize,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(_logoCornerRadius),
+            child: Image.asset(
+              'assets/carbon_logo.png',
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
+              filterQuality: FilterQuality.high,
+            ),
           ),
         ),
       ),
@@ -593,7 +610,7 @@ class _LoginScreenState extends State<LoginScreen> {
         textAlign: TextAlign.center,
         style: _brandTitleStyle,
       ),
-      const SizedBox(height: 2),
+      const SizedBox(height: 8),
       Text(
         'WAREHOUSE MANAGEMENT SOFTWARE',
         textAlign: TextAlign.center,
@@ -605,7 +622,7 @@ class _LoginScreenState extends State<LoginScreen> {
           color: _subtitleGrey,
         ),
       ),
-      const SizedBox(height: 14),
+      const SizedBox(height: 28),
       Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -636,16 +653,23 @@ class _LoginScreenState extends State<LoginScreen> {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      if (_deviceApprovalLine != null) ...[
-        const SizedBox(height: 4),
-        Text(
-          _deviceApprovalLine!,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: _deviceIdLineStyle,
-        ),
-      ],
+      const SizedBox(height: 8),
+      SizedBox(
+        height: _deviceLineReserveHeight,
+        width: double.infinity,
+        child: _deviceApprovalLine != null
+            ? Align(
+                alignment: Alignment.topCenter,
+                child: Text(
+                  _deviceApprovalLine!,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: _deviceIdLineStyle,
+                ),
+              )
+            : const SizedBox.shrink(),
+      ),
       const SizedBox(height: 12),
       Text('USER EMAIL', style: _fieldLabelStyle),
       const SizedBox(height: 6),
