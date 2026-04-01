@@ -27,14 +27,16 @@ class _LoginScreenState extends State<LoginScreen> {
   static const String kDefaultLoginEmail = 'user@carbonjeanscompany.com';
   static const double _fieldHeight = 64;
 
-  /// Email row slightly smaller; server / lock / eye share one size so the eye matches the lock visually
-  /// (Lucide eye glyph reads smaller than lock at identical pt size — 28px aligns perceived weight).
+  /// Email leading icon slightly smaller; server / lock / eye share one size (28px — Lucide eye reads smaller than lock at 24).
   static const double _iconSizeEmailRow = 20;
   static const double _iconSizeFieldRow = 28;
 
   /// Mint wash like early CarbonWMS handheld mock (not pure white).
   static const Color _bg = Color(0xFFF5FAFA);
   static const Color _fieldFill = Color(0xFFF0F5F4);
+  static const Color _pillFill = Color(0xFFFFFFFF);
+  /// Thin dark edge on white pill (mock: pill inside grey tray).
+  static const Color _pillBorder = Color(0xFF6D7979);
   static const Color _labelGrey = Color(0xFF6D7979);
   static const Color _labelAboveField = Color(0xFF3D4949);
   static const Color _textBlack = Color(0xFF171D1D);
@@ -190,12 +192,34 @@ class _LoginScreenState extends State<LoginScreen> {
         color: _labelGrey,
       );
 
-  static const InputDecoration _plainFieldDeco = InputDecoration(
+  static const InputDecoration _pillFieldDeco = InputDecoration(
     border: InputBorder.none,
     isDense: true,
     filled: false,
-    contentPadding: EdgeInsets.zero,
+    contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 10),
   );
+
+  /// White rounded pill (text lives here); icons stay in the outer grey [`_fieldFill`] tray.
+  Widget _inputPill({required bool focused, required Widget child}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: _pillFill,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: focused ? _primaryTeal : _pillBorder,
+          width: focused ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
 
   Widget _labeledRow({
     required String label,
@@ -217,10 +241,8 @@ class _LoginScreenState extends State<LoginScreen> {
           decoration: BoxDecoration(
             color: _fieldFill,
             borderRadius: BorderRadius.circular(8),
-            border: focused ? Border.all(color: _primaryTeal, width: 2) : null,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          clipBehavior: Clip.none,
+          padding: const EdgeInsets.only(left: 12, right: 8),
           alignment: Alignment.center,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -228,8 +250,8 @@ class _LoginScreenState extends State<LoginScreen> {
               Icon(icon, size: leadingIconSize, color: _labelGrey),
               SizedBox(width: iconAfterGap),
               Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
+                child: _inputPill(
+                  focused: focused,
                   child: field,
                 ),
               ),
@@ -514,7 +536,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: _fieldFill,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.only(left: 12, right: 12),
                   alignment: Alignment.center,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -522,12 +544,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Icon(LucideIcons.server, size: _iconSizeFieldRow, color: _labelGrey),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: TextField(
-                          controller: _serverUrl,
-                          readOnly: true,
-                          enableInteractiveSelection: true,
-                          style: _inputTextStyle,
-                          decoration: _plainFieldDeco,
+                        child: _inputPill(
+                          focused: false,
+                          child: TextField(
+                            controller: _serverUrl,
+                            readOnly: true,
+                            enableInteractiveSelection: true,
+                            style: _inputTextStyle,
+                            decoration: _pillFieldDeco,
+                          ),
                         ),
                       ),
                     ],
@@ -560,7 +585,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlignVertical: TextAlignVertical.center,
                     style: _inputTextStyle,
                     cursorColor: _textBlack,
-                    decoration: _plainFieldDeco,
+                    decoration: _pillFieldDeco,
                     onChanged: (_) => unawaited(_refreshVaultUi()),
                   ),
                 ),
@@ -583,12 +608,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: _inputTextStyle,
                         cursorColor: _textBlack,
                         decoration: hasPassword
-                            ? _plainFieldDeco
+                            ? _pillFieldDeco
                             : InputDecoration(
                                 border: InputBorder.none,
                                 isDense: true,
                                 filled: false,
-                                contentPadding: EdgeInsets.zero,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
                                 hintText: '••••••••••••',
                                 hintStyle: _inputTextStyleMuted,
                               ),
