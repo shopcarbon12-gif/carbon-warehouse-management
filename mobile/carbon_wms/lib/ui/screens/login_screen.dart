@@ -653,7 +653,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      const SizedBox(height: 4),
+      const SizedBox(height: 2),
       SizedBox(
         height: _deviceLineReserveHeight,
         width: double.infinity,
@@ -670,7 +670,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               )
             : const SizedBox.shrink(),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: 4),
       Text('USER EMAIL', style: _fieldLabelStyle),
       const SizedBox(height: 6),
       _loginTray(
@@ -806,61 +806,80 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return SingleChildScrollView(
-                          physics: const ClampingScrollPhysics(),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: _loginScrollableFormChildren(),
+                  if (_vaultReady) ...[
+                    Expanded(
+                      flex: 5,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return SingleChildScrollView(
+                            physics: const ClampingScrollPhysics(),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: _loginScrollableFormChildren(),
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  if (_vaultReady)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Center(
-                            child: Material(
+                    Expanded(
+                      flex: 2,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Material(
                               color: Colors.transparent,
                               child: InkWell(
                                 onTap: _busy ? null : _biometricSignIn,
                                 customBorder: const CircleBorder(),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(4),
                                   child: Icon(
                                     Icons.fingerprint,
-                                    size: 64,
+                                    size: 96,
                                     color: _primaryTeal,
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          if (_vaultEmail != null && _vaultEmail!.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Text(
-                                '(${_vaultEmail!})',
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600,
-                                  color: _primaryTeal,
-                                  fontSize: 13,
+                            if (_vaultEmail != null && _vaultEmail!.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  '(${_vaultEmail!})',
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w600,
+                                    color: _primaryTeal,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ] else
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return SingleChildScrollView(
+                            physics: const ClampingScrollPhysics(),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: _loginScrollableFormChildren(),
+                              ),
                             ),
-                        ],
+                          );
+                        },
                       ),
                     ),
                   SizedBox(

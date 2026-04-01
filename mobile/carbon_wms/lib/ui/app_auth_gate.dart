@@ -4,7 +4,6 @@ import 'dart:io' show Platform;
 import 'package:android_id/android_id.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -27,9 +26,7 @@ class AppAuthGate extends StatefulWidget {
   State<AppAuthGate> createState() => _AppAuthGateState();
 }
 
-class _AppAuthGateState extends State<AppAuthGate> with WidgetsBindingObserver {
-  static const MethodChannel _lifecycleChannel = MethodChannel('carbon_wms/lifecycle');
-
+class _AppAuthGateState extends State<AppAuthGate> {
   _Phase _phase = _Phase.booting;
   String _androidId = '';
   bool _pending = false;
@@ -37,44 +34,11 @@ class _AppAuthGateState extends State<AppAuthGate> with WidgetsBindingObserver {
   String? _otaLatestVersion;
   bool _otaDismissed = false;
   int _loginKey = 0;
-  WmsApiClient? _apiForSessionClear;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    if (!kIsWeb && Platform.isAndroid) {
-      _lifecycleChannel.setMethodCallHandler((call) async {
-        if (call.method == 'clearSession') {
-          final api = _apiForSessionClear;
-          if (api != null) await api.setSessionToken(null);
-        }
-      });
-    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _apiForSessionClear = context.read<WmsApiClient>();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    if (!kIsWeb && Platform.isAndroid) {
-      _lifecycleChannel.setMethodCallHandler(null);
-    }
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached) {
-      final api = _apiForSessionClear;
-      if (api != null) unawaited(api.setSessionToken(null));
-    }
   }
 
   Future<String> _resolveAndroidId() async {
