@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import useSWR from "swr";
-import { Bot, Crown, Ghost, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import type { StatusLabelRow } from "@/lib/queries/status-labels";
 import { STATUS_LABEL_NAME_TOOLTIPS } from "@/lib/settings/status-label-tooltips";
 
@@ -19,45 +19,24 @@ function yn(v: boolean) {
   return v ? "Yes" : "No";
 }
 
-/** Rule icons (Lucide in chips) — centered column, even spacing, tooltips. */
+/**
+ * Same emoji semantics as before (👑 super-admin lock, 👻 scanner ghost, 🤖 system-only).
+ * Fixed 3-column grid so each icon type lines up vertically across rows; empty slots show a faint dot.
+ */
 function StatusRuleIcons({ row }: { row: StatusLabelRow }) {
   const ghost = !row.is_visible_to_scanner;
-  const chips: { key: string; title: string; el: ReactNode }[] = [];
-  if (row.super_admin_locked) {
-    chips.push({
-      key: "lock",
-      title: "Super Admin lock — staff cannot change items in this status without Super Admin",
-      el: (
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-amber-500/35 bg-amber-500/[0.12] text-amber-400">
-          <Crown className="h-4 w-4" strokeWidth={2} aria-hidden />
-        </span>
-      ),
-    });
-  }
-  if (ghost) {
-    chips.push({
-      key: "ghost",
-      title: "Ghost — handheld ignores reads (no beep, no count)",
-      el: (
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-violet-500/35 bg-violet-500/[0.12] text-violet-300">
-          <Ghost className="h-4 w-4" strokeWidth={2} aria-hidden />
-        </span>
-      ),
-    });
-  }
-  if (row.is_system_only) {
-    chips.push({
-      key: "bot",
-      title: "System-only — hidden from staff status pickers; Super Admin may still assign",
-      el: (
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-sky-500/35 bg-sky-500/[0.12] text-sky-300">
-          <Bot className="h-4 w-4" strokeWidth={2} aria-hidden />
-        </span>
-      ),
-    });
-  }
 
-  if (chips.length === 0) {
+  const slot = (content: ReactNode, title: string) => (
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center text-[1.35rem] leading-none"
+      title={title}
+    >
+      {content ?? <span className="select-none font-mono text-sm text-[var(--wms-muted)] opacity-35" aria-hidden>·</span>}
+    </div>
+  );
+
+  const hasAny = row.super_admin_locked || ghost || row.is_system_only;
+  if (!hasAny) {
     return (
       <div className="flex min-h-[2.25rem] items-center justify-center">
         <span className="font-mono text-xs text-[var(--wms-muted)]">—</span>
@@ -66,12 +45,21 @@ function StatusRuleIcons({ row }: { row: StatusLabelRow }) {
   }
 
   return (
-    <div className="flex min-h-[2.25rem] flex-wrap items-center justify-center gap-2 px-1" role="group" aria-label="Status rule indicators">
-      {chips.map((c) => (
-        <span key={c.key} title={c.title} className="inline-flex shrink-0 cursor-default" aria-label={c.title}>
-          {c.el}
-        </span>
-      ))}
+    <div className="flex min-h-[2.25rem] items-center justify-center" role="group" aria-label="Status rule indicators">
+      <div className="inline-flex items-stretch rounded-md border border-[var(--wms-border)]/50 bg-[var(--wms-surface-elevated)]/40 px-0.5 py-0.5">
+        {slot(
+          row.super_admin_locked ? <span aria-hidden>👑</span> : null,
+          "Super Admin lock — staff cannot change items in this status without Super Admin",
+        )}
+        {slot(
+          ghost ? <span aria-hidden>👻</span> : null,
+          "Ghost — handheld ignores reads (no beep, no count)",
+        )}
+        {slot(
+          row.is_system_only ? <span aria-hidden>🤖</span> : null,
+          "System-only — hidden from staff status pickers; Super Admin may still assign",
+        )}
+      </div>
     </div>
   );
 }
@@ -198,7 +186,7 @@ export function StatusLabelsWorkspace() {
               <th className={th}>Web sellable</th>
               <th className={th}>Scanner</th>
               <th className={th}>UI visible</th>
-              <th className={`${th} w-[9.5rem] text-center`}>Icons</th>
+              <th className={`${th} w-[7.25rem] text-center`}>Icons</th>
               <th className={`${th} pr-3 text-right`}>Actions</th>
             </tr>
           </thead>
@@ -220,7 +208,7 @@ export function StatusLabelsWorkspace() {
                     {row.is_visible_to_scanner ? "Yes" : "Ignore"}
                   </td>
                   <td className="px-2 py-2 text-center font-mono text-xs">{yn(row.is_visible_in_ui)}</td>
-                  <td className="align-middle px-2 py-2">
+                  <td className="align-middle px-2 py-2 text-center">
                     <StatusRuleIcons row={row} />
                   </td>
                   <td className="px-2 py-2 text-right">
