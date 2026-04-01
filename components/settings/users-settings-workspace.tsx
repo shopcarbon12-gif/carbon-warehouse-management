@@ -236,9 +236,9 @@ export function UsersSettingsWorkspace() {
           ) : null}
 
           <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
-            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[720px] border-collapse text-left">
               <thead>
-                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono uppercase tracking-wide">
                   <th className="w-10 px-2 py-3">
                     <input
                       type="checkbox"
@@ -284,7 +284,7 @@ export function UsersSettingsWorkspace() {
                         <button
                           type="button"
                           onClick={() => setEditUser(u)}
-                          className="text-teal-400/90 hover:underline"
+                          className="font-medium text-[var(--wms-accent)] hover:underline"
                         >
                           Edit
                         </button>
@@ -292,7 +292,7 @@ export function UsersSettingsWorkspace() {
                         <button
                           type="button"
                           onClick={() => void removeUser(u, muUsers)}
-                          className="text-red-400/85 hover:underline"
+                          className="font-medium text-red-600 hover:underline dark:text-red-400/90"
                         >
                           Remove
                         </button>
@@ -345,9 +345,9 @@ export function UsersSettingsWorkspace() {
             </p>
           ) : null}
           <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
-            <table className="w-full min-w-[400px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[400px] border-collapse text-left">
               <thead>
-                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono uppercase tracking-wide">
                   <th className="px-3 py-3">Role name</th>
                   <th className="px-3 py-3 text-right">Actions</th>
                 </tr>
@@ -669,7 +669,7 @@ function RolePermissionsModal({
         <div className="mt-4 space-y-4 border-t border-[var(--wms-border)] pt-4">
           {APP_PERMISSION_PAGES.map((page) => (
             <div key={page.id}>
-              <div className="font-mono text-[0.65rem] font-semibold uppercase tracking-wide text-teal-500/80">
+              <div className="font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-accent)]">
                 {page.label}
               </div>
               <div className="mt-2 space-y-2">
@@ -685,9 +685,9 @@ function RolePermissionsModal({
                         <button
                           type="button"
                           onClick={() => setMode(page.id, sec.id, "view")}
-                          className={`rounded px-2 py-1 font-mono text-[0.65rem] ${
+                          className={`rounded px-2 py-1 font-mono text-xs ${
                             modeCur === "view"
-                              ? "bg-teal-600/30 text-teal-200"
+                              ? "bg-[color-mix(in_srgb,var(--wms-accent)_22%,var(--wms-surface-elevated))] font-medium text-[color-mix(in_srgb,var(--wms-fg)_20%,var(--wms-accent))] dark:bg-teal-600/30 dark:text-teal-100"
                               : "text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
                           }`}
                         >
@@ -696,9 +696,9 @@ function RolePermissionsModal({
                         <button
                           type="button"
                           onClick={() => setMode(page.id, sec.id, "hide")}
-                          className={`rounded px-2 py-1 font-mono text-[0.65rem] ${
+                          className={`rounded px-2 py-1 font-mono text-xs ${
                             modeCur === "hide"
-                              ? "bg-red-900/35 text-red-200/90"
+                              ? "bg-red-100 font-medium text-red-900 dark:bg-red-900/35 dark:text-red-200/90"
                               : "text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
                           }`}
                         >

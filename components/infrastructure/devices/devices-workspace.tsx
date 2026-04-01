@@ -117,7 +117,7 @@ export function DevicesWorkspace() {
       <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
         <table className="w-full min-w-[960px] border-collapse text-left text-xs">
           <thead>
-            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Type</th>
               <th className="px-3 py-2">IP / MAC</th>
@@ -127,7 +127,7 @@ export function DevicesWorkspace() {
               <th className="px-3 py-2 w-24"> </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
+          <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
             {filtered.length === 0 && !error ? (
               <tr>
                 <td colSpan={7} className="px-6 py-16 text-center">
@@ -167,7 +167,7 @@ export function DevicesWorkspace() {
                   <td className="px-3 py-2">
                     <span
                       className={
-                        d.status_online ? "text-emerald-400/90" : "text-[var(--wms-muted)] line-through decoration-[var(--wms-muted)]"
+                        d.status_online ? "wms-status-success" : "text-[var(--wms-muted)] line-through decoration-[var(--wms-muted)]"
                       }
                     >
                       {d.status_online ? "Online" : "Offline"}

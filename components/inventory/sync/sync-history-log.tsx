@@ -58,7 +58,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
       ) : null}
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left text-xs">
-          <thead className="bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+          <thead className="bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
             <tr>
               <th className="px-3 py-2">Timestamp</th>
               <th className="px-3 py-2">Status</th>
@@ -66,7 +66,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
               <th className="px-3 py-2">Error</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
+          <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
             {isLoading ? (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-[var(--wms-muted)]">
@@ -92,7 +92,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
                     <span
                       className={
                         r.status === "completed"
-                          ? "text-emerald-400/90"
+                          ? "wms-status-success"
                           : r.status === "failed"
                             ? "text-red-400/90"
                             : "text-amber-400/90"

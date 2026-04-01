@@ -126,7 +126,7 @@ export function InventoryAuditLogWorkspace({
                   <td className="max-w-[220px] px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
                     <span className="text-red-400/90">{row.old_value ?? "—"}</span>
                     <span className="mx-1 text-[var(--wms-fg)]">→</span>
-                    <span className="text-emerald-400/90">{row.new_value ?? "—"}</span>
+                    <span className="wms-status-success">{row.new_value ?? "—"}</span>
                   </td>
                   <td className="max-w-[200px] truncate px-3 py-2.5 text-xs" title={row.reason ?? ""}>
                     {row.reason ?? "—"}

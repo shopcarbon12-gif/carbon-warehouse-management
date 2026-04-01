@@ -114,7 +114,7 @@ export function LocationsManager({
         </p>
       ) : null}
       {error ? (
-        <p className="font-mono text-xs text-red-400/90">
+        <p className="font-mono text-sm text-red-600 dark:text-red-400/90">
           {error instanceof Error ? error.message : "Failed to load locations"}
         </p>
       ) : null}
@@ -122,15 +122,15 @@ export function LocationsManager({
       <div className="grid min-h-[420px] gap-4 lg:grid-cols-[minmax(220px,280px)_1fr]">
         {/* Left: locations */}
         <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
-          <div className="border-b border-[var(--wms-border)] px-3 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          <div className="border-b border-[var(--wms-border)] px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-fg)]">
             Locations
           </div>
           {locations.length === 0 && !error ? (
             <div className="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center">
               <MapPin className="h-9 w-9 text-[var(--wms-secondary)]" strokeWidth={1.25} />
               <p className="mt-3 font-mono text-sm text-[var(--wms-muted)]">No locations configured.</p>
-              <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                Run <code className="text-[var(--wms-muted)]">npm run db:seed</code> to bootstrap sites.
+              <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
+                Run <code className="text-[var(--wms-fg)]">npm run db:seed</code> to bootstrap sites.
               </p>
             </div>
           ) : (
@@ -142,16 +142,16 @@ export function LocationsManager({
                     <button
                       type="button"
                       onClick={() => setSelectedId(l.id)}
-                      className={`w-full px-3 py-3 text-left font-mono text-sm transition-colors ${
+                      className={`w-full px-3 py-3 text-left font-mono text-base transition-colors ${
                         active
-                          ? "bg-[var(--wms-surface-elevated)]/80 text-teal-200 ring-1 ring-inset ring-teal-700/40"
+                          ? "wms-loc-row-active"
                           : "text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80"
                       }`}
                     >
-                      <span className="text-teal-400/90">{l.code}</span>
+                      <span className="font-semibold text-[var(--wms-accent)]">{l.code}</span>
                       <span className="text-[var(--wms-muted)]"> — </span>
                       <span className="text-[var(--wms-fg)]">{l.name}</span>
-                      <span className="mt-0.5 block text-[0.6rem] text-[var(--wms-muted)]">
+                      <span className="mt-0.5 block text-xs text-[var(--wms-muted)]">
                         {l.bins.length} bin{l.bins.length === 1 ? "" : "s"}
                       </span>
                     </button>
@@ -166,22 +166,22 @@ export function LocationsManager({
         <div className="flex min-h-0 flex-col rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] px-4 py-3">
             <div>
-              <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Bins</h3>
+              <h3 className="text-base font-semibold text-[var(--wms-fg)]">Bins</h3>
               {selected ? (
-                <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                <p className="font-mono text-xs text-[var(--wms-muted)]">
                   {selected.code} · {selected.name}
                 </p>
               ) : (
-                <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">Select a location</p>
+                <p className="font-mono text-xs text-[var(--wms-muted)]">Select a location</p>
               )}
             </div>
             <button
               type="button"
               disabled={!selected}
               onClick={openAdd}
-              className="inline-flex items-center gap-1.5 rounded-md border border-teal-600/45 bg-teal-950/25 px-3 py-2 font-mono text-xs text-teal-200 hover:bg-teal-900/25 disabled:opacity-40"
+              className="wms-btn-accent-soft inline-flex items-center gap-1.5 rounded-md px-3 py-2 font-mono text-sm disabled:opacity-40"
             >
-              <PackagePlus className="h-3.5 w-3.5" />
+              <PackagePlus className="h-4 w-4 shrink-0" strokeWidth={2} />
               Add new bin
             </button>
           </div>
@@ -194,15 +194,15 @@ export function LocationsManager({
             ) : selected.bins.length === 0 ? (
               <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
                 <p className="font-mono text-sm text-[var(--wms-muted)]">No bins at this site yet.</p>
-                <p className="mt-2 max-w-sm font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                  Use <strong className="text-[var(--wms-muted)]">Add new bin</strong> to create receiving or
+                <p className="mt-2 max-w-sm font-mono text-xs text-[var(--wms-muted)]">
+                  Use <strong className="text-[var(--wms-fg)]">Add new bin</strong> to create receiving or
                   floor positions. Archive is blocked while in-stock EPCs reference a bin.
                 </p>
               </div>
             ) : (
-              <table className="w-full min-w-[640px] border-collapse text-left text-xs">
+              <table className="w-full min-w-[640px] border-collapse text-left">
                 <thead>
-                  <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+                  <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
                     <th className="px-3 py-2">Identifier</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2 text-right tabular-nums">Capacity</th>
@@ -210,16 +210,14 @@ export function LocationsManager({
                     <th className="px-3 py-2 w-36"> </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
+                <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
                   {selected.bins.map((b) => (
                     <tr key={b.id} className="hover:bg-[var(--wms-surface-elevated)]/50">
                       <td className="px-3 py-2 text-[var(--wms-fg)]">{b.code}</td>
                       <td className="px-3 py-2">
                         <span
                           className={
-                            b.status === "inactive"
-                              ? "text-amber-400/90"
-                              : "text-emerald-400/85"
+                            b.status === "inactive" ? "wms-status-warning" : "wms-status-success"
                           }
                         >
                           {b.status === "inactive" ? "inactive" : "active"}
@@ -239,18 +237,18 @@ export function LocationsManager({
                               title="Clean bin — unassign all items"
                               disabled={cleanBusy === b.id || (b.in_stock_count ?? 0) === 0}
                               onClick={() => void cleanBin(b.id)}
-                              className="inline-flex items-center gap-1 rounded border border-amber-900/50 px-2 py-1 text-[0.6rem] text-amber-200/90 hover:bg-amber-950/40 disabled:opacity-40"
+                              className="wms-table-btn-clean inline-flex items-center gap-1 rounded px-2 py-1 text-xs disabled:opacity-40"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <Trash2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
                               Clean
                             </button>
                           ) : null}
                           <button
                             type="button"
                             onClick={() => openEdit(b)}
-                            className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                            className="wms-table-row-action inline-flex items-center gap-1 rounded px-2 py-1 text-xs"
                           >
-                            <Pencil className="h-3 w-3" />
+                            <Pencil className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
                             Edit
                           </button>
                         </div>

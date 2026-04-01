@@ -91,9 +91,9 @@ export function LocationsSettingsWorkspace() {
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
-        <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[900px] border-collapse text-left">
           <thead>
-            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono uppercase tracking-wide">
               <th className="px-3 py-3">Location name</th>
               <th className="px-3 py-3">Code</th>
               <th className="px-3 py-3">Lightspeed shop ID</th>
@@ -114,16 +114,16 @@ export function LocationsSettingsWorkspace() {
                 <tr key={row.id} className="text-[var(--wms-fg)]">
                   <td className="px-3 py-2.5 font-medium text-[var(--wms-fg)]">{row.name}</td>
                   <td className="px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]">{row.code}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-teal-400/85">
+                  <td className="px-3 py-2.5 font-mono text-xs font-medium text-[var(--wms-accent)]">
                     {row.lightspeed_shop_id ?? "—"}
                   </td>
                   <td className="px-3 py-2.5">
                     <button
                       type="button"
                       onClick={() => void toggleActive(row)}
-                      className={`rounded-full px-2.5 py-0.5 font-mono text-[0.65rem] font-medium ${
+                      className={`rounded-full px-2.5 py-0.5 font-mono text-xs font-medium ${
                         row.is_active
-                          ? "bg-emerald-950/50 text-emerald-300/90 ring-1 ring-emerald-700/40"
+                          ? "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-600/40 dark:bg-emerald-950/50 dark:text-emerald-200/95 dark:ring-emerald-700/45"
                           : "bg-[var(--wms-surface-elevated)] text-[var(--wms-muted)] ring-1 ring-[var(--wms-border)]"
                       }`}
                     >

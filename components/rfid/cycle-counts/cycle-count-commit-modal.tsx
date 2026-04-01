@@ -74,7 +74,7 @@ export function CycleCountCommitModal({
           <ul className="mt-4 space-y-2 font-mono text-xs text-[var(--wms-fg)]">
             <li className="flex justify-between border-b border-[var(--wms-border)]/80 pb-2">
               <span className="text-[var(--wms-muted)]">Matched</span>
-              <span className="text-emerald-400/90">{summary.matched}</span>
+              <span className="wms-status-success">{summary.matched}</span>
             </li>
             <li className="flex justify-between border-b border-[var(--wms-border)]/80 pb-2">
               <span className="text-[var(--wms-muted)]">Missing</span>

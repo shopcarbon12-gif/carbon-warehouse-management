@@ -561,9 +561,9 @@ export function CatalogWorkspace({
       ) : tab === "lightspeed" ? (
         <>
           <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-            <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[1000px] border-collapse text-left">
               <thead>
-                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
                   <th className="px-2 py-2">Item name</th>
                   <th className="px-2 py-2">Custom SKU</th>
                   <th className="px-2 py-2">UPC</th>
@@ -574,7 +574,7 @@ export function CatalogWorkspace({
                   <th className="px-2 py-2 text-right tabular-nums">Qty (LS)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
+              <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
                 {isLoading ? (
                   <tr>
                     <td colSpan={8} className="px-4 py-10 text-center text-[var(--wms-muted)]">
@@ -603,7 +603,7 @@ export function CatalogWorkspace({
                       <td className="px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
                         {formatPrice(r.retail_price)}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-teal-400/85">
+                      <td className="px-2 py-1.5 text-right tabular-nums font-medium text-[var(--wms-table-accent-num)]">
                         {r.ls_on_hand_total != null && Number.isFinite(r.ls_on_hand_total)
                           ? r.ls_on_hand_total
                           : "—"}
@@ -619,9 +619,9 @@ export function CatalogWorkspace({
       ) : (
         <>
           <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-            <table className="w-full min-w-[960px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[960px] border-collapse text-left">
               <thead>
-                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
                   <th className="px-2 py-2">System ID (matrix)</th>
                   <th className="px-2 py-2">Custom SKU</th>
                   <th className="px-2 py-2">UPC</th>
@@ -631,7 +631,7 @@ export function CatalogWorkspace({
                   <th className="w-24 px-2 py-2">RFID</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
+              <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
                 {isLoading ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-10 text-center text-[var(--wms-muted)]">
@@ -642,7 +642,7 @@ export function CatalogWorkspace({
                   <tr>
                     <td colSpan={7} className="px-4 py-14 text-center text-[var(--wms-muted)]">
                       <p className="font-mono text-sm text-[var(--wms-muted)]">No rows match your search.</p>
-                      <p className="mt-2 text-[0.65rem] text-[var(--wms-muted)]">
+                      <p className="mt-2 text-xs text-[var(--wms-muted)]">
                         Try another query or clear the search box.
                       </p>
                     </td>

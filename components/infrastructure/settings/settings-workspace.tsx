@@ -398,7 +398,7 @@ export function SettingsWorkspace() {
             <span className="block">
               LS_CLIENT_SECRET (Coolify):{" "}
               {data?.hints.env_ls_client_secret ? (
-                <span className="text-emerald-400/90">set</span>
+                <span className="wms-status-success">set</span>
               ) : (
                 <span className="text-amber-400/90">missing</span>
               )}
@@ -406,7 +406,7 @@ export function SettingsWorkspace() {
             <span className="block">
               LS_REFRESH_TOKEN (Coolify):{" "}
               {data?.hints.env_ls_refresh_token ? (
-                <span className="text-emerald-400/90">set</span>
+                <span className="wms-status-success">set</span>
               ) : (
                 <span className="text-amber-400/90">missing</span>
               )}

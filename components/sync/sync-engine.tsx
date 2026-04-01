@@ -25,12 +25,12 @@ type RowKind = "over" | "short" | "matched";
 function varianceClass(kind: RowKind): string {
   switch (kind) {
     case "short":
-      return "text-red-400";
+      return "wms-status-danger";
     case "over":
-      return "text-blue-400";
+      return "wms-status-info";
     case "matched":
     default:
-      return "text-emerald-400";
+      return "wms-status-success";
   }
 }
 
@@ -78,14 +78,15 @@ export function SyncEngine() {
           {data ? (
             <div className="mt-1 space-y-1 font-mono text-xs text-[var(--wms-muted)]">
               <p>
-                LS location key: <span className="text-teal-500/90">{data.lsLocationId}</span>
+                LS location key:{" "}
+                <span className="font-medium text-[var(--wms-accent)]">{data.lsLocationId}</span>
               </p>
               {data.lsInventorySource ? (
                 <p>
                   POS qty source:{" "}
                   <span
                     className={
-                      data.lsInventorySource === "live_catalog" ? "text-emerald-400/90" : "text-amber-400/85"
+                      data.lsInventorySource === "live_catalog" ? "wms-status-success" : "wms-status-warning"
                     }
                   >
                     {data.lsInventorySource === "live_catalog" ? "live catalog API" : "simulated demo"}
@@ -136,7 +137,7 @@ export function SyncEngine() {
               <p className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
                 Over
               </p>
-              <p className="mt-2 text-3xl font-semibold tabular-nums text-blue-400">
+              <p className="mt-2 text-3xl font-semibold tabular-nums wms-status-info">
                 {data.over.length}
               </p>
               <p className="mt-1 text-xs text-[var(--wms-muted)]">Physical &gt; LS qty</p>
@@ -145,7 +146,7 @@ export function SyncEngine() {
               <p className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
                 Short
               </p>
-              <p className="mt-2 text-3xl font-semibold tabular-nums text-red-400">
+              <p className="mt-2 text-3xl font-semibold tabular-nums wms-status-danger">
                 {data.short.length}
               </p>
               <p className="mt-1 text-xs text-[var(--wms-muted)]">Physical &lt; LS qty</p>
@@ -154,7 +155,7 @@ export function SyncEngine() {
               <p className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
                 Matched
               </p>
-              <p className="mt-2 text-3xl font-semibold tabular-nums text-emerald-400">
+              <p className="mt-2 text-3xl font-semibold tabular-nums wms-status-success">
                 {data.matched.length}
               </p>
               <p className="mt-1 text-xs text-[var(--wms-muted)]">Counts aligned</p>
@@ -162,9 +163,9 @@ export function SyncEngine() {
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-            <table className="w-full min-w-[800px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[800px] border-collapse text-left">
               <thead>
-                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
+                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wider">
                   <th className="px-3 py-2.5">Custom SKU</th>
                   <th className="px-3 py-2.5">Description</th>
                   <th className="px-3 py-2.5 text-right">LS count</th>

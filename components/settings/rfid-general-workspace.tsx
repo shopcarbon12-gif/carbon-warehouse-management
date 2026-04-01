@@ -123,7 +123,7 @@ export function RfidGeneralWorkspace() {
 
           {msg ? (
             <p
-              className={`font-mono text-xs ${msg === "Saved." ? "text-emerald-400/90" : "text-red-400/90"}`}
+              className={`font-mono text-xs ${msg === "Saved." ? "wms-status-success" : "text-red-600 dark:text-red-400/90"}`}
             >
               {msg}
             </p>

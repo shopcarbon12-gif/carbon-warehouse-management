@@ -20,6 +20,16 @@
   --wms-accent: #2dd4bf;
   --wms-secondary: #587e7e;
   --wms-accent-fg: #0c0f12;
+  /* Table / status (dark default) */
+  --wms-status-success-fg: #6ee7b7;
+  --wms-status-warning-fg: #fcd34d;
+  --wms-table-accent-num: #5eead4;
+  --wms-table-clean-fg: #fde68a;
+  --wms-table-clean-border: rgba(245, 158, 11, 0.42);
+  --wms-table-clean-bg-hover: rgba(120, 53, 15, 0.35);
+  --wms-status-danger-fg: #f87171;
+  --wms-status-info-fg: #60a5fa;
+  --wms-status-orange-fg: #fb923c;
 }
 
 html[data-theme="light"] {
@@ -40,6 +50,16 @@ html[data-theme="light"] {
   --wms-accent: #0b9597;
   --wms-secondary: #587e7e;
   --wms-accent-fg: #ffffff;
+  --wms-muted: #475569;
+  --wms-status-success-fg: #047857;
+  --wms-status-warning-fg: #b45309;
+  --wms-table-accent-num: #0b9597;
+  --wms-table-clean-fg: #92400e;
+  --wms-table-clean-border: rgba(180, 83, 9, 0.5);
+  --wms-table-clean-bg-hover: rgba(254, 243, 199, 0.9);
+  --wms-status-danger-fg: #b91c1c;
+  --wms-status-info-fg: #1d4ed8;
+  --wms-status-orange-fg: #c2410c;
 }
 
 /* Default type = former optional “large” (~18px root). Extra large bumps again. */
@@ -269,4 +289,119 @@ html.dark .wms-toggle-track[data-state="on"] .wms-toggle-thumb {
     0 0 56px color-mix(in srgb, var(--wms-accent) 26%, transparent),
     0 3px 12px rgba(0, 0, 0, 0.45),
     inset 0 1px 1px rgba(255, 255, 255, 0.12);
+}
+
+/* Status chips / table cells (theme tokens beat raw Tailwind emerald/amber). */
+.wms-status-success {
+  color: var(--wms-status-success-fg);
+}
+
+.wms-status-warning {
+  color: var(--wms-status-warning-fg);
+}
+
+.wms-status-danger {
+  color: var(--wms-status-danger-fg);
+}
+
+.wms-status-info {
+  color: var(--wms-status-info-fg);
+}
+
+.wms-status-orange {
+  color: var(--wms-status-orange-fg);
+}
+
+/* Soft accent CTA — readable in light (was teal-200 on pale bg). */
+.wms-btn-accent-soft {
+  border: 1px solid color-mix(in srgb, var(--wms-accent) 42%, var(--wms-border));
+  background: color-mix(in srgb, var(--wms-accent) 14%, var(--wms-surface-elevated));
+  color: color-mix(in srgb, var(--wms-fg) 92%, var(--wms-accent));
+}
+
+html.dark .wms-btn-accent-soft {
+  color: color-mix(in srgb, #a7f3d0 78%, var(--wms-fg));
+  background: color-mix(in srgb, var(--wms-accent) 10%, #042f2e);
+  border-color: color-mix(in srgb, var(--wms-accent) 38%, var(--wms-border));
+}
+
+html[data-theme="light"] .wms-btn-accent-soft {
+  color: color-mix(in srgb, #0f172a 55%, var(--wms-accent));
+  background: color-mix(in srgb, var(--wms-accent) 16%, var(--wms-surface-elevated));
+  border-color: color-mix(in srgb, var(--wms-accent) 55%, var(--wms-border));
+}
+
+.wms-btn-accent-soft:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--wms-accent) 24%, var(--wms-surface-elevated));
+}
+
+html.dark .wms-btn-accent-soft:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--wms-accent) 18%, #064e3b);
+}
+
+/* Table row actions: visible borders/icons in light. */
+.wms-table-row-action {
+  border: 1px solid var(--wms-border);
+  color: var(--wms-fg);
+}
+
+html[data-theme="light"] .wms-table-row-action {
+  border-color: color-mix(in srgb, var(--wms-fg) 32%, var(--wms-border));
+  color: var(--wms-fg);
+}
+
+.wms-table-row-action:hover {
+  background: color-mix(in srgb, var(--wms-surface-elevated) 88%, var(--wms-fg));
+}
+
+.wms-table-btn-clean {
+  border: 1px solid var(--wms-table-clean-border);
+  color: var(--wms-table-clean-fg);
+  background: transparent;
+}
+
+.wms-table-btn-clean:hover:not(:disabled) {
+  background: var(--wms-table-clean-bg-hover);
+}
+
+/* Location picker active row — no pale teal on white. */
+.wms-loc-row-active {
+  background: color-mix(in srgb, var(--wms-accent) 12%, var(--wms-surface-elevated));
+  color: var(--wms-fg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wms-accent) 45%, var(--wms-border));
+}
+
+html.dark .wms-loc-row-active {
+  background: color-mix(in srgb, var(--wms-surface-elevated) 70%, #134e4a);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wms-accent) 35%, transparent);
+}
+
+/*
+ * Main content tables: bump cell/header size past text-xs / arbitrary rem utilities.
+ * Scoped to main so marketing or other roots stay untouched.
+ */
+main table {
+  font-size: 1rem !important;
+  line-height: 1.45 !important;
+}
+
+main table thead th {
+  font-size: 0.8125rem !important;
+  line-height: 1.35 !important;
+  letter-spacing: 0.04em !important;
+  font-weight: 600 !important;
+}
+
+main table tbody td {
+  font-size: 0.9375rem !important;
+  line-height: 1.4 !important;
+}
+
+html[data-theme="light"] main table thead th {
+  color: #0f172a !important;
+  background-color: #e5e7eb !important;
+}
+
+html.dark main table thead th {
+  color: color-mix(in srgb, var(--wms-fg) 92%, var(--wms-muted)) !important;
 }

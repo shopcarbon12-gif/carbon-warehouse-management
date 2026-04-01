@@ -117,9 +117,9 @@ export function BinGrid({ initialBins }: { initialBins: BinWithCountRow[] }) {
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[640px] border-collapse text-left">
           <thead>
-            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
+            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wider">
               <th className="px-3 py-2.5">Bin code</th>
               <th className="px-3 py-2.5">Row / section</th>
               <th className="px-3 py-2.5">Shelf</th>
@@ -157,19 +157,19 @@ export function BinGrid({ initialBins }: { initialBins: BinWithCountRow[] }) {
                     className="cursor-pointer text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80"
                   >
                     <td className="px-3 py-2 align-middle">
-                      <span className="font-mono text-sm font-bold tracking-tight text-[var(--wms-fg)]">
+                      <span className="font-mono font-bold tracking-tight text-[var(--wms-fg)]">
                         {bin.code}
                       </span>
                     </td>
-                    <td className="px-3 py-2 align-middle font-mono text-xs text-[var(--wms-muted)]">
+                    <td className="px-3 py-2 align-middle font-mono text-[var(--wms-muted)]">
                       {section}
                     </td>
-                    <td className="px-3 py-2 align-middle font-mono text-xs text-[var(--wms-muted)]">
+                    <td className="px-3 py-2 align-middle font-mono text-[var(--wms-muted)]">
                       {shelf}
                     </td>
                     <td
-                      className={`px-3 py-2 text-right align-middle font-mono text-sm font-semibold tabular-nums ${
-                        hasStock ? "text-teal-400" : "text-[var(--wms-muted)]"
+                      className={`px-3 py-2 text-right align-middle font-mono font-semibold tabular-nums ${
+                        hasStock ? "text-[var(--wms-table-accent-num)]" : "text-[var(--wms-muted)]"
                       }`}
                     >
                       {bin.in_stock_count}
@@ -204,7 +204,7 @@ export function BinGrid({ initialBins }: { initialBins: BinWithCountRow[] }) {
                 >
                   {drawerBin.code}
                 </h2>
-                <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
                   {drawerBin.in_stock_count} in-stock EPC
                   {drawerBin.in_stock_count === 1 ? "" : "s"}
                 </p>
@@ -223,7 +223,7 @@ export function BinGrid({ initialBins }: { initialBins: BinWithCountRow[] }) {
               <button
                 type="button"
                 onClick={() => mockPrintLabel(drawerBin)}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2.5 font-mono text-xs font-medium text-[var(--wms-fg)] hover:border-teal-500/50 hover:text-teal-300"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2.5 font-mono text-sm font-medium text-[var(--wms-fg)] hover:border-[color-mix(in_srgb,var(--wms-accent)_55%,var(--wms-border))] hover:text-[var(--wms-accent)]"
               >
                 <Printer className="h-4 w-4" strokeWidth={2} />
                 Print bin label
@@ -231,7 +231,7 @@ export function BinGrid({ initialBins }: { initialBins: BinWithCountRow[] }) {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
+              <p className="font-mono text-xs font-semibold uppercase tracking-wider text-[var(--wms-fg)]">
                 Contents (matrix / custom SKU)
               </p>
               {loadingContents ? (

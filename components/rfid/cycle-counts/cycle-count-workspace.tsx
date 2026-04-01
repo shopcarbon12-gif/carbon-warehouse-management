@@ -355,9 +355,9 @@ export function CycleCountWorkspace() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(
           [
-            ["Matched", kpi.matched, "text-emerald-400/90"],
-            ["Missing", kpi.missing, "text-amber-400/90"],
-            ["Misplaced", kpi.misplaced, "text-orange-400/90"],
+            ["Matched", kpi.matched, "wms-status-success"],
+            ["Missing", kpi.missing, "wms-status-warning"],
+            ["Misplaced", kpi.misplaced, "wms-status-orange"],
             ["Unrecognized", kpi.unrecognized, "text-[var(--wms-muted)]"],
           ] as const
         ).map(([label, n, cls]) => (
@@ -378,8 +378,8 @@ export function CycleCountWorkspace() {
           Results ({gridRows.length} rows)
         </div>
         <div className="max-h-[min(60vh,480px)] overflow-auto">
-          <table className="w-full border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          <table className="w-full border-collapse text-left">
+            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
               <tr>
                 <th className="px-3 py-2">EPC</th>
                 <th className="px-3 py-2">SKU</th>
@@ -389,10 +389,10 @@ export function CycleCountWorkspace() {
                 <th className="px-3 py-2">State</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
+            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
               {gridRows.map((r) => (
                 <tr key={r.epc}>
-                  <td className="px-3 py-2 text-teal-400/85">{r.epc}</td>
+                  <td className="px-3 py-2 font-medium text-[var(--wms-accent)]">{r.epc}</td>
                   <td className="px-3 py-2">{r.sku}</td>
                   <td className="px-3 py-2 text-[var(--wms-muted)]">{r.bin}</td>
                 <td className="px-3 py-2">{r.expected ? "Yes" : "No"}</td>
@@ -401,11 +401,11 @@ export function CycleCountWorkspace() {
                     <span
                       className={
                         r.state === "matched"
-                          ? "text-emerald-400/90"
+                          ? "wms-status-success"
                           : r.state === "missing"
-                            ? "text-amber-400/90"
+                            ? "wms-status-warning"
                             : r.state === "misplaced"
-                              ? "text-orange-400/90"
+                              ? "wms-status-orange"
                               : "text-[var(--wms-muted)]"
                       }
                     >
