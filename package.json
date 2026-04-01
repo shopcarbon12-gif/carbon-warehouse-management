@@ -34,6 +34,8 @@
     "coolify:fetch-database-url-local": "node scripts/coolify-fetch-database-url-to-local.mjs",
     "coolify:api-check": "node scripts/coolify-api-check.mjs",
     "coolify:ensure-uploads-volume": "node scripts/coolify-ensure-uploads-volume.mjs",
+    "coolify:provision-sync-worker": "node scripts/coolify-provision-sync-worker.mjs",
+    "deploy:coolify:worker": "node scripts/trigger-coolify-worker-deploy.mjs",
     "coolify:list-env-keys": "node scripts/coolify-list-env-keys.mjs",
     "coolify:patch-env": "node scripts/coolify-patch-env-bulk.mjs",
     "diagnose:db": "node scripts/diagnose-wms-db.mjs",

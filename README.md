@@ -100,7 +100,7 @@ Keep both values in gitignored **`.env.coolify.local`** (not in git).
 
 Optional: set **`WMS_BASE_PATH`** at **build time** if the app is served under a subpath (see `next.config.ts`).
 
-Background worker (sync jobs): **`npm run worker`** — run as a second process or Coolify service with the same **`DATABASE_URL`**.
+Background worker (sync jobs): **`npm run worker`** — locally, a second terminal; on Coolify use **`Dockerfile.worker`** (see **`docs/WORKER.md`**, **`npm run coolify:provision-sync-worker`**).
 
 ## E2E
 

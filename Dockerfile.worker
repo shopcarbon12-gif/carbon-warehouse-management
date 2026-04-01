@@ -1,0 +1,15 @@
+# Carbon WMS — background sync worker (no HTTP). Coolify: second application, same repo/branch, Dockerfile = Dockerfile.worker.
+# Drains `sync_jobs` (lightspeed_pull / lightspeed_catalog queued rows). Same DATABASE_URL + Lightspeed env as the web app.
+FROM node:20-alpine
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+# tsx lives in devDependencies; worker imports @/lib (TypeScript path aliases).
+ENV NPM_CONFIG_PRODUCTION=false
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY lib ./lib
+COPY scripts ./scripts
+CMD ["npx", "tsx", "scripts/worker.ts"]

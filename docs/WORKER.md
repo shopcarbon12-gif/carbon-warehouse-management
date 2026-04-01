@@ -14,20 +14,53 @@ Run it in a second terminal while `npm run dev` serves the web app.
 
 ## Production (Coolify)
 
-Use a **second application** (or duplicate service) that runs the worker process — not an extra process inside the web container.
+Use a **second Coolify application** that builds **`Dockerfile.worker`** from this repo — not an extra process inside the web container. The web image’s `CMD` is Next.js; the worker image runs `npx tsx scripts/worker.ts` only.
 
-1. **Coolify → your project → environment → New resource → Application** (or duplicate the WMS app).
-2. **Same Git repository and branch** as the web app; same **Dockerfile** / build if you use Docker.
-3. **Start command** (or Docker command override): `npm run worker` — **not** `npm start`. If the image’s default `CMD` is Next.js, override it in the UI so only the worker runs.
-4. **Environment variables:** copy or link the **same** env as the web app (`DATABASE_URL`, Lightspeed keys, etc.). The worker does not need `PORT` for HTTP.
-5. **No public domain** required; do not replace your web app URL with this service.
-6. **Redeploy** when `scripts/worker.ts` or worker-related deps change.
+### Automated setup (recommended)
 
-If you **only** run the web container, `sync_jobs` / Lightspeed queue rows may sit until something runs `npm run worker` locally or you add this service.
+Requires **`.env.coolify.local`** with a Coolify API token that can **create applications**, **PATCH env**, and **trigger deploy** (not deploy-only).
 
-## Web UI “Trigger manual sync”
+1. Ensure **`COOLIFY_DEPLOY_WEBHOOK_URL`** points at the **WMS web** app (existing).
+2. Run:
 
-The dashboard button typically **enqueues** work (e.g. `lightspeed_pull` rows). The worker **consumes** that queue. If nothing processes jobs, triggers will stack up and catalog will look stale until the worker runs.
+```bash
+npm run coolify:provision-sync-worker
+```
+
+This will:
+
+- `POST /applications/private-deploy-key` → app name **`carbon-wms-sync-worker`**, **`dockerfile_location`:** `/Dockerfile.worker`
+- Copy runtime env from the web app (same `DATABASE_URL`, Lightspeed keys, etc.), forcing **`WMS_AUTO_MIGRATE=0`** on the worker (migrations stay on the web deploy)
+- Queue a deploy via **`POST /api/v1/deploy?uuid=<worker-uuid>&force=false`**
+
+3. Add to **`.env.coolify.local`** (script prints these):
+
+- **`COOLIFY_WORKER_APP_UUID`**
+- **`COOLIFY_WORKER_DEPLOY_WEBHOOK_URL`** — worker app → Configuration → Webhooks (same shape as the web deploy URL, different `uuid=`)
+
+Worker-only deploy from your machine:
+
+```bash
+npm run deploy:coolify:worker
+```
+
+Re-run **`npm run coolify:provision-sync-worker`** after adding **`COOLIFY_WORKER_APP_UUID`** to refresh env from the web app (skips create; handles duplicate name with **409**).
+
+### Manual setup (UI)
+
+1. **Coolify → CARBON WMS → production → New resource → Application**
+2. Same **Git** repo + branch as WMS web.
+3. **Build:** Dockerfile at **`Dockerfile.worker`** (not `/Dockerfile`).
+4. **Env:** mirror the web app (`DATABASE_URL`, `LS_*`, etc.); set **`WMS_AUTO_MIGRATE=0`**.
+5. **No public domain** required.
+6. **Redeploy** when `Dockerfile.worker`, `scripts/worker.ts`, or worker-related `lib/` code changes.
+
+If you **only** run the web container, **queued** `sync_jobs` rows (`lightspeed_pull` from **Enqueue** on Live compare) stay **`queued`** until something runs the worker.
+
+## Web UI sync vs queue
+
+- **Inventory → Sync → Sync engine → “Trigger manual sync”** runs catalog sync **inside the web request** (`POST /api/inventory/sync/trigger`) — **no worker required**.
+- **Live compare → “Enqueue Lightspeed catalog pull”** inserts **`queued`** jobs — the **worker** drains those (same `performLightspeedCatalogSync` pipeline as manual sync).
 
 ## Health
 
