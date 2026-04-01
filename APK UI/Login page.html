@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>CarbonWMS | Sign in — device pending approval</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800;900&amp;family=Space+Grotesk:wght@500;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary-container": "#bfe7e7",
+              "surface-container-high": "#e4e9e8",
+              "surface-container-low": "#f0f5f4",
+              "on-primary": "#ffffff",
+              "surface-container-lowest": "#ffffff",
+              "outline": "#6d7979",
+              "surface-container": "#eaefee",
+              "outline-variant": "#bcc9c9",
+              "on-surface-variant": "#3d4949",
+              "on-surface": "#171d1d",
+              "primary": "#006768",
+              "secondary": "#3f6565"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Space Grotesk"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .primary-gradient {
+            background: linear-gradient(180deg, #006768 0%, #008284 100%);
+        }
+        input:focus { outline: none; box-shadow: none; }
+        .field-row input {
+          background-color: transparent;
+          box-shadow: none;
+        }
+        .login-email-row { gap: 0.25rem; }
+        .login-email-row .material-symbols-outlined {
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+          font-size: 20px;
+          width: 1.25rem;
+          min-width: 1.25rem;
+          text-align: center;
+          flex-shrink: 0;
+          line-height: 1;
+        }
+    </style>
+<style>
+    body { min-height: max(884px, 100dvh); }
+  </style>
+</head>
+<!-- Mock: one plain centered line under server URL until device is approved. -->
+<body class="bg-surface-container-lowest font-body text-on-surface min-h-[884px] flex flex-col items-center overflow-x-hidden">
+<main class="w-full max-w-[480px] min-h-[884px] flex flex-col px-8 py-12">
+<header class="flex flex-col items-center mb-16">
+<img src="carbon_logo.png" alt="CarbonWMS" width="128" height="128" class="w-32 h-32 rounded-xl mb-2 shadow-[0_8px_24px_rgba(0,0,0,0.04)] object-cover" />
+<h1 class="font-headline font-black text-2xl tracking-widest text-black">CarbonWMS</h1>
+<p class="font-label text-sm text-outline mt-2 tracking-widest">WAREHOUSE MANAGEMENT SOFTWARE</p>
+</header>
+<section class="flex-grow space-y-3">
+<div class="space-y-3">
+<div class="flex justify-between items-end">
+<label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">Server URL</label>
+<span class="font-label text-[10px] text-outline uppercase tracking-tighter">Connected via SSL</span>
+</div>
+<div class="h-16 bg-surface-container-low field-row flex items-center px-4 rounded-md">
+<span class="material-symbols-outlined text-outline mr-3">dns</span>
+<input class="bg-transparent border-none w-full font-label text-base font-medium text-on-surface focus:ring-0" type="text" value="https://wms.shopcarbon.com" readonly>
+</div>
+<p class="text-center mt-0.5 font-mono text-[15px] font-medium text-black tracking-wide leading-tight">MAC 48:2F:6B:12:34:56</p>
+
+</div>
+<div class="space-y-6">
+<div class="space-y-2">
+<label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">USER EMAIL</label>
+<div class="login-email-row h-16 bg-surface-container-low field-row flex items-center min-w-0 px-4 rounded-md">
+<span class="material-symbols-outlined text-outline">person</span>
+<input class="login-email-field bg-transparent border-none min-w-0 flex-1 font-label text-base font-medium text-on-surface focus:ring-0 pl-0 shadow-none" type="email" value="" placeholder="user@carbonjeanscompany.com" autocomplete="email">
+</div>
+</div>
+<div class="space-y-2">
+<label class="font-label text-xs font-bold uppercase tracking-widest text-on-surface-variant">PASSWORD</label>
+<div class="h-16 bg-surface-container-low field-row flex items-center px-4 rounded-md">
+<span class="material-symbols-outlined text-outline mr-3">lock</span>
+<input class="bg-transparent border-none w-full font-label text-base font-medium text-on-surface focus:ring-0" type="password" placeholder="••••••••••••">
+<button type="button" class="text-outline hover:text-primary transition-colors" aria-label="Show password">
+<span class="material-symbols-outlined">visibility</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<footer class="mt-auto pt-12 pb-8">
+<button type="button" class="w-full h-16 primary-gradient text-on-primary font-headline font-bold text-lg tracking-widest rounded-md shadow-lg active:scale-[0.98] transition-transform">
+                SIGN IN
+            </button>
+</footer>
+</main>
+<div class="fixed bottom-0 left-0 w-full h-1 bg-primary/20 pointer-events-none"></div>
+</body>
+</html>

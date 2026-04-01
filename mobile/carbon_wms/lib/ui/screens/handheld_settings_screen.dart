@@ -4,10 +4,11 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/login_credentials_store.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
-/// Server URL, identity, and manual OTA check (reference: persistent settings entry).
+/// Server URL, identity, OTA check, and biometric preferences.
 class HandheldSettingsScreen extends StatefulWidget {
   const HandheldSettingsScreen({super.key});
 
@@ -18,6 +19,47 @@ class HandheldSettingsScreen extends StatefulWidget {
 class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
   bool _busy = false;
   String? _lastStatus;
+  bool _bioReloading = true;
+  bool _bioEligible = false;
+  bool _bioEnrolled = false;
+  bool _offerAfterSignIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reloadBiometricSection());
+  }
+
+  Future<void> _reloadBiometricSection() async {
+    setState(() => _bioReloading = true);
+    final eligible = await LoginCredentialsStore.canUseBiometricPasswordVault();
+    final enrolled = await LoginCredentialsStore.hasVaultedCredentials();
+    final offer = await LoginCredentialsStore.getOfferBiometricSetupAfterSignIn();
+    if (!mounted) return;
+    setState(() {
+      _bioEligible = eligible;
+      _bioEnrolled = enrolled;
+      _offerAfterSignIn = offer;
+      _bioReloading = false;
+    });
+  }
+
+  /// On when vault is active, or user asked for post–sign-in setup offer.
+  bool get _biometricSwitchValue => _bioEnrolled || _offerAfterSignIn;
+
+  Future<void> _onBiometricSwitch(bool v) async {
+    if (!v) {
+      await LoginCredentialsStore.setBiometricLoginEnabled(false);
+      await LoginCredentialsStore.setOfferBiometricSetupAfterSignIn(false);
+      await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(false);
+    } else {
+      await LoginCredentialsStore.setOfferBiometricSetupAfterSignIn(true);
+      if (await LoginCredentialsStore.hasVaultedCredentials()) {
+        await LoginCredentialsStore.setBiometricLoginEnabled(true);
+      }
+    }
+    if (mounted) await _reloadBiometricSection();
+  }
 
   Future<void> _checkOta() async {
     if (!mounted) return;
@@ -88,7 +130,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                 title: const Text('WMS server'),
                 subtitle: SelectableText(
                   u.isEmpty ? '(not configured)' : u,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppColors.textMuted,
                     fontFamily: 'monospace',
                     fontSize: 12,
@@ -111,7 +153,48 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
               );
             },
           ),
-          const SizedBox(height: 12),
+          const Divider(height: 32),
+          const Text(
+            'Biometric sign-in',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_bioReloading)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else if (!_bioEligible)
+            const Text(
+              'Not available on this device (rugged scanners never store passwords).',
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            )
+          else ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Fingerprint or face sign-in'),
+              subtitle: Text(
+                _bioEnrolled
+                    ? 'Saved credentials on this device. Turn off to remove them.'
+                    : _offerAfterSignIn
+                        ? 'After your next password sign-in, you can confirm to save credentials.'
+                        : 'Turn on to allow the optional setup prompt after you sign in with password.',
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.35),
+              ),
+              value: _biometricSwitchValue,
+              activeThumbColor: AppColors.primary,
+              onChanged: _onBiometricSwitch,
+            ),
+          ],
+          const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _busy ? null : _checkOta,
             icon: _busy
@@ -131,7 +214,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             const SizedBox(height: 16),
             SelectableText(
               _lastStatus!,
-              style: TextStyle(
+              style: const TextStyle(
                 color: AppColors.textMuted,
                 fontFamily: 'monospace',
                 fontSize: 11,

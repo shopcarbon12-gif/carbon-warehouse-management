@@ -2,12 +2,12 @@ import 'dart:io' show Platform;
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Biometric + encrypted password vault for **consumer-style phones** only (not Chainway/Zebra/etc.).
-/// After a successful sign-in, the app may offer to store credentials behind fingerprint / face unlock.
 /// Rugged handhelds never persist passwords.
 class LoginCredentialsStore {
   LoginCredentialsStore._();
@@ -16,6 +16,8 @@ class LoginCredentialsStore {
   static const _vaultPassword = 'wms_login_vault_password_v1';
   static const _prefsBiometric = 'wms_biometric_superadmin_enabled_v1';
   static const _prefsSkipBioOffer = 'wms_skip_biometric_enrollment_offer_v1';
+  /// User opted in (login checkbox or settings) to see the post–password setup prompt.
+  static const _prefsOfferBioAfterSignIn = 'wms_offer_biometric_setup_after_sign_in_v1';
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
 
@@ -46,9 +48,21 @@ class LoginCredentialsStore {
       final supported = await _auth.isDeviceSupported();
       final can = await _auth.canCheckBiometrics;
       return supported && can;
+    } on PlatformException catch (_) {
+      return false;
     } catch (_) {
       return false;
     }
+  }
+
+  static Future<bool> getOfferBiometricSetupAfterSignIn() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getBool(_prefsOfferBioAfterSignIn) ?? false;
+  }
+
+  static Future<void> setOfferBiometricSetupAfterSignIn(bool value) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_prefsOfferBioAfterSignIn, value);
   }
 
   static Future<bool> isBiometricLoginEnabled() async {
@@ -82,8 +96,9 @@ class LoginCredentialsStore {
     return p != null && p.isNotEmpty;
   }
 
-  /// Offer fingerprint/face vault once per install unless the user chose "Not now".
+  /// Offer setup only if the user opted in on the login screen (or settings) and did not dismiss permanently.
   static Future<bool> shouldOfferBiometricEnrollment() async {
+    if (!await getOfferBiometricSetupAfterSignIn()) return false;
     if (!await canUseBiometricPasswordVault()) return false;
     if (await hasVaultedCredentials()) return false;
     final p = await SharedPreferences.getInstance();
@@ -101,11 +116,15 @@ class LoginCredentialsStore {
 
   static Future<bool> authenticateWithBiometric() async {
     try {
-      return _auth.authenticate(
+      return await _auth.authenticate(
         localizedReason: 'Sign in to CarbonWMS',
         biometricOnly: true,
         persistAcrossBackgrounding: true,
       );
+    } on LocalAuthException catch (_) {
+      return false;
+    } on PlatformException catch (_) {
+      return false;
     } catch (_) {
       return false;
     }
