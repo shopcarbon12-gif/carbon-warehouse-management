@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CarbonWMS — Production parity: Web (wms.shopcarbon.com)</title>
+  <style>
+    :root {
+      --bg: #0a0d12;
+      --surface: #121820;
+      --border: #243044;
+      --text: #e7ebf0;
+      --muted: #8b97a8;
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --info: #60a5fa;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; font-size: 14px; }
+    main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 3.5rem; }
+    h1 { font-size: 1.45rem; margin: 0 0 0.35rem; letter-spacing: -0.02em; }
+    h2 { font-size: 1.08rem; margin: 2rem 0 0.65rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+    h3 { font-size: 0.95rem; color: var(--muted); margin: 1.1rem 0 0.4rem; }
+    .muted { color: var(--muted); font-size: 0.88rem; }
+    .meta { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.6rem 0; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.55rem; text-align: left; vertical-align: top; }
+    th { background: var(--surface); color: var(--muted); }
+    code { font-family: ui-monospace, monospace; font-size: 0.88em; color: #a5c4e8; }
+    .pill { display: inline-block; padding: 0.12rem 0.4rem; border-radius: 4px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .p-ok { background: rgba(52, 211, 153, 0.14); color: var(--ok); }
+    .p-warn { background: rgba(251, 191, 36, 0.12); color: var(--warn); }
+    .p-bad { background: rgba(248, 113, 113, 0.12); color: var(--bad); }
+    .p-info { background: rgba(96, 165, 250, 0.12); color: var(--info); }
+    ul.tight li { margin-bottom: 0.35rem; }
+    .file { color: #93c5fd; }
+    footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Production parity — Web application</h1>
+    <p class="muted"><strong>Host reviewed:</strong> <code>https://wms.shopcarbon.com</code> (not <code>shopcaron</code>). <strong>Report generated:</strong> 2026-04-01 (agent session). <strong>Scope:</strong> Deep cross-check of repository <code>main</code>, Coolify deployment API, live <code>GET /api/health</code>, and the audit threads you referenced (primary gap-closure / deep web audit chat, APK/git timeline chat, theme / revert / transcript investigation chat).</p>
+
+    <div class="meta">
+      <strong>Executive summary</strong>
+      <ul class="tight">
+        <li><span class="pill p-ok">Live</span> Production responded <code>HTTP 200</code> with <code>{"ok":true}</code> on <code>/api/health</code> from the reporting environment (20s timeout).</li>
+        <li><span class="pill p-ok">Code parity</span> The <strong>last finished</strong> Coolify deployment for this app was commit <code>68dbbd1</code> — <em>feat(db): ensure Orlando bin grid via CLI, admin API, and Infra Settings UI</em> — finished <strong>2026-04-01T06:38:10Z</strong>. That revision <strong>includes</strong> the gap-closure web stack (Bearer-aware APIs, mobile routes, transfer slips, proxy behavior) and subsequent UI work through that merge (typography tiers <code>7536c49</code>, sidebar scale <code>b494d4f</code>, pointer cursors <code>6c05119</code>, handheld toggle styling, etc. — verified as ancestors of <code>68dbbd1</code> in git).</li>
+        <li><span class="pill p-warn">In progress</span> A deployment for <code>d1bfb7b</code> was <strong>in progress</strong> at report time. That commit only adds <span class="file">scripts/ensure-orlando-bins-through-tunnel.mjs</span> and an npm script — <strong>no Next.js runtime or API behavior change</strong> for browsers. When it finishes, production will match local <code>main</code> at HEAD for app code paths.</li>
+        <li><span class="pill p-warn">Data ≠ deploy</span> Bins, catalog rows, devices, and OTA metadata live in <strong>Postgres</strong>. A successful deploy does not copy localhost data to production. See §5.</li>
+      </ul>
+    </div>
+
+    <h2>1. Sources of truth used</h2>
+    <table>
+      <thead>
+        <tr><th>Source</th><th>What we used it for</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>git rev-parse HEAD</code> + <code>git log</code></td>
+          <td>Local <code>main</code> tip (<code>d1bfb7b</code> at generation time) and ancestry checks vs <code>68dbbd1</code>.</td>
+        </tr>
+        <tr>
+          <td><code>node scripts/coolify-latest-deployment.mjs</code></td>
+          <td>Coolify API: last <strong>finished</strong> deploy SHA, newest row status (<code>in_progress</code> / <code>finished</code>).</td>
+        </tr>
+        <tr>
+          <td><code>GET https://wms.shopcarbon.com/api/health</code></td>
+          <td>Confirms the edge + container are serving the app (liveness).</td>
+        </tr>
+        <tr>
+          <td><span class="file">docs/gap-closure-report.html</span></td>
+          <td>Canonical list of web+mobile parity work that was implemented in code.</td>
+        </tr>
+        <tr>
+          <td><span class="file">docs/web-deep-audit-report.html</span></td>
+          <td>Residual product/ops gaps called out at audit time (Playwright depth, thin pages, worker story).</td>
+        </tr>
+        <tr>
+          <td><span class="file">docs/localhost-vs-wms-shopcarbon-report.html</span></td>
+          <td>Why localhost and production differ when <strong>data</strong> diverges.</td>
+        </tr>
+        <tr>
+          <td><span class="file">docs/transcript-81e566e4-execution-audit-report-v2.html</span></td>
+          <td>Reconciliation of older transcript gaps vs later chats and repo (where applicable).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. Deploy matrix (repository vs production)</h2>
+    <table>
+      <thead>
+        <tr><th>Artifact</th><th>Version / SHA</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Local git <code>HEAD</code></td>
+          <td><code>d1bfb7b</code></td>
+          <td>Includes developer-only SSH tunnel helper for bin ensure script.</td>
+        </tr>
+        <tr>
+          <td>Coolify last <strong>finished</strong></td>
+          <td><code>68dbbd1</code></td>
+          <td>Production web container image built from this commit unless Coolify build was overridden manually.</td>
+        </tr>
+        <tr>
+          <td>Delta <code>68dbbd1..d1bfb7b</code></td>
+          <td>1 commit</td>
+          <td><span class="pill p-ok">No user-facing web delta</span> — tooling only.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Web feature checklist vs “what we did” (gap closure + follow-ons)</h2>
+    <p class="muted">These items are <strong>in the codebase</strong> that is already contained in <code>68dbbd1</code> (and therefore on production at last successful deploy). They are not re-proven here with Playwright against production (credentials not used in this session).</p>
+    <table>
+      <thead>
+        <tr><th>Area</th><th>Expected on production</th><th>Residual risk</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>proxy.ts</code> — API JSON 401, Bearer + cookie</td>
+          <td><span class="pill p-ok">Deployed</span></td>
+          <td>Misconfigured env (<code>NEXTAUTH</code> / JWT) would break auth; health still 200.</td>
+        </tr>
+        <tr>
+          <td>Mobile APIs: clean-bin, item-detail, transfer slips, catalog, commission</td>
+          <td><span class="pill p-ok">Deployed</span></td>
+          <td>RBAC: wrong role → 403 (expected).</td>
+        </tr>
+        <tr>
+          <td>OTA upload route + lowercase APK filename</td>
+          <td><span class="pill p-ok">Deployed</span></td>
+          <td>Without persistent volume on <code>/app/public/uploads</code>, APK files disappear on redeploy (ops).</td>
+        </tr>
+        <tr>
+          <td>Infra Settings — ensure Orlando bins (admin API + UI)</td>
+          <td><span class="pill p-ok">In 68dbbd1</span></td>
+          <td>Button must be run per tenant/DB; does not auto-run on deploy.</td>
+        </tr>
+        <tr>
+          <td>Theme: light palette, typography tiers, sidebar sizing, button/input alignment</td>
+          <td><span class="pill p-ok">Deployed</span> (ancestors of <code>68dbbd1</code>)</td>
+          <td>Browser cache / stale CDN edge (rare).</td>
+        </tr>
+        <tr>
+          <td>Pointer / <code>not-allowed</code> cursor pass</td>
+          <td><span class="pill p-ok">Deployed</span></td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. Gaps that are <em>not</em> “missing deploy” — product / ops / data</h2>
+    <p class="muted">These are still true even when production code matches <code>main</code>. They are not bugs in the last deploy step.</p>
+    <table>
+      <thead>
+        <tr><th>Gap</th><th>Type</th><th>What to do</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Bins / locations / inventory counts differ from localhost</td>
+          <td><span class="pill p-warn">Data</span></td>
+          <td>Use production UI or <code>POST /api/admin/ensure-orlando-bins</code> (super-admin) after deploy, or seed production deliberately. See <span class="file">docs/localhost-vs-wms-shopcarbon-report.html</span>.</td>
+        </tr>
+        <tr>
+          <td>Lightspeed catalog pull / worker jobs</td>
+          <td><span class="pill p-warn">Ops</span></td>
+          <td>Queued work may need a <strong>second Coolify service</strong> for the worker process. See <span class="file">docs/WORKER.md</span> (if present) and deep audit §ops.</td>
+        </tr>
+        <tr>
+          <td>Thin or stubby pages (<code>/compare</code>, <code>/orders</code>, some reports)</td>
+          <td><span class="pill p-info">Product backlog</span></td>
+          <td>Not part of handset parity closure; still lighter than full legacy Senitron parity.</td>
+        </tr>
+        <tr>
+          <td>Playwright / CI coverage narrow</td>
+          <td><span class="pill p-info">QA</span></td>
+          <td>Deep audits assumed static code review; extend e2e against staging or prod read-only checks as you prefer.</td>
+        </tr>
+        <tr>
+          <td>Readiness probe <code>/api/health/ready</code> vs DB outages</td>
+          <td><span class="pill p-info">Infra</span></td>
+          <td>Liveness stays DB-free by design; DB down may still show “up” on health — expected per project hardening docs.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>5. Manual verification checklist (you or QA)</h2>
+    <ol class="tight">
+      <li>Coolify UI: confirm the <code>d1bfb7b</code> deployment left <code>in_progress</code> and shows <strong>Finished</strong> (optional; no web behavior change expected).</li>
+      <li>Sign in on <code>wms.shopcarbon.com</code> → <strong>Settings → Mobile updates</strong>: confirm active APK row and download URL if you rely on OTA.</li>
+      <li><strong>Infrastructure / Settings</strong> (or your admin path): if production bins should mirror seed, run the ensure-bin action once per environment.</li>
+      <li>Handheld: log in with production URL, hit transfer slips / clean bin / lookup — confirms API + DB for that tenant.</li>
+    </ol>
+
+    <h2>6. Conclusion</h2>
+    <p><strong>For the web app,</strong> <code>wms.shopcarbon.com</code> is aligned with the work through <code>68dbbd1</code> at the last <strong>finished</strong> deploy. The only pending commit at report time (<code>d1bfb7b</code>) is a <strong>developer tunnel helper</strong> and does not change production HTTP behavior. Remaining “gaps” you may still perceive are overwhelmingly <strong>database contents</strong>, <strong>OTA file persistence</strong>, <strong>worker topology</strong>, or <strong>product depth</strong> — not a missing web deploy of the gap-closure stack.</p>
+
+    <footer>
+      Companion report: <span class="file">docs/production-parity-apk-report-2026-04-01.html</span>. Regenerate after major releases by re-running Coolify poll + health check + git compare.
+    </footer>
+  </main>
+</body>
+</html>

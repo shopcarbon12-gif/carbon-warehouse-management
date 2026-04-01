@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CarbonWMS — Production parity: Handheld APK vs wms.shopcarbon.com</title>
+  <style>
+    :root {
+      --bg: #0a0d12;
+      --surface: #121820;
+      --border: #243044;
+      --text: #e7ebf0;
+      --muted: #8b97a8;
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --info: #60a5fa;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; font-size: 14px; }
+    main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 3.5rem; }
+    h1 { font-size: 1.45rem; margin: 0 0 0.35rem; letter-spacing: -0.02em; }
+    h2 { font-size: 1.08rem; margin: 2rem 0 0.65rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+    h3 { font-size: 0.95rem; color: var(--muted); margin: 1.1rem 0 0.4rem; }
+    .muted { color: var(--muted); font-size: 0.88rem; }
+    .meta { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin: 1rem 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.6rem 0; }
+    th, td { border: 1px solid var(--border); padding: 0.5rem 0.55rem; text-align: left; vertical-align: top; }
+    th { background: var(--surface); color: var(--muted); }
+    code { font-family: ui-monospace, monospace; font-size: 0.88em; color: #a5c4e8; }
+    .pill { display: inline-block; padding: 0.12rem 0.4rem; border-radius: 4px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .p-ok { background: rgba(52, 211, 153, 0.14); color: var(--ok); }
+    .p-warn { background: rgba(251, 191, 36, 0.12); color: var(--warn); }
+    .p-bad { background: rgba(248, 113, 113, 0.12); color: var(--bad); }
+    .p-info { background: rgba(96, 165, 250, 0.12); color: var(--info); }
+    ul.tight li { margin-bottom: 0.35rem; }
+    .file { color: #93c5fd; }
+    footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Production parity — Handheld APK (Flutter)</h1>
+    <p class="muted"><strong>Server reviewed:</strong> <code>https://wms.shopcarbon.com</code>. <strong>Report generated:</strong> 2026-04-01. <strong>Repository mobile version:</strong> <code>mobile/carbon_wms/pubspec.yaml</code> → <strong>0.1.11+18</strong> (<code>versionName</code> 0.1.11, <code>versionCode</code> 18). <strong>Scope:</strong> Server deploy parity for APIs the APK uses, OTA mechanics, device inventory of what must be true for “fully updated,” and reconciliation with gap-closure + prior APK/git timeline discussions.</p>
+
+    <div class="meta">
+      <strong>Executive summary</strong>
+      <ul class="tight">
+        <li><span class="pill p-ok">Server APIs</span> The same Coolify deployment described in the web parity report (<code>68dbbd1</code> last finished) ships the Next.js routes and <code>proxy.ts</code> behavior the Flutter client depends on (Bearer + cookie, mobile paths, OTA upload, etc.).</li>
+        <li><span class="pill p-warn">Binary on phones ≠ git</span> Each physical device runs whatever APK was <strong>installed</strong> (OTA or sideload). That version is only guaranteed to match <code>main</code> if you built from the same tree and distributed that artifact.</li>
+        <li><span class="pill p-warn">OTA row + file</span> The server’s <code>GET /api/mobile/status</code> returns <code>latestVersion</code> and <code>downloadUrl</code> from Postgres (<code>app_releases</code>) and the file must exist under <code>public/uploads/...</code> on a <strong>persistent volume</strong> in Coolify. This session did not query your production DB or download the hosted APK.</li>
+        <li><span class="pill p-info">Canonical artifact name</span> Project convention: <code>D:\CarbonWmsRelease\CarbonWMS V0.1.11+18.apk</code> (after <span class="file">scripts/build-apk.ps1</span>) — see Cursor rules for agents.</li>
+      </ul>
+    </div>
+
+    <h2>1. Three-way model (source, server, handset)</h2>
+    <table>
+      <thead>
+        <tr><th>Layer</th><th>“Fully updated” means</th><th>How to verify</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>A. Git / repo</strong></td>
+          <td><code>pubspec.yaml</code> shows intended marketing + build number; Dart sources match features you expect.</td>
+          <td><code>git pull</code>, read <span class="file">pubspec.yaml</span>, run <code>flutter analyze</code> locally.</td>
+        </tr>
+        <tr>
+          <td><strong>B. wms.shopcarbon.com</strong></td>
+          <td>Deploy SHA includes mobile API routes + proxy rules; health OK.</td>
+          <td>Coolify history; <code>GET /api/health</code>; optional authenticated API probes.</td>
+        </tr>
+        <tr>
+          <td><strong>C. Device</strong></td>
+          <td>Installed package version matches the build you published; OTA URL returns a real APK bytes (not HTML 404/login).</td>
+          <td>Android settings → app info; in-app Handheld settings “check OTA”; or <code>adb shell dumpsys package com.shopcarbon.wms</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="muted">A gap at any layer looks like “production is wrong” even when the other two are correct — e.g. server updated but OTA file missing → <code>WmsApiException(404)</code> HTML; or server updated but phone still on old APK → missing UI flows.</p>
+
+    <h2>2. Flutter modules vs gap-closure expectations</h2>
+    <p class="muted">Files under <span class="file">mobile/carbon_wms/lib/</span> (current tree). These should match the narrative in <span class="file">docs/gap-closure-report.html</span> and the refreshed <span class="file">docs/apk-deep-audit-report.html</span> if those docs were updated after the last doc pass.</p>
+    <table>
+      <thead>
+        <tr><th>Module / screen</th><th>Role</th><th>Deploy dependency</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="file">wms_api_client.dart</span></td>
+          <td>All REST calls, Bearer header, timeouts.</td>
+          <td>Server routes + <code>proxy.ts</code> on production.</td>
+        </tr>
+        <tr>
+          <td><span class="file">transfer_slips_screen.dart</span></td>
+          <td>Slip create/scan/receive per gap closure.</td>
+          <td>Transfer slip APIs deployed.</td>
+        </tr>
+        <tr>
+          <td><span class="file">clean_bin_screen.dart</span></td>
+          <td>Clean bin by code.</td>
+          <td><code>POST /api/mobile/clean-bin</code>.</td>
+        </tr>
+        <tr>
+          <td><span class="file">inventory_lookup_screen.dart</span></td>
+          <td>EPC → item detail / bin enrichment.</td>
+          <td><code>GET /api/mobile/item-detail</code>.</td>
+        </tr>
+        <tr>
+          <td><span class="file">status_change_screen.dart</span></td>
+          <td>Bulk status via <code>postBulkStatus</code>.</td>
+          <td>Bulk / status APIs + Clean 10 rules on server DB.</td>
+        </tr>
+        <tr>
+          <td><span class="file">encode_suite_screens.dart</span></td>
+          <td>Search, Scan &amp; Print, Upload retry queue.</td>
+          <td>Catalog search + commission + printer path on server.</td>
+        </tr>
+        <tr>
+          <td><span class="file">login_screen.dart</span> / <span class="file">app_auth_gate.dart</span></td>
+          <td>Server URL, session, OTA prompt.</td>
+          <td>Auth cookies + mobile status route.</td>
+        </tr>
+        <tr>
+          <td><span class="file">handheld_settings_screen.dart</span></td>
+          <td>OTA status text for debugging.</td>
+          <td>Working <code>/api/mobile/status</code> + DB release row.</td>
+        </tr>
+        <tr>
+          <td>Other flows (<span class="file">fast_putaway_screen.dart</span>, <span class="file">locate_tag_screen.dart</span>, CSV, barcode intake, device lock)</td>
+          <td>Operational RFID / inventory UX.</td>
+          <td>Same server + tenant data; feature flags in tenant settings if any.</td>
+        </tr>
+        <tr>
+          <td><span class="file">packages/carbon_chainway_driver</span> (RSSI)</td>
+          <td>Vendor RFID integration.</td>
+          <td>Device hardware; no extra deploy beyond app binary.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. What can still be “not installed” (APK-specific)</h2>
+    <table>
+      <thead>
+        <tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>OTA download 404 or HTML error body</td>
+          <td>Missing file on disk after redeploy, or wrong URL in DB; Linux case sensitivity (mitigated server-side by lowercasing stored filename).</td>
+          <td>Coolify volume on <code>/app/public/uploads</code>; re-upload APK in <strong>Settings → Mobile updates</strong>; confirm URL in Handheld settings.</td>
+        </tr>
+        <tr>
+          <td><code>updateAvailable</code> false but you expect new build</td>
+          <td><code>version_label</code> in DB matches device <code>PackageInfo.version</code> string normalization, or no active release row.</td>
+          <td>Upload with distinct label (e.g. <code>0.1.11+18</code>); set active release.</td>
+        </tr>
+        <tr>
+          <td>401 / JSON errors on API</td>
+          <td>Expired session, missing Bearer, or proxy change not deployed (unlikely if SHA matches).</td>
+          <td>Re-login; confirm deploy SHA; check tenant role.</td>
+        </tr>
+        <tr>
+          <td>Feature “missing” on phone but works on desktop</td>
+          <td>Old APK sideloaded; or server feature uses data not present in prod DB.</td>
+          <td>Install <strong>CarbonWMS V0.1.11+18.apk</strong> (or newer); align production data.</td>
+        </tr>
+        <tr>
+          <td>Encode “Upload” feels lighter than full print lab</td>
+          <td><span class="pill p-info">By design</span></td>
+          <td>Gap-closure called out intentional partial closure: Search + commission path wired; full Zebra lab validation is product scope.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. Prior “APK vs git history” lesson (transcript thread)</h2>
+    <p class="muted">In the APK build / SHA timeline chat, we established that an APK’s <strong>file timestamp</strong> does not prove inclusion of a git SHA unless the tree at <code>flutter build</code> time contained those commits. For production parity, the operational rule is: <strong>build → upload/set active → install on devices</strong>, and keep a record of the version label you published.</p>
+
+    <h2>5. Checklist: confirm you are “fully updated”</h2>
+    <ol class="tight">
+      <li><strong>Coolify:</strong> Application on a commit ≥ <code>68dbbd1</code> (or latest finished after this report).</li>
+      <li><strong>Volume:</strong> Persistent storage mounted for uploads (OTA survives redeploy).</li>
+      <li><strong>OTA:</strong> Admin UI shows active release; label matches the binary you intend (e.g. <code>0.1.11+18</code>).</li>
+      <li><strong>Handset:</strong> Settings → OTA status shows <code>server label:</code> and a non-empty <code>download:</code> URL when appropriate.</li>
+      <li><strong>Install:</strong> Device version string matches shipped APK; after install, exercise transfer slips + clean bin + lookup once.</li>
+    </ol>
+
+    <h2>6. Conclusion</h2>
+    <p><strong>Server-side,</strong> <code>wms.shopcarbon.com</code> at the last <strong>finished</strong> deploy (<code>68dbbd1</code>) carries the APIs and proxy behavior required for the current <strong>0.1.11+18</strong> source tree. <strong>Whether every handset is “fully updated”</strong> cannot be asserted from the repo alone: you must align <strong>OTA/database/file storage</strong> and <strong>installed binaries</strong>. Any remaining gap is most often <strong>artifact distribution</strong> or <strong>Postgres contents</strong>, not missing Next.js routes from the gap-closure batch.</p>
+
+    <footer>
+      Companion report: <span class="file">docs/production-parity-web-report-2026-04-01.html</span>. Update both after the next production deploy + OTA publish cycle.
+    </footer>
+  </main>
+</body>
+</html>
