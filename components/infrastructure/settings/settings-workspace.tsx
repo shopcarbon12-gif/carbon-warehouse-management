@@ -44,8 +44,8 @@ function LightspeedLiveReadiness({
     <div
       className={`rounded-lg border px-3 py-3 font-mono text-[0.65rem] leading-relaxed ${
         rSeriesLive
-          ? "border-emerald-800/60 bg-emerald-950/25 text-emerald-100/90"
-          : "border-amber-800/60 bg-amber-950/20 text-amber-100/85"
+          ? "border-emerald-700/35 bg-[color-mix(in_srgb,#059669_16%,var(--wms-surface-elevated))] text-emerald-950 dark:border-emerald-800/60 dark:bg-emerald-950/25 dark:text-emerald-100/90"
+          : "border-amber-700/35 bg-[color-mix(in_srgb,#b45309_14%,var(--wms-surface-elevated))] text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/20 dark:text-amber-100/85"
       }`}
     >
       <p className="font-semibold uppercase tracking-wide text-[0.6rem] opacity-90">
@@ -54,27 +54,27 @@ function LightspeedLiveReadiness({
       <p className="mt-1">
         {rSeriesLive ? (
           <>
-            <span className="text-emerald-400">Ready for a real pull.</span> Open{" "}
-            <a href="/inventory/sync" className="text-teal-400 underline hover:text-teal-300">
+            <span className="font-medium text-emerald-800 dark:text-emerald-400">Ready for a real pull.</span> Open{" "}
+            <a href="/inventory/sync" className="font-semibold text-[var(--wms-accent)] underline hover:opacity-90">
               Lightspeed Sync
             </a>{" "}
             and run Trigger manual sync. The result should not say simulated.
           </>
         ) : (
           <>
-            <span className="text-amber-400">Not ready.</span> Catalog sync will use simulated products until
+            <span className="font-medium text-amber-800 dark:text-amber-400">Not ready.</span> Catalog sync will use simulated products until
             everything below is set and Coolify has redeployed.
           </>
         )}
       </p>
       {!rSeriesLive ? (
-        <ul className="mt-2 list-inside list-disc space-y-0.5 text-amber-200/80">
+        <ul className="mt-2 list-inside list-disc space-y-0.5 text-amber-900/90 dark:text-amber-200/80">
           {missing.map((m) => (
             <li key={m}>{m}</li>
           ))}
         </ul>
       ) : null}
-      <ol className="mt-3 list-inside list-decimal space-y-1 border-t border-white/10 pt-2 text-[var(--wms-fg)]/90 sm:list-outside sm:pl-4">
+      <ol className="mt-3 list-inside list-decimal space-y-1 border-t border-[var(--wms-border)] pt-2 text-[var(--wms-fg)]/90 sm:list-outside sm:pl-4">
         <li>
           In Coolify → WMS → Environment: LS_CLIENT_ID, LS_CLIENT_SECRET, LS_REFRESH_TOKEN, LS_ACCOUNT_ID
           (R-Series OAuth + account id — not the X-Series shop subdomain flow). Optional: LS_DOMAIN_PREFIX
@@ -82,7 +82,7 @@ function LightspeedLiveReadiness({
         </li>
         <li>
           Lightspeed dev app redirect URL must match:{" "}
-          <code className="break-all text-violet-300">{callback}</code>
+          <code className="break-all text-[var(--wms-accent)] dark:text-violet-300">{callback}</code>
         </li>
         <li>
           Optional: LS_REDIRECT_URI = same callback. Public base (carbon-gen order):{" "}
@@ -220,7 +220,7 @@ export function SettingsWorkspace() {
             onClick={() => setTab(k)}
             className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
               tab === k
-                ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+                ? "border border-b-0 border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] font-semibold text-[var(--wms-accent)] dark:bg-[var(--wms-surface-elevated)] dark:text-[var(--wms-accent)]"
                 : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
             }`}
           >
@@ -238,8 +238,8 @@ export function SettingsWorkspace() {
       {tab === "rfid" ? (
         <div className="space-y-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-5">
           {data?.hints.env_company_prefix ? (
-            <p className="rounded border border-amber-800/50 bg-amber-950/20 px-3 py-2 font-mono text-[0.65rem] text-amber-200/90">
-              <code className="text-amber-400/90">WMS_COMPANY_PREFIX</code> is set in the
+            <p className="rounded border border-amber-700/40 bg-[color-mix(in_srgb,#b45309_14%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-[0.65rem] text-amber-950 dark:border-amber-800/50 dark:bg-amber-950/20 dark:text-amber-200/90">
+              <code className="font-semibold text-amber-800 dark:text-amber-400/90">WMS_COMPANY_PREFIX</code> is set in the
               environment — it overrides stored tenant defaults for commissioning.
             </p>
           ) : null}
@@ -250,7 +250,7 @@ export function SettingsWorkspace() {
               onChange={(e) =>
                 setRfidForm((f) => ({ ...f, company_prefix: e.target.value }))
               }
-              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
             />
           </label>
           <div className="grid grid-cols-2 gap-3">
@@ -259,7 +259,7 @@ export function SettingsWorkspace() {
               <input
                 value={rfidForm.item_bits}
                 onChange={(e) => setRfidForm((f) => ({ ...f, item_bits: e.target.value }))}
-                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
               />
             </label>
             <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
@@ -267,7 +267,7 @@ export function SettingsWorkspace() {
               <input
                 value={rfidForm.serial_bits}
                 onChange={(e) => setRfidForm((f) => ({ ...f, serial_bits: e.target.value }))}
-                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
               />
             </label>
           </div>
@@ -279,14 +279,14 @@ export function SettingsWorkspace() {
                 setRfidForm((f) => ({ ...f, printer_default: e.target.value }))
               }
               placeholder="192.168.1.3:80 / PSTPRNT"
-              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
             />
           </label>
           <button
             type="button"
             disabled={busy || !data}
             onClick={() => void saveRfid()}
-            className="rounded-lg border border-teal-600/45 bg-teal-950/25 px-5 py-2.5 font-mono text-xs text-teal-200 hover:bg-teal-900/20 disabled:opacity-40"
+            className="rounded-lg border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-5 py-2.5 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-40"
           >
             Save RFID defaults
           </button>
@@ -313,7 +313,7 @@ export function SettingsWorkspace() {
               value={lsForm.client_id}
               onChange={(e) => setLsForm((f) => ({ ...f, client_id: e.target.value }))}
               autoComplete="off"
-              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
             />
           </label>
           <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
@@ -321,7 +321,7 @@ export function SettingsWorkspace() {
             <input
               value={lsForm.account_id}
               onChange={(e) => setLsForm((f) => ({ ...f, account_id: e.target.value }))}
-              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
             />
           </label>
           <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
@@ -330,10 +330,10 @@ export function SettingsWorkspace() {
               value={lsForm.domain_prefix}
               onChange={(e) => setLsForm((f) => ({ ...f, domain_prefix: e.target.value }))}
               placeholder="your-store"
-              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
             />
           </label>
-          <div className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 px-3 py-2 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+          <div className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_10%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-[0.6rem] text-[var(--wms-muted)]">
             <span className="block">
               LS_CLIENT_SECRET (Coolify):{" "}
               {data?.hints.env_ls_client_secret ? (
@@ -351,7 +351,7 @@ export function SettingsWorkspace() {
               )}
             </span>
           </div>
-          <div className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/60 px-3 py-3 font-mono text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">
+          <div className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_10%,var(--wms-surface-elevated))] px-3 py-3 font-mono text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">
             <strong className="text-[var(--wms-fg)]">Connect Lightspeed (redirect flow)</strong> — sends you
             to Lightspeed login, then returns a page with a <code className="text-[var(--wms-muted)]">refresh token</code>{" "}
             to paste as <code className="text-[var(--wms-muted)]">LS_REFRESH_TOKEN</code>. In the Lightspeed dev app,
@@ -361,7 +361,7 @@ export function SettingsWorkspace() {
             <div className="mt-2">
               <a
                 href="/api/lightspeed/auth"
-                className="inline-flex rounded-md border border-violet-600/50 bg-violet-950/30 px-3 py-1.5 text-violet-200 hover:bg-violet-900/25"
+                className="inline-flex rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-1.5 font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90"
               >
                 Start OAuth
               </a>
@@ -371,7 +371,7 @@ export function SettingsWorkspace() {
             type="button"
             disabled={busy || !data}
             onClick={() => void saveLs()}
-            className="rounded-lg border border-violet-600/45 bg-violet-950/25 px-5 py-2.5 font-mono text-xs text-violet-200 hover:bg-violet-900/20 disabled:opacity-40"
+            className="rounded-lg border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-5 py-2.5 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-40"
           >
             Save integration fields
           </button>

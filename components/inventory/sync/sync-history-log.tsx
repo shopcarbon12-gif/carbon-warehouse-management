@@ -121,7 +121,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded border border-[var(--wms-border)] px-2 py-1 disabled:opacity-40"
+              className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-2 py-1 font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)]"
             >
               Prev
             </button>
@@ -129,7 +129,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
               type="button"
               disabled={page >= pages}
               onClick={() => setPage((p) => p + 1)}
-              className="rounded border border-[var(--wms-border)] px-2 py-1 disabled:opacity-40"
+              className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-2 py-1 font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)]"
             >
               Next
             </button>

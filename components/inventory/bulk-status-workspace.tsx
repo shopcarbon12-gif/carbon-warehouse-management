@@ -53,7 +53,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
       <label className="flex flex-col gap-2 font-mono text-xs text-[var(--wms-muted)]">
         Target status
         <select
-          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+          className="rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_10%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
           value={target}
           onChange={(e) => setTarget(e.target.value)}
         >
@@ -74,7 +74,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
         Allow risky transitions (Super Admin only)
       </label>
       <textarea
-        className="min-h-[180px] rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 font-mono text-sm text-[var(--wms-fg)]"
+        className="min-h-[180px] rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_8%,var(--wms-surface))] p-3 font-mono text-sm text-[var(--wms-fg)]"
         placeholder="EPCs…"
         value={raw}
         onChange={(e) => setRaw(e.target.value)}
@@ -83,7 +83,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
         type="button"
         disabled={busy}
         onClick={() => void run()}
-        className="rounded-md bg-emerald-600 px-4 py-2 font-mono text-sm font-semibold text-white disabled:opacity-50"
+        className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-sm font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-50"
       >
         {busy ? "Working…" : "Apply bulk status"}
       </button>

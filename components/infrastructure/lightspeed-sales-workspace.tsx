@@ -61,7 +61,7 @@ export function LightspeedSalesWorkspace() {
           type="button"
           disabled={loading}
           onClick={() => void load(0)}
-          className="rounded-lg border border-violet-600/45 bg-violet-950/25 px-4 py-2 font-mono text-xs text-violet-200 hover:bg-violet-900/20 disabled:opacity-40"
+          className="rounded-lg border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-40"
         >
           {loading ? "Loading…" : "Load recent sales"}
         </button>
@@ -69,7 +69,7 @@ export function LightspeedSalesWorkspace() {
           type="button"
           disabled={loading || offset < limit}
           onClick={() => void load(Math.max(0, offset - limit))}
-          className="rounded-md border border-[var(--wms-border)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80 disabled:opacity-40"
+          className="rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-xs font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)]"
         >
           Previous page
         </button>
@@ -81,7 +81,7 @@ export function LightspeedSalesWorkspace() {
             (totalCount != null && offset + limit >= totalCount)
           }
           onClick={() => void load(offset + limit)}
-          className="rounded-md border border-[var(--wms-border)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80 disabled:opacity-40"
+          className="rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-xs font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)]"
         >
           Next page
         </button>
@@ -93,7 +93,7 @@ export function LightspeedSalesWorkspace() {
       </div>
 
       {error ? (
-        <p className="rounded border border-amber-900/50 bg-amber-950/20 px-3 py-2 font-mono text-xs text-amber-200">
+        <p className="rounded border border-amber-700/40 bg-[color-mix(in_srgb,#b45309_16%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-xs font-medium text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
           {error}
         </p>
       ) : null}

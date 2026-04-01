@@ -47,14 +47,14 @@ export function SyncPanel() {
       <div className="flex flex-wrap gap-2 font-mono text-xs">
         <button
           type="button"
-          className="rounded-md border border-teal-600/50 bg-teal-950/30 px-3 py-2 font-semibold text-teal-200 hover:bg-teal-900/25"
+          className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90"
           onClick={() => void enqueue("lightspeed_pull")}
         >
           Enqueue Lightspeed catalog pull
         </button>
         <button
           type="button"
-          className="rounded-md border border-[var(--wms-border)] px-3 py-2 text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80"
+          className="rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-xs font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))]"
           onClick={() => void enqueue("reconcile")}
         >
           Enqueue reconcile (stub)

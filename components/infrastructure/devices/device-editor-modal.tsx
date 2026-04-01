@@ -301,7 +301,7 @@ export function DeviceEditorModal({ open, editing, onClose, onSaved }: Props) {
               type="button"
               disabled={busy}
               onClick={() => void save()}
-              className="w-full rounded-lg border border-violet-600/45 bg-violet-950/25 py-2.5 font-mono text-xs font-medium text-violet-200 hover:bg-violet-900/25 disabled:opacity-50"
+              className="w-full rounded-lg border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] py-2.5 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-50"
             >
               Save device
             </button>

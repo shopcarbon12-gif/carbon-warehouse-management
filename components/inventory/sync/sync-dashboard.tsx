@@ -78,9 +78,9 @@ const SyncEngineTabBody = memo(function SyncEngineTabBody() {
           </p>
         ) : null}
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 p-4">
+          <div className="rounded-lg border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] p-4 shadow-sm">
             <div className="font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">Last success</div>
-            <div className="mt-1 font-mono text-sm text-teal-400/90">
+            <div className="mt-1 font-mono text-sm font-medium text-[var(--wms-accent)]">
               {data?.last_success_at
                 ? new Date(data.last_success_at).toLocaleString()
                 : "—"}
@@ -102,7 +102,7 @@ const SyncEngineTabBody = memo(function SyncEngineTabBody() {
           type="button"
           disabled={busy}
           onClick={() => void trigger()}
-          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-violet-600/45 bg-violet-950/25 py-3 font-mono text-sm font-medium text-violet-200 hover:bg-violet-900/20 disabled:opacity-50 sm:w-auto sm:px-10"
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] py-3 font-mono text-sm font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-50 sm:w-auto sm:px-10"
         >
           <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />
           {busy ? "Syncing…" : "Trigger manual sync"}
@@ -171,7 +171,7 @@ export function SyncDashboard() {
               onClick={() => setActiveTab(t.id)}
               className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide transition-colors ${
                 selected
-                  ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+                  ? "border border-b-0 border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] font-semibold text-[var(--wms-accent)] dark:bg-[var(--wms-surface-elevated)] dark:text-[var(--wms-accent)]"
                   : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
               }`}
             >

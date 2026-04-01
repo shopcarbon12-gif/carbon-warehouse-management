@@ -72,7 +72,7 @@ export function DevicesWorkspace() {
             onClick={() => setTab("all")}
             className={`rounded-t-md px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide ${
               tab === "all"
-                ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+                ? "border border-b-0 border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] font-semibold text-[var(--wms-accent)] dark:bg-[var(--wms-surface-elevated)] dark:text-[var(--wms-accent)]"
                 : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
             }`}
           >
@@ -87,7 +87,7 @@ export function DevicesWorkspace() {
               onClick={() => setTab(t)}
               className={`rounded-t-md px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide ${
                 tab === t
-                  ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+                  ? "border border-b-0 border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] font-semibold text-[var(--wms-accent)] dark:bg-[var(--wms-surface-elevated)] dark:text-[var(--wms-accent)]"
                   : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
               }`}
             >
@@ -101,7 +101,7 @@ export function DevicesWorkspace() {
             setEditing(null);
             setModalOpen(true);
           }}
-          className="inline-flex items-center gap-1.5 rounded-md border border-violet-600/45 bg-violet-950/25 px-4 py-2 font-mono text-xs text-violet-200 hover:bg-violet-900/25"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90"
         >
           <Plus className="h-3.5 w-3.5" />
           Add device
@@ -146,7 +146,7 @@ export function DevicesWorkspace() {
                       setEditing(null);
                       setModalOpen(true);
                     }}
-                    className="mt-6 rounded-lg border border-teal-600/45 bg-teal-950/25 px-5 py-2.5 font-mono text-xs text-teal-200 hover:bg-teal-900/25"
+                    className="mt-6 rounded-lg border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-5 py-2.5 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90"
                   >
                     Register a device
                   </button>
