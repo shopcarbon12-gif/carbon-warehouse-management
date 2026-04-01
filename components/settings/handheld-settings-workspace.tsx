@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import type { HandheldSettings, TenantSettingsRow } from "@/lib/settings/tenant-settings-defaults";
 
@@ -22,22 +22,36 @@ function Toggle({
   onChange: (v: boolean) => void;
   label: string;
 }) {
+  const uid = useId();
+  const id = `handheld-toggle-${uid.replace(/:/g, "")}`;
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-4 border-b border-[var(--wms-border)]/80 py-3 font-mono text-xs text-[var(--wms-fg)] last:border-0">
-      <span>{label}</span>
+    <label
+      htmlFor={id}
+      className="flex cursor-pointer items-center justify-between gap-4 border-b border-[var(--wms-border)]/80 py-3.5 font-mono text-xs text-[var(--wms-fg)] last:border-0"
+    >
+      <span className="min-w-0 pr-2 font-medium leading-snug">{label}</span>
       <button
+        id={id}
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`relative h-6 w-10 shrink-0 rounded-full border transition-colors ${
-          checked ? "border-teal-500/60 bg-teal-600/35" : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80"
-        }`}
+        className={[
+          "relative h-7 w-12 shrink-0 rounded-full border-2 transition-colors duration-200 ease-out",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wms-accent)]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--wms-surface)]",
+          checked
+            ? "border-[color-mix(in_srgb,var(--wms-accent)_70%,transparent)] bg-[var(--wms-accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
+            : "border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))] shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]",
+        ].join(" ")}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-[var(--wms-surface)] transition-transform ${
-            checked ? "translate-x-4" : "translate-x-0.5"
-          }`}
+          className={[
+            "pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full shadow-md ring-1 transition-all duration-200 ease-out",
+            checked
+              ? "left-[calc(100%-1.375rem)] bg-[var(--wms-accent-fg)] ring-[color-mix(in_srgb,var(--wms-accent-fg)_35%,transparent)]"
+              : "left-0.5 bg-[var(--wms-surface)] ring-[var(--wms-border)]/70 dark:bg-[color-mix(in_srgb,var(--wms-fg)_88%,var(--wms-surface-elevated))]",
+          ].join(" ")}
         />
       </button>
     </label>
@@ -81,7 +95,7 @@ export function HandheldSettingsWorkspace() {
   }, [h, mutate]);
 
   if (error) {
-    return <p className="font-mono text-xs text-red-400/90">{error.message}</p>;
+    return <p className="font-mono text-xs text-red-600 dark:text-red-400/90">{error.message}</p>;
   }
   if (isLoading || !data || !h) {
     return <p className="font-mono text-xs text-[var(--wms-muted)]">Loading…</p>;
@@ -107,7 +121,7 @@ export function HandheldSettingsWorkspace() {
                   : s,
               )
             }
-            className="mt-1 w-full max-w-xs rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+            className="mt-1 w-full max-w-xs rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/55 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/35"
           >
             <option value="HOLD_RELEASE">Hold / release (continuous)</option>
             <option value="CLICK">Click (single read)</option>
@@ -170,7 +184,7 @@ export function HandheldSettingsWorkspace() {
                   : s,
               )
             }
-            className="mt-1 w-full max-w-xs rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+            className="mt-1 w-full max-w-xs rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/55 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/35"
           />
         </label>
         <label className="block py-2 font-mono text-xs text-[var(--wms-muted)]">
@@ -193,7 +207,7 @@ export function HandheldSettingsWorkspace() {
                   : s,
               )
             }
-            className="mt-1 w-full max-w-xs rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+            className="mt-1 w-full max-w-xs rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/55 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/35"
           />
         </label>
       </Section>
@@ -219,7 +233,7 @@ export function HandheldSettingsWorkspace() {
           value={h.itemDetailsTemplate}
           onChange={(e) => setH((s) => (s ? { ...s, itemDetailsTemplate: e.target.value } : s))}
           rows={3}
-          className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]"
+          className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/55 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/35"
         />
       </Section>
 
@@ -232,29 +246,35 @@ export function HandheldSettingsWorkspace() {
           value={h.tagDetailsTemplate}
           onChange={(e) => setH((s) => (s ? { ...s, tagDetailsTemplate: e.target.value } : s))}
           rows={4}
-          className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]"
+          className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/55 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/35"
         />
       </Section>
 
       {msg ? (
-        <p className={`font-mono text-xs ${msg === "Saved." ? "text-emerald-400/90" : "text-red-400/90"}`}>
+        <p
+          className={`font-mono text-xs ${
+            msg === "Saved."
+              ? "text-[color-mix(in_srgb,var(--wms-accent)_8%,#14532d)] dark:text-emerald-400/90"
+              : "text-red-600 dark:text-red-400/90"
+          }`}
+        >
           {msg}
         </p>
       ) : null}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           disabled={busy}
           onClick={() => void onSave()}
-          className="rounded-md bg-teal-600 px-4 py-2 font-mono text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+          className="rounded-lg border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-50"
         >
           {busy ? "Saving…" : "Save handheld settings"}
         </button>
         <button
           type="button"
           onClick={() => setH(structuredClone(data.handheld_settings))}
-          className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+          className="rounded-lg border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_10%,var(--wms-surface-elevated))] px-4 py-2 font-mono text-xs font-medium text-[var(--wms-fg)] shadow-sm hover:border-[var(--wms-accent)]/35"
         >
           Reset
         </button>
