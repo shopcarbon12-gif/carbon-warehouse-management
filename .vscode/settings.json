@@ -1,0 +1,4 @@
+{
+  "dart.flutterSdkPath": "${workspaceFolder}/.tools/flutter",
+  "dart.sdkPath": "${workspaceFolder}/.tools/flutter/bin/cache/dart-sdk"
+}
