@@ -6,7 +6,7 @@
   <title>CarbonWMS — Light theme design review (approval)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       /* scheme.png anchors */
@@ -218,34 +218,120 @@
       border-left: 3px solid var(--c-primary);
       margin: 0.75rem 0 0;
     }
-    .toggle-mock {
-      display: inline-flex;
+    /* —— WMS switch: parity with HandheldSettingsWorkspace + globals.css (light / dark) —— */
+    .wms-theme-panel {
+      border-radius: 0.5rem;
+      padding: 1rem 1.15rem;
+      outline: 1px solid var(--panel-outline, rgba(198, 197, 212, 0.45));
+      margin-top: 0.75rem;
+    }
+    .wms-theme-panel[data-wms-theme="light"] {
+      --wms-accent: #0b9597;
+      --wms-accent-fg: #ffffff;
+      --wms-muted: #5c6366;
+      --wms-surface: #ffffff;
+      --wms-surface-elevated: #eeeeee;
+      --wms-border: rgba(198, 197, 212, 0.55);
+      --wms-fg: #1a1d1f;
+      --panel-outline: rgba(198, 197, 212, 0.45);
+      background: #f3f3f4;
+      color: var(--wms-fg);
+    }
+    .wms-theme-panel[data-wms-theme="dark"] {
+      --wms-accent: #2dd4bf;
+      --wms-accent-fg: #0c0f12;
+      --wms-muted: #8b939e;
+      --wms-surface: #09090b;
+      --wms-surface-elevated: #18181b;
+      --wms-border: #1e293b;
+      --wms-fg: #e8eaed;
+      --panel-outline: #243040;
+      background: #0c0f12;
+      color: var(--wms-fg);
+    }
+    .wms-theme-panel h3 {
+      margin: 0 0 0.75rem;
+      font-family: Outfit, Inter, sans-serif;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--wms-muted);
+    }
+    .wms-toggle-row {
+      display: flex;
       align-items: center;
-      gap: 0.65rem;
-      margin-top: 0.5rem;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.65rem 0;
+      border-bottom: 1px solid color-mix(in srgb, var(--wms-border) 80%, transparent);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 0.75rem;
+      font-weight: 500;
+      line-height: 1.35;
     }
-    .toggle-track {
-      width: 52px;
-      height: 28px;
-      border-radius: 999px;
-      background: linear-gradient(180deg, #e8e8ea 0%, #d8dadc 100%);
-      box-shadow: inset 0 2px 4px rgba(0,0,0,0.12), 0 1px 0 #fff;
+    .wms-theme-panel[data-wms-theme="dark"] .wms-toggle-row {
+      border-bottom-color: color-mix(in srgb, var(--wms-border) 65%, transparent);
+    }
+    .wms-toggle-row:last-child { border-bottom: none; }
+    .wms-toggle-row span:first-child { min-width: 0; padding-right: 0.5rem; }
+    /* Track: h-7 w-12 (28×48px), border-2 — matches Tailwind component */
+    .wms-switch {
       position: relative;
+      flex-shrink: 0;
+      width: 3rem;
+      height: 1.75rem;
+      border-radius: 9999px;
+      border: 2px solid var(--sw-border);
+      background: var(--sw-bg);
+      box-shadow: var(--sw-inset);
+      box-sizing: border-box;
     }
-    .toggle-thumb {
+    .wms-switch--off {
+      --sw-border: var(--wms-border);
+      --sw-bg: color-mix(in srgb, var(--wms-muted) 18%, var(--wms-surface-elevated));
+      --sw-inset: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+    }
+    .wms-theme-panel[data-wms-theme="dark"] .wms-switch--off {
+      --sw-inset: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+    }
+    .wms-switch--on {
+      --sw-border: color-mix(in srgb, var(--wms-accent) 70%, transparent);
+      --sw-bg: var(--wms-accent);
+      --sw-inset: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+    /* Thumb: h-5 w-5, centered; on → right aligned like calc(100% - 1.375rem) */
+    .wms-switch-thumb {
       position: absolute;
-      top: 3px;
-      left: 3px;
-      width: 22px;
-      height: 22px;
+      top: 50%;
+      left: 0.125rem;
+      width: 1.25rem;
+      height: 1.25rem;
+      margin-top: -0.625rem;
       border-radius: 50%;
-      background: linear-gradient(180deg, #fff 0%, #f0f0f2 100%);
-      box-shadow: 0 2px 8px rgba(11, 149, 151, 0.35), 0 1px 2px rgba(0,0,0,0.15);
+      background: var(--th-bg);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
+      outline: 1px solid var(--th-ring);
+      outline-offset: 0;
+      transition: left 0.2s ease-out, background 0.2s ease-out, outline-color 0.2s ease-out;
     }
-    .toggle-on .toggle-track {
-      background: linear-gradient(180deg, #0ec4c6 0%, var(--c-primary) 100%);
+    .wms-switch--off .wms-switch-thumb {
+      --th-bg: var(--wms-surface);
+      --th-ring: color-mix(in srgb, var(--wms-border) 70%, transparent);
     }
-    .toggle-on .toggle-thumb { left: 27px; box-shadow: 0 0 12px rgba(11, 149, 151, 0.65), 0 1px 2px rgba(0,0,0,0.2); }
+    .wms-theme-panel[data-wms-theme="dark"] .wms-switch--off .wms-switch-thumb {
+      --th-bg: color-mix(in srgb, var(--wms-fg) 88%, var(--wms-surface-elevated));
+      --th-ring: color-mix(in srgb, var(--wms-border) 70%, transparent);
+    }
+    .wms-switch--on .wms-switch-thumb {
+      left: calc(100% - 1.375rem);
+      --th-bg: var(--wms-accent-fg);
+      --th-ring: color-mix(in srgb, var(--wms-accent-fg) 35%, transparent);
+    }
+    .wms-switch:focus-visible {
+      outline: none;
+      box-shadow: var(--sw-inset), 0 0 0 2px var(--wms-surface), 0 0 0 4px color-mix(in srgb, var(--wms-accent) 50%, transparent);
+    }
     footer.note {
       font-size: 0.875rem;
       color: var(--on-surface-subtle);
@@ -297,7 +383,7 @@
           <tr><td>Table headers</td><td>Background <code>#EEEEEE</code>; text <code>#1A1D1F</code> or <code>#3D4548</code> — not faint grey on white.</td></tr>
           <tr><td>Inputs / search</td><td>Light field on <code>#F3F3F4</code> or <code>#EEE</code> per scheme; placeholder <code>#5C6366</code> minimum.</td></tr>
           <tr><td>Data (EPC, SKU, IDs)</td><td>JetBrains Mono (or Space Grotesk if you prefer); scale one step below UI labels for scanability.</td></tr>
-          <tr><td>Toggles (e.g. handheld)</td><td>3D inset track + glowing thumb when on; primary teal when active — mock below.</td></tr>
+          <tr><td>Toggles (e.g. handheld)</td><td>Flat <code>48×28px</code> track, <code>2px</code> border; <strong>on</strong> = solid <code>--wms-accent</code> + inset highlight, thumb <code>--wms-accent-fg</code> (white in light, near-black in dark). <strong>Off</strong> = muted mix on <code>--wms-surface-elevated</code>, thumb matches surface / light grey in dark. Focus: ring in accent. Same as shipped <code>HandheldSettingsWorkspace</code> — mocks below (light + dark).</td></tr>
           <tr><td>“No-line” vs a11y</td><td>Prefer tonal layers; where needed use <code>outline_variant</code> at ~35% opacity — not harsh 1px black boxes.</td></tr>
         </tbody>
       </table>
@@ -343,10 +429,35 @@
     </section>
 
     <section>
-      <h2>Handheld / settings — toggle direction</h2>
-      <p class="caption" style="margin-top:0;">Fancy but still industrial: embossed track, lit thumb when on.</p>
-      <div class="toggle-mock toggle-on"><div class="toggle-track"><div class="toggle-thumb"></div></div><span>Stream debug</span></div>
-      <div class="toggle-mock" style="margin-top:0.75rem;"><div class="toggle-track"><div class="toggle-thumb"></div></div><span>Off state</span></div>
+      <h2>Handheld / settings — switches (app parity)</h2>
+      <p class="caption" style="margin-top:0;">
+        Matches production <strong>Handheld settings</strong> toggles and <code>globals.css</code> tokens
+        (<code>html[data-theme=&quot;light&quot;]</code> vs <code>.dark</code>). Outfit + JetBrains Mono for the row labels.
+      </p>
+
+      <div class="wms-theme-panel" data-wms-theme="light">
+        <h3>Light theme</h3>
+        <div class="wms-toggle-row">
+          <span>Vibrate on tag read</span>
+          <span class="wms-switch wms-switch--on" role="img" aria-label="On"><span class="wms-switch-thumb"></span></span>
+        </div>
+        <div class="wms-toggle-row">
+          <span>Confirm on quantity change</span>
+          <span class="wms-switch wms-switch--off" role="img" aria-label="Off"><span class="wms-switch-thumb"></span></span>
+        </div>
+      </div>
+
+      <div class="wms-theme-panel" data-wms-theme="dark">
+        <h3>Dark theme</h3>
+        <div class="wms-toggle-row">
+          <span>Vibrate on tag read</span>
+          <span class="wms-switch wms-switch--on" role="img" aria-label="On"><span class="wms-switch-thumb"></span></span>
+        </div>
+        <div class="wms-toggle-row">
+          <span>Confirm on quantity change</span>
+          <span class="wms-switch wms-switch--off" role="img" aria-label="Off"><span class="wms-switch-thumb"></span></span>
+        </div>
+      </div>
     </section>
 
     <section>
