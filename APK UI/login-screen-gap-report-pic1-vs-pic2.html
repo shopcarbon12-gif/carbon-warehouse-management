@@ -113,8 +113,7 @@
       Also documents <strong>Pic 3</strong> (keyboard layout shrink) and <strong>Pic 4</strong> (biometric failure messaging).
     </p>
     <p class="meta">
-      Status: <strong>Report only</strong> — no code changes were made in the repository for this deliverable.
-      Approve this document before engineering implements fixes.
+      Original sections 1–6 describe the baseline gap analysis. <strong>Section 7</strong> adds <strong>incremental product scope</strong> (typography / logo / copy sizing) on top — it does not replace earlier items.
     </p>
     <a class="preview-link" href="login-screen-preview-after-fix.html">Open post-fix HTML preview →</a>
   </header>
@@ -129,6 +128,7 @@
         <li><a href="#keyboard">4. Bug: keyboard open — full screen shrinks (Pic 3)</a></li>
         <li><a href="#biometric">5. Bug: biometric “not working” (Pic 4)</a></li>
         <li><a href="#proposed">6. Proposed remediation outline (pending your approval)</a></li>
+        <li><a href="#scope-addendum">7. Addendum: branding &amp; type scope (after report)</a></li>
       </ul>
     </nav>
 
@@ -320,10 +320,67 @@
         <a class="preview-link" href="login-screen-preview-after-fix.html">View HTML preview of target layout →</a>
       </p>
     </section>
+
+    <section class="card" id="scope-addendum">
+      <h2>7. Addendum: branding &amp; type scope (stacked on the report — not a replacement)</h2>
+      <p>
+        The following items extend the remediation scope. They are <strong>additive</strong> to sections 1–6 and to any prior approved mock (Pic 2).
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Requirement</th>
+            <th>Implementation note (Flutter)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>Logo with moderate rounded corners (reference Pic 2 — not a full circle)</td>
+            <td><code class="mono">ClipRRect</code> + <code class="mono">BorderRadius.circular(14)</code> around <code class="mono">Image.asset</code>; <code class="mono">BoxFit.contain</code> preserved.</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>“CarbonWMS” title uses <strong>Neuzeit Grotesk W01 Regular</strong> (brand .otf), rendered <strong>bold</strong>; add slight letter-spacing if the face reads tight</td>
+            <td>Font bundled as <code class="mono">assets/fonts/NeuzeitGroteskW01Regular.otf</code>, family <code class="mono">NeuzeitGrotesk</code>, <code class="mono">FontWeight.w700</code>, <code class="mono">letterSpacing: 0.45</code>.</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Small extra vertical gap between logo and title (not excessive)</td>
+            <td><code class="mono">SizedBox(height: 10)</code> after logo block (was 2).</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>“WAREHOUSE MANAGEMENT SOFTWARE” slightly larger; grey a bit darker (not near black)</td>
+            <td>Font size 14 (was 13); color <code class="mono">#6A7070</code> (between prior subtitle and body black).</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>MAC / device identifier line: <strong>black</strong>, slightly larger (line still hidden when device is authorized — unchanged rule)</td>
+            <td><code class="mono">Colors.black</code>, weight 600, size 15.</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>Larger <strong>text only</strong> (tray/button heights unchanged): server URL string, email (typed + hint <code class="mono">user@carbonjeanscompany.com</code>), and SIGN IN (and busy “SIGNING IN…”)</td>
+            <td>Server &amp; email: 17px Inter; button label: 17px Inter.</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>Mobile build number</td>
+            <td><code class="mono">pubspec.yaml</code> → <code class="mono">0.1.11+19</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="callout">
+        Source font path on the design machine (for re-copy if needed):<br />
+        <code class="mono">D:\CARBON JEANS COMPANY Dropbox\elior perez\Carbon\FINAL LOGO\font-Carbon\Neuzeit Grotesk W01 Regular.otf</code>
+      </p>
+    </section>
   </main>
 
   <footer>
-    CarbonWMS · Login gap report · HTML only (no app changes in this step)
+    CarbonWMS · Login gap report + addendum scope · See section 7 for post-report requirements
   </footer>
 </body>
 </html>

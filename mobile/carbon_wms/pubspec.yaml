@@ -1,7 +1,7 @@
 name: carbon_wms
 description: Carbon WMS rugged handheld client (Chainway & Zebra HAL).
 publish_to: "none"
-version: 0.1.11+18
+version: 0.1.11+19
 
 environment:
   sdk: ^3.5.0
@@ -38,6 +38,11 @@ flutter:
   uses-material-design: true
   assets:
     - assets/carbon_logo.png
+  fonts:
+    - family: NeuzeitGrotesk
+      fonts:
+        - asset: assets/fonts/NeuzeitGroteskW01Regular.otf
+          weight: 400
 
 flutter_launcher_icons:
   android: true

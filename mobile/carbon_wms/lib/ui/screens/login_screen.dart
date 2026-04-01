@@ -29,6 +29,10 @@ class _LoginScreenState extends State<LoginScreen> {
   static const String kDefaultLoginEmail = 'user@carbonjeanscompany.com';
   static const String kLockedServerDisplay = 'https://wms.shopcarbon.com';
 
+  /// Bundled from brand kit: `Neuzeit Grotesk W01 Regular.otf` (bold via [FontWeight.w700]).
+  static const String _kBrandFontFamily = 'NeuzeitGrotesk';
+  static const double _logoCornerRadius = 14;
+
   static const double _fieldHeight = 52;
 
   static const double _iconPerson = 20;
@@ -40,7 +44,8 @@ class _LoginScreenState extends State<LoginScreen> {
   static const Color _labelAboveField = Color(0xFF4A5454);
   static const Color _textBlack = Color(0xFF171D1D);
   static const Color _primaryTeal = Color(0xFF1B7D7D);
-  static const Color _deviceLineGrey = Color(0xFF6D7373);
+  /// Subtitle: slightly darker than [_labelGrey], not as strong as body black.
+  static const Color _subtitleGrey = Color(0xFF6A7070);
 
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -189,6 +194,46 @@ class _LoginScreenState extends State<LoginScreen> {
         fontWeight: FontWeight.w500,
         height: 1.2,
         color: _labelGrey,
+      );
+
+  /// Server URL row — larger text only (tray height unchanged).
+  TextStyle get _serverUrlTextStyle => GoogleFonts.inter(
+        fontSize: 17,
+        fontWeight: FontWeight.w500,
+        height: 1.2,
+        color: _textBlack,
+      );
+
+  /// Email field typed text — larger only.
+  TextStyle get _emailTrayTextStyle => GoogleFonts.inter(
+        fontSize: 17,
+        fontWeight: FontWeight.w500,
+        height: 1.2,
+        color: _textBlack,
+      );
+
+  /// Email hint — larger only.
+  TextStyle get _emailTrayHintStyle => GoogleFonts.inter(
+        fontSize: 17,
+        fontWeight: FontWeight.w500,
+        height: 1.2,
+        color: _labelGrey,
+      );
+
+  TextStyle get _brandTitleStyle => const TextStyle(
+        fontFamily: _kBrandFontFamily,
+        fontSize: 28,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.45,
+        height: 1.05,
+        color: Colors.black,
+      );
+
+  TextStyle get _deviceIdLineStyle => GoogleFonts.inter(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        height: 1.2,
+        color: Colors.black,
       );
 
   static const InputDecoration _trayInputDecoration = InputDecoration(
@@ -469,36 +514,33 @@ class _LoginScreenState extends State<LoginScreen> {
                             children: [
                               const SizedBox(height: 4),
                               Center(
-                                child: Image.asset(
-                                  'assets/carbon_logo.png',
-                                  width: 152,
-                                  height: 152,
-                                  fit: BoxFit.contain,
-                                  filterQuality: FilterQuality.high,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(_logoCornerRadius),
+                                  child: Image.asset(
+                                    'assets/carbon_logo.png',
+                                    width: 152,
+                                    height: 152,
+                                    fit: BoxFit.contain,
+                                    filterQuality: FilterQuality.high,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 10),
                               Text(
                                 'CarbonWMS',
                                 textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.6,
-                                  height: 1.05,
-                                  color: Colors.black,
-                                ),
+                                style: _brandTitleStyle,
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 'WAREHOUSE MANAGEMENT SOFTWARE',
                                 textAlign: TextAlign.center,
                                 style: GoogleFonts.inter(
-                                  fontSize: 13,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: 0.45,
                                   height: 1.2,
-                                  color: _labelGrey,
+                                  color: _subtitleGrey,
                                 ),
                               ),
                               const SizedBox(height: 14),
@@ -527,7 +569,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 gapAfterIcon: 10,
                                 input: Text(
                                   kLockedServerDisplay,
-                                  style: _inputTextStyle,
+                                  style: _serverUrlTextStyle,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -539,11 +581,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   textAlign: TextAlign.center,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: _deviceLineGrey,
-                                  ),
+                                  style: _deviceIdLineStyle,
                                 ),
                               ],
                               const SizedBox(height: 12),
@@ -562,11 +600,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                   keyboardType: TextInputType.emailAddress,
                                   autocorrect: false,
                                   textAlignVertical: TextAlignVertical.center,
-                                  style: _inputTextStyle,
+                                  style: _emailTrayTextStyle,
                                   cursorColor: _textBlack,
                                   decoration: _trayInputDecoration.copyWith(
                                     hintText: kDefaultLoginEmail,
-                                    hintStyle: _inputTextStyleMuted,
+                                    hintStyle: _emailTrayHintStyle,
                                     contentPadding: const EdgeInsets.symmetric(vertical: 2),
                                   ),
                                   onChanged: (_) => unawaited(_refreshVaultUi()),
@@ -699,7 +737,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Text(
                             _busy ? 'SIGNING IN…' : 'SIGN IN',
                             style: GoogleFonts.inter(
-                              fontSize: 15,
+                              fontSize: 17,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 1.1,
                               color: Colors.white,
