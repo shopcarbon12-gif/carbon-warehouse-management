@@ -132,7 +132,7 @@ const context = await browser.newContext({
 await context.addInitScript(() => {
   try {
     localStorage.setItem("wms_theme_color", "light");
-    localStorage.setItem("wms_theme_font", "large");
+    localStorage.setItem("wms_theme_font", "expanded");
   } catch {
     /* ignore */
   }

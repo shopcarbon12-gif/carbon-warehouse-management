@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Outfit, JetBrains_Mono } from "next/font/google";
+import { WMS_THEME_FONT_BOOT_SCRIPT } from "@/lib/theme-boot";
 import "./globals.css";
 
 const wmsSans = Outfit({
@@ -31,6 +32,12 @@ export default function RootLayout({
       data-theme="dark"
       suppressHydrationWarning
     >
+      <head>
+        <script
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: WMS_THEME_FONT_BOOT_SCRIPT }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

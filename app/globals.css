@@ -42,9 +42,25 @@ html[data-theme="light"] {
   --wms-accent-fg: #ffffff;
 }
 
-html.wms-text-lg {
+/* Default type = former optional “large” (~18px root). Extra large bumps again. */
+html {
   font-size: 1.125rem;
   line-height: 1.55;
+}
+
+html.wms-text-xl {
+  font-size: 1.3125rem;
+  line-height: 1.55;
+}
+
+/* Extra-large tier: give .wms-field controls room only at this scale (em follows root). */
+html.wms-text-xl textarea.wms-field {
+  min-height: 7em;
+}
+
+html.wms-text-xl select.wms-field,
+html.wms-text-xl input.wms-field {
+  min-height: 2.75em;
 }
 
 /* Route title row: reads as a header, not body copy (esp. light theme) */

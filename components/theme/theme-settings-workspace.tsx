@@ -4,10 +4,10 @@ import { Monitor, Moon, Sun, Type } from "lucide-react";
 import { useWmsTheme, type ThemeCombo } from "@/components/theme/theme-provider";
 
 const combos: { id: string; label: string; combo: ThemeCombo; icon: typeof Moon }[] = [
-  { id: "dark-std", label: "Dark · Standard", combo: { color: "dark", font: "standard" }, icon: Moon },
-  { id: "dark-lg", label: "Dark · Large type", combo: { color: "dark", font: "large" }, icon: Type },
-  { id: "light-std", label: "Light · Standard", combo: { color: "light", font: "standard" }, icon: Sun },
-  { id: "light-lg", label: "Light · Large type", combo: { color: "light", font: "large" }, icon: Monitor },
+  { id: "dark-def", label: "Dark · Default type", combo: { color: "dark", font: "comfortable" }, icon: Moon },
+  { id: "dark-xl", label: "Dark · Extra large type", combo: { color: "dark", font: "expanded" }, icon: Type },
+  { id: "light-def", label: "Light · Default type", combo: { color: "light", font: "comfortable" }, icon: Sun },
+  { id: "light-xl", label: "Light · Extra large type", combo: { color: "light", font: "expanded" }, icon: Monitor },
 ];
 
 export function ThemeSettingsWorkspace() {
@@ -16,8 +16,10 @@ export function ThemeSettingsWorkspace() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <p className="font-mono text-xs text-[var(--wms-muted)]">
-        Preference is saved in this browser only. Large type scales the interface from the{" "}
-        <code className="text-[var(--wms-accent)]">&lt;html&gt;</code> root.
+        Preference is saved in this browser only. <strong>Default type</strong> matches the former
+        “large” scale (~18px root). <strong>Extra large</strong> bumps the root again; form fields
+        with <code className="text-[var(--wms-accent)]">wms-field</code> get a bit more vertical room
+        only in that mode.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         {combos.map((c) => {
@@ -38,7 +40,7 @@ export function ThemeSettingsWorkspace() {
               <span className="text-base font-semibold text-[var(--wms-fg)]">{c.label}</span>
               <span className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
                 {c.combo.color === "dark" ? "Dark UI" : "Light UI"} ·{" "}
-                {c.combo.font === "large" ? "Scaled typography" : "Default size"}
+                {c.combo.font === "expanded" ? "Larger root + roomier fields" : "Standard app scale"}
               </span>
             </button>
           );
