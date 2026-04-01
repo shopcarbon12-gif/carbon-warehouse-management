@@ -38,19 +38,49 @@ function Toggle({
         aria-label={label}
         onClick={() => onChange(!checked)}
         className={[
-          "relative h-7 w-12 shrink-0 rounded-full border-2 transition-colors duration-200 ease-out",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wms-accent)]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--wms-surface)]",
+          "relative h-7 w-12 shrink-0 rounded-full border-2 transition-[box-shadow,background-color,border-color] duration-200 ease-out",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wms-accent)]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--wms-surface)]",
           checked
-            ? "border-[color-mix(in_srgb,var(--wms-accent)_70%,transparent)] bg-[var(--wms-accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
-            : "border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))] shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]",
+            ? [
+                "border-[color-mix(in_srgb,var(--wms-accent)_48%,#ffffff)]",
+                "bg-[linear-gradient(180deg,color-mix(in_srgb,var(--wms-accent)_32%,#ffffff)_0%,var(--wms-accent)_42%,color-mix(in_srgb,var(--wms-accent)_72%,#000000)_100%)]",
+                "shadow-[inset_0_2px_5px_rgba(255,255,255,0.35),inset_0_-4px_10px_rgba(0,0,0,0.2),0_0_0_1px_color-mix(in_srgb,var(--wms-accent)_32%,transparent),0_0_16px_color-mix(in_srgb,var(--wms-accent)_50%,transparent),0_0_34px_color-mix(in_srgb,var(--wms-accent)_26%,transparent),0_4px_14px_rgba(0,0,0,0.1)]",
+                "dark:border-[color-mix(in_srgb,var(--wms-accent)_40%,transparent)]",
+                "dark:bg-[linear-gradient(180deg,color-mix(in_srgb,var(--wms-accent)_22%,#ffffff)_0%,var(--wms-accent)_45%,color-mix(in_srgb,var(--wms-accent)_65%,#000000)_100%)]",
+                "dark:shadow-[inset_0_2px_6px_rgba(255,255,255,0.2),inset_0_-5px_12px_rgba(0,0,0,0.36),0_0_0_1px_color-mix(in_srgb,var(--wms-accent)_28%,transparent),0_0_22px_color-mix(in_srgb,var(--wms-accent)_58%,transparent),0_0_48px_color-mix(in_srgb,var(--wms-accent)_34%,transparent),0_0_72px_color-mix(in_srgb,var(--wms-accent)_16%,transparent)]",
+              ].join(" ")
+            : [
+                "border-[color-mix(in_srgb,var(--wms-border)_90%,#000000)]",
+                "bg-[linear-gradient(180deg,color-mix(in_srgb,var(--wms-surface-elevated)_55%,#ffffff)_0%,color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))_100%)]",
+                "shadow-[inset_0_3px_7px_rgba(0,0,0,0.14),inset_0_-2px_5px_rgba(255,255,255,0.45),0_1px_0_rgba(255,255,255,0.65),0_2px_4px_rgba(0,0,0,0.06)]",
+                "dark:border-[color-mix(in_srgb,var(--wms-border)_85%,#000000)]",
+                "dark:bg-[linear-gradient(180deg,#252a34_0%,color-mix(in_srgb,var(--wms-muted)_28%,var(--wms-surface-elevated))_100%)]",
+                "dark:shadow-[inset_0_5px_12px_rgba(0,0,0,0.58),inset_0_1px_0_rgba(255,255,255,0.07),0_1px_0_rgba(255,255,255,0.04)]",
+              ].join(" "),
         ].join(" ")}
       >
         <span
           className={[
-            "pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full shadow-md ring-1 transition-all duration-200 ease-out",
+            "pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full ring-1 transition-all duration-200 ease-out",
             checked
-              ? "left-[calc(100%-1.375rem)] bg-[var(--wms-accent-fg)] ring-[color-mix(in_srgb,var(--wms-accent-fg)_35%,transparent)]"
-              : "left-0.5 bg-[var(--wms-surface)] ring-[var(--wms-border)]/70 dark:bg-[color-mix(in_srgb,var(--wms-fg)_88%,var(--wms-surface-elevated))]",
+              ? [
+                  "left-[calc(100%-1.375rem)]",
+                  "bg-[linear-gradient(165deg,color-mix(in_srgb,var(--wms-accent-fg)_8%,#ffffff)_0%,var(--wms-accent-fg)_45%,color-mix(in_srgb,var(--wms-accent-fg)_88%,#000000)_100%)]",
+                  "ring-[color-mix(in_srgb,var(--wms-accent-fg)_42%,var(--wms-accent))]",
+                  "shadow-[0_0_12px_color-mix(in_srgb,var(--wms-accent)_72%,transparent),0_0_26px_color-mix(in_srgb,var(--wms-accent)_40%,transparent),0_3px_10px_rgba(0,0,0,0.22),inset_0_1px_2px_rgba(255,255,255,0.45)]",
+                  "dark:bg-[linear-gradient(165deg,color-mix(in_srgb,var(--wms-accent)_35%,var(--wms-accent-fg))_0%,var(--wms-accent-fg)_55%,#000000_100%)]",
+                  "dark:ring-[color-mix(in_srgb,var(--wms-accent)_55%,var(--wms-accent-fg))]",
+                  "dark:shadow-[0_0_16px_color-mix(in_srgb,var(--wms-accent)_82%,transparent),0_0_36px_color-mix(in_srgb,var(--wms-accent)_52%,transparent),0_0_56px_color-mix(in_srgb,var(--wms-accent)_26%,transparent),0_3px_12px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.12)]",
+                ].join(" ")
+              : [
+                  "left-0.5",
+                  "bg-[linear-gradient(165deg,#ffffff_0%,#e8eaee_55%,#d9dce2_100%)]",
+                  "ring-[color-mix(in_srgb,var(--wms-border)_75%,transparent)]",
+                  "shadow-[0_2px_6px_rgba(0,0,0,0.16),inset_0_2px_3px_rgba(255,255,255,0.95),inset_0_-2px_4px_rgba(0,0,0,0.06)]",
+                  "dark:bg-[linear-gradient(165deg,color-mix(in_srgb,var(--wms-fg)_94%,#ffffff)_0%,color-mix(in_srgb,var(--wms-fg)_68%,var(--wms-surface-elevated))_100%)]",
+                  "dark:ring-[color-mix(in_srgb,var(--wms-border)_70%,transparent)]",
+                  "dark:shadow-[0_2px_10px_rgba(0,0,0,0.55),inset_0_1px_2px_rgba(255,255,255,0.14),inset_0_-2px_5px_rgba(0,0,0,0.35)]",
+                ].join(" "),
           ].join(" ")}
         />
       </button>

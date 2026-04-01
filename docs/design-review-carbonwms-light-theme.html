@@ -275,7 +275,7 @@
     }
     .wms-toggle-row:last-child { border-bottom: none; }
     .wms-toggle-row span:first-child { min-width: 0; padding-right: 0.5rem; }
-    /* Track: h-7 w-12 (28×48px), border-2 — matches Tailwind component */
+    /* Track: 48×28px, 2px border — 3D inset + accent bloom when on */
     .wms-switch {
       position: relative;
       flex-shrink: 0;
@@ -284,23 +284,67 @@
       border-radius: 9999px;
       border: 2px solid var(--sw-border);
       background: var(--sw-bg);
-      box-shadow: var(--sw-inset);
+      box-shadow: var(--sw-outer);
       box-sizing: border-box;
     }
     .wms-switch--off {
-      --sw-border: var(--wms-border);
-      --sw-bg: color-mix(in srgb, var(--wms-muted) 18%, var(--wms-surface-elevated));
-      --sw-inset: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+      --sw-border: color-mix(in srgb, var(--wms-border) 90%, #000);
+      --sw-bg: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--wms-surface-elevated) 55%, #fff) 0%,
+        color-mix(in srgb, var(--wms-muted) 22%, var(--wms-surface-elevated)) 100%
+      );
+      --sw-outer:
+        inset 0 3px 7px rgba(0, 0, 0, 0.14),
+        inset 0 -2px 5px rgba(255, 255, 255, 0.45),
+        0 1px 0 rgba(255, 255, 255, 0.65),
+        0 2px 4px rgba(0, 0, 0, 0.06);
     }
     .wms-theme-panel[data-wms-theme="dark"] .wms-switch--off {
-      --sw-inset: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+      --sw-border: color-mix(in srgb, var(--wms-border) 85%, #000);
+      --sw-bg: linear-gradient(
+        180deg,
+        #252a34 0%,
+        color-mix(in srgb, var(--wms-muted) 28%, var(--wms-surface-elevated)) 100%
+      );
+      --sw-outer:
+        inset 0 5px 12px rgba(0, 0, 0, 0.58),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07),
+        0 1px 0 rgba(255, 255, 255, 0.04);
     }
     .wms-switch--on {
-      --sw-border: color-mix(in srgb, var(--wms-accent) 70%, transparent);
-      --sw-bg: var(--wms-accent);
-      --sw-inset: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      --sw-border: color-mix(in srgb, var(--wms-accent) 48%, #fff);
+      --sw-bg: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--wms-accent) 32%, #fff) 0%,
+        var(--wms-accent) 42%,
+        color-mix(in srgb, var(--wms-accent) 72%, #000) 100%
+      );
+      --sw-outer:
+        inset 0 2px 5px rgba(255, 255, 255, 0.38),
+        inset 0 -4px 10px rgba(0, 0, 0, 0.22),
+        0 0 0 1px color-mix(in srgb, var(--wms-accent) 32%, transparent),
+        0 0 16px color-mix(in srgb, var(--wms-accent) 52%, transparent),
+        0 0 34px color-mix(in srgb, var(--wms-accent) 28%, transparent),
+        0 4px 14px rgba(0, 0, 0, 0.1);
     }
-    /* Thumb: h-5 w-5, centered; on → right aligned like calc(100% - 1.375rem) */
+    .wms-theme-panel[data-wms-theme="dark"] .wms-switch--on {
+      --sw-border: color-mix(in srgb, var(--wms-accent) 40%, transparent);
+      --sw-bg: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--wms-accent) 22%, #fff) 0%,
+        var(--wms-accent) 45%,
+        color-mix(in srgb, var(--wms-accent) 65%, #000) 100%
+      );
+      --sw-outer:
+        inset 0 2px 6px rgba(255, 255, 255, 0.22),
+        inset 0 -5px 12px rgba(0, 0, 0, 0.38),
+        0 0 0 1px color-mix(in srgb, var(--wms-accent) 28%, transparent),
+        0 0 22px color-mix(in srgb, var(--wms-accent) 62%, transparent),
+        0 0 48px color-mix(in srgb, var(--wms-accent) 38%, transparent),
+        0 0 72px color-mix(in srgb, var(--wms-accent) 18%, transparent);
+    }
+    /* Thumb: raised sphere + teal halo when on */
     .wms-switch-thumb {
       position: absolute;
       top: 50%;
@@ -310,27 +354,66 @@
       margin-top: -0.625rem;
       border-radius: 50%;
       background: var(--th-bg);
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15), 0 2px 4px -2px rgba(0, 0, 0, 0.08);
+      box-shadow: var(--th-glow);
       outline: 1px solid var(--th-ring);
       outline-offset: 0;
-      transition: left 0.2s ease-out, background 0.2s ease-out, outline-color 0.2s ease-out;
+      transition: left 0.2s ease-out, box-shadow 0.2s ease-out, outline-color 0.2s ease-out;
     }
     .wms-switch--off .wms-switch-thumb {
-      --th-bg: var(--wms-surface);
-      --th-ring: color-mix(in srgb, var(--wms-border) 70%, transparent);
+      --th-bg: linear-gradient(165deg, #ffffff 0%, #e8eaee 55%, #d9dce2 100%);
+      --th-ring: color-mix(in srgb, var(--wms-border) 75%, transparent);
+      --th-glow:
+        0 2px 6px rgba(0, 0, 0, 0.16),
+        inset 0 2px 3px rgba(255, 255, 255, 0.95),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.06);
     }
     .wms-theme-panel[data-wms-theme="dark"] .wms-switch--off .wms-switch-thumb {
-      --th-bg: color-mix(in srgb, var(--wms-fg) 88%, var(--wms-surface-elevated));
-      --th-ring: color-mix(in srgb, var(--wms-border) 70%, transparent);
+      --th-bg: linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--wms-fg) 94%, #fff) 0%,
+        color-mix(in srgb, var(--wms-fg) 68%, var(--wms-surface-elevated)) 100%
+      );
+      --th-glow:
+        0 2px 10px rgba(0, 0, 0, 0.55),
+        inset 0 1px 2px rgba(255, 255, 255, 0.14),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.35);
     }
     .wms-switch--on .wms-switch-thumb {
       left: calc(100% - 1.375rem);
-      --th-bg: var(--wms-accent-fg);
-      --th-ring: color-mix(in srgb, var(--wms-accent-fg) 35%, transparent);
+      --th-bg: linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--wms-accent-fg) 8%, #fff) 0%,
+        var(--wms-accent-fg) 45%,
+        color-mix(in srgb, var(--wms-accent-fg) 88%, #000) 100%
+      );
+      --th-ring: color-mix(in srgb, var(--wms-accent-fg) 42%, var(--wms-accent));
+      --th-glow:
+        0 0 12px color-mix(in srgb, var(--wms-accent) 75%, transparent),
+        0 0 26px color-mix(in srgb, var(--wms-accent) 42%, transparent),
+        0 3px 10px rgba(0, 0, 0, 0.22),
+        inset 0 1px 2px rgba(255, 255, 255, 0.45);
+    }
+    .wms-theme-panel[data-wms-theme="dark"] .wms-switch--on .wms-switch-thumb {
+      --th-bg: linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--wms-accent) 35%, var(--wms-accent-fg)) 0%,
+        var(--wms-accent-fg) 55%,
+        #000 100%
+      );
+      --th-ring: color-mix(in srgb, var(--wms-accent) 55%, var(--wms-accent-fg));
+      --th-glow:
+        0 0 16px color-mix(in srgb, var(--wms-accent) 85%, transparent),
+        0 0 36px color-mix(in srgb, var(--wms-accent) 55%, transparent),
+        0 0 56px color-mix(in srgb, var(--wms-accent) 28%, transparent),
+        0 3px 12px rgba(0, 0, 0, 0.45),
+        inset 0 1px 1px rgba(255, 255, 255, 0.12);
     }
     .wms-switch:focus-visible {
       outline: none;
-      box-shadow: var(--sw-inset), 0 0 0 2px var(--wms-surface), 0 0 0 4px color-mix(in srgb, var(--wms-accent) 50%, transparent);
+      box-shadow:
+        var(--sw-outer),
+        0 0 0 2px var(--wms-surface),
+        0 0 0 5px color-mix(in srgb, var(--wms-accent) 48%, transparent);
     }
     footer.note {
       font-size: 0.875rem;
@@ -383,7 +466,7 @@
           <tr><td>Table headers</td><td>Background <code>#EEEEEE</code>; text <code>#1A1D1F</code> or <code>#3D4548</code> — not faint grey on white.</td></tr>
           <tr><td>Inputs / search</td><td>Light field on <code>#F3F3F4</code> or <code>#EEE</code> per scheme; placeholder <code>#5C6366</code> minimum.</td></tr>
           <tr><td>Data (EPC, SKU, IDs)</td><td>JetBrains Mono (or Space Grotesk if you prefer); scale one step below UI labels for scanability.</td></tr>
-          <tr><td>Toggles (e.g. handheld)</td><td>Flat <code>48×28px</code> track, <code>2px</code> border; <strong>on</strong> = solid <code>--wms-accent</code> + inset highlight, thumb <code>--wms-accent-fg</code> (white in light, near-black in dark). <strong>Off</strong> = muted mix on <code>--wms-surface-elevated</code>, thumb matches surface / light grey in dark. Focus: ring in accent. Same as shipped <code>HandheldSettingsWorkspace</code> — mocks below (light + dark).</td></tr>
+          <tr><td>Toggles (e.g. handheld)</td><td><code>48×28px</code> track, <code>2px</code> border. <strong>3D:</strong> beveled gradient track (inset shadow + top highlight). <strong>On:</strong> teal gradient + <strong>outer glow</strong> (accent bloom); thumb is a lit sphere with accent halo. <strong>Off:</strong> recessed neutral groove; thumb is a raised pearl. Light vs dark panels below match <code>globals.css</code> tokens — same treatment as <code>HandheldSettingsWorkspace</code>.</td></tr>
           <tr><td>“No-line” vs a11y</td><td>Prefer tonal layers; where needed use <code>outline_variant</code> at ~35% opacity — not harsh 1px black boxes.</td></tr>
         </tbody>
       </table>
@@ -431,8 +514,7 @@
     <section>
       <h2>Handheld / settings — switches (app parity)</h2>
       <p class="caption" style="margin-top:0;">
-        Matches production <strong>Handheld settings</strong> toggles and <code>globals.css</code> tokens
-        (<code>html[data-theme=&quot;light&quot;]</code> vs <code>.dark</code>). Outfit + JetBrains Mono for the row labels.
+        Same dimensions and tokens as production; <strong>3D track</strong> (embossed off, lit gradient on) and <strong>accent glow</strong> on the active state. Outfit + JetBrains Mono for row labels.
       </p>
 
       <div class="wms-theme-panel" data-wms-theme="light">
