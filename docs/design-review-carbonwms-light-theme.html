@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CarbonWMS — Light theme design review (approval)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* scheme.png anchors */
+      --c-primary: #0b9597;
+      --c-secondary: #587e7e;
+      --c-tertiary: #031a84;
+      --c-neutral: #737878;
+      /* DESIGN (2).md surfaces */
+      --surface-lowest: #ffffff;
+      --surface-low: #f3f3f4;
+      --surface-mid: #eeeeee;
+      --on-surface: #1a1d1f;
+      --on-surface-muted: #3d4548;
+      --on-surface-subtle: #5c6366;
+      --outline-variant: rgba(198, 197, 212, 0.35);
+      --shadow-float: 0 8px 24px rgba(26, 29, 31, 0.06);
+      --header-band: linear-gradient(90deg, rgba(11, 149, 151, 0.12) 0%, rgba(11, 149, 151, 0.04) 48%, transparent 100%);
+      --radius-md: 0.375rem;
+      --radius-sm: 0.125rem;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 1.0625rem;
+      line-height: 1.55;
+      color: var(--on-surface);
+      background: var(--surface-low);
+    }
+    .banner {
+      background: var(--c-tertiary);
+      color: #fff;
+      padding: 0.85rem 1.25rem;
+      font-weight: 600;
+      text-align: center;
+      letter-spacing: 0.02em;
+    }
+    .banner small { font-weight: 400; opacity: 0.9; display: block; margin-top: 0.35rem; font-size: 0.9rem; }
+    main { max-width: 1120px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    h1 {
+      font-family: Manrope, Inter, sans-serif;
+      font-weight: 800;
+      font-size: 1.85rem;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.5rem;
+    }
+    .lede { color: var(--on-surface-muted); max-width: 68ch; margin-bottom: 2rem; }
+    section {
+      background: var(--surface-lowest);
+      border-radius: 0.5rem;
+      padding: 1.5rem 1.5rem 1.75rem;
+      margin-bottom: 1.5rem;
+      box-shadow: var(--shadow-float);
+      outline: 1px solid var(--outline-variant);
+    }
+    section h2 {
+      font-family: Manrope, sans-serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--c-secondary);
+      margin: 0 0 1rem;
+      padding-bottom: 0.65rem;
+      border-bottom: 2px solid var(--surface-mid);
+    }
+    .scheme-img {
+      width: 100%;
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--radius-md);
+      display: block;
+      outline: 1px solid var(--outline-variant);
+    }
+    .caption { font-size: 0.875rem; color: var(--on-surface-subtle); margin-top: 0.5rem; }
+    table.tokens { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    table.tokens th, table.tokens td {
+      text-align: left;
+      padding: 0.55rem 0.65rem;
+      border-bottom: 1px solid var(--surface-mid);
+    }
+    table.tokens th { font-weight: 600; color: var(--on-surface-muted); width: 28%; }
+    .swatch-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+    .swatch {
+      flex: 1 1 120px;
+      min-height: 72px;
+      border-radius: var(--radius-md);
+      padding: 0.65rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      outline: 1px solid rgba(0,0,0,0.08);
+    }
+    .swatch.light { color: var(--on-surface); }
+    .mock-page {
+      background: var(--surface-low);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      outline: 1px solid var(--outline-variant);
+    }
+    /* Distinct page header (not a generic card) */
+    .mock-header {
+      background: var(--header-band);
+      border-left: 4px solid var(--c-primary);
+      padding: 1rem 1.25rem 1.1rem;
+      margin-bottom: 1rem;
+      border-radius: 0 0.35rem 0.35rem 0;
+      box-shadow: 0 1px 0 var(--surface-mid);
+    }
+    .mock-header .title {
+      font-family: Manrope, sans-serif;
+      font-weight: 800;
+      font-size: 1.5rem;
+      color: var(--on-surface);
+      letter-spacing: -0.02em;
+      margin: 0 0 0.35rem;
+    }
+    .mock-header .subtitle {
+      margin: 0;
+      font-size: 0.95rem;
+      color: var(--on-surface-muted);
+      max-width: 62ch;
+    }
+    /* Content card: tonal only, no heavy border */
+    .mock-card {
+      background: var(--surface-lowest);
+      border-radius: 0.5rem;
+      padding: 1.1rem 1.2rem;
+      box-shadow: 0 4px 16px rgba(26, 29, 31, 0.05);
+    }
+    .mock-card .card-kicker {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--c-primary);
+      margin-bottom: 0.5rem;
+    }
+    .mock-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-top: 0.75rem;
+    }
+    .btn {
+      font-family: Inter, sans-serif;
+      font-weight: 600;
+      font-size: 0.9375rem;
+      min-height: 44px;
+      padding: 0 1.1rem;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: default;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-primary {
+      background: linear-gradient(180deg, #0ca8aa 0%, var(--c-primary) 100%);
+      color: #fff;
+    }
+    .btn-secondary { background: var(--surface-mid); color: var(--on-surface); }
+    .btn-outline {
+      background: var(--surface-lowest);
+      color: var(--on-surface);
+      outline: 1px solid var(--outline-variant);
+    }
+    .search {
+      flex: 1 1 200px;
+      min-height: 48px;
+      background: var(--surface-low);
+      border-radius: var(--radius-md);
+      padding: 0 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--on-surface-subtle);
+      font-size: 0.9rem;
+    }
+    .data { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.875rem; color: var(--on-surface); }
+    .table-mock {
+      width: 100%;
+      margin-top: 0.75rem;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    .table-mock thead {
+      background: var(--surface-mid);
+      color: var(--on-surface);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.72rem;
+    }
+    .table-mock th, .table-mock td { padding: 0.65rem 0.5rem; text-align: left; }
+    .table-mock tbody tr:nth-child(even) { background: rgba(243, 243, 244, 0.6); }
+    .principles { margin: 0; padding-left: 1.2rem; color: var(--on-surface-muted); }
+    .principles li { margin-bottom: 0.45rem; }
+    .md-quote {
+      background: var(--surface-low);
+      padding: 1rem 1.15rem;
+      border-radius: var(--radius-md);
+      font-size: 0.9rem;
+      color: var(--on-surface-muted);
+      border-left: 3px solid var(--c-primary);
+      margin: 0.75rem 0 0;
+    }
+    .toggle-mock {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin-top: 0.5rem;
+    }
+    .toggle-track {
+      width: 52px;
+      height: 28px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #e8e8ea 0%, #d8dadc 100%);
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.12), 0 1px 0 #fff;
+      position: relative;
+    }
+    .toggle-thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: linear-gradient(180deg, #fff 0%, #f0f0f2 100%);
+      box-shadow: 0 2px 8px rgba(11, 149, 151, 0.35), 0 1px 2px rgba(0,0,0,0.15);
+    }
+    .toggle-on .toggle-track {
+      background: linear-gradient(180deg, #0ec4c6 0%, var(--c-primary) 100%);
+    }
+    .toggle-on .toggle-thumb { left: 27px; box-shadow: 0 0 12px rgba(11, 149, 151, 0.65), 0 1px 2px rgba(0,0,0,0.2); }
+    footer.note {
+      font-size: 0.875rem;
+      color: var(--on-surface-subtle);
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--surface-mid);
+    }
+  </style>
+</head>
+<body>
+  <div class="banner">
+    APPROVAL PREVIEW — No theme code changes until you sign off on this direction
+    <small>Open this file in a browser. Asset: <code>design-preview-assets/scheme.png</code> (copied from <code>D:\scheme.png</code>).</small>
+  </div>
+  <main>
+    <h1>CarbonWMS light theme — unified direction</h1>
+    <p class="lede">
+      This document merges your <strong>scheme.png</strong> palette with <strong>DESIGN (2).md</strong> (“Industrial Precision / Aggressive Functionalism”):
+      tonal surfaces instead of noisy outlines, teal as the single accent, strong typographic hierarchy, and monospace for SKU/EPC data.
+      It also addresses current UI issues: washed-out page titles, mixed dark panels on light pages, and controls that fail contrast.
+    </p>
+
+    <section>
+      <h2>Reference — scheme.png</h2>
+      <img class="scheme-img" src="design-preview-assets/scheme.png" alt="CarbonWMS reference palette: primary teal, secondary slate, tertiary navy, neutral grey, plus UI samples" width="1200" height="675" />
+      <p class="caption">Primary <code>#0B9597</code>, Secondary <code>#587E7E</code>, Tertiary <code>#031A84</code>, Neutral <code>#737878</code>. Typography: headline / body / label levels. Buttons: primary, secondary, inverted, outlined; light search field.</p>
+    </section>
+
+    <section>
+      <h2>Token map (scheme + DESIGN doc)</h2>
+      <div class="swatch-row">
+        <div class="swatch" style="background:#0b9597;">Primary<br>#0B9597</div>
+        <div class="swatch" style="background:#587e7e;">Secondary<br>#587E7E</div>
+        <div class="swatch" style="background:#031a84;">Tertiary<br>#031A84</div>
+        <div class="swatch light" style="background:#737878;color:#fff;">Neutral<br>#737878</div>
+      </div>
+      <div class="swatch-row">
+        <div class="swatch light" style="background:#ffffff;border:1px solid #e0e0e2;">Surface lowest<br>#FFFFFF</div>
+        <div class="swatch light" style="background:#f3f3f4;">Surface low<br>#F3F3F4</div>
+        <div class="swatch light" style="background:#eeeeee;">Surface mid<br>#EEEEEE</div>
+        <div class="swatch light" style="background:#1a1d1f;color:#fff;">On-surface<br>#1A1D1F</div>
+      </div>
+      <table class="tokens">
+        <thead><tr><th>Token / rule</th><th>Value &amp; use</th></tr></thead>
+        <tbody>
+          <tr><td>Primary actions</td><td>Teal gradient (top slightly lighter → <code>#0B9597</code>); white label; min height 44–56px per DESIGN glove rule.</td></tr>
+          <tr><td>Page header (distinct from cards)</td><td>Left accent bar 4px primary + soft horizontal teal wash; Manrope title in <code>on-surface</code>; subtitle in <code>on-surface-muted</code> — never pale teal on pale grey.</td></tr>
+          <tr><td>Cards / panels</td><td>White (<code>#FFF</code>) on <code>#F3F3F4</code> app background; separation by shadow + tone — avoid random charcoal “dark theme” slabs on light routes.</td></tr>
+          <tr><td>Table headers</td><td>Background <code>#EEEEEE</code>; text <code>#1A1D1F</code> or <code>#3D4548</code> — not faint grey on white.</td></tr>
+          <tr><td>Inputs / search</td><td>Light field on <code>#F3F3F4</code> or <code>#EEE</code> per scheme; placeholder <code>#5C6366</code> minimum.</td></tr>
+          <tr><td>Data (EPC, SKU, IDs)</td><td>JetBrains Mono (or Space Grotesk if you prefer); scale one step below UI labels for scanability.</td></tr>
+          <tr><td>Toggles (e.g. handheld)</td><td>3D inset track + glowing thumb when on; primary teal when active — mock below.</td></tr>
+          <tr><td>“No-line” vs a11y</td><td>Prefer tonal layers; where needed use <code>outline_variant</code> at ~35% opacity — not harsh 1px black boxes.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Live mock — page header vs content card</h2>
+      <p class="caption" style="margin-top:0;">Headers read as a <strong>banded editorial strip</strong>; everything below is standard surface cards. This is the pattern we will roll across Transfers, RFID, Reports, Integrations, etc.</p>
+      <div class="mock-page">
+        <div class="mock-header">
+          <div class="title">Lightspeed sync</div>
+          <p class="subtitle">Catalog pull, job queue, and live compare — operational copy stays readable on light grey.</p>
+        </div>
+        <div class="mock-card">
+          <div class="card-kicker">Catalog sync</div>
+          <p style="margin:0 0 0.5rem;color:var(--on-surface-muted);font-size:0.95rem;">Last success and SKU counts use the same light surfaces as the rest of the app (no orphan dark panels).</p>
+          <div class="mock-toolbar">
+            <div class="search" aria-hidden="true">🔍 <span>Search SKUs…</span></div>
+            <button type="button" class="btn btn-primary">Trigger sync</button>
+            <button type="button" class="btn btn-outline">Export</button>
+          </div>
+          <table class="table-mock">
+            <thead><tr><th>When</th><th>Status</th><th class="data">Idempotency key</th></tr></thead>
+            <tbody>
+              <tr><td class="data">2026-03-31 14:02</td><td>OK</td><td class="data">ls_cat_7f3a…</td></tr>
+              <tr><td class="data">2026-03-31 13:10</td><td>Retry</td><td class="data">ls_cat_91bc…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Typography scale (proposal)</h2>
+      <table class="tokens">
+        <tbody>
+          <tr><td>Default UI (current “large”)</td><td>Base ~17–18px (1.0625–1.125rem); comfortable line height 1.5–1.55.</td></tr>
+          <tr><td>“Expanded” tier</td><td>+1 step (~19–20px root or component multiplier) for accessibility / warehouse use; sidebar width and row min-heights grow with it.</td></tr>
+          <tr><td>Page title</td><td>Manrope 800, ~1.35–1.5rem in default tier; larger in expanded.</td></tr>
+          <tr><td>Section labels</td><td>Uppercase tracking, secondary color or primary at 0.7rem–0.75rem — always sufficient contrast on white/#F3F3F4.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Handheld / settings — toggle direction</h2>
+      <p class="caption" style="margin-top:0;">Fancy but still industrial: embossed track, lit thumb when on.</p>
+      <div class="toggle-mock toggle-on"><div class="toggle-track"><div class="toggle-thumb"></div></div><span>Stream debug</span></div>
+      <div class="toggle-mock" style="margin-top:0.75rem;"><div class="toggle-track"><div class="toggle-thumb"></div></div><span>Off state</span></div>
+    </section>
+
+    <section>
+      <h2>Principles excerpt — DESIGN (2).md</h2>
+      <ul class="principles">
+        <li><strong>No-line architecture:</strong> structure from surface tiers (#FFF / #F3F3F4 / #EEE), not busy borders.</li>
+        <li><strong>Dual type:</strong> Manrope/Inter for UI; monospace for codes.</li>
+        <li><strong>56dp targets</strong> for primary actions in field-heavy flows where feasible on web.</li>
+      </ul>
+      <p class="md-quote">“The layout should feel like a high-end technical manual: asymmetric balance, bold monochromatic shifts, and a ruthless commitment to touch ergonomics.”</p>
+    </section>
+
+    <footer class="note">
+      <strong>Next step after your approval:</strong> implement CSS variables + shared layout primitives (page header component, card shell, table chrome), then sweep routes for hardcoded dark panels and low-contrast text; capture before/after screenshots and the HTML report you requested.
+      Reply in chat to approve or request tweaks (e.g. corner radius, header bar height, exact expanded scale).
+    </footer>
+  </main>
+</body>
+</html>
