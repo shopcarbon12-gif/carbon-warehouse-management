@@ -170,12 +170,12 @@ function NavAccordion({
       <button
         type="button"
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-[var(--wms-secondary)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
+        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left font-mono text-sm font-semibold uppercase tracking-wide text-[var(--wms-secondary)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
         onClick={() => setOpen((o) => !o)}
       >
         {section.label}
         <ChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-5 w-5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
           strokeWidth={1.75}
           aria-hidden
         />
@@ -189,7 +189,7 @@ function NavAccordion({
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors ${
                     active
                       ? "bg-[var(--wms-surface-elevated)] text-[var(--wms-accent)] ring-1 ring-[var(--wms-border)]"
                       : "text-[var(--wms-fg)]/85 hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
@@ -198,7 +198,7 @@ function NavAccordion({
                 >
                   <span className="relative shrink-0">
                     <Icon
-                      className={`h-[1.125rem] w-[1.125rem] shrink-0 ${
+                      className={`h-5 w-5 shrink-0 ${
                         active ? "text-[var(--wms-accent)]" : "text-[var(--wms-muted)]"
                       }`}
                       strokeWidth={1.75}
@@ -259,19 +259,19 @@ export function Sidebar({
 
       <aside
         id="wms-sidebar"
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col border-r border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl transition-transform duration-200 ease-out md:static md:z-0 md:translate-x-0 md:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 shrink-0 flex-col border-r border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl transition-transform duration-200 ease-out md:static md:z-0 md:translate-x-0 md:shadow-none ${
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
         <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-4">
           <Link href="/dashboard" className="min-w-0" onClick={onNavigate}>
-            <span className="font-mono text-[0.65rem] font-medium uppercase tracking-[0.2em] text-[var(--wms-accent)]">
+            <span className="font-mono text-xs font-medium uppercase tracking-[0.18em] text-[var(--wms-accent)]">
               WMS
             </span>
-            <span className="mt-0.5 block truncate text-base font-semibold tracking-tight text-[var(--wms-fg)]">
+            <span className="mt-0.5 block truncate text-lg font-semibold tracking-tight text-[var(--wms-fg)]">
               CarbonWMS
             </span>
-            <span className="mt-0.5 block font-mono text-[0.65rem] text-[var(--wms-muted)]">
+            <span className="mt-0.5 block font-mono text-sm text-[var(--wms-muted)]">
               RFID operations
             </span>
           </Link>
@@ -292,14 +292,14 @@ export function Sidebar({
             <Link
               href="/dashboard"
               onClick={onNavigate}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors ${
                 dashActive
                   ? "bg-[var(--wms-surface-elevated)] text-[var(--wms-accent)] ring-1 ring-[var(--wms-border)]"
                   : "text-[var(--wms-fg)]/85 hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
               }`}
             >
               <LayoutDashboard
-                className={`h-[1.125rem] w-[1.125rem] ${dashActive ? "text-[var(--wms-accent)]" : "text-[var(--wms-muted)]"}`}
+                className={`h-5 w-5 ${dashActive ? "text-[var(--wms-accent)]" : "text-[var(--wms-muted)]"}`}
                 strokeWidth={1.75}
                 aria-hidden
               />
@@ -323,7 +323,7 @@ export function Sidebar({
           <form action={logoutAction}>
             <button
               type="submit"
-              className="font-mono text-xs text-[var(--wms-accent)] hover:underline"
+              className="font-mono text-sm text-[var(--wms-accent)] hover:underline"
             >
               Sign out
             </button>
