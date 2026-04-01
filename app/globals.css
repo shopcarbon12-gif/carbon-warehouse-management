@@ -98,8 +98,33 @@ body {
   font-family: var(--font-wms-sans), system-ui, sans-serif;
 }
 
+/* Click targets: show hand cursor (Tailwind @layer base so component utilities can still override). */
+@layer base {
+  :is(
+      a[href]:not([aria-disabled="true"]),
+      button:not(:disabled):not([aria-disabled="true"]),
+      input:is([type="button"], [type="submit"], [type="reset"], [type="file"], [type="checkbox"], [type="radio"], [type="image"]):not(:disabled):not([aria-disabled="true"]),
+      label[for],
+      select:not(:disabled):not([aria-disabled="true"]),
+      summary,
+      [role="button"]:not([aria-disabled="true"]),
+      [role="link"][href]:not([aria-disabled="true"]),
+      [role="menuitem"]:not([aria-disabled="true"]),
+      [role="option"]:not([aria-disabled="true"]),
+      [role="tab"]:not([aria-disabled="true"]),
+      [role="switch"]:not([aria-disabled="true"])
+    ) {
+    cursor: pointer;
+  }
+
+  :is(:disabled, [aria-disabled="true"]) {
+    cursor: not-allowed;
+  }
+}
+
 /* Handheld settings switch — kept out of Tailwind arbitrary classes (avoids dev compile hang). */
 .wms-toggle-track {
+  cursor: pointer;
   position: relative;
   height: 1.75rem;
   width: 3rem;
