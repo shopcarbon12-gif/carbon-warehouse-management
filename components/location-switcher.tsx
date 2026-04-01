@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Loc = { id: string; code: string; name: string };
 
@@ -27,6 +27,12 @@ export function LocationSwitcher({
     return () => clearTimeout(t);
   }, [load]);
 
+  const activeLabel = useMemo(() => {
+    const hit = locations.find((l) => l.id === activeLocationId);
+    if (!hit) return "";
+    return `${hit.code} · ${hit.name}`;
+  }, [locations, activeLocationId]);
+
   async function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const locationId = e.target.value;
     if (!locationId || locationId === activeLocationId) return;
@@ -42,7 +48,8 @@ export function LocationSwitcher({
     <label className="mx-4 mb-2 mt-2 block">
       <span className="sr-only">Active location</span>
       <select
-        className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/40"
+        title={activeLabel || undefined}
+        className="w-full min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-xs leading-snug text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/40 sm:text-sm"
         value={activeLocationId}
         onChange={onChange}
       >
