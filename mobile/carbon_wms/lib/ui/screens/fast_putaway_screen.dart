@@ -77,7 +77,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                 },
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.background,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 18),
                 ),
                 child: const Text('ASSIGN ALL COLORS', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -143,7 +143,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     return CarbonScaffold(
       body: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        color: _flashOk ? const Color(0xFF064E3B) : AppColors.background,
+        color: _flashOk ? const Color(0xFFCCEAE9) : AppColors.background,
         width: double.infinity,
         height: double.infinity,
         child: Padding(

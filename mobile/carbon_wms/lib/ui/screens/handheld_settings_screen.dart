@@ -166,7 +166,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             label: Text(_busy ? 'Checking…' : 'Check OTA / authorization'),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.background,
+              foregroundColor: Colors.white,
             ),
           ),
           if (_lastStatus != null) ...[

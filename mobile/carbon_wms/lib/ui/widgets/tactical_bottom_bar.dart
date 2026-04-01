@@ -16,7 +16,8 @@ class TacticalBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.surface,
-      elevation: 12,
+      elevation: 3,
+      shadowColor: Colors.black.withOpacity(0.08),
       child: SafeArea(
         top: false,
         minimum: const EdgeInsets.fromLTRB(12, 8, 12, 12),
@@ -54,7 +55,7 @@ class TacticalEmeraldButton extends StatelessWidget {
     return _TacticalButton(
       height: _kTacticalButtonHeight,
       background: AppColors.primary,
-      foreground: AppColors.background,
+      foreground: Colors.white,
       label: label,
       onPressed: onPressed,
       onLongPressStart: onLongPressStart,
@@ -79,7 +80,7 @@ class TacticalSlateButton extends StatelessWidget {
     return _TacticalButton(
       height: _kTacticalButtonHeight,
       background: AppColors.slateActionDark,
-      foreground: AppColors.textMain,
+      foreground: Colors.white,
       label: label,
       onPressed: onPressed,
     );

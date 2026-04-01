@@ -191,7 +191,7 @@ class _SearchEncodeTabState extends State<_SearchEncodeTab> {
                 onPressed: id.isEmpty || _busy ? null : () => unawaited(_commission(id, label)),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  foregroundColor: AppColors.background,
+                  foregroundColor: Colors.white,
                 ),
                 child: const Text('WRITE'),
               ),
@@ -308,7 +308,7 @@ class _ScanPrintTabState extends State<_ScanPrintTab> {
             onPressed: _busy ? null : () => unawaited(_printViaCommission()),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.background,
+              foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 18),
             ),
             child: Text(
@@ -417,7 +417,7 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
               : ListView.separated(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: _jobs.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF334155)),
+                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, i) {
                     final j = _jobs[i];
                     return ListTile(
@@ -451,7 +451,7 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
                   onPressed: (_jobs.isEmpty || _syncing) ? null : () => unawaited(_syncAll()),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.slateActionDark,
-                    foregroundColor: AppColors.textMain,
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),
                   child: Text(

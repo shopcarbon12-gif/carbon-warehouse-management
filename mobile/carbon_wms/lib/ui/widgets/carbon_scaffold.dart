@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:carbon_wms/theme/app_theme.dart';
 
 /// Persistent shell: Carbon WMS title + optional back navigation.
 class CarbonScaffold extends StatelessWidget {
@@ -36,7 +35,7 @@ class CarbonScaffold extends StatelessWidget {
         automaticallyImplyLeading: false,
       ),
       body: ColoredBox(
-        color: AppColors.background,
+        color: Theme.of(context).scaffoldBackgroundColor,
         child: body,
       ),
       bottomNavigationBar: bottomBar,

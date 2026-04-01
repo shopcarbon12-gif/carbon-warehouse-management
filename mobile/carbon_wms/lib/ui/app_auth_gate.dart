@@ -13,6 +13,7 @@ import 'package:carbon_wms/services/handheld_client_info.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
 import 'package:carbon_wms/ui/screens/dashboard_screen.dart';
 import 'package:carbon_wms/ui/screens/device_lock_screen.dart';
+import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/login_screen.dart';
 import 'package:carbon_wms/ui/widgets/ota_update_dialog.dart';
 
@@ -172,35 +173,41 @@ class _AppAuthGateState extends State<AppAuthGate> {
           },
         );
       case _Phase.lock:
-        return DeviceLockScreen(
-          androidId: _androidId.isEmpty ? '(unavailable)' : _androidId,
-          pendingApproval: _pending,
-          onLogout: () async {
-            await context.read<WmsApiClient>().setSessionToken(null);
-            await LoginCredentialsStore.onUserLogout();
-            if (mounted) {
-              setState(() {
-                _loginKey++;
-                _phase = _Phase.login;
-              });
-            }
-          },
+        return Theme(
+          data: AppTheme.authenticated,
+          child: DeviceLockScreen(
+            androidId: _androidId.isEmpty ? '(unavailable)' : _androidId,
+            pendingApproval: _pending,
+            onLogout: () async {
+              await context.read<WmsApiClient>().setSessionToken(null);
+              await LoginCredentialsStore.onUserLogout();
+              if (mounted) {
+                setState(() {
+                  _loginKey++;
+                  _phase = _Phase.login;
+                });
+              }
+            },
+          ),
         );
       case _Phase.dashboard:
-        return DashboardScreen(
-          otaDownloadUrl: _otaUrl,
-          otaLatestVersion: _otaLatestVersion,
-          onLogout: () async {
-            await context.read<WmsApiClient>().setSessionToken(null);
-            await LoginCredentialsStore.onUserLogout();
-            if (mounted) {
-              setState(() {
-                _loginKey++;
-                _phase = _Phase.login;
-                _otaUrl = null;
-              });
-            }
-          },
+        return Theme(
+          data: AppTheme.authenticated,
+          child: DashboardScreen(
+            otaDownloadUrl: _otaUrl,
+            otaLatestVersion: _otaLatestVersion,
+            onLogout: () async {
+              await context.read<WmsApiClient>().setSessionToken(null);
+              await LoginCredentialsStore.onUserLogout();
+              if (mounted) {
+                setState(() {
+                  _loginKey++;
+                  _phase = _Phase.login;
+                  _otaUrl = null;
+                });
+              }
+            },
+          ),
         );
     }
   }

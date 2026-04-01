@@ -137,7 +137,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
                     )
                   : ListView.separated(
                       itemCount: items.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF334155)),
+                      separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         return ListTile(
                           title: Text(
