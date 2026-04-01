@@ -4,9 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CarbonWMS — Light theme design review (approval)</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- Same stack as app preview only: no new fonts; implementation keeps existing CarbonWMS families. -->
   <style>
     :root {
       /* scheme.png anchors */
@@ -30,14 +28,14 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: Inter, system-ui, sans-serif;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       font-size: 1.0625rem;
       line-height: 1.55;
       color: var(--on-surface);
       background: var(--surface-low);
     }
     .banner {
-      background: var(--c-tertiary);
+      background: var(--on-surface);
       color: #fff;
       padding: 0.85rem 1.25rem;
       font-weight: 600;
@@ -47,8 +45,7 @@
     .banner small { font-weight: 400; opacity: 0.9; display: block; margin-top: 0.35rem; font-size: 0.9rem; }
     main { max-width: 1120px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
     h1 {
-      font-family: Manrope, Inter, sans-serif;
-      font-weight: 800;
+      font-weight: 700;
       font-size: 1.85rem;
       letter-spacing: -0.02em;
       margin: 0 0 0.5rem;
@@ -63,7 +60,6 @@
       outline: 1px solid var(--outline-variant);
     }
     section h2 {
-      font-family: Manrope, sans-serif;
       font-size: 1.05rem;
       font-weight: 700;
       text-transform: uppercase;
@@ -120,8 +116,7 @@
       box-shadow: 0 1px 0 var(--surface-mid);
     }
     .mock-header .title {
-      font-family: Manrope, sans-serif;
-      font-weight: 800;
+      font-weight: 700;
       font-size: 1.5rem;
       color: var(--on-surface);
       letter-spacing: -0.02em;
@@ -145,7 +140,7 @@
       font-weight: 700;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: var(--c-primary);
+      color: var(--on-surface-muted);
       margin-bottom: 0.5rem;
     }
     .mock-toolbar {
@@ -156,7 +151,6 @@
       margin-top: 0.75rem;
     }
     .btn {
-      font-family: Inter, sans-serif;
       font-weight: 600;
       font-size: 0.9375rem;
       min-height: 44px;
@@ -168,15 +162,16 @@
       align-items: center;
       justify-content: center;
     }
+    /* Restrained actions: flat neutrals + one solid primary — no gradients or decorative color blocks */
     .btn-primary {
-      background: linear-gradient(180deg, #0ca8aa 0%, var(--c-primary) 100%);
+      background: var(--on-surface);
       color: #fff;
     }
     .btn-secondary { background: var(--surface-mid); color: var(--on-surface); }
     .btn-outline {
       background: var(--surface-lowest);
       color: var(--on-surface);
-      outline: 1px solid var(--outline-variant);
+      border: 1px solid rgba(26, 29, 31, 0.22);
     }
     .search {
       flex: 1 1 200px;
@@ -190,7 +185,7 @@
       color: var(--on-surface-subtle);
       font-size: 0.9rem;
     }
-    .data { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.875rem; color: var(--on-surface); }
+    .data { font-size: 0.875rem; color: var(--on-surface); }
     .table-mock {
       width: 100%;
       margin-top: 0.75rem;
@@ -228,8 +223,8 @@
       width: 52px;
       height: 28px;
       border-radius: 999px;
-      background: linear-gradient(180deg, #e8e8ea 0%, #d8dadc 100%);
-      box-shadow: inset 0 2px 4px rgba(0,0,0,0.12), 0 1px 0 #fff;
+      background: var(--surface-mid);
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
       position: relative;
     }
     .toggle-thumb {
@@ -239,13 +234,13 @@
       width: 22px;
       height: 22px;
       border-radius: 50%;
-      background: linear-gradient(180deg, #fff 0%, #f0f0f2 100%);
-      box-shadow: 0 2px 8px rgba(11, 149, 151, 0.35), 0 1px 2px rgba(0,0,0,0.15);
+      background: var(--surface-lowest);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
     }
     .toggle-on .toggle-track {
-      background: linear-gradient(180deg, #0ec4c6 0%, var(--c-primary) 100%);
+      background: var(--c-neutral);
     }
-    .toggle-on .toggle-thumb { left: 27px; box-shadow: 0 0 12px rgba(11, 149, 151, 0.65), 0 1px 2px rgba(0,0,0,0.2); }
+    .toggle-on .toggle-thumb { left: 27px; }
     footer.note {
       font-size: 0.875rem;
       color: var(--on-surface-subtle);
@@ -263,15 +258,15 @@
   <main>
     <h1>CarbonWMS light theme — unified direction</h1>
     <p class="lede">
-      This document merges your <strong>scheme.png</strong> palette with <strong>DESIGN (2).md</strong> (“Industrial Precision / Aggressive Functionalism”):
-      tonal surfaces instead of noisy outlines, teal as the single accent, strong typographic hierarchy, and monospace for SKU/EPC data.
-      It also addresses current UI issues: washed-out page titles, mixed dark panels on light pages, and controls that fail contrast.
+      This document merges your <strong>scheme.png</strong> palette with <strong>DESIGN (2).md</strong> surfaces and spacing ideas.
+      <strong>Constraints you set:</strong> keep the app’s <strong>existing font families and styles</strong> (no switching to new display or data fonts); use <strong>restrained, flat actions</strong> — no gradient or “colorful” button treatments.
+      Focus stays on contrast, consistent light surfaces, and a page header treatment that reads clearly apart from cards.
     </p>
 
     <section>
       <h2>Reference — scheme.png</h2>
       <img class="scheme-img" src="design-preview-assets/scheme.png" alt="CarbonWMS reference palette: primary teal, secondary slate, tertiary navy, neutral grey, plus UI samples" width="1200" height="675" />
-      <p class="caption">Primary <code>#0B9597</code>, Secondary <code>#587E7E</code>, Tertiary <code>#031A84</code>, Neutral <code>#737878</code>. Typography: headline / body / label levels. Buttons: primary, secondary, inverted, outlined; light search field.</p>
+      <p class="caption">Reference palette: Primary <code>#0B9597</code>, Secondary <code>#587E7E</code>, Tertiary <code>#031A84</code>, Neutral <code>#737878</code>. Implementation uses these for accents and surfaces; actions in the app stay flat/neutral as above, not “poster” buttons.</p>
     </section>
 
     <section>
@@ -291,13 +286,13 @@
       <table class="tokens">
         <thead><tr><th>Token / rule</th><th>Value &amp; use</th></tr></thead>
         <tbody>
-          <tr><td>Primary actions</td><td>Teal gradient (top slightly lighter → <code>#0B9597</code>); white label; min height 44–56px per DESIGN glove rule.</td></tr>
-          <tr><td>Page header (distinct from cards)</td><td>Left accent bar 4px primary + soft horizontal teal wash; Manrope title in <code>on-surface</code>; subtitle in <code>on-surface-muted</code> — never pale teal on pale grey.</td></tr>
+          <tr><td>Primary actions</td><td>Flat fill (e.g. <code>on-surface</code> + white text, or existing app button tokens) — <strong>no</strong> gradients or decorative multi-color CTAs. Adequate min height for touch where we already scale UI.</td></tr>
+          <tr><td>Page header (distinct from cards)</td><td>Left accent bar + soft wash; title and body use <strong>the same font stack as today</strong>, with weight/size only for hierarchy — never pale teal on pale grey.</td></tr>
           <tr><td>Cards / panels</td><td>White (<code>#FFF</code>) on <code>#F3F3F4</code> app background; separation by shadow + tone — avoid random charcoal “dark theme” slabs on light routes.</td></tr>
           <tr><td>Table headers</td><td>Background <code>#EEEEEE</code>; text <code>#1A1D1F</code> or <code>#3D4548</code> — not faint grey on white.</td></tr>
           <tr><td>Inputs / search</td><td>Light field on <code>#F3F3F4</code> or <code>#EEE</code> per scheme; placeholder <code>#5C6366</code> minimum.</td></tr>
-          <tr><td>Data (EPC, SKU, IDs)</td><td>JetBrains Mono (or Space Grotesk if you prefer); scale one step below UI labels for scanability.</td></tr>
-          <tr><td>Toggles (e.g. handheld)</td><td>3D inset track + glowing thumb when on; primary teal when active — mock below.</td></tr>
+          <tr><td>Data (EPC, SKU, IDs)</td><td>Keep whatever monospace / data font the app already uses; only adjust color and size for contrast — <strong>no font-family changes</strong>.</td></tr>
+          <tr><td>Toggles (e.g. handheld)</td><td>Simple flat track and thumb; clear on/off — <strong>no</strong> glow or saturated “neon” states unless you ask later.</td></tr>
           <tr><td>“No-line” vs a11y</td><td>Prefer tonal layers; where needed use <code>outline_variant</code> at ~35% opacity — not harsh 1px black boxes.</td></tr>
         </tbody>
       </table>
@@ -331,13 +326,14 @@
     </section>
 
     <section>
-      <h2>Typography scale (proposal)</h2>
+      <h2>Type scale (size only — no font changes)</h2>
       <table class="tokens">
         <tbody>
-          <tr><td>Default UI (current “large”)</td><td>Base ~17–18px (1.0625–1.125rem); comfortable line height 1.5–1.55.</td></tr>
-          <tr><td>“Expanded” tier</td><td>+1 step (~19–20px root or component multiplier) for accessibility / warehouse use; sidebar width and row min-heights grow with it.</td></tr>
-          <tr><td>Page title</td><td>Manrope 800, ~1.35–1.5rem in default tier; larger in expanded.</td></tr>
-          <tr><td>Section labels</td><td>Uppercase tracking, secondary color or primary at 0.7rem–0.75rem — always sufficient contrast on white/#F3F3F4.</td></tr>
+          <tr><td>Font families</td><td><strong>Unchanged</strong> — same sans / mono as production CarbonWMS.</td></tr>
+          <tr><td>Default UI (current “large”)</td><td>Base ~17–18px (1.0625–1.125rem) if already agreed; line height unchanged or slightly relaxed for readability.</td></tr>
+          <tr><td>“Expanded” tier</td><td>Optional +1 step on root or components; widen sidebar rows if text wraps.</td></tr>
+          <tr><td>Page title</td><td>Heavier weight / larger size using <strong>existing</strong> UI font only — no new display face.</td></tr>
+          <tr><td>Section labels</td><td>Size and color for contrast on white / <code>#F3F3F4</code>; same family as body.</td></tr>
         </tbody>
       </table>
     </section>
@@ -353,7 +349,7 @@
       <h2>Principles excerpt — DESIGN (2).md</h2>
       <ul class="principles">
         <li><strong>No-line architecture:</strong> structure from surface tiers (#FFF / #F3F3F4 / #EEE), not busy borders.</li>
-        <li><strong>Dual type:</strong> Manrope/Inter for UI; monospace for codes.</li>
+        <li><strong>Type:</strong> DESIGN doc suggested dual families — <strong>we will not change fonts</strong>; we only borrow surface and spacing ideas from the doc.</li>
         <li><strong>56dp targets</strong> for primary actions in field-heavy flows where feasible on web.</li>
       </ul>
       <p class="md-quote">“The layout should feel like a high-end technical manual: asymmetric balance, bold monochromatic shifts, and a ruthless commitment to touch ergonomics.”</p>
@@ -361,7 +357,7 @@
 
     <footer class="note">
       <strong>Next step after your approval:</strong> implement CSS variables + shared layout primitives (page header component, card shell, table chrome), then sweep routes for hardcoded dark panels and low-contrast text; capture before/after screenshots and the HTML report you requested.
-      Reply in chat to approve or request tweaks (e.g. corner radius, header bar height, exact expanded scale).
+      Buttons stay neutral / flat; typography stays on current families. Reply if you want any other constraint recorded before implementation.
     </footer>
   </main>
 </body>
