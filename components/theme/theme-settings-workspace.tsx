@@ -1,13 +1,13 @@
 "use client";
 
-import { Maximize2, Moon, Sun, Type } from "lucide-react";
+import { Monitor, Moon, Sun, Type } from "lucide-react";
 import { useWmsTheme, type ThemeCombo } from "@/components/theme/theme-provider";
 
 const combos: { id: string; label: string; combo: ThemeCombo; icon: typeof Moon }[] = [
-  { id: "dark-comf", label: "Dark · Default type", combo: { color: "dark", font: "comfortable" }, icon: Moon },
-  { id: "dark-exp", label: "Dark · Extra large", combo: { color: "dark", font: "expanded" }, icon: Type },
-  { id: "light-comf", label: "Light · Default type", combo: { color: "light", font: "comfortable" }, icon: Sun },
-  { id: "light-exp", label: "Light · Extra large", combo: { color: "light", font: "expanded" }, icon: Maximize2 },
+  { id: "dark-std", label: "Dark · Standard", combo: { color: "dark", font: "standard" }, icon: Moon },
+  { id: "dark-lg", label: "Dark · Large type", combo: { color: "dark", font: "large" }, icon: Type },
+  { id: "light-std", label: "Light · Standard", combo: { color: "light", font: "standard" }, icon: Sun },
+  { id: "light-lg", label: "Light · Large type", combo: { color: "light", font: "large" }, icon: Monitor },
 ];
 
 export function ThemeSettingsWorkspace() {
@@ -15,10 +15,9 @@ export function ThemeSettingsWorkspace() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <p className="font-mono text-[0.75em] text-[var(--wms-muted)]">
-        Saved in this browser only. Default type is the former “large” scale (~18px root). Extra large bumps
-        the root again and relaxes control heights when labels need more room.{" "}
-        <code className="text-[var(--wms-accent)]">&lt;html&gt;</code>
+      <p className="font-mono text-xs text-[var(--wms-muted)]">
+        Preference is saved in this browser only. Large type scales the interface from the{" "}
+        <code className="text-[var(--wms-accent)]">&lt;html&gt;</code> root.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         {combos.map((c) => {
@@ -37,9 +36,9 @@ export function ThemeSettingsWorkspace() {
             >
               <Icon className="h-8 w-8 text-[var(--wms-accent)]" strokeWidth={1.5} />
               <span className="text-base font-semibold text-[var(--wms-fg)]">{c.label}</span>
-              <span className="font-mono text-[0.65em] text-[var(--wms-muted)]">
+              <span className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
                 {c.combo.color === "dark" ? "Dark UI" : "Light UI"} ·{" "}
-                {c.combo.font === "expanded" ? "Larger type + roomier fields" : "Balanced readability"}
+                {c.combo.font === "large" ? "Scaled typography" : "Default size"}
               </span>
             </button>
           );
