@@ -18,7 +18,13 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <!-- Required for correct mobile / narrow Chrome layout (device-width, no tiny desktop canvas). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="description" content="A new Flutter project.">
+  <style>
+    html, body { height: 100%; margin: 0; padding: 0; }
+    body { background-color: #F5F5F5; }
+  </style>
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">

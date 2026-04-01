@@ -1,5 +1,6 @@
 import 'dart:async' show TimeoutException, unawaited;
 import 'dart:io' show Platform, SocketException;
+import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -801,11 +802,20 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               duration: const Duration(milliseconds: 120),
               curve: Curves.easeOutCubic,
               padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final mw = MediaQuery.sizeOf(context).width;
+                  final hPad = mw < 360 ? 16.0 : 22.0;
+                  final contentMaxW = min(440.0, (mw - 2 * hPad).clamp(0.0, double.infinity));
+                  return Padding(
+                    padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 6),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: contentMaxW),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                   if (_vaultReady) ...[
                     Expanded(
                       flex: 5,
@@ -910,7 +920,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                     ),
                   ),
                   ],
-                ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
