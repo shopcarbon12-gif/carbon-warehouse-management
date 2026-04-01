@@ -45,6 +45,7 @@ class LoginCredentialsStore {
   /// Phones with screen lock / biometrics: [canCheckBiometrics] alone is false on some OEMs
   /// even though [LocalAuthentication.authenticate] works with device credential fallback.
   static Future<bool> canUseBiometricPasswordVault() async {
+    if (kIsWeb) return false;
     if (await isRuggedHandheldProfile()) return false;
     if (!Platform.isAndroid) return false;
     try {

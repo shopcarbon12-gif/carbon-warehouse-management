@@ -2,6 +2,7 @@ import 'dart:async' show TimeoutException, unawaited;
 import 'dart:io' show Platform, SocketException;
 import 'dart:math' show min;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -144,7 +145,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     final api = context.read<WmsApiClient>();
     final androidId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
     Map<String, dynamic> clientInfo = {};
-    if (Platform.isAndroid) {
+    if (!kIsWeb && Platform.isAndroid) {
       try {
         clientInfo = await HandheldClientInfo.collect();
       } catch (_) {
