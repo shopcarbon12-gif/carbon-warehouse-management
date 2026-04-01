@@ -13,7 +13,7 @@ const fetcher = async (url: string) => {
   return res.json();
 };
 
-type Tab = "rfid" | "integrations";
+type Tab = "rfid" | "integrations" | "bins";
 
 function LightspeedLiveReadiness({
   data,
@@ -118,6 +118,9 @@ export function SettingsWorkspace() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [publicOrigin, setPublicOrigin] = useState("");
+  const [binsBusy, setBinsBusy] = useState(false);
+  const [binsToast, setBinsToast] = useState<string | null>(null);
+  const [binLocationCode, setBinLocationCode] = useState("001");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -205,6 +208,33 @@ export function SettingsWorkspace() {
     }
   };
 
+  const ensureOrlandoBins = async () => {
+    setBinsBusy(true);
+    setBinsToast(null);
+    try {
+      const res = await fetch("/api/settings/ensure-orlando-bins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locationCode: binLocationCode.trim() || "001" }),
+      });
+      const j = (await res.json()) as {
+        error?: string;
+        inserted?: number;
+        binsAfter?: number;
+        binsBefore?: number;
+        location?: { code: string; name: string };
+      };
+      if (!res.ok) throw new Error(j.error ?? "Request failed");
+      setBinsToast(
+        `Location ${j.location?.code ?? "?"} (${j.location?.name ?? ""}): +${j.inserted ?? 0} new bins, total active ${j.binsAfter ?? "?"}.`,
+      );
+    } catch (e) {
+      setBinsToast(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBinsBusy(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex gap-2 border-b border-[var(--wms-border)] pb-2">
@@ -212,6 +242,7 @@ export function SettingsWorkspace() {
           [
             ["rfid", "RFID defaults"],
             ["integrations", "Integrations"],
+            ["bins", "Locations / bins"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -233,6 +264,36 @@ export function SettingsWorkspace() {
         <p className="font-mono text-xs text-red-400/90">
           {error instanceof Error ? error.message : "Load failed"}
         </p>
+      ) : null}
+
+      {tab === "bins" ? (
+        <div className="space-y-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-5">
+          <p className="font-mono text-sm leading-relaxed text-[var(--wms-fg)]/90">
+            Inserts the same Orlando warehouse bin grid as local <code className="text-[var(--wms-accent)]">db:seed</code>{" "}
+            (~675 codes: aisles × sections 01–05 × L/C/R). Existing codes are left unchanged (
+            <code className="text-[var(--wms-muted)]">ON CONFLICT DO NOTHING</code>).
+          </p>
+          <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
+            Location code
+            <input
+              value={binLocationCode}
+              onChange={(e) => setBinLocationCode(e.target.value)}
+              placeholder="001"
+              className="mt-1 w-full max-w-xs rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={binsBusy}
+            onClick={() => void ensureOrlandoBins()}
+            className="rounded-lg border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-5 py-2.5 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-40"
+          >
+            {binsBusy ? "Working…" : "Ensure Orlando bin grid"}
+          </button>
+          {binsToast ? (
+            <p className="font-mono text-xs text-[var(--wms-muted)]">{binsToast}</p>
+          ) : null}
+        </div>
       ) : null}
 
       {tab === "rfid" ? (

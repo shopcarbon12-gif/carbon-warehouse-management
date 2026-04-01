@@ -39,6 +39,8 @@
     "diagnose:db": "node scripts/diagnose-wms-db.mjs",
     "db:copy-bins": "node scripts/copy-bins-to-target.mjs",
     "db:copy-bins:tunnel": "node scripts/copy-bins-through-tunnel.mjs",
+    "db:ensure-orlando-bins": "node scripts/ensure-orlando-seed-bins.mjs",
+    "db:ensure-orlando-bins:coolify": "node scripts/ensure-orlando-seed-bins.mjs --coolify",
     "coolify:set-public-urls": "node scripts/coolify-set-public-urls.mjs",
     "env:ensure-local": "node scripts/ensure-local-public-env.mjs",
     "env:parity-local": "node scripts/ensure-production-parity-local.mjs",
