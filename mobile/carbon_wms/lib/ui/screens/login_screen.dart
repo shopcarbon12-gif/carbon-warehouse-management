@@ -1,5 +1,5 @@
-import 'dart:async' show unawaited;
-import 'dart:io' show Platform;
+import 'dart:async' show TimeoutException, unawaited;
+import 'dart:io' show Platform, SocketException;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,7 +13,7 @@ import 'package:carbon_wms/services/handheld_client_info.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
 
-/// Light login layout aligned with `APK UI` mocks. Does not change app-wide theme.
+/// Light login layout aligned with `APK UI` mocks (rounded-md fields, gradient CTA).
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.onSuccess});
 
@@ -27,12 +27,19 @@ class _LoginScreenState extends State<LoginScreen> {
   static const String kDefaultLoginEmail = 'user@carbonjeanscompany.com';
   static const double _fieldHeight = 64;
 
-  static const Color _bg = Color(0xFFFFFFFF);
+  /// Leading icons in `Login page - unregistered device mockup.html`: email row uses 20px
+  /// (`.login-email-row .material-symbols-outlined`); server / lock / visibility use opsz 24 → 24px.
+  static const double _iconSizeEmailRow = 20;
+  static const double _iconSizeFieldRow = 24;
+
+  /// Mint wash like early CarbonWMS handheld mock (not pure white).
+  static const Color _bg = Color(0xFFF5FAFA);
   static const Color _fieldFill = Color(0xFFF0F5F4);
   static const Color _labelGrey = Color(0xFF6D7979);
   static const Color _labelAboveField = Color(0xFF3D4949);
   static const Color _textBlack = Color(0xFF171D1D);
   static const Color _primaryTeal = Color(0xFF006768);
+  static const Color _primaryTealDeep = Color(0xFF008284);
 
   final _serverUrl = TextEditingController();
   final _email = TextEditingController();
@@ -47,7 +54,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _vaultReady = false;
   String? _vaultEmail;
   bool _rememberEmail = true;
-  bool _showBioHint = false;
+  bool _offerBiometricSetupAfterSignIn = false;
+  bool _bioCapableDevice = false;
 
   @override
   void initState() {
@@ -72,28 +80,31 @@ class _LoginScreenState extends State<LoginScreen> {
 
     _rememberEmail = await api.getRememberLoginEmail();
     final saved = await api.getSavedLoginEmail();
+    final offerBio = await LoginCredentialsStore.getOfferBiometricSetupAfterSignIn();
+    final bioCapable = await LoginCredentialsStore.canUseBiometricPasswordVault();
     if (!mounted) return;
     if (_rememberEmail && saved != null && saved.isNotEmpty) {
       _email.text = saved;
     } else {
       _email.text = kDefaultLoginEmail;
     }
+    setState(() {
+      _offerBiometricSetupAfterSignIn = offerBio;
+      _bioCapableDevice = bioCapable;
+    });
 
     await _refreshVaultUi();
     await _loadDeviceApprovalLine();
-    await _refreshBioHint();
-  }
-
-  Future<void> _refreshBioHint() async {
-    final can = await LoginCredentialsStore.canUseBiometricPasswordVault();
-    final vaulted = await LoginCredentialsStore.hasVaultedCredentials();
-    if (!mounted) return;
-    setState(() => _showBioHint = can && !vaulted);
   }
 
   Future<void> _applyRememberEmail(bool value) async {
     setState(() => _rememberEmail = value);
     await context.read<WmsApiClient>().setRememberLoginEmail(value);
+  }
+
+  Future<void> _applyOfferBiometric(bool value) async {
+    setState(() => _offerBiometricSetupAfterSignIn = value);
+    await LoginCredentialsStore.setOfferBiometricSetupAfterSignIn(value);
   }
 
   Future<void> _refreshVaultUi() async {
@@ -164,12 +175,19 @@ class _LoginScreenState extends State<LoginScreen> {
         color: _labelAboveField,
       );
 
-  /// Same nominal font size as mock (`text-base`); [height] improves descender room inside fixed row.
   TextStyle get _inputTextStyle => GoogleFonts.spaceGrotesk(
         fontSize: 16,
         fontWeight: FontWeight.w500,
         height: 1.25,
         color: _textBlack,
+      );
+
+  /// Password placeholder bullets (empty field); real input uses [_inputTextStyle] (black).
+  TextStyle get _inputTextStyleMuted => GoogleFonts.spaceGrotesk(
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+        height: 1.25,
+        color: _labelGrey,
       );
 
   static const InputDecoration _plainFieldDeco = InputDecoration(
@@ -185,6 +203,8 @@ class _LoginScreenState extends State<LoginScreen> {
     required Widget field,
     Widget? trailing,
     FocusNode? focusNode,
+    double leadingIconSize = _iconSizeFieldRow,
+    double iconAfterGap = 12,
   }) {
     final focused = focusNode?.hasFocus ?? false;
     return Column(
@@ -205,8 +225,8 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(icon, size: 20, color: _labelGrey),
-              const SizedBox(width: 12),
+              Icon(icon, size: leadingIconSize, color: _labelGrey),
+              SizedBox(width: iconAfterGap),
               Expanded(
                 child: Align(
                   alignment: Alignment.centerLeft,
@@ -219,6 +239,76 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ],
     );
+  }
+
+  String _formatLoginFailure(Object e) {
+    final t = e.runtimeType.toString();
+    if (t.contains('LocalAuth') || e is PlatformException) {
+      return 'Biometric setup failed. Open Android Settings → Security and ensure fingerprint '
+          'or face unlock is set up, then try again.';
+    }
+    return 'Cannot reach server. Check Wi‑Fi and that the site is up.\n($t)';
+  }
+
+  /// Never throws; does not block navigation on biometric errors.
+  Future<void> _maybeOfferBiometricEnrollment(String email, String password) async {
+    if (!await LoginCredentialsStore.canUseBiometricPasswordVault()) {
+      await LoginCredentialsStore.clearVault();
+      await LoginCredentialsStore.setBiometricLoginEnabled(false);
+      return;
+    }
+    if (!await LoginCredentialsStore.shouldOfferBiometricEnrollment()) return;
+    if (!mounted) return;
+
+    try {
+      final offer = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Fingerprint or face sign-in'),
+          content: const Text(
+            'Save your password on this device and sign in next time with fingerprint or face unlock? '
+            'Passwords are never stored on rugged handheld scanners.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Turn on'),
+            ),
+          ],
+        ),
+      );
+
+      if (offer == true) {
+        final bioOk = await LoginCredentialsStore.authenticateWithBiometric();
+        if (!mounted) return;
+        if (bioOk) {
+          await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(false);
+          await LoginCredentialsStore.setBiometricLoginEnabled(true);
+          await LoginCredentialsStore.storeVaultCredentials(email.trim(), password);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Biometric verification was cancelled or failed. You can try again from Handheld settings.',
+              ),
+            ),
+          );
+        }
+      } else if (offer == false) {
+        await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(true);
+      }
+    } catch (e, st) {
+      debugPrint('Biometric enrollment UI: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_formatLoginFailure(e))),
+        );
+      }
+    }
   }
 
   Future<void> _submitWithCredentials(String email, String password) async {
@@ -245,57 +335,28 @@ class _LoginScreenState extends State<LoginScreen> {
         await api.setSavedLoginEmail(email.trim());
       }
 
-      if (!await LoginCredentialsStore.canUseBiometricPasswordVault()) {
-        await LoginCredentialsStore.clearVault();
-        await LoginCredentialsStore.setBiometricLoginEnabled(false);
-      } else {
-        if (!mounted) return;
-        final offerEnrollment = await LoginCredentialsStore.shouldOfferBiometricEnrollment();
-        if (!mounted) return;
-        if (offerEnrollment) {
-          final offer = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Fingerprint or face sign-in'),
-              content: const Text(
-                'Save your password on this device and sign in next time with fingerprint or face unlock? '
-                'Passwords are never stored on rugged handheld scanners.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Not now'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Turn on'),
-                ),
-              ],
-            ),
-          );
-          if (offer == true) {
-            final bioOk = await LoginCredentialsStore.authenticateWithBiometric();
-            if (bioOk) {
-              await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(false);
-              await LoginCredentialsStore.setBiometricLoginEnabled(true);
-              await LoginCredentialsStore.storeVaultCredentials(email.trim(), password);
-            }
-          } else if (offer == false) {
-            await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(true);
-          }
-        }
-      }
+      await _maybeOfferBiometricEnrollment(email.trim(), password);
 
       _password.clear();
       await _refreshVaultUi();
-      await _refreshBioHint();
       await widget.onSuccess();
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _err = 'Connection timed out. Check Wi‑Fi and try again.';
+      });
+    } on SocketException {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _err = 'Cannot reach server. Check Wi‑Fi and that the site is up.';
+      });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _err =
-            'Cannot reach server. Check Wi‑Fi and that the site is up.\n${e.runtimeType}';
+        _err = _formatLoginFailure(e);
       });
     }
   }
@@ -305,12 +366,69 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _biometricSignIn() async {
-    final ok = await LoginCredentialsStore.authenticateWithBiometric();
-    if (!ok || !mounted) return;
-    final email = await LoginCredentialsStore.readVaultEmail();
-    final pass = await LoginCredentialsStore.readVaultPassword();
-    if (email == null || pass == null || email.isEmpty || pass.isEmpty) return;
-    await _submitWithCredentials(email, pass);
+    try {
+      final ok = await LoginCredentialsStore.authenticateWithBiometric();
+      if (!ok || !mounted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Biometric sign-in was cancelled or is unavailable.'),
+            ),
+          );
+        }
+        return;
+      }
+      final email = await LoginCredentialsStore.readVaultEmail();
+      final pass = await LoginCredentialsStore.readVaultPassword();
+      if (email == null || pass == null || email.isEmpty || pass.isEmpty) return;
+      await _submitWithCredentials(email, pass);
+    } on Object catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_formatLoginFailure(e))),
+      );
+    }
+  }
+
+  Widget _checkRow({
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required String label,
+  }) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: Checkbox(
+                value: value,
+                activeColor: _primaryTeal,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+                onChanged: (v) => onChanged(v ?? false),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: _textBlack,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -400,7 +518,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Icon(LucideIcons.server, size: 20, color: _labelGrey),
+                      const Icon(LucideIcons.server, size: _iconSizeFieldRow, color: _labelGrey),
                       const SizedBox(width: 12),
                       Expanded(
                         child: TextField(
@@ -430,6 +548,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 _labeledRow(
                   label: 'USER EMAIL',
                   icon: LucideIcons.user,
+                  leadingIconSize: _iconSizeEmailRow,
+                  iconAfterGap: 4,
                   focusNode: _emailFocus,
                   field: TextField(
                     controller: _email,
@@ -448,74 +568,61 @@ class _LoginScreenState extends State<LoginScreen> {
                   label: 'PASSWORD',
                   icon: LucideIcons.lock,
                   focusNode: _passwordFocus,
-                  field: TextField(
-                    controller: _password,
-                    focusNode: _passwordFocus,
-                    obscureText: _obscurePassword,
-                    obscuringCharacter: '•',
-                    textAlignVertical: TextAlignVertical.center,
-                    style: _inputTextStyle,
-                    cursorColor: _textBlack,
-                    decoration: _plainFieldDeco,
-                    onSubmitted: (_) {
-                      if (!_busy) unawaited(_submit());
+                  field: Builder(
+                    builder: (context) {
+                      final hasPassword = _password.text.isNotEmpty;
+                      // Empty + obscureText:true makes Flutter paint bullets with [style] (black), not hintStyle.
+                      // Grey dots = hint while empty; real input uses black + obscuring when non-empty.
+                      return TextField(
+                        controller: _password,
+                        focusNode: _passwordFocus,
+                        obscureText: hasPassword && _obscurePassword,
+                        obscuringCharacter: '•',
+                        textAlignVertical: TextAlignVertical.center,
+                        style: _inputTextStyle,
+                        cursorColor: _textBlack,
+                        decoration: hasPassword
+                            ? _plainFieldDeco
+                            : InputDecoration(
+                                border: InputBorder.none,
+                                isDense: true,
+                                filled: false,
+                                contentPadding: EdgeInsets.zero,
+                                hintText: '••••••••••••',
+                                hintStyle: _inputTextStyleMuted,
+                              ),
+                        onChanged: (_) => setState(() {}),
+                        onSubmitted: (_) {
+                          if (!_busy) unawaited(_submit());
+                        },
+                      );
                     },
                   ),
                   trailing: IconButton(
+                    tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                    iconSize: _iconSizeFieldRow,
+                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                     icon: Icon(
                       _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
-                      size: 22,
+                      size: _iconSizeFieldRow,
                       color: _labelGrey,
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                InkWell(
-                  onTap: () => unawaited(_applyRememberEmail(!_rememberEmail)),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Checkbox(
-                            value: _rememberEmail,
-                            activeColor: _primaryTeal,
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
-                            onChanged: (v) => unawaited(_applyRememberEmail(v ?? true)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Remember email on this device',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: _textBlack,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                _checkRow(
+                  value: _rememberEmail,
+                  onChanged: (v) => unawaited(_applyRememberEmail(v)),
+                  label: 'Remember email on this device',
                 ),
-                if (_showBioHint) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'After you sign in, you can turn on fingerprint or face sign-in for faster login.',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: _labelGrey,
-                      height: 1.35,
-                    ),
+                if (_bioCapableDevice) ...[
+                  const SizedBox(height: 4),
+                  _checkRow(
+                    value: _offerBiometricSetupAfterSignIn,
+                    onChanged: (v) => unawaited(_applyOfferBiometric(v)),
+                    label: 'Biometric login',
                   ),
                 ],
                 if (_err != null) ...[
@@ -528,20 +635,38 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 28),
                 SizedBox(
                   height: _fieldHeight,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _primaryTeal,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: _primaryTeal.withValues(alpha: 0.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: _busy ? null : _submit,
-                    child: Text(
-                      _busy ? 'SIGNING IN…' : 'SIGN IN',
-                      style: GoogleFonts.manrope(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _busy ? null : _submit,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [_primaryTeal, _primaryTealDeep],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text(
+                            _busy ? 'SIGNING IN…' : 'SIGN IN',
+                            style: GoogleFonts.manrope(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
