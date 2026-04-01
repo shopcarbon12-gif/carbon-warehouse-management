@@ -24,15 +24,21 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  static const Color _bg = Color(0xFFF5FAFA);
+  static const String kDefaultLoginEmail = 'user@carbonjeanscompany.com';
+  static const double _fieldHeight = 64;
+
+  static const Color _bg = Color(0xFFFFFFFF);
   static const Color _fieldFill = Color(0xFFF0F5F4);
   static const Color _labelGrey = Color(0xFF6D7979);
+  static const Color _labelAboveField = Color(0xFF3D4949);
   static const Color _textBlack = Color(0xFF171D1D);
   static const Color _primaryTeal = Color(0xFF006768);
 
   final _serverUrl = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _emailFocus = FocusNode();
+  final _passwordFocus = FocusNode();
 
   bool _busy = false;
   String? _err;
@@ -40,11 +46,19 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _deviceApprovalLine;
   bool _vaultReady = false;
   String? _vaultEmail;
+  bool _rememberEmail = true;
+  bool _showBioHint = false;
 
   @override
   void initState() {
     super.initState();
+    _emailFocus.addListener(_refocusDecoration);
+    _passwordFocus.addListener(_refocusDecoration);
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+  }
+
+  void _refocusDecoration() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _bootstrap() async {
@@ -56,14 +70,30 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     _serverUrl.text = locked;
 
+    _rememberEmail = await api.getRememberLoginEmail();
     final saved = await api.getSavedLoginEmail();
     if (!mounted) return;
-    if (saved != null && saved.isNotEmpty) {
+    if (_rememberEmail && saved != null && saved.isNotEmpty) {
       _email.text = saved;
+    } else {
+      _email.text = kDefaultLoginEmail;
     }
 
     await _refreshVaultUi();
     await _loadDeviceApprovalLine();
+    await _refreshBioHint();
+  }
+
+  Future<void> _refreshBioHint() async {
+    final can = await LoginCredentialsStore.canUseBiometricPasswordVault();
+    final vaulted = await LoginCredentialsStore.hasVaultedCredentials();
+    if (!mounted) return;
+    setState(() => _showBioHint = can && !vaulted);
+  }
+
+  Future<void> _applyRememberEmail(bool value) async {
+    setState(() => _rememberEmail = value);
+    await context.read<WmsApiClient>().setRememberLoginEmail(value);
   }
 
   Future<void> _refreshVaultUi() async {
@@ -117,49 +147,79 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _emailFocus.removeListener(_refocusDecoration);
+    _passwordFocus.removeListener(_refocusDecoration);
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
     _serverUrl.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
   }
 
-  InputDecoration _decoration({
-    required String label,
-    Widget? suffixIcon,
-  }) {
-    return InputDecoration(
-      labelText: label.toUpperCase(),
-      labelStyle: GoogleFonts.spaceGrotesk(
+  TextStyle get _fieldLabelStyle => GoogleFonts.spaceGrotesk(
         fontSize: 11,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.2,
-        color: _labelGrey,
-      ),
-      floatingLabelBehavior: FloatingLabelBehavior.always,
-      suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: _fieldFill,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide.none,
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: _primaryTeal, width: 2),
-      ),
-    );
-  }
+        color: _labelAboveField,
+      );
 
+  /// Same nominal font size as mock (`text-base`); [height] improves descender room inside fixed row.
   TextStyle get _inputTextStyle => GoogleFonts.spaceGrotesk(
         fontSize: 16,
         fontWeight: FontWeight.w500,
+        height: 1.25,
         color: _textBlack,
       );
+
+  static const InputDecoration _plainFieldDeco = InputDecoration(
+    border: InputBorder.none,
+    isDense: true,
+    filled: false,
+    contentPadding: EdgeInsets.zero,
+  );
+
+  Widget _labeledRow({
+    required String label,
+    required IconData icon,
+    required Widget field,
+    Widget? trailing,
+    FocusNode? focusNode,
+  }) {
+    final focused = focusNode?.hasFocus ?? false;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(label, style: _fieldLabelStyle),
+        const SizedBox(height: 8),
+        Container(
+          height: _fieldHeight,
+          decoration: BoxDecoration(
+            color: _fieldFill,
+            borderRadius: BorderRadius.circular(8),
+            border: focused ? Border.all(color: _primaryTeal, width: 2) : null,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(icon, size: 20, color: _labelGrey),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: field,
+                ),
+              ),
+              if (trailing != null) trailing,
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Future<void> _submitWithCredentials(String email, String password) async {
     setState(() {
@@ -180,40 +240,55 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      await api.setSavedLoginEmail(email.trim());
+      await api.setRememberLoginEmail(_rememberEmail);
+      if (_rememberEmail) {
+        await api.setSavedLoginEmail(email.trim());
+      }
 
-      if (!r.bypass || !await LoginCredentialsStore.canUseBiometricPasswordVault()) {
+      if (!await LoginCredentialsStore.canUseBiometricPasswordVault()) {
         await LoginCredentialsStore.clearVault();
         await LoginCredentialsStore.setBiometricLoginEnabled(false);
-      } else if (mounted) {
-        final offer = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Biometric sign-in'),
-            content: const Text(
-              'Save your password on this phone for Super Admin biometric sign-in? '
-              'Passwords are never stored on rugged handheld scanners.',
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Yes'),
+      } else {
+        if (!mounted) return;
+        final offerEnrollment = await LoginCredentialsStore.shouldOfferBiometricEnrollment();
+        if (!mounted) return;
+        if (offerEnrollment) {
+          final offer = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Fingerprint or face sign-in'),
+              content: const Text(
+                'Save your password on this device and sign in next time with fingerprint or face unlock? '
+                'Passwords are never stored on rugged handheld scanners.',
               ),
-            ],
-          ),
-        );
-        if (offer == true) {
-          final bioOk = await LoginCredentialsStore.authenticateWithBiometric();
-          if (bioOk) {
-            await LoginCredentialsStore.setBiometricLoginEnabled(true);
-            await LoginCredentialsStore.storeVaultCredentials(email.trim(), password);
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Not now'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Turn on'),
+                ),
+              ],
+            ),
+          );
+          if (offer == true) {
+            final bioOk = await LoginCredentialsStore.authenticateWithBiometric();
+            if (bioOk) {
+              await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(false);
+              await LoginCredentialsStore.setBiometricLoginEnabled(true);
+              await LoginCredentialsStore.storeVaultCredentials(email.trim(), password);
+            }
+          } else if (offer == false) {
+            await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(true);
           }
         }
       }
 
       _password.clear();
       await _refreshVaultUi();
+      await _refreshBioHint();
       await widget.onSuccess();
     } on Object catch (e) {
       if (!mounted) return;
@@ -298,7 +373,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.2,
-                          color: _labelGrey,
+                          color: _labelAboveField,
                         ),
                       ),
                     ),
@@ -314,32 +389,29 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: _serverUrl,
-                  readOnly: true,
-                  enableInteractiveSelection: true,
-                  style: _inputTextStyle,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: _fieldFill,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: _primaryTeal, width: 2),
-                    ),
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.only(left: 12, right: 8),
-                      child: Icon(LucideIcons.server, size: 22, color: _labelGrey),
-                    ),
-                    prefixIconConstraints: const BoxConstraints(minWidth: 44, minHeight: 48),
+                Container(
+                  height: _fieldHeight,
+                  decoration: BoxDecoration(
+                    color: _fieldFill,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  alignment: Alignment.center,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(LucideIcons.server, size: 20, color: _labelGrey),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _serverUrl,
+                          readOnly: true,
+                          enableInteractiveSelection: true,
+                          style: _inputTextStyle,
+                          decoration: _plainFieldDeco,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 if (_deviceApprovalLine != null) ...[
@@ -354,50 +426,98 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 20),
-                TextField(
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  autocorrect: false,
-                  style: _inputTextStyle,
-                  cursorColor: _textBlack,
-                  decoration: _decoration(label: 'User email').copyWith(
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.only(left: 12, right: 8),
-                      child: Icon(LucideIcons.user, size: 22, color: _labelGrey),
-                    ),
-                    prefixIconConstraints: const BoxConstraints(minWidth: 44, minHeight: 48),
+                const SizedBox(height: 24),
+                _labeledRow(
+                  label: 'USER EMAIL',
+                  icon: LucideIcons.user,
+                  focusNode: _emailFocus,
+                  field: TextField(
+                    controller: _email,
+                    focusNode: _emailFocus,
+                    keyboardType: TextInputType.emailAddress,
+                    autocorrect: false,
+                    textAlignVertical: TextAlignVertical.center,
+                    style: _inputTextStyle,
+                    cursorColor: _textBlack,
+                    decoration: _plainFieldDeco,
+                    onChanged: (_) => unawaited(_refreshVaultUi()),
                   ),
-                  onChanged: (_) async => _refreshVaultUi(),
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _password,
-                  obscureText: _obscurePassword,
-                  obscuringCharacter: '•',
-                  style: _inputTextStyle.copyWith(
-                    color: _textBlack,
+                const SizedBox(height: 24),
+                _labeledRow(
+                  label: 'PASSWORD',
+                  icon: LucideIcons.lock,
+                  focusNode: _passwordFocus,
+                  field: TextField(
+                    controller: _password,
+                    focusNode: _passwordFocus,
+                    obscureText: _obscurePassword,
+                    obscuringCharacter: '•',
+                    textAlignVertical: TextAlignVertical.center,
+                    style: _inputTextStyle,
+                    cursorColor: _textBlack,
+                    decoration: _plainFieldDeco,
+                    onSubmitted: (_) {
+                      if (!_busy) unawaited(_submit());
+                    },
                   ),
-                  cursorColor: _textBlack,
-                  decoration: _decoration(label: 'Password').copyWith(
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.only(left: 12, right: 8),
-                      child: Icon(LucideIcons.lock, size: 22, color: _labelGrey),
-                    ),
-                    prefixIconConstraints: const BoxConstraints(minWidth: 44, minHeight: 48),
-                    suffixIcon: IconButton(
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                      icon: Icon(
-                        _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
-                        size: 22,
-                        color: _labelGrey,
-                      ),
+                  trailing: IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(
+                      _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
+                      size: 22,
+                      color: _labelGrey,
                     ),
                   ),
-                  onSubmitted: (_) {
-                    if (!_busy) unawaited(_submit());
-                  },
                 ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () => unawaited(_applyRememberEmail(!_rememberEmail)),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _rememberEmail,
+                            activeColor: _primaryTeal,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                            onChanged: (v) => unawaited(_applyRememberEmail(v ?? true)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Remember email on this device',
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: _textBlack,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_showBioHint) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'After you sign in, you can turn on fingerprint or face sign-in for faster login.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: _labelGrey,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
                 if (_err != null) ...[
                   const SizedBox(height: 14),
                   Text(
@@ -407,7 +527,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
                 const SizedBox(height: 28),
                 SizedBox(
-                  height: 52,
+                  height: _fieldHeight,
                   child: FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: _primaryTeal,
@@ -430,7 +550,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 12),
                   TextButton.icon(
                     onPressed: _busy ? null : _biometricSignIn,
-                    icon: Icon(Icons.fingerprint, color: _primaryTeal, size: 26),
+                    icon: const Icon(Icons.fingerprint, color: _primaryTeal, size: 26),
                     label: Text(
                       _vaultEmail != null && _vaultEmail!.isNotEmpty
                           ? 'Biometric sign-in ($_vaultEmail)'

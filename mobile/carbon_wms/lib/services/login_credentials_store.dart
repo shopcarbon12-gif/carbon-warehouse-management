@@ -6,14 +6,16 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Biometric + encrypted password vault for **consumer-style phones** only, and only when the
-/// server marks the account as Super Admin (`bypassDeviceLock`). Rugged handhelds never persist passwords.
+/// Biometric + encrypted password vault for **consumer-style phones** only (not Chainway/Zebra/etc.).
+/// After a successful sign-in, the app may offer to store credentials behind fingerprint / face unlock.
+/// Rugged handhelds never persist passwords.
 class LoginCredentialsStore {
   LoginCredentialsStore._();
 
   static const _vaultEmail = 'wms_login_vault_email_v1';
   static const _vaultPassword = 'wms_login_vault_password_v1';
   static const _prefsBiometric = 'wms_biometric_superadmin_enabled_v1';
+  static const _prefsSkipBioOffer = 'wms_skip_biometric_enrollment_offer_v1';
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
 
@@ -78,6 +80,23 @@ class LoginCredentialsStore {
     if (!await isBiometricLoginEnabled()) return false;
     final p = await readVaultPassword();
     return p != null && p.isNotEmpty;
+  }
+
+  /// Offer fingerprint/face vault once per install unless the user chose "Not now".
+  static Future<bool> shouldOfferBiometricEnrollment() async {
+    if (!await canUseBiometricPasswordVault()) return false;
+    if (await hasVaultedCredentials()) return false;
+    final p = await SharedPreferences.getInstance();
+    return p.getBool(_prefsSkipBioOffer) != true;
+  }
+
+  static Future<void> setBiometricEnrollmentPromptSkipped(bool skipped) async {
+    final p = await SharedPreferences.getInstance();
+    if (skipped) {
+      await p.setBool(_prefsSkipBioOffer, true);
+    } else {
+      await p.remove(_prefsSkipBioOffer);
+    }
   }
 
   static Future<bool> authenticateWithBiometric() async {

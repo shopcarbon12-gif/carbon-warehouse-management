@@ -17,6 +17,7 @@ class WmsApiClient {
   static const String _prefsKeySession = 'wms_session_token';
   static const String _prefsRecentServers = 'wms_recent_servers_v1';
   static const String _prefsSavedLoginEmail = 'wms_saved_login_email';
+  static const String _prefsRememberLoginEmail = 'wms_remember_login_email_v1';
 
   /// Optional: `flutter run --dart-define=CARBON_WMS_DEV_HOST=http://10.0.2.2:3040` for emulator.
   /// Otherwise empty — user enters production URL on login (e.g. https://wms.shopcarbon.com).
@@ -107,6 +108,18 @@ class WmsApiClient {
     } else {
       await p.setString(_prefsSavedLoginEmail, t);
     }
+  }
+
+  /// When true (default), last successful email is restored on the login screen.
+  Future<bool> getRememberLoginEmail() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getBool(_prefsRememberLoginEmail) ?? true;
+  }
+
+  Future<void> setRememberLoginEmail(bool value) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_prefsRememberLoginEmail, value);
+    if (!value) await setSavedLoginEmail(null);
   }
 
   Future<Map<String, String>> handheldAuthHeaders() async {
@@ -270,12 +283,30 @@ class WmsApiClient {
     return bytes[0] == 0x50 && bytes[1] == 0x4b && bytes[2] == 0x03 && bytes[3] == 0x04;
   }
 
+  /// Rejects folder URLs and non-.apk paths (e.g. nginx directory index under `/storage/apk/`).
+  static void assertOtaUrlIsApkFile(String resolvedUrl) {
+    final uri = Uri.parse(resolvedUrl.trim());
+    final path = uri.path;
+    final lower = path.toLowerCase();
+    if (path.isEmpty || path.endsWith('/')) {
+      throw StateError(
+        'OTA URL must point to one .apk file, not a folder. In WMS → Settings → Mobile OTA, upload the APK again so the active release stores the full file URL.',
+      );
+    }
+    if (!lower.endsWith('.apk')) {
+      throw StateError(
+        'OTA URL must end with .apk. Fix the active release in WMS → Settings → Mobile OTA.',
+      );
+    }
+  }
+
   Future<void> downloadAndInstallApk(String relativeOrAbsoluteUrl) async {
     if (kIsWeb) return;
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final url = relativeOrAbsoluteUrl.startsWith('http')
         ? relativeOrAbsoluteUrl
         : '$base${relativeOrAbsoluteUrl.startsWith('/') ? '' : '/'}$relativeOrAbsoluteUrl';
+    assertOtaUrlIsApkFile(url);
     final uri = Uri.parse(url);
     final res = await _http.get(uri);
     if (res.statusCode == 404) {
@@ -289,9 +320,13 @@ class WmsApiClient {
     }
     final body = res.bodyBytes;
     if (!_looksLikeApkBytes(body)) {
-      final head = String.fromCharCodes(body.take(120).where((b) => b >= 32 && b < 127));
-      final hint = head.startsWith('<!') || head.startsWith('<h')
-          ? ' (server returned HTML — often a login page; redeploy WMS with /uploads/mobile-apk public in proxy).'
+      final head = String.fromCharCodes(body.take(200).where((b) => b >= 32 && b < 127));
+      final isHtml = head.startsWith('<!') || head.startsWith('<h');
+      final isIndex = head.toLowerCase().contains('index of');
+      final hint = isHtml
+          ? (isIndex
+              ? ' (server returned a directory listing — the OTA URL must be the full .apk path, not a folder.)'
+              : ' (server returned HTML — often a login page; ensure GET /uploads/mobile-apk/… is public in the proxy.)')
           : '';
       throw StateError('Download is not a valid APK (wrong file signature).$hint');
     }

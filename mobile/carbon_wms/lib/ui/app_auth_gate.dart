@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:android_id/android_id.dart';
@@ -124,28 +125,47 @@ class _AppAuthGateState extends State<AppAuthGate> {
     if (mounted) setState(() => _phase = _Phase.lock);
   }
 
+  Future<void> _installOtaFromDialog(BuildContext dialogContext) async {
+    final url = _otaUrl;
+    if (url == null || url.isEmpty) return;
+    Navigator.of(dialogContext).pop();
+    if (!mounted) return;
+    setState(() => _otaDismissed = true);
+    try {
+      await context.read<WmsApiClient>().downloadAndInstallApk(url);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Installer opened — approve the Android install prompt. After install, open Carbon WMS again (the app does not auto-restart).',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   void _maybeShowOta() {
     if (!mounted || _otaDismissed || _otaUrl == null || _otaUrl!.isEmpty) return;
     showDialog<void>(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Update available'),
         content: const Text('A newer CarbonWMS build is published. Install when convenient.'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () {
-              setState(() => _otaDismissed = true);
-              Navigator.of(ctx).pop();
-            },
-          ),
           TextButton(
             onPressed: () {
               setState(() => _otaDismissed = true);
               Navigator.of(ctx).pop();
             },
             child: const Text('Dismiss'),
+          ),
+          FilledButton(
+            onPressed: () => unawaited(_installOtaFromDialog(ctx)),
+            child: const Text('Install'),
           ),
         ],
       ),
