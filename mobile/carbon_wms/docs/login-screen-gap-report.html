@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CarbonWMS Login — Pic1 vs Pic2 Gap Report &amp; Target Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-page: #f6f7f8;
+      --text: #171d1d;
+      --muted: #8a9090;
+      --label: #4a5454;
+      --teal: #1b7d7d;
+      --field-bg: #ebebeb;
+      --white: #ffffff;
+      --border-preview: #1a2744;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background: var(--bg-page);
+      color: var(--text);
+      line-height: 1.55;
+      font-size: 15px;
+    }
+    header {
+      background: linear-gradient(135deg, #0d3d3d 0%, #1b7d7d 100%);
+      color: #fff;
+      padding: 2rem 1.5rem 2.5rem;
+    }
+    header h1 { margin: 0 0 0.35rem; font-size: 1.45rem; font-weight: 800; letter-spacing: -0.02em; }
+    header p { margin: 0; opacity: 0.92; font-size: 0.95rem; max-width: 52rem; }
+    main { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    h2 {
+      font-size: 1.15rem;
+      font-weight: 800;
+      margin: 2.25rem 0 0.75rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 2px solid #1b7d7d;
+    }
+    h3 { font-size: 1rem; font-weight: 700; margin: 1.25rem 0 0.5rem; }
+    p.note {
+      background: #fff8e6;
+      border-left: 4px solid #e6a800;
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    p.danger {
+      background: #fdeeee;
+      border-left: 4px solid #c62828;
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    table.gap {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      font-size: 0.88rem;
+    }
+    table.gap th, table.gap td {
+      border: 1px solid #e0e4e4;
+      padding: 0.55rem 0.65rem;
+      vertical-align: top;
+      text-align: left;
+    }
+    table.gap th { background: #eef5f5; font-weight: 700; }
+    .sev-h { background: #ffebee; font-weight: 700; }
+    .sev-m { background: #fff8e1; }
+    .sev-l { background: #f1f8e9; }
+    ul.tight { margin: 0.35rem 0; padding-left: 1.2rem; }
+    ul.tight li { margin: 0.25rem 0; }
+
+    .preview-wrap {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+      margin: 1.5rem 0;
+    }
+    @media (min-width: 900px) {
+      .preview-wrap { grid-template-columns: 1fr 1fr; align-items: start; }
+    }
+    .phone {
+      width: 100%;
+      max-width: 360px;
+      margin: 0 auto;
+      background: #111;
+      border-radius: 28px;
+      padding: 12px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.25);
+    }
+    .phone-inner {
+      background: var(--white);
+      border-radius: 20px;
+      overflow: hidden;
+      min-height: 640px;
+      display: flex;
+      flex-direction: column;
+      padding: 20px 22px 18px;
+    }
+    .phone-label {
+      text-align: center;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #888;
+      margin-bottom: 10px;
+    }
+    .mock-logo {
+      width: 88px;
+      height: 88px;
+      margin: 8px auto 6px;
+      background: linear-gradient(160deg, #3a3a3a 0%, #0a0a0a 100%);
+      border-radius: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 800;
+      text-align: center;
+      line-height: 1.15;
+    }
+    .mock-logo span.sub { font-size: 0.55rem; font-weight: 600; opacity: 0.85; margin-top: 2px; }
+    .mock-title {
+      text-align: center;
+      font-size: 1.65rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #000;
+      margin: 0;
+    }
+    .mock-sub {
+      text-align: center;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 4px 0 0;
+      text-transform: uppercase;
+    }
+    .mock-labrow {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: 18px;
+      margin-bottom: 6px;
+    }
+    .mock-lab { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; color: var(--label); }
+    .mock-ssl { font-size: 0.58rem; color: var(--muted); font-weight: 500; letter-spacing: 0.04em; }
+    .mock-tray {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--field-bg);
+      border-radius: 10px;
+      padding: 0 14px;
+      min-height: 48px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: #000;
+    }
+    .mock-tray .ic { opacity: 0.55; font-size: 1rem; }
+    .mock-mac {
+      text-align: center;
+      font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      font-size: 0.72rem;
+      color: #000;
+      margin: 8px 0 0;
+    }
+    .mock-tray-input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font: inherit;
+      font-weight: 500;
+      color: var(--muted);
+      outline: none;
+    }
+    .mock-tray-pass {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font: inherit;
+      letter-spacing: 0.15em;
+      outline: none;
+    }
+    .mock-eye { opacity: 0.5; font-size: 1rem; padding: 8px; }
+    .mock-checks { margin-top: 12px; }
+    .mock-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 6px 0;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .sq {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--teal);
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .sq.on { background: var(--teal); color: #fff; font-size: 0.65rem; font-weight: 800; }
+    .mock-btn {
+      margin-top: auto;
+      background: var(--teal);
+      color: #fff;
+      text-align: center;
+      font-weight: 800;
+      font-size: 0.92rem;
+      letter-spacing: 0.08em;
+      padding: 14px;
+      border-radius: 10px;
+      border: none;
+      width: 100%;
+    }
+    .legend { font-size: 0.8rem; color: #555; margin-top: 0.5rem; }
+    code { font-size: 0.84em; background: #eee; padding: 0.1em 0.35em; border-radius: 4px; }
+    footer { padding: 2rem 1.5rem; text-align: center; font-size: 0.82rem; color: #666; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CarbonWMS login — visual gap report</h1>
+    <p>
+      Compares <strong>Pic1</strong> (current implementation / your device screenshot) to <strong>Pic2</strong> (target mock).
+      Includes a static <strong>HTML preview</strong> of the intended post-fix appearance (Pic2-aligned).
+      <strong>No app code was changed</strong> to produce this document.
+    </p>
+  </header>
+
+  <main>
+    <h2>1. Executive summary</h2>
+    <p>
+      Pic1 and Pic2 diverge on <strong>screen background</strong>, <strong>logo treatment</strong>, <strong>server URL label layout</strong>,
+      <strong>device identifier typography</strong>, and—most visibly—<strong>email/password field structure</strong> (Pic1 shows a nested
+      outlined inner input inside the gray tray; Pic2 describes a single flat tray per field without that inner chrome).
+      The Flutter code today uses <code>InputBorder.none</code> and a uniform <code>_loginTray</code>; any inner border in Pic1 may come from
+      the platform <code>TextField</code> theme, focus state, or OEM rendering—this must be verified on device when implementing fixes.
+    </p>
+    <p class="danger">
+      <strong>Logo conflict to resolve before build:</strong> Pic2’s written spec describes a <strong>rounded square with “CarbonWMS / logo” text</strong>.
+      The product direction elsewhere uses the <strong>hexagon PNG asset</strong>. The HTML preview below shows the Pic2 <em>text</em> logo for mock fidelity only;
+      implementation should follow whichever asset you approve after this report.
+    </p>
+
+    <h2>2. Gap matrix (Pic1 → Pic2)</h2>
+    <table class="gap">
+      <thead>
+        <tr>
+          <th style="width:18%">Area</th>
+          <th style="width:28%">Pic1 (current)</th>
+          <th style="width:28%">Pic2 (target)</th>
+          <th style="width:12%">Severity</th>
+          <th style="width:14%">Notes / fix direction</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Page background</strong></td>
+          <td>Very light gray (~<code>#F5F5F5</code>), matches current <code>_bg</code>.</td>
+          <td><strong>Solid white</strong> canvas; form sits directly on white.</td>
+          <td class="sev-m">Medium</td>
+          <td>Set scaffold background to white (or off-white only if you explicitly relax Pic2).</td>
+        </tr>
+        <tr>
+          <td><strong>Logo</strong></td>
+          <td>Large black square, white <strong>hex</strong> mark (production asset).</td>
+          <td>Rounded dark tile with <strong>white wordmark</strong> “CarbonWMS” + smaller “logo” text.</td>
+          <td class="sev-h">High</td>
+          <td>Choose one source of truth: hex PNG vs mock wordmark; adjust corner radius / size to match approved art.</td>
+        </tr>
+        <tr>
+          <td><strong>Title / subtitle</strong></td>
+          <td>“CarbonWMS” + “WAREHOUSE MANAGEMENT SOFTWARE”; Inter, tight title.</td>
+          <td>Same copy; bold black title; gray all-caps subtitle, slightly different spacing hierarchy.</td>
+          <td class="sev-l">Low</td>
+          <td>Fine-tune font size, weight, letter-spacing to match Pic2 optical scale (minor delta).</td>
+        </tr>
+        <tr>
+          <td><strong>SERVER URL + SSL row</strong></td>
+          <td><code>SERVER URL</code> and <code>CONNECTED VIA SSL</code> on <strong>one horizontal row</strong> (baseline aligned).</td>
+          <td>SSL helper <strong>above</strong> the field, right-aligned; label row separate per mock description.</td>
+          <td class="sev-m">Medium</td>
+          <td>Restructure layout: e.g. row with SSL right-aligned over the tray, or two-line header block as in Pic2.</td>
+        </tr>
+        <tr>
+          <td><strong>Server value styling</strong></td>
+          <td>URL in tray, medium weight (Inter w500 ~15px).</td>
+          <td>URL called out as <strong>bold black</strong> in tray.</td>
+          <td class="sev-l">Low</td>
+          <td>Bump weight to w700/w800 for URL text only.</td>
+        </tr>
+        <tr>
+          <td><strong>Device ID line</strong></td>
+          <td>Centered, Inter, <strong>gray</strong> (~<code>#6D7373</code>), 13px.</td>
+          <td>Centered, <strong>monospace</strong>, <strong>black</strong>, smaller “system” look (e.g. MAC sample).</td>
+          <td class="sev-m">Medium</td>
+          <td>Switch to <code>RobotoMono</code> / <code>GoogleFonts.robotoMono</code> (or equivalent); color <code>#000</code> or near-black; size ~11–12px.</td>
+        </tr>
+        <tr>
+          <td><strong>USER EMAIL field</strong></td>
+          <td>Single gray tray; Pic1 screenshot shows a <strong>nested inner field</strong> with dark outline containing the email.</td>
+          <td>One light gray rounded tray; person icon; placeholder/email in <strong>standard gray</strong>—no inner box described.</td>
+          <td class="sev-h">High</td>
+          <td>Remove inner border: audit <code>ThemeData.inputDecorationTheme</code>, <code>Material</code> parents, M3 defaults; use decoration that stays flush in tray.</td>
+        </tr>
+        <tr>
+          <td><strong>PASSWORD field</strong></td>
+          <td>Gray tray; Pic1 shows <strong>inner outlined</strong> password area; eye <strong>outside</strong> inner box, still in tray.</td>
+          <td>Padlock + dots + eye on the right within one tray (no nested outline in spec).</td>
+          <td class="sev-h">High</td>
+          <td>Same as email: eliminate nested outline; keep eye as trailing control inside tray padding.</td>
+        </tr>
+        <tr>
+          <td><strong>Tray chrome</strong></td>
+          <td>Fill <code>#ECECEC</code>, radius 10, height 52.</td>
+          <td>Fill ~<code>#EBEBEB</code> / light gray, radius ~8–10px.</td>
+          <td class="sev-l">Low</td>
+          <td>Optionally align hex to <code>#EBEBEB</code>; height tuning if inner padding changes.</td>
+        </tr>
+        <tr>
+          <td><strong>Checkboxes</strong></td>
+          <td>Teal border + fill when checked; Material <code>Checkbox</code>.</td>
+          <td>Teal square check style; checked = filled teal.</td>
+          <td class="sev-l">Low</td>
+          <td>Already close; optional custom painter for pixel match to mock corners.</td>
+        </tr>
+        <tr>
+          <td><strong>SIGN IN button</strong></td>
+          <td>Solid teal <code>#1B7D7D</code>, white caps label.</td>
+          <td>Solid teal (~<code>#1E7D7D</code> in Pic1 notes / Pic2 family).</td>
+          <td class="sev-l">Low</td>
+          <td>Optional 1-step color unify to <code>#1E7D7D</code> if brand wants exact match.</td>
+        </tr>
+        <tr>
+          <td><strong>Extra UI (not in Pic2)</strong></td>
+          <td>When enrolled: <strong>Biometric sign-in</strong> text button above SIGN IN; error text; <code>FittedBox</code> scale on small screens.</td>
+          <td>Mock shows only core stack + SIGN IN.</td>
+          <td class="sev-l">Low</td>
+          <td>Keep functional controls but style/spacing so primary button still reads as Pic2 footer; avoid crowding.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Implementation cross-reference (Flutter)</h2>
+    <p>Current code lives in <code>mobile/carbon_wms/lib/ui/screens/login_screen.dart</code>:</p>
+    <ul class="tight">
+      <li><code>_bg = 0xFFF5F5F5</code> → conflicts with Pic2 white.</li>
+      <li><code>_fieldFill = 0xFFECECEC</code> → near Pic2; optional tweak to <code>#EBEBEB</code>.</li>
+      <li><code>_loginTray</code> wraps email/password <code>TextField</code> with <code>InputBorder.none</code> — inner outline in Pic1 likely <strong>not</strong> from explicit border in this file.</li>
+      <li>Device line uses <code>GoogleFonts.inter</code> and <code>_deviceLineGrey</code> → change for Pic2 monospace black.</li>
+      <li>SSL + label: built as one <code>Row</code> → Pic2 wants SSL visually “above” the tray.</li>
+    </ul>
+
+    <h2>4. Open questions (need your approval)</h2>
+    <ol class="tight">
+      <li><strong>Logo:</strong> Ship hex asset (Pic1-like) or wordmark tile (Pic2 mock)?</li>
+      <li><strong>Background:</strong> Strict white (#fff) or keep slight tint for OLED comfort?</li>
+      <li><strong>Biometric row:</strong> Pic2 shows checkbox always; app hides on rugged / non-biometric devices — confirm OK.</li>
+      <li><strong>Inner outline on Pic1:</strong> Confirm whether it appears only when focused; share a second screenshot unfocused if possible.</li>
+    </ol>
+
+    <h2>5. Target preview (static HTML — Pic2-aligned)</h2>
+    <p class="note">
+      This is a <strong>browser mockup only</strong>. It is not the running Flutter app. Left column describes intent; right column shows the preview phone.
+    </p>
+
+    <div class="preview-wrap">
+      <div>
+        <h3>What this preview demonstrates</h3>
+        <ul class="tight">
+          <li>White screen background.</li>
+          <li>Pic2-style logo tile (text-based placeholder — replace with approved asset).</li>
+          <li>SSL hint positioned as a dedicated row above the server tray (right-aligned).</li>
+          <li>Monospace black MAC line.</li>
+          <li>Email/password: <strong>no</strong> inner bordered box—only the outer gray tray + icon.</li>
+          <li>Teal checkboxes + teal SIGN IN.</li>
+        </ul>
+        <p class="legend">Open this file in Chrome/Edge and narrow the window to ~400px width to approximate phone framing.</p>
+      </div>
+      <div>
+        <div class="phone">
+          <div class="phone-inner">
+            <div class="phone-label">After fix — target (Pic2)</div>
+            <div class="mock-logo">CarbonWMS<span class="sub">logo</span></div>
+            <p class="mock-title">CarbonWMS</p>
+            <p class="mock-sub">Warehouse management software</p>
+
+            <div class="mock-labrow">
+              <span class="mock-lab">SERVER URL</span>
+            </div>
+            <div style="text-align:right;margin-bottom:4px"><span class="mock-ssl">CONNECTED VIA SSL</span></div>
+            <div class="mock-tray">
+              <span class="ic">▥</span>
+              <span>https://wms.shopcarbon.com</span>
+            </div>
+            <p class="mock-mac">MAC 48:2F:6B:12:34:56</p>
+
+            <div class="mock-labrow" style="margin-top:14px">
+              <span class="mock-lab">USER EMAIL</span>
+            </div>
+            <div class="mock-tray">
+              <span class="ic">◎</span>
+              <input class="mock-tray-input" type="text" value="user@carbonjeanscompany.com" readonly />
+            </div>
+
+            <div class="mock-labrow">
+              <span class="mock-lab">PASSWORD</span>
+            </div>
+            <div class="mock-tray">
+              <span class="ic">🔒</span>
+              <input class="mock-tray-pass" type="password" value="••••••••••••" readonly />
+              <span class="mock-eye">👁</span>
+            </div>
+
+            <div class="mock-checks">
+              <div class="mock-row"><div class="sq on">✓</div> Remember email on this device</div>
+              <div class="mock-row"><div class="sq"></div> Biometric login</div>
+            </div>
+
+            <button type="button" class="mock-btn" style="margin-top:22px">SIGN IN</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2>6. Suggested implementation checklist (after approval)</h2>
+    <ul class="tight">
+      <li>Scaffold / theme: white background; verify <code>InputDecorationTheme</code> has no outline for handheld login fields.</li>
+      <li>Rebuild server URL header: SSL above tray, right-aligned.</li>
+      <li>Device line: monospace + black + smaller.</li>
+      <li>Email/password: ensure no nested Material outline; possibly wrap with transparent material or use themed <code>InputDecorator</code>.</li>
+      <li>Logo: finalize asset + corner radius + size vs title spacing per chosen reference (Pic1 hex vs Pic2 tile).</li>
+      <li>Visual QA on same device that produced Pic1.</li>
+    </ul>
+  </main>
+
+  <footer>
+    Generated for CarbonWMS · Report only — no Dart changes in this step.<br />
+    File: <code>mobile/carbon_wms/docs/login-screen-gap-report.html</code>
+  </footer>
+</body>
+</html>
