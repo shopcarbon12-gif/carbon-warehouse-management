@@ -16,6 +16,7 @@ class WmsApiClient {
   static const String _prefsKeyEdge = 'wms_edge_api_key';
   static const String _prefsKeySession = 'wms_session_token';
   static const String _prefsRecentServers = 'wms_recent_servers_v1';
+  static const String _prefsSavedLoginEmail = 'wms_saved_login_email';
 
   /// Optional: `flutter run --dart-define=CARBON_WMS_DEV_HOST=http://10.0.2.2:3040` for emulator.
   /// Otherwise empty — user enters production URL on login (e.g. https://wms.shopcarbon.com).
@@ -23,6 +24,12 @@ class WmsApiClient {
     const fromDefine = String.fromEnvironment('CARBON_WMS_DEV_HOST', defaultValue: '');
     if (fromDefine.isNotEmpty) return fromDefine;
     return '';
+  }
+
+  /// Fixed server URL for the handheld app login screen (production). Uses [kDefaultBase] when set via dart-define.
+  static String get lockedServerUrl {
+    if (kDefaultBase.isNotEmpty) return normalizeBaseUrl(kDefaultBase);
+    return normalizeBaseUrl('https://wms.shopcarbon.com');
   }
 
   final http.Client _http;
@@ -85,6 +92,21 @@ class WmsApiClient {
     final next = <String>[n, ...prev.where((s) => s != n)].take(5).toList();
     final p = await SharedPreferences.getInstance();
     await p.setString(_prefsRecentServers, jsonEncode(next));
+  }
+
+  Future<String?> getSavedLoginEmail() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(_prefsSavedLoginEmail)?.trim();
+  }
+
+  Future<void> setSavedLoginEmail(String? email) async {
+    final p = await SharedPreferences.getInstance();
+    final t = email?.trim();
+    if (t == null || t.isEmpty) {
+      await p.remove(_prefsSavedLoginEmail);
+    } else {
+      await p.setString(_prefsSavedLoginEmail, t);
+    }
   }
 
   Future<Map<String, String>> handheldAuthHeaders() async {
