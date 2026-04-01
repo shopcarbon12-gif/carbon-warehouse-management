@@ -1,7 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
@@ -42,13 +42,13 @@ class LoginCredentialsStore {
     }
   }
 
+  /// Phones with screen lock / biometrics: [canCheckBiometrics] alone is false on some OEMs
+  /// even though [LocalAuthentication.authenticate] works with device credential fallback.
   static Future<bool> canUseBiometricPasswordVault() async {
     if (await isRuggedHandheldProfile()) return false;
     if (!Platform.isAndroid) return false;
     try {
-      final supported = await _auth.isDeviceSupported();
-      final can = await _auth.canCheckBiometrics;
-      return supported && can;
+      return await _auth.isDeviceSupported();
     } on PlatformException catch (_) {
       return false;
     } catch (_) {
@@ -120,18 +120,24 @@ class LoginCredentialsStore {
     }
   }
 
+  /// [biometricOnly] false allows PIN/pattern when biometrics fail (better success on real devices).
+  /// [sensitiveTransaction] false avoids extra face-ID confirmation flows that often confuse users.
   static Future<bool> authenticateWithBiometric() async {
     try {
       return await _auth.authenticate(
         localizedReason: 'Sign in to CarbonWMS',
-        biometricOnly: true,
+        biometricOnly: false,
+        sensitiveTransaction: false,
         persistAcrossBackgrounding: true,
       );
-    } on LocalAuthException catch (_) {
+    } on LocalAuthException catch (e, st) {
+      debugPrint('local_auth LocalAuthException: $e\n$st');
       return false;
-    } on PlatformException catch (_) {
+    } on PlatformException catch (e, st) {
+      debugPrint('local_auth PlatformException: ${e.code} ${e.message}\n$st');
       return false;
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('local_auth: $e\n$st');
       return false;
     }
   }

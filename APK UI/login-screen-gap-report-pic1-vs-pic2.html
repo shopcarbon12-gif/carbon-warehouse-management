@@ -113,7 +113,7 @@
       Also documents <strong>Pic 3</strong> (keyboard layout shrink) and <strong>Pic 4</strong> (biometric failure messaging).
     </p>
     <p class="meta">
-      Original sections 1–6 describe the baseline gap analysis. <strong>Section 7</strong> adds <strong>incremental product scope</strong> (typography / logo / copy sizing) on top — it does not replace earlier items.
+      Original sections 1–6 describe the baseline gap analysis. <strong>Section 7</strong> adds <strong>incremental product scope</strong> (typography / logo / copy sizing) on top — it does not replace earlier items. <strong>Section 8</strong> maps report items to what was implemented in the app (verify on a fresh install of the current build).
     </p>
     <a class="preview-link" href="login-screen-preview-after-fix.html">Open post-fix HTML preview →</a>
   </header>
@@ -128,7 +128,8 @@
         <li><a href="#keyboard">4. Bug: keyboard open — full screen shrinks (Pic 3)</a></li>
         <li><a href="#biometric">5. Bug: biometric “not working” (Pic 4)</a></li>
         <li><a href="#proposed">6. Proposed remediation outline (pending your approval)</a></li>
-        <li><a href="#scope-addendum">7. Addendum: branding &amp; type scope (after report)</a></li>
+        <li><a href="#scope-addendum">7. Addendum: branding &amp; type scope (after report)</a> — <a href="#product-checklist-chat">7a checklist</a> · <a href="#implementation-mapping">7b mapping</a></li>
+        <li><a href="#implementation-status">8. Implementation status (engineering)</a></li>
       </ul>
     </nav>
 
@@ -312,6 +313,7 @@
         <li><strong>Visual parity:</strong> Remove inner white filled input decoration; single gray tray; teal/neutral focus only; match Pic 2.</li>
         <li><strong>Keyboard:</strong> Eliminate scale-down-on-inset; prefer inset padding or controlled scroll; keep SIGN IN usable above keyboard.</li>
         <li><strong>Biometric:</strong> Debug <code class="mono">local_auth</code> on target devices; tighten enrollment success criteria and messaging; verify vault token persistence.</li>
+        <li><strong>Branding &amp; type (additive — does not replace 1–3):</strong> Logo corner radius per Pic 2; Neuzeit Grotesk bold title with light tracking if needed; small logo–title gap; subtitle size/grey tweak; MAC line black/larger when shown; larger <em>text only</em> for locked server URL, email hint, and SIGN IN. Full product wording: <a href="#product-checklist-chat">section 7a</a>; Flutter mapping: <a href="#implementation-mapping">section 7b</a>.</li>
       </ol>
       <p class="callout">
         <strong>Next step:</strong> After you approve this report, engineering can implement the above in <code class="mono">login_screen.dart</code>, theme/input decoration, <code class="mono">MainActivity</code> (if needed), and related tests.
@@ -324,8 +326,23 @@
     <section class="card" id="scope-addendum">
       <h2>7. Addendum: branding &amp; type scope (stacked on the report — not a replacement)</h2>
       <p>
-        The following items extend the remediation scope. They are <strong>additive</strong> to sections 1–6 and to any prior approved mock (Pic 2).
+        The following items extend the remediation scope. They are <strong>additive</strong> to sections 1–6 and to any prior approved mock (Pic 2). Nothing here replaces earlier sections; it layers product intent and implementation notes on top.
       </p>
+
+      <h3 id="product-checklist-chat">7a. Product checklist (chat wording — same scope, explicit)</h3>
+      <p class="muted" style="color: var(--muted); font-size: 0.92rem; margin: 0 0 0.75rem;">
+        Verbatim goals from chat; the numbered table below maps the same work to Flutter. Spelling: email hint is <code class="mono">user@carbonjeanscompany.com</code> (not “caron”).
+      </p>
+      <ol style="margin-top: 0;">
+        <li><strong>Logo:</strong> Round corners, <strong>not too much</strong> — use Pic 2 as reference.</li>
+        <li><strong>“CarbonWMS” title font:</strong> Brand file <code class="mono">Neuzeit Grotesk W01 Regular.otf</code> from <code class="mono">D:\CARBON JEANS COMPANY Dropbox\elior perez\Carbon\FINAL LOGO\font-Carbon\</code> — render <strong>bold</strong>; if default spacing feels tight, add a <strong>little</strong> letter-spacing.</li>
+        <li><strong>Logo → title:</strong> Add another <strong>small</strong> vertical gap (not too much).</li>
+        <li><strong>“WAREHOUSE MANAGEMENT SOFTWARE”:</strong> Increase size a <strong>little</strong> (not too much); grey a <strong>bit darker</strong> (not too dark / not near black).</li>
+        <li><strong>MAC / device line:</strong> <strong>Black</strong> and a <strong>bit bigger</strong>. When the device is authorized the line correctly stays hidden — keep that behavior.</li>
+        <li><strong>Text size only</strong> (do not grow tray or button chrome): <code class="mono">https://wms.shopcarbon.com</code>, email hint <code class="mono">user@carbonjeanscompany.com</code>, and the <strong>SIGN IN</strong> label inside the button.</li>
+      </ol>
+
+      <h3 id="implementation-mapping">7b. Implementation mapping (engineering)</h3>
       <table>
         <thead>
           <tr>
@@ -368,7 +385,7 @@
           <tr>
             <td>7</td>
             <td>Mobile build number</td>
-            <td><code class="mono">pubspec.yaml</code> → <code class="mono">0.1.11+19</code>.</td>
+            <td><code class="mono">pubspec.yaml</code> → <code class="mono">0.1.11+22</code> (bump as releases ship).</td>
           </tr>
         </tbody>
       </table>
@@ -377,10 +394,61 @@
         <code class="mono">D:\CARBON JEANS COMPANY Dropbox\elior perez\Carbon\FINAL LOGO\font-Carbon\Neuzeit Grotesk W01 Regular.otf</code>
       </p>
     </section>
+
+    <section class="card" id="implementation-status">
+      <h2>8. Implementation status (engineering)</h2>
+      <p>
+        Cross-check against sections 1–7 and chat decisions (including <a href="#product-checklist-chat">7a product checklist</a>). Primary code: <code class="mono">mobile/carbon_wms/lib/ui/screens/login_screen.dart</code>, <code class="mono">login_credentials_store.dart</code>, <code class="mono">android/.../MainActivity.kt</code> (<code class="mono">FlutterFragmentActivity</code> for <code class="mono">local_auth</code>).
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Report / chat topic</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Sections 2–3: inner white pill, green focus, flat tray</td>
+            <td class="ok">Addressed</td>
+            <td>Login uses a light <code class="mono">ThemeData</code> shell with flat <code class="mono">InputDecorationTheme</code> (no filled inner box); <code class="mono">useMaterial3: false</code> to avoid global dark/green focus leaking from app theme.</td>
+          </tr>
+          <tr>
+            <td>Section 4: keyboard shrinks whole UI (FittedBox)</td>
+            <td class="ok">Addressed</td>
+            <td><code class="mono">FittedBox</code> removed; <code class="mono">resizeToAvoidBottomInset: false</code> + <code class="mono">AnimatedPadding(viewInsets.bottom)</code> + scrollable form column.</td>
+          </tr>
+          <tr>
+            <td>Section 5: biometric “not working” / wrong surface for errors</td>
+            <td class="ok">Addressed</td>
+            <td>Vault eligibility uses <code class="mono">isDeviceSupported()</code>; <code class="mono">authenticate</code> options adjusted; enrollment/login failures that occur before navigation use a blocking dialog (<code class="mono">_awaitLoginAlert</code>) so messages are not left on the dashboard; <code class="mono">clearSnackBars</code> before <code class="mono">onSuccess</code> on password path.</td>
+          </tr>
+          <tr>
+            <td>No password in secure storage</td>
+            <td class="ok">Addressed</td>
+            <td>Vault stores session token + email only (<code class="mono">login_credentials_store.dart</code>).</td>
+          </tr>
+          <tr>
+            <td>Section 7: branding (7a chat checklist + 7b mapping)</td>
+            <td class="ok">Addressed</td>
+            <td>Matches checklist items 1–6; Neuzeit bundled in <code class="mono">pubspec.yaml</code>. Email hint spelling: <code class="mono">user@carbonjeanscompany.com</code>.</td>
+          </tr>
+          <tr>
+            <td>Hardcoded server URL, remember-email rules</td>
+            <td class="ok">As specified</td>
+            <td>Unchanged product rules from approved spec.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="callout">
+        <strong>Verify on device:</strong> Install the APK matching <code class="mono">pubspec.yaml</code> <code class="mono">version</code> (currently <code class="mono">0.1.11+22</code>). An older APK will still show prior layout and biometric behavior.
+      </p>
+    </section>
   </main>
 
   <footer>
-    CarbonWMS · Login gap report + addendum scope · See section 7 for post-report requirements
+    CarbonWMS · Login gap report · Sections 7–8: scope + implementation status
   </footer>
 </body>
 </html>
