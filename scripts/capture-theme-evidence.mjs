@@ -96,7 +96,7 @@ const ROUTES = [
   "/settings/epc-profiles",
   "/settings/users",
   "/settings/locations",
-  "/docs/handheld-api",
+  /* Dev API doc (optional): "/docs/handheld-api" — not main WMS UI; omit from theme evidence */
 ];
 
 function slug(route) {
@@ -146,7 +146,7 @@ for (const route of ROUTES) {
   const name = `${slug(route)}.png`;
   const target = `${baseURL}${route}`;
   try {
-    if (!okLogin && route !== "/login" && route !== "/docs/handheld-api") {
+    if (!okLogin && route !== "/login") {
       await page.goto(target, { waitUntil: "domcontentloaded", timeout: 45_000 });
     } else {
       await page.goto(target, { waitUntil: "domcontentloaded", timeout: 60_000 });

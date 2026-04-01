@@ -12,6 +12,9 @@ light-theme-report.html — single file with embedded (base64) images so every
 before/after pair is visible without opening separate PNG paths. Open this file
 in a browser from the repo (double-click or file://).
 
+Note: The embedded light-theme-report.html may still include older captures (e.g. /docs/handheld-api).
+That URL is internal API documentation for the Flutter handheld (app/docs/handheld-api/page.tsx), not a normal WMS screen. The capture script no longer includes it by default.
+
 Regenerate
 ----------
 1. Start the app (e.g. npm run dev on 3040, or next start -p 3050 after build).
