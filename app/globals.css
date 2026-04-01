@@ -81,3 +81,151 @@ body {
   color: var(--wms-fg);
   font-family: var(--font-wms-sans), system-ui, sans-serif;
 }
+
+/* Handheld settings switch — kept out of Tailwind arbitrary classes (avoids dev compile hang). */
+.wms-toggle-track {
+  position: relative;
+  height: 1.75rem;
+  width: 3rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border-width: 2px;
+  border-style: solid;
+  transition:
+    box-shadow 0.2s ease-out,
+    background-color 0.2s ease-out,
+    border-color 0.2s ease-out;
+}
+
+.wms-toggle-track:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--wms-accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.wms-toggle-track[data-state="off"] {
+  border-color: color-mix(in srgb, var(--wms-border) 90%, #000000);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--wms-surface-elevated) 55%, #ffffff) 0%,
+    color-mix(in srgb, var(--wms-muted) 22%, var(--wms-surface-elevated)) 100%
+  );
+  box-shadow:
+    inset 0 3px 7px rgba(0, 0, 0, 0.14),
+    inset 0 -2px 5px rgba(255, 255, 255, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.65),
+    0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+html.dark .wms-toggle-track[data-state="off"] {
+  border-color: color-mix(in srgb, var(--wms-border) 85%, #000000);
+  background: linear-gradient(
+    180deg,
+    #252a34 0%,
+    color-mix(in srgb, var(--wms-muted) 28%, var(--wms-surface-elevated)) 100%
+  );
+  box-shadow:
+    inset 0 5px 12px rgba(0, 0, 0, 0.58),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.wms-toggle-track[data-state="on"] {
+  border-color: color-mix(in srgb, var(--wms-accent) 48%, #ffffff);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--wms-accent) 32%, #ffffff) 0%,
+    var(--wms-accent) 42%,
+    color-mix(in srgb, var(--wms-accent) 72%, #000000) 100%
+  );
+  box-shadow:
+    inset 0 2px 5px rgba(255, 255, 255, 0.35),
+    inset 0 -4px 10px rgba(0, 0, 0, 0.2),
+    0 0 0 1px color-mix(in srgb, var(--wms-accent) 32%, transparent),
+    0 0 16px color-mix(in srgb, var(--wms-accent) 50%, transparent),
+    0 0 34px color-mix(in srgb, var(--wms-accent) 26%, transparent),
+    0 4px 14px rgba(0, 0, 0, 0.1);
+}
+
+html.dark .wms-toggle-track[data-state="on"] {
+  border-color: color-mix(in srgb, var(--wms-accent) 40%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--wms-accent) 22%, #ffffff) 0%,
+    var(--wms-accent) 45%,
+    color-mix(in srgb, var(--wms-accent) 65%, #000000) 100%
+  );
+  box-shadow:
+    inset 0 2px 6px rgba(255, 255, 255, 0.2),
+    inset 0 -5px 12px rgba(0, 0, 0, 0.36),
+    0 0 0 1px color-mix(in srgb, var(--wms-accent) 28%, transparent),
+    0 0 22px color-mix(in srgb, var(--wms-accent) 58%, transparent),
+    0 0 48px color-mix(in srgb, var(--wms-accent) 34%, transparent),
+    0 0 72px color-mix(in srgb, var(--wms-accent) 16%, transparent);
+}
+
+.wms-toggle-thumb {
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  left: 0.125rem;
+  margin-top: -0.625rem;
+  height: 1.25rem;
+  width: 1.25rem;
+  border-radius: 9999px;
+  transition:
+    left 0.2s ease-out,
+    box-shadow 0.2s ease-out,
+    background 0.2s ease-out;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.16),
+    inset 0 2px 3px rgba(255, 255, 255, 0.95),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.06);
+  background: linear-gradient(165deg, #ffffff 0%, #e8eaee 55%, #d9dce2 100%);
+  outline: 1px solid color-mix(in srgb, var(--wms-border) 75%, transparent);
+  outline-offset: 0;
+}
+
+html.dark .wms-toggle-track[data-state="off"] .wms-toggle-thumb {
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--wms-fg) 94%, #ffffff) 0%,
+    color-mix(in srgb, var(--wms-fg) 68%, var(--wms-surface-elevated)) 100%
+  );
+  outline-color: color-mix(in srgb, var(--wms-border) 70%, transparent);
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.55),
+    inset 0 1px 2px rgba(255, 255, 255, 0.14),
+    inset 0 -2px 5px rgba(0, 0, 0, 0.35);
+}
+
+.wms-toggle-track[data-state="on"] .wms-toggle-thumb {
+  left: calc(100% - 1.375rem);
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--wms-accent-fg) 8%, #ffffff) 0%,
+    var(--wms-accent-fg) 45%,
+    color-mix(in srgb, var(--wms-accent-fg) 88%, #000000) 100%
+  );
+  outline-color: color-mix(in srgb, var(--wms-accent-fg) 42%, var(--wms-accent));
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--wms-accent) 72%, transparent),
+    0 0 26px color-mix(in srgb, var(--wms-accent) 40%, transparent),
+    0 3px 10px rgba(0, 0, 0, 0.22),
+    inset 0 1px 2px rgba(255, 255, 255, 0.45);
+}
+
+html.dark .wms-toggle-track[data-state="on"] .wms-toggle-thumb {
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--wms-accent) 35%, var(--wms-accent-fg)) 0%,
+    var(--wms-accent-fg) 55%,
+    #000000 100%
+  );
+  outline-color: color-mix(in srgb, var(--wms-accent) 55%, var(--wms-accent-fg));
+  box-shadow:
+    0 0 16px color-mix(in srgb, var(--wms-accent) 82%, transparent),
+    0 0 36px color-mix(in srgb, var(--wms-accent) 52%, transparent),
+    0 0 56px color-mix(in srgb, var(--wms-accent) 26%, transparent),
+    0 3px 12px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.12);
+}
