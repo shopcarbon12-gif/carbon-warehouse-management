@@ -27,6 +27,9 @@ abstract final class AppColors {
   static const Color textSecondary = Color(0xFF3D4949);
   static const Color slateAction = Color(0xFF6D7979);
   static const Color slateActionDark = Color(0xFF3D4949);
+
+  /// Light warning strip / snackbar (queue, offline hints) — dark text for contrast.
+  static const Color warningSurface = Color(0xFFFFEFD6);
 }
 
 abstract final class AppTheme {
@@ -93,8 +96,9 @@ abstract final class AppTheme {
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      visualDensity: VisualDensity.compact,
       scaffoldBackgroundColor: AppColors.background,
-      colorScheme: ColorScheme.light(
+      colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
         onPrimary: Colors.white,
         primaryContainer: AppColors.surfaceContainer,
@@ -107,7 +111,7 @@ abstract final class AppTheme {
         surfaceContainerHighest: AppColors.surfaceContainerHigh,
         outline: AppColors.outlineMuted,
         outlineVariant: AppColors.outlineMuted,
-        error: const Color(0xFFDC2626),
+        error: Color(0xFFDC2626),
         onError: Colors.white,
       ),
     );
@@ -135,6 +139,17 @@ abstract final class AppTheme {
         iconTheme: const IconThemeData(color: AppColors.textMain, size: 22),
       ),
       textTheme: interBody.copyWith(
+        bodySmall: GoogleFonts.inter(
+          fontSize: 12,
+          height: 1.35,
+          color: AppColors.textMuted,
+        ),
+        labelSmall: GoogleFonts.spaceGrotesk(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.8,
+          color: AppColors.textMuted,
+        ),
         titleMedium: GoogleFonts.manrope(
           fontSize: 15,
           height: 1.3,
@@ -148,10 +163,53 @@ abstract final class AppTheme {
           color: AppColors.textMain,
         ),
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.background,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: GoogleFonts.manrope(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textMain,
+        ),
+        contentTextStyle: GoogleFonts.inter(
+          fontSize: 14,
+          height: 1.4,
+          color: AppColors.textSecondary,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: AppColors.outlineMuted),
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        iconColor: AppColors.textMuted,
+        textColor: AppColors.textMain,
+        titleTextStyle: GoogleFonts.inter(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textMain,
+        ),
+        subtitleTextStyle: GoogleFonts.inter(
+          fontSize: 12,
+          height: 1.3,
+          color: AppColors.textMuted,
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.background,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(foregroundColor: AppColors.textMain),
+      ),
       cardTheme: CardThemeData(
         color: AppColors.surface,
         elevation: 0,
-        shadowColor: Colors.black.withOpacity(0.06),
+        shadowColor: Color.fromARGB((0.06 * 255).round(), 0, 0, 0),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
           side: const BorderSide(color: AppColors.outlineMuted),
@@ -177,7 +235,7 @@ abstract final class AppTheme {
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
         labelStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-        hintStyle: TextStyle(color: AppColors.textMuted.withOpacity(0.9)),
+        hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.9)),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -197,9 +255,9 @@ abstract final class AppTheme {
         activeTrackColor: AppColors.primary,
         inactiveTrackColor: AppColors.outlineMuted,
         thumbColor: AppColors.primary,
-        overlayColor: AppColors.primary.withOpacity(0.12),
+        overlayColor: AppColors.primary.withValues(alpha: 0.12),
       ),
-      tabBarTheme: TabBarThemeData(
+      tabBarTheme: const TabBarThemeData(
         labelColor: AppColors.primary,
         unselectedLabelColor: AppColors.textMuted,
         dividerColor: AppColors.outlineMuted,
@@ -208,6 +266,7 @@ abstract final class AppTheme {
         backgroundColor: AppColors.textSecondary,
         contentTextStyle: GoogleFonts.inter(color: Colors.white, fontSize: 14),
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppColors.primary,
@@ -223,6 +282,20 @@ abstract final class AppTheme {
       fontWeight: FontWeight.w700,
       letterSpacing: 2.4,
       color: cs.onSurfaceVariant,
+    );
+  }
+
+  /// Secondary floor action — light fill, subtle border (COMMIT, APPEND EPCS, etc.).
+  static ButtonStyle warehouseSecondaryAction() {
+    return FilledButton.styleFrom(
+      backgroundColor: AppColors.surfaceContainer,
+      foregroundColor: AppColors.textMain,
+      elevation: 0,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(6),
+        side: const BorderSide(color: AppColors.outlineMuted),
+      ),
     );
   }
 }

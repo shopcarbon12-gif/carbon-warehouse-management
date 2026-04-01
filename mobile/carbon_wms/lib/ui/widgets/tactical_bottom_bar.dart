@@ -16,8 +16,8 @@ class TacticalBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.surface,
-      elevation: 3,
-      shadowColor: Colors.black.withOpacity(0.08),
+      elevation: 1,
+      shadowColor: Color.fromARGB((0.06 * 255).round(), 0, 0, 0),
       child: SafeArea(
         top: false,
         minimum: const EdgeInsets.fromLTRB(12, 8, 12, 12),
@@ -77,12 +77,59 @@ class TacticalSlateButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _TacticalButton(
+    return _TacticalOutlinedButton(
       height: _kTacticalButtonHeight,
-      background: AppColors.slateActionDark,
-      foreground: Colors.white,
       label: label,
       onPressed: onPressed,
+    );
+  }
+}
+
+/// Outlined secondary — light surface, border (matches post-login CarbonWMS).
+class _TacticalOutlinedButton extends StatelessWidget {
+  const _TacticalOutlinedButton({
+    required this.height,
+    required this.label,
+    this.onPressed,
+  });
+
+  final double height;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    final child = Center(
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: AppColors.textMain,
+          fontWeight: FontWeight.w800,
+          fontSize: 14,
+          letterSpacing: 1.1,
+        ),
+      ),
+    );
+
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: SizedBox(
+        height: height,
+        child: Material(
+          color: AppColors.background,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: AppColors.outlineMuted, width: 1.5),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: enabled ? onPressed : null,
+            child: child,
+          ),
+        ),
+      ),
     );
   }
 }

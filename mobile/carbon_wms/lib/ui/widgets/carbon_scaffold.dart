@@ -22,6 +22,8 @@ class CarbonScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final canPop = Navigator.canPop(context);
 
+    final dividerColor = Theme.of(context).dividerTheme.color;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -33,6 +35,12 @@ class CarbonScaffold extends StatelessWidget {
               )
             : null,
         automaticallyImplyLeading: false,
+        bottom: dividerColor != null
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Divider(height: 1, thickness: 1, color: dividerColor),
+              )
+            : null,
       ),
       body: ColoredBox(
         color: Theme.of(context).scaffoldBackgroundColor,

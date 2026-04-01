@@ -185,11 +185,7 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () => unawaited(_commitIntake()),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.slateActionDark,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
+                style: AppTheme.warehouseSecondaryAction(),
                 child: const Text(
                   'COMMIT INTAKE',
                   style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),

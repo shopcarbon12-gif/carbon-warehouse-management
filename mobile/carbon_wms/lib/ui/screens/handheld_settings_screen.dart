@@ -183,14 +183,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
           ],
           const SizedBox(height: 24),
           const Divider(height: 32),
-          const Text(
-            'Biometric sign-in',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-              letterSpacing: 0.5,
-            ),
-          ),
+          Text('BIOMETRIC SIGN-IN', style: AppTheme.headline(context)),
           const SizedBox(height: 8),
           if (_bioReloading)
             const Padding(

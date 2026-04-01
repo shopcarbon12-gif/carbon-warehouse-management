@@ -24,8 +24,11 @@ param(
   [string] $ReleaseRoot = "D:\CarbonWmsRelease"
 )
 $ErrorActionPreference = "Stop"
-$here = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
+# Prefer cwd without spaces: open via junction (e.g. D:\cwm_build\carbon_wms). Get-Item keeps the junction path;
+# Resolve-Path would follow the target and break native-asset hooks.
+$here = (Get-Item -LiteralPath (Join-Path $PSScriptRoot "..")).FullName
+$physicalCarbonWms = try { (Resolve-Path -LiteralPath $here).Path } catch { $here }
+$repoRoot = (Resolve-Path (Join-Path $physicalCarbonWms "..\..")).Path
 Set-Location $here
 
 . (Join-Path $PSScriptRoot "_carbon_wms_d_env.ps1") -RepoRoot $repoRoot -RequireRepoOnDDrive

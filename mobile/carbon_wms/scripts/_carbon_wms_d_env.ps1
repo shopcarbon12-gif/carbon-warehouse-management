@@ -22,11 +22,23 @@ Then open D:\cwm\mobile\carbon_wms. Current repo: $RepoRoot
   }
 }
 
-$toolPub = Join-Path $RepoRoot ".tools\pub-cache"
-$toolGradle = Join-Path $RepoRoot ".tools\gradle-user-home"
-$toolTmp = Join-Path $RepoRoot ".tools\tmp"
-$xdgCache = Join-Path $RepoRoot ".tools\xdg-cache"
-$xdgConfig = Join-Path $RepoRoot ".tools\xdg-config"
+$resolvedRepo = try { (Resolve-Path -LiteralPath $RepoRoot -ErrorAction Stop).ProviderPath } catch { $RepoRoot }
+$driveRoot = Split-Path $resolvedRepo -Qualifier
+# Native-asset hooks (e.g. objective_c) invoke batch steps that break on spaces in PUB_CACHE paths.
+if ($resolvedRepo -match '\s' -and $driveRoot) {
+  $extTools = Join-Path $driveRoot 'CarbonWmsTooling'
+  $toolPub = Join-Path $extTools 'pub-cache'
+  $toolGradle = Join-Path $extTools 'gradle-user-home'
+  $toolTmp = Join-Path $extTools 'tmp'
+  $xdgCache = Join-Path $extTools 'xdg-cache'
+  $xdgConfig = Join-Path $extTools 'xdg-config'
+} else {
+  $toolPub = Join-Path $RepoRoot ".tools\pub-cache"
+  $toolGradle = Join-Path $RepoRoot ".tools\gradle-user-home"
+  $toolTmp = Join-Path $RepoRoot ".tools\tmp"
+  $xdgCache = Join-Path $RepoRoot ".tools\xdg-cache"
+  $xdgConfig = Join-Path $RepoRoot ".tools\xdg-config"
+}
 New-Item -ItemType Directory -Force -Path $toolPub, $toolGradle, $toolTmp, $xdgCache, $xdgConfig | Out-Null
 
 $env:PUB_CACHE = $toolPub

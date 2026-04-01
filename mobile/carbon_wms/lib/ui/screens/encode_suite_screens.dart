@@ -133,8 +133,12 @@ class _SearchEncodeTabState extends State<_SearchEncodeTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed — queued for Upload tab: $e'),
-            backgroundColor: Colors.orange.shade900,
+            content: Text(
+              'Failed — queued for Upload tab: $e',
+              style: const TextStyle(color: AppColors.textMain),
+            ),
+            backgroundColor: AppColors.warningSurface,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -450,7 +454,7 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
                 child: FilledButton(
                   onPressed: (_jobs.isEmpty || _syncing) ? null : () => unawaited(_syncAll()),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.slateActionDark,
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),

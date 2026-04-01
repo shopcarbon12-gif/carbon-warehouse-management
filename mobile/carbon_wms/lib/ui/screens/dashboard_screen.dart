@@ -412,7 +412,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (_otaForInstall == null)
             Material(
               color: AppColors.surface,
-              elevation: 6,
+              elevation: 1,
+              shadowColor: Color.fromARGB((0.06 * 255).round(), 0, 0, 0),
               child: SafeArea(
                 top: false,
                 child: Padding(
@@ -458,12 +459,16 @@ class _DashCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: AppColors.outlineMuted),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
