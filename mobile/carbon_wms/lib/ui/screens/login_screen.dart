@@ -36,7 +36,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   /// Smaller on-screen square; [BoxFit.cover] zooms the mark inside the clip.
   static const double _logoDisplaySize = 120;
   /// Reserved height for MAC / Android ID so USER EMAIL lines up whether or not the line shows.
-  static const double _deviceLineReserveHeight = 48;
+  static const double _deviceLineReserveHeight = 36;
 
   static const double _fieldHeight = 52;
 
@@ -653,7 +653,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: 4),
       SizedBox(
         height: _deviceLineReserveHeight,
         width: double.infinity,
@@ -670,7 +670,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               )
             : const SizedBox.shrink(),
       ),
-      const SizedBox(height: 12),
+      const SizedBox(height: 8),
       Text('USER EMAIL', style: _fieldLabelStyle),
       const SizedBox(height: 6),
       _loginTray(
@@ -824,20 +824,43 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   ),
                   if (_vaultReady)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: TextButton.icon(
-                        onPressed: _busy ? null : _biometricSignIn,
-                        icon: const Icon(Icons.fingerprint, color: _primaryTeal, size: 22),
-                        label: Text(
-                          _vaultEmail != null && _vaultEmail!.isNotEmpty
-                              ? 'Biometric sign-in ($_vaultEmail)'
-                              : 'Biometric sign-in',
-                          style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w600,
-                            color: _primaryTeal,
-                            fontSize: 13,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Center(
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _busy ? null : _biometricSignIn,
+                                customBorder: const CircleBorder(),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Icon(
+                                    Icons.fingerprint,
+                                    size: 64,
+                                    color: _primaryTeal,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                          if (_vaultEmail != null && _vaultEmail!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                '(${_vaultEmail!})',
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                  color: _primaryTeal,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   SizedBox(

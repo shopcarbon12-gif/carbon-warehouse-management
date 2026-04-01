@@ -22,12 +22,20 @@ import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/ui/widgets/ota_update_dialog.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, this.onLogout, this.otaDownloadUrl});
+  const DashboardScreen({
+    super.key,
+    this.onLogout,
+    this.otaDownloadUrl,
+    this.otaLatestVersion,
+  });
 
   final Future<void> Function()? onLogout;
   final String? otaDownloadUrl;
+  /// Server label from `/api/mobile/status` (e.g. OTA release version).
+  final String? otaLatestVersion;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -37,11 +45,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _otaPoll;
   String? _effectiveOtaUrl;
   bool _updateAvailable = false;
+  String? _otaLatestVersion;
+  bool _otaPeriodicDialogShown = false;
 
   @override
   void initState() {
     super.initState();
     _effectiveOtaUrl = widget.otaDownloadUrl;
+    _otaLatestVersion = widget.otaLatestVersion;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_syncMobileSettings());
       unawaited(_refreshOtaHints(notifyUser: false));
@@ -62,6 +73,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.didUpdateWidget(oldWidget);
     if (widget.otaDownloadUrl != oldWidget.otaDownloadUrl) {
       _effectiveOtaUrl = widget.otaDownloadUrl;
+    }
+    if (widget.otaLatestVersion != oldWidget.otaLatestVersion) {
+      _otaLatestVersion = widget.otaLatestVersion;
     }
   }
 
@@ -85,15 +99,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
       final url = (st['downloadUrl'] as String?)?.trim();
       final upd = st['updateAvailable'] == true;
+      final latestRaw = st['latestVersion'];
+      final latest = latestRaw is String ? latestRaw.trim() : '';
       if (!mounted) return;
       setState(() {
         _effectiveOtaUrl = (url != null && url.isNotEmpty) ? url : null;
         _updateAvailable = upd;
+        if (latest.isNotEmpty) _otaLatestVersion = latest;
+        if (!upd) _otaPeriodicDialogShown = false;
       });
-      if (notifyUser && upd && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Update available — tap the download icon in the header.'),
+      if (notifyUser && upd && mounted && url != null && url.isNotEmpty && !_otaPeriodicDialogShown) {
+        _otaPeriodicDialogShown = true;
+        unawaited(
+          showCarbonWmsOtaDialog(
+            context: context,
+            downloadUrl: url,
+            latestVersion: _otaLatestVersion,
+            onInstallChosen: (u) async {
+              try {
+                await context.read<WmsApiClient>().downloadAndInstallApk(u);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                }
+              }
+            },
           ),
         );
       }

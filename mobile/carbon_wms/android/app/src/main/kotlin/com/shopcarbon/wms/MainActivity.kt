@@ -14,9 +14,11 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterFragmentActivity() {
   private var zebraController: CarbonZebraRfidController? = null
   private var chainwayController: CarbonChainwayRfidController? = null
+  private var hostedFlutterEngine: FlutterEngine? = null
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
+    hostedFlutterEngine = flutterEngine
     val messenger = flutterEngine.dartExecutor.binaryMessenger
     DeviceTelemetryChannel.register(flutterEngine, this)
 
@@ -115,10 +117,21 @@ class MainActivity : FlutterFragmentActivity() {
   }
 
   override fun onDestroy() {
+    // Task removed / activity finishing (not rotation): clear server session on next launch path.
+    if (!isChangingConfigurations && isFinishing) {
+      hostedFlutterEngine?.dartExecutor?.binaryMessenger?.let { m ->
+        try {
+          MethodChannel(m, "carbon_wms/lifecycle").invokeMethod("clearSession", null)
+        } catch (_: Throwable) {
+          /* engine may already be torn down */
+        }
+      }
+    }
     zebraController?.dispose()
     chainwayController?.dispose()
     zebraController = null
     chainwayController = null
+    hostedFlutterEngine = null
     super.onDestroy()
   }
 

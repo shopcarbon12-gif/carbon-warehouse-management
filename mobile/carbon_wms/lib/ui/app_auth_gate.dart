@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:android_id/android_id.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -14,6 +15,7 @@ import 'package:carbon_wms/services/login_credentials_store.dart';
 import 'package:carbon_wms/ui/screens/dashboard_screen.dart';
 import 'package:carbon_wms/ui/screens/device_lock_screen.dart';
 import 'package:carbon_wms/ui/screens/login_screen.dart';
+import 'package:carbon_wms/ui/widgets/ota_update_dialog.dart';
 
 enum _Phase { booting, login, lock, dashboard }
 
@@ -25,18 +27,54 @@ class AppAuthGate extends StatefulWidget {
   State<AppAuthGate> createState() => _AppAuthGateState();
 }
 
-class _AppAuthGateState extends State<AppAuthGate> {
+class _AppAuthGateState extends State<AppAuthGate> with WidgetsBindingObserver {
+  static const MethodChannel _lifecycleChannel = MethodChannel('carbon_wms/lifecycle');
+
   _Phase _phase = _Phase.booting;
   String _androidId = '';
   bool _pending = false;
   String? _otaUrl;
+  String? _otaLatestVersion;
   bool _otaDismissed = false;
   int _loginKey = 0;
+  WmsApiClient? _apiForSessionClear;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (!kIsWeb && Platform.isAndroid) {
+      _lifecycleChannel.setMethodCallHandler((call) async {
+        if (call.method == 'clearSession') {
+          final api = _apiForSessionClear;
+          if (api != null) await api.setSessionToken(null);
+        }
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _apiForSessionClear = context.read<WmsApiClient>();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (!kIsWeb && Platform.isAndroid) {
+      _lifecycleChannel.setMethodCallHandler(null);
+    }
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      final api = _apiForSessionClear;
+      if (api != null) unawaited(api.setSessionToken(null));
+    }
   }
 
   Future<String> _resolveAndroidId() async {
@@ -100,10 +138,13 @@ class _AppAuthGateState extends State<AppAuthGate> {
     final bypass = status['bypassDeviceLock'] == true;
     final updateAvailable = status['updateAvailable'] == true;
     final downloadUrl = status['downloadUrl'] as String?;
+    final latestRaw = status['latestVersion'];
+    final latestLabel = latestRaw is String ? latestRaw.trim() : '';
 
     if (mounted) {
       setState(() {
         _otaUrl = downloadUrl;
+        _otaLatestVersion = latestLabel.isNotEmpty ? latestLabel : null;
         _otaDismissed = false;
       });
     }
@@ -126,41 +167,27 @@ class _AppAuthGateState extends State<AppAuthGate> {
     if (mounted) setState(() => _phase = _Phase.lock);
   }
 
-  Future<void> _installOtaFromDialog(BuildContext dialogContext) async {
-    final url = _otaUrl;
-    if (url == null || url.isEmpty) return;
-    Navigator.of(dialogContext).pop();
-    if (!mounted) return;
-    setState(() => _otaDismissed = true);
-    try {
-      await context.read<WmsApiClient>().downloadAndInstallApk(url);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
-  }
-
   void _maybeShowOta() {
     if (!mounted || _otaDismissed || _otaUrl == null || _otaUrl!.isEmpty) return;
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Update available'),
-        content: const Text('A newer CarbonWMS build is published. Install when convenient.'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() => _otaDismissed = true);
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('Dismiss'),
-          ),
-          FilledButton(
-            onPressed: () => unawaited(_installOtaFromDialog(ctx)),
-            child: const Text('Install'),
-          ),
-        ],
+    final url = _otaUrl!;
+    unawaited(
+      showCarbonWmsOtaDialog(
+        context: context,
+        downloadUrl: url,
+        latestVersion: _otaLatestVersion,
+        onAnyClose: () {
+          if (mounted) setState(() => _otaDismissed = true);
+        },
+        onInstallChosen: (u) async {
+          if (!mounted) return;
+          setState(() => _otaDismissed = true);
+          try {
+            await context.read<WmsApiClient>().downloadAndInstallApk(u);
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+          }
+        },
       ),
     );
   }
@@ -198,6 +225,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
       case _Phase.dashboard:
         return DashboardScreen(
           otaDownloadUrl: _otaUrl,
+          otaLatestVersion: _otaLatestVersion,
           onLogout: () async {
             await context.read<WmsApiClient>().setSessionToken(null);
             await LoginCredentialsStore.onUserLogout();
