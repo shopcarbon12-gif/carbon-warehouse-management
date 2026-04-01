@@ -433,7 +433,7 @@ export function CycleCountWorkspace() {
             (c.misplaced.length > 0 && !binId)
           }
           onClick={() => setCommitOpen(true)}
-          className="rounded-lg border border-teal-600/50 bg-teal-950/40 px-5 py-2.5 font-mono text-sm text-teal-200 hover:bg-teal-900/30 disabled:opacity-40"
+          className="wms-btn-primary px-6 font-mono disabled:opacity-40"
         >
           Review & commit
         </button>

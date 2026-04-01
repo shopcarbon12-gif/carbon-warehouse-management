@@ -49,7 +49,7 @@ export function LocationSwitcher({
       <span className="sr-only">Active location</span>
       <select
         title={activeLabel || undefined}
-        className="w-full min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2.5 font-mono text-sm leading-snug text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/40 md:text-base"
+        className="w-full min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-3 font-mono text-base leading-snug text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/40 md:text-lg"
         value={activeLocationId}
         onChange={onChange}
       >

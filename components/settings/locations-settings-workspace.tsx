@@ -78,7 +78,7 @@ export function LocationsSettingsWorkspace() {
         <button
           type="button"
           onClick={() => setModal({ mode: "add" })}
-          className="rounded-md bg-teal-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-teal-500"
+          className="wms-btn-primary wms-btn-sm font-mono"
         >
           Add location
         </button>
@@ -345,7 +345,7 @@ function LocationFormModal({
             type="button"
             disabled={busy}
             onClick={() => void submit()}
-            className="rounded bg-teal-600 px-4 py-2 font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+            className="wms-btn-primary font-mono disabled:opacity-50"
           >
             {busy ? "Saving…" : "Save"}
           </button>

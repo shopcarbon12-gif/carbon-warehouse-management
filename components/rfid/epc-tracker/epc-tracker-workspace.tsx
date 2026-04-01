@@ -127,7 +127,9 @@ export function EpcTrackerWorkspace() {
                   type="button"
                   onClick={() => setSelectedEpc(m.epc)}
                   className={`w-full rounded-md px-3 py-2 text-left font-mono text-xs hover:bg-[var(--wms-surface-elevated)] ${
-                    focusedEpc === m.epc ? "bg-teal-950/40 text-teal-200" : "text-[var(--wms-fg)]"
+                    focusedEpc === m.epc
+                      ? "bg-[color-mix(in_srgb,var(--wms-accent)_20%,var(--wms-surface-elevated))] font-semibold text-[var(--wms-fg)] ring-1 ring-[color-mix(in_srgb,var(--wms-accent)_45%,var(--wms-border))] dark:bg-teal-950/45 dark:text-teal-100 dark:ring-teal-700/40"
+                      : "text-[var(--wms-fg)]"
                   }`}
                 >
                   <span className="text-teal-400/90">{m.epc}</span>

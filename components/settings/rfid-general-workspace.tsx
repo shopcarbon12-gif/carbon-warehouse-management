@@ -134,7 +134,7 @@ export function RfidGeneralWorkspace() {
               type="button"
               disabled={busy}
               onClick={() => void onSave()}
-              className="rounded-md bg-teal-600 px-4 py-2 font-mono text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+              className="wms-btn-primary wms-btn-sm font-mono disabled:opacity-50"
             >
               {busy ? "Saving…" : "Save"}
             </button>

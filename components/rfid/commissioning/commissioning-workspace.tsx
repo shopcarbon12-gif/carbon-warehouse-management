@@ -352,7 +352,7 @@ export function CommissioningWorkspace() {
         </div>
 
         {selected ? (
-          <div className="mt-4 rounded-md border border-teal-500/25 bg-teal-950/20 px-3 py-2 font-mono text-[0.7rem] text-[var(--wms-fg)]">
+          <div className="mt-4 rounded-md border border-teal-600/35 bg-teal-50 px-3 py-2 font-mono text-xs text-teal-950 dark:border-teal-500/25 dark:bg-teal-950/25 dark:text-[var(--wms-fg)]">
             <span className="text-teal-500/90">{selected.sku}</span>
             <span className="text-[var(--wms-muted)]"> · </span>
             {selected.description}
@@ -440,7 +440,7 @@ export function CommissioningWorkspace() {
             !selected || phase === "ENCODING" || phase === "PRINTING"
           }
           onClick={() => void onPrint()}
-          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-teal-600/50 bg-teal-950/40 py-3 font-mono text-sm font-medium text-teal-200 hover:bg-teal-900/30 disabled:cursor-not-allowed disabled:opacity-40"
+          className="wms-btn-primary mt-3 inline-flex w-full font-mono disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Printer className="h-4 w-4" strokeWidth={2} />
           Print / commission

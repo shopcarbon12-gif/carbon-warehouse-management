@@ -79,7 +79,7 @@ export function ExceptionResolutionModal({ row, onClose, onResolved }: Props) {
           </div>
 
           <h3 className="mt-4 font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">Triggered EPCs</h3>
-          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto font-mono text-[0.65rem] text-red-300/90">
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto font-mono text-sm text-red-800 dark:text-red-300/90">
             {epcs.length ? (
               epcs.map((e) => <li key={e}>{e}</li>)
             ) : (
@@ -88,7 +88,7 @@ export function ExceptionResolutionModal({ row, onClose, onResolved }: Props) {
           </ul>
 
           {err ? (
-            <p className="mt-3 font-mono text-xs text-red-400/90">{err}</p>
+            <p className="mt-3 font-mono text-sm text-red-600 dark:text-red-400/90">{err}</p>
           ) : null}
 
           {!open ? (
@@ -100,7 +100,7 @@ export function ExceptionResolutionModal({ row, onClose, onResolved }: Props) {
                   type="button"
                   disabled={busy}
                   onClick={() => void resolve("return_to_stock")}
-                  className="flex-1 rounded-lg border border-emerald-600/45 bg-emerald-950/25 py-2.5 font-mono text-xs text-emerald-200 hover:bg-emerald-900/20 disabled:opacity-50"
+                  className="wms-btn-success-solid flex-1 font-mono disabled:opacity-50"
                 >
                   Return to stock
                 </button>
@@ -108,7 +108,7 @@ export function ExceptionResolutionModal({ row, onClose, onResolved }: Props) {
                   type="button"
                   disabled={busy}
                   onClick={() => void resolve("mark_missing")}
-                  className="flex-1 rounded-lg border border-red-600/45 bg-red-950/25 py-2.5 font-mono text-xs text-red-200 hover:bg-red-900/20 disabled:opacity-50"
+                  className="wms-btn-danger flex-1 font-mono disabled:opacity-50"
                 >
                   Mark as missing
                 </button>

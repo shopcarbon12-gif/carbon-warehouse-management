@@ -103,7 +103,7 @@ export function CycleCountCommitModal({
               type="button"
               disabled={busy}
               onClick={() => onClose()}
-              className="flex-1 rounded-lg border border-[var(--wms-border)] py-2.5 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+              className="flex-1 rounded-lg border-2 border-[var(--wms-border)] bg-[var(--wms-surface)] py-2.5 font-mono text-sm font-medium text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
             >
               Cancel
             </button>
@@ -111,7 +111,7 @@ export function CycleCountCommitModal({
               type="button"
               disabled={busy}
               onClick={() => void run()}
-              className="flex-1 rounded-lg border border-teal-600/50 bg-teal-950/40 py-2.5 font-mono text-xs font-medium text-teal-200 hover:bg-teal-900/30 disabled:opacity-50"
+              className="wms-btn-primary flex-1 font-mono disabled:opacity-50"
             >
               {busy ? "Committing…" : "Commit"}
             </button>

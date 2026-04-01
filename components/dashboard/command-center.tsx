@@ -51,7 +51,7 @@ function PulsePill({
   const live = count > 0;
   return (
     <div
-      className={`flex min-w-[6.5rem] flex-1 items-center gap-2 rounded-lg border px-3 py-2.5 font-mono text-xs sm:min-w-[7.5rem] ${
+      className={`flex min-w-[7.25rem] flex-1 items-center gap-2 rounded-lg border px-3 py-3.5 font-mono text-base sm:min-w-[8rem] ${
         live
           ? "border-emerald-700/45 bg-[color-mix(in_srgb,#059669_32%,var(--wms-surface-elevated))] text-emerald-950 shadow-sm dark:border-emerald-500/45 dark:bg-[color-mix(in_srgb,#10b981_22%,var(--wms-surface-elevated))] dark:text-emerald-100"
           : "border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] text-[var(--wms-fg)] dark:bg-[var(--wms-surface-elevated)]"
@@ -70,11 +70,11 @@ function PulsePill({
       <Icon className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={2} />
       <div className="min-w-0 leading-tight">
         <div
-          className={`text-[0.6rem] uppercase tracking-wide ${live ? "text-emerald-900/85 dark:text-emerald-200/90" : "text-[var(--wms-muted)]"}`}
+          className={`text-xs font-semibold uppercase tracking-wide ${live ? "text-emerald-900 dark:text-emerald-200/90" : "text-[var(--wms-muted)]"}`}
         >
           {label}
         </div>
-        <div className="tabular-nums text-sm font-semibold text-[var(--wms-fg)]">{count}</div>
+        <div className="tabular-nums text-base font-bold text-[var(--wms-fg)]">{count}</div>
       </div>
     </div>
   );
@@ -112,10 +112,10 @@ function KpiTile({
   return (
     <Link
       href={href}
-      className={`block rounded-xl border p-5 shadow-sm transition-colors ${skin.card}`}
+      className={`block rounded-xl border p-6 shadow-sm transition-colors ${skin.card}`}
     >
-      <div className={`text-3xl font-bold tabular-nums ${skin.num}`}>{value}</div>
-      <div className={`mt-2 font-mono text-[0.65rem] uppercase tracking-wider ${skin.label}`}>{title}</div>
+      <div className={`text-4xl font-bold tabular-nums ${skin.num}`}>{value}</div>
+      <div className={`mt-2.5 font-mono text-base font-semibold uppercase tracking-wider ${skin.label}`}>{title}</div>
     </Link>
   );
 }
@@ -161,16 +161,16 @@ export function CommandCenter() {
           <div>
             <div className="flex items-center gap-2 text-[var(--wms-secondary)]">
               <Cpu className="h-4 w-4 text-[var(--wms-accent)]" strokeWidth={2} />
-              <span className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.2em]">Command center</span>
+              <span className="font-mono text-sm font-semibold uppercase tracking-[0.18em]">Command center</span>
             </div>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--wms-fg)]">
               Operations overview
             </h1>
-            <p className="mt-1 max-w-xl font-mono text-xs text-[var(--wms-muted)]">
+            <p className="mt-1 max-w-xl font-mono text-sm text-[var(--wms-muted)]">
               KPIs refresh every 15s. RFID edge stream (SSE) updates the live scan counter for this session.
             </p>
           </div>
-          <div className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
+          <div className="font-mono text-sm text-[var(--wms-muted)]">
             {isValidating && !isLoading ? <span className="text-[var(--wms-accent)]">Syncing…</span> : null}
             {error ? <span className="text-red-500/90">KPI load error</span> : null}
           </div>
@@ -214,8 +214,8 @@ export function CommandCenter() {
 
       {/* Middle: hardware pulse */}
       <section aria-label="Hardware pulse">
-        <h2 className="mb-3 flex items-center gap-2 border-b border-[var(--wms-border)] pb-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-[var(--wms-secondary)]">
-          <Radio className="h-3.5 w-3.5 text-[var(--wms-accent)]" strokeWidth={2} />
+        <h2 className="mb-3 flex items-center gap-2 border-b border-[var(--wms-border)] pb-2 font-mono text-base font-semibold uppercase tracking-[0.1em] text-[var(--wms-fg)]">
+          <Radio className="h-5 w-5 text-[var(--wms-accent)]" strokeWidth={2} />
           Hardware pulse
         </h2>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
@@ -228,13 +228,13 @@ export function CommandCenter() {
 
       {/* Bottom: recent activity timeline */}
       <section aria-label="Recent activity">
-        <h2 className="mb-3 flex items-center gap-2 border-b border-[var(--wms-border)] pb-2 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-[var(--wms-secondary)]">
-          <Activity className="h-3.5 w-3.5 text-[var(--wms-accent)]" strokeWidth={2} />
+        <h2 className="mb-3 flex items-center gap-2 border-b border-[var(--wms-border)] pb-2 font-mono text-base font-semibold uppercase tracking-[0.1em] text-[var(--wms-fg)]">
+          <Activity className="h-5 w-5 text-[var(--wms-accent)]" strokeWidth={2} />
           Recent activity
         </h2>
         <div className="rounded-xl border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_6%,var(--wms-surface))] shadow-sm dark:bg-[var(--wms-surface)]">
           <div className="border-b border-[var(--wms-border)] px-4 py-3">
-            <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
+            <p className="font-mono text-base text-[color-mix(in_srgb,var(--wms-fg)_72%,var(--wms-muted))]">
               Last 10 audit events ·{" "}
               <Link href="/reports/activity" className="text-[var(--wms-accent)] hover:underline">
                 View all
@@ -243,27 +243,27 @@ export function CommandCenter() {
           </div>
           <ul className="divide-y divide-[var(--wms-border)]/80">
             {activity.length === 0 ? (
-              <li className="px-4 py-10 text-center font-mono text-xs text-[var(--wms-muted)]">
+              <li className="px-4 py-10 text-center font-mono text-base text-[var(--wms-muted)]">
                 No audit events yet.
               </li>
             ) : (
               activity.map((row, i) => (
-                <li key={row.id} className="relative flex gap-4 px-4 py-3 pl-8">
+                <li key={row.id} className="relative flex gap-4 px-4 py-3.5 pl-9">
                   <span
-                    className="absolute left-3 top-4 h-2 w-2 rounded-full bg-[var(--wms-accent)] ring-4 ring-[var(--wms-surface)]"
+                    className="absolute left-3.5 top-[1.15rem] h-2.5 w-2.5 rounded-full bg-[var(--wms-accent)] ring-4 ring-[var(--wms-surface)]"
                     aria-hidden
                   />
                   {i < activity.length - 1 ? (
                     <span
-                      className="absolute bottom-0 left-[0.8rem] top-8 w-px bg-[var(--wms-border)]"
+                      className="absolute bottom-0 left-[0.95rem] top-9 w-px bg-[var(--wms-border)]"
                       aria-hidden
                     />
                   ) : null}
                   <div className="min-w-0 flex-1">
-                    <p className="font-mono text-xs leading-snug text-[var(--wms-fg)]">
+                    <p className="font-mono text-base leading-snug text-[var(--wms-fg)]">
                       {formatAuditLine(row)}
                     </p>
-                    <p className="mt-1 font-mono text-[0.6rem] tabular-nums text-[var(--wms-muted)]">
+                    <p className="mt-1.5 font-mono text-sm tabular-nums text-[color-mix(in_srgb,var(--wms-fg)_62%,var(--wms-muted))]">
                       {new Date(row.created_at).toLocaleString()}
                     </p>
                   </div>
@@ -273,7 +273,7 @@ export function CommandCenter() {
           </ul>
         </div>
 
-        <div className="mt-4 rounded-lg border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-4 py-3 font-mono text-xs text-[var(--wms-fg)] dark:text-[var(--wms-muted)]">
+        <div className="mt-4 rounded-lg border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-4 py-3.5 font-mono text-base text-[var(--wms-fg)] dark:text-[var(--wms-muted)]">
           <Link className="text-[var(--wms-accent)] hover:underline" href="/inventory">
             Inventory
           </Link>

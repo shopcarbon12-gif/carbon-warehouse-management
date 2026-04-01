@@ -147,10 +147,10 @@ export function BinEditorDrawer({
       <aside className="fixed inset-y-0 right-0 z-[80] flex w-full max-w-md flex-col border-l border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
         <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold text-[var(--wms-fg)]">
+            <h2 className="text-base font-semibold text-[var(--wms-fg)]">
               {mode === "add" ? "Add bin" : "Edit bin"}
             </h2>
-            <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">{locationLabel}</p>
+            <p className="font-mono text-xs text-[var(--wms-muted)]">{locationLabel}</p>
           </div>
           <button
             type="button"
@@ -163,7 +163,7 @@ export function BinEditorDrawer({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="space-y-3 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/30 p-4">
-            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
+            <label className="block font-mono text-xs font-medium uppercase tracking-wide text-[var(--wms-fg)]">
               Bin name / identifier
               <input
                 value={code}
@@ -171,7 +171,7 @@ export function BinEditorDrawer({
                 className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
               />
             </label>
-            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
+            <label className="block font-mono text-xs font-medium uppercase tracking-wide text-[var(--wms-fg)]">
               Capacity limit (optional)
               <input
                 type="number"
@@ -181,7 +181,7 @@ export function BinEditorDrawer({
                 className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
               />
             </label>
-            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
+            <label className="block font-mono text-xs font-medium uppercase tracking-wide text-[var(--wms-fg)]">
               Status
               <select
                 value={status}
@@ -194,19 +194,21 @@ export function BinEditorDrawer({
             </label>
 
             {mode === "edit" && editingBin ? (
-              <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+              <p className="font-mono text-xs text-[var(--wms-muted)]">
                 In-stock EPCs at this site:{" "}
                 <span className="text-[var(--wms-muted)]">{editingBin.in_stock_count}</span>
               </p>
             ) : null}
 
-            {err ? <p className="font-mono text-xs text-red-400/90">{err}</p> : null}
+            {err ? (
+              <p className="font-mono text-sm text-red-600 dark:text-red-400/90">{err}</p>
+            ) : null}
 
             <button
               type="button"
               disabled={busy}
               onClick={() => void saveBin()}
-              className="w-full rounded border border-teal-600/45 bg-teal-950/25 py-2.5 font-mono text-xs font-medium text-teal-200 hover:bg-teal-900/25 disabled:opacity-50"
+              className="wms-btn-primary w-full font-mono"
             >
               Save bin
             </button>
@@ -221,7 +223,7 @@ export function BinEditorDrawer({
                     : undefined
                 }
                 onClick={() => void archiveBin()}
-                className="w-full rounded border border-red-900/50 bg-red-950/20 py-2.5 font-mono text-xs font-medium text-red-300/90 hover:bg-red-950/35 disabled:opacity-30"
+                className="wms-btn-danger w-full font-mono"
               >
                 Archive bin
               </button>

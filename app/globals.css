@@ -51,7 +51,7 @@ html[data-theme="light"] {
   --wms-secondary: #587e7e;
   --wms-accent-fg: #ffffff;
   --wms-muted: #475569;
-  --wms-status-success-fg: #047857;
+  --wms-status-success-fg: #065f46;
   --wms-status-warning-fg: #b45309;
   --wms-table-accent-num: #0b9597;
   --wms-table-clean-fg: #92400e;
@@ -62,14 +62,14 @@ html[data-theme="light"] {
   --wms-status-orange-fg: #c2410c;
 }
 
-/* Default type = former optional “large” (~18px root). Extra large bumps again. */
+/* Default type — bumped again for readability (tables + UI follow rem). */
 html {
-  font-size: 1.125rem;
+  font-size: 1.1875rem;
   line-height: 1.55;
 }
 
 html.wms-text-xl {
-  font-size: 1.3125rem;
+  font-size: 1.375rem;
   line-height: 1.55;
 }
 
@@ -294,6 +294,7 @@ html.dark .wms-toggle-track[data-state="on"] .wms-toggle-thumb {
 /* Status chips / table cells (theme tokens beat raw Tailwind emerald/amber). */
 .wms-status-success {
   color: var(--wms-status-success-fg);
+  font-weight: 600;
 }
 
 .wms-status-warning {
@@ -376,24 +377,147 @@ html.dark .wms-loc-row-active {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wms-accent) 35%, transparent);
 }
 
+/* Solid action buttons — readable in light (no pale mint / pink text on wash). */
+.wms-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--wms-accent) 58%, #0000002e);
+  background: var(--wms-accent);
+  color: var(--wms-accent-fg);
+  font-weight: 600;
+  line-height: 1.25;
+  padding: 0.65rem 1.15rem;
+  min-height: 2.85rem;
+  transition:
+    filter 0.12s ease,
+    box-shadow 0.12s ease;
+  box-shadow: 0 1px 0 color-mix(in srgb, #ffffff 40%, transparent);
+}
+
+html.dark .wms-btn-primary {
+  box-shadow: 0 1px 0 color-mix(in srgb, #ffffff 14%, transparent);
+}
+
+.wms-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+.wms-btn-primary:active:not(:disabled) {
+  filter: brightness(0.94);
+}
+
+.wms-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wms-btn-primary.wms-btn-compact {
+  min-height: 0;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Toolbar-sized primary (settings “Add …” rows). */
+.wms-btn-primary.wms-btn-sm {
+  min-height: 2.35rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.875rem;
+}
+
+.wms-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid #991b1b;
+  background: #dc2626;
+  color: #ffffff;
+  font-weight: 600;
+  line-height: 1.25;
+  padding: 0.65rem 1.15rem;
+  min-height: 2.85rem;
+  transition: filter 0.12s ease;
+}
+
+html.dark .wms-btn-danger {
+  background: #ef4444;
+  border-color: color-mix(in srgb, #fca5a5 35%, #7f1d1d);
+}
+
+.wms-btn-danger:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.wms-btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wms-btn-danger.wms-btn-compact {
+  min-height: 0;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8125rem;
+}
+
+.wms-btn-danger.wms-btn-sm {
+  min-height: 2.35rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.875rem;
+}
+
+.wms-btn-success-solid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid #047857;
+  background: #059669;
+  color: #ffffff;
+  font-weight: 600;
+  line-height: 1.25;
+  padding: 0.65rem 1.15rem;
+  min-height: 2.85rem;
+  transition: filter 0.12s ease;
+}
+
+html.dark .wms-btn-success-solid {
+  background: #10b981;
+  border-color: #059669;
+}
+
+.wms-btn-success-solid:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.wms-btn-success-solid:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /*
  * Main content tables: bump cell/header size past text-xs / arbitrary rem utilities.
  * Scoped to main so marketing or other roots stay untouched.
  */
 main table {
-  font-size: 1rem !important;
+  font-size: 1.0625rem !important;
   line-height: 1.45 !important;
 }
 
 main table thead th {
-  font-size: 0.8125rem !important;
+  font-size: 0.9375rem !important;
   line-height: 1.35 !important;
   letter-spacing: 0.04em !important;
   font-weight: 600 !important;
 }
 
 main table tbody td {
-  font-size: 0.9375rem !important;
+  font-size: 1.0625rem !important;
   line-height: 1.4 !important;
 }
 

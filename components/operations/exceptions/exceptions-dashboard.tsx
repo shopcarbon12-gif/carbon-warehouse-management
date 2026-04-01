@@ -63,10 +63,10 @@ export function ExceptionsDashboard() {
             key={f}
             type="button"
             onClick={() => setFilter(f)}
-            className={`rounded-md border px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide ${
+            className={`rounded-md border px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide ${
               filter === f
-                ? "border-red-500/50 bg-red-950/30 text-red-200"
-                : "border-[var(--wms-border)] text-[var(--wms-muted)] hover:border-[var(--wms-border)]"
+                ? "border-red-800 bg-red-100 text-red-900 dark:border-red-500/45 dark:bg-red-950/40 dark:text-red-100"
+                : "border-[var(--wms-border)] text-[var(--wms-muted)] hover:border-[var(--wms-border)] hover:bg-[var(--wms-surface-elevated)]"
             }`}
           >
             {f}
@@ -76,7 +76,7 @@ export function ExceptionsDashboard() {
           type="button"
           disabled={simBusy}
           onClick={() => void simulate()}
-          className="ml-auto inline-flex items-center gap-2 rounded-lg border border-red-600/40 bg-red-950/20 px-3 py-2 font-mono text-xs text-red-200/90 hover:bg-red-950/35 disabled:opacity-50"
+          className="wms-btn-danger wms-btn-sm ml-auto font-mono disabled:opacity-50"
         >
           <BellRing className="h-4 w-4" />
           {simBusy ? "Simulating…" : "Simulate dock alarm"}
@@ -93,7 +93,7 @@ export function ExceptionsDashboard() {
       </div>
 
       {error ? (
-        <p className="font-mono text-xs text-red-400/90">
+        <p className="font-mono text-sm text-red-600 dark:text-red-400/90">
           {error instanceof Error ? error.message : "Load failed"}
         </p>
       ) : null}
@@ -119,7 +119,9 @@ export function ExceptionsDashboard() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span
                     className={
-                      open ? "font-semibold text-red-300/90" : "text-[var(--wms-muted)] line-through"
+                      open
+                        ? "font-semibold text-red-700 dark:text-red-300/90"
+                        : "text-[var(--wms-muted)] line-through"
                     }
                   >
                     {r.action}

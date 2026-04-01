@@ -188,7 +188,7 @@ export function UsersSettingsWorkspace() {
             <button
               type="button"
               onClick={() => setAddUserOpen(true)}
-              className="rounded-md bg-teal-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-teal-500"
+              className="wms-btn-primary wms-btn-sm font-mono"
             >
               Add user
             </button>
@@ -334,7 +334,7 @@ export function UsersSettingsWorkspace() {
             <button
               type="button"
               onClick={() => setRoleModal({ mode: "add" })}
-              className="rounded-md bg-teal-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-teal-500"
+              className="wms-btn-primary wms-btn-sm font-mono"
             >
               Add role
             </button>
@@ -574,7 +574,7 @@ function UserFormModal({
             type="button"
             disabled={busy}
             onClick={() => void submit()}
-            className="rounded bg-teal-600 px-4 py-2 font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+            className="wms-btn-primary font-mono disabled:opacity-50"
           >
             {busy ? "Saving…" : "Save"}
           </button>
@@ -718,7 +718,7 @@ function RolePermissionsModal({
             <button
               type="button"
               onClick={() => void deleteRole(row, onSaved)}
-              className="rounded border border-red-900/50 px-3 py-2 font-mono text-xs text-red-400 hover:bg-red-950/30"
+              className="wms-btn-danger wms-btn-sm font-mono"
             >
               Delete role
             </button>
@@ -737,7 +737,7 @@ function RolePermissionsModal({
               type="button"
               disabled={busy}
               onClick={() => void submit()}
-              className="rounded bg-teal-600 px-4 py-2 font-mono text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+              className="wms-btn-primary font-mono disabled:opacity-50"
             >
               {busy ? "Saving…" : "Save"}
             </button>

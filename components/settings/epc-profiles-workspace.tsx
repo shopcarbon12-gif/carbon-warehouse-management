@@ -74,7 +74,7 @@ export function EpcProfilesWorkspace() {
           type="button"
           disabled={busy || !data}
           onClick={() => setModal({ mode: "add" })}
-          className="rounded-md bg-teal-600 px-3 py-2 font-mono text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+          className="wms-btn-primary wms-btn-sm font-mono disabled:opacity-50"
         >
           Add profile
         </button>
@@ -274,7 +274,7 @@ function ProfileModal({
             type="button"
             disabled={busy || !row.id.trim() || !row.name.trim()}
             onClick={() => void onSave({ ...row, epcPrefix: row.epcPrefix || "F0A0B" })}
-            className="rounded bg-teal-600 px-4 py-2 font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+            className="wms-btn-primary font-mono disabled:opacity-50"
           >
             Save
           </button>

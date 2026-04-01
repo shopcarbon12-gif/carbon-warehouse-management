@@ -135,7 +135,7 @@ export function PrintLogsModal({ open, onClose }: Props) {
                 type="button"
                 onClick={exportCsv}
                 disabled={rows.length === 0}
-                className="inline-flex items-center gap-1 rounded border border-teal-600/50 bg-teal-950/30 px-2 py-1 font-mono text-[0.65rem] text-teal-200 disabled:opacity-40"
+                className="wms-btn-primary wms-btn-compact inline-flex items-center gap-1 font-mono disabled:opacity-40"
               >
                 <Download className="h-3.5 w-3.5" />
                 Export CSV

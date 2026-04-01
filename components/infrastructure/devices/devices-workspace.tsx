@@ -188,7 +188,7 @@ export function DevicesWorkspace() {
                       <button
                         type="button"
                         onClick={() => void remove(d)}
-                        className="rounded border border-red-900/40 p-1.5 text-red-400/90 hover:bg-red-950/30"
+                        className="rounded border border-red-300 p-1.5 text-red-700 hover:bg-red-50 dark:border-red-800/50 dark:text-red-400/90 dark:hover:bg-red-950/35"
                         aria-label="Remove device"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
