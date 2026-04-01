@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   normalizeStoredFont,
+  STORAGE_COLOR_KEY,
   STORAGE_FONT_KEY,
   type ThemeFontScale,
 } from "@/lib/theme-boot";
@@ -23,8 +24,6 @@ export type ThemeCombo = {
   font: ThemeFontScale;
 };
 
-const STORAGE_COLOR = "wms_theme_color";
-
 type ThemeContextValue = {
   colorMode: ThemeColorMode;
   fontScale: ThemeFontScale;
@@ -37,7 +36,7 @@ function readStored(): ThemeCombo {
   if (typeof window === "undefined") {
     return { color: "dark", font: "comfortable" };
   }
-  const c = window.localStorage.getItem(STORAGE_COLOR);
+  const c = window.localStorage.getItem(STORAGE_COLOR_KEY);
   const f = window.localStorage.getItem(STORAGE_FONT_KEY);
   return {
     color: c === "light" ? "light" : "dark",
@@ -78,7 +77,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setColorMode(combo.color);
     setFontScale(combo.font);
     try {
-      window.localStorage.setItem(STORAGE_COLOR, combo.color);
+      window.localStorage.setItem(STORAGE_COLOR_KEY, combo.color);
       window.localStorage.setItem(STORAGE_FONT_KEY, combo.font);
     } catch {
       /* ignore */

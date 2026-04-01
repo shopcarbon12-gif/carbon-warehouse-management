@@ -83,12 +83,17 @@ html.wms-text-xl input.wms-field {
   min-height: 2.75em;
 }
 
-/* Route title row: reads as a header, not body copy (esp. light theme) */
-html[data-theme="light"] main h1.text-lg.font-semibold.tracking-tight {
+/*
+ * Route title row: same box model in light vs dark — only surfaces differ (no size jump on theme toggle).
+ */
+main h1.text-lg.font-semibold.tracking-tight {
   margin-bottom: 0.35rem;
   padding: 1rem 1.15rem 1.1rem;
   border-radius: 0.5rem;
   border: 1px solid color-mix(in srgb, var(--wms-border) 85%, transparent);
+}
+
+html[data-theme="light"] main h1.text-lg.font-semibold.tracking-tight {
   background: linear-gradient(
     90deg,
     rgba(11, 149, 151, 0.14) 0%,
@@ -99,10 +104,8 @@ html[data-theme="light"] main h1.text-lg.font-semibold.tracking-tight {
 }
 
 html.dark main h1.text-lg.font-semibold.tracking-tight {
-  margin-bottom: 0.35rem;
-  padding-bottom: 0.65rem;
-  border-bottom: 1px solid var(--wms-border);
   background: linear-gradient(90deg, rgba(45, 212, 191, 0.1) 0%, transparent 72%);
+  box-shadow: none;
 }
 
 @theme inline {
