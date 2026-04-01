@@ -51,44 +51,44 @@ export function CycleCountCommitModal({
       />
       <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
         <div
-          className="w-full max-w-md rounded-xl border border-slate-800 bg-zinc-950 p-5 shadow-2xl"
+          className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-2xl"
           role="dialog"
           aria-modal="true"
         >
           <div className="flex items-start justify-between gap-3">
-            <h2 className="text-sm font-semibold text-slate-100">Commit cycle count</h2>
+            <h2 className="text-sm font-semibold text-[var(--wms-fg)]">Commit cycle count</h2>
             <button
               type="button"
               onClick={() => !busy && onClose()}
-              className="rounded p-1 text-slate-500 hover:bg-zinc-800 hover:text-slate-200"
+              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
-          <p className="mt-2 font-mono text-[0.65rem] leading-relaxed text-slate-500">
+          <p className="mt-2 font-mono text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">
             Missing tags will be set to <span className="text-amber-400/90">UNKNOWN</span>.
             Misplaced tags will be moved to <span className="text-teal-400/90">in-stock</span> in
             the selected bin. Unrecognized EPCs are audit-only.
           </p>
-          <ul className="mt-4 space-y-2 font-mono text-xs text-slate-300">
-            <li className="flex justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-slate-500">Matched</span>
+          <ul className="mt-4 space-y-2 font-mono text-xs text-[var(--wms-fg)]">
+            <li className="flex justify-between border-b border-[var(--wms-border)]/80 pb-2">
+              <span className="text-[var(--wms-muted)]">Matched</span>
               <span className="text-emerald-400/90">{summary.matched}</span>
             </li>
-            <li className="flex justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-slate-500">Missing</span>
+            <li className="flex justify-between border-b border-[var(--wms-border)]/80 pb-2">
+              <span className="text-[var(--wms-muted)]">Missing</span>
               <span className="text-amber-400/90">{summary.missing}</span>
             </li>
-            <li className="flex justify-between border-b border-slate-800/80 pb-2">
-              <span className="text-slate-500">Misplaced</span>
+            <li className="flex justify-between border-b border-[var(--wms-border)]/80 pb-2">
+              <span className="text-[var(--wms-muted)]">Misplaced</span>
               <span className="text-orange-400/90">{summary.misplaced}</span>
             </li>
             <li className="flex justify-between pb-2">
-              <span className="text-slate-500">Unrecognized</span>
-              <span className="text-slate-400">{summary.unrecognized}</span>
+              <span className="text-[var(--wms-muted)]">Unrecognized</span>
+              <span className="text-[var(--wms-muted)]">{summary.unrecognized}</span>
             </li>
-            <li className="flex justify-between border-t border-slate-800 pt-2 font-medium text-slate-200">
+            <li className="flex justify-between border-t border-[var(--wms-border)] pt-2 font-medium text-[var(--wms-fg)]">
               <span>Scanned EPCs</span>
               <span>
                 {summary.matched + summary.misplaced + summary.unrecognized}
@@ -103,7 +103,7 @@ export function CycleCountCommitModal({
               type="button"
               disabled={busy}
               onClick={() => onClose()}
-              className="flex-1 rounded-lg border border-slate-700 py-2.5 font-mono text-xs text-slate-300 hover:bg-zinc-900 disabled:opacity-50"
+              className="flex-1 rounded-lg border border-[var(--wms-border)] py-2.5 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
             >
               Cancel
             </button>

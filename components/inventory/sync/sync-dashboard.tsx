@@ -68,8 +68,8 @@ const SyncEngineTabBody = memo(function SyncEngineTabBody() {
 
   return (
     <div className="space-y-8">
-      <div className="rounded-xl border border-slate-800 bg-zinc-950/80 p-6">
-        <h2 className="font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+      <div className="rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-6">
+        <h2 className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
           Catalog sync
         </h2>
         {error ? (
@@ -78,23 +78,23 @@ const SyncEngineTabBody = memo(function SyncEngineTabBody() {
           </p>
         ) : null}
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-lg border border-slate-800 bg-zinc-900/40 p-4">
-            <div className="font-mono text-[0.6rem] uppercase text-slate-500">Last success</div>
+          <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 p-4">
+            <div className="font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">Last success</div>
             <div className="mt-1 font-mono text-sm text-teal-400/90">
               {data?.last_success_at
                 ? new Date(data.last_success_at).toLocaleString()
                 : "—"}
             </div>
           </div>
-          <div className="rounded-lg border border-slate-800 bg-zinc-900/40 p-4">
-            <div className="font-mono text-[0.6rem] uppercase text-slate-500">
+          <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 p-4">
+            <div className="font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
               Synchronized SKUs
             </div>
-            <div className="mt-1 font-mono text-2xl tabular-nums text-slate-200">
+            <div className="mt-1 font-mono text-2xl tabular-nums text-[var(--wms-fg)]">
               {data?.total_catalog_skus ?? "—"}
             </div>
-            <p className="mt-2 font-mono text-[0.55rem] text-slate-600">
-              Total <code className="text-slate-500">custom_skus</code> rows in the matrix catalog.
+            <p className="mt-2 font-mono text-[0.55rem] text-[var(--wms-muted)]">
+              Total <code className="text-[var(--wms-muted)]">custom_skus</code> rows in the matrix catalog.
             </p>
           </div>
         </div>
@@ -108,7 +108,7 @@ const SyncEngineTabBody = memo(function SyncEngineTabBody() {
           {busy ? "Syncing…" : "Trigger manual sync"}
         </button>
         {msg ? (
-          <p className="mt-3 font-mono text-xs text-slate-500">{msg}</p>
+          <p className="mt-3 font-mono text-xs text-[var(--wms-muted)]">{msg}</p>
         ) : null}
       </div>
 
@@ -121,7 +121,7 @@ const LiveCompareTabBody = memo(function LiveCompareTabBody() {
   return (
     <div className="space-y-10">
       <div>
-        <p className="font-mono text-xs text-slate-500">
+        <p className="font-mono text-xs text-[var(--wms-muted)]">
           Compare POS on-hand (mock) to RFID in-stock EPC counts at the active location.
         </p>
         <div className="mt-4">
@@ -129,11 +129,11 @@ const LiveCompareTabBody = memo(function LiveCompareTabBody() {
         </div>
       </div>
 
-      <section className="border-t border-slate-800 pt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+      <section className="border-t border-[var(--wms-border)] pt-8">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--wms-muted)]">
           Background jobs
         </h2>
-        <p className="mt-1 font-mono text-xs text-slate-500">
+        <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
           Queue jobs in Postgres; run{" "}
           <code className="text-teal-500/90">npm run worker</code> (or a second Coolify service) to
           process them.
@@ -153,7 +153,7 @@ export function SyncDashboard() {
       <div
         role="tablist"
         aria-label="Sync dashboard sections"
-        className="flex flex-wrap gap-2 border-b border-slate-800 pb-2"
+        className="flex flex-wrap gap-2 border-b border-[var(--wms-border)] pb-2"
       >
         {TABS.map((t) => {
           const selected = activeTab === t.id;
@@ -171,8 +171,8 @@ export function SyncDashboard() {
               onClick={() => setActiveTab(t.id)}
               className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide transition-colors ${
                 selected
-                  ? "border border-b-0 border-slate-700 bg-zinc-900 text-teal-300/90"
-                  : "text-slate-500 hover:text-slate-300"
+                  ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+                  : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
               }`}
             >
               {t.label}

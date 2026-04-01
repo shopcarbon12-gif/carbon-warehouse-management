@@ -47,8 +47,8 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
   const pages = Math.max(1, Math.ceil(total / limit));
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-zinc-950/80">
-      <div className="border-b border-slate-800 px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+    <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
+      <div className="border-b border-[var(--wms-border)] px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
         Sync history
       </div>
       {error ? (
@@ -58,7 +58,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
       ) : null}
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left text-xs">
-          <thead className="bg-zinc-900 font-mono text-[0.6rem] uppercase text-slate-500">
+          <thead className="bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
             <tr>
               <th className="px-3 py-2">Timestamp</th>
               <th className="px-3 py-2">Status</th>
@@ -66,18 +66,18 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
               <th className="px-3 py-2">Error</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/80 font-mono text-[0.65rem] text-slate-300">
+          <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
             {isLoading ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={4} className="px-4 py-8 text-center text-[var(--wms-muted)]">
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-slate-600">
+                <td colSpan={4} className="px-4 py-12 text-center text-[var(--wms-muted)]">
                   <p>No sync history found.</p>
-                  <p className="mt-2 text-[0.6rem] text-slate-500">
+                  <p className="mt-2 text-[0.6rem] text-[var(--wms-muted)]">
                     Trigger a manual sync and run the worker to populate jobs.
                   </p>
                 </td>
@@ -85,7 +85,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
             ) : (
               rows.map((r) => (
                 <tr key={r.id}>
-                  <td className="whitespace-nowrap px-3 py-2 text-slate-500">
+                  <td className="whitespace-nowrap px-3 py-2 text-[var(--wms-muted)]">
                     {new Date(r.updated_at).toLocaleString()}
                   </td>
                   <td className="px-3 py-2">
@@ -112,7 +112,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
         </table>
       </div>
       {total > 0 ? (
-        <div className="flex items-center justify-between border-t border-slate-800 px-4 py-2 font-mono text-[0.6rem] text-slate-500">
+        <div className="flex items-center justify-between border-t border-[var(--wms-border)] px-4 py-2 font-mono text-[0.6rem] text-[var(--wms-muted)]">
           <span>
             Page {page} / {pages}
           </span>
@@ -121,7 +121,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded border border-slate-700 px-2 py-1 disabled:opacity-40"
+              className="rounded border border-[var(--wms-border)] px-2 py-1 disabled:opacity-40"
             >
               Prev
             </button>
@@ -129,7 +129,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
               type="button"
               disabled={page >= pages}
               onClick={() => setPage((p) => p + 1)}
-              className="rounded border border-slate-700 px-2 py-1 disabled:opacity-40"
+              className="rounded border border-[var(--wms-border)] px-2 py-1 disabled:opacity-40"
             >
               Next
             </button>

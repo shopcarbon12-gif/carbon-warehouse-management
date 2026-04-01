@@ -6,10 +6,10 @@ export default function CycleCountsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-slate-100">Cycle counts</h1>
-        <p className="mt-2 max-w-2xl font-mono text-sm text-slate-500">
+        <h1 className="text-xl font-semibold tracking-tight text-[var(--wms-fg)]">Cycle counts</h1>
+        <p className="mt-2 max-w-2xl font-mono text-sm text-[var(--wms-muted)]">
           Location or bin-scoped expected tags, simulated RFID reads, variance KPIs, and commit with
-          UNKNOWN / bin corrections plus <span className="text-slate-400">rfid_cycle_count</span>{" "}
+          UNKNOWN / bin corrections plus <span className="text-[var(--wms-muted)]">rfid_cycle_count</span>{" "}
           audit.
         </p>
       </div>

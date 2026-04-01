@@ -39,10 +39,10 @@ export function SyncPanel() {
 
   return (
     <div className="mt-6 space-y-4">
-      <p className="font-mono text-[0.6rem] text-slate-500">
-        Queued <code className="text-slate-400">lightspeed_pull</code> jobs run the same matrix catalog sync as{" "}
-        <strong className="text-slate-400">Trigger manual sync</strong> when the WMS worker (
-        <code className="text-slate-400">npm run worker</code>) is running.
+      <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+        Queued <code className="text-[var(--wms-muted)]">lightspeed_pull</code> jobs run the same matrix catalog sync as{" "}
+        <strong className="text-[var(--wms-muted)]">Trigger manual sync</strong> when the WMS worker (
+        <code className="text-[var(--wms-muted)]">npm run worker</code>) is running.
       </p>
       <div className="flex flex-wrap gap-2 font-mono text-xs">
         <button
@@ -54,16 +54,16 @@ export function SyncPanel() {
         </button>
         <button
           type="button"
-          className="rounded-md border border-slate-700 px-3 py-2 text-slate-200 hover:bg-slate-800/60"
+          className="rounded-md border border-[var(--wms-border)] px-3 py-2 text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80"
           onClick={() => void enqueue("reconcile")}
         >
           Enqueue reconcile (stub)
         </button>
       </div>
-      <div className="overflow-x-auto rounded-lg border border-slate-800">
+      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-800 bg-zinc-900 font-mono text-xs uppercase text-slate-500">
+            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-xs uppercase text-[var(--wms-muted)]">
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Attempts</th>
@@ -74,7 +74,7 @@ export function SyncPanel() {
           <tbody>
             {jobs.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center font-mono text-xs text-slate-500">
+                <td colSpan={5} className="px-4 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
                   No jobs yet — enqueue above or POST handheld batches.
                 </td>
               </tr>
@@ -82,12 +82,12 @@ export function SyncPanel() {
               jobs.map((j) => (
                 <tr
                   key={j.id}
-                  className="border-b border-slate-800/60 text-slate-200 hover:bg-zinc-900/50"
+                  className="border-b border-[var(--wms-border)]/60 text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/70"
                 >
                   <td className="px-4 py-2 font-mono text-xs">{j.job_type}</td>
                   <td className="px-4 py-2 font-mono text-xs">{j.status}</td>
                   <td className="px-4 py-2 font-mono text-xs tabular-nums">{j.attempts}</td>
-                  <td className="max-w-[200px] truncate px-4 py-2 font-mono text-[0.65rem] text-slate-500">
+                  <td className="max-w-[200px] truncate px-4 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
                     {j.idempotency_key}
                   </td>
                   <td className="max-w-xs truncate px-4 py-2 font-mono text-xs text-red-400/90">

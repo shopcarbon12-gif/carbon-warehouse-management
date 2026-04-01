@@ -170,7 +170,7 @@ function NavAccordion({
       <button
         type="button"
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
+        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-[var(--wms-secondary)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
         onClick={() => setOpen((o) => !o)}
       >
         {section.label}

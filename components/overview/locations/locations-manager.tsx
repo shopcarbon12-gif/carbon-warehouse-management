@@ -109,7 +109,7 @@ export function LocationsManager({
   return (
     <div className="space-y-4">
       {cleanNotice ? (
-        <p className="font-mono text-xs text-slate-400" role="status">
+        <p className="font-mono text-xs text-[var(--wms-muted)]" role="status">
           {cleanNotice}
         </p>
       ) : null}
@@ -121,20 +121,20 @@ export function LocationsManager({
 
       <div className="grid min-h-[420px] gap-4 lg:grid-cols-[minmax(220px,280px)_1fr]">
         {/* Left: locations */}
-        <div className="rounded-lg border border-slate-800 bg-zinc-950/80 lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
-          <div className="border-b border-slate-800 px-3 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+        <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
+          <div className="border-b border-[var(--wms-border)] px-3 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
             Locations
           </div>
           {locations.length === 0 && !error ? (
             <div className="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center">
-              <MapPin className="h-9 w-9 text-slate-700" strokeWidth={1.25} />
-              <p className="mt-3 font-mono text-sm text-slate-500">No locations configured.</p>
-              <p className="mt-1 font-mono text-[0.65rem] text-slate-600">
-                Run <code className="text-slate-500">npm run db:seed</code> to bootstrap sites.
+              <MapPin className="h-9 w-9 text-[var(--wms-secondary)]" strokeWidth={1.25} />
+              <p className="mt-3 font-mono text-sm text-[var(--wms-muted)]">No locations configured.</p>
+              <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                Run <code className="text-[var(--wms-muted)]">npm run db:seed</code> to bootstrap sites.
               </p>
             </div>
           ) : (
-            <ul className="divide-y divide-slate-800/80 overflow-y-auto lg:flex-1">
+            <ul className="divide-y divide-[var(--wms-border)]/80 overflow-y-auto lg:flex-1">
               {locations.map((l) => {
                 const active = l.id === selectedId;
                 return (
@@ -144,14 +144,14 @@ export function LocationsManager({
                       onClick={() => setSelectedId(l.id)}
                       className={`w-full px-3 py-3 text-left font-mono text-sm transition-colors ${
                         active
-                          ? "bg-slate-800/80 text-teal-200 ring-1 ring-inset ring-teal-700/40"
-                          : "text-slate-200 hover:bg-zinc-900/60"
+                          ? "bg-[var(--wms-surface-elevated)]/80 text-teal-200 ring-1 ring-inset ring-teal-700/40"
+                          : "text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80"
                       }`}
                     >
                       <span className="text-teal-400/90">{l.code}</span>
-                      <span className="text-slate-600"> — </span>
-                      <span className="text-slate-200">{l.name}</span>
-                      <span className="mt-0.5 block text-[0.6rem] text-slate-500">
+                      <span className="text-[var(--wms-muted)]"> — </span>
+                      <span className="text-[var(--wms-fg)]">{l.name}</span>
+                      <span className="mt-0.5 block text-[0.6rem] text-[var(--wms-muted)]">
                         {l.bins.length} bin{l.bins.length === 1 ? "" : "s"}
                       </span>
                     </button>
@@ -163,16 +163,16 @@ export function LocationsManager({
         </div>
 
         {/* Right: bins for selected location */}
-        <div className="flex min-h-0 flex-col rounded-lg border border-slate-800 bg-zinc-950/80">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
+        <div className="flex min-h-0 flex-col rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] px-4 py-3">
             <div>
-              <h3 className="text-sm font-semibold text-slate-100">Bins</h3>
+              <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Bins</h3>
               {selected ? (
-                <p className="font-mono text-[0.6rem] text-slate-500">
+                <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
                   {selected.code} · {selected.name}
                 </p>
               ) : (
-                <p className="font-mono text-[0.6rem] text-slate-600">Select a location</p>
+                <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">Select a location</p>
               )}
             </div>
             <button
@@ -189,20 +189,20 @@ export function LocationsManager({
           <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
             {!selected ? (
               <div className="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center">
-                <p className="font-mono text-sm text-slate-500">Select a location on the left.</p>
+                <p className="font-mono text-sm text-[var(--wms-muted)]">Select a location on the left.</p>
               </div>
             ) : selected.bins.length === 0 ? (
               <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-                <p className="font-mono text-sm text-slate-500">No bins at this site yet.</p>
-                <p className="mt-2 max-w-sm font-mono text-[0.65rem] text-slate-600">
-                  Use <strong className="text-slate-500">Add new bin</strong> to create receiving or
+                <p className="font-mono text-sm text-[var(--wms-muted)]">No bins at this site yet.</p>
+                <p className="mt-2 max-w-sm font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                  Use <strong className="text-[var(--wms-muted)]">Add new bin</strong> to create receiving or
                   floor positions. Archive is blocked while in-stock EPCs reference a bin.
                 </p>
               </div>
             ) : (
               <table className="w-full min-w-[640px] border-collapse text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-zinc-900 font-mono text-[0.6rem] uppercase text-slate-500">
+                  <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
                     <th className="px-3 py-2">Identifier</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2 text-right tabular-nums">Capacity</th>
@@ -210,10 +210,10 @@ export function LocationsManager({
                     <th className="px-3 py-2 w-36"> </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/80 font-mono text-[0.65rem] text-slate-300">
+                <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
                   {selected.bins.map((b) => (
-                    <tr key={b.id} className="hover:bg-zinc-900/40">
-                      <td className="px-3 py-2 text-slate-200">{b.code}</td>
+                    <tr key={b.id} className="hover:bg-[var(--wms-surface-elevated)]/50">
+                      <td className="px-3 py-2 text-[var(--wms-fg)]">{b.code}</td>
                       <td className="px-3 py-2">
                         <span
                           className={
@@ -225,10 +225,10 @@ export function LocationsManager({
                           {b.status === "inactive" ? "inactive" : "active"}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                      <td className="px-3 py-2 text-right tabular-nums text-[var(--wms-muted)]">
                         {b.capacity != null ? b.capacity : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-400">
+                      <td className="px-3 py-2 text-right tabular-nums text-[var(--wms-muted)]">
                         {b.in_stock_count}
                       </td>
                       <td className="px-3 py-2">
@@ -248,7 +248,7 @@ export function LocationsManager({
                           <button
                             type="button"
                             onClick={() => openEdit(b)}
-                            className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-[0.6rem] text-slate-300 hover:bg-zinc-800"
+                            className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
                           >
                             <Pencil className="h-3 w-3" />
                             Edit

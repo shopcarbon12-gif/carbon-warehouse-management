@@ -61,29 +61,29 @@ export function ExceptionResolutionModal({ row, onClose, onResolved }: Props) {
         onClick={() => !busy && onClose()}
       />
       <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-xl border border-slate-800 bg-zinc-950 p-5 shadow-2xl">
+        <div className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-2xl">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-slate-100">Resolve exception</h2>
-              <p className="mt-1 font-mono text-[0.6rem] text-slate-500">
+              <h2 className="text-sm font-semibold text-[var(--wms-fg)]">Resolve exception</h2>
+              <p className="mt-1 font-mono text-[0.6rem] text-[var(--wms-muted)]">
                 {row.action} · {new Date(row.created_at).toLocaleString()}
               </p>
             </div>
             <button
               type="button"
               onClick={() => !busy && onClose()}
-              className="rounded p-1 text-slate-500 hover:bg-zinc-800"
+              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <h3 className="mt-4 font-mono text-[0.65rem] uppercase text-slate-500">Triggered EPCs</h3>
+          <h3 className="mt-4 font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">Triggered EPCs</h3>
           <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto font-mono text-[0.65rem] text-red-300/90">
             {epcs.length ? (
               epcs.map((e) => <li key={e}>{e}</li>)
             ) : (
-              <li className="text-slate-600">No EPC list on this record.</li>
+              <li className="text-[var(--wms-muted)]">No EPC list on this record.</li>
             )}
           </ul>
 
@@ -92,7 +92,7 @@ export function ExceptionResolutionModal({ row, onClose, onResolved }: Props) {
           ) : null}
 
           {!open ? (
-            <p className="mt-4 font-mono text-xs text-slate-500">Already resolved.</p>
+            <p className="mt-4 font-mono text-xs text-[var(--wms-muted)]">Already resolved.</p>
           ) : (
             <>
               <div className="mt-5 flex flex-col gap-2 sm:flex-row">
@@ -113,7 +113,7 @@ export function ExceptionResolutionModal({ row, onClose, onResolved }: Props) {
                   Mark as missing
                 </button>
               </div>
-              <p className="mt-3 font-mono text-[0.55rem] leading-relaxed text-slate-600">
+              <p className="mt-3 font-mono text-[0.55rem] leading-relaxed text-[var(--wms-muted)]">
                 Return to stock closes the alarm without changing item rows. Mark as missing sets
                 matching tags to UNKNOWN and merges resolution into this audit row.
               </p>

@@ -161,27 +161,27 @@ export function DeviceEditorModal({ open, editing, onClose, onSaved }: Props) {
         onClick={() => !busy && onClose()}
       />
       <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-        <div className="max-h-[min(92vh,640px)] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-800 bg-zinc-950 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-100">
+        <div className="max-h-[min(92vh,640px)] w-full max-w-lg overflow-y-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+          <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
+            <h2 className="text-sm font-semibold text-[var(--wms-fg)]">
               {editing ? "Edit device" : "Register device"}
             </h2>
             <button
               type="button"
               onClick={() => !busy && onClose()}
-              className="rounded p-2 text-slate-500 hover:bg-zinc-800"
+              className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
           <div className="space-y-3 p-4">
-            <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
               Device type
               <select
                 value={deviceType}
                 disabled={Boolean(editing)}
                 onChange={(e) => setDeviceType(e.target.value as DeviceType)}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-200 disabled:opacity-60"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)] disabled:opacity-60"
               >
                 {DEVICE_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -191,16 +191,16 @@ export function DeviceEditorModal({ open, editing, onClose, onSaved }: Props) {
               </select>
             </label>
 
-            <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
               Device name
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-100"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
               />
             </label>
 
-            <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
               Assigned location
               <select
                 value={locationId}
@@ -208,7 +208,7 @@ export function DeviceEditorModal({ open, editing, onClose, onSaved }: Props) {
                   setLocationId(e.target.value);
                   setBinId("");
                 }}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-200"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
               >
                 <option value="">Select location…</option>
                 {locations.map((l) => (
@@ -221,17 +221,17 @@ export function DeviceEditorModal({ open, editing, onClose, onSaved }: Props) {
 
             {isPrinter(deviceType) ? (
               <>
-                <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+                <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
                   IP address / host
                   <input
                     value={networkAddress}
                     onChange={(e) => setNetworkAddress(e.target.value)}
                     placeholder="192.168.1.3"
-                    className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-100"
+                    className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
                   />
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+                  <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
                     Port
                     <input
                       type="number"
@@ -239,38 +239,38 @@ export function DeviceEditorModal({ open, editing, onClose, onSaved }: Props) {
                       max={65535}
                       value={printerPort}
                       onChange={(e) => setPrinterPort(e.target.value)}
-                      className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-100"
+                      className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
                     />
                   </label>
-                  <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+                  <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
                     URI
                     <input
                       value={printerUri}
                       onChange={(e) => setPrinterUri(e.target.value)}
                       placeholder="PSTPRNT"
-                      className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-100"
+                      className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
                     />
                   </label>
                 </div>
               </>
             ) : (
               <>
-                <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+                <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
                   MAC / reader ID
                   <input
                     value={networkAddress}
                     onChange={(e) => setNetworkAddress(e.target.value)}
                     placeholder="00:1A:2B:3C:4D:5E"
-                    className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-100"
+                    className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
                   />
                 </label>
-                <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+                <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
                   Bin (optional — pin scans to a bin)
                   <select
                     value={binId}
                     onChange={(e) => setBinId(e.target.value)}
                     disabled={!locationId}
-                    className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-200 disabled:opacity-50"
+                    className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)] disabled:opacity-50"
                   >
                     <option value="">Entire location (no bin)</option>
                     {bins.map((b) => (
@@ -283,12 +283,12 @@ export function DeviceEditorModal({ open, editing, onClose, onSaved }: Props) {
               </>
             )}
 
-            <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
               Status (mock)
               <select
                 value={statusOnline ? "online" : "offline"}
                 onChange={(e) => setStatusOnline(e.target.value === "online")}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-200"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
               >
                 <option value="online">Online</option>
                 <option value="offline">Offline</option>

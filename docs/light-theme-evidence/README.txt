@@ -1,17 +1,27 @@
-Light theme evidence (per your spec)
-=====================================
+Light theme evidence (web only)
+================================
 
-before/   Drop full-page PNG screenshots here BEFORE any approved theme work.
-after/    Drop matching PNGs AFTER the approved pass.
+Folders
+-------
+before/   PNG full-page captures (gitignored — regenerate locally).
+after/    PNG full-page captures (gitignored — regenerate locally).
 
-Final HTML report
------------------
-Use report-template.html as the shell: replace each PLACEHOLDER block with
-real <img> tags. For email or single-file sharing, embed images as data URLs
-(base64) so pictures are visible without separate files.
+Committed artifact
+------------------
+light-theme-report.html — single file with embedded (base64) images so every
+before/after pair is visible without opening separate PNG paths. Open this file
+in a browser from the repo (double-click or file://).
 
-Nothing in before/ or after/ is committed yet (add .gitkeep only). You may
-gitignore large PNGs if you prefer; keep the report + embedded images for audit.
+Regenerate
+----------
+1. Start the app (e.g. npm run dev on 3040, or next start -p 3050 after build).
+2. Set WMS_SCREENSHOT_EMAIL / WMS_SCREENSHOT_PASSWORD or SEED_ADMIN_PASSWORD in
+   .env.local so Playwright can sign in.
+3. npm run evidence:theme:before   # optional baseline from current code
+4. npm run evidence:theme:after    # after UI changes
+5. npm run evidence:theme:report   # rebuild light-theme-report.html
 
-Git commits a89d076 reverted unapproved theme code; docs/color-scheme-v1.html
-and docs/design-review-carbonwms-light-theme.html are the first color preview.
+Scripts live under scripts/capture-theme-evidence.mjs and
+scripts/generate-light-theme-report.mjs. Codemod: scripts/light-theme-slate-to-wms.mjs
+
+Color approval reference: docs/design-review-carbonwms-light-theme.html

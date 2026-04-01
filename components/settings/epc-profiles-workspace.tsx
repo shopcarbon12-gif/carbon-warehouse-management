@@ -82,12 +82,12 @@ export function EpcProfilesWorkspace() {
 
       {error ? <p className="font-mono text-xs text-red-400/90">{error.message}</p> : null}
       {isLoading || !data ? (
-        <p className="font-mono text-xs text-slate-500">Loading…</p>
+        <p className="font-mono text-xs text-[var(--wms-muted)]">Loading…</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-zinc-950/60">
+        <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
           <table className="w-full min-w-[960px] border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-slate-800 bg-zinc-900/80 font-mono text-[0.6rem] uppercase text-slate-500">
+              <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
                 <th className="px-3 py-3">Profile name</th>
                 <th className="px-3 py-3">EPC prefix</th>
                 <th className="px-3 py-3">Item start / len</th>
@@ -96,9 +96,9 @@ export function EpcProfilesWorkspace() {
                 <th className="px-3 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/90">
+            <tbody className="divide-y divide-[var(--wms-border)]/90">
               {data.epc_profiles.map((row) => (
-                <tr key={row.id} className="text-slate-200">
+                <tr key={row.id} className="text-[var(--wms-fg)]">
                   <td className="px-3 py-2.5 font-medium">{row.name}</td>
                   <td className="px-3 py-2.5 font-mono text-xs text-teal-400/85">{row.epcPrefix}</td>
                   <td className="px-3 py-2.5 font-mono text-xs">
@@ -116,7 +116,7 @@ export function EpcProfilesWorkspace() {
                     >
                       Edit
                     </button>
-                    <span className="mx-2 text-slate-600">|</span>
+                    <span className="mx-2 text-[var(--wms-muted)]">|</span>
                     <button
                       type="button"
                       onClick={() => void remove(row.id)}
@@ -179,29 +179,29 @@ function ProfileModal({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <button type="button" aria-label="Close" className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
-        <h3 className="text-sm font-semibold text-slate-100">
+      <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
+        <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
           {mode === "add" ? "Add EPC profile" : "Edit EPC profile"}
         </h3>
         <div className="mt-4 space-y-3 font-mono text-xs">
-          <label className="block text-slate-500">
+          <label className="block text-[var(--wms-muted)]">
             Profile ID
             <input
               value={row.id}
               onChange={(e) => setRow((r) => ({ ...r, id: e.target.value.trim() }))}
               disabled={mode === "edit"}
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100 disabled:opacity-60"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)] disabled:opacity-60"
             />
           </label>
-          <label className="block text-slate-500">
+          <label className="block text-[var(--wms-muted)]">
             Profile name
             <input
               value={row.name}
               onChange={(e) => setRow((r) => ({ ...r, name: e.target.value }))}
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
             />
           </label>
-          <label className="block text-slate-500">
+          <label className="block text-[var(--wms-muted)]">
             EPC prefix (hex)
             <input
               value={row.epcPrefix}
@@ -211,53 +211,53 @@ function ProfileModal({
                   epcPrefix: e.target.value.toUpperCase().replace(/[^0-9A-F]/g, ""),
                 }))
               }
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
             />
           </label>
           <div className="grid grid-cols-2 gap-2">
-            <label className="text-slate-500">
+            <label className="text-[var(--wms-muted)]">
               Item start bit
               <input
                 type="number"
                 value={row.itemStartBit}
                 onChange={(e) => setRow((r) => ({ ...r, itemStartBit: Number(e.target.value) || 0 }))}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
               />
             </label>
-            <label className="text-slate-500">
+            <label className="text-[var(--wms-muted)]">
               Item length
               <input
                 type="number"
                 value={row.itemLength}
                 onChange={(e) => setRow((r) => ({ ...r, itemLength: Number(e.target.value) || 1 }))}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
               />
             </label>
-            <label className="text-slate-500">
+            <label className="text-[var(--wms-muted)]">
               Serial start bit
               <input
                 type="number"
                 value={row.serialStartBit}
                 onChange={(e) => setRow((r) => ({ ...r, serialStartBit: Number(e.target.value) || 0 }))}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
               />
             </label>
-            <label className="text-slate-500">
+            <label className="text-[var(--wms-muted)]">
               Serial length
               <input
                 type="number"
                 value={row.serialLength}
                 onChange={(e) => setRow((r) => ({ ...r, serialLength: Number(e.target.value) || 1 }))}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
               />
             </label>
           </div>
-          <label className="flex cursor-pointer items-center gap-2 text-slate-300">
+          <label className="flex cursor-pointer items-center gap-2 text-[var(--wms-fg)]">
             <input
               type="checkbox"
               checked={row.isActive}
               onChange={(e) => setRow((r) => ({ ...r, isActive: e.target.checked }))}
-              className="rounded border-slate-600 bg-zinc-900"
+              className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
             />
             Active (included in mobile sync)
           </label>
@@ -266,7 +266,7 @@ function ProfileModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-slate-600 px-4 py-2 text-slate-300 hover:bg-zinc-800"
+            className="rounded border border-[var(--wms-border)] px-4 py-2 text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
           >
             Cancel
           </button>

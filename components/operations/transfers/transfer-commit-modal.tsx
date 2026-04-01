@@ -60,36 +60,36 @@ export function TransferCommitModal({
       />
       <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
         <div
-          className="flex max-h-[min(90vh,560px)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-800 bg-zinc-950 shadow-2xl"
+          className="flex max-h-[min(90vh,560px)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl"
           role="dialog"
           aria-modal="true"
         >
-          <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-100">Confirm transfer</h2>
+          <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
+            <h2 className="text-sm font-semibold text-[var(--wms-fg)]">Confirm transfer</h2>
             <button
               type="button"
               onClick={() => !busy && onClose()}
-              className="rounded p-1 text-slate-500 hover:bg-zinc-800"
+              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-            <p className="font-mono text-[0.65rem] text-slate-500">
+            <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
               Destination · <span className="text-teal-400/90">{destinationLabel}</span>
             </p>
-            <h3 className="mt-4 font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+            <h3 className="mt-4 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
               By SKU ({rows.length} EPCs)
             </h3>
-            <ul className="mt-2 space-y-1.5 font-mono text-xs text-slate-300">
+            <ul className="mt-2 space-y-1.5 font-mono text-xs text-[var(--wms-fg)]">
               {bySku.map(([sku, n]) => (
                 <li
                   key={sku}
-                  className="flex justify-between rounded border border-slate-800/80 bg-zinc-900/40 px-2 py-1.5"
+                  className="flex justify-between rounded border border-[var(--wms-border)]/80 bg-[var(--wms-surface-elevated)]/50 px-2 py-1.5"
                 >
                   <span>{sku}</span>
-                  <span className="tabular-nums text-slate-500">×{n}</span>
+                  <span className="tabular-nums text-[var(--wms-muted)]">×{n}</span>
                 </li>
               ))}
             </ul>
@@ -97,12 +97,12 @@ export function TransferCommitModal({
           {err ? (
             <p className="px-4 font-mono text-xs text-red-400/90">{err}</p>
           ) : null}
-          <div className="flex gap-2 border-t border-slate-800 p-4">
+          <div className="flex gap-2 border-t border-[var(--wms-border)] p-4">
             <button
               type="button"
               disabled={busy}
               onClick={() => onClose()}
-              className="flex-1 rounded-lg border border-slate-700 py-2.5 font-mono text-xs text-slate-300 hover:bg-zinc-900 disabled:opacity-50"
+              className="flex-1 rounded-lg border border-[var(--wms-border)] py-2.5 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
             >
               Cancel
             </button>

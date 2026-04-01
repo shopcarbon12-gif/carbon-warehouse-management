@@ -70,13 +70,13 @@ export function SyncEngine() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 border-b border-slate-800 pb-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-[var(--wms-border)] pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="font-mono text-[0.65rem] uppercase tracking-wider text-slate-500">
+          <p className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
             Lightspeed ↔ RFID
           </p>
           {data ? (
-            <div className="mt-1 space-y-1 font-mono text-xs text-slate-500">
+            <div className="mt-1 space-y-1 font-mono text-xs text-[var(--wms-muted)]">
               <p>
                 LS location key: <span className="text-teal-500/90">{data.lsLocationId}</span>
               </p>
@@ -93,7 +93,7 @@ export function SyncEngine() {
                 </p>
               ) : null}
               {data.lsInventoryDetail ? (
-                <p className="max-w-xl text-[0.65rem] leading-relaxed text-slate-600">{data.lsInventoryDetail}</p>
+                <p className="max-w-xl text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">{data.lsInventoryDetail}</p>
               ) : null}
             </div>
           ) : null}
@@ -103,7 +103,7 @@ export function SyncEngine() {
             type="button"
             disabled={loading}
             onClick={() => void run()}
-            className="inline-flex min-h-11 min-w-[200px] items-center justify-center gap-2 rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-semibold text-zinc-950 shadow-sm hover:bg-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-11 min-w-[200px] items-center justify-center gap-2 rounded-lg bg-[var(--wms-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2} />
@@ -116,7 +116,7 @@ export function SyncEngine() {
             type="button"
             disabled
             title="Coming soon"
-            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-slate-500"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5 text-sm font-medium text-[var(--wms-muted)]"
           >
             Push to Lightspeed
           </button>
@@ -132,39 +132,39 @@ export function SyncEngine() {
       {data ? (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-slate-800 bg-zinc-900/80 px-4 py-4">
-              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-slate-500">
+            <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 px-4 py-4">
+              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
                 Over
               </p>
               <p className="mt-2 text-3xl font-semibold tabular-nums text-blue-400">
                 {data.over.length}
               </p>
-              <p className="mt-1 text-xs text-slate-500">Physical &gt; LS qty</p>
+              <p className="mt-1 text-xs text-[var(--wms-muted)]">Physical &gt; LS qty</p>
             </div>
-            <div className="rounded-lg border border-slate-800 bg-zinc-900/80 px-4 py-4">
-              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-slate-500">
+            <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 px-4 py-4">
+              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
                 Short
               </p>
               <p className="mt-2 text-3xl font-semibold tabular-nums text-red-400">
                 {data.short.length}
               </p>
-              <p className="mt-1 text-xs text-slate-500">Physical &lt; LS qty</p>
+              <p className="mt-1 text-xs text-[var(--wms-muted)]">Physical &lt; LS qty</p>
             </div>
-            <div className="rounded-lg border border-slate-800 bg-zinc-900/80 px-4 py-4">
-              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-slate-500">
+            <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 px-4 py-4">
+              <p className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
                 Matched
               </p>
               <p className="mt-2 text-3xl font-semibold tabular-nums text-emerald-400">
                 {data.matched.length}
               </p>
-              <p className="mt-1 text-xs text-slate-500">Counts aligned</p>
+              <p className="mt-1 text-xs text-[var(--wms-muted)]">Counts aligned</p>
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-slate-800">
+          <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
             <table className="w-full min-w-[800px] border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-800 bg-zinc-900 font-mono text-[0.65rem] uppercase tracking-wider text-slate-400">
+                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
                   <th className="px-3 py-2.5">Custom SKU</th>
                   <th className="px-3 py-2.5">Description</th>
                   <th className="px-3 py-2.5 text-right">LS count</th>
@@ -173,29 +173,29 @@ export function SyncEngine() {
                   <th className="px-3 py-2.5">Bucket</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800 bg-zinc-950">
+              <tbody className="divide-y divide-[var(--wms-border)] bg-[var(--wms-surface)]">
                 {tableRows.length === 0 ? (
                   <tr>
                     <td
                       colSpan={6}
-                      className="px-4 py-8 text-center font-mono text-xs text-slate-500"
+                      className="px-4 py-8 text-center font-mono text-xs text-[var(--wms-muted)]"
                     >
                       No custom SKUs to compare — add matrix data or mock LS lines.
                     </td>
                   </tr>
                 ) : (
                   tableRows.map(({ kind, row }) => (
-                    <tr key={row.sku} className="text-slate-200">
+                    <tr key={row.sku} className="text-[var(--wms-fg)]">
                       <td className="px-3 py-1.5 font-mono text-xs text-teal-400/90">
                         {row.sku}
                       </td>
-                      <td className="max-w-xs truncate px-3 py-1.5 text-xs text-slate-300">
+                      <td className="max-w-xs truncate px-3 py-1.5 text-xs text-[var(--wms-fg)]">
                         {row.description}
                       </td>
-                      <td className="px-3 py-1.5 text-right font-mono text-xs tabular-nums text-slate-400">
+                      <td className="px-3 py-1.5 text-right font-mono text-xs tabular-nums text-[var(--wms-muted)]">
                         {row.lsCount}
                       </td>
-                      <td className="px-3 py-1.5 text-right font-mono text-xs tabular-nums text-slate-300">
+                      <td className="px-3 py-1.5 text-right font-mono text-xs tabular-nums text-[var(--wms-fg)]">
                         {row.physicalCount}
                       </td>
                       <td
@@ -218,7 +218,7 @@ export function SyncEngine() {
           </div>
         </>
       ) : !loading && !error ? (
-        <p className="font-mono text-sm text-slate-500">
+        <p className="font-mono text-sm text-[var(--wms-muted)]">
           Run a comparison to load Lightspeed mock inventory vs in-stock EPC counts.
         </p>
       ) : null}

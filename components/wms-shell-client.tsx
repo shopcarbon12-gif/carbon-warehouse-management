@@ -28,7 +28,7 @@ export function WmsShellClient({
           onMobileOpenChange={onMobileOpenChange}
         />
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-3 border-b border-[var(--wms-border)] bg-[var(--wms-surface)]/95 px-3 backdrop-blur-md md:hidden">
+          <header className="sticky top-0 z-30 flex min-h-12 shrink-0 items-center gap-3 border-b border-[var(--wms-border)] bg-[var(--wms-surface)]/95 px-3 py-2 backdrop-blur-md md:hidden">
           <button
             type="button"
             aria-expanded={mobileOpen}
@@ -43,7 +43,7 @@ export function WmsShellClient({
             CarbonWMS
           </span>
         </header>
-          <main className="flex flex-1 flex-col p-4 md:p-6">
+          <main className="flex flex-1 flex-col p-5 md:p-7 lg:p-8">
             {banner}
             {children}
           </main>

@@ -23,7 +23,7 @@ function Toggle({
   label: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-4 border-b border-slate-800/80 py-3 font-mono text-xs text-slate-300 last:border-0">
+    <label className="flex cursor-pointer items-center justify-between gap-4 border-b border-[var(--wms-border)]/80 py-3 font-mono text-xs text-[var(--wms-fg)] last:border-0">
       <span>{label}</span>
       <button
         type="button"
@@ -31,11 +31,11 @@ function Toggle({
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={`relative h-6 w-10 shrink-0 rounded-full border transition-colors ${
-          checked ? "border-teal-500/60 bg-teal-600/35" : "border-slate-600 bg-slate-800/80"
+          checked ? "border-teal-500/60 bg-teal-600/35" : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80"
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-slate-100 transition-transform ${
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-[var(--wms-surface)] transition-transform ${
             checked ? "translate-x-4" : "translate-x-0.5"
           }`}
         />
@@ -84,13 +84,13 @@ export function HandheldSettingsWorkspace() {
     return <p className="font-mono text-xs text-red-400/90">{error.message}</p>;
   }
   if (isLoading || !data || !h) {
-    return <p className="font-mono text-xs text-slate-500">Loading…</p>;
+    return <p className="font-mono text-xs text-[var(--wms-muted)]">Loading…</p>;
   }
 
   return (
     <div className="space-y-8">
       <Section title="System">
-        <label className="mb-2 block font-mono text-xs text-slate-500">
+        <label className="mb-2 block font-mono text-xs text-[var(--wms-muted)]">
           Trigger mode
           <select
             value={h.system.triggerMode}
@@ -107,7 +107,7 @@ export function HandheldSettingsWorkspace() {
                   : s,
               )
             }
-            className="mt-1 w-full max-w-xs rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+            className="mt-1 w-full max-w-xs rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
           >
             <option value="HOLD_RELEASE">Hold / release (continuous)</option>
             <option value="CLICK">Click (single read)</option>
@@ -150,7 +150,7 @@ export function HandheldSettingsWorkspace() {
           }
           label="Transfer-out power lock (high power for outbound)"
         />
-        <label className="block py-2 font-mono text-xs text-slate-500">
+        <label className="block py-2 font-mono text-xs text-[var(--wms-muted)]">
           Transfer-out antenna power (0–30 dBm)
           <input
             type="number"
@@ -170,10 +170,10 @@ export function HandheldSettingsWorkspace() {
                   : s,
               )
             }
-            className="mt-1 w-full max-w-xs rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+            className="mt-1 w-full max-w-xs rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
           />
         </label>
-        <label className="block py-2 font-mono text-xs text-slate-500">
+        <label className="block py-2 font-mono text-xs text-[var(--wms-muted)]">
           Transfer-in antenna power (0–30 dBm)
           <input
             type="number"
@@ -193,7 +193,7 @@ export function HandheldSettingsWorkspace() {
                   : s,
               )
             }
-            className="mt-1 w-full max-w-xs rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+            className="mt-1 w-full max-w-xs rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
           />
         </label>
       </Section>
@@ -209,9 +209,9 @@ export function HandheldSettingsWorkspace() {
       </Section>
 
       <Section title="Item details (scanner template)">
-        <p className="mb-2 font-mono text-[0.6rem] leading-relaxed text-slate-500">
+        <p className="mb-2 font-mono text-[0.6rem] leading-relaxed text-[var(--wms-muted)]">
           Variables:{" "}
-          <code className="text-slate-400">
+          <code className="text-[var(--wms-muted)]">
             {`{{item.customSku}} {{item.name}} {{item.upc}} {{item.vendor}} {{item.color}} {{item.size}} {{item.price}} {{item.quantity}}`}
           </code>
         </p>
@@ -219,20 +219,20 @@ export function HandheldSettingsWorkspace() {
           value={h.itemDetailsTemplate}
           onChange={(e) => setH((s) => (s ? { ...s, itemDetailsTemplate: e.target.value } : s))}
           rows={3}
-          className="w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-xs text-slate-100"
+          className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]"
         />
       </Section>
 
       <Section title="Tag details (scanner template)">
-        <p className="mb-2 font-mono text-[0.6rem] leading-relaxed text-slate-500">
+        <p className="mb-2 font-mono text-[0.6rem] leading-relaxed text-[var(--wms-muted)]">
           Variables:{" "}
-          <code className="text-slate-400">{`{{epc.id}} {{epc.status}} {{epc.lastSeen}} {{epc.zone}}`}</code>
+          <code className="text-[var(--wms-muted)]">{`{{epc.id}} {{epc.status}} {{epc.lastSeen}} {{epc.zone}}`}</code>
         </p>
         <textarea
           value={h.tagDetailsTemplate}
           onChange={(e) => setH((s) => (s ? { ...s, tagDetailsTemplate: e.target.value } : s))}
           rows={4}
-          className="w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-xs text-slate-100"
+          className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]"
         />
       </Section>
 
@@ -254,7 +254,7 @@ export function HandheldSettingsWorkspace() {
         <button
           type="button"
           onClick={() => setH(structuredClone(data.handheld_settings))}
-          className="rounded-md border border-slate-600 px-4 py-2 font-mono text-xs text-slate-300 hover:bg-zinc-800"
+          className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
         >
           Reset
         </button>
@@ -265,8 +265,8 @@ export function HandheldSettingsWorkspace() {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-zinc-950/60 p-5">
-      <h2 className="mb-2 border-b border-slate-800 pb-2 font-mono text-[0.65rem] font-bold uppercase tracking-wider text-teal-500/90">
+    <div className="rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 p-5">
+      <h2 className="mb-2 border-b border-[var(--wms-border)] pb-2 font-mono text-[0.65rem] font-bold uppercase tracking-wider text-[var(--wms-secondary)]">
         {title}
       </h2>
       <div>{children}</div>

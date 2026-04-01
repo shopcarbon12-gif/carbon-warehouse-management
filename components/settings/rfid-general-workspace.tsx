@@ -75,42 +75,42 @@ export function RfidGeneralWorkspace() {
       ) : null}
 
       {isLoading || !data ? (
-        <p className="font-mono text-xs text-slate-500">Loading…</p>
+        <p className="font-mono text-xs text-[var(--wms-muted)]">Loading…</p>
       ) : (
-        <div className="max-w-xl space-y-5 rounded-xl border border-slate-800 bg-zinc-950/60 p-6">
-          <p className="font-mono text-[0.65rem] text-slate-500">
+        <div className="max-w-xl space-y-5 rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 p-6">
+          <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
             Global RFID EPC encoding defaults for this tenant. Bit layouts are configured under EPC setting
             profiles.
           </p>
 
-          <label className="block font-mono text-xs text-slate-400">
+          <label className="block font-mono text-xs text-[var(--wms-muted)]">
             Encoding standard
             <select
               value={encoding}
               onChange={(e) => setEncoding(e.target.value as "SENITRON" | "CUSTOM")}
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
             >
               <option value="SENITRON">SENITRON (default)</option>
               <option value="CUSTOM">Custom</option>
             </select>
           </label>
 
-          <label className="block font-mono text-xs text-slate-400">
+          <label className="block font-mono text-xs text-[var(--wms-muted)]">
             Company prefix (hex)
             <input
               value={prefix}
               onChange={(e) => setPrefix(e.target.value.toUpperCase().replace(/[^0-9A-F]/g, ""))}
               maxLength={12}
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-[var(--wms-fg)]"
             />
           </label>
 
-          <label className="block font-mono text-xs text-slate-400">
+          <label className="block font-mono text-xs text-[var(--wms-muted)]">
             Active EPC profile (optional)
             <select
               value={activeId ?? ""}
               onChange={(e) => setActiveId(e.target.value || null)}
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
             >
               <option value="">— None —</option>
               {profiles.map((p) => (
@@ -141,7 +141,7 @@ export function RfidGeneralWorkspace() {
             <button
               type="button"
               onClick={onReset}
-              className="rounded-md border border-slate-600 px-4 py-2 font-mono text-xs text-slate-300 hover:bg-zinc-800"
+              className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
             >
               Reset
             </button>

@@ -69,7 +69,7 @@ export function LightspeedSalesWorkspace() {
           type="button"
           disabled={loading || offset < limit}
           onClick={() => void load(Math.max(0, offset - limit))}
-          className="rounded-md border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300 hover:bg-slate-800/60 disabled:opacity-40"
+          className="rounded-md border border-[var(--wms-border)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80 disabled:opacity-40"
         >
           Previous page
         </button>
@@ -81,12 +81,12 @@ export function LightspeedSalesWorkspace() {
             (totalCount != null && offset + limit >= totalCount)
           }
           onClick={() => void load(offset + limit)}
-          className="rounded-md border border-slate-700 px-3 py-2 font-mono text-xs text-slate-300 hover:bg-slate-800/60 disabled:opacity-40"
+          className="rounded-md border border-[var(--wms-border)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80 disabled:opacity-40"
         >
           Next page
         </button>
         {totalCount != null ? (
-          <span className="font-mono text-[0.65rem] text-slate-500">
+          <span className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
             offset {offset} · reported total {totalCount}
           </span>
         ) : null}
@@ -98,10 +98,10 @@ export function LightspeedSalesWorkspace() {
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-800">
+      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-800 bg-zinc-900 font-mono text-xs uppercase text-slate-500">
+            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-xs uppercase text-[var(--wms-muted)]">
               <th className="px-3 py-2">Sale ID</th>
               <th className="px-3 py-2">Time</th>
               <th className="px-3 py-2">Total</th>
@@ -114,20 +114,20 @@ export function LightspeedSalesWorkspace() {
           <tbody>
             {rows.length === 0 && !loading ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center font-mono text-xs text-slate-500">
+                <td colSpan={7} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
                   No rows — load sales (R-Series API, admin only).
                 </td>
               </tr>
             ) : (
               rows.map((r) => (
-                <tr key={r.saleID || r.referenceNumber} className="border-b border-slate-800/60">
-                  <td className="px-3 py-2 font-mono text-xs text-slate-200">{r.saleID || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.timeStamp || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-300">{r.calcTotal || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.completed || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.voided || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.referenceNumber || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.shopID || "—"}</td>
+                <tr key={r.saleID || r.referenceNumber} className="border-b border-[var(--wms-border)]/60">
+                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-fg)]">{r.saleID || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">{r.timeStamp || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-fg)]">{r.calcTotal || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">{r.completed || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">{r.voided || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">{r.referenceNumber || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">{r.shopID || "—"}</td>
                 </tr>
               ))
             )}

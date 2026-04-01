@@ -307,11 +307,11 @@ export function CommissioningWorkspace() {
         printerEndpoint={settings.printerLine.trim() || "—"}
       />
 
-      <div className="rounded-lg border border-slate-800 bg-zinc-950/80 p-5">
-        <h2 className="font-mono text-[0.7rem] font-semibold uppercase tracking-wider text-slate-400">
+      <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-5">
+        <h2 className="font-mono text-[0.7rem] font-semibold uppercase tracking-wider text-[var(--wms-muted)]">
           SKU search
         </h2>
-        <p className="mt-1 font-mono text-[0.6rem] text-slate-600">
+        <p className="mt-1 font-mono text-[0.6rem] text-[var(--wms-muted)]">
           System ID, SKU, UPC, EAN, or matrix description — type at least 2 characters.
         </p>
         <div className="relative mt-3">
@@ -323,27 +323,27 @@ export function CommissioningWorkspace() {
               if (selected && e.target.value !== selected.sku) setSelected(null);
             }}
             placeholder="Search…"
-            className="w-full rounded-md border border-slate-700 bg-zinc-900 px-3 py-2.5 font-mono text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-500/50 focus:outline-none focus:ring-1 focus:ring-teal-500/30"
+            className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2.5 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] focus:border-teal-500/50 focus:outline-none focus:ring-1 focus:ring-teal-500/30"
           />
           {searchLoading ? (
-            <p className="mt-2 font-mono text-[0.65rem] text-slate-500">Searching…</p>
+            <p className="mt-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">Searching…</p>
           ) : null}
           {matches.length > 0 ? (
-            <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-slate-700 bg-zinc-900 py-1 shadow-xl">
+            <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl">
               {matches.map((m) => (
                 <li key={m.id}>
                   <button
                     type="button"
                     onClick={() => pickMatch(m)}
-                    className="w-full px-3 py-2 text-left font-mono text-xs hover:bg-zinc-800"
+                    className="w-full px-3 py-2 text-left font-mono text-xs hover:bg-[var(--wms-surface-elevated)]"
                   >
                     <span className="text-teal-400/90">{m.sku}</span>
-                    <span className="text-slate-600"> · </span>
-                    <span className="text-slate-400">UPC {m.upc}</span>
+                    <span className="text-[var(--wms-muted)]"> · </span>
+                    <span className="text-[var(--wms-muted)]">UPC {m.upc}</span>
                     <br />
-                    <span className="text-slate-500">LS {m.ls_system_id}</span>
-                    <span className="text-slate-600"> — </span>
-                    <span className="text-slate-300">{m.description}</span>
+                    <span className="text-[var(--wms-muted)]">LS {m.ls_system_id}</span>
+                    <span className="text-[var(--wms-muted)]"> — </span>
+                    <span className="text-[var(--wms-fg)]">{m.description}</span>
                   </button>
                 </li>
               ))}
@@ -352,18 +352,18 @@ export function CommissioningWorkspace() {
         </div>
 
         {selected ? (
-          <div className="mt-4 rounded-md border border-teal-500/25 bg-teal-950/20 px-3 py-2 font-mono text-[0.7rem] text-slate-300">
+          <div className="mt-4 rounded-md border border-teal-500/25 bg-teal-950/20 px-3 py-2 font-mono text-[0.7rem] text-[var(--wms-fg)]">
             <span className="text-teal-500/90">{selected.sku}</span>
-            <span className="text-slate-600"> · </span>
+            <span className="text-[var(--wms-muted)]"> · </span>
             {selected.description}
-            <span className="mt-1 block text-slate-500">
+            <span className="mt-1 block text-[var(--wms-muted)]">
               UPC {selected.upc} · System ID {selected.ls_system_id}
             </span>
           </div>
         ) : null}
 
         <label className="mt-4 block">
-          <span className="font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+          <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
             Quantity
           </span>
           <input
@@ -372,29 +372,29 @@ export function CommissioningWorkspace() {
             max={500}
             value={qty}
             onChange={(e) => setQty(Number(e.target.value) || 1)}
-            className="mt-1 w-full rounded-md border border-slate-700 bg-zinc-900 px-3 py-2.5 font-mono text-sm tabular-nums text-slate-100"
+            className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2.5 font-mono text-sm tabular-nums text-[var(--wms-fg)]"
           />
         </label>
 
-        <label className="mt-4 flex cursor-pointer items-center gap-2 font-mono text-sm text-slate-300">
+        <label className="mt-4 flex cursor-pointer items-center gap-2 font-mono text-sm text-[var(--wms-fg)]">
           <input
             type="checkbox"
             checked={addToInventory}
             onChange={(e) => setAddToInventory(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-600 bg-zinc-900 text-teal-600"
+            className="h-4 w-4 rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-600"
           />
           Add to inventory (in-stock in selected bin)
         </label>
 
         <label className="mt-4 block">
-          <span className="font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+          <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
             Bin {addToInventory ? "(required)" : "(optional)"}
           </span>
           <select
             value={binId}
             onChange={(e) => setBinId(e.target.value)}
             disabled={loadingBins}
-            className="mt-1 w-full rounded-md border border-slate-700 bg-zinc-900 px-3 py-2.5 font-mono text-sm text-slate-100 disabled:opacity-50"
+            className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2.5 font-mono text-sm text-[var(--wms-fg)] disabled:opacity-50"
           >
             <option value="">— Select bin —</option>
             {bins.map((b) => (
@@ -410,7 +410,7 @@ export function CommissioningWorkspace() {
             type="button"
             disabled={!selected}
             onClick={() => setPreviewOpen(true)}
-            className="inline-flex flex-1 min-w-[8rem] items-center justify-center gap-2 rounded-lg border border-slate-600 bg-zinc-900 py-2.5 font-mono text-xs font-medium text-slate-200 hover:border-teal-500/40 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex flex-1 min-w-[8rem] items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2.5 font-mono text-xs font-medium text-[var(--wms-fg)] hover:border-teal-500/40 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Eye className="h-4 w-4" strokeWidth={2} />
             Preview label
@@ -418,7 +418,7 @@ export function CommissioningWorkspace() {
           <button
             type="button"
             onClick={() => setLogsOpen(true)}
-            className="inline-flex flex-1 min-w-[8rem] items-center justify-center gap-2 rounded-lg border border-slate-600 bg-zinc-900 py-2.5 font-mono text-xs font-medium text-slate-200 hover:border-slate-500"
+            className="inline-flex flex-1 min-w-[8rem] items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2.5 font-mono text-xs font-medium text-[var(--wms-fg)] hover:border-[var(--wms-accent)]"
           >
             <ScrollText className="h-4 w-4" strokeWidth={2} />
             Open logs
@@ -427,7 +427,7 @@ export function CommissioningWorkspace() {
             type="button"
             disabled={!selected}
             onClick={() => void copyZpl()}
-            className="inline-flex w-full min-w-[8rem] flex-[1_1_100%] items-center justify-center gap-2 rounded-lg border border-slate-600 bg-zinc-900 py-2.5 font-mono text-xs font-medium text-slate-200 hover:border-amber-500/40 sm:flex-[1] sm:basis-auto"
+            className="inline-flex w-full min-w-[8rem] flex-[1_1_100%] items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2.5 font-mono text-xs font-medium text-[var(--wms-fg)] hover:border-amber-500/40 sm:flex-[1] sm:basis-auto"
           >
             <Copy className="h-4 w-4" strokeWidth={2} />
             Copy ZPL (RFID + layout)
@@ -455,8 +455,8 @@ export function CommissioningWorkspace() {
       </div>
 
       {lastEpcs.length > 0 ? (
-        <div className="rounded-lg border border-slate-800 bg-zinc-950/60 p-4">
-          <h3 className="font-mono text-[0.65rem] uppercase tracking-wider text-slate-500">
+        <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 p-4">
+          <h3 className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
             Last job — EPCs (hex)
           </h3>
           <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto font-mono text-[0.65rem] text-teal-400/85">
@@ -476,18 +476,18 @@ export function CommissioningWorkspace() {
             onClick={() => setPreviewOpen(false)}
           />
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-800 bg-zinc-950 p-5 shadow-2xl">
+            <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-2xl">
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-100">Label preview</h3>
+                <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Label preview</h3>
                 <button
                   type="button"
                   onClick={() => setPreviewOpen(false)}
-                  className="font-mono text-xs text-slate-500 hover:text-slate-300"
+                  className="font-mono text-xs text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
                 >
                   Close
                 </button>
               </div>
-              <p className="mb-3 font-mono text-[0.6rem] text-slate-600">
+              <p className="mb-3 font-mono text-[0.6rem] text-[var(--wms-muted)]">
                 Canvas at {settings.labelWidthDots} × {settings.labelHeightDots} dots (scaled to
                 fit). Sample EPC uses next serial {nextSerial}.
               </p>

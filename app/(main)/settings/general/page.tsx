@@ -9,9 +9,9 @@ export default async function RfidGeneralSettingsPage() {
 
   return (
     <div className="mx-auto flex min-w-0 max-w-6xl flex-col gap-6">
-      <div className="border-b border-slate-800 pb-3">
-        <h1 className="text-lg font-semibold tracking-tight text-slate-100">RFID EPC settings</h1>
-        <p className="mt-1 font-mono text-xs text-slate-500">
+      <div className="border-b border-[var(--wms-border)] pb-3">
+        <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">RFID EPC settings</h1>
+        <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
           Encoding standard and company prefix for this tenant (Carbon WMS defaults).
         </p>
       </div>

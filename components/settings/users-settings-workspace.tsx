@@ -153,7 +153,7 @@ export function UsersSettingsWorkspace() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-2" role="tablist">
+      <div className="flex flex-wrap gap-2 border-b border-[var(--wms-border)] pb-2" role="tablist">
         <button
           type="button"
           role="tab"
@@ -161,8 +161,8 @@ export function UsersSettingsWorkspace() {
           onClick={() => setTab("users")}
           className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
             tab === "users"
-              ? "border border-b-0 border-slate-700 bg-zinc-900 text-teal-300/90"
-              : "text-slate-500 hover:text-slate-300"
+              ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+              : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
           }`}
         >
           Users
@@ -174,8 +174,8 @@ export function UsersSettingsWorkspace() {
           onClick={() => setTab("roles")}
           className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
             tab === "roles"
-              ? "border border-b-0 border-slate-700 bg-zinc-900 text-teal-300/90"
-              : "text-slate-500 hover:text-slate-300"
+              ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+              : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
           }`}
         >
           User roles
@@ -195,7 +195,7 @@ export function UsersSettingsWorkspace() {
             <button
               type="button"
               onClick={exportUsersCsv}
-              className="rounded-md border border-slate-600 bg-zinc-900 px-3 py-2 font-mono text-xs text-slate-200 hover:bg-zinc-800"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
             >
               Export
             </button>
@@ -203,23 +203,23 @@ export function UsersSettingsWorkspace() {
               <button
                 type="button"
                 onClick={() => setBulkOpen((o) => !o)}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-600 bg-zinc-900 px-3 py-2 font-mono text-xs text-slate-200 hover:bg-zinc-800"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
               >
                 Bulk actions
                 <ChevronDown className="h-3.5 w-3.5 opacity-70" />
               </button>
               {bulkOpen ? (
-                <div className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-slate-700 bg-zinc-900 py-1 shadow-xl">
+                <div className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl">
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
                     onClick={() => void bulkDeactivate()}
                   >
                     Remove selected from tenant
                   </button>
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
                     onClick={() => exportSelectedEmailsCsv()}
                   >
                     Export selected emails (CSV)
@@ -235,17 +235,17 @@ export function UsersSettingsWorkspace() {
             </p>
           ) : null}
 
-          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-zinc-950/60">
+          <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
             <table className="w-full min-w-[720px] border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-800 bg-zinc-900/80 font-mono text-[0.6rem] uppercase text-slate-500">
+                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
                   <th className="w-10 px-2 py-3">
                     <input
                       type="checkbox"
                       aria-label="Select all users"
                       checked={Boolean(users?.length) && selectedIds.size === (users?.length ?? 0)}
                       onChange={() => toggleSelectAll()}
-                      className="rounded border-slate-600 bg-zinc-900"
+                      className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
                     />
                   </th>
                   <th className="px-3 py-3">Email</th>
@@ -254,28 +254,28 @@ export function UsersSettingsWorkspace() {
                   <th className="px-3 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/90">
+              <tbody className="divide-y divide-[var(--wms-border)]/90">
                 {!users ? (
                   <tr>
-                    <td colSpan={5} className="px-3 py-8 text-center font-mono text-xs text-slate-500">
+                    <td colSpan={5} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
                       Loading…
                     </td>
                   </tr>
                 ) : (
                   users.map((u) => (
-                    <tr key={u.id} className="text-slate-200">
+                    <tr key={u.id} className="text-[var(--wms-fg)]">
                       <td className="px-2 py-2.5">
                         <input
                           type="checkbox"
                           aria-label={`Select ${u.email}`}
                           checked={selectedIds.has(u.id)}
                           onChange={() => toggleSelect(u.id)}
-                          className="rounded border-slate-600 bg-zinc-900"
+                          className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
                         />
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-xs text-slate-100">{u.email}</td>
-                      <td className="px-3 py-2.5 text-slate-400">{u.role_name ?? "—"}</td>
-                      <td className="max-w-[280px] px-3 py-2.5 font-mono text-[0.65rem] text-slate-500">
+                      <td className="px-3 py-2.5 font-mono text-xs text-[var(--wms-fg)]">{u.email}</td>
+                      <td className="px-3 py-2.5 text-[var(--wms-muted)]">{u.role_name ?? "—"}</td>
+                      <td className="max-w-[280px] px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
                         {u.locations.length
                           ? u.locations.map((l) => `${l.code} · ${l.name}`).join(", ")
                           : "—"}
@@ -288,7 +288,7 @@ export function UsersSettingsWorkspace() {
                         >
                           Edit
                         </button>
-                        <span className="mx-2 text-slate-600">|</span>
+                        <span className="mx-2 text-[var(--wms-muted)]">|</span>
                         <button
                           type="button"
                           onClick={() => void removeUser(u, muUsers)}
@@ -344,24 +344,24 @@ export function UsersSettingsWorkspace() {
               {rolesErr instanceof Error ? rolesErr.message : "Failed to load roles"}
             </p>
           ) : null}
-          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-zinc-950/60">
+          <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
             <table className="w-full min-w-[400px] border-collapse text-left text-sm">
               <thead>
-                <tr className="border-b border-slate-800 bg-zinc-900/80 font-mono text-[0.6rem] uppercase text-slate-500">
+                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
                   <th className="px-3 py-3">Role name</th>
                   <th className="px-3 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/90">
+              <tbody className="divide-y divide-[var(--wms-border)]/90">
                 {!roles ? (
                   <tr>
-                    <td colSpan={2} className="px-3 py-8 text-center text-slate-500">
+                    <td colSpan={2} className="px-3 py-8 text-center text-[var(--wms-muted)]">
                       Loading…
                     </td>
                   </tr>
                 ) : (
                   roles.map((r) => (
-                    <tr key={r.id} className="text-slate-200">
+                    <tr key={r.id} className="text-[var(--wms-fg)]">
                       <td className="px-3 py-2.5 font-medium">{r.name}</td>
                       <td className="px-3 py-2.5 text-right">
                         <button
@@ -506,36 +506,36 @@ function UserFormModal({
         className="absolute inset-0 bg-black/70"
         onClick={onClose}
       />
-      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
-        <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
+      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
+        <h3 className="text-sm font-semibold text-[var(--wms-fg)]">{title}</h3>
         <div className="mt-4 space-y-3 font-mono text-xs">
-          <label className="block text-slate-500">
+          <label className="block text-[var(--wms-muted)]">
             Email
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={!!initial}
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100 disabled:opacity-60"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)] disabled:opacity-60"
             />
           </label>
           {!initial ? (
-            <label className="block text-slate-500">
+            <label className="block text-[var(--wms-muted)]">
               Password (optional — auto-generated if empty)
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
               />
             </label>
           ) : null}
-          <label className="block text-slate-500">
+          <label className="block text-[var(--wms-muted)]">
             Role
             <select
               value={roleId}
               onChange={(e) => setRoleId(Number(e.target.value))}
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
             >
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -544,16 +544,16 @@ function UserFormModal({
               ))}
             </select>
           </label>
-          <div className="text-slate-500">
+          <div className="text-[var(--wms-muted)]">
             Locations
-            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded border border-slate-800 p-2">
+            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded border border-[var(--wms-border)] p-2">
               {allLocs.map((l) => (
-                <label key={l.id} className="flex cursor-pointer items-center gap-2 text-slate-300">
+                <label key={l.id} className="flex cursor-pointer items-center gap-2 text-[var(--wms-fg)]">
                   <input
                     type="checkbox"
                     checked={locIds.has(l.id)}
                     onChange={() => toggleLoc(l.id)}
-                    className="rounded border-slate-600 bg-zinc-900"
+                    className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
                   />
                   {l.code} · {l.name}
                 </label>
@@ -566,7 +566,7 @@ function UserFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-slate-600 px-4 py-2 text-slate-300 hover:bg-zinc-800"
+            className="rounded border border-[var(--wms-border)] px-4 py-2 text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
           >
             Cancel
           </button>
@@ -650,23 +650,23 @@ function RolePermissionsModal({
         className="absolute inset-0 bg-black/70"
         onClick={onClose}
       />
-      <div className="relative max-h-[min(90vh,640px)] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
-        <h3 className="text-sm font-semibold text-slate-100">
+      <div className="relative max-h-[min(90vh,640px)] w-full max-w-2xl overflow-y-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
+        <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
           {mode === "add" ? "Add role" : "Edit role"}
         </h3>
-        <p className="mt-1 font-mono text-[0.65rem] text-slate-500">
+        <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
           Permissions control page/section visibility (stored as JSON on the role). Enforcement in navigation
           can be wired in a follow-up.
         </p>
-        <label className="mt-4 block font-mono text-xs text-slate-500">
+        <label className="mt-4 block font-mono text-xs text-[var(--wms-muted)]">
           Role name
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-sm text-slate-100"
+            className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)]"
           />
         </label>
-        <div className="mt-4 space-y-4 border-t border-slate-800 pt-4">
+        <div className="mt-4 space-y-4 border-t border-[var(--wms-border)] pt-4">
           {APP_PERMISSION_PAGES.map((page) => (
             <div key={page.id}>
               <div className="font-mono text-[0.65rem] font-semibold uppercase tracking-wide text-teal-500/80">
@@ -678,9 +678,9 @@ function RolePermissionsModal({
                   return (
                     <div
                       key={sec.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-800/80 bg-zinc-900/40 px-3 py-2"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--wms-border)]/80 bg-[var(--wms-surface-elevated)]/50 px-3 py-2"
                     >
-                      <span className="font-mono text-xs text-slate-300">{sec.label}</span>
+                      <span className="font-mono text-xs text-[var(--wms-fg)]">{sec.label}</span>
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -688,7 +688,7 @@ function RolePermissionsModal({
                           className={`rounded px-2 py-1 font-mono text-[0.65rem] ${
                             modeCur === "view"
                               ? "bg-teal-600/30 text-teal-200"
-                              : "text-slate-500 hover:bg-zinc-800"
+                              : "text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
                           }`}
                         >
                           View
@@ -699,7 +699,7 @@ function RolePermissionsModal({
                           className={`rounded px-2 py-1 font-mono text-[0.65rem] ${
                             modeCur === "hide"
                               ? "bg-red-900/35 text-red-200/90"
-                              : "text-slate-500 hover:bg-zinc-800"
+                              : "text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
                           }`}
                         >
                           Hide
@@ -729,7 +729,7 @@ function RolePermissionsModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded border border-slate-600 px-4 py-2 font-mono text-xs text-slate-300 hover:bg-zinc-800"
+              className="rounded border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
             >
               Cancel
             </button>

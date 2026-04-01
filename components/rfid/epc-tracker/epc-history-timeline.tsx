@@ -25,10 +25,10 @@ const ACTION_STYLES: Record<
     label: "text-emerald-200/90",
   },
   rfid_cycle_count: {
-    border: "border-slate-500/40",
-    bg: "bg-slate-500/10",
-    dot: "bg-slate-400",
-    label: "text-slate-200/90",
+    border: "border-[var(--wms-muted)]/40",
+    bg: "bg-[var(--wms-muted)]/10",
+    dot: "bg-[var(--wms-muted)]",
+    label: "text-[var(--wms-fg)]/90",
   },
   rfid_transfer: {
     border: "border-orange-500/45",
@@ -57,10 +57,10 @@ const ACTION_STYLES: Record<
 };
 
 const DEFAULT_STYLE = {
-  border: "border-slate-700",
-  bg: "bg-zinc-900/50",
-  dot: "bg-slate-500",
-  label: "text-slate-300",
+  border: "border-[var(--wms-border)]",
+  bg: "bg-[var(--wms-surface-elevated)]/60",
+  dot: "bg-[var(--wms-muted)]",
+  label: "text-[var(--wms-fg)]",
 };
 
 type Props = {
@@ -71,13 +71,13 @@ type Props = {
 export function EpcHistoryTimeline({ rows, loading }: Props) {
   if (loading) {
     return (
-      <p className="py-8 text-center font-mono text-xs text-slate-500">Loading history…</p>
+      <p className="py-8 text-center font-mono text-xs text-[var(--wms-muted)]">Loading history…</p>
     );
   }
 
   if (rows.length === 0) {
     return (
-      <p className="py-8 text-center font-mono text-xs text-slate-600">
+      <p className="py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
         No audit_log events reference this EPC yet.
       </p>
     );
@@ -86,7 +86,7 @@ export function EpcHistoryTimeline({ rows, loading }: Props) {
   return (
     <div className="relative pl-6">
       <div
-        className="absolute bottom-4 left-[11px] top-4 w-px bg-slate-800"
+        className="absolute bottom-4 left-[11px] top-4 w-px bg-[var(--wms-surface-elevated)]"
         aria-hidden
       />
       <ul className="space-y-4">
@@ -108,12 +108,12 @@ export function EpcHistoryTimeline({ rows, loading }: Props) {
                   <span className={`font-semibold uppercase tracking-wide ${st.label}`}>
                     {r.action}
                   </span>
-                  <time className="text-slate-500" dateTime={r.created_at}>
+                  <time className="text-[var(--wms-muted)]" dateTime={r.created_at}>
                     {new Date(r.created_at).toLocaleString()}
                   </time>
                 </div>
-                <div className="mt-1 text-slate-500">entity · {r.entity}</div>
-                <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all text-[0.6rem] text-slate-500">
+                <div className="mt-1 text-[var(--wms-muted)]">entity · {r.entity}</div>
+                <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all text-[0.6rem] text-[var(--wms-muted)]">
                   {(() => {
                     const raw = JSON.stringify(r.metadata ?? {}, null, 2);
                     return raw.length > 900 ? `${raw.slice(0, 900)}…` : raw;

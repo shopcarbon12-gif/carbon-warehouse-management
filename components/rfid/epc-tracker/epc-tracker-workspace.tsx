@@ -100,13 +100,13 @@ export function EpcTrackerWorkspace() {
   return (
     <div className="space-y-6">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--wms-muted)]" />
         <input
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="24-char hex EPC, SKU, or Lightspeed System ID…"
-          className="w-full rounded-lg border border-slate-700 bg-zinc-900 py-3 pl-10 pr-3 font-mono text-sm text-slate-100 placeholder:text-slate-600 focus:border-teal-500/40 focus:outline-none focus:ring-1 focus:ring-teal-500/25"
+          className="w-full rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-3 pl-10 pr-3 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] focus:border-teal-500/40 focus:outline-none focus:ring-1 focus:ring-teal-500/25"
         />
         {searchErr ? (
           <p className="mt-2 font-mono text-xs text-red-400/90">
@@ -116,8 +116,8 @@ export function EpcTrackerWorkspace() {
       </div>
 
       {pickMatches.length > 0 ? (
-        <div className="rounded-lg border border-slate-800 bg-zinc-950/80 p-4">
-          <h3 className="font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+        <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4">
+          <h3 className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
             Select tag ({pickMatches.length})
           </h3>
           <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
@@ -126,14 +126,14 @@ export function EpcTrackerWorkspace() {
                 <button
                   type="button"
                   onClick={() => setSelectedEpc(m.epc)}
-                  className={`w-full rounded-md px-3 py-2 text-left font-mono text-xs hover:bg-zinc-800 ${
-                    focusedEpc === m.epc ? "bg-teal-950/40 text-teal-200" : "text-slate-300"
+                  className={`w-full rounded-md px-3 py-2 text-left font-mono text-xs hover:bg-[var(--wms-surface-elevated)] ${
+                    focusedEpc === m.epc ? "bg-teal-950/40 text-teal-200" : "text-[var(--wms-fg)]"
                   }`}
                 >
                   <span className="text-teal-400/90">{m.epc}</span>
-                  <span className="text-slate-600"> · </span>
+                  <span className="text-[var(--wms-muted)]"> · </span>
                   {m.sku}
-                  <span className="block text-[0.6rem] text-slate-500">
+                  <span className="block text-[0.6rem] text-[var(--wms-muted)]">
                     {m.location_code}
                     {m.bin_code ? ` / ${m.bin_code}` : ""} · {m.status}
                   </span>
@@ -145,7 +145,7 @@ export function EpcTrackerWorkspace() {
       ) : null}
 
       {searchResult?.mode === "pick" && pickMatches.length === 0 && debounced.length >= 2 ? (
-        <p className="font-mono text-xs text-slate-600">No items match this query.</p>
+        <p className="font-mono text-xs text-[var(--wms-muted)]">No items match this query.</p>
       ) : null}
 
       {detailErr ? (
@@ -161,38 +161,38 @@ export function EpcTrackerWorkspace() {
       ) : null}
 
       {focusedEpc && item ? (
-        <div className="grid gap-4 rounded-lg border border-slate-800 bg-zinc-950/80 p-4 lg:grid-cols-2">
+        <div className="grid gap-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4 lg:grid-cols-2">
           <div>
-            <h3 className="font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+            <h3 className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
               Tag status
             </h3>
-            <dl className="mt-3 space-y-2 font-mono text-xs text-slate-300">
-              <div className="flex justify-between gap-2 border-b border-slate-800/80 py-1">
-                <dt className="text-slate-500">EPC</dt>
+            <dl className="mt-3 space-y-2 font-mono text-xs text-[var(--wms-fg)]">
+              <div className="flex justify-between gap-2 border-b border-[var(--wms-border)]/80 py-1">
+                <dt className="text-[var(--wms-muted)]">EPC</dt>
                 <dd className="break-all text-right text-teal-400/90">{item.epc}</dd>
               </div>
-              <div className="flex justify-between gap-2 border-b border-slate-800/80 py-1">
-                <dt className="text-slate-500">Status</dt>
-                <dd className="text-right font-medium text-slate-100">{item.status}</dd>
+              <div className="flex justify-between gap-2 border-b border-[var(--wms-border)]/80 py-1">
+                <dt className="text-[var(--wms-muted)]">Status</dt>
+                <dd className="text-right font-medium text-[var(--wms-fg)]">{item.status}</dd>
               </div>
-              <div className="flex justify-between gap-2 border-b border-slate-800/80 py-1">
-                <dt className="text-slate-500">Location / bin</dt>
+              <div className="flex justify-between gap-2 border-b border-[var(--wms-border)]/80 py-1">
+                <dt className="text-[var(--wms-muted)]">Location / bin</dt>
                 <dd className="text-right">
                   {item.location_code} / {item.bin_code ?? "—"}
                 </dd>
               </div>
-              <div className="flex justify-between gap-2 border-b border-slate-800/80 py-1">
-                <dt className="text-slate-500">Recorded</dt>
-                <dd className="text-right text-slate-400">
+              <div className="flex justify-between gap-2 border-b border-[var(--wms-border)]/80 py-1">
+                <dt className="text-[var(--wms-muted)]">Recorded</dt>
+                <dd className="text-right text-[var(--wms-muted)]">
                   {new Date(item.created_at).toLocaleString()}
                 </dd>
               </div>
-              <div className="flex justify-between gap-2 border-b border-slate-800/80 py-1">
-                <dt className="text-slate-500">SKU</dt>
+              <div className="flex justify-between gap-2 border-b border-[var(--wms-border)]/80 py-1">
+                <dt className="text-[var(--wms-muted)]">SKU</dt>
                 <dd className="text-right">{item.sku}</dd>
               </div>
               <div className="flex justify-between gap-2 py-1">
-                <dt className="text-slate-500">System ID / UPC</dt>
+                <dt className="text-[var(--wms-muted)]">System ID / UPC</dt>
                 <dd className="text-right">
                   {item.ls_system_id} · {item.upc}
                 </dd>
@@ -200,21 +200,21 @@ export function EpcTrackerWorkspace() {
             </dl>
           </div>
           <div>
-            <h3 className="font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+            <h3 className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
               Decoded SGTIN-96 (WMS 96-bit layout)
             </h3>
             {decoded ? (
-              <dl className="mt-3 space-y-2 font-mono text-xs text-slate-300">
-                <div className="flex justify-between border-b border-slate-800/80 py-1">
-                  <dt className="text-slate-500">Company prefix (20 bit)</dt>
+              <dl className="mt-3 space-y-2 font-mono text-xs text-[var(--wms-fg)]">
+                <div className="flex justify-between border-b border-[var(--wms-border)]/80 py-1">
+                  <dt className="text-[var(--wms-muted)]">Company prefix (20 bit)</dt>
                   <dd>{decoded.companyPrefix}</dd>
                 </div>
-                <div className="flex justify-between border-b border-slate-800/80 py-1">
-                  <dt className="text-slate-500">Item ref (40 bit)</dt>
+                <div className="flex justify-between border-b border-[var(--wms-border)]/80 py-1">
+                  <dt className="text-[var(--wms-muted)]">Item ref (40 bit)</dt>
                   <dd>{decoded.itemReference}</dd>
                 </div>
                 <div className="flex justify-between py-1">
-                  <dt className="text-slate-500">Serial (36 bit)</dt>
+                  <dt className="text-[var(--wms-muted)]">Serial (36 bit)</dt>
                   <dd>{decoded.serialNumber}</dd>
                 </div>
               </dl>
@@ -223,18 +223,18 @@ export function EpcTrackerWorkspace() {
                 EPC is not 24 hex — decode unavailable.
               </p>
             )}
-            <p className="mt-3 font-mono text-[0.6rem] leading-relaxed text-slate-600">
+            <p className="mt-3 font-mono text-[0.6rem] leading-relaxed text-[var(--wms-muted)]">
               {item.description}
             </p>
           </div>
         </div>
       ) : selectedEpc && detailLoading ? (
-        <p className="font-mono text-xs text-slate-500">Loading tag details…</p>
+        <p className="font-mono text-xs text-[var(--wms-muted)]">Loading tag details…</p>
       ) : null}
 
       {selectedEpc ? (
-        <div className="rounded-lg border border-slate-800 bg-zinc-950/80 p-4">
-          <h3 className="mb-4 font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+        <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4">
+          <h3 className="mb-4 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
             Audit timeline
           </h3>
           <EpcHistoryTimeline rows={histJson?.history ?? []} loading={histLoading} />

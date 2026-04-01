@@ -33,14 +33,14 @@ export function CommissioningStatusBar({ phase, elapsedMs, printerEndpoint }: Pr
   const isError = phase === "ERROR";
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-zinc-950/90 p-4">
+    <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/90 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-slate-400">
+        <h3 className="font-mono text-[0.65rem] font-semibold uppercase tracking-wider text-[var(--wms-muted)]">
           RFID task status
         </h3>
         <div
           className={`font-mono text-sm tabular-nums ${
-            phase === "IDLE" ? "text-slate-600" : "text-teal-400/90"
+            phase === "IDLE" ? "text-[var(--wms-muted)]" : "text-teal-400/90"
           }`}
         >
           {formatElapsed(elapsedMs)}
@@ -60,12 +60,12 @@ export function CommissioningStatusBar({ phase, elapsedMs, printerEndpoint }: Pr
                   ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
                   : current
                     ? "border-amber-500/50 bg-amber-500/10 text-amber-100"
-                    : "border-slate-800 bg-zinc-900/40 text-slate-600"
+                    : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 text-[var(--wms-muted)]"
               } ${pending && !current ? "opacity-70" : ""}`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
-                  done ? "bg-emerald-400" : current ? "animate-pulse bg-amber-400" : "bg-slate-600"
+                  done ? "bg-emerald-400" : current ? "animate-pulse bg-amber-400" : "bg-[var(--wms-muted)]"
                 }`}
               />
               {step.label}
@@ -79,7 +79,7 @@ export function CommissioningStatusBar({ phase, elapsedMs, printerEndpoint }: Pr
         ) : null}
       </div>
 
-      <p className="mt-3 font-mono text-[0.6rem] text-slate-600">
+      <p className="mt-3 font-mono text-[0.6rem] text-[var(--wms-muted)]">
         {phase === "IDLE" && "Ready — select a SKU and run print / commission."}
         {phase === "ENCODING" && "Commission API: DB encode, ZPL batch, printer POST…"}
         {phase === "PRINTING" && `Printer phase ${printerEndpoint} (~1.2s settle)…`}
@@ -87,7 +87,7 @@ export function CommissioningStatusBar({ phase, elapsedMs, printerEndpoint }: Pr
         {phase === "ERROR" && "Job aborted — see message below."}
       </p>
 
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--wms-surface-elevated)]">
         <div
           className={`h-full transition-all duration-300 ${
             isError ? "bg-red-500/70" : "bg-teal-500/80"

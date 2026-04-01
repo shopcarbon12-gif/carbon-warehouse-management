@@ -132,7 +132,7 @@ export function LabelPreviewCanvas({
   return (
     <canvas
       ref={ref}
-      className="mx-auto rounded border border-slate-700 bg-white shadow-lg"
+      className="mx-auto rounded border border-[var(--wms-border)] bg-white shadow-lg"
       aria-label="RFID label preview"
     />
   );

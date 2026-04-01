@@ -295,7 +295,7 @@ export function CatalogWorkspace({
   const showNoMatches = !isLoading && total === 0 && Boolean(debounced);
 
   const pagination = !showCatalogEmpty && total > 0 && (
-    <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[0.65rem] text-slate-500">
+    <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
       <span>
         {total} row{total === 1 ? "" : "s"} · page {page} / {totalPages}
       </span>
@@ -304,7 +304,7 @@ export function CatalogWorkspace({
           type="button"
           disabled={page <= 1}
           onClick={() => setPage((p) => Math.max(1, p - 1))}
-          className="rounded border border-slate-700 px-3 py-1 text-slate-300 disabled:opacity-40"
+          className="rounded border border-[var(--wms-border)] px-3 py-1 text-[var(--wms-fg)] disabled:opacity-40"
         >
           Previous
         </button>
@@ -312,7 +312,7 @@ export function CatalogWorkspace({
           type="button"
           disabled={page >= totalPages}
           onClick={() => setPage((p) => p + 1)}
-          className="rounded border border-slate-700 px-3 py-1 text-slate-300 disabled:opacity-40"
+          className="rounded border border-[var(--wms-border)] px-3 py-1 text-[var(--wms-fg)] disabled:opacity-40"
         >
           Next
         </button>
@@ -325,7 +325,7 @@ export function CatalogWorkspace({
       <div
         role="tablist"
         aria-label="Catalog view"
-        className="flex flex-wrap gap-2 border-b border-slate-800 pb-2"
+        className="flex flex-wrap gap-2 border-b border-[var(--wms-border)] pb-2"
       >
         <button
           type="button"
@@ -334,8 +334,8 @@ export function CatalogWorkspace({
           onClick={() => setTab("lightspeed")}
           className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
             tab === "lightspeed"
-              ? "border border-b-0 border-slate-700 bg-zinc-900 text-teal-300/90"
-              : "text-slate-500 hover:text-slate-300"
+              ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+              : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
           }`}
         >
           Lightspeed catalog
@@ -347,8 +347,8 @@ export function CatalogWorkspace({
           onClick={() => setTab("rfid")}
           className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
             tab === "rfid"
-              ? "border border-b-0 border-slate-700 bg-zinc-900 text-teal-300/90"
-              : "text-slate-500 hover:text-slate-300"
+              ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+              : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
           }`}
         >
           RFID &amp; EPCs
@@ -363,13 +363,13 @@ export function CatalogWorkspace({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, SKU, UPC, vendor…"
-              className="w-full max-w-md rounded-md border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100 placeholder:text-slate-600 md:max-w-lg"
+              className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-lg"
             />
           </div>
 
           <div
             ref={catalogToolbarRef}
-            className="flex flex-wrap items-center justify-end gap-2 border-b border-slate-800/80 pb-3"
+            className="flex flex-wrap items-center justify-end gap-2 border-b border-[var(--wms-border)]/80 pb-3"
           >
             {canManageCatalog ? (
               <>
@@ -396,7 +396,7 @@ export function CatalogWorkspace({
                 </button>
               </>
             ) : (
-              <span className="font-mono text-[0.6rem] text-slate-600" title="Admin scope required">
+              <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]" title="Admin scope required">
                 New / Import · admin only
               </span>
             )}
@@ -414,14 +414,14 @@ export function CatalogWorkspace({
                 onClick={() =>
                   setCatalogMenuOpen((m) => (m === "lightspeed" ? null : "lightspeed"))
                 }
-                className="inline-flex items-center gap-1 rounded-md border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-xs font-medium text-slate-100 hover:bg-slate-700"
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs font-medium text-[var(--wms-fg)] hover:bg-[var(--wms-border)]"
               >
                 Lightspeed
                 <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
               </button>
               {catalogMenuOpen === "lightspeed" ? (
                 <div
-                  className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-slate-700 bg-zinc-900 py-1 shadow-xl"
+                  className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl"
                   role="menu"
                 >
                   <button
@@ -432,7 +432,7 @@ export function CatalogWorkspace({
                       setCatalogMenuOpen(null);
                       void triggerLightspeedSync();
                     }}
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-teal-200 hover:bg-zinc-800 disabled:opacity-50"
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-teal-200 hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
                   >
                     {syncBusy ? "Syncing…" : "Sync Lightspeed"}
                   </button>
@@ -440,7 +440,7 @@ export function CatalogWorkspace({
                     href="/inventory/sync"
                     role="menuitem"
                     onClick={() => setCatalogMenuOpen(null)}
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
                   >
                     Open Lightspeed sync workspace
                   </Link>
@@ -448,7 +448,7 @@ export function CatalogWorkspace({
                     href="/inventory/sync"
                     role="menuitem"
                     onClick={() => setCatalogMenuOpen(null)}
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
                   >
                     Job queue &amp; history
                   </Link>
@@ -467,7 +467,7 @@ export function CatalogWorkspace({
               </button>
               {catalogMenuOpen === "more" ? (
                 <div
-                  className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-slate-700 bg-zinc-900 py-1 shadow-xl"
+                  className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl"
                   role="menu"
                 >
                   <button
@@ -476,7 +476,7 @@ export function CatalogWorkspace({
                     disabled
                     title="Not implemented yet"
                     onClick={() => setCatalogMenuOpen(null)}
-                    className="block w-full cursor-not-allowed px-3 py-2 text-left font-mono text-xs text-slate-600"
+                    className="block w-full cursor-not-allowed px-3 py-2 text-left font-mono text-xs text-[var(--wms-muted)]"
                   >
                     Bulk tag assign (soon)
                   </button>
@@ -486,7 +486,7 @@ export function CatalogWorkspace({
                     disabled
                     title="Not implemented yet"
                     onClick={() => setCatalogMenuOpen(null)}
-                    className="block w-full cursor-not-allowed px-3 py-2 text-left font-mono text-xs text-slate-600"
+                    className="block w-full cursor-not-allowed px-3 py-2 text-left font-mono text-xs text-[var(--wms-muted)]"
                   >
                     Bulk archive (soon)
                   </button>
@@ -496,12 +496,12 @@ export function CatalogWorkspace({
           </div>
 
           {syncMsg ? (
-            <p className="font-mono text-xs text-slate-500" role="status">
+            <p className="font-mono text-xs text-[var(--wms-muted)]" role="status">
               {syncMsg}
             </p>
           ) : null}
           {!canTriggerLightspeedSync ? (
-            <p className="font-mono text-[0.6rem] text-slate-600">
+            <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
               Full sync API may require admin.{" "}
               <Link href="/inventory/sync" className="text-teal-500 hover:underline">
                 Lightspeed sync
@@ -516,7 +516,7 @@ export function CatalogWorkspace({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search system ID, description, SKU, UPC…"
-            className="w-full max-w-md rounded-md border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100 placeholder:text-slate-600 md:max-w-lg"
+            className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-lg"
           />
         </div>
       )}
@@ -528,14 +528,14 @@ export function CatalogWorkspace({
       ) : null}
 
       {showCatalogEmpty ? (
-        <div className="rounded-xl border border-slate-800/90 bg-gradient-to-b from-zinc-950 to-zinc-900/80 px-8 py-16 text-center">
+        <div className="rounded-xl border border-[var(--wms-border)]/90 bg-gradient-to-b from-[var(--wms-surface)] to-[var(--wms-surface-elevated)] px-8 py-16 text-center">
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.25em] text-teal-500/80">
             {tab === "lightspeed" ? "Lightspeed catalog" : "RFID matrix"}
           </p>
-          <h2 className="mt-3 text-lg font-semibold tracking-tight text-slate-100">
+          <h2 className="mt-3 text-lg font-semibold tracking-tight text-[var(--wms-fg)]">
             No synchronized catalog yet
           </h2>
-          <p className="mx-auto mt-2 max-w-md font-mono text-xs leading-relaxed text-slate-500">
+          <p className="mx-auto mt-2 max-w-md font-mono text-xs leading-relaxed text-[var(--wms-muted)]">
             {tab === "lightspeed"
               ? "Run Sync Lightspeed (admins) or open the sync dashboard to pull item matrices from Lightspeed. Quantities show total on-hand when the POS API returns stock data (R-Series qoh / shops; X-Series when inventory fields are present)."
               : "Pull matrices and custom SKUs from Lightspeed first. RFID tag counts reflect in-stock EPCs at your active location."}
@@ -552,7 +552,7 @@ export function CatalogWorkspace({
             ) : null}
             <Link
               href="/inventory/sync"
-              className="inline-flex items-center justify-center rounded-lg border border-slate-600/50 bg-slate-900/40 px-6 py-3 font-mono text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800/50"
+              className="inline-flex items-center justify-center rounded-lg border border-[var(--wms-border)]/50 bg-[var(--wms-surface-elevated)]/40 px-6 py-3 font-mono text-sm font-medium text-[var(--wms-fg)] transition-colors hover:bg-[var(--wms-surface-elevated)]/50"
             >
               Sync dashboard
             </Link>
@@ -560,10 +560,10 @@ export function CatalogWorkspace({
         </div>
       ) : tab === "lightspeed" ? (
         <>
-          <div className="overflow-x-auto rounded-lg border border-slate-800">
+          <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
             <table className="w-full min-w-[1000px] border-collapse text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-800 bg-zinc-900 font-mono text-[0.6rem] uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
                   <th className="px-2 py-2">Item name</th>
                   <th className="px-2 py-2">Custom SKU</th>
                   <th className="px-2 py-2">UPC</th>
@@ -574,33 +574,33 @@ export function CatalogWorkspace({
                   <th className="px-2 py-2 text-right tabular-nums">Qty (LS)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/80 font-mono text-[0.65rem] text-slate-300">
+              <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                    <td colSpan={8} className="px-4 py-10 text-center text-[var(--wms-muted)]">
                       Loading catalog…
                     </td>
                   </tr>
                 ) : showNoMatches ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-14 text-center text-slate-600">
-                      <p className="font-mono text-sm text-slate-500">No rows match your search.</p>
+                    <td colSpan={8} className="px-4 py-14 text-center text-[var(--wms-muted)]">
+                      <p className="font-mono text-sm text-[var(--wms-muted)]">No rows match your search.</p>
                     </td>
                   </tr>
                 ) : (
                   rows.map((r) => (
-                    <tr key={r.custom_sku_id} className="hover:bg-zinc-900/40">
-                      <td className="max-w-[220px] truncate px-2 py-1.5 text-slate-200" title={r.name}>
+                    <tr key={r.custom_sku_id} className="hover:bg-[var(--wms-surface-elevated)]/50">
+                      <td className="max-w-[220px] truncate px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
                         {r.name}
                       </td>
                       <td className="px-2 py-1.5">{r.sku}</td>
-                      <td className="px-2 py-1.5 text-slate-400">{displayUpc(r)}</td>
-                      <td className="max-w-[140px] truncate px-2 py-1.5 text-slate-400" title={r.vendor ?? ""}>
+                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
+                      <td className="max-w-[140px] truncate px-2 py-1.5 text-[var(--wms-muted)]" title={r.vendor ?? ""}>
                         {r.vendor?.trim() || "—"}
                       </td>
-                      <td className="px-2 py-1.5 text-slate-500">{r.color?.trim() || "—"}</td>
-                      <td className="px-2 py-1.5 text-slate-500">{r.size?.trim() || "—"}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-300">
+                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>
+                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">{r.size?.trim() || "—"}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
                         {formatPrice(r.retail_price)}
                       </td>
                       <td className="px-2 py-1.5 text-right tabular-nums text-teal-400/85">
@@ -618,10 +618,10 @@ export function CatalogWorkspace({
         </>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-slate-800">
+          <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
             <table className="w-full min-w-[960px] border-collapse text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-800 bg-zinc-900 font-mono text-[0.6rem] uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
                   <th className="px-2 py-2">System ID (matrix)</th>
                   <th className="px-2 py-2">Custom SKU</th>
                   <th className="px-2 py-2">UPC</th>
@@ -631,35 +631,35 @@ export function CatalogWorkspace({
                   <th className="w-24 px-2 py-2">RFID</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/80 font-mono text-[0.65rem] text-slate-300">
+              <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                    <td colSpan={7} className="px-4 py-10 text-center text-[var(--wms-muted)]">
                       Loading catalog…
                     </td>
                   </tr>
                 ) : showNoMatches ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-14 text-center text-slate-600">
-                      <p className="font-mono text-sm text-slate-500">No rows match your search.</p>
-                      <p className="mt-2 text-[0.65rem] text-slate-600">
+                    <td colSpan={7} className="px-4 py-14 text-center text-[var(--wms-muted)]">
+                      <p className="font-mono text-sm text-[var(--wms-muted)]">No rows match your search.</p>
+                      <p className="mt-2 text-[0.65rem] text-[var(--wms-muted)]">
                         Try another query or clear the search box.
                       </p>
                     </td>
                   </tr>
                 ) : (
                   rows.map((r) => (
-                    <tr key={r.custom_sku_id} className="hover:bg-zinc-900/40">
+                    <tr key={r.custom_sku_id} className="hover:bg-[var(--wms-surface-elevated)]/50">
                       <td className="px-2 py-1.5 text-teal-400/85">
                         {r.matrix_ls_system_id ?? "—"}
                       </td>
                       <td className="px-2 py-1.5">{r.sku}</td>
-                      <td className="px-2 py-1.5 text-slate-400">{displayUpc(r)}</td>
-                      <td className="max-w-[240px] truncate px-2 py-1.5 text-slate-200" title={r.name}>
+                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
+                      <td className="max-w-[240px] truncate px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
                         {r.name}
                       </td>
-                      <td className="px-2 py-1.5 text-slate-500">{formatAttributes(r)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-300">
+                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">{formatAttributes(r)}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
                         {r.active_epc_count}
                       </td>
                       <td className="px-2 py-1.5">
@@ -691,79 +691,79 @@ export function CatalogWorkspace({
             onClick={() => setNewItemOpen(false)}
           />
           <div className="fixed inset-0 z-[70] flex max-h-screen items-center justify-center overflow-y-auto p-4">
-            <div className="my-4 w-full max-w-lg rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
-              <h3 className="text-sm font-semibold text-slate-100">New catalog item</h3>
-              <p className="mt-2 font-mono text-xs leading-relaxed text-slate-500">
+            <div className="my-4 w-full max-w-lg rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
+              <h3 className="text-sm font-semibold text-[var(--wms-fg)]">New catalog item</h3>
+              <p className="mt-2 font-mono text-xs leading-relaxed text-[var(--wms-muted)]">
                 Creates or updates a matrix by UPC and adds a custom SKU (synthetic negative Lightspeed id).
                 No EPCs until you encode tags.
               </p>
               <div className="mt-4 grid gap-3 font-mono text-xs">
                 <label className="grid gap-1">
-                  <span className="text-slate-500">Matrix UPC (required)</span>
+                  <span className="text-[var(--wms-muted)]">Matrix UPC (required)</span>
                   <input
                     value={manualMatrixUpc}
                     onChange={(e) => setManualMatrixUpc(e.target.value)}
-                    className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
                   />
                 </label>
                 <label className="grid gap-1">
-                  <span className="text-slate-500">Description (required)</span>
+                  <span className="text-[var(--wms-muted)]">Description (required)</span>
                   <input
                     value={manualDesc}
                     onChange={(e) => setManualDesc(e.target.value)}
-                    className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
                   />
                 </label>
                 <label className="grid gap-1">
-                  <span className="text-slate-500">Custom SKU (required)</span>
+                  <span className="text-[var(--wms-muted)]">Custom SKU (required)</span>
                   <input
                     value={manualSku}
                     onChange={(e) => setManualSku(e.target.value)}
-                    className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
                   />
                 </label>
                 <label className="grid gap-1">
-                  <span className="text-slate-500">Variant UPC (optional)</span>
+                  <span className="text-[var(--wms-muted)]">Variant UPC (optional)</span>
                   <input
                     value={manualVariantUpc}
                     onChange={(e) => setManualVariantUpc(e.target.value)}
-                    className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
                   />
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="grid gap-1">
-                    <span className="text-slate-500">Vendor</span>
+                    <span className="text-[var(--wms-muted)]">Vendor</span>
                     <input
                       value={manualVendor}
                       onChange={(e) => setManualVendor(e.target.value)}
-                      className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
                     />
                   </label>
                   <label className="grid gap-1">
-                    <span className="text-slate-500">Retail price</span>
+                    <span className="text-[var(--wms-muted)]">Retail price</span>
                     <input
                       value={manualRetail}
                       onChange={(e) => setManualRetail(e.target.value)}
                       placeholder="29.99"
-                      className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
                     />
                   </label>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="grid gap-1">
-                    <span className="text-slate-500">Color</span>
+                    <span className="text-[var(--wms-muted)]">Color</span>
                     <input
                       value={manualColor}
                       onChange={(e) => setManualColor(e.target.value)}
-                      className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
                     />
                   </label>
                   <label className="grid gap-1">
-                    <span className="text-slate-500">Size</span>
+                    <span className="text-[var(--wms-muted)]">Size</span>
                     <input
                       value={manualSize}
                       onChange={(e) => setManualSize(e.target.value)}
-                      className="rounded border border-slate-700 bg-zinc-900 px-2 py-2 text-slate-100"
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
                     />
                   </label>
                 </div>
@@ -775,7 +775,7 @@ export function CatalogWorkspace({
                 <button
                   type="button"
                   onClick={() => setNewItemOpen(false)}
-                  className="rounded-md border border-slate-600 px-4 py-2 font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                  className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
                 >
                   Cancel
                 </button>
@@ -807,9 +807,9 @@ export function CatalogWorkspace({
             onClick={() => setImportOpen(false)}
           />
           <div className="fixed inset-0 z-[70] flex max-h-screen items-center justify-center overflow-y-auto p-4">
-            <div className="my-4 w-full max-w-2xl rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
-              <h3 className="text-sm font-semibold text-slate-100">Import catalog (CSV)</h3>
-              <p className="mt-2 font-mono text-xs leading-relaxed text-slate-500">
+            <div className="my-4 w-full max-w-2xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
+              <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Import catalog (CSV)</h3>
+              <p className="mt-2 font-mono text-xs leading-relaxed text-[var(--wms-muted)]">
                 Headers must include <span className="text-teal-500/90">matrix_upc</span> (or upc),{" "}
                 <span className="text-teal-500/90">sku</span>, and{" "}
                 <span className="text-teal-500/90">name</span> (or description). Optional: vendor, color,
@@ -817,7 +817,7 @@ export function CatalogWorkspace({
               </p>
               <input
                 type="file"
-                className="mt-3 block w-full font-mono text-xs text-slate-400 file:mr-3 file:rounded file:border file:border-slate-600 file:bg-zinc-900 file:px-3 file:py-1.5 file:text-slate-200"
+                className="mt-3 block w-full font-mono text-xs text-[var(--wms-muted)] file:mr-3 file:rounded file:border file:border-[var(--wms-border)] file:bg-[var(--wms-surface-elevated)] file:px-3 file:py-1.5 file:text-[var(--wms-fg)]"
                 accept=".csv,text/csv"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -832,19 +832,19 @@ export function CatalogWorkspace({
                 onChange={(e) => setImportCsvText(e.target.value)}
                 placeholder="Or paste CSV here…"
                 rows={10}
-                className="mt-3 w-full resize-y rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-[0.65rem] text-slate-200 placeholder:text-slate-600"
+                className="mt-3 w-full resize-y rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-[0.65rem] text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)]"
               />
               {importErr ? (
                 <p className="mt-2 font-mono text-xs text-red-400/90">{importErr}</p>
               ) : null}
               {importSummary ? (
-                <p className="mt-2 font-mono text-xs text-slate-400">{importSummary}</p>
+                <p className="mt-2 font-mono text-xs text-[var(--wms-muted)]">{importSummary}</p>
               ) : null}
               <div className="mt-4 flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setImportOpen(false)}
-                  className="rounded-md border border-slate-600 px-4 py-2 font-mono text-xs text-slate-300 hover:bg-zinc-800"
+                  className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
                 >
                   Close
                 </button>
@@ -871,18 +871,18 @@ export function CatalogWorkspace({
             onClick={closeModal}
           />
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="max-h-[min(90vh,560px)] w-full max-w-lg overflow-hidden rounded-xl border border-slate-800 bg-zinc-950 shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+            <div className="max-h-[min(90vh,560px)] w-full max-w-lg overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-100">RFID tags</h3>
-                  <p className="mt-0.5 font-mono text-[0.6rem] text-slate-500">
+                  <h3 className="text-sm font-semibold text-[var(--wms-fg)]">RFID tags</h3>
+                  <p className="mt-0.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">
                     {modalSku.sku} · UPC {displayUpc(modalSku)}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="rounded p-2 text-slate-500 hover:bg-zinc-800"
+                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
                   aria-label="Close"
                 >
                   <X className="h-4 w-4" />
@@ -890,9 +890,9 @@ export function CatalogWorkspace({
               </div>
               <div className="max-h-[420px] overflow-y-auto p-4">
                 {itemsLoading ? (
-                  <p className="font-mono text-xs text-slate-500">Loading EPCs…</p>
+                  <p className="font-mono text-xs text-[var(--wms-muted)]">Loading EPCs…</p>
                 ) : !itemData || itemData.length === 0 ? (
-                  <p className="py-8 text-center font-mono text-xs text-slate-600">
+                  <p className="py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
                     No items at the active location for this custom SKU.
                   </p>
                 ) : (
@@ -900,10 +900,10 @@ export function CatalogWorkspace({
                     {itemData.map((it) => (
                       <li
                         key={it.epc}
-                        className="rounded border border-slate-800/80 bg-zinc-900/40 px-3 py-2"
+                        className="rounded border border-[var(--wms-border)]/80 bg-[var(--wms-surface-elevated)]/50 px-3 py-2"
                       >
                         <div className="text-teal-400/90">{it.epc}</div>
-                        <div className="mt-1 text-slate-500">
+                        <div className="mt-1 text-[var(--wms-muted)]">
                           #{it.serial_number} · {it.status} · bin {it.bin_code}
                         </div>
                       </li>

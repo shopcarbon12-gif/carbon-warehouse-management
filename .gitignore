@@ -60,3 +60,7 @@ next-env.d.ts
 
 # Local OTA APK uploads
 public/uploads/mobile-apk/
+
+# Theme evidence PNGs (regenerate with npm run evidence:theme:*); embedded report is committed
+docs/light-theme-evidence/before/*.png
+docs/light-theme-evidence/after/*.png

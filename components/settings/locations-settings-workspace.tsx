@@ -90,10 +90,10 @@ export function LocationsSettingsWorkspace() {
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-800 bg-zinc-950/60">
+      <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
         <table className="w-full min-w-[900px] border-collapse text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-800 bg-zinc-900/80 font-mono text-[0.6rem] uppercase text-slate-500">
+            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
               <th className="px-3 py-3">Location name</th>
               <th className="px-3 py-3">Code</th>
               <th className="px-3 py-3">Lightspeed shop ID</th>
@@ -102,18 +102,18 @@ export function LocationsSettingsWorkspace() {
               <th className="px-3 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/90">
+          <tbody className="divide-y divide-[var(--wms-border)]/90">
             {!locations ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={6} className="px-3 py-8 text-center text-[var(--wms-muted)]">
                   Loading…
                 </td>
               </tr>
             ) : (
               locations.map((row) => (
-                <tr key={row.id} className="text-slate-200">
-                  <td className="px-3 py-2.5 font-medium text-slate-100">{row.name}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-slate-400">{row.code}</td>
+                <tr key={row.id} className="text-[var(--wms-fg)]">
+                  <td className="px-3 py-2.5 font-medium text-[var(--wms-fg)]">{row.name}</td>
+                  <td className="px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]">{row.code}</td>
                   <td className="px-3 py-2.5 font-mono text-xs text-teal-400/85">
                     {row.lightspeed_shop_id ?? "—"}
                   </td>
@@ -124,13 +124,13 @@ export function LocationsSettingsWorkspace() {
                       className={`rounded-full px-2.5 py-0.5 font-mono text-[0.65rem] font-medium ${
                         row.is_active
                           ? "bg-emerald-950/50 text-emerald-300/90 ring-1 ring-emerald-700/40"
-                          : "bg-slate-800 text-slate-500 ring-1 ring-slate-700"
+                          : "bg-[var(--wms-surface-elevated)] text-[var(--wms-muted)] ring-1 ring-[var(--wms-border)]"
                       }`}
                     >
                       {row.is_active ? "Active" : "Disabled"}
                     </button>
                   </td>
-                  <td className="max-w-[220px] px-3 py-2.5 font-mono text-[0.65rem] text-slate-500">
+                  <td className="max-w-[220px] px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
                     {row.users.length ? row.users.map((u) => u.email).join(", ") : "—"}
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono text-xs">
@@ -141,7 +141,7 @@ export function LocationsSettingsWorkspace() {
                     >
                       Edit
                     </button>
-                    <span className="mx-2 text-slate-600">|</span>
+                    <span className="mx-2 text-[var(--wms-muted)]">|</span>
                     <button
                       type="button"
                       onClick={() => void removeLocation(row)}
@@ -157,7 +157,7 @@ export function LocationsSettingsWorkspace() {
         </table>
       </div>
 
-      <p className="font-mono text-[0.6rem] text-slate-600">
+      <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
         Lightspeed shop ID maps to the numeric shop identifier in your Lightspeed admin URLs (R-Series /
         Retail). Use it to target inventory sync per shop.
       </p>
@@ -269,62 +269,62 @@ function LocationFormModal({
         className="absolute inset-0 bg-black/70"
         onClick={onClose}
       />
-      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-800 bg-zinc-950 p-6 shadow-2xl">
-        <h3 className="text-sm font-semibold text-slate-100">
+      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
+        <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
           {mode === "add" ? "Add location" : "Edit location"}
         </h3>
-        <p className="mt-1 font-mono text-[0.6rem] leading-relaxed text-slate-500">
+        <p className="mt-1 font-mono text-[0.6rem] leading-relaxed text-[var(--wms-muted)]">
           Lightspeed shop ID: use the numeric id from your Lightspeed URL when viewing a shop / register
           context (varies by product). Leave empty if this site is not mapped to a single LS shop.
         </p>
         <div className="mt-4 space-y-3 font-mono text-xs">
-          <label className="block text-slate-500">
+          <label className="block text-[var(--wms-muted)]">
             Short code
             <input
               value={code}
               onChange={(e) => setCode(e.target.value)}
               disabled={mode === "edit"}
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100 disabled:opacity-60"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)] disabled:opacity-60"
               placeholder="001"
             />
           </label>
-          <label className="block text-slate-500">
+          <label className="block text-[var(--wms-muted)]">
             Location name
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
             />
           </label>
-          <label className="block text-slate-500">
+          <label className="block text-[var(--wms-muted)]">
             Lightspeed shop ID (optional)
             <input
               value={shopId}
               onChange={(e) => setShopId(e.target.value)}
               inputMode="numeric"
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
               placeholder="e.g. 1"
             />
           </label>
-          <label className="flex cursor-pointer items-center gap-2 text-slate-300">
+          <label className="flex cursor-pointer items-center gap-2 text-[var(--wms-fg)]">
             <input
               type="checkbox"
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
-              className="rounded border-slate-600 bg-zinc-900"
+              className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
             />
             Location active
           </label>
-          <div className="text-slate-500">
+          <div className="text-[var(--wms-muted)]">
             User access
-            <div className="mt-2 max-h-36 space-y-1 overflow-y-auto rounded border border-slate-800 p-2">
+            <div className="mt-2 max-h-36 space-y-1 overflow-y-auto rounded border border-[var(--wms-border)] p-2">
               {users.map((u) => (
-                <label key={u.id} className="flex cursor-pointer items-center gap-2 text-slate-300">
+                <label key={u.id} className="flex cursor-pointer items-center gap-2 text-[var(--wms-fg)]">
                   <input
                     type="checkbox"
                     checked={userIds.has(u.id)}
                     onChange={() => toggleUser(u.id)}
-                    className="rounded border-slate-600 bg-zinc-900"
+                    className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
                   />
                   {u.email}
                 </label>
@@ -337,7 +337,7 @@ function LocationFormModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-slate-600 px-4 py-2 text-slate-300 hover:bg-zinc-800"
+            className="rounded border border-[var(--wms-border)] px-4 py-2 text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
           >
             Cancel
           </button>

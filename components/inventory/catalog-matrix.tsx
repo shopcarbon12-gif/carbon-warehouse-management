@@ -21,13 +21,13 @@ function StatusGlyph({ status }: { status: CatalogMatrixRow["status_key"] }) {
   const common = "h-4 w-4 shrink-0";
   switch (status) {
     case "no_custom_skus":
-      return <Package2 className={`${common} text-slate-500`} strokeWidth={1.75} aria-hidden />;
+      return <Package2 className={`${common} text-[var(--wms-muted)]`} strokeWidth={1.75} aria-hidden />;
     case "no_inventory":
       return <Package className={`${common} text-amber-500/90`} strokeWidth={1.75} aria-hidden />;
     case "in_stock":
       return <CircleCheck className={`${common} text-teal-400`} strokeWidth={1.75} aria-hidden />;
     case "sold_out":
-      return <ShoppingBag className={`${common} text-slate-500`} strokeWidth={1.75} aria-hidden />;
+      return <ShoppingBag className={`${common} text-[var(--wms-muted)]`} strokeWidth={1.75} aria-hidden />;
     case "mixed":
     default:
       return <AlertCircle className={`${common} text-amber-400`} strokeWidth={1.75} aria-hidden />;
@@ -136,10 +136,10 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
 
   return (
     <div className="min-w-0">
-      <div className="overflow-x-auto rounded-lg border border-slate-800">
+      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
         <table className="w-full min-w-[900px] border-collapse text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-800 bg-zinc-900 font-mono text-[0.7rem] uppercase tracking-wider text-slate-400">
+            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.7rem] uppercase tracking-wider text-[var(--wms-muted)]">
               <th className="w-10 px-2 py-2.5" aria-hidden />
               <th className="w-12 px-2 py-2.5 text-center">Sts</th>
               <th className="px-3 py-2.5">UPC</th>
@@ -148,12 +148,12 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
               <th className="w-32 px-3 py-2.5 text-right">On-hand EPCs</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800 bg-zinc-950">
+          <tbody className="divide-y divide-[var(--wms-border)] bg-[var(--wms-surface)]">
             {initialMatrices.length === 0 ? (
               <tr>
                 <td
                   colSpan={6}
-                  className="px-4 py-10 text-center font-mono text-sm text-slate-500"
+                  className="px-4 py-10 text-center font-mono text-sm text-[var(--wms-muted)]"
                 >
                   No matrices in catalog. Seed data or import from Lightspeed.
                 </td>
@@ -175,11 +175,11 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
                           toggleMatrix(m.id);
                         }
                       }}
-                      className="cursor-pointer text-slate-200 hover:bg-zinc-900/80"
+                      className="cursor-pointer text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80"
                     >
                       <td className="px-2 py-2 align-middle">
                         <ChevronRight
-                          className={`mx-auto h-4 w-4 text-slate-500 transition-transform ${
+                          className={`mx-auto h-4 w-4 text-[var(--wms-muted)] transition-transform ${
                             open ? "rotate-90" : ""
                           }`}
                           strokeWidth={2}
@@ -194,32 +194,32 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
                       <td className="px-3 py-2 align-middle font-mono text-xs text-teal-400/90">
                         {m.upc}
                       </td>
-                      <td className="max-w-md truncate px-3 py-2 align-middle font-medium text-slate-100">
+                      <td className="max-w-md truncate px-3 py-2 align-middle font-medium text-[var(--wms-fg)]">
                         {m.description}
                       </td>
-                      <td className="px-3 py-2 text-right align-middle font-mono text-xs tabular-nums text-slate-300">
+                      <td className="px-3 py-2 text-right align-middle font-mono text-xs tabular-nums text-[var(--wms-fg)]">
                         {m.custom_sku_count}
                       </td>
-                      <td className="px-3 py-2 text-right align-middle font-mono text-xs tabular-nums text-slate-300">
+                      <td className="px-3 py-2 text-right align-middle font-mono text-xs tabular-nums text-[var(--wms-fg)]">
                         {m.epc_count}
                       </td>
                     </tr>
                     {open ? (
                       <tr className="bg-black/20">
                         <td colSpan={6} className="p-0">
-                          <div className="border-t border-slate-800 px-2 py-3 pl-10">
+                          <div className="border-t border-[var(--wms-border)] px-2 py-3 pl-10">
                             {loadingCs || customSkus === undefined ? (
-                              <p className="font-mono text-xs text-slate-500">
+                              <p className="font-mono text-xs text-[var(--wms-muted)]">
                                 Loading custom SKUs…
                               </p>
                             ) : customSkus.length === 0 ? (
-                              <p className="font-mono text-xs text-slate-500">
+                              <p className="font-mono text-xs text-[var(--wms-muted)]">
                                 No custom SKUs for this matrix.
                               </p>
                             ) : (
                               <table className="w-full border-collapse text-left text-xs">
                                 <thead>
-                                  <tr className="border-b border-slate-800 bg-zinc-900 text-[0.65rem] uppercase tracking-wide text-slate-500">
+                                  <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
                                     <th className="w-10 px-2 py-2" aria-hidden />
                                     <th className="px-2 py-2">Custom SKU</th>
                                     <th className="px-2 py-2">Color</th>
@@ -228,32 +228,32 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
                                     <th className="w-24 py-2 text-right">EPCs</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-800/80">
+                                <tbody className="divide-y divide-[var(--wms-border)]/80">
                                   {customSkus.map((cs) => (
-                                    <tr key={cs.id} className="text-slate-300">
+                                    <tr key={cs.id} className="text-[var(--wms-fg)]">
                                       <td className="px-2 py-1.5 align-middle">
                                         <button
                                           type="button"
                                           title="Item group detail (EPCs)"
-                                          className="rounded p-1 text-teal-500 hover:bg-slate-800 hover:text-teal-300"
+                                          className="rounded p-1 text-teal-500 hover:bg-[var(--wms-surface-elevated)] hover:text-teal-300"
                                           onClick={(e) => openDrawer(e, cs, m.upc)}
                                         >
                                           <Tag className="h-3.5 w-3.5" strokeWidth={2} />
                                         </button>
                                       </td>
-                                      <td className="px-2 py-1.5 font-mono text-[0.7rem] text-slate-200">
+                                      <td className="px-2 py-1.5 font-mono text-[0.7rem] text-[var(--wms-fg)]">
                                         {cs.sku}
                                       </td>
-                                      <td className="px-2 py-1.5 text-slate-400">
+                                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">
                                         {cs.color_code ?? "—"}
                                       </td>
-                                      <td className="px-2 py-1.5 text-slate-400">
+                                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">
                                         {cs.size ?? "—"}
                                       </td>
-                                      <td className="px-2 py-1.5 font-mono text-[0.65rem] text-slate-500">
+                                      <td className="px-2 py-1.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
                                         {cs.ls_system_id}
                                       </td>
-                                      <td className="py-1.5 text-right font-mono tabular-nums text-slate-400">
+                                      <td className="py-1.5 text-right font-mono tabular-nums text-[var(--wms-muted)]">
                                         {cs.epc_count}
                                       </td>
                                     </tr>
@@ -286,29 +286,29 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
             role="presentation"
           >
             <div
-              className="flex max-h-[min(85vh,40rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-800 bg-zinc-950 shadow-2xl"
+              className="flex max-h-[min(85vh,40rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl"
               role="dialog"
               aria-modal="true"
               aria-labelledby="catalog-modal-title"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start justify-between gap-3 border-b border-slate-800 bg-zinc-900 px-4 py-3">
+              <div className="flex items-start justify-between gap-3 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-3">
                 <div className="min-w-0">
                   <h2
                     id="catalog-modal-title"
-                    className="text-sm font-semibold text-slate-100"
+                    className="text-sm font-semibold text-[var(--wms-fg)]"
                   >
                     Items for custom SKU
                   </h2>
-                  <p className="mt-1 font-mono text-[0.65rem] leading-relaxed text-slate-500">
+                  <p className="mt-1 font-mono text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">
                     <span className="text-teal-500/90">{drawerMatrixUpc}</span>
-                    <span className="text-slate-600"> · </span>
-                    <span className="text-slate-400">{drawerCustomSku.sku}</span>
+                    <span className="text-[var(--wms-muted)]"> · </span>
+                    <span className="text-[var(--wms-muted)]">{drawerCustomSku.sku}</span>
                   </p>
                 </div>
                 <button
                   type="button"
-                  className="shrink-0 rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                  className="shrink-0 rounded-md p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
                   onClick={closeDrawer}
                   aria-label="Close"
                 >
@@ -317,32 +317,32 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
                 {itemLoading ? (
-                  <p className="font-mono text-xs text-slate-500">Loading EPCs…</p>
+                  <p className="font-mono text-xs text-[var(--wms-muted)]">Loading EPCs…</p>
                 ) : itemRows && itemRows.length === 0 ? (
-                  <p className="font-mono text-xs text-slate-500">No items at this location.</p>
+                  <p className="font-mono text-xs text-[var(--wms-muted)]">No items at this location.</p>
                 ) : itemRows ? (
                   <table className="w-full border-collapse text-left text-xs">
                     <thead className="sticky top-0 z-10">
-                      <tr className="border-b border-slate-800 bg-zinc-900 font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+                      <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
                         <th className="px-2 py-2">Serial #</th>
                         <th className="px-2 py-2">EPC (96-bit)</th>
                         <th className="px-2 py-2">Bin</th>
                         <th className="px-2 py-2">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800">
+                    <tbody className="divide-y divide-[var(--wms-border)]">
                       {itemRows.map((row) => (
-                        <tr key={`${row.epc}-${row.serial_number}`} className="text-slate-300">
-                          <td className="px-2 py-1.5 font-mono tabular-nums text-slate-400">
+                        <tr key={`${row.epc}-${row.serial_number}`} className="text-[var(--wms-fg)]">
+                          <td className="px-2 py-1.5 font-mono tabular-nums text-[var(--wms-muted)]">
                             {row.serial_number}
                           </td>
                           <td className="px-2 py-1.5 font-mono text-[0.65rem] text-teal-400/85">
                             {row.epc}
                           </td>
-                          <td className="px-2 py-1.5 font-mono text-[0.7rem] text-slate-400">
+                          <td className="px-2 py-1.5 font-mono text-[0.7rem] text-[var(--wms-muted)]">
                             {row.bin_code}
                           </td>
-                          <td className="px-2 py-1.5 text-slate-400">{row.status}</td>
+                          <td className="px-2 py-1.5 text-[var(--wms-muted)]">{row.status}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -266,8 +266,8 @@ export function CycleCountWorkspace() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 rounded-lg border border-slate-800 bg-zinc-950/80 p-4 sm:grid-cols-2">
-        <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+      <div className="grid gap-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4 sm:grid-cols-2">
+        <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
           Location
           <select
             value={locationId}
@@ -276,7 +276,7 @@ export function CycleCountWorkspace() {
               setBinId("");
               resetScans();
             }}
-            className="mt-1 w-full rounded-md border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100"
+            className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
           >
             <option value="">— Select —</option>
             {locations.map((l) => (
@@ -286,7 +286,7 @@ export function CycleCountWorkspace() {
             ))}
           </select>
         </label>
-        <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+        <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
           Bin (optional)
           <select
             value={binId}
@@ -295,7 +295,7 @@ export function CycleCountWorkspace() {
               resetScans();
             }}
             disabled={!locationId}
-            className="mt-1 w-full rounded-md border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100 disabled:opacity-40"
+            className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] disabled:opacity-40"
           >
             <option value="">All bins at location</option>
             {(binRows ?? []).map((b) => (
@@ -307,7 +307,7 @@ export function CycleCountWorkspace() {
         </label>
       </div>
 
-      <div className="rounded-lg border border-slate-800 bg-zinc-950/80 p-4">
+      <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4">
         <div className="flex flex-wrap items-center gap-4">
           <button
             type="button"
@@ -319,11 +319,11 @@ export function CycleCountWorkspace() {
             className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors ${
               scanning
                 ? "border-amber-500/60 bg-amber-950/40 text-amber-100"
-                : "border-slate-600 bg-zinc-900 text-slate-200 hover:border-teal-500/40"
+                : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-teal-500/40"
             } disabled:opacity-40`}
           >
             <Radio
-              className={`h-5 w-5 ${scanning ? "text-amber-400" : "text-slate-500"}`}
+              className={`h-5 w-5 ${scanning ? "text-amber-400" : "text-[var(--wms-muted)]"}`}
             />
             {scanning ? "Scanning…" : "Start scan"}
           </button>
@@ -331,7 +331,7 @@ export function CycleCountWorkspace() {
             type="button"
             disabled={!locationId || expected.length === 0}
             onClick={() => void simulateScan()}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-zinc-900 px-4 py-2.5 font-mono text-xs text-slate-200 hover:border-violet-500/40 disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5 font-mono text-xs text-[var(--wms-fg)] hover:border-violet-500/40 disabled:opacity-40"
           >
             <Shuffle className="h-4 w-4" />
             Simulate scan
@@ -340,13 +340,13 @@ export function CycleCountWorkspace() {
             type="button"
             disabled={!locationId || scanned.length === 0}
             onClick={resetScans}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2.5 font-mono text-xs text-slate-400 hover:bg-zinc-900"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] px-4 py-2.5 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
           >
             <ScanLine className="h-4 w-4" />
             Clear scans
           </button>
         </div>
-        <p className="mt-3 font-mono text-[0.6rem] text-slate-600">
+        <p className="mt-3 font-mono text-[0.6rem] text-[var(--wms-muted)]">
           Hardware SDK can feed EPCs while scanning is active. Use Simulate scan to load ~90% of
           expected plus sample misplaced and unrecognized tags.
         </p>
@@ -358,14 +358,14 @@ export function CycleCountWorkspace() {
             ["Matched", kpi.matched, "text-emerald-400/90"],
             ["Missing", kpi.missing, "text-amber-400/90"],
             ["Misplaced", kpi.misplaced, "text-orange-400/90"],
-            ["Unrecognized", kpi.unrecognized, "text-slate-400"],
+            ["Unrecognized", kpi.unrecognized, "text-[var(--wms-muted)]"],
           ] as const
         ).map(([label, n, cls]) => (
           <div
             key={label}
-            className="rounded-lg border border-slate-800 bg-zinc-950/60 px-3 py-3 text-center"
+            className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 px-3 py-3 text-center"
           >
-            <div className="font-mono text-[0.6rem] uppercase tracking-wide text-slate-500">
+            <div className="font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
               {label}
             </div>
             <div className={`mt-1 font-mono text-2xl tabular-nums ${cls}`}>{n}</div>
@@ -373,13 +373,13 @@ export function CycleCountWorkspace() {
         ))}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-800 bg-zinc-950/80">
-        <div className="border-b border-slate-800 px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+      <div className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
+        <div className="border-b border-[var(--wms-border)] px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
           Results ({gridRows.length} rows)
         </div>
         <div className="max-h-[min(60vh,480px)] overflow-auto">
           <table className="w-full border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-zinc-900 font-mono text-[0.6rem] uppercase tracking-wide text-slate-500">
+            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
               <tr>
                 <th className="px-3 py-2">EPC</th>
                 <th className="px-3 py-2">SKU</th>
@@ -389,12 +389,12 @@ export function CycleCountWorkspace() {
                 <th className="px-3 py-2">State</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/80 font-mono text-[0.65rem] text-slate-300">
+            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
               {gridRows.map((r) => (
                 <tr key={r.epc}>
                   <td className="px-3 py-2 text-teal-400/85">{r.epc}</td>
                   <td className="px-3 py-2">{r.sku}</td>
-                  <td className="px-3 py-2 text-slate-500">{r.bin}</td>
+                  <td className="px-3 py-2 text-[var(--wms-muted)]">{r.bin}</td>
                 <td className="px-3 py-2">{r.expected ? "Yes" : "No"}</td>
                 <td className="px-3 py-2">{r.scanned ? "Yes" : "No"}</td>
                   <td className="px-3 py-2">
@@ -406,7 +406,7 @@ export function CycleCountWorkspace() {
                             ? "text-amber-400/90"
                             : r.state === "misplaced"
                               ? "text-orange-400/90"
-                              : "text-slate-500"
+                              : "text-[var(--wms-muted)]"
                       }
                     >
                       {r.state.toUpperCase()}
@@ -417,7 +417,7 @@ export function CycleCountWorkspace() {
             </tbody>
           </table>
           {gridRows.length === 0 ? (
-            <p className="p-6 text-center font-mono text-xs text-slate-600">
+            <p className="p-6 text-center font-mono text-xs text-[var(--wms-muted)]">
               Select a location to load expected in-stock EPCs.
             </p>
           ) : null}
@@ -445,7 +445,7 @@ export function CycleCountWorkspace() {
       </div>
 
       {toast ? (
-        <p className="font-mono text-xs text-slate-400">{toast}</p>
+        <p className="font-mono text-xs text-[var(--wms-muted)]">{toast}</p>
       ) : null}
 
       <CycleCountCommitModal

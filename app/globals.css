@@ -18,27 +18,55 @@
   --wms-surface-elevated: #18181b;
   --wms-border: #1e293b;
   --wms-accent: #2dd4bf;
+  --wms-secondary: #587e7e;
+  --wms-accent-fg: #0c0f12;
 }
 
 html[data-theme="light"] {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --muted: #64748b;
+  /* Align with docs/design-review-carbonwms-light-theme.html */
+  --background: #ffffff;
+  --foreground: #1a1d1f;
+  --muted: #5c6366;
   --surface: #ffffff;
-  --surface-border: #cbd5e1;
-  --accent: #0d9488;
-  --accent-dim: #115e59;
-  --wms-bg: #f8fafc;
-  --wms-fg: #0f172a;
-  --wms-muted: #64748b;
+  --surface-border: rgba(198, 197, 212, 0.45);
+  --accent: #0b9597;
+  --accent-dim: #0a7c7e;
+  --wms-bg: #f3f3f4;
+  --wms-fg: #1a1d1f;
+  --wms-muted: #5c6366;
   --wms-surface: #ffffff;
-  --wms-surface-elevated: #f1f5f9;
-  --wms-border: #cbd5e1;
-  --wms-accent: #0d9488;
+  --wms-surface-elevated: #eeeeee;
+  --wms-border: rgba(198, 197, 212, 0.55);
+  --wms-accent: #0b9597;
+  --wms-secondary: #587e7e;
+  --wms-accent-fg: #ffffff;
 }
 
 html.wms-text-lg {
   font-size: 1.125rem;
+  line-height: 1.55;
+}
+
+/* Route title row: reads as a header, not body copy (esp. light theme) */
+html[data-theme="light"] main h1.text-lg.font-semibold.tracking-tight {
+  margin-bottom: 0.35rem;
+  padding: 1rem 1.15rem 1.1rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--wms-border) 85%, transparent);
+  background: linear-gradient(
+    90deg,
+    rgba(11, 149, 151, 0.14) 0%,
+    rgba(11, 149, 151, 0.05) 42%,
+    var(--wms-surface) 100%
+  );
+  box-shadow: 0 8px 24px rgba(26, 29, 31, 0.05);
+}
+
+html.dark main h1.text-lg.font-semibold.tracking-tight {
+  margin-bottom: 0.35rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--wms-border);
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.1) 0%, transparent 72%);
 }
 
 @theme inline {

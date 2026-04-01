@@ -74,7 +74,7 @@ function LightspeedLiveReadiness({
           ))}
         </ul>
       ) : null}
-      <ol className="mt-3 list-inside list-decimal space-y-1 border-t border-white/10 pt-2 text-slate-300/90 sm:list-outside sm:pl-4">
+      <ol className="mt-3 list-inside list-decimal space-y-1 border-t border-white/10 pt-2 text-[var(--wms-fg)]/90 sm:list-outside sm:pl-4">
         <li>
           In Coolify → WMS → Environment: LS_CLIENT_ID, LS_CLIENT_SECRET, LS_REFRESH_TOKEN, LS_ACCOUNT_ID
           (R-Series OAuth + account id — not the X-Series shop subdomain flow). Optional: LS_DOMAIN_PREFIX
@@ -86,8 +86,8 @@ function LightspeedLiveReadiness({
         </li>
         <li>
           Optional: LS_REDIRECT_URI = same callback. Public base (carbon-gen order):{" "}
-          <code className="text-slate-500">NEXT_PUBLIC_BASE_URL</code> then{" "}
-          <code className="text-slate-500">WMS_APP_PUBLIC_BASE_URL</code>.
+          <code className="text-[var(--wms-muted)]">NEXT_PUBLIC_BASE_URL</code> then{" "}
+          <code className="text-[var(--wms-muted)]">WMS_APP_PUBLIC_BASE_URL</code>.
         </li>
         <li>Save integration fields below, then Redeploy WMS in Coolify so the container loads secrets.</li>
         <li>Start OAuth → copy refresh token into LS_REFRESH_TOKEN → Redeploy again if needed.</li>
@@ -207,7 +207,7 @@ export function SettingsWorkspace() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div className="flex gap-2 border-b border-slate-800 pb-2">
+      <div className="flex gap-2 border-b border-[var(--wms-border)] pb-2">
         {(
           [
             ["rfid", "RFID defaults"],
@@ -220,8 +220,8 @@ export function SettingsWorkspace() {
             onClick={() => setTab(k)}
             className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
               tab === k
-                ? "border border-b-0 border-slate-700 bg-zinc-900 text-teal-300/90"
-                : "text-slate-500 hover:text-slate-300"
+                ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+                : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
             }`}
           >
             {label}
@@ -236,42 +236,42 @@ export function SettingsWorkspace() {
       ) : null}
 
       {tab === "rfid" ? (
-        <div className="space-y-4 rounded-lg border border-slate-800 bg-zinc-950/80 p-5">
+        <div className="space-y-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-5">
           {data?.hints.env_company_prefix ? (
             <p className="rounded border border-amber-800/50 bg-amber-950/20 px-3 py-2 font-mono text-[0.65rem] text-amber-200/90">
               <code className="text-amber-400/90">WMS_COMPANY_PREFIX</code> is set in the
               environment — it overrides stored tenant defaults for commissioning.
             </p>
           ) : null}
-          <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+          <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
             Company prefix (20-bit)
             <input
               value={rfidForm.company_prefix}
               onChange={(e) =>
                 setRfidForm((f) => ({ ...f, company_prefix: e.target.value }))
               }
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
             />
           </label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
               Item bits
               <input
                 value={rfidForm.item_bits}
                 onChange={(e) => setRfidForm((f) => ({ ...f, item_bits: e.target.value }))}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
               />
             </label>
-            <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
               Serial bits
               <input
                 value={rfidForm.serial_bits}
                 onChange={(e) => setRfidForm((f) => ({ ...f, serial_bits: e.target.value }))}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
               />
             </label>
           </div>
-          <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+          <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
             Default printer (host:port / URI)
             <input
               value={rfidForm.printer_default}
@@ -279,7 +279,7 @@ export function SettingsWorkspace() {
                 setRfidForm((f) => ({ ...f, printer_default: e.target.value }))
               }
               placeholder="192.168.1.3:80 / PSTPRNT"
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
             />
           </label>
           <button
@@ -292,48 +292,48 @@ export function SettingsWorkspace() {
           </button>
         </div>
       ) : (
-        <div className="space-y-4 rounded-lg border border-slate-800 bg-zinc-950/80 p-5">
+        <div className="space-y-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-5">
           <LightspeedLiveReadiness
             data={data}
             lsForm={lsForm}
             publicOrigin={publicOrigin}
           />
-          <p className="font-mono text-[0.65rem] leading-relaxed text-slate-500">
+          <p className="font-mono text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">
             Store non-secret Lightspeed identifiers in the tenant record (or rely on the same keys in
-            Coolify env). <strong className="text-slate-400">LS_CLIENT_SECRET</strong> and{" "}
-            <strong className="text-slate-400">LS_REFRESH_TOKEN</strong> must be set in Coolify only — never
-            commit them. Live catalog sync uses <strong className="text-slate-400">R-Series</strong>{" "}
-            (<code className="text-slate-600">api.lightspeedapp.com</code>) when Account ID + OAuth are
-            complete. Domain prefix is for token endpoints (often <code className="text-slate-600">us</code>{" "}
+            Coolify env). <strong className="text-[var(--wms-muted)]">LS_CLIENT_SECRET</strong> and{" "}
+            <strong className="text-[var(--wms-muted)]">LS_REFRESH_TOKEN</strong> must be set in Coolify only — never
+            commit them. Live catalog sync uses <strong className="text-[var(--wms-muted)]">R-Series</strong>{" "}
+            (<code className="text-[var(--wms-muted)]">api.lightspeedapp.com</code>) when Account ID + OAuth are
+            complete. Domain prefix is for token endpoints (often <code className="text-[var(--wms-muted)]">us</code>{" "}
             like carbon-gen) and for Retail X-Series if you use that path.
           </p>
-          <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+          <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
             Client ID
             <input
               value={lsForm.client_id}
               onChange={(e) => setLsForm((f) => ({ ...f, client_id: e.target.value }))}
               autoComplete="off"
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
             />
           </label>
-          <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+          <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
             Account ID
             <input
               value={lsForm.account_id}
               onChange={(e) => setLsForm((f) => ({ ...f, account_id: e.target.value }))}
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
             />
           </label>
-          <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+          <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
             Domain prefix
             <input
               value={lsForm.domain_prefix}
               onChange={(e) => setLsForm((f) => ({ ...f, domain_prefix: e.target.value }))}
               placeholder="your-store"
-              className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
             />
           </label>
-          <div className="rounded border border-slate-800 bg-zinc-900/40 px-3 py-2 font-mono text-[0.6rem] text-slate-500">
+          <div className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 px-3 py-2 font-mono text-[0.6rem] text-[var(--wms-muted)]">
             <span className="block">
               LS_CLIENT_SECRET (Coolify):{" "}
               {data?.hints.env_ls_client_secret ? (
@@ -351,13 +351,13 @@ export function SettingsWorkspace() {
               )}
             </span>
           </div>
-          <div className="rounded border border-slate-800 bg-zinc-900/50 px-3 py-3 font-mono text-[0.65rem] leading-relaxed text-slate-400">
-            <strong className="text-slate-300">Connect Lightspeed (redirect flow)</strong> — sends you
-            to Lightspeed login, then returns a page with a <code className="text-slate-500">refresh token</code>{" "}
-            to paste as <code className="text-slate-500">LS_REFRESH_TOKEN</code>. In the Lightspeed dev app,
+          <div className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/60 px-3 py-3 font-mono text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">
+            <strong className="text-[var(--wms-fg)]">Connect Lightspeed (redirect flow)</strong> — sends you
+            to Lightspeed login, then returns a page with a <code className="text-[var(--wms-muted)]">refresh token</code>{" "}
+            to paste as <code className="text-[var(--wms-muted)]">LS_REFRESH_TOKEN</code>. In the Lightspeed dev app,
             register redirect URL{" "}
             <code className="text-violet-400/90">…/api/lightspeed/callback</code> (same as{" "}
-            <code className="text-slate-500">LS_REDIRECT_URI</code> if you set it).
+            <code className="text-[var(--wms-muted)]">LS_REDIRECT_URI</code> if you set it).
             <div className="mt-2">
               <a
                 href="/api/lightspeed/auth"
@@ -379,7 +379,7 @@ export function SettingsWorkspace() {
       )}
 
       {toast ? (
-        <p className="font-mono text-xs text-slate-400">{toast}</p>
+        <p className="font-mono text-xs text-[var(--wms-muted)]">{toast}</p>
       ) : null}
     </div>
   );

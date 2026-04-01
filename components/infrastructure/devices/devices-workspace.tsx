@@ -63,7 +63,7 @@ export function DevicesWorkspace() {
         <div
           role="tablist"
           aria-label="Device categories"
-          className="flex flex-wrap gap-1.5 border-b border-slate-800 pb-2"
+          className="flex flex-wrap gap-1.5 border-b border-[var(--wms-border)] pb-2"
         >
           <button
             type="button"
@@ -72,8 +72,8 @@ export function DevicesWorkspace() {
             onClick={() => setTab("all")}
             className={`rounded-t-md px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide ${
               tab === "all"
-                ? "border border-b-0 border-slate-700 bg-zinc-900 text-teal-300/90"
-                : "text-slate-500 hover:text-slate-300"
+                ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+                : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
             }`}
           >
             All
@@ -87,8 +87,8 @@ export function DevicesWorkspace() {
               onClick={() => setTab(t)}
               className={`rounded-t-md px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide ${
                 tab === t
-                  ? "border border-b-0 border-slate-700 bg-zinc-900 text-teal-300/90"
-                  : "text-slate-500 hover:text-slate-300"
+                  ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+                  : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
               }`}
             >
               {typeLabel(t)}
@@ -114,10 +114,10 @@ export function DevicesWorkspace() {
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-800">
+      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
         <table className="w-full min-w-[960px] border-collapse text-left text-xs">
           <thead>
-            <tr className="border-b border-slate-800 bg-zinc-900 font-mono text-[0.6rem] uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Type</th>
               <th className="px-3 py-2">IP / MAC</th>
@@ -127,15 +127,15 @@ export function DevicesWorkspace() {
               <th className="px-3 py-2 w-24"> </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/80 font-mono text-[0.65rem] text-slate-300">
+          <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
             {filtered.length === 0 && !error ? (
               <tr>
                 <td colSpan={7} className="px-6 py-16 text-center">
-                  <Cpu className="mx-auto h-10 w-10 text-slate-700" strokeWidth={1.25} />
-                  <p className="mt-3 font-mono text-sm text-slate-500">
+                  <Cpu className="mx-auto h-10 w-10 text-[var(--wms-secondary)]" strokeWidth={1.25} />
+                  <p className="mt-3 font-mono text-sm text-[var(--wms-muted)]">
                     No devices registered in this category.
                   </p>
-                  <p className="mx-auto mt-2 max-w-md font-mono text-[0.65rem] leading-relaxed text-slate-600">
+                  <p className="mx-auto mt-2 max-w-md font-mono text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">
                     Add your first Zebra printer or Carbon edge reader. Locations come from the
                     warehouse map — assign each device so scan events can be attributed to a site
                     (and optionally a bin).
@@ -154,20 +154,20 @@ export function DevicesWorkspace() {
               </tr>
             ) : (
               filtered.map((d) => (
-                <tr key={d.id} className="hover:bg-zinc-900/40">
-                  <td className="px-3 py-2 text-slate-200">{d.name}</td>
-                  <td className="px-3 py-2 text-slate-500">{d.device_type.replace(/_/g, " ")}</td>
-                  <td className="max-w-[200px] truncate px-3 py-2 text-slate-400" title={d.network_address ?? ""}>
+                <tr key={d.id} className="hover:bg-[var(--wms-surface-elevated)]/50">
+                  <td className="px-3 py-2 text-[var(--wms-fg)]">{d.name}</td>
+                  <td className="px-3 py-2 text-[var(--wms-muted)]">{d.device_type.replace(/_/g, " ")}</td>
+                  <td className="max-w-[200px] truncate px-3 py-2 text-[var(--wms-muted)]" title={d.network_address ?? ""}>
                     {d.network_address ?? "—"}
                   </td>
                   <td className="px-3 py-2 text-teal-400/85">
                     {d.location_code} · {d.location_name}
                   </td>
-                  <td className="px-3 py-2 text-slate-500">{d.bin_code ?? "—"}</td>
+                  <td className="px-3 py-2 text-[var(--wms-muted)]">{d.bin_code ?? "—"}</td>
                   <td className="px-3 py-2">
                     <span
                       className={
-                        d.status_online ? "text-emerald-400/90" : "text-slate-500 line-through decoration-slate-600"
+                        d.status_online ? "text-emerald-400/90" : "text-[var(--wms-muted)] line-through decoration-[var(--wms-muted)]"
                       }
                     >
                       {d.status_online ? "Online" : "Offline"}
@@ -181,7 +181,7 @@ export function DevicesWorkspace() {
                           setEditing(d);
                           setModalOpen(true);
                         }}
-                        className="rounded border border-slate-700 px-2 py-1 text-[0.6rem] text-slate-300 hover:bg-zinc-800"
+                        className="rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
                       >
                         Edit
                       </button>

@@ -170,8 +170,8 @@ export function TransferWorkspace() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 rounded-lg border border-slate-800 bg-zinc-950/80 p-4 sm:grid-cols-2">
-        <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+      <div className="grid gap-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4 sm:grid-cols-2">
+        <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
           Destination location
           <select
             value={destLocationId}
@@ -179,7 +179,7 @@ export function TransferWorkspace() {
               setDestLocationId(e.target.value);
               setDestBinId("");
             }}
-            className="mt-1 w-full rounded-md border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100"
+            className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
           >
             <option value="">— Select —</option>
             {locations.map((l) => (
@@ -189,13 +189,13 @@ export function TransferWorkspace() {
             ))}
           </select>
         </label>
-        <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+        <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
           Destination bin
           <select
             value={destBinId}
             onChange={(e) => setDestBinId(e.target.value)}
             disabled={!destLocationId}
-            className="mt-1 w-full rounded-md border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-slate-100 disabled:opacity-40"
+            className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] disabled:opacity-40"
           >
             <option value="">— Select bin —</option>
             {(destBins ?? []).map((b) => (
@@ -207,7 +207,7 @@ export function TransferWorkspace() {
         </label>
       </div>
 
-      <div className="rounded-lg border border-slate-800 bg-zinc-950/80 p-4">
+      <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4">
         <div className="flex flex-wrap items-end gap-3">
           <button
             type="button"
@@ -218,16 +218,16 @@ export function TransferWorkspace() {
             className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors ${
               scanning
                 ? "border-amber-500/60 bg-amber-950/40 text-amber-100"
-                : "border-slate-600 bg-zinc-900 text-slate-200 hover:border-teal-500/40"
+                : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-teal-500/40"
             }`}
           >
-            <Radio className={`h-5 w-5 ${scanning ? "text-amber-400" : "text-slate-500"}`} />
+            <Radio className={`h-5 w-5 ${scanning ? "text-amber-400" : "text-[var(--wms-muted)]"}`} />
             {scanning ? "Scanning…" : "Start scan"}
           </button>
           <button
             type="button"
             onClick={() => void simulateScan()}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-zinc-900 px-4 py-2.5 font-mono text-xs text-slate-200 hover:border-violet-500/40"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5 font-mono text-xs text-[var(--wms-fg)] hover:border-violet-500/40"
           >
             <Shuffle className="h-4 w-4" />
             Simulate scan
@@ -239,7 +239,7 @@ export function TransferWorkspace() {
               setStaged([]);
               setScanning(false);
             }}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2.5 font-mono text-xs text-slate-400 hover:bg-zinc-900 disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] px-4 py-2.5 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-40"
           >
             <ScanLine className="h-4 w-4" />
             Clear staged
@@ -251,17 +251,17 @@ export function TransferWorkspace() {
             value={manualEpc}
             onChange={(e) => setManualEpc(e.target.value)}
             placeholder="Manual EPC (24 hex)"
-            className="min-w-[12rem] flex-1 rounded-md border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-xs text-slate-100"
+            className="min-w-[12rem] flex-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]"
           />
           <button
             type="button"
             onClick={() => void addManualEpc()}
-            className="rounded-md border border-slate-600 bg-zinc-900 px-3 py-2 font-mono text-xs text-slate-200 hover:border-teal-500/40"
+            className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:border-teal-500/40"
           >
             Add EPC
           </button>
         </div>
-        <p className="mt-2 font-mono text-[0.6rem] text-slate-600">
+        <p className="mt-2 font-mono text-[0.6rem] text-[var(--wms-muted)]">
           Live handheld batches with scanContext{" "}
           <span className="text-teal-400/90">TRANSFER</span> (same location as your session) stream in
           over SSE and stage here. Simulated reads use in-stock tags at your active session location.
@@ -270,13 +270,13 @@ export function TransferWorkspace() {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-800 bg-zinc-950/80">
-        <div className="border-b border-slate-800 px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-slate-500">
+      <div className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
+        <div className="border-b border-[var(--wms-border)] px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
           Staged payload ({staged.length})
         </div>
         <div className="max-h-[min(50vh,400px)] overflow-auto">
           <table className="w-full border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-zinc-900 font-mono text-[0.6rem] uppercase text-slate-500">
+            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
               <tr>
                 <th className="px-3 py-2">EPC</th>
                 <th className="px-3 py-2">SKU</th>
@@ -284,19 +284,19 @@ export function TransferWorkspace() {
                 <th className="px-3 py-2">Bin</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/80 font-mono text-[0.65rem] text-slate-300">
+            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
               {staged.map((r) => (
                 <tr key={r.epc}>
                   <td className="px-3 py-2 text-teal-400/85">{r.epc}</td>
                   <td className="px-3 py-2">{r.sku}</td>
                   <td className="px-3 py-2 text-amber-400/80">{r.location_code}</td>
-                  <td className="px-3 py-2 text-slate-500">{r.bin_code ?? "—"}</td>
+                  <td className="px-3 py-2 text-[var(--wms-muted)]">{r.bin_code ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {staged.length === 0 ? (
-            <p className="p-6 text-center font-mono text-xs text-slate-600">
+            <p className="p-6 text-center font-mono text-xs text-[var(--wms-muted)]">
               Stage tags via edge stream, simulate, manual EPC, or reader SDK.
             </p>
           ) : null}
@@ -314,7 +314,7 @@ export function TransferWorkspace() {
         Review & transfer
       </button>
 
-      {toast ? <p className="font-mono text-xs text-slate-400">{toast}</p> : null}
+      {toast ? <p className="font-mono text-xs text-[var(--wms-muted)]">{toast}</p> : null}
 
       <TransferCommitModal
         open={commitOpen}
