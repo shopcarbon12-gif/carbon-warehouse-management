@@ -12,8 +12,10 @@ import 'package:carbon_wms/services/handheld_client_info.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
 
-/// Layout: `APK UI/login-screen-preview.html`. Icons match `Login page.html` Material Symbols
-/// (`dns`, `person`, `lock`, `visibility`) via Material [Icons].
+/// Fixed single-screen login (no scroll). Visual match: approved CarbonWMS mock — **login only**.
+///
+/// **Device authorization line:** hidden when `GET /api/mobile/status` returns `authorized: true`
+/// or `bypassDeviceLock: true` (see [_loadDeviceApprovalLine]).
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.onSuccess});
 
@@ -25,22 +27,21 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   static const String kDefaultLoginEmail = 'user@carbonjeanscompany.com';
-  static const double _fieldHeight = 64;
+  static const String kLockedServerDisplay = 'https://wms.shopcarbon.com';
 
-  /// `Login page.html`: person opsz 20; dns / lock / visibility opsz 24.
+  static const double _fieldHeight = 52;
+
   static const double _iconPerson = 20;
-  static const double _iconDnsLockEye = 24;
+  static const double _iconDnsLockEye = 22;
 
-  /// Mint wash like early CarbonWMS handheld mock (not pure white).
-  static const Color _bg = Color(0xFFF5FAFA);
-  static const Color _fieldFill = Color(0xFFF0F5F4);
-  static const Color _labelGrey = Color(0xFF6D7979);
-  static const Color _labelAboveField = Color(0xFF3D4949);
+  static const Color _bg = Color(0xFFF5F5F5);
+  static const Color _fieldFill = Color(0xFFECECEC);
+  static const Color _labelGrey = Color(0xFF8A9090);
+  static const Color _labelAboveField = Color(0xFF4A5454);
   static const Color _textBlack = Color(0xFF171D1D);
-  static const Color _primaryTeal = Color(0xFF006768);
-  static const Color _primaryTealDeep = Color(0xFF008284);
+  static const Color _primaryTeal = Color(0xFF1B7D7D);
+  static const Color _deviceLineGrey = Color(0xFF6D7373);
 
-  final _serverUrl = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _emailFocus = FocusNode();
@@ -74,8 +75,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final api = context.read<WmsApiClient>();
     final locked = WmsApiClient.lockedServerUrl;
     await api.setBaseUrl(locked);
-    if (!mounted) return;
-    _serverUrl.text = locked;
 
     _rememberEmail = await api.getRememberLoginEmail();
     final saved = await api.getSavedLoginEmail();
@@ -85,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_rememberEmail && saved != null && saved.isNotEmpty) {
       _email.text = saved;
     } else {
-      _email.text = kDefaultLoginEmail;
+      _email.text = '';
     }
     setState(() {
       _offerBiometricSetupAfterSignIn = offerBio;
@@ -98,7 +97,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _applyRememberEmail(bool value) async {
     setState(() => _rememberEmail = value);
-    await context.read<WmsApiClient>().setRememberLoginEmail(value);
+    final api = context.read<WmsApiClient>();
+    await api.setRememberLoginEmail(value);
+    if (!value && mounted) {
+      _email.clear();
+      setState(() {});
+    }
   }
 
   Future<void> _applyOfferBiometric(bool value) async {
@@ -161,35 +165,32 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordFocus.removeListener(_refocusDecoration);
     _emailFocus.dispose();
     _passwordFocus.dispose();
-    _serverUrl.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
   }
 
-  TextStyle get _fieldLabelStyle => GoogleFonts.spaceGrotesk(
+  TextStyle get _fieldLabelStyle => GoogleFonts.inter(
         fontSize: 11,
         fontWeight: FontWeight.w700,
-        letterSpacing: 1.2,
+        letterSpacing: 0.9,
         color: _labelAboveField,
       );
 
-  TextStyle get _inputTextStyle => GoogleFonts.spaceGrotesk(
-        fontSize: 16,
+  TextStyle get _inputTextStyle => GoogleFonts.inter(
+        fontSize: 15,
         fontWeight: FontWeight.w500,
-        height: 1.25,
+        height: 1.2,
         color: _textBlack,
       );
 
-  /// Password placeholder bullets (empty field); real input uses [_inputTextStyle] (black).
-  TextStyle get _inputTextStyleMuted => GoogleFonts.spaceGrotesk(
-        fontSize: 16,
+  TextStyle get _inputTextStyleMuted => GoogleFonts.inter(
+        fontSize: 15,
         fontWeight: FontWeight.w500,
-        height: 1.25,
+        height: 1.2,
         color: _labelGrey,
       );
 
-  /// Flat tray inputs (no white pill) — `login-screen-preview.html`.
   static const InputDecoration _trayInputDecoration = InputDecoration(
     border: InputBorder.none,
     isDense: true,
@@ -200,19 +201,19 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _loginTray({
     required Widget leadingIcon,
     required Widget input,
-    double gapAfterIcon = 12,
-    double horizontalPadding = 16,
+    double gapAfterIcon = 10,
+    double horizontalPadding = 14,
     Widget? trailing,
   }) {
     return Container(
       height: _fieldHeight,
       decoration: BoxDecoration(
         color: _fieldFill,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
       ),
       padding: EdgeInsets.only(
         left: horizontalPadding,
-        right: trailing != null ? 8 : horizontalPadding,
+        right: trailing != null ? 6 : horizontalPadding,
       ),
       alignment: Alignment.center,
       child: Row(
@@ -236,8 +237,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return 'Cannot reach server. Check Wi‑Fi and that the site is up.\n($t)';
   }
 
-  /// Never throws; does not block navigation on biometric errors.
-  Future<void> _maybeOfferBiometricEnrollment(String email, String password) async {
+  Future<void> _maybeOfferBiometricEnrollment(String email) async {
     if (!await LoginCredentialsStore.canUseBiometricPasswordVault()) {
       await LoginCredentialsStore.clearVault();
       await LoginCredentialsStore.setBiometricLoginEnabled(false);
@@ -246,14 +246,16 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!await LoginCredentialsStore.shouldOfferBiometricEnrollment()) return;
     if (!mounted) return;
 
+    final api = context.read<WmsApiClient>();
+
     try {
       final offer = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Fingerprint or face sign-in'),
           content: const Text(
-            'Save your password on this device and sign in next time with fingerprint or face unlock? '
-            'Passwords are never stored on rugged handheld scanners.',
+            'Use fingerprint or face to unlock CarbonWMS on this device next time? '
+            'Only an encrypted session token is stored — your password is never saved.',
           ),
           actions: [
             TextButton(
@@ -272,9 +274,15 @@ class _LoginScreenState extends State<LoginScreen> {
         final bioOk = await LoginCredentialsStore.authenticateWithBiometric();
         if (!mounted) return;
         if (bioOk) {
-          await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(false);
-          await LoginCredentialsStore.setBiometricLoginEnabled(true);
-          await LoginCredentialsStore.storeVaultCredentials(email.trim(), password);
+          final token = await api.getSessionToken();
+          if (token != null && token.isNotEmpty) {
+            await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(false);
+            await LoginCredentialsStore.storeBiometricEnrollment(
+              email: email.trim(),
+              sessionToken: token,
+            );
+            await LoginCredentialsStore.setBiometricLoginEnabled(true);
+          }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -295,6 +303,11 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     }
+  }
+
+  String get _resolvedEmail {
+    final t = _email.text.trim();
+    return t.isEmpty ? kDefaultLoginEmail : t;
   }
 
   Future<void> _submitWithCredentials(String email, String password) async {
@@ -319,9 +332,11 @@ class _LoginScreenState extends State<LoginScreen> {
       await api.setRememberLoginEmail(_rememberEmail);
       if (_rememberEmail) {
         await api.setSavedLoginEmail(email.trim());
+      } else {
+        await api.setSavedLoginEmail(null);
       }
 
-      await _maybeOfferBiometricEnrollment(email.trim(), password);
+      await _maybeOfferBiometricEnrollment(email.trim());
 
       _password.clear();
       await _refreshVaultUi();
@@ -348,7 +363,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    await _submitWithCredentials(_email.text, _password.text);
+    await _submitWithCredentials(_resolvedEmail, _password.text);
   }
 
   Future<void> _biometricSignIn() async {
@@ -364,10 +379,13 @@ class _LoginScreenState extends State<LoginScreen> {
         }
         return;
       }
-      final email = await LoginCredentialsStore.readVaultEmail();
-      final pass = await LoginCredentialsStore.readVaultPassword();
-      if (email == null || pass == null || email.isEmpty || pass.isEmpty) return;
-      await _submitWithCredentials(email, pass);
+      final api = context.read<WmsApiClient>();
+      final token = await LoginCredentialsStore.readVaultSessionToken();
+      if (token == null || token.isEmpty) return;
+      await api.setBaseUrl(WmsApiClient.lockedServerUrl);
+      await api.setSessionToken(token);
+      if (!mounted) return;
+      await widget.onSuccess();
     } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -385,23 +403,28 @@ class _LoginScreenState extends State<LoginScreen> {
       onTap: () => onChanged(!value),
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(
-              width: 28,
-              height: 28,
+              width: 26,
+              height: 26,
               child: Checkbox(
                 value: value,
-                activeColor: _primaryTeal,
-                side: const BorderSide(color: _primaryTeal, width: 2),
+                side: const BorderSide(color: _primaryTeal, width: 1.5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+                fillColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) return _primaryTeal;
+                  return Colors.transparent;
+                }),
+                checkColor: Colors.white,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: VisualDensity.compact,
                 onChanged: (v) => onChanged(v ?? false),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(
               child: Text(
                 label,
@@ -428,222 +451,257 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Scaffold(
         backgroundColor: _bg,
         body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 8),
-                Center(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.asset(
-                      'assets/carbon_logo.png',
-                      width: 128,
-                      height: 128,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'CarbonWMS',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.manrope(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2,
-                    color: Colors.black,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'WAREHOUSE MANAGEMENT SOFTWARE',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 2,
-                    color: _labelGrey,
-                  ),
-                ),
-                const SizedBox(height: 36),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'SERVER URL',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
-                          color: _labelAboveField,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      'CONNECTED VIA SSL',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.5,
-                        color: _labelGrey,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _loginTray(
-                  leadingIcon: const Icon(Icons.dns, size: _iconDnsLockEye, color: _labelGrey),
-                  gapAfterIcon: 12,
-                  input: TextField(
-                    controller: _serverUrl,
-                    readOnly: true,
-                    enableInteractiveSelection: true,
-                    style: _inputTextStyle,
-                    textAlignVertical: TextAlignVertical.center,
-                    decoration: _trayInputDecoration,
-                  ),
-                ),
-                if (_deviceApprovalLine != null) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    _deviceApprovalLine!,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.robotoMono(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: _textBlack,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Text('USER EMAIL', style: _fieldLabelStyle),
-                const SizedBox(height: 8),
-                _loginTray(
-                  leadingIcon: const Icon(Icons.person, size: _iconPerson, color: _labelGrey),
-                  gapAfterIcon: 4,
-                  input: TextField(
-                    controller: _email,
-                    focusNode: _emailFocus,
-                    keyboardType: TextInputType.emailAddress,
-                    autocorrect: false,
-                    textAlignVertical: TextAlignVertical.center,
-                    style: _inputTextStyle,
-                    cursorColor: _textBlack,
-                    decoration: _trayInputDecoration,
-                    onChanged: (_) => unawaited(_refreshVaultUi()),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text('PASSWORD', style: _fieldLabelStyle),
-                const SizedBox(height: 8),
-                _loginTray(
-                  leadingIcon: const Icon(Icons.lock_outline, size: _iconDnsLockEye, color: _labelGrey),
-                  gapAfterIcon: 12,
-                  input: Builder(
-                    builder: (context) {
-                      final hasPassword = _password.text.isNotEmpty;
-                      return TextField(
-                        controller: _password,
-                        focusNode: _passwordFocus,
-                        obscureText: hasPassword && _obscurePassword,
-                        obscuringCharacter: '•',
-                        textAlignVertical: TextAlignVertical.center,
-                        style: _inputTextStyle,
-                        cursorColor: _textBlack,
-                        decoration: hasPassword
-                            ? _trayInputDecoration
-                            : InputDecoration(
-                                border: InputBorder.none,
-                                isDense: true,
-                                filled: false,
-                                contentPadding: EdgeInsets.zero,
-                                hintText: '••••••••••••',
-                                hintStyle: _inputTextStyleMuted,
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const SizedBox(height: 4),
+                              Center(
+                                child: Image.asset(
+                                  'assets/carbon_logo.png',
+                                  width: 152,
+                                  height: 152,
+                                  fit: BoxFit.contain,
+                                  filterQuality: FilterQuality.high,
+                                ),
                               ),
-                        onChanged: (_) => setState(() {}),
-                        onSubmitted: (_) {
-                          if (!_busy) unawaited(_submit());
-                        },
+                              const SizedBox(height: 2),
+                              Text(
+                                'CarbonWMS',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.6,
+                                  height: 1.05,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'WAREHOUSE MANAGEMENT SOFTWARE',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.45,
+                                  height: 1.2,
+                                  color: _labelGrey,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Expanded(child: Text('SERVER URL', style: _fieldLabelStyle)),
+                                  Text(
+                                    'CONNECTED VIA SSL',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.35,
+                                      color: _labelGrey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              _loginTray(
+                                leadingIcon: Icon(
+                                  Icons.dns_outlined,
+                                  size: _iconDnsLockEye,
+                                  color: _labelGrey.withValues(alpha: 0.85),
+                                ),
+                                gapAfterIcon: 10,
+                                input: Text(
+                                  kLockedServerDisplay,
+                                  style: _inputTextStyle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (_deviceApprovalLine != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  _deviceApprovalLine!,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: _deviceLineGrey,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 12),
+                              Text('USER EMAIL', style: _fieldLabelStyle),
+                              const SizedBox(height: 6),
+                              _loginTray(
+                                leadingIcon: Icon(
+                                  Icons.person_outline,
+                                  size: _iconPerson,
+                                  color: _labelGrey.withValues(alpha: 0.9),
+                                ),
+                                gapAfterIcon: 4,
+                                input: TextField(
+                                  controller: _email,
+                                  focusNode: _emailFocus,
+                                  keyboardType: TextInputType.emailAddress,
+                                  autocorrect: false,
+                                  textAlignVertical: TextAlignVertical.center,
+                                  style: _inputTextStyle,
+                                  cursorColor: _textBlack,
+                                  decoration: _trayInputDecoration.copyWith(
+                                    hintText: kDefaultLoginEmail,
+                                    hintStyle: _inputTextStyleMuted,
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 2),
+                                  ),
+                                  onChanged: (_) => unawaited(_refreshVaultUi()),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text('PASSWORD', style: _fieldLabelStyle),
+                              const SizedBox(height: 6),
+                              _loginTray(
+                                leadingIcon: Icon(
+                                  Icons.lock_outline,
+                                  size: _iconDnsLockEye,
+                                  color: _labelGrey.withValues(alpha: 0.85),
+                                ),
+                                gapAfterIcon: 10,
+                                input: Builder(
+                                  builder: (context) {
+                                    final hasPassword = _password.text.isNotEmpty;
+                                    return TextField(
+                                      controller: _password,
+                                      focusNode: _passwordFocus,
+                                      obscureText: hasPassword && _obscurePassword,
+                                      obscuringCharacter: '•',
+                                      textAlignVertical: TextAlignVertical.center,
+                                      style: _inputTextStyle,
+                                      cursorColor: _textBlack,
+                                      decoration: hasPassword
+                                          ? _trayInputDecoration
+                                          : _trayInputDecoration.copyWith(
+                                              hintText: '••••••••••••',
+                                              hintStyle: _inputTextStyleMuted,
+                                              contentPadding: const EdgeInsets.symmetric(vertical: 2),
+                                            ),
+                                      onChanged: (_) => setState(() {}),
+                                      onSubmitted: (_) {
+                                        if (!_busy) unawaited(_submit());
+                                      },
+                                    );
+                                  },
+                                ),
+                                trailing: Tooltip(
+                                  message: _obscurePassword ? 'Show password' : 'Hide password',
+                                  child: Material(
+                                    type: MaterialType.transparency,
+                                    child: InkWell(
+                                      onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+                                      customBorder: const CircleBorder(),
+                                      child: SizedBox(
+                                        width: 44,
+                                        height: 44,
+                                        child: Center(
+                                          child: Icon(
+                                            _obscurePassword
+                                                ? Icons.visibility_outlined
+                                                : Icons.visibility_off_outlined,
+                                            size: _iconDnsLockEye,
+                                            color: _labelGrey,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              _checkRow(
+                                value: _rememberEmail,
+                                onChanged: (v) => unawaited(_applyRememberEmail(v)),
+                                label: 'Remember email on this device',
+                              ),
+                              if (_bioCapableDevice) ...[
+                                const SizedBox(height: 2),
+                                _checkRow(
+                                  value: _offerBiometricSetupAfterSignIn,
+                                  onChanged: (v) => unawaited(_applyOfferBiometric(v)),
+                                  label: 'Biometric login',
+                                ),
+                              ],
+                              if (_err != null) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  _err!,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: Colors.red.shade700,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       );
                     },
                   ),
-                  trailing: Tooltip(
-                    message: _obscurePassword ? 'Show password' : 'Hide password',
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: InkWell(
-                        onTap: () => setState(() => _obscurePassword = !_obscurePassword),
-                        customBorder: const CircleBorder(),
-                        child: SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Center(
-                            child: Icon(
-                              _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                              size: _iconDnsLockEye,
-                              color: _labelGrey,
-                            ),
-                          ),
+                ),
+                if (_vaultReady)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: TextButton.icon(
+                      onPressed: _busy ? null : _biometricSignIn,
+                      icon: const Icon(Icons.fingerprint, color: _primaryTeal, size: 22),
+                      label: Text(
+                        _vaultEmail != null && _vaultEmail!.isNotEmpty
+                            ? 'Biometric sign-in ($_vaultEmail)'
+                            : 'Biometric sign-in',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600,
+                          color: _primaryTeal,
+                          fontSize: 13,
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                _checkRow(
-                  value: _rememberEmail,
-                  onChanged: (v) => unawaited(_applyRememberEmail(v)),
-                  label: 'Remember email on this device',
-                ),
-                if (_bioCapableDevice) ...[
-                  const SizedBox(height: 4),
-                  _checkRow(
-                    value: _offerBiometricSetupAfterSignIn,
-                    onChanged: (v) => unawaited(_applyOfferBiometric(v)),
-                    label: 'Biometric login',
-                  ),
-                ],
-                if (_err != null) ...[
-                  const SizedBox(height: 14),
-                  Text(
-                    _err!,
-                    style: GoogleFonts.inter(fontSize: 12, color: Colors.red.shade700, height: 1.35),
-                  ),
-                ],
-                const SizedBox(height: 28),
                 SizedBox(
                   height: _fieldHeight,
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
                       onTap: _busy ? null : _submit,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       child: Ink(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          gradient: const LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [_primaryTeal, _primaryTealDeep],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.12),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                          color: _primaryTeal,
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: Center(
                           child: Text(
                             _busy ? 'SIGNING IN…' : 'SIGN IN',
-                            style: GoogleFonts.manrope(
-                              fontSize: 16,
+                            style: GoogleFonts.inter(
+                              fontSize: 15,
                               fontWeight: FontWeight.w800,
-                              letterSpacing: 2,
+                              letterSpacing: 1.1,
                               color: Colors.white,
                             ),
                           ),
@@ -652,23 +710,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                if (_vaultReady) ...[
-                  const SizedBox(height: 12),
-                  TextButton.icon(
-                    onPressed: _busy ? null : _biometricSignIn,
-                    icon: const Icon(Icons.fingerprint, color: _primaryTeal, size: 26),
-                    label: Text(
-                      _vaultEmail != null && _vaultEmail!.isNotEmpty
-                          ? 'Biometric sign-in ($_vaultEmail)'
-                          : 'Biometric sign-in',
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w600,
-                        color: _primaryTeal,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
               ],
             ),
           ),

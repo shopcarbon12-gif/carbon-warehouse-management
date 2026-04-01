@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_client_info.dart';
+import 'package:carbon_wms/services/login_credentials_store.dart';
 import 'package:carbon_wms/ui/screens/dashboard_screen.dart';
 import 'package:carbon_wms/ui/screens/device_lock_screen.dart';
 import 'package:carbon_wms/ui/screens/login_screen.dart';
@@ -91,6 +92,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
         });
       }
       await api.setSessionToken(null);
+      await LoginCredentialsStore.clearBiometricVaultOnLogout();
       return;
     }
 
@@ -193,6 +195,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
           pendingApproval: _pending,
           onLogout: () async {
             await context.read<WmsApiClient>().setSessionToken(null);
+            await LoginCredentialsStore.clearBiometricVaultOnLogout();
             if (mounted) {
               setState(() {
                 _loginKey++;
@@ -206,6 +209,7 @@ class _AppAuthGateState extends State<AppAuthGate> {
           otaDownloadUrl: _otaUrl,
           onLogout: () async {
             await context.read<WmsApiClient>().setSessionToken(null);
+            await LoginCredentialsStore.clearBiometricVaultOnLogout();
             if (mounted) {
               setState(() {
                 _loginKey++;

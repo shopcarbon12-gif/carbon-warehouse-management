@@ -7,23 +7,24 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Biometric + encrypted password vault for **consumer-style phones** only (not Chainway/Zebra/etc.).
-/// Rugged handhelds never persist passwords.
+/// Biometric unlock for **consumer-style phones** only (not Chainway/Zebra/etc.).
+/// **Passwords are never read from or written to any persistent storage** (including
+/// [FlutterSecureStorage]). Enrollment stores only a **session token** returned by the server.
 class LoginCredentialsStore {
   LoginCredentialsStore._();
 
   static const _vaultEmail = 'wms_login_vault_email_v1';
-  static const _vaultPassword = 'wms_login_vault_password_v1';
+  static const _vaultSessionToken = 'wms_login_vault_session_v1';
+  static const _vaultPasswordLegacy = 'wms_login_vault_password_v1';
+
   static const _prefsBiometric = 'wms_biometric_superadmin_enabled_v1';
   static const _prefsSkipBioOffer = 'wms_skip_biometric_enrollment_offer_v1';
-  /// User opted in (login checkbox or settings) to see the post–password setup prompt.
   static const _prefsOfferBioAfterSignIn = 'wms_offer_biometric_setup_after_sign_in_v1';
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
 
   static final LocalAuthentication _auth = LocalAuthentication();
 
-  /// Chainway / Zebra / common enterprise scanners — no password vault.
   static Future<bool> isRuggedHandheldProfile() async {
     if (kIsWeb || !Platform.isAndroid) return false;
     try {
@@ -76,27 +77,32 @@ class LoginCredentialsStore {
     if (!value) await clearVault();
   }
 
-  static Future<void> storeVaultCredentials(String email, String password) async {
+  static Future<void> storeBiometricEnrollment({
+    required String email,
+    required String sessionToken,
+  }) async {
+    final t = sessionToken.trim();
+    if (t.isEmpty) return;
     await _storage.write(key: _vaultEmail, value: email.trim());
-    await _storage.write(key: _vaultPassword, value: password);
+    await _storage.write(key: _vaultSessionToken, value: t);
   }
 
   static Future<void> clearVault() async {
     await _storage.delete(key: _vaultEmail);
-    await _storage.delete(key: _vaultPassword);
+    await _storage.delete(key: _vaultSessionToken);
+    await _storage.delete(key: _vaultPasswordLegacy);
   }
 
   static Future<String?> readVaultEmail() async => _storage.read(key: _vaultEmail);
 
-  static Future<String?> readVaultPassword() async => _storage.read(key: _vaultPassword);
+  static Future<String?> readVaultSessionToken() async => _storage.read(key: _vaultSessionToken);
 
   static Future<bool> hasVaultedCredentials() async {
-    if (!await isBiometricLoginEnabled()) return false;
-    final p = await readVaultPassword();
-    return p != null && p.isNotEmpty;
+    if (!await canUseBiometricPasswordVault()) return false;
+    final t = await readVaultSessionToken();
+    return t != null && t.isNotEmpty;
   }
 
-  /// Offer setup only if the user opted in on the login screen (or settings) and did not dismiss permanently.
   static Future<bool> shouldOfferBiometricEnrollment() async {
     if (!await getOfferBiometricSetupAfterSignIn()) return false;
     if (!await canUseBiometricPasswordVault()) return false;
@@ -130,8 +136,14 @@ class LoginCredentialsStore {
     }
   }
 
-  /// Clears vault when switching to a rugged profile (e.g. after OS update mis-detected).
+  static Future<void> clearBiometricVaultOnLogout() async {
+    await clearVault();
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_prefsBiometric, false);
+  }
+
   static Future<void> enforceRuggedNoPasswordPolicy() async {
+    await _storage.delete(key: _vaultPasswordLegacy);
     if (await isRuggedHandheldProfile()) {
       await clearVault();
       await setBiometricLoginEnabled(false);

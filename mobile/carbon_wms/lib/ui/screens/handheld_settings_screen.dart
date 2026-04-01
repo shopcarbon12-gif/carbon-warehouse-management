@@ -199,7 +199,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             )
           else if (!_bioEligible)
             const Text(
-              'Not available on this device (rugged scanners never store passwords).',
+              'Not available on this device (rugged scanners do not use biometric sign-in here).',
               style: TextStyle(
                 color: AppColors.textMuted,
                 fontSize: 13,
@@ -212,9 +212,9 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
               title: const Text('Fingerprint or face sign-in'),
               subtitle: Text(
                 _bioEnrolled
-                    ? 'Saved credentials on this device. Turn off to remove them.'
+                    ? 'Biometric sign-in is enabled. Turn off to clear the saved session and require setup again after a future sign-in.'
                     : _offerAfterSignIn
-                        ? 'After your next password sign-in, you can confirm to save credentials.'
+                        ? 'After your next password sign-in, you can confirm to enable fingerprint or face unlock.'
                         : 'Turn on to allow the optional setup prompt after you sign in with password.',
                 style: const TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.35),
               ),
