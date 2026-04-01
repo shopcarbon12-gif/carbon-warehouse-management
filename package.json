@@ -34,6 +34,7 @@
     "coolify:patch-env": "node scripts/coolify-patch-env-bulk.mjs",
     "diagnose:db": "node scripts/diagnose-wms-db.mjs",
     "db:copy-bins": "node scripts/copy-bins-to-target.mjs",
+    "db:copy-bins:tunnel": "node scripts/copy-bins-through-tunnel.mjs",
     "coolify:set-public-urls": "node scripts/coolify-set-public-urls.mjs",
     "env:ensure-local": "node scripts/ensure-local-public-env.mjs",
     "env:parity-local": "node scripts/ensure-production-parity-local.mjs",

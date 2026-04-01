@@ -204,6 +204,33 @@ async function main() {
     console.log(
       `Done: ${dryRun ? "would upsert" : "upserted"} ${upserted} bin row(s); source had ${rows.length}; skipped (missing target location): ${skippedNoLocation}`,
     );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const code = typeof e === "object" && e && "code" in e ? String((e).code) : "";
+    if (
+      code === "ETIMEDOUT" ||
+      code === "ECONNREFUSED" ||
+      msg.includes("ETIMEDOUT") ||
+      msg.includes("ECONNREFUSED")
+    ) {
+      console.error(`
+Target Postgres is not reachable from this PC (firewall or DB port not published to the internet).
+
+Fix one of:
+  1) Coolify → Postgres → expose the mapped port on 0.0.0.0 and open it in the VPS firewall, or
+  2) SSH tunnel, then copy bins:
+       npm run db:copy-bins:tunnel
+     (needs ssh to the Coolify server; forwards local 15432 → server 127.0.0.1:3000 by default)
+
+Manual tunnel (terminal 1, leave open):
+  ssh -N -L 15432:127.0.0.1:3000 root@YOUR_VPS_IP
+
+Then (terminal 2), same user/password/db as .env.coolify.local but host 127.0.0.1 port 15432:
+  set TARGET_DATABASE_URL=postgresql://USER:PASS@127.0.0.1:15432/postgres
+  npm run db:copy-bins
+`);
+    }
+    throw e;
   } finally {
     await srcPool.end();
     await dstPool.end();
