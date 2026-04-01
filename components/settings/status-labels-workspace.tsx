@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import useSWR from "swr";
-import { Pencil } from "lucide-react";
+import { Bot, Crown, Ghost, Pencil } from "lucide-react";
 import type { StatusLabelRow } from "@/lib/queries/status-labels";
 import { STATUS_LABEL_NAME_TOOLTIPS } from "@/lib/settings/status-label-tooltips";
 
@@ -17,6 +17,63 @@ const fetcher = async (url: string) => {
 
 function yn(v: boolean) {
   return v ? "Yes" : "No";
+}
+
+/** Rule icons (Lucide in chips) — centered column, even spacing, tooltips. */
+function StatusRuleIcons({ row }: { row: StatusLabelRow }) {
+  const ghost = !row.is_visible_to_scanner;
+  const chips: { key: string; title: string; el: ReactNode }[] = [];
+  if (row.super_admin_locked) {
+    chips.push({
+      key: "lock",
+      title: "Super Admin lock — staff cannot change items in this status without Super Admin",
+      el: (
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-amber-500/35 bg-amber-500/[0.12] text-amber-400">
+          <Crown className="h-4 w-4" strokeWidth={2} aria-hidden />
+        </span>
+      ),
+    });
+  }
+  if (ghost) {
+    chips.push({
+      key: "ghost",
+      title: "Ghost — handheld ignores reads (no beep, no count)",
+      el: (
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-violet-500/35 bg-violet-500/[0.12] text-violet-300">
+          <Ghost className="h-4 w-4" strokeWidth={2} aria-hidden />
+        </span>
+      ),
+    });
+  }
+  if (row.is_system_only) {
+    chips.push({
+      key: "bot",
+      title: "System-only — hidden from staff status pickers; Super Admin may still assign",
+      el: (
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-sky-500/35 bg-sky-500/[0.12] text-sky-300">
+          <Bot className="h-4 w-4" strokeWidth={2} aria-hidden />
+        </span>
+      ),
+    });
+  }
+
+  if (chips.length === 0) {
+    return (
+      <div className="flex min-h-[2.25rem] items-center justify-center">
+        <span className="font-mono text-xs text-[var(--wms-muted)]">—</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-[2.25rem] flex-wrap items-center justify-center gap-2 px-1" role="group" aria-label="Status rule indicators">
+      {chips.map((c) => (
+        <span key={c.key} title={c.title} className="inline-flex shrink-0 cursor-default" aria-label={c.title}>
+          {c.el}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function RuleSummary({ row }: { row: StatusLabelRow }) {
@@ -141,14 +198,13 @@ export function StatusLabelsWorkspace() {
               <th className={th}>Web sellable</th>
               <th className={th}>Scanner</th>
               <th className={th}>UI visible</th>
-              <th className={th}>Icons</th>
+              <th className={`${th} w-[9.5rem] text-center`}>Icons</th>
               <th className={`${th} pr-3 text-right`}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--wms-border)]/80">
             {rows.map((row) => {
               const tip = STATUS_LABEL_NAME_TOOLTIPS[row.name] ?? "";
-              const ghost = !row.is_visible_to_scanner;
               return (
                 <tr key={row.id} className="text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/50">
                   <td className="px-3 py-2">
@@ -164,20 +220,8 @@ export function StatusLabelsWorkspace() {
                     {row.is_visible_to_scanner ? "Yes" : "Ignore"}
                   </td>
                   <td className="px-2 py-2 text-center font-mono text-xs">{yn(row.is_visible_in_ui)}</td>
-                  <td
-                    className="px-2 py-2 text-center text-lg"
-                    title={[
-                      row.super_admin_locked ? "Super Admin lock" : "",
-                      ghost ? "Ghost (handheld ignores)" : "",
-                      row.is_system_only ? "System-only picker" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  >
-                    {row.super_admin_locked ? "👑" : ""}
-                    {ghost ? "👻" : ""}
-                    {row.is_system_only ? "🤖" : ""}
-                    {!row.super_admin_locked && !ghost && !row.is_system_only ? "—" : ""}
+                  <td className="align-middle px-2 py-2">
+                    <StatusRuleIcons row={row} />
                   </td>
                   <td className="px-2 py-2 text-right">
                     <button
