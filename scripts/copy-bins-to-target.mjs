@@ -6,9 +6,9 @@
  * Usage:
  *   SOURCE_DATABASE_URL="postgresql://..." TARGET_DATABASE_URL="postgresql://..." node scripts/copy-bins-to-target.mjs
  *
- * If env vars are omitted, loads:
- *   - Source: SOURCE_DATABASE_URL, else DATABASE_URL from `.env`
- *   - Target: TARGET_DATABASE_URL, else DATABASE_URL from `.env.coolify.local`
+ * If env vars are omitted, loads from files only (avoids shell `DATABASE_URL` matching both):
+ *   - Source: SOURCE_DATABASE_URL (env), else COPY_BINS_SOURCE_DATABASE_URL or DATABASE_URL in `.env`
+ *   - Target: TARGET_DATABASE_URL (env), else DATABASE_URL in `.env.coolify.local`
  *
  * Options:
  *   --dry-run     List counts only, no writes
@@ -66,8 +66,8 @@ function resolveUrls() {
 
   const source =
     process.env.SOURCE_DATABASE_URL?.trim() ||
-    dotEnv.DATABASE_URL?.trim() ||
-    process.env.DATABASE_URL?.trim();
+    dotEnv.COPY_BINS_SOURCE_DATABASE_URL?.trim() ||
+    dotEnv.DATABASE_URL?.trim();
   const target =
     process.env.TARGET_DATABASE_URL?.trim() || coolify.DATABASE_URL?.trim();
 
@@ -80,7 +80,7 @@ async function main() {
 
   if (!source) {
     console.error(
-      "Missing source URL: set SOURCE_DATABASE_URL or DATABASE_URL in .env",
+      "Missing source URL: set SOURCE_DATABASE_URL, or COPY_BINS_SOURCE_DATABASE_URL / DATABASE_URL in .env",
     );
     process.exit(1);
   }

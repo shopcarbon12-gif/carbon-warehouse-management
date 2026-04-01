@@ -17,10 +17,6 @@ const wmsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "CarbonWMS",
   description: "CarbonWMS — warehouse management, inventory, lots, and operations.",
-  icons: {
-    icon: [{ url: "/carbonwms-icon.png", type: "image/png" }],
-    apple: [{ url: "/carbonwms-icon.png", type: "image/png" }],
-  },
 };
 
 export default function RootLayout({
