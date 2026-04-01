@@ -215,8 +215,6 @@
     }
     .table-mock th, .table-mock td { padding: 0.65rem 0.5rem; text-align: left; }
     .table-mock tbody tr:nth-child(even) { background: rgba(243, 243, 244, 0.6); }
-    .principles { margin: 0; padding-left: 1.2rem; color: var(--on-surface-muted); }
-    .principles li { margin-bottom: 0.45rem; }
     .md-quote {
       background: var(--surface-low);
       padding: 1rem 1.15rem;
@@ -261,6 +259,64 @@
       padding-top: 1rem;
       border-top: 1px solid var(--surface-mid);
     }
+    /* Full DESIGN (2).md body */
+    .design-spec .source-tag {
+      font-size: 0.65em;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--c-primary);
+      vertical-align: middle;
+    }
+    .design-spec .md-body {
+      max-width: 78ch;
+      color: var(--on-surface-muted);
+    }
+    .design-spec .md-body > h3 {
+      font-size: 1.08rem;
+      font-weight: 700;
+      color: var(--on-surface);
+      margin: 1.75rem 0 0.65rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--surface-mid);
+    }
+    .design-spec .md-body > h3:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: none;
+    }
+    .design-spec .md-body > h4 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--on-surface);
+      margin: 1.1rem 0 0.45rem;
+    }
+    .design-spec .md-body p { margin: 0 0 0.75rem; }
+    .design-spec .md-body ul {
+      margin: 0 0 0.85rem;
+      padding-left: 1.2rem;
+    }
+    .design-spec .md-body li { margin-bottom: 0.4rem; }
+    .design-spec .md-body hr {
+      border: none;
+      border-top: 1px solid var(--surface-mid);
+      margin: 1.25rem 0;
+    }
+    .design-spec code.token {
+      font-size: 0.88em;
+      background: var(--surface-low);
+      padding: 0.1em 0.35em;
+      border-radius: var(--radius-sm);
+    }
+    .carbon-note {
+      background: rgba(11, 149, 151, 0.08);
+      border-left: 4px solid var(--c-primary);
+      padding: 0.85rem 1rem;
+      margin: 0.85rem 0;
+      font-size: 0.9rem;
+      color: var(--on-surface);
+    }
+    .carbon-note strong { color: var(--on-surface); }
   </style>
 </head>
 <body>
@@ -271,10 +327,100 @@
   <main>
     <h1>CarbonWMS light theme — unified direction</h1>
     <p class="lede">
-      This document merges your <strong>scheme.png</strong> palette with <strong>DESIGN (2).md</strong> surfaces and spacing ideas.
-      <strong>Clarification (your pic1 — Inventory catalog):</strong> “Not colorful” was <strong>not</strong> a request to grey-out the product. It meant: don’t add extra decorative treatment (e.g. teal <em>gradients</em> from an early mock). The <strong>canonical action style</strong> is the catalog toolbar: <strong>solid</strong> green (New / Export), blue (Import), slate (dropdowns like Lightspeed), orange (More) — white text, no gradients. Light-theme work should make <strong>every page use that same pattern</strong> so the app looks consistent.
-      <strong>Fonts:</strong> keep existing CarbonWMS families; only size/weight/contrast as needed.
+      Below is the <strong>full text</strong> of <code>DESIGN (2).md</code> (Industrial Precision), then <strong>scheme.png</strong>, token mapping, and mocks. CarbonWMS-specific notes appear in green callouts where the live product differs (e.g. Inventory catalog toolbar colors, no font stack swap).
     </p>
+
+    <section class="design-spec" id="design-md-full">
+      <h2>Design System Strategy: Industrial Precision <span class="source-tag">D:\Downloads\DESIGN (2).md</span></h2>
+      <article class="md-body">
+        <h3>1. Overview &amp; Creative North Star</h3>
+        <p>The North Star for this design system is <strong>“Aggressive Functionalism.”</strong></p>
+        <p>In an industrial warehouse environment, there is no room for decoration—only performance. This system rejects the “web-style” template in favor of an editorial, high-precision aesthetic. We move beyond standard UI by utilizing a “No-Line” architecture, where structure is defined by tonal weight and negative space rather than strokes.</p>
+        <p>The layout should feel like a high-end technical manual: asymmetric balance, bold monochromatic shifts, and a ruthless commitment to touch ergonomics. We are not just building an app; we are building a digital tool that feels as solid and reliable as the hardware it runs on.</p>
+
+        <h3>2. Colors &amp; Tonal Architecture</h3>
+        <p>The palette is rooted in a pure white base, contrasted by a deep, authoritative Teal and a spectrum of functional grays.</p>
+        <h4>The “No-Line” Rule</h4>
+        <p><strong>Explicit Instruction:</strong> Prohibit the use of 1px solid borders for sectioning or containment.</p>
+        <ul>
+          <li><strong>Separation:</strong> Use background shifts (e.g. <code class="token">surface-container-low</code> <strong>#F3F3F4</strong>) against the pure white <code class="token">surface-container-lowest</code> (<strong>#FFFFFF</strong>).</li>
+          <li><strong>Definition:</strong> Boundaries are created through the <code class="token">surface</code> hierarchy. A card should never be “outlined”; it should “exist” as a tonal change.</li>
+        </ul>
+        <h4>Surface Hierarchy &amp; Nesting</h4>
+        <p>Treat the UI as a series of physical plates. Use the following tiers to define depth:</p>
+        <ul>
+          <li><strong>Base:</strong> <code class="token">surface-container-lowest</code> (<strong>#FFFFFF</strong>) for the primary canvas.</li>
+          <li><strong>Sectioning:</strong> <code class="token">surface-container-low</code> (<strong>#F3F3F4</strong>) for grouping related inputs.</li>
+          <li><strong>Interaction:</strong> <code class="token">surface-container</code> (<strong>#EEEEEE</strong>) for inactive buttons or secondary fields.</li>
+          <li><strong>Nesting:</strong> Place a high-priority data read-out (using <code class="token">surface-bright</code>) inside a <code class="token">surface-container-high</code> zone to create a “recessed” look that draws the eye.</li>
+        </ul>
+        <h4>Signature Textures</h4>
+        <ul>
+          <li><strong>The Teal Gradient:</strong> For primary actions (Login, Submit), transition from <code class="token">primary</code> to <code class="token">primary_container</code>. This subtle vertical gradient prevents the “flat” look and adds a premium, tactile weight.</li>
+          <li><strong>Glassmorphism:</strong> Use for floating notifications or “Scan Success” overlays. Use <code class="token">surface</code> colors at 80% opacity with a <strong>20px</strong> backdrop-blur to maintain context of the warehouse floor while focusing the user.</li>
+        </ul>
+        <p class="carbon-note"><strong>CarbonWMS:</strong> Toolbar actions follow the <strong>Inventory catalog</strong> pattern — solid green / blue / slate / orange, white text, <strong>no</strong> teal gradient on those controls. Teal remains for brand accent, links, and header strip. Glassmorphism only where we already use overlays.</p>
+
+        <h3>3. Typography: The Dual-Engine System</h3>
+        <p>We utilize two distinct type families to separate “UI Instruction” from “Industrial Data.”</p>
+        <ul>
+          <li><strong>UI Engine (Manrope/Inter):</strong> High-readability sans-serif for navigation and labels.
+            <ul>
+              <li><em>Display/Headline:</em> Use <strong>Manrope</strong> for an aggressive, geometric feel.</li>
+              <li><em>Body/Title:</em> Use <strong>Inter</strong> for neutral, utilitarian communication.</li>
+            </ul>
+          </li>
+          <li><strong>Data Engine (Space Grotesk / Monospace):</strong> All EPC, UPC, SKU, and Location data <strong>must</strong> use the <code class="token">label-md</code> or <code class="token">label-sm</code> scales (Space Grotesk). The fixed width ensures that alphanumeric codes are easily scannable and never misread.</li>
+        </ul>
+        <p><strong>Editorial Hierarchy:</strong> Use a “High-Contrast” scale. If a headline is <code class="token">headline-lg</code>, the supporting label should be <code class="token">label-sm</code>. This dramatic difference in scale eliminates ambiguity in high-stress environments.</p>
+        <p class="carbon-note"><strong>CarbonWMS:</strong> Keep <strong>existing</strong> app font families (no switch to Manrope/Inter/Space Grotesk as new dependencies). Apply the same <em>idea</em>: clear hierarchy via size/weight; monospace for codes if already in use.</p>
+
+        <h3>4. Elevation &amp; Depth</h3>
+        <p>Depth is achieved through <strong>Tonal Layering</strong>, not structural lines.</p>
+        <ul>
+          <li><strong>Layering Principle:</strong> Stack surfaces. A <code class="token">surface-container-lowest</code> card sitting on a <code class="token">surface-container-low</code> background provides sufficient contrast for the human eye without the visual “noise” of a border.</li>
+          <li><strong>Ambient Shadows:</strong> For floating elements (Modals/Quick-Actions), use extra-diffused shadows.
+            <ul>
+              <li><em>Specs:</em> <strong>Y: 8px, Blur: 24px, Color: on_surface @ 6%.</strong> This mimics soft, overhead warehouse lighting.</li>
+            </ul>
+          </li>
+          <li><strong>The “Ghost Border” Fallback:</strong> If a high-contrast scenario (like an error state) requires containment, use <code class="token">outline_variant</code> (<strong>#C6C5D4</strong>) at 20% opacity. <strong>Never use 100% opaque borders.</strong></li>
+        </ul>
+
+        <h3>5. Components &amp; Ergonomics</h3>
+        <h4>The 56dp Glove-Touch Rule</h4>
+        <p>Every interactive element must have a minimum hit area of <strong>56dp</strong>. This accounts for industrial glove usage and rapid, high-vibration movement.</p>
+        <ul>
+          <li><strong>Buttons:</strong>
+            <ul>
+              <li><strong>Primary:</strong> Teal gradient, <code class="token">rounded-md</code> (0.375rem), white text.</li>
+              <li><strong>Secondary:</strong> <code class="token">surface-container-high</code> background, <code class="token">on_surface</code> text. No border.</li>
+            </ul>
+          </li>
+          <li><strong>Input Fields:</strong> Use <code class="token">surface-container-low</code> backgrounds. Labels should be <code class="token">label-md</code> and always visible (never floating placeholders). Height must be exactly <strong>64dp</strong> to accommodate large touch targets.</li>
+          <li><strong>Data Cards:</strong> Use <code class="token">1.5</code> (0.5rem) or <code class="token">2</code> (0.7rem) spacing between elements. Forbid divider lines; use a <code class="token">3</code> (1rem) vertical gap to separate SKU entries.</li>
+          <li><strong>Inventory Chips:</strong> Use <code class="token">rounded-sm</code> (0.125rem) for a more “mechanical” look. Use <code class="token">tertiary_container</code> for high-priority alerts (e.g. Low Stock).</li>
+        </ul>
+        <p class="carbon-note"><strong>CarbonWMS:</strong> Aim for generous tap targets on web where practical; catalog toolbar buttons stay <strong>solid role colors</strong> (not necessarily teal gradient primary). Inputs: visible labels + contrast fixes in light theme.</p>
+
+        <h3>6. Do’s and Don’ts</h3>
+        <h4>Do</h4>
+        <ul>
+          <li><strong>DO</strong> use Monospaced fonts for all UPC and SKU data to ensure characters like ‘0’ and ‘O’ are distinguishable.</li>
+          <li><strong>DO</strong> rely on the Spacing Scale (specifically <code class="token">spacing-4</code> and <code class="token">spacing-6</code>) to create “breathing room” that guides the eye.</li>
+          <li><strong>DO</strong> use <code class="token">surface-dim</code> for inactive states to maintain the “No-Line” aesthetic.</li>
+          <li><strong>DO</strong> treat the UI as an editorial layout—use bold, large headings to anchor the screen.</li>
+        </ul>
+        <h4>Don’t</h4>
+        <ul>
+          <li><strong>DON’T</strong> use 1px borders to separate list items. Use a 1px <code class="token">surface-container-highest</code> background strip if separation is critical, or simply use <code class="token">spacing-px</code>.</li>
+          <li><strong>DON’T</strong> use standard blue (<strong>#0000FF</strong>). Stick strictly to the primary Teal for a premium feel.</li>
+          <li><strong>DON’T</strong> use “Soft” rounded corners (e.g. <code class="token">xl</code>). Keep the industrial vibe with <code class="token">sm</code> or <code class="token">md</code> (0.125rem to 0.375rem).</li>
+          <li><strong>DON’T</strong> use drop shadows on buttons; let the tonal shifts and gradients provide the affordance.</li>
+        </ul>
+        <p class="carbon-note"><strong>CarbonWMS:</strong> <strong>Import</strong> in the catalog intentionally uses <strong>blue</strong> as a semantic role color — we keep that. Avoid neon #0000FF; use the same controlled blue token as the catalog. Shadows on buttons: prefer flat solids; optional very soft shadow only if needed for contrast on light backgrounds.</p>
+      </article>
+    </section>
 
     <section>
       <h2>Reference — scheme.png</h2>
@@ -364,13 +510,9 @@
     </section>
 
     <section>
-      <h2>Principles excerpt — DESIGN (2).md</h2>
-      <ul class="principles">
-        <li><strong>No-line architecture:</strong> structure from surface tiers (#FFF / #F3F3F4 / #EEE), not busy borders.</li>
-        <li><strong>Type:</strong> DESIGN doc suggested dual families — <strong>we will not change fonts</strong>; we only borrow surface and spacing ideas from the doc.</li>
-        <li><strong>56dp targets</strong> for primary actions in field-heavy flows where feasible on web.</li>
-      </ul>
+      <h2>Pull quote — DESIGN (2).md</h2>
       <p class="md-quote">“The layout should feel like a high-end technical manual: asymmetric balance, bold monochromatic shifts, and a ruthless commitment to touch ergonomics.”</p>
+      <p class="caption" style="margin-top:0.75rem;">Full sections 1–6 are in <a href="#design-md-full">Design System Strategy (above)</a>.</p>
     </section>
 
     <footer class="note">
