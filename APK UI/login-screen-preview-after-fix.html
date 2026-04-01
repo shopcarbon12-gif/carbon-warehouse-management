@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>CarbonWMS Login — Preview After Fixes (Pic 2 parity)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f5f5f5;
+      --tray: #ececec;
+      --label: #4a5454;
+      --muted: #8a9090;
+      --text: #171d1d;
+      --teal: #1b7d7d;
+      --phone-w: 390px;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, system-ui, sans-serif;
+      background: #1e293b;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem 0.75rem 2rem;
+      gap: 1rem;
+    }
+    .banner {
+      color: #e2e8f0;
+      max-width: 520px;
+      text-align: center;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+    .banner strong { color: #5eead4; }
+    .phone {
+      width: min(100%, var(--phone-w));
+      background: var(--bg);
+      border-radius: 28px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.45);
+      overflow: hidden;
+      border: 3px solid #334155;
+    }
+    .status {
+      height: 28px;
+      background: var(--bg);
+    }
+    .screen {
+      padding: 8px 22px 18px;
+      min-height: 640px;
+      display: flex;
+      flex-direction: column;
+    }
+    .brand {
+      text-align: center;
+      margin-top: 4px;
+    }
+    .logo {
+      width: 152px;
+      height: 152px;
+      margin: 0 auto;
+      background: #000;
+      border-radius: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255,255,255,0.25);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    .title {
+      margin: 6px 0 0;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.6px;
+      color: #000;
+      line-height: 1.05;
+    }
+    .subtitle {
+      margin: 4px 0 0;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.45px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .row-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: 18px;
+      margin-bottom: 6px;
+    }
+    .lbl {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.9px;
+      color: var(--label);
+      text-transform: uppercase;
+    }
+    .ssl {
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.35px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .tray {
+      height: 52px;
+      background: var(--tray);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 10px;
+    }
+    .tray .ic {
+      width: 22px;
+      height: 22px;
+      opacity: 0.75;
+      flex-shrink: 0;
+    }
+    .tray .val {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mac {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 500;
+      color: #6d7373;
+      margin-top: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+    .field-block { margin-top: 14px; }
+    .field-block .row-label { margin-top: 0; margin-bottom: 6px; }
+    /* Key fix vs Pic 1: NO inner white box — text sits directly in gray tray */
+    .input-ghost {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text);
+      outline: none;
+      padding: 0;
+      min-width: 0;
+    }
+    .input-ghost::placeholder {
+      color: var(--muted);
+    }
+    .eye {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.65;
+      flex-shrink: 0;
+    }
+    .checks {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .cb {
+      width: 22px;
+      height: 22px;
+      border: 1.5px solid var(--teal);
+      border-radius: 3px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .cb.on { background: var(--teal); }
+    .cb.off { background: transparent; color: transparent; }
+    .spacer { flex: 1; min-height: 12px; }
+    .btn {
+      height: 52px;
+      background: var(--teal);
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 1.1px;
+      text-transform: uppercase;
+      margin-top: 8px;
+    }
+    .note {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.35;
+    }
+    a.back {
+      color: #94a3b8;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <p class="banner">
+    <strong>Preview only</strong> — static HTML approximation of <strong>Pic 2</strong> after planned fixes:<br />
+    single gray trays (no inner white boxes), teal accents only, no <code style="color:#94a3b8;">FittedBox</code> shrink when keyboard opens (that behavior cannot be simulated accurately in static HTML).
+  </p>
+
+  <div class="phone" aria-label="Phone preview">
+    <div class="status"></div>
+    <div class="screen">
+      <div class="brand">
+        <div class="logo" title="Production asset: honeycomb on black">LOGO</div>
+        <h1 class="title">CarbonWMS</h1>
+        <p class="subtitle">Warehouse management software</p>
+      </div>
+
+      <div class="row-label">
+        <span class="lbl">Server URL</span>
+        <span class="ssl">Connected via SSL</span>
+      </div>
+      <div class="tray">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg>
+        <span class="val">https://wms.shopcarbon.com</span>
+      </div>
+      <p class="mac">MAC 48:2F:6B:12:34:56</p>
+
+      <div class="field-block">
+        <div class="row-label">
+          <span class="lbl">User email</span>
+        </div>
+        <div class="tray">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1c0-3 3-5 7-5s7 2 7 5v1"/></svg>
+          <input class="input-ghost" type="email" placeholder="user@carbonjeanscompany.com" value="" readonly tabindex="-1" />
+        </div>
+      </div>
+
+      <div class="field-block">
+        <div class="row-label">
+          <span class="lbl">Password</span>
+        </div>
+        <div class="tray">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          <span class="val" style="letter-spacing:2px;">•••••••••••••</span>
+          <div class="eye" title="Visibility toggle">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="checks">
+        <label class="check-row">
+          <span class="cb on">✓</span>
+          Remember email on this device
+        </label>
+        <label class="check-row">
+          <span class="cb off">✓</span>
+          Biometric login
+        </label>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="btn">Sign in</div>
+      <p class="note">Inner white “pill” removed · No green focus ring (teal/neutral only) · Layout does not scale as a block when keyboard opens</p>
+    </div>
+  </div>
+
+  <a class="back" href="login-screen-gap-report-pic1-vs-pic2.html">← Back to gap report</a>
+</body>
+</html>

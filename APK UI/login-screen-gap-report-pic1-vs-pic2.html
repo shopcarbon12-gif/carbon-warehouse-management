@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CarbonWMS Login — Gap Report (Pic 1 vs Pic 2) + Known Bugs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #fff;
+      --text: #1a1f24;
+      --muted: #5c656d;
+      --border: #e2e6ea;
+      --teal: #1b7d7d;
+      --warn: #b45309;
+      --bad: #b91c1c;
+      --ok: #047857;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--text);
+      background: var(--bg);
+    }
+    header {
+      background: linear-gradient(135deg, #0f172a 0%, #134e4a 100%);
+      color: #fff;
+      padding: 2rem 1.5rem 2.5rem;
+    }
+    header h1 { margin: 0 0 0.35rem; font-size: 1.65rem; font-weight: 800; letter-spacing: -0.02em; }
+    header p { margin: 0; opacity: 0.9; max-width: 52rem; }
+    .meta {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+    main { max-width: 56rem; margin: -1.5rem auto 3rem; padding: 0 1.25rem; }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+      padding: 1.75rem 1.5rem;
+      margin-bottom: 1.25rem;
+      border: 1px solid var(--border);
+    }
+    h2 {
+      margin: 0 0 1rem;
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #0f172a;
+      border-bottom: 2px solid var(--teal);
+      padding-bottom: 0.35rem;
+    }
+    h3 { margin: 1.25rem 0 0.5rem; font-size: 1rem; font-weight: 700; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.65rem 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; font-weight: 700; }
+    .gap { color: var(--bad); font-weight: 600; }
+    .ok { color: var(--ok); font-weight: 600; }
+    .partial { color: var(--warn); font-weight: 600; }
+    ul { margin: 0.35rem 0 0.75rem 1.1rem; padding: 0; }
+    li { margin: 0.35rem 0; }
+    code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.82em; }
+    .callout {
+      border-left: 4px solid var(--teal);
+      background: #f0fdfa;
+      padding: 1rem 1rem 1rem 1.1rem;
+      margin: 1rem 0;
+      border-radius: 0 8px 8px 0;
+    }
+    .callout.bad { border-left-color: var(--bad); background: #fef2f2; }
+    .callout.warn { border-left-color: var(--warn); background: #fffbeb; }
+    .toc a { color: var(--teal); font-weight: 600; }
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .preview-link {
+      display: inline-block;
+      margin-top: 0.75rem;
+      padding: 0.65rem 1.1rem;
+      background: var(--teal);
+      color: #fff !important;
+      text-decoration: none;
+      font-weight: 700;
+      border-radius: 8px;
+    }
+    .preview-link:hover { filter: brightness(1.08); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CarbonWMS Login UI — Gap &amp; Bug Report</h1>
+    <p>
+      Compares <strong>Pic 1</strong> (current Flutter implementation on device) with <strong>Pic 2</strong> (approved mock / target).
+      Also documents <strong>Pic 3</strong> (keyboard layout shrink) and <strong>Pic 4</strong> (biometric failure messaging).
+    </p>
+    <p class="meta">
+      Status: <strong>Report only</strong> — no code changes were made in the repository for this deliverable.
+      Approve this document before engineering implements fixes.
+    </p>
+    <a class="preview-link" href="login-screen-preview-after-fix.html">Open post-fix HTML preview →</a>
+  </header>
+
+  <main>
+    <nav class="card toc">
+      <h2 style="border: none; padding: 0; margin: 0 0 0.75rem;">Contents</h2>
+      <ul style="list-style: none; margin: 0; padding: 0;">
+        <li><a href="#summary">1. Executive summary</a></li>
+        <li><a href="#comparison">2. Pic 1 vs Pic 2 — comparison matrix</a></li>
+        <li><a href="#detailed">3. Detailed visual gaps</a></li>
+        <li><a href="#keyboard">4. Bug: keyboard open — full screen shrinks (Pic 3)</a></li>
+        <li><a href="#biometric">5. Bug: biometric “not working” (Pic 4)</a></li>
+        <li><a href="#proposed">6. Proposed remediation outline (pending your approval)</a></li>
+      </ul>
+    </nav>
+
+    <section class="card" id="summary">
+      <h2>1. Executive summary</h2>
+      <p>
+        Pic 1 shows the shipped login screen after the last implementation pass. It is <strong>close</strong> to Pic 2 in structure (logo, title, subtitle, server row, email, password, checkboxes, teal SIGN IN),
+        but several <strong>Material Design side effects</strong> and one <strong>layout strategy</strong> diverge from the flat mock.
+      </p>
+      <ul>
+        <li><strong>Primary visual gap:</strong> Email and password fields show an <strong>inner white “pill” or nested field</strong> with border (Pic 1). Pic 2 shows a <strong>single light-gray rounded tray</strong> only — no inner white box, no extra outline (except optional focus ring not visible in static mock).</li>
+        <li><strong>Password focus (Pic 3):</strong> A <strong>bright green border</strong> around the password inner area is visible — not present in Pic 2 (teal/gray system only). This is consistent with Flutter’s default <code>InputDecorator</code> / theme focus border when Material 3 or a theme color maps focus to green.</li>
+        <li><strong>Keyboard shrink (Pic 3):</strong> When the IME opens, the <strong>entire form scales down</strong> (logo, text, fields, button). Root cause in code: <code>FittedBox(fit: BoxFit.scaleDown)</code> inside an <code>Expanded</code> that receives a <strong>reduced max height</strong> when the scaffold resizes for the keyboard (<code>resizeToAvoidBottomInset: true</code> by default).</li>
+        <li><strong>Biometric (Pic 4):</strong> The exact snackbar text matches the <strong>post-login enrollment</strong> path in <code class="mono">login_screen.dart</code> when the user cancels or <code class="mono">local_auth</code> fails. The app then still proceeds to the dashboard because enrollment is optional. “Not working” may mean enrollment fails, vault empty, or users expect biometric on dashboard without prior successful enrollment.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="comparison">
+      <h2>2. Pic 1 vs Pic 2 — comparison matrix</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Element</th>
+            <th>Pic 2 (target mock)</th>
+            <th>Pic 1 (current)</th>
+            <th>Gap</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Page background</td>
+            <td>Very light gray / off-white, clean card feel</td>
+            <td>Light gray (<code class="mono">#F5F5F5</code> class)</td>
+            <td class="ok">Aligned</td>
+          </tr>
+          <tr>
+            <td>Logo</td>
+            <td>Mock shows rounded dark tile with placeholder text; production uses supplied honeycomb asset</td>
+            <td>Black square + white line art (correct asset)</td>
+            <td class="partial">Mock vs brand asset — implementation follows product asset, not placeholder tile</td>
+          </tr>
+          <tr>
+            <td>Title “CarbonWMS”</td>
+            <td>Bold black sans, strong hierarchy</td>
+            <td>Large bold Inter</td>
+            <td class="ok">Largely aligned</td>
+          </tr>
+          <tr>
+            <td>Subtitle</td>
+            <td>Small caps gray, tracked</td>
+            <td>Smaller gray caps</td>
+            <td class="partial">Fine-tune size/letter-spacing vs mock</td>
+          </tr>
+          <tr>
+            <td>SERVER URL row</td>
+            <td>Label left, CONNECTED VIA SSL right; single gray tray; URL read-only</td>
+            <td>Same structure; URL read-only in tray</td>
+            <td class="ok">Aligned</td>
+          </tr>
+          <tr>
+            <td>Device line (MAC …)</td>
+            <td>Shown in mock (sample MAC)</td>
+            <td>Hidden when API marks device authorized</td>
+            <td class="partial">By design vs static mock — document for stakeholders</td>
+          </tr>
+          <tr>
+            <td>USER EMAIL field</td>
+            <td>One gray rounded container; icon + text/hint; <strong>no inner white box</strong></td>
+            <td>Gray outer tray + <strong>inner white bordered inset</strong> (Pic 1)</td>
+            <td class="gap">Major visual gap</td>
+          </tr>
+          <tr>
+            <td>PASSWORD field</td>
+            <td>Same as email — single tray; eye icon; dots</td>
+            <td>Same nested white box; <strong>green focus border</strong> when focused (Pic 3)</td>
+            <td class="gap">Major + focus color wrong</td>
+          </tr>
+          <tr>
+            <td>Checkboxes</td>
+            <td>Teal outline / filled when checked</td>
+            <td>Teal outline + fill</td>
+            <td class="ok">Close</td>
+          </tr>
+          <tr>
+            <td>SIGN IN</td>
+            <td>Solid teal, white caps, full width</td>
+            <td>Solid teal bar</td>
+            <td class="ok">Aligned</td>
+          </tr>
+          <tr>
+            <td>Vertical rhythm</td>
+            <td>Even spacing; not crowded top/bottom</td>
+            <td>Tighter; worsens when keyboard scales content</td>
+            <td class="partial">Spacing + keyboard interaction</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card" id="detailed">
+      <h2>3. Detailed visual gaps</h2>
+
+      <h3>3.1 Nested “double box” on email and password (Pic 1)</h3>
+      <p>
+        Pic 2 describes fields as <strong>light gray containers with rounded corners only</strong> — “no borders” except the outer fill shape.
+        Pic 1 shows a <strong>secondary inner shape</strong> (white, thin dark border) that reads as a different component inside the tray.
+      </p>
+      <ul>
+        <li><strong>Likely cause:</strong> Flutter <code class="mono">TextField</code> / <code class="mono">InputDecoration</code> default filled decoration, or theme <code class="mono">filled: true</code> with a white <code class="mono">fillColor</code> inside a parent gray <code class="mono">Container</code>.</li>
+        <li><strong>Target:</strong> Transparent input background inside the gray tray; no visible inner border in default state; focus state should match brand (teal/neutral), not system green.</li>
+      </ul>
+
+      <h3>3.2 Focus / error border color (green on password, Pic 3)</h3>
+      <p>
+        The mock’s accent is <strong>teal</strong> (~<code class="mono">#1B7D7D</code> / <code class="mono">#1E7E7E</code>). A <strong>green</strong> focus ring suggests the app theme’s <code class="mono">colorScheme.primary</code> or M3 <code class="mono">InputDecorator</code> mapping is green, or the field is in an “error” or “focused” state styled by the platform theme.
+      </p>
+
+      <h3>3.3 Typography micro-gaps</h3>
+      <ul>
+        <li>Label row: “SERVER URL” / “CONNECTED VIA SSL” weight and size vs mock (minor).</li>
+        <li>Subtitle letter-spacing vs Pic 2 (minor).</li>
+      </ul>
+
+      <h3>3.4 Logo treatment</h3>
+      <p>
+        Pic 2 illustration uses a <strong>rounded</strong> tile with gradient; the approved <strong>production logo</strong> is a square black field with line art. Implementation correctly uses the asset without tinting. Any “gap” vs Pic 2 is <strong>intentional brand vs placeholder</strong>.
+      </p>
+    </section>
+
+    <section class="card" id="keyboard">
+      <h2>4. Bug: keyboard open — full screen shrinks (Pic 3)</h2>
+      <div class="callout warn">
+        <strong>Symptom:</strong> When the soft keyboard opens, the entire login UI (logo, typography, fields, button) appears to <strong>scale down</strong> into the reduced viewport, with tight gaps and almost no padding above the keyboard.
+      </div>
+      <h3>4.1 Technical root cause (current codebase)</h3>
+      <ul>
+        <li><code class="mono">Scaffold</code> defaults to <code class="mono">resizeToAvoidBottomInset: true</code>, so when the keyboard appears, the body’s available height <strong>shrinks</strong>.</li>
+        <li>The login form uses <code class="mono">Expanded</code> → <code class="mono">LayoutBuilder</code> → <code class="mono">FittedBox(fit: BoxFit.scaleDown)</code> wrapping the main <code class="mono">Column</code>.</li>
+        <li><code class="mono">FittedBox.scaleDown</code> uniformly scales its child to fit the <strong>constraints</strong>. Smaller max height ⇒ <strong>smaller scale factor for everything</strong> — hence “whole screen shrink.”</li>
+      </ul>
+      <h3>4.2 Direction for fix (for approval — not implemented)</h3>
+      <ul>
+        <li>Remove <code class="mono">FittedBox</code> for the common case, or gate it only when keyboard is <strong>closed</strong>.</li>
+        <li>Consider <code class="mono">resizeToAvoidBottomInset: false</code> on this screen and pad bottom by <code class="mono">MediaQuery.viewInsets.bottom</code> so content <strong>translates</strong> instead of <strong>scales</strong>.</li>
+        <li>Alternatively, allow a <strong>bounded</strong> scroll only while the keyboard is open (product previously required no scroll — trade-off to confirm).</li>
+      </ul>
+    </section>
+
+    <section class="card" id="biometric">
+      <h2>5. Bug: biometric “not working” (Pic 4)</h2>
+      <div class="callout bad">
+        <strong>Pic 4 text:</strong> “Biometric verification was cancelled or failed. You can try again from Handheld settings.”
+      </div>
+      <h3>5.1 Where this string comes from</h3>
+      <p>
+        This message is shown from <code class="mono">login_screen.dart</code> in the <strong>post–successful-login biometric enrollment</strong> flow: after the user taps “Turn on” in the dialog, <code class="mono">LocalAuthentication.authenticate</code> returns false or throws — not from the dashboard module list itself.
+      </p>
+      <h3>5.2 Why it can appear “on the dashboard” (Pic 4)</h3>
+      <p>
+        Enrollment runs <strong>after</strong> login succeeds and <strong>before</strong> navigation to the dashboard completes. A <code class="mono">SnackBar</code> is shown and the app then calls <code class="mono">onSuccess()</code>. The snackbar <strong>overlays</strong> the next route, so it is visible on top of the modules screen. That matches Pic 4.
+      </p>
+      <h3>5.3 Likely failure modes to verify in a fix pass</h3>
+      <ul>
+        <li>User cancelled the system biometric sheet.</li>
+        <li>Device has no enrolled fingerprints / face.</li>
+        <li><code class="mono">local_auth</code> Android configuration (e.g. <code class="mono">FragmentActivity</code>, manifest permissions, biometric prompt theme).</li>
+        <li>Session token read timing: enrollment stores token from <code class="mono">getSessionToken()</code> after login — if null, vault may stay empty silently in some branches (separate from this snackbar).</li>
+        <li>After logout, vault is cleared — user must enroll again; expectations may mismatch.</li>
+      </ul>
+      <h3>5.4 Direction for fix (for approval — not implemented)</h3>
+      <ul>
+        <li>Reproduce on device with logging around <code class="mono">authenticateWithBiometric</code> and secure storage writes.</li>
+        <li>Align UX: if enrollment fails, optionally show a shorter message or retry on login only (avoid confusing dashboard context).</li>
+        <li>Confirm Android MainActivity extends <code class="mono">FlutterFragmentActivity</code> if required by <code class="mono">local_auth</code> on this Flutter version.</li>
+      </ul>
+    </section>
+
+    <section class="card" id="proposed">
+      <h2>6. Proposed remediation outline (pending approval)</h2>
+      <ol>
+        <li><strong>Visual parity:</strong> Remove inner white filled input decoration; single gray tray; teal/neutral focus only; match Pic 2.</li>
+        <li><strong>Keyboard:</strong> Eliminate scale-down-on-inset; prefer inset padding or controlled scroll; keep SIGN IN usable above keyboard.</li>
+        <li><strong>Biometric:</strong> Debug <code class="mono">local_auth</code> on target devices; tighten enrollment success criteria and messaging; verify vault token persistence.</li>
+      </ol>
+      <p class="callout">
+        <strong>Next step:</strong> After you approve this report, engineering can implement the above in <code class="mono">login_screen.dart</code>, theme/input decoration, <code class="mono">MainActivity</code> (if needed), and related tests.
+      </p>
+      <p>
+        <a class="preview-link" href="login-screen-preview-after-fix.html">View HTML preview of target layout →</a>
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    CarbonWMS · Login gap report · HTML only (no app changes in this step)
+  </footer>
+</body>
+</html>
