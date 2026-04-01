@@ -5,6 +5,10 @@
  *
  *   node scripts/capture-button-theme-pages.mjs
  *
+ * Optional:
+ *   PLAYWRIGHT_CHANNEL=chrome  — use installed Google Chrome (Windows: chrome.exe)
+ *   PLAYWRIGHT_HEADED=1        — headed window (default headless)
+ *
  * Env: same as capture-theme-evidence.mjs (WMS_SCREENSHOT_* or SEED_ADMIN_PASSWORD, PLAYWRIGHT_BASE_URL).
  */
 import fs from "node:fs";
@@ -43,6 +47,8 @@ const password =
   process.env.SEED_ADMIN_PASSWORD?.trim();
 
 const ROUTES = [
+  "/",
+  "/settings/handheld",
   "/infrastructure/devices",
   "/infrastructure/lightspeed-sales",
   "/infrastructure/settings",
@@ -74,7 +80,16 @@ async function tryLogin(page) {
   return true;
 }
 
-const browser = await chromium.launch({ headless: true });
+const channel =
+  process.env.PLAYWRIGHT_CHANNEL?.trim().toLowerCase() === "chrome" ? "chrome" : undefined;
+const headless = process.env.PLAYWRIGHT_HEADED === "1" || process.env.PLAYWRIGHT_HEADED === "true" ? false : true;
+const browser = await chromium.launch({
+  channel,
+  headless,
+});
+if (channel) console.log("Browser: Google Chrome (channel)");
+else console.log("Browser: Playwright Chromium bundle");
+console.log(headless ? "Mode: headless" : "Mode: headed");
 const context = await browser.newContext({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
@@ -96,11 +111,20 @@ if (!ok) {
   process.exit(1);
 }
 
+const settleMs = Number(process.env.WMS_SCREENSHOT_SETTLE_MS || 4200);
+
 for (const route of ROUTES) {
   const name = `${slug(route)}.png`;
   try {
     await page.goto(`${baseURL}${route}`, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await page.waitForTimeout(1600);
+    /* SWR + location switcher need time; handheld page shows “Loading…” briefly. */
+    if (route === "/settings/handheld") {
+      await page
+        .getByRole("button", { name: "Save handheld settings" })
+        .waitFor({ state: "visible", timeout: 45_000 })
+        .catch(() => null);
+    }
+    await page.waitForTimeout(settleMs);
     await page.screenshot({ path: path.join(outDir, name), fullPage: true });
     console.log("saved", name);
   } catch (e) {

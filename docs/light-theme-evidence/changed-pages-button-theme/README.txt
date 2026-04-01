@@ -3,10 +3,17 @@ and Print/commission (teal status bar).
 
 PNG files (gitignored)
 ----------------------
-Run on your machine (app + Postgres + valid user):
+Run on your machine (app + Postgres + valid user), from repo root or D:\cwm:
 
   npm run dev
   npm run evidence:button-theme-pages
+
+Google Chrome (installed) instead of bundled Chromium (Windows):
+
+  PowerShell:  $env:PLAYWRIGHT_CHANNEL="chrome"; npm run evidence:button-theme-pages
+
+Optional: PLAYWRIGHT_HEADED=1 opens a visible Chrome window.
+Optional: WMS_SCREENSHOT_SETTLE_MS=6000 if pages are still loading in captures.
 
 Or set PLAYWRIGHT_BASE_URL=http://127.0.0.1:3050 if you use `next start -p 3050`.
 
@@ -17,6 +24,8 @@ Gallery
 After PNGs exist, open index.html in this folder (double-click) to view all images.
 
 Expected files:
+  root.png  (dashboard — command center)
+  settings__handheld.png
   infrastructure__devices.png
   infrastructure__lightspeed-sales.png
   infrastructure__settings.png
