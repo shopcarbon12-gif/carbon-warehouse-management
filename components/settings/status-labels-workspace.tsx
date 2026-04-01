@@ -26,23 +26,20 @@ function yn(v: boolean) {
 function StatusRuleIcons({ row }: { row: StatusLabelRow }) {
   const ghost = !row.is_visible_to_scanner;
 
+  const emptySlot = (
+    <span className="select-none font-mono text-sm text-[var(--wms-muted)] opacity-50" aria-hidden>
+      –
+    </span>
+  );
+
   const slot = (content: ReactNode, title: string) => (
     <div
       className="flex h-9 w-9 shrink-0 items-center justify-center text-[1.35rem] leading-none"
       title={title}
     >
-      {content ?? <span className="select-none font-mono text-sm text-[var(--wms-muted)] opacity-35" aria-hidden>·</span>}
+      {content ?? emptySlot}
     </div>
   );
-
-  const hasAny = row.super_admin_locked || ghost || row.is_system_only;
-  if (!hasAny) {
-    return (
-      <div className="flex min-h-[2.25rem] items-center justify-center">
-        <span className="font-mono text-xs text-[var(--wms-muted)]">—</span>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-[2.25rem] items-center justify-center" role="group" aria-label="Status rule indicators">
