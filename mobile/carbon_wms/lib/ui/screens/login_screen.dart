@@ -4,7 +4,6 @@ import 'dart:io' show Platform, SocketException;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lucide_icons/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -13,7 +12,8 @@ import 'package:carbon_wms/services/handheld_client_info.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
 
-/// Light login layout aligned with `APK UI` mocks (rounded-md fields, gradient CTA).
+/// Layout: `APK UI/login-screen-preview.html`. Icons match `Login page.html` Material Symbols
+/// (`dns`, `person`, `lock`, `visibility`) via Material [Icons].
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.onSuccess});
 
@@ -27,16 +27,13 @@ class _LoginScreenState extends State<LoginScreen> {
   static const String kDefaultLoginEmail = 'user@carbonjeanscompany.com';
   static const double _fieldHeight = 64;
 
-  /// Email leading icon slightly smaller; server / lock / eye share one size (28px — Lucide eye reads smaller than lock at 24).
-  static const double _iconSizeEmailRow = 20;
-  static const double _iconSizeFieldRow = 28;
+  /// `Login page.html`: person opsz 20; dns / lock / visibility opsz 24.
+  static const double _iconPerson = 20;
+  static const double _iconDnsLockEye = 24;
 
   /// Mint wash like early CarbonWMS handheld mock (not pure white).
   static const Color _bg = Color(0xFFF5FAFA);
   static const Color _fieldFill = Color(0xFFF0F5F4);
-  static const Color _pillFill = Color(0xFFFFFFFF);
-  /// Thin dark edge on white pill (mock: pill inside grey tray).
-  static const Color _pillBorder = Color(0xFF6D7979);
   static const Color _labelGrey = Color(0xFF6D7979);
   static const Color _labelAboveField = Color(0xFF3D4949);
   static const Color _textBlack = Color(0xFF171D1D);
@@ -192,74 +189,41 @@ class _LoginScreenState extends State<LoginScreen> {
         color: _labelGrey,
       );
 
-  static const InputDecoration _pillFieldDeco = InputDecoration(
+  /// Flat tray inputs (no white pill) — `login-screen-preview.html`.
+  static const InputDecoration _trayInputDecoration = InputDecoration(
     border: InputBorder.none,
     isDense: true,
     filled: false,
-    contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+    contentPadding: EdgeInsets.zero,
   );
 
-  /// White rounded pill (text lives here); icons stay in the outer grey [`_fieldFill`] tray.
-  Widget _inputPill({required bool focused, required Widget child}) {
-    return DecoratedBox(
+  Widget _loginTray({
+    required Widget leadingIcon,
+    required Widget input,
+    double gapAfterIcon = 12,
+    double horizontalPadding = 16,
+    Widget? trailing,
+  }) {
+    return Container(
+      height: _fieldHeight,
       decoration: BoxDecoration(
-        color: _pillFill,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: focused ? _primaryTeal : _pillBorder,
-          width: focused ? 2 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
+        color: _fieldFill,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: EdgeInsets.only(
+        left: horizontalPadding,
+        right: trailing != null ? 8 : horizontalPadding,
+      ),
+      alignment: Alignment.center,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          leadingIcon,
+          SizedBox(width: gapAfterIcon),
+          Expanded(child: input),
+          if (trailing != null) trailing,
         ],
       ),
-      child: child,
-    );
-  }
-
-  Widget _labeledRow({
-    required String label,
-    required IconData icon,
-    required Widget field,
-    Widget? trailing,
-    FocusNode? focusNode,
-    double leadingIconSize = _iconSizeFieldRow,
-    double iconAfterGap = 12,
-  }) {
-    final focused = focusNode?.hasFocus ?? false;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(label, style: _fieldLabelStyle),
-        const SizedBox(height: 8),
-        Container(
-          height: _fieldHeight,
-          decoration: BoxDecoration(
-            color: _fieldFill,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          padding: const EdgeInsets.only(left: 12, right: 8),
-          alignment: Alignment.center,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(icon, size: leadingIconSize, color: _labelGrey),
-              SizedBox(width: iconAfterGap),
-              Expanded(
-                child: _inputPill(
-                  focused: focused,
-                  child: field,
-                ),
-              ),
-              if (trailing != null) trailing,
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -530,32 +494,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Container(
-                  height: _fieldHeight,
-                  decoration: BoxDecoration(
-                    color: _fieldFill,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  padding: const EdgeInsets.only(left: 12, right: 12),
-                  alignment: Alignment.center,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Icon(LucideIcons.server, size: _iconSizeFieldRow, color: _labelGrey),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _inputPill(
-                          focused: false,
-                          child: TextField(
-                            controller: _serverUrl,
-                            readOnly: true,
-                            enableInteractiveSelection: true,
-                            style: _inputTextStyle,
-                            decoration: _pillFieldDeco,
-                          ),
-                        ),
-                      ),
-                    ],
+                _loginTray(
+                  leadingIcon: const Icon(Icons.dns, size: _iconDnsLockEye, color: _labelGrey),
+                  gapAfterIcon: 12,
+                  input: TextField(
+                    controller: _serverUrl,
+                    readOnly: true,
+                    enableInteractiveSelection: true,
+                    style: _inputTextStyle,
+                    textAlignVertical: TextAlignVertical.center,
+                    decoration: _trayInputDecoration,
                   ),
                 ),
                 if (_deviceApprovalLine != null) ...[
@@ -571,13 +519,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
                 const SizedBox(height: 24),
-                _labeledRow(
-                  label: 'USER EMAIL',
-                  icon: LucideIcons.user,
-                  leadingIconSize: _iconSizeEmailRow,
-                  iconAfterGap: 4,
-                  focusNode: _emailFocus,
-                  field: TextField(
+                Text('USER EMAIL', style: _fieldLabelStyle),
+                const SizedBox(height: 8),
+                _loginTray(
+                  leadingIcon: const Icon(Icons.person, size: _iconPerson, color: _labelGrey),
+                  gapAfterIcon: 4,
+                  input: TextField(
                     controller: _email,
                     focusNode: _emailFocus,
                     keyboardType: TextInputType.emailAddress,
@@ -585,20 +532,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlignVertical: TextAlignVertical.center,
                     style: _inputTextStyle,
                     cursorColor: _textBlack,
-                    decoration: _pillFieldDeco,
+                    decoration: _trayInputDecoration,
                     onChanged: (_) => unawaited(_refreshVaultUi()),
                   ),
                 ),
                 const SizedBox(height: 24),
-                _labeledRow(
-                  label: 'PASSWORD',
-                  icon: LucideIcons.lock,
-                  focusNode: _passwordFocus,
-                  field: Builder(
+                Text('PASSWORD', style: _fieldLabelStyle),
+                const SizedBox(height: 8),
+                _loginTray(
+                  leadingIcon: const Icon(Icons.lock_outline, size: _iconDnsLockEye, color: _labelGrey),
+                  gapAfterIcon: 12,
+                  input: Builder(
                     builder: (context) {
                       final hasPassword = _password.text.isNotEmpty;
-                      // Empty + obscureText:true makes Flutter paint bullets with [style] (black), not hintStyle.
-                      // Grey dots = hint while empty; real input uses black + obscuring when non-empty.
                       return TextField(
                         controller: _password,
                         focusNode: _passwordFocus,
@@ -608,12 +554,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: _inputTextStyle,
                         cursorColor: _textBlack,
                         decoration: hasPassword
-                            ? _pillFieldDeco
+                            ? _trayInputDecoration
                             : InputDecoration(
                                 border: InputBorder.none,
                                 isDense: true,
                                 filled: false,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                                contentPadding: EdgeInsets.zero,
                                 hintText: '••••••••••••',
                                 hintStyle: _inputTextStyleMuted,
                               ),
@@ -636,8 +582,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           height: 48,
                           child: Center(
                             child: Icon(
-                              _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
-                              size: _iconSizeFieldRow,
+                              _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                              size: _iconDnsLockEye,
                               color: _labelGrey,
                             ),
                           ),

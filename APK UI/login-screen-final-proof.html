@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CarbonWMS — Login screen preview</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@700;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+  <title>CarbonWMS login — FINAL PROOF (Material icons from Login page.html + layout from login-screen-preview.html)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800;900&amp;family=Space+Grotesk:wght@500;700&amp;display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #f5fafa;
@@ -27,8 +27,15 @@
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
       color: var(--outline);
+      user-select: none;
     }
-    .icon-24 { font-size: 24px; width: 24px; min-width: 24px; text-align: center; line-height: 1; }
+    .icon-dns, .icon-lock, .icon-visibility {
+      font-size: 24px;
+      width: 24px;
+      min-width: 24px;
+      text-align: center;
+      line-height: 1;
+    }
     .login-email-row .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
       font-size: 20px;
@@ -45,6 +52,18 @@
       display: flex;
       flex-direction: column;
     }
+    .proof-banner {
+      font-size: 11px;
+      line-height: 1.5;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      background: rgba(0, 103, 104, 0.1);
+      border: 1px solid rgba(0, 103, 104, 0.28);
+      color: var(--label-dark);
+      font-family: ui-monospace, monospace;
+    }
+    .proof-banner strong { color: var(--primary); }
     .header { text-align: center; margin-bottom: 28px; }
     .logo-img {
       width: 128px;
@@ -130,7 +149,11 @@
       font-size: 14px;
       font-weight: 500;
     }
-    .check input { width: 20px; height: 20px; accent-color: var(--primary); }
+    .check input {
+      width: 20px;
+      height: 20px;
+      accent-color: var(--primary);
+    }
     .btn-wrap { margin-top: 28px; }
     .btn {
       width: 100%;
@@ -156,10 +179,11 @@
       border: none;
       background: transparent;
       border-radius: 50%;
+      cursor: pointer;
       color: var(--outline);
       padding: 0;
-      cursor: pointer;
     }
+    .vis-btn:hover { background: rgba(0,0,0,0.04); }
     .note {
       margin-top: 20px;
       padding: 12px;
@@ -173,6 +197,15 @@
 </head>
 <body>
   <div class="phone">
+    <div class="proof-banner">
+      <strong>FINAL PROOF</strong> — Icons are <strong>only</strong> from <code>APK UI/Login page.html</code>
+      (Material Symbols Outlined: <code>dns</code>, <code>person</code>, <code>lock</code>, <code>visibility</code>).
+      Layout matches <code>APK UI/login-screen-preview.html</code> (flat grey trays, no white pills).
+      Flutter: <code>login_screen.dart</code> uses Material <code>Icons.dns</code>, <code>Icons.person</code>, <code>Icons.lock_outline</code>, <code>Icons.visibility</code> / <code>visibility_off</code> (same glyphs as those symbols).
+      Logo: real app asset <code>mobile/carbon_wms/assets/carbon_logo.png</code>.
+      Target APK: <strong>CarbonWMS V0.1.11+18.apk</strong> (<code>pubspec version: 0.1.11+18</code>). Approve in browser, then run <code>scripts/build-apk.ps1</code>.
+    </div>
+
     <header class="header">
       <img class="logo-img" src="../mobile/carbon_wms/assets/carbon_logo.png" alt="CarbonWMS" width="128" height="128" />
       <h1>CarbonWMS</h1>
@@ -185,7 +218,7 @@
         <span class="lbl-sm">Connected via SSL</span>
       </div>
       <div class="field">
-        <span class="material-symbols-outlined icon-24" aria-hidden="true">dns</span>
+        <span class="material-symbols-outlined icon-dns" aria-hidden="true">dns</span>
         <input type="text" value="https://wms.shopcarbon.com" readonly>
       </div>
       <p class="mono-line">MAC 48:2F:6B:12:34:56</p>
@@ -201,10 +234,10 @@
       <div class="block">
         <span class="lbl">Password</span>
         <div class="field" style="padding-right: 8px;">
-          <span class="material-symbols-outlined icon-24" aria-hidden="true">lock</span>
+          <span class="material-symbols-outlined icon-lock" aria-hidden="true">lock</span>
           <input type="password" placeholder="••••••••••••" value="" autocomplete="off">
           <button type="button" class="vis-btn" title="Show password" aria-label="Show password">
-            <span class="material-symbols-outlined icon-24" aria-hidden="true">visibility</span>
+            <span class="material-symbols-outlined icon-visibility" aria-hidden="true">visibility</span>
           </button>
         </div>
       </div>
@@ -224,8 +257,7 @@
     </section>
 
     <p class="note">
-      Icons from <code>Login page.html</code> (Material Symbols: dns, person, lock, visibility).
-      Final sign-off: <code>login-screen-final-proof.html</code>.
+      Open this file from the repo (so the logo path resolves). If the image is missing locally, add <code>carbon_logo.png</code> under <code>mobile/carbon_wms/assets/</code> — the APK already references it.
     </p>
   </div>
 </body>
