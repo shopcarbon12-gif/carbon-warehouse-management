@@ -27,10 +27,10 @@ class _LoginScreenState extends State<LoginScreen> {
   static const String kDefaultLoginEmail = 'user@carbonjeanscompany.com';
   static const double _fieldHeight = 64;
 
-  /// Leading icons in `Login page - unregistered device mockup.html`: email row uses 20px
-  /// (`.login-email-row .material-symbols-outlined`); server / lock / visibility use opsz 24 → 24px.
+  /// Email row slightly smaller; server / lock / eye share one size so the eye matches the lock visually
+  /// (Lucide eye glyph reads smaller than lock at identical pt size — 28px aligns perceived weight).
   static const double _iconSizeEmailRow = 20;
-  static const double _iconSizeFieldRow = 24;
+  static const double _iconSizeFieldRow = 28;
 
   /// Mint wash like early CarbonWMS handheld mock (not pure white).
   static const Color _bg = Color(0xFFF5FAFA);
@@ -404,11 +404,12 @@ class _LoginScreenState extends State<LoginScreen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(
-              width: 24,
-              height: 24,
+              width: 28,
+              height: 28,
               child: Checkbox(
                 value: value,
                 activeColor: _primaryTeal,
+                side: const BorderSide(color: _primaryTeal, width: 2),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: VisualDensity.compact,
                 onChanged: (v) => onChanged(v ?? false),
@@ -598,16 +599,25 @@ class _LoginScreenState extends State<LoginScreen> {
                       );
                     },
                   ),
-                  trailing: IconButton(
-                    tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                    padding: EdgeInsets.zero,
-                    iconSize: _iconSizeFieldRow,
-                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                    icon: Icon(
-                      _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
-                      size: _iconSizeFieldRow,
-                      color: _labelGrey,
+                  trailing: Tooltip(
+                    message: _obscurePassword ? 'Show password' : 'Hide password',
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                        onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+                        customBorder: const CircleBorder(),
+                        child: SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Center(
+                            child: Icon(
+                              _obscurePassword ? LucideIcons.eye : LucideIcons.eyeOff,
+                              size: _iconSizeFieldRow,
+                              color: _labelGrey,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),

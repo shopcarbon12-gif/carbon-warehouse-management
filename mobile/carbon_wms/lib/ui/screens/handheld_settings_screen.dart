@@ -154,6 +154,35 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             },
           ),
           const Divider(height: 32),
+          FilledButton.icon(
+            onPressed: _busy ? null : _checkOta,
+            icon: _busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.system_update_alt),
+            label: Text(_busy ? 'Checking…' : 'Check OTA / authorization'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.background,
+            ),
+          ),
+          if (_lastStatus != null) ...[
+            const SizedBox(height: 16),
+            SelectableText(
+              _lastStatus!,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontFamily: 'monospace',
+                fontSize: 11,
+                height: 1.4,
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          const Divider(height: 32),
           const Text(
             'Biometric sign-in',
             style: TextStyle(
@@ -192,34 +221,6 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
               value: _biometricSwitchValue,
               activeThumbColor: AppColors.primary,
               onChanged: _onBiometricSwitch,
-            ),
-          ],
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: _busy ? null : _checkOta,
-            icon: _busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.system_update_alt),
-            label: Text(_busy ? 'Checking…' : 'Check OTA / authorization'),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.background,
-            ),
-          ),
-          if (_lastStatus != null) ...[
-            const SizedBox(height: 16),
-            SelectableText(
-              _lastStatus!,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontFamily: 'monospace',
-                fontSize: 11,
-                height: 1.4,
-              ),
             ),
           ],
         ],
