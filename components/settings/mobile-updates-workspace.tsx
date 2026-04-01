@@ -126,42 +126,6 @@ export function MobileUpdatesWorkspace({ initialReleases }: { initialReleases: M
 
   return (
     <div className="flex flex-col gap-4">
-      {initialReleases.length > 0 ? (
-        <div className="rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-4 dark:border-[var(--wms-border)]">
-          <h2 className="font-mono text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--wms-muted)]">
-            Releases for this tenant
-          </h2>
-          <ul className="mt-3 divide-y divide-[var(--wms-border)] font-mono text-xs">
-            {initialReleases.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center gap-2 py-2">
-                <span className="text-[var(--wms-fg)]">{r.version_label}</span>
-                {r.is_active ? (
-                  <span className="rounded bg-[var(--wms-accent)]/20 px-2 py-0.5 text-[0.65rem] text-[var(--wms-accent)]">
-                    active
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={activatingId !== null}
-                    onClick={() => void setActive(r.id)}
-                    className="rounded border border-[var(--wms-border)] px-2 py-0.5 text-[0.65rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
-                  >
-                    {activatingId === r.id ? "…" : "Set active"}
-                  </button>
-                )}
-                <span className="min-w-0 flex-1 truncate text-[var(--wms-muted)]" title={r.apk_url}>
-                  {r.apk_url}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : (
-        <p className="font-mono text-xs text-[var(--wms-muted)]">
-          No releases in the database for this tenant yet. Upload an APK above (or confirm you are in the correct warehouse /
-          tenant).
-        </p>
-      )}
       <div
         onDragOver={onDragOver}
         onDrop={onDrop}
@@ -221,6 +185,42 @@ export function MobileUpdatesWorkspace({ initialReleases }: { initialReleases: M
         {busy ? "Uploading…" : "Upload & set active"}
       </button>
       {msg ? <p className="max-w-3xl whitespace-pre-wrap font-mono text-xs text-[var(--wms-muted)]">{msg}</p> : null}
+      {initialReleases.length > 0 ? (
+        <div className="rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-4 dark:border-[var(--wms-border)]">
+          <h2 className="font-mono text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--wms-muted)]">
+            Releases for this tenant
+          </h2>
+          <ul className="mt-3 divide-y divide-[var(--wms-border)] font-mono text-xs">
+            {initialReleases.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-2 py-2">
+                <span className="text-[var(--wms-fg)]">{r.version_label}</span>
+                {r.is_active ? (
+                  <span className="rounded bg-[var(--wms-accent)]/20 px-2 py-0.5 text-[0.65rem] text-[var(--wms-accent)]">
+                    active
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={activatingId !== null}
+                    onClick={() => void setActive(r.id)}
+                    className="rounded border border-[var(--wms-border)] px-2 py-0.5 text-[0.65rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                  >
+                    {activatingId === r.id ? "…" : "Set active"}
+                  </button>
+                )}
+                <span className="min-w-0 flex-1 truncate text-[var(--wms-muted)]" title={r.apk_url}>
+                  {r.apk_url}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="font-mono text-xs text-[var(--wms-muted)]">
+          No releases in the database for this tenant yet. Upload an APK using the form above (or confirm you are in the
+          correct warehouse / tenant).
+        </p>
+      )}
     </div>
   );
 }
