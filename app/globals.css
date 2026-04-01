@@ -20,25 +20,47 @@
   --wms-accent: #2dd4bf;
 }
 
+/* Higher-contrast light theme (borders + text vs surface) */
 html[data-theme="light"] {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --muted: #64748b;
+  color-scheme: light;
+  --background: #e8eef4;
+  --foreground: #020617;
+  --muted: #3f4f63;
   --surface: #ffffff;
-  --surface-border: #cbd5e1;
-  --accent: #0d9488;
-  --accent-dim: #115e59;
-  --wms-bg: #f8fafc;
-  --wms-fg: #0f172a;
-  --wms-muted: #64748b;
+  --surface-border: #94a3b8;
+  --accent: #0f766e;
+  --accent-dim: #134e4a;
+  --wms-bg: #e2e8f0;
+  --wms-fg: #020617;
+  --wms-muted: #475569;
   --wms-surface: #ffffff;
   --wms-surface-elevated: #f1f5f9;
-  --wms-border: #cbd5e1;
+  --wms-border: #64748b;
   --wms-accent: #0d9488;
 }
 
-html.wms-text-lg {
+html.dark,
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Default type = former “large” (~18px root). Extra large bumps again. */
+html {
   font-size: 1.125rem;
+}
+
+html.wms-text-xl {
+  font-size: 1.3125rem;
+}
+
+/* Extra-large tier: give controls room only at this scale (em follows root). */
+html.wms-text-xl textarea.wms-field {
+  min-height: 7em;
+}
+
+html.wms-text-xl select.wms-field,
+html.wms-text-xl input.wms-field {
+  min-height: 2.75em;
 }
 
 @theme inline {

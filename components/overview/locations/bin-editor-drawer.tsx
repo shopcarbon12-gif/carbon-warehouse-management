@@ -144,49 +144,49 @@ export function BinEditorDrawer({
         className="fixed inset-0 z-[75] bg-black/60"
         onClick={() => !busy && onClose()}
       />
-      <aside className="fixed inset-y-0 right-0 z-[80] flex w-full max-w-md flex-col border-l border-slate-800 bg-zinc-950 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+      <aside className="fixed inset-y-0 right-0 z-[80] flex w-full max-w-md flex-col border-l border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-100">
+            <h2 className="text-sm font-semibold text-[var(--wms-fg)]">
               {mode === "add" ? "Add bin" : "Edit bin"}
             </h2>
-            <p className="font-mono text-[0.6rem] text-slate-500">{locationLabel}</p>
+            <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">{locationLabel}</p>
           </div>
           <button
             type="button"
             onClick={() => !busy && onClose()}
-            className="rounded p-2 text-slate-500 hover:bg-zinc-800"
+            className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="space-y-3 rounded-lg border border-slate-800 bg-zinc-900/30 p-4">
-            <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+          <div className="space-y-3 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4">
+            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
               Bin name / identifier
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-100"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
               />
             </label>
-            <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
               Capacity limit (optional)
               <input
                 type="number"
                 min={0}
                 value={capacity}
                 onChange={(e) => setCapacity(e.target.value)}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-100"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
               />
             </label>
-            <label className="block font-mono text-[0.65rem] uppercase text-slate-500">
+            <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
               Status
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as "active" | "inactive")}
-                className="mt-1 w-full rounded border border-slate-700 bg-zinc-900 px-2 py-2 font-mono text-sm text-slate-200"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
@@ -194,9 +194,9 @@ export function BinEditorDrawer({
             </label>
 
             {mode === "edit" && editingBin ? (
-              <p className="font-mono text-[0.6rem] text-slate-600">
+              <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
                 In-stock EPCs at this site:{" "}
-                <span className="text-slate-400">{editingBin.in_stock_count}</span>
+                <span className="text-[var(--wms-muted)]">{editingBin.in_stock_count}</span>
               </p>
             ) : null}
 
@@ -206,7 +206,7 @@ export function BinEditorDrawer({
               type="button"
               disabled={busy}
               onClick={() => void saveBin()}
-              className="w-full rounded border border-teal-600/45 bg-teal-950/25 py-2.5 font-mono text-xs font-medium text-teal-200 hover:bg-teal-900/25 disabled:opacity-50"
+              className="w-full rounded border border-[color-mix(in_oklab,var(--wms-accent)_50%,transparent)] bg-[color-mix(in_oklab,var(--wms-accent)_12%,var(--wms-surface))] py-2.5 font-mono text-xs font-medium text-[var(--wms-accent)] hover:bg-[color-mix(in_oklab,var(--wms-accent)_20%,var(--wms-surface))] disabled:opacity-50"
             >
               Save bin
             </button>

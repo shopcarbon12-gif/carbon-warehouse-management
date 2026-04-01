@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import type { HandheldSettings, TenantSettingsRow } from "@/lib/settings/tenant-settings-defaults";
+import { WmsToggle } from "@/components/ui/wms-toggle";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -13,36 +14,8 @@ const fetcher = async (url: string) => {
   return res.json() as Promise<TenantSettingsRow>;
 };
 
-function Toggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <label className="flex cursor-pointer items-center justify-between gap-4 border-b border-slate-800/80 py-3 font-mono text-xs text-slate-300 last:border-0">
-      <span>{label}</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative h-6 w-10 shrink-0 rounded-full border transition-colors ${
-          checked ? "border-teal-500/60 bg-teal-600/35" : "border-slate-600 bg-slate-800/80"
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-slate-100 transition-transform ${
-            checked ? "translate-x-4" : "translate-x-0.5"
-          }`}
-        />
-      </button>
-    </label>
-  );
-}
+const fieldClass =
+  "wms-field mt-1 w-full max-w-xs rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-[0.8125em] text-[var(--wms-fg)] shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)] placeholder:text-[var(--wms-muted)]";
 
 export function HandheldSettingsWorkspace() {
   const { data, error, mutate, isLoading } = useSWR("/api/settings/tenant-settings", fetcher, {
@@ -81,16 +54,16 @@ export function HandheldSettingsWorkspace() {
   }, [h, mutate]);
 
   if (error) {
-    return <p className="font-mono text-xs text-red-400/90">{error.message}</p>;
+    return <p className="font-mono text-[0.8125em] text-red-500">{error.message}</p>;
   }
   if (isLoading || !data || !h) {
-    return <p className="font-mono text-xs text-slate-500">Loading…</p>;
+    return <p className="font-mono text-[0.8125em] text-[var(--wms-muted)]">Loading…</p>;
   }
 
   return (
     <div className="space-y-8">
       <Section title="System">
-        <label className="mb-2 block font-mono text-xs text-slate-500">
+        <label className="mb-2 block font-mono text-[0.8125em] text-[var(--wms-muted)]">
           Trigger mode
           <select
             value={h.system.triggerMode}
@@ -107,18 +80,18 @@ export function HandheldSettingsWorkspace() {
                   : s,
               )
             }
-            className="mt-1 w-full max-w-xs rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+            className={fieldClass}
           >
             <option value="HOLD_RELEASE">Hold / release (continuous)</option>
             <option value="CLICK">Click (single read)</option>
           </select>
         </label>
-        <Toggle
+        <WmsToggle
           checked={h.system.vibrateOnRead}
           onChange={(v) => setH((s) => (s ? { ...s, system: { ...s.system, vibrateOnRead: v } } : s))}
           label="Vibrate on tag read"
         />
-        <Toggle
+        <WmsToggle
           checked={h.system.beepOnRead}
           onChange={(v) => setH((s) => (s ? { ...s, system: { ...s.system, beepOnRead: v } } : s))}
           label="Beep on tag read"
@@ -126,14 +99,14 @@ export function HandheldSettingsWorkspace() {
       </Section>
 
       <Section title="Inventory">
-        <Toggle
+        <WmsToggle
           checked={h.inventory.autoSaveInventoryData}
           onChange={(v) =>
             setH((s) => (s ? { ...s, inventory: { ...s.inventory, autoSaveInventoryData: v } } : s))
           }
           label="Auto-save inventory data"
         />
-        <Toggle
+        <WmsToggle
           checked={h.inventory.confirmOnQtyChange}
           onChange={(v) =>
             setH((s) => (s ? { ...s, inventory: { ...s.inventory, confirmOnQtyChange: v } } : s))
@@ -143,14 +116,14 @@ export function HandheldSettingsWorkspace() {
       </Section>
 
       <Section title="Transfer">
-        <Toggle
+        <WmsToggle
           checked={h.transfer.transferOutPowerLock}
           onChange={(v) =>
             setH((s) => (s ? { ...s, transfer: { ...s.transfer, transferOutPowerLock: v } } : s))
           }
           label="Transfer-out power lock (high power for outbound)"
         />
-        <label className="block py-2 font-mono text-xs text-slate-500">
+        <label className="block py-2 font-mono text-[0.8125em] text-[var(--wms-muted)]">
           Transfer-out antenna power (0–30 dBm)
           <input
             type="number"
@@ -170,10 +143,10 @@ export function HandheldSettingsWorkspace() {
                   : s,
               )
             }
-            className="mt-1 w-full max-w-xs rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+            className={fieldClass}
           />
         </label>
-        <label className="block py-2 font-mono text-xs text-slate-500">
+        <label className="block py-2 font-mono text-[0.8125em] text-[var(--wms-muted)]">
           Transfer-in antenna power (0–30 dBm)
           <input
             type="number"
@@ -193,13 +166,13 @@ export function HandheldSettingsWorkspace() {
                   : s,
               )
             }
-            className="mt-1 w-full max-w-xs rounded border border-slate-700 bg-zinc-900 px-3 py-2 text-slate-100"
+            className={fieldClass}
           />
         </label>
       </Section>
 
       <Section title="Encoding">
-        <Toggle
+        <WmsToggle
           checked={h.encoding.validateEpcChecksum}
           onChange={(v) =>
             setH((s) => (s ? { ...s, encoding: { ...s.encoding, validateEpcChecksum: v } } : s))
@@ -209,9 +182,9 @@ export function HandheldSettingsWorkspace() {
       </Section>
 
       <Section title="Item details (scanner template)">
-        <p className="mb-2 font-mono text-[0.6rem] leading-relaxed text-slate-500">
+        <p className="mb-2 font-mono text-[0.65em] leading-relaxed text-[var(--wms-muted)]">
           Variables:{" "}
-          <code className="text-slate-400">
+          <code className="text-[var(--wms-fg)]">
             {`{{item.customSku}} {{item.name}} {{item.upc}} {{item.vendor}} {{item.color}} {{item.size}} {{item.price}} {{item.quantity}}`}
           </code>
         </p>
@@ -219,42 +192,44 @@ export function HandheldSettingsWorkspace() {
           value={h.itemDetailsTemplate}
           onChange={(e) => setH((s) => (s ? { ...s, itemDetailsTemplate: e.target.value } : s))}
           rows={3}
-          className="w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-xs text-slate-100"
+          className={`${fieldClass} min-h-[5em] w-full max-w-none font-mono`}
         />
       </Section>
 
       <Section title="Tag details (scanner template)">
-        <p className="mb-2 font-mono text-[0.6rem] leading-relaxed text-slate-500">
+        <p className="mb-2 font-mono text-[0.65em] leading-relaxed text-[var(--wms-muted)]">
           Variables:{" "}
-          <code className="text-slate-400">{`{{epc.id}} {{epc.status}} {{epc.lastSeen}} {{epc.zone}}`}</code>
+          <code className="text-[var(--wms-fg)]">{`{{epc.id}} {{epc.status}} {{epc.lastSeen}} {{epc.zone}}`}</code>
         </p>
         <textarea
           value={h.tagDetailsTemplate}
           onChange={(e) => setH((s) => (s ? { ...s, tagDetailsTemplate: e.target.value } : s))}
           rows={4}
-          className="w-full rounded border border-slate-700 bg-zinc-900 px-3 py-2 font-mono text-xs text-slate-100"
+          className={`${fieldClass} min-h-[6em] w-full max-w-none font-mono`}
         />
       </Section>
 
       {msg ? (
-        <p className={`font-mono text-xs ${msg === "Saved." ? "text-emerald-400/90" : "text-red-400/90"}`}>
+        <p
+          className={`font-mono text-[0.8125em] ${msg === "Saved." ? "text-emerald-600 dark:text-emerald-400/90" : "text-red-500"}`}
+        >
           {msg}
         </p>
       ) : null}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           disabled={busy}
           onClick={() => void onSave()}
-          className="rounded-md bg-teal-600 px-4 py-2 font-mono text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
+          className="rounded-md bg-[var(--wms-accent)] px-4 py-2 font-mono text-[0.8125em] font-semibold text-slate-950 shadow-[0_2px_8px_color-mix(in_oklab,var(--wms-accent)_40%,transparent)] hover:brightness-110 disabled:opacity-50"
         >
           {busy ? "Saving…" : "Save handheld settings"}
         </button>
         <button
           type="button"
           onClick={() => setH(structuredClone(data.handheld_settings))}
-          className="rounded-md border border-slate-600 px-4 py-2 font-mono text-xs text-slate-300 hover:bg-zinc-800"
+          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2 font-mono text-[0.8125em] text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
         >
           Reset
         </button>
@@ -265,8 +240,8 @@ export function HandheldSettingsWorkspace() {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-zinc-950/60 p-5">
-      <h2 className="mb-2 border-b border-slate-800 pb-2 font-mono text-[0.65rem] font-bold uppercase tracking-wider text-teal-500/90">
+    <div className="rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] dark:bg-[color-mix(in_oklab,var(--wms-surface)_92%,black)]">
+      <h2 className="mb-2 border-b border-[var(--wms-border)] pb-2 font-mono text-[0.65em] font-bold uppercase tracking-wider text-[var(--wms-accent)]">
         {title}
       </h2>
       <div>{children}</div>

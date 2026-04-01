@@ -8,17 +8,21 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  normalizeStoredFont,
+  STORAGE_COLOR_KEY,
+  STORAGE_FONT_KEY,
+  type ThemeFontScale,
+} from "@/lib/theme-boot";
+
+export type { ThemeFontScale } from "@/lib/theme-boot";
 
 export type ThemeColorMode = "dark" | "light";
-export type ThemeFontScale = "standard" | "large";
 
 export type ThemeCombo = {
   color: ThemeColorMode;
   font: ThemeFontScale;
 };
-
-const STORAGE_COLOR = "wms_theme_color";
-const STORAGE_FONT = "wms_theme_font";
 
 type ThemeContextValue = {
   colorMode: ThemeColorMode;
@@ -29,12 +33,14 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function readStored(): ThemeCombo {
-  if (typeof window === "undefined") return { color: "dark", font: "standard" };
-  const c = window.localStorage.getItem(STORAGE_COLOR);
-  const f = window.localStorage.getItem(STORAGE_FONT);
+  if (typeof window === "undefined") {
+    return { color: "dark", font: "comfortable" };
+  }
+  const c = window.localStorage.getItem(STORAGE_COLOR_KEY);
+  const f = window.localStorage.getItem(STORAGE_FONT_KEY);
   return {
     color: c === "light" ? "light" : "dark",
-    font: f === "large" ? "large" : "standard",
+    font: normalizeStoredFont(f),
   };
 }
 
@@ -46,20 +52,20 @@ function applyDom(combo: ThemeCombo) {
   } else {
     root.classList.remove("dark");
   }
-  if (combo.font === "large") {
-    root.classList.add("wms-text-lg");
+  root.classList.remove("wms-text-lg");
+  if (combo.font === "expanded") {
+    root.classList.add("wms-text-xl");
   } else {
-    root.classList.remove("wms-text-lg");
+    root.classList.remove("wms-text-xl");
   }
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [colorMode, setColorMode] = useState<ThemeColorMode>("dark");
-  const [fontScale, setFontScale] = useState<ThemeFontScale>("standard");
+  const [fontScale, setFontScale] = useState<ThemeFontScale>("comfortable");
 
   useLayoutEffect(() => {
     const s = readStored();
-    /* One-time read from localStorage on client; avoids SSR/localStorage mismatch flash. */
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional hydration from localStorage
     setColorMode(s.color);
     setFontScale(s.font);
@@ -70,8 +76,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setColorMode(combo.color);
     setFontScale(combo.font);
     try {
-      window.localStorage.setItem(STORAGE_COLOR, combo.color);
-      window.localStorage.setItem(STORAGE_FONT, combo.font);
+      window.localStorage.setItem(STORAGE_COLOR_KEY, combo.color);
+      window.localStorage.setItem(STORAGE_FONT_KEY, combo.font);
     } catch {
       /* ignore */
     }
