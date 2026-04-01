@@ -410,7 +410,7 @@ export function CommissioningWorkspace() {
             type="button"
             disabled={!selected}
             onClick={() => setPreviewOpen(true)}
-            className="inline-flex flex-1 min-w-[8rem] items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2.5 font-mono text-xs font-medium text-[var(--wms-fg)] hover:border-teal-500/40 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex flex-1 min-w-[8rem] items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] py-2.5 font-mono text-xs font-medium text-[var(--wms-fg)] shadow-sm hover:border-[var(--wms-accent)]/50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Eye className="h-4 w-4" strokeWidth={2} />
             Preview label
@@ -418,7 +418,7 @@ export function CommissioningWorkspace() {
           <button
             type="button"
             onClick={() => setLogsOpen(true)}
-            className="inline-flex flex-1 min-w-[8rem] items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2.5 font-mono text-xs font-medium text-[var(--wms-fg)] hover:border-[var(--wms-accent)]"
+            className="inline-flex flex-1 min-w-[8rem] items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] py-2.5 font-mono text-xs font-medium text-[var(--wms-fg)] shadow-sm hover:border-[var(--wms-accent)]/50"
           >
             <ScrollText className="h-4 w-4" strokeWidth={2} />
             Open logs
@@ -427,7 +427,7 @@ export function CommissioningWorkspace() {
             type="button"
             disabled={!selected}
             onClick={() => void copyZpl()}
-            className="inline-flex w-full min-w-[8rem] flex-[1_1_100%] items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2.5 font-mono text-xs font-medium text-[var(--wms-fg)] hover:border-amber-500/40 sm:flex-[1] sm:basis-auto"
+            className="inline-flex w-full min-w-[8rem] flex-[1_1_100%] items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] py-2.5 font-mono text-xs font-medium text-[var(--wms-fg)] shadow-sm hover:border-[var(--wms-accent)]/50 sm:flex-[1] sm:basis-auto"
           >
             <Copy className="h-4 w-4" strokeWidth={2} />
             Copy ZPL (RFID + layout)
@@ -450,7 +450,7 @@ export function CommissioningWorkspace() {
           <p className="mt-3 font-mono text-xs text-red-400/90">{error}</p>
         ) : null}
         {message ? (
-          <p className="mt-3 font-mono text-xs text-teal-400/90">{message}</p>
+          <p className="mt-3 font-mono text-xs font-medium text-[var(--wms-accent)]">{message}</p>
         ) : null}
       </div>
 
@@ -459,7 +459,7 @@ export function CommissioningWorkspace() {
           <h3 className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
             Last job — EPCs (hex)
           </h3>
-          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto font-mono text-[0.65rem] text-teal-400/85">
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto font-mono text-[0.65rem] font-medium text-[var(--wms-accent)]">
             {lastEpcs.map((e) => (
               <li key={e}>{e}</li>
             ))}
