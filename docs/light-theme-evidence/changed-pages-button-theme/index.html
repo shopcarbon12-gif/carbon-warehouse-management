@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WMS — pages changed (button theme + commissioning)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1.5rem; background: #f1f5f9; color: #0f172a; }
+    h1 { font-size: 1.25rem; }
+    p.lede { color: #64748b; max-width: 70ch; }
+    section { margin: 2rem 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; }
+    h2 { font-size: 0.95rem; margin: 0 0 0.75rem; font-family: ui-monospace, monospace; }
+    img { max-width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Pages touched after “button visibility / theme” (pics 1–3, 6) + Print/commission</h1>
+  <p class="lede">Regenerate PNGs: <code>npm run evidence:button-theme-pages</code> (requires app + DB login in .env.local). Open this file from this folder so images load.</p>
+
+  <section><h2>/infrastructure/devices</h2><img src="infrastructure__devices.png" alt="Devices" /></section>
+  <section><h2>/infrastructure/lightspeed-sales</h2><img src="infrastructure__lightspeed-sales.png" alt="LS Sales" /></section>
+  <section><h2>/infrastructure/settings</h2><img src="infrastructure__settings.png" alt="General settings" /></section>
+  <section><h2>/inventory/sync</h2><img src="inventory__sync.png" alt="Lightspeed sync" /></section>
+  <section><h2>/inventory/bulk-status</h2><img src="inventory__bulk-status.png" alt="Bulk status" /></section>
+  <section><h2>/inventory/catalog</h2><img src="inventory__catalog.png" alt="Catalog" /></section>
+  <section><h2>/rfid/commissioning</h2><img src="rfid__commissioning.png" alt="Print commission" /></section>
+</body>
+</html>

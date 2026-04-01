@@ -24,6 +24,7 @@
     "evidence:theme:before": "node scripts/capture-theme-evidence.mjs before",
     "evidence:theme:after": "node scripts/capture-theme-evidence.mjs after",
     "evidence:theme:report": "node scripts/generate-light-theme-report.mjs",
+    "evidence:button-theme-pages": "node scripts/capture-button-theme-pages.mjs",
     "deploy:coolify": "node scripts/trigger-coolify-deploy.mjs",
     "deploy:coolify:watch": "node scripts/deploy-coolify-watch.mjs",
     "coolify:poll-deployment": "node scripts/poll-coolify-deployment.mjs",
