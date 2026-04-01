@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Verification — Orlando bins on production</title>
+    <style>
+      :root {
+        --bg: #0c0f12;
+        --fg: #e8eaed;
+        --muted: #8b939e;
+        --accent: #2dd4bf;
+        --border: #243040;
+      }
+      body {
+        font-family: system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        line-height: 1.55;
+        max-width: 56rem;
+        margin: 0 auto;
+        padding: 2rem 1.25rem 4rem;
+      }
+      h1 {
+        font-size: 1.35rem;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.5rem;
+      }
+      h2 {
+        font-size: 1.05rem;
+        margin-top: 2rem;
+        color: var(--accent);
+      }
+      .meta {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .ok {
+        color: #34d399;
+        font-weight: 600;
+      }
+      figure {
+        margin: 1rem 0;
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        overflow: hidden;
+        background: #11151a;
+      }
+      figcaption {
+        font-size: 0.8rem;
+        color: var(--muted);
+        padding: 0.5rem 0.75rem;
+        border-top: 1px solid var(--border);
+      }
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      ul {
+        padding-left: 1.25rem;
+      }
+      code {
+        font-size: 0.88em;
+        background: #1a222c;
+        padding: 0.1em 0.35em;
+        border-radius: 0.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Production verification — Orlando warehouse bins</h1>
+    <p class="meta">
+      Host: <strong>wms.shopcarbon.com</strong> · Verified via live browser (Cursor IDE browser MCP) ·
+      Date: 2026-04-01 (UTC snapshot)
+    </p>
+
+    <p class="ok">Status: SUCCESS</p>
+
+    <h2>What was done</h2>
+    <ul>
+      <li>
+        Opened <code>/infrastructure/settings</code> while authenticated (existing session in MCP browser).
+      </li>
+      <li>
+        Selected tab <strong>Locations / bins</strong>, location code <strong>001</strong>, clicked
+        <strong>Ensure Orlando bin grid</strong>.
+      </li>
+      <li>
+        First run API result (UI): <strong>+675 new bins</strong>, <strong>total active 675</strong> for
+        Orlando Warehouse.
+      </li>
+      <li>
+        Second run (idempotency): <strong>+0 new bins</strong>, <strong>total active 675</strong> — confirms
+        <code>ON CONFLICT DO NOTHING</code> behavior.
+      </li>
+      <li>
+        Opened <code>/overview/locations</code>: left pane lists <strong>001 — Orlando Warehouse · 675 bins</strong>;
+        right pane shows bin table (scrollable; first rows e.g. <code>1A01C</code>, <code>1A01L</code>).
+      </li>
+    </ul>
+
+    <h2>Evidence screenshots (repo)</h2>
+    <figure>
+      <img src="evidence-orlando-bins-overview-production.png" alt="Locations and bins overview on production" />
+      <figcaption>
+        Full-page capture: <code>/overview/locations</code> — Orlando shows 675 bins; bin grid visible in table.
+      </figcaption>
+    </figure>
+    <figure>
+      <img src="evidence-orlando-bins-infra-settings.png" alt="Infrastructure settings Locations bins tab" />
+      <figcaption>
+        Viewport capture: <code>/infrastructure/settings</code> — Locations / bins tab after second ensure;
+        message <code>+0 new bins, total active 675</code>.
+      </figcaption>
+    </figure>
+
+    <h2>API</h2>
+    <p>
+      Same operation as UI: <code>POST /api/settings/ensure-orlando-bins</code> with optional body
+      <code>{ "locationCode": "001" }</code> — requires admin scope.
+    </p>
+
+    <h2>CLI (when Postgres reachable)</h2>
+    <p>
+      <code>npm run db:ensure-orlando-bins:coolify</code> or
+      <code>npm run db:ensure-orlando-bins:coolify:tunnel</code> — see repo scripts.
+    </p>
+  </body>
+</html>
