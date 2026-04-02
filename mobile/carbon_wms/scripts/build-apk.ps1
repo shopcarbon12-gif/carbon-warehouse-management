@@ -16,12 +16,14 @@
   After success, copies app-release.apk + app-release.apk.sha1 and a versioned
   CarbonWMS V{pubspec-version}.apk (+ .sha1) to D:\CarbonWmsRelease (override with -ReleaseRoot).
 
-  Runs `flutter test` before the release APK build.
+  Runs `flutter test` before the release APK build (skip with `-SkipTests` for a faster release).
 
   If the repo path has spaces, use a no-space junction and android/local.properties — README.md.
+  For C: filling when tools run outside this script, run `install-user-build-env-on-d.ps1` once.
 #>
 param(
-  [string] $ReleaseRoot = "D:\CarbonWmsRelease"
+  [string] $ReleaseRoot = "D:\CarbonWmsRelease",
+  [switch] $SkipTests
 )
 $ErrorActionPreference = "Stop"
 # Prefer cwd without spaces: open via junction (e.g. D:\cwm_build\carbon_wms). Get-Item keeps the junction path;
@@ -114,9 +116,13 @@ if (-not (Test-Path $androidGradle)) {
 & $flutter pub get
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Running flutter test..."
-& $flutter test
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if (-not $SkipTests) {
+  Write-Host "Running flutter test..."
+  & $flutter test
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} else {
+  Write-Host "Skipping flutter test (-SkipTests)."
+}
 
 & $flutter build apk --release
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
