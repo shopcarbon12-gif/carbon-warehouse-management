@@ -4,17 +4,17 @@ Rugged handheld client for Carbon WMS (Chainway / Zebra HAL stubs, tactical UI).
 
 ## Prerequisites
 
-- [Flutter](https://docs.flutter.dev/get-started/install/windows) stable (repo copy: extract to `<repo>/.tools/flutter`, gitignored).
+- [Flutter](https://docs.flutter.dev/get-started/install/windows) stable. **Recommended for this repo:** extract the Windows SDK zip to **`D:\flutter`** (see repo root `.vscode/settings.json`). Fallback: `<repo>/.tools/flutter` (gitignored) if you do not use `D:\flutter`.
 - [Android Studio](https://developer.android.com/studio) with Android SDK + SDK Platform matching the app (Flutter will prompt for components on first build).
 
 ## Android Studio
 
 1. **File → Open** → select this folder (`mobile/carbon_wms`).
 2. Install the **Flutter** and **Dart** plugins if prompted.
-3. **Settings → Languages & Frameworks → Flutter** → set **Flutter SDK path** to your SDK (e.g. `<repo>\.tools\flutter`).
+3. **Settings → Languages & Frameworks → Flutter** → set **Flutter SDK path** to **`D:\flutter`** (or `<repo>\.tools\flutter` if you use the bundled copy). **Cursor** uses **`.vscode/settings.json`** → `dart.flutterSdkPath` (set to `D:/flutter` in this repo).
 4. **local.properties** (under `android/`, gitignored) must define:
    - `sdk.dir=` path to the Android SDK (Android Studio: **Settings → Languages & Frameworks → Android SDK → Android SDK Location**).
-   - `flutter.sdk=` path to the Flutter SDK (forward slashes are fine, e.g. `D:/path/to/flutter`).
+   - `flutter.sdk=` path to the Flutter SDK (forward slashes are fine). Prefer **`D:/flutter`**; see **`android/local.properties.example`**.
 
 ## Release APK (CLI)
 

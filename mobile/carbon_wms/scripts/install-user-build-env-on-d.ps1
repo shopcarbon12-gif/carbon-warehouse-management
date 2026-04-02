@@ -48,9 +48,29 @@ Set-UserEnv "GRADLE_USER_HOME" $gradle
 Set-UserEnv "XDG_CACHE_HOME" $xdgCache
 Set-UserEnv "XDG_CONFIG_HOME" $xdgConfig
 
+# Flutter SDK on D: (Cursor / CLI / build-apk Find-FlutterBin)
+$flutterSdk = "D:\flutter"
+$flutterBat = Join-Path $flutterSdk "bin\flutter.bat"
+if (Test-Path -LiteralPath $flutterBat) {
+  Set-UserEnv "FLUTTER_ROOT" $flutterSdk
+  $flutterBin = Join-Path $flutterSdk "bin"
+  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  $parts = if ($userPath) { $userPath -split ';' | Where-Object { $_ -ne '' } } else { @() }
+  if ($parts -notcontains $flutterBin) {
+    $newPath = if ($parts.Count -gt 0) { ($parts + $flutterBin) -join ';' } else { $flutterBin }
+    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+    Write-Host "User Path appended: $flutterBin"
+  } else {
+    Write-Host "User Path already contains $flutterBin"
+  }
+} else {
+  Write-Host "Skip FLUTTER_ROOT: $flutterBat not found (extract Flutter to D:\flutter)."
+}
+
 Write-Host ""
 Write-Host 'Done. Restart Cursor and open a NEW PowerShell - verify:'
-Write-Host '  echo $env:TEMP; echo $env:PUB_CACHE; echo $env:GRADLE_USER_HOME'
+Write-Host '  echo $env:TEMP; echo $env:PUB_CACHE; echo $env:GRADLE_USER_HOME; echo $env:FLUTTER_ROOT'
+Write-Host '  flutter --version'
 Write-Host ""
 Write-Host 'Junction tip: Explorer can mis-count space when the repo is a junction to another drive.'
 Write-Host 'Long-term: clone the repo directly under D:\ (no junction) if crashes persist.'

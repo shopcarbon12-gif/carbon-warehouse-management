@@ -19,6 +19,8 @@ Without explicit env, **Flutter / Gradle / JVM** use **`%TEMP%` on C:**, **Pub**
 
 4. **Docker Desktop (local Windows):** keep app + WSL data on **D:** (`--installation-dir`, `--wsl-default-data-root`) so Docker does not consume C:. **Coolify** = server-side; separate from this.
 
-5. **APK builds:** **`.\scripts\build-apk.ps1`**; use **`-SkipTests`** if **`flutter test`** / native hooks block release. Canonical output: **`D:\CarbonWmsRelease\CarbonWMS V{pubspec}.apk`**.
+5. **Flutter SDK:** Prefer **`D:\flutter`** (stable zip on **D:**). Workspace **`.vscode/settings.json`** sets **`dart.flutterSdkPath`** for Dart/Flutter extensions. **`install-user-build-env-on-d.ps1`** sets **`FLUTTER_ROOT`** and **`Path`** when **`D:\flutter`** exists. Fallback: **`<repo>/.tools/flutter`**.
+
+6. **APK builds:** **`.\scripts\build-apk.ps1`**; use **`-SkipTests`** if **`flutter test`** / native hooks block release. Canonical output: **`D:\CarbonWmsRelease\CarbonWMS V{pubspec}.apk`**.
 
 Full prose: **`AGENTS.md`** (Windows + D: section). Handheld details: **`mobile/carbon_wms/README.md`**.

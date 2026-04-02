@@ -30,7 +30,10 @@ This project’s **handheld** build expects tooling on **D:**. Follow this so Cu
 4. **Docker Desktop on D: (local Windows)**  
    Install with CLI flags so binaries and WSL data stay on D:, e.g. `--installation-dir=D:\Docker\DockerDesktop` and `--wsl-default-data-root=D:\Docker\wsl` (see [Docker Windows install](https://docs.docker.com/desktop/setup/install/windows-install/#installer-flags)). **Coolify** still runs on the **Linux VPS**; this item is for **local** `docker compose` / Next parity — it avoids huge **C:** growth from default Docker/WSL placement.
 
-5. **Release APK script**  
+5. **Flutter SDK on D:**  
+   Prefer **`D:\flutter`** (official Windows stable zip extracted to that folder). **Cursor / VS Code:** **`.vscode/settings.json`** → **`dart.flutterSdkPath`**: `D:/flutter`. **`install-user-build-env-on-d.ps1`** also sets **`FLUTTER_ROOT`** and appends **`D:\flutter\bin`** to **User `Path`** when that SDK exists. **`build-apk.ps1`** resolves Flutter in order: **`FLUTTER_ROOT`**, **`D:\flutter`**, then **`<repo>/.tools/flutter`**.
+
+6. **Release APK script**  
    **`.\scripts\build-apk.ps1`** enforces repo/SDK on D: and applies `_carbon_wms_d_env.ps1`. Use **`-SkipTests`** if **`flutter test`** fails (e.g. `objective_c` native-asset hooks) until the toolchain is fixed; still produces **`build/.../app-release.apk`** and copies to **`D:\CarbonWmsRelease`** per project rules.
 
 ### Reference

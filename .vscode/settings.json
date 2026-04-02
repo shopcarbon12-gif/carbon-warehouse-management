@@ -1,4 +1,10 @@
 {
-  "dart.flutterSdkPath": ".tools/flutter",
-  "dart.sdkPath": ".tools/flutter/bin/cache/dart-sdk"
+  "dart.flutterSdkPath": "D:/flutter",
+  "dart.sdkPath": "D:/flutter/bin/cache/dart-sdk",
+  "dart.analysisExcludedFolders": [
+    "mobile/carbon_wms/build",
+    "mobile/carbon_wms/.dart_tool",
+    "mobile/carbon_wms/android/build",
+    "mobile/carbon_wms/ios"
+  ]
 }

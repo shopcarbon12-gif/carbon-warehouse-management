@@ -37,29 +37,30 @@ Set-Location $here
 . (Join-Path $PSScriptRoot "_carbon_wms_d_env.ps1") -RepoRoot $repoRoot -RequireRepoOnDDrive
 
 function Find-FlutterBin {
-  $repoFlutter = Join-Path $repoRoot ".tools\flutter\bin\flutter.bat"
-  if (Test-Path $repoFlutter) { return $repoFlutter }
   if ($env:FLUTTER_ROOT -and (Test-Path "$($env:FLUTTER_ROOT)\bin\flutter.bat")) {
     return "$($env:FLUTTER_ROOT)\bin\flutter.bat"
   }
-  $cmd = Get-Command flutter -ErrorAction SilentlyContinue
-  if ($cmd) { return $cmd.Source }
   foreach ($p in @(
       "D:\flutter\bin\flutter.bat",
-      "D:\src\flutter\bin\flutter.bat",
-      "$env:USERPROFILE\flutter\bin\flutter.bat"
+      "D:\src\flutter\bin\flutter.bat"
     )) {
     if (Test-Path $p) { return $p }
   }
+  $repoFlutter = Join-Path $repoRoot ".tools\flutter\bin\flutter.bat"
+  if (Test-Path $repoFlutter) { return $repoFlutter }
+  $cmd = Get-Command flutter -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+  $pf = "$env:USERPROFILE\flutter\bin\flutter.bat"
+  if (Test-Path $pf) { return $pf }
   return $null
 }
 
 $flutter = Find-FlutterBin
 if (-not $flutter) {
   Write-Error @"
-Could not find Flutter. Put the SDK on drive D under <repo>\.tools\flutter, or set
-FLUTTER_ROOT to a Flutter folder on drive D (must contain bin\flutter.bat).
-Android Studio: Settings → Languages & Frameworks → Flutter → Flutter SDK path.
+Could not find Flutter. Install to D:\flutter (zip extract) or set User FLUTTER_ROOT, or keep
+<repo>\.tools\flutter. Path must contain bin\flutter.bat on drive D:.
+Cursor/VS Code: .vscode/settings.json -> dart.flutterSdkPath. Gradle: android/local.properties -> flutter.sdk.
 "@
 }
 

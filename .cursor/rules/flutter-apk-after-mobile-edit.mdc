@@ -10,7 +10,7 @@ alwaysApply: true
 When **this session** changes any file under **`mobile/carbon_wms/`** (including `packages/carbon_*_driver`, `android/`, `pubspec.yaml`, `lib/**/*.dart`, or `scripts/build-apk.ps1` / `_carbon_wms_d_env.ps1` / `install-user-build-env-on-d.ps1`), **before finishing the turn** you must:
 
 1. **Run a release APK build** so the user always gets an up-to-date `app-release.apk`, unless they explicitly asked to skip the build.
-2. Use **D:** for temp/caches: **`build-apk.ps1`** dot-sources **`_carbon_wms_d_env.ps1`** (or the user ran **`install-user-build-env-on-d.ps1`** once so User `TEMP`/`PUB_CACHE`/`GRADLE_USER_HOME` are on D:). From **`D:\cwm\mobile\carbon_wms`** (junction, no spaces) or the repo’s `mobile\carbon_wms` on **D:** run:
+2. Use **D:** for temp/caches and **`D:\flutter`** (or **`FLUTTER_ROOT`**) for the SDK: **`build-apk.ps1`** dot-sources **`_carbon_wms_d_env.ps1`**; **`install-user-build-env-on-d.ps1`** sets User caches + **`FLUTTER_ROOT`** when **`D:\flutter`** exists. Workspace **`.vscode/settings.json`** points Dart/Flutter extensions at **`D:/flutter`**. From **`D:\cwm\mobile\carbon_wms`** (junction, no spaces) or the repo’s `mobile\carbon_wms` on **D:** run:
    ```powershell
    .\scripts\build-apk.ps1
    ```

@@ -1,0 +1,4 @@
+# Copy to local.properties (gitignored) and adjust sdk.dir to your machine.
+sdk.dir=D:/asdk
+flutter.sdk=D:/flutter
+flutter.buildMode=release
