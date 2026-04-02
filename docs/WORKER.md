@@ -46,6 +46,26 @@ npm run deploy:coolify:worker
 
 Re-run **`npm run coolify:provision-sync-worker`** after adding **`COOLIFY_WORKER_APP_UUID`** to refresh env from the web app (skips create; handles duplicate name with **409**).
 
+### Remove the auto-generated sslip URL (optional)
+
+Coolify may assign a placeholder FQDN even though the worker has no real public site. Clear it via API (same token as other Coolify scripts):
+
+```bash
+npm run coolify:clear-worker-public-url
+```
+
+Then **`npm run deploy:coolify:worker`** once so proxy labels refresh.
+
+### Smoke-test the queue (from a machine that can reach Postgres)
+
+Inserts a harmless **`reconcile`** job (stub — no Lightspeed). The worker should mark it **`completed`** within ~1 minute:
+
+```bash
+npm run smoke:worker-queue
+```
+
+Requires **`DATABASE_URL`** in **`.env.coolify.local`** pointing at the same DB the worker uses. If your laptop cannot reach the DB port (firewall), run this on a host that can (e.g. SSH on the VPS).
+
 ### Manual setup (UI)
 
 1. **Coolify → CARBON WMS → production → New resource → Application**

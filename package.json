@@ -35,6 +35,8 @@
     "coolify:api-check": "node scripts/coolify-api-check.mjs",
     "coolify:ensure-uploads-volume": "node scripts/coolify-ensure-uploads-volume.mjs",
     "coolify:check-worker-web": "node scripts/coolify-check-worker-web-status.mjs",
+    "coolify:clear-worker-public-url": "node scripts/coolify-clear-worker-public-url.mjs",
+    "smoke:worker-queue": "node scripts/smoke-test-worker-queue.mjs",
     "coolify:provision-sync-worker": "node scripts/coolify-provision-sync-worker.mjs",
     "deploy:coolify:worker": "node scripts/trigger-coolify-worker-deploy.mjs",
     "coolify:list-env-keys": "node scripts/coolify-list-env-keys.mjs",
