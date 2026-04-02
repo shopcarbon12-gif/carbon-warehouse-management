@@ -49,8 +49,8 @@ Set-UserEnv "XDG_CACHE_HOME" $xdgCache
 Set-UserEnv "XDG_CONFIG_HOME" $xdgConfig
 
 Write-Host ""
-Write-Host "Done. Restart Cursor and open a NEW PowerShell — verify:"
+Write-Host 'Done. Restart Cursor and open a NEW PowerShell - verify:'
 Write-Host '  echo $env:TEMP; echo $env:PUB_CACHE; echo $env:GRADLE_USER_HOME'
 Write-Host ""
-Write-Host "Junction tip: Explorer can mis-count space when the repo is a junction to another drive."
-Write-Host "Long-term: clone the repo directly under D:\ (no junction) if crashes persist."
+Write-Host 'Junction tip: Explorer can mis-count space when the repo is a junction to another drive.'
+Write-Host 'Long-term: clone the repo directly under D:\ (no junction) if crashes persist.'
