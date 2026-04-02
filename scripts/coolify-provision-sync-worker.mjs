@@ -134,6 +134,127 @@ function envRowToBulk(row) {
   };
 }
 
+function normalizePostgresUrlString(v) {
+  if (typeof v !== "string" || v.length < 12) return "";
+  if (v.startsWith("postgresql://")) return v;
+  if (v.startsWith("postgres://")) return `postgresql://${v.slice("postgres://".length)}`;
+  return "";
+}
+
+function pickInternalUrlFromDatabaseDetail(d) {
+  if (!d || typeof d !== "object") return "";
+  const root = d.database && typeof d.database === "object" ? d.database : d;
+  for (const k of ["internal_db_url", "internal_url", "postgres_url", "database_url", "connection_string"]) {
+    const n = normalizePostgresUrlString(root[k] ?? d[k] ?? "");
+    if (n) return n;
+  }
+  return "";
+}
+
+function safeDecodeUrlPart(s) {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+function isCoolifyLongPostgresDNSHostname(webUrl) {
+  const wn = normalizePostgresUrlString(
+    typeof webUrl === "string" && webUrl.startsWith("postgres://")
+      ? `postgresql://${webUrl.slice("postgres://".length)}`
+      : webUrl || "",
+  );
+  if (!wn) return false;
+  try {
+    return new URL(wn.replace(/^postgresql:/i, "http:")).hostname.toLowerCase().includes("postgresql-database-");
+  } catch {
+    return false;
+  }
+}
+
+/** Host:port from Coolify internal URL; path + user + password + query from web (same DB as Next.js). */
+function applyInternalHostToWebDatabaseUrl(webUrl, internalUrl) {
+  const wn = normalizePostgresUrlString(webUrl);
+  const inn = normalizePostgresUrlString(internalUrl);
+  if (!wn || !inn) return inn || wn;
+  try {
+    const i = new URL(inn.replace(/^postgresql:/i, "http:"));
+    const w = new URL(wn.replace(/^postgresql:/i, "http:"));
+    const host = i.hostname;
+    const port = i.port || "5432";
+    const user = safeDecodeUrlPart(w.username || "postgres");
+    const pass = safeDecodeUrlPart(w.password || "");
+    const path = w.pathname || "/postgres";
+    const search = w.search || "";
+    const encU = encodeURIComponent(user);
+    const encP = encodeURIComponent(pass);
+    const auth = pass ? `${encU}:${encP}` : encU;
+    return `postgresql://${auth}@${host}:${port}${path}${search}`;
+  } catch {
+    return inn;
+  }
+}
+
+/**
+ * Coolify’s internal_db_url uses the short Docker DNS name (e.g. {uuid}:5432). The web app’s
+ * DATABASE_URL sometimes uses a longer hostname (postgresql-database-…) that does not resolve
+ * from the worker container — override worker copy with the API value (keeping web DB name).
+ */
+async function resolvePostgresInternalUrlForWorker(environmentId, webDatabaseUrl) {
+  const explicitPg = process.env.COOLIFY_POSTGRES_UUID?.trim();
+  const nameSub = process.env.COOLIFY_POSTGRES_NAME_SUBSTR?.trim().toLowerCase();
+
+  let pgUuid = explicitPg;
+  if (!pgUuid) {
+    const { res, data } = await fetchJson("/databases");
+    if (!res.ok) {
+      console.warn("GET /databases failed; worker DATABASE_URL not overridden:", res.status);
+      return "";
+    }
+    const list = Array.isArray(data) ? data : data?.data ?? data?.databases ?? [];
+    let pg = list.filter((row) => {
+      const t = (row.type ?? row.database_type ?? row.kind ?? "").toString().toLowerCase();
+      const isPg = t.includes("postgres") || t === "postgresql";
+      if (!isPg) return false;
+      if (!nameSub) return true;
+      const n = (row.name ?? row.uuid ?? "").toString().toLowerCase();
+      return n.includes(nameSub);
+    });
+    if (pg.length > 1 && environmentId != null) {
+      const scoped = pg.filter((row) => row.environment_id === environmentId);
+      if (scoped.length === 1) pg = scoped;
+    }
+    if (pg.length !== 1) {
+      console.warn(
+        "Worker DATABASE_URL not overridden: expected 1 Postgres in env (got",
+        pg.length,
+        "). Set COOLIFY_POSTGRES_UUID.",
+      );
+      return "";
+    }
+    pgUuid = pg[0].uuid;
+  }
+
+  const { res: dRes, data: dData } = await fetchJson(`/databases/${pgUuid}`);
+  if (!dRes.ok) {
+    console.warn("GET /databases/{uuid} failed; worker DATABASE_URL not overridden:", dRes.status);
+    return "";
+  }
+  const internal = pickInternalUrlFromDatabaseDetail(dData);
+  if (!internal) return "";
+  const wn = normalizePostgresUrlString(
+    typeof webDatabaseUrl === "string" && webDatabaseUrl.startsWith("postgres://")
+      ? `postgresql://${webDatabaseUrl.slice("postgres://".length)}`
+      : webDatabaseUrl || "",
+  );
+  if (wn) {
+    if (isCoolifyLongPostgresDNSHostname(wn)) return applyInternalHostToWebDatabaseUrl(wn, internal);
+    return wn;
+  }
+  return internal;
+}
+
 async function getPrivateKeyUuidForApp(privateKeyId) {
   const { res, data } = await fetchJson("/security/keys");
   if (!res.ok) {
@@ -222,6 +343,8 @@ async function main() {
       is_spa: false,
       health_check_enabled: false,
       instant_deploy: false,
+      /** Required so `postgresql-database-…` from DATABASE_URL resolves (same Docker network as DB). */
+      connect_to_docker_network: true,
     };
 
     if (dryRun) {
@@ -264,6 +387,20 @@ async function main() {
     console.log("Using existing COOLIFY_WORKER_APP_UUID:", workerUuid);
   }
 
+  const { res: wkRes, data: workerApp } = await fetchJson(`/applications/${workerUuid}`);
+  if (wkRes.ok && workerApp && !workerApp.connect_to_docker_network) {
+    const { res: netRes, data: netOut } = await fetchJson(`/applications/${workerUuid}`, {
+      method: "PATCH",
+      body: JSON.stringify({ connect_to_docker_network: true }),
+    });
+    if (!netRes.ok) {
+      console.warn("PATCH connect_to_docker_network failed:", netRes.status, netOut);
+      console.warn("Run: npm run coolify:worker-connect-docker-network");
+    } else {
+      console.log("Enabled connect_to_docker_network on worker (resolves internal Postgres hostname).");
+    }
+  }
+
   const { res: eRes, data: envRows } = await fetchJson(`/applications/${webUuid}/envs`);
   if (!eRes.ok) {
     console.error("Failed to GET web envs:", eRes.status, envRows);
@@ -271,6 +408,14 @@ async function main() {
   }
 
   const merged = mergeWebEnvs(Array.isArray(envRows) ? envRows : []);
+  const webDbRow = merged.find((r) => r.key === "DATABASE_URL");
+  const webDbRaw = webDbRow ? (webDbRow.real_value ?? webDbRow.value ?? "") : "";
+  const webDbUnquoted =
+    typeof webDbRaw === "string" && webDbRaw.length >= 2 &&
+    ((webDbRaw.startsWith("'") && webDbRaw.endsWith("'")) || (webDbRaw.startsWith('"') && webDbRaw.endsWith('"')))
+      ? webDbRaw.slice(1, -1)
+      : String(webDbRaw);
+
   const bulk = merged.map(envRowToBulk);
 
   /** Worker container: no Next server; migrations belong on web deploy */
@@ -278,6 +423,22 @@ async function main() {
     if (bulk[i].key === "WMS_AUTO_MIGRATE") {
       bulk[i] = { ...bulk[i], value: "0" };
     }
+  }
+
+  const workerInternalDb = await resolvePostgresInternalUrlForWorker(envId, webDbUnquoted);
+  if (workerInternalDb) {
+    const ix = bulk.findIndex((b) => b.key === "DATABASE_URL");
+    const entry = {
+      key: "DATABASE_URL",
+      value: workerInternalDb,
+      is_literal: true,
+      is_multiline: false,
+    };
+    if (ix >= 0) bulk[ix] = entry;
+    else bulk.push(entry);
+    console.log(
+      "Worker DATABASE_URL overridden with Coolify database internal_db_url (short Docker hostname).",
+    );
   }
 
   if (dryRun) {

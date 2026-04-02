@@ -109,21 +109,23 @@ Deploy-only API tokens cannot PATCH application envs.
 
 ### Same check for the worker app
 
-Any **second service** running **`npm run worker`** must also receive the **same** valid **`DATABASE_URL`**.
-
-Copying `DATABASE_URL` from the web app (e.g. via **`npm run coolify:provision-sync-worker`**) is **not enough** by itself: the hostname in that URL is usually a **Coolify/Docker internal** name such as `postgresql-database-xxxxxxxx`.
+Any **second service** running **`npm run worker`** must use a **`DATABASE_URL`** that resolves and reaches **the same logical database** as the web app.
 
 ### Worker logs: `getaddrinfo EAI_AGAIN postgresql-database-…`
 
-That error means the **worker container cannot resolve the database hostname**. The web app can resolve it because Coolify attached the **WMS web** application to the Postgres resource’s network. The **worker** is a **separate** application and is **not** on that network until you link it.
+The worker cannot resolve that hostname. Common cause: the **web** app’s `DATABASE_URL` uses a long name (`postgresql-database-…`) while Coolify’s **`GET /databases/{uuid}` → `internal_db_url`** uses a **short** Docker hostname (e.g. `{uuid}:5432`) on the **`coolify`** network. Copying web env verbatim onto the worker can leave the wrong host string.
 
-**Fix (Coolify UI — wording varies slightly by version):**
+**Automated fixes (repo + `.env.coolify.local`):**
 
-1. Open **Coolify →** your environment **→** the **`carbon-wms-sync-worker`** application (not the web app).
-2. **Link** or **connect** the **same PostgreSQL database resource** the WMS web app uses (same place you’d add a database to a new app: e.g. **Resources**, **Databases**, **Services**, or **Add existing Postgres** — pick the existing DB, do not create a second one).
-3. Ensure **`DATABASE_URL`** on the worker still matches the **internal** URL for that database (Coolify often injects or updates this when the DB is linked). Enable **Available at Runtime** if your UI shows it.
-4. **Save** and **Redeploy** the worker.
+1. **`npm run coolify:worker-sync-internal-database-url`** — PATCHes the worker’s `DATABASE_URL` from the database resource API, redeploys, polls until finished.
+2. **`npm run coolify:provision-sync-worker`** — copies env from web, then **overwrites** worker `DATABASE_URL` with that same API internal URL (so future provisions stay correct).
 
-After redeploy, logs should show **`WMS worker started`** and **no** repeating `EAI_AGAIN`. Then **`npm run verify:production-smoke`** should see the stub job move from **`queued`** to **`completed`**.
+Optional: **`npm run coolify:worker-connect-docker-network`** — sets `connect_to_docker_network` on the worker (some Coolify versions); new workers get it in the create payload.
 
-If your Coolify build has no “link database” option, use a **`DATABASE_URL`** whose host is reachable from the worker’s network (e.g. server-internal IP and published port, or a managed-DB public host), not only the `postgresql-database-…` Docker DNS name.
+**Optional — Coolify UI:** enable **Connect to Docker network** on the worker app if your build exposes it; redeploy.
+
+**Logs:** **`npm run coolify:worker-logs`** — tail worker logs via Coolify API.
+
+After the worker connects, **`npm run verify:production-smoke`** should show the stub job go from **`queued`** to **`completed`**.
+
+If internal DNS still fails, use a **`DATABASE_URL`** whose host is reachable from the worker (e.g. published host port); see **`npm run coolify:worker-public-database-url`** (only when you understand firewall exposure).

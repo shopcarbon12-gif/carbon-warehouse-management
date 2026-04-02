@@ -337,7 +337,8 @@ async function main() {
   }
 
   const key = postJson.idempotency_key;
-  const deadline = Date.now() + 120_000;
+  const pollMs = Math.max(30_000, Number(process.env.WMS_SMOKE_POLL_MS ?? 120_000) || 120_000);
+  const deadline = Date.now() + pollMs;
   while (Date.now() < deadline) {
     const gr = await fetch(`${smokeUrl}?idempotency_key=${encodeURIComponent(key)}`, {
       headers: { "x-wms-smoke-secret": smokeSecret, Accept: "application/json" },
