@@ -1,16 +1,19 @@
 {
   "version": "0.2.0",
+  // cwd must live on a path WITHOUT spaces: objective_c native-asset hooks invoke .cmd
+  // that splits on spaces ("D:\Projects\My" …). Use junction D:\cwm → repo root:
+  //   mklink /J D:\cwm "D:\Projects\My project\carbon-warehouse-management"
   "configurations": [
     {
       "name": "carbon_wms",
-      "cwd": "mobile/carbon_wms",
+      "cwd": "D:/cwm/mobile/carbon_wms",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart"
     },
     {
       "name": "carbon_wms (Chrome web · localhost:50122)",
-      "cwd": "mobile/carbon_wms",
+      "cwd": "D:/cwm/mobile/carbon_wms",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
@@ -19,7 +22,7 @@
     },
     {
       "name": "carbon_wms (profile mode)",
-      "cwd": "mobile/carbon_wms",
+      "cwd": "D:/cwm/mobile/carbon_wms",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
@@ -27,7 +30,7 @@
     },
     {
       "name": "carbon_wms (release mode)",
-      "cwd": "mobile/carbon_wms",
+      "cwd": "D:/cwm/mobile/carbon_wms",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
@@ -35,7 +38,7 @@
     },
     {
       "name": "carbon_wms (Chrome web profile · localhost:50122)",
-      "cwd": "mobile/carbon_wms",
+      "cwd": "D:/cwm/mobile/carbon_wms",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
@@ -45,40 +48,40 @@
     },
     {
       "name": "carbon_chainway_driver",
-      "cwd": "mobile/carbon_wms/packages/carbon_chainway_driver",
+      "cwd": "D:/cwm/mobile/carbon_wms/packages/carbon_chainway_driver",
       "request": "launch",
       "type": "dart"
     },
     {
       "name": "carbon_chainway_driver (profile mode)",
-      "cwd": "mobile/carbon_wms/packages/carbon_chainway_driver",
+      "cwd": "D:/cwm/mobile/carbon_wms/packages/carbon_chainway_driver",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile"
     },
     {
       "name": "carbon_chainway_driver (release mode)",
-      "cwd": "mobile/carbon_wms/packages/carbon_chainway_driver",
+      "cwd": "D:/cwm/mobile/carbon_wms/packages/carbon_chainway_driver",
       "request": "launch",
       "type": "dart",
       "flutterMode": "release"
     },
     {
       "name": "carbon_zebra_driver",
-      "cwd": "mobile/carbon_wms/packages/carbon_zebra_driver",
+      "cwd": "D:/cwm/mobile/carbon_wms/packages/carbon_zebra_driver",
       "request": "launch",
       "type": "dart"
     },
     {
       "name": "carbon_zebra_driver (profile mode)",
-      "cwd": "mobile/carbon_wms/packages/carbon_zebra_driver",
+      "cwd": "D:/cwm/mobile/carbon_wms/packages/carbon_zebra_driver",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile"
     },
     {
       "name": "carbon_zebra_driver (release mode)",
-      "cwd": "mobile/carbon_wms/packages/carbon_zebra_driver",
+      "cwd": "D:/cwm/mobile/carbon_wms/packages/carbon_zebra_driver",
       "request": "launch",
       "type": "dart",
       "flutterMode": "release"
