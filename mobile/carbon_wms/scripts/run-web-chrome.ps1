@@ -20,7 +20,15 @@ param(
 $ErrorActionPreference = "Stop"
 $here = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
-Set-Location $here
+# Native-asset hooks break when the project path contains spaces; use junction if present.
+$junctionApp = "D:\cwm\mobile\carbon_wms"
+if ($here -match "\s" -and (Test-Path -LiteralPath $junctionApp)) {
+  Set-Location -LiteralPath $junctionApp
+  $here = (Get-Location).Path
+  $repoRoot = "D:\cwm"
+} else {
+  Set-Location $here
+}
 
 . (Join-Path $PSScriptRoot "_carbon_wms_d_env.ps1") -RepoRoot $repoRoot -RequireRepoOnDDrive
 
@@ -40,8 +48,8 @@ if (-not $flutter) {
   Write-Error "Could not find Flutter (.tools\flutter or FLUTTER_ROOT)."
 }
 
-if ($here -match "\s") {
-  Write-Warning "Project path has spaces. Prefer: cd D:\cwm\mobile\carbon_wms"
+if ((Get-Location).Path -match "\s") {
+  Write-Warning "Project path has spaces. Create junction: mklink /J D:\cwm `"<path-to-repo>`""
 }
 
 Write-Host "Flutter web: http://localhost:$WebPort/"
