@@ -3,6 +3,8 @@
   // cwd must live on a path WITHOUT spaces: objective_c native-asset hooks invoke .cmd
   // that splits on spaces ("D:\Projects\My" …). Use junction D:\cwm → repo root:
   //   mklink /J D:\cwm "D:\Projects\My project\carbon-warehouse-management"
+  // Windows (desktop) needs Visual Studio "Desktop development with C++". Otherwise pick
+  // Chrome or Android in the device selector, or use the "Chrome web" launch config.
   "configurations": [
     {
       "name": "carbon_wms",
