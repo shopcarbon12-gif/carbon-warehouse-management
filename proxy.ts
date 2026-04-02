@@ -12,6 +12,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/docs")) return true;
   if (pathname === "/login") return true;
   if (pathname.startsWith("/api/health")) return true;
+  /* Ops smoke: header secret only; disabled when WMS_OPS_SMOKE_SECRET unset (route returns 404). */
+  if (pathname === "/api/internal/smoke/worker-queue") return true;
   if (pathname.startsWith("/api/auth/")) return true;
   /* Lightspeed R-Series OAuth: browser hits these without WMS session. */
   if (pathname.startsWith("/api/lightspeed/auth")) return true;
