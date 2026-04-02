@@ -52,21 +52,46 @@ Open/build from `D:\cwm\mobile\carbon_wms` (or keep using the junction paths in 
 
 ## D: only (no new build files on C:)
 
-Keep the repo on **`D:`** (e.g. junction `D:\cwm` → your clone). The release script enforces that and redirects:
+Keep the repo on **`D:`** (e.g. junction `D:\cwm` → your clone). **`build-apk.ps1`** enforces D: and dot-sources **`scripts/_carbon_wms_d_env.ps1`**, which redirects for **that process**:
 
-- `PUB_CACHE`, `GRADLE_USER_HOME` → `<repo>/.tools/…`
-- `TEMP` / `TMP` and JVM `java.io.tmpdir` → `<repo>/.tools/tmp`
+- `PUB_CACHE`, `GRADLE_USER_HOME` → `<repo>/.tools/…` (or **`D:\CarbonWmsTooling\…`** if the **resolved repo path contains spaces** — required so native-asset hooks do not break)
+- `TEMP` / `TMP` and JVM `java.io.tmpdir` → matching tmp root
 
-**Android Studio from the same policy:** in PowerShell, from `mobile/carbon_wms`:
+**Important:** Cursor, IDE terminals, and a raw **`flutter`** / **`gradle`** command **do not** load `_carbon_wms_d_env.ps1` unless you dot-source it. To keep **every** Flutter/Gradle run off C:, run **once per Windows user** (no admin needed):
+
+```powershell
+cd D:\cwm\mobile\carbon_wms   # or your path to mobile/carbon_wms
+.\scripts\install-user-build-env-on-d.ps1
+```
+
+That sets **User** environment variables to **`D:\CarbonWmsTooling\{pub-cache,gradle-user-home,tmp,xdg-cache,xdg-config}`**. **Fully quit and reopen Cursor** (or log off/on) so new shells pick them up. Verify:
+
+```powershell
+echo $env:TEMP; echo $env:PUB_CACHE; echo $env:GRADLE_USER_HOME
+```
+
+**Android Studio — same policy for one session:** from `mobile/carbon_wms`:
 
 ```powershell
 . .\scripts\env-d-drive.ps1
 ```
 
-Then start Studio from that terminal (or run Gradle/Flutter there) so the same env applies.
+Then start Studio from **that** terminal (or run Flutter/Gradle there).
 
 Flutter SDK and Android SDK paths should also be on **`D:`** (e.g. `local.properties` with `D:/asdk` and `D:/cwm/.tools/flutter`).
 
+### Release APK when `flutter test` fails
+
+Some setups hit native-asset / hook errors during **`flutter test`**. You can still produce a release APK:
+
+```powershell
+.\scripts\build-apk.ps1 -SkipTests
+```
+
+### Docker Desktop (local Windows)
+
+To avoid large **C:** usage from Docker/WSL defaults, install Docker Desktop with data on **D:** (see [Docker Windows installer flags](https://docs.docker.com/desktop/setup/install/windows-install/#installer-flags)), e.g. `--installation-dir=D:\Docker\DockerDesktop` and `--wsl-default-data-root=D:\Docker\wsl`. This is **local dev only**; **Coolify** runs on your **Linux server**.
+
 ## Other
 
-- **C: drive full:** Some tools still write small prefs under `%APPDATA%` on `C:`; free space there if installs fail. APK/Gradle/Pub/temp for this project are kept under `<repo>/.tools/` via `build-apk.ps1` / `env-d-drive.ps1`.
+- **C: drive full:** Even with the above, some apps write under `%APPDATA%` on `C:`. Free space and use Storage settings if installs fail. **Agents:** see repo root **`AGENTS.md`** (Windows + D: section) and **`.cursor/rules/windows-carbonwms-dev-disk.mdc`**.

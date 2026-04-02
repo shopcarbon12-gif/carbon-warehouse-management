@@ -7,13 +7,14 @@ alwaysApply: true
 
 **After mobile work:** Per **`git-push-deploy-user-only.mdc`**, **commit and push** when the task is done if there are changes. **Do not** run Coolify **`deploy:coolify`** unless the user asks to deploy.
 
-When **this session** changes any file under **`mobile/carbon_wms/`** (including `packages/carbon_*_driver`, `android/`, `pubspec.yaml`, `lib/**/*.dart`, or `scripts/build-apk.ps1` / `_carbon_wms_d_env.ps1`), **before finishing the turn** you must:
+When **this session** changes any file under **`mobile/carbon_wms/`** (including `packages/carbon_*_driver`, `android/`, `pubspec.yaml`, `lib/**/*.dart`, or `scripts/build-apk.ps1` / `_carbon_wms_d_env.ps1` / `install-user-build-env-on-d.ps1`), **before finishing the turn** you must:
 
 1. **Run a release APK build** so the user always gets an up-to-date `app-release.apk`, unless they explicitly asked to skip the build.
-2. Use **D:** for temp/caches (full C: disk): set `$env:TEMP` and `$env:TMP` to `D:\cwm\.tools\tmp` (or `<repo>\.tools\tmp`), then from **`D:\cwm\mobile\carbon_wms`** (junction) or the repo’s `mobile\carbon_wms` on **D:** run:
+2. Use **D:** for temp/caches: **`build-apk.ps1`** dot-sources **`_carbon_wms_d_env.ps1`** (or the user ran **`install-user-build-env-on-d.ps1`** once so User `TEMP`/`PUB_CACHE`/`GRADLE_USER_HOME` are on D:). From **`D:\cwm\mobile\carbon_wms`** (junction, no spaces) or the repo’s `mobile\carbon_wms` on **D:** run:
    ```powershell
    .\scripts\build-apk.ps1
    ```
+   If **`flutter test`** fails (e.g. **`objective_c`** hooks), use **`.\scripts\build-apk.ps1 -SkipTests`** and note that in the reply. See **`AGENTS.md`** and **`.cursor/rules/windows-carbonwms-dev-disk.mdc`**.
 3. **Confirm** exit success and report paths, sizes, and last modified times. **Lead with `D:\CarbonWmsRelease`** (hard lock — see **`apk-canonical-path-d-carbonwmsrelease.mdc`**):
    - **`D:\CarbonWmsRelease\CarbonWMS V{pubspec-version}.apk`** and **`D:\CarbonWmsRelease\app-release.apk`** (and `.sha1` siblings).
    - Then the Flutter output if useful: **`D:\cwm\mobile\carbon_wms\build\app\outputs\flutter-apk\app-release.apk`** (junction) or repo `mobile\carbon_wms\build\...`.

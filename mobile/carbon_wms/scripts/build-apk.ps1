@@ -19,7 +19,8 @@
   Runs `flutter test` before the release APK build (skip with `-SkipTests` for a faster release).
 
   If the repo path has spaces, use a no-space junction and android/local.properties — README.md.
-  For C: filling when tools run outside this script, run `install-user-build-env-on-d.ps1` once.
+  For C: filling when tools run outside this script, run `install-user-build-env-on-d.ps1` once
+  (see repo root AGENTS.md and `.cursor/rules/windows-carbonwms-dev-disk.mdc`).
 #>
 param(
   [string] $ReleaseRoot = "D:\CarbonWmsRelease",

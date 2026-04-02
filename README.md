@@ -115,6 +115,10 @@ Use **`PLAYWRIGHT_SKIP_WEBSERVER=1`** if the dev server is already running.
 
 The included `Dockerfile` builds a **standalone** Next image (port `3000` in the container). Map Coolify’s public port as needed and inject `DATABASE_URL` (and any secrets) via Coolify environment variables — not baked into the image.
 
+### Windows contributors: Flutter + local Docker on D:
+
+Handheld app builds and **Docker Desktop** on a dev PC should keep heavy data on **D:** so **C:** does not fill (temp, Pub, Gradle, WSL disk images). One-time User env: **`mobile/carbon_wms/scripts/install-user-build-env-on-d.ps1`**; full checklist: **`AGENTS.md`** (Windows + D: section) and **`mobile/carbon_wms/README.md`**. AI agents also load **`.cursor/rules/windows-carbonwms-dev-disk.mdc`**.
+
 ## Learn more
 
 - [Next.js documentation](https://nextjs.org/docs)
