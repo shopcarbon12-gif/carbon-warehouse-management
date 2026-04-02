@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
@@ -202,7 +201,7 @@ class _LocateTagScreenState extends State<LocateTagScreen> {
     final holdRelease = context.watch<MobileSettingsRepository>().config.triggerModeHoldRelease;
     final target = _normalizedTarget;
     final pct = (_proximity01 * 100).round();
-    final rssiLabel = _liveRssi != null ? 'RSSI: ${_liveRssi}' : 'RSSI: —';
+    final rssiLabel = _liveRssi != null ? 'RSSI: $_liveRssi' : 'RSSI: —';
 
     return CarbonScaffold(
       bottomBar: TacticalBottomBar(

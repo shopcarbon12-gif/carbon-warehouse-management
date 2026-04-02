@@ -30,13 +30,13 @@ class DeviceLockScreen extends StatelessWidget {
                 pendingApproval
                     ? 'This phone is registered but not yet authorized. Ask an admin: Settings → Device binding (pending list), or find it under Infrastructure → Devices → Hand-held readers tab after approval.'
                     : 'This Android ID is not registered. Sign in once to register, then wait for admin approval (same places as above).',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4),
               ),
               const SizedBox(height: 24),
               SelectableText(
                 androidId,
                 style: const TextStyle(
-                  color: AppColors.textSecondary,
+                  color: Colors.white70,
                   fontFamily: 'monospace',
                   fontSize: 12,
                 ),
