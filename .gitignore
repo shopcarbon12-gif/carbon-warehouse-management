@@ -26,6 +26,7 @@
 /.tools/
 
 # Flutter (carbon_wms)
+/mobile/carbon_wms/lib.zip
 /mobile/carbon_wms/build/
 /mobile/carbon_wms/.dart_tool/
 /mobile/carbon_wms/.flutter-plugins-dependencies

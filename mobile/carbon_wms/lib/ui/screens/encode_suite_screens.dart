@@ -133,12 +133,8 @@ class _SearchEncodeTabState extends State<_SearchEncodeTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Failed — queued for Upload tab: $e',
-              style: const TextStyle(color: AppColors.textMain),
-            ),
-            backgroundColor: AppColors.warningSurface,
-            behavior: SnackBarBehavior.floating,
+            content: Text('Failed — queued for Upload tab: $e'),
+            backgroundColor: Colors.orange.shade900,
           ),
         );
       }
@@ -195,7 +191,7 @@ class _SearchEncodeTabState extends State<_SearchEncodeTab> {
                 onPressed: id.isEmpty || _busy ? null : () => unawaited(_commission(id, label)),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.background,
                 ),
                 child: const Text('WRITE'),
               ),
@@ -312,7 +308,7 @@ class _ScanPrintTabState extends State<_ScanPrintTab> {
             onPressed: _busy ? null : () => unawaited(_printViaCommission()),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              foregroundColor: AppColors.background,
               padding: const EdgeInsets.symmetric(vertical: 18),
             ),
             child: Text(
@@ -421,7 +417,7 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
               : ListView.separated(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: _jobs.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF334155)),
                   itemBuilder: (context, i) {
                     final j = _jobs[i];
                     return ListTile(
@@ -454,8 +450,8 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
                 child: FilledButton(
                   onPressed: (_jobs.isEmpty || _syncing) ? null : () => unawaited(_syncAll()),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppColors.slateActionDark,
+                    foregroundColor: AppColors.textMain,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                   ),
                   child: Text(
