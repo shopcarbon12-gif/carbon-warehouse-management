@@ -1,0 +1,32 @@
+---
+description: Canonical Ubuntu mirror path for Cursor transcripts/archives; mandatory lookup before claiming no past-chat access
+alwaysApply: true
+---
+
+# Transcripts & archives — canonical backup path (hard lock)
+
+## Where to look (user mandate)
+
+**After** Windows backups are mirrored to Ubuntu, the canonical read-only reference is:
+
+- **`/home/eliorp1/backup-from-windows-c/`**
+
+Under it, expect at least:
+
+- **`archives/`** — Cursor profile zips (transcript / workspace–style data), e.g. `AppData-Roaming-Cursor.zip`, `UserProfile-dot-cursor.zip` (names may match your backup script).
+- **`project-repos/`** (and nested archives) — project zips/trees from backup scripts.
+
+**Before** that mirror exists, the same *role* on Windows is typically **`D:\backup c\archives\`** and **`D:\backup c\project-repos\`**.
+
+Full paste-ready block and rationale: **`docs/migration-ubuntu-master-plan.md`** → section *After Ubuntu has backups: prompt for AI agents*.
+
+## Agent behavior (non-negotiable)
+
+1. Assume the user wants **continuity**: answers about **past** questions, decisions, or sessions may **only** exist in those archives (inside zips or extracted trees), not in the current chat.
+2. If the user references **earlier** conversation or **what was agreed**, **do not** default to "I can't access previous chats" **until** you have **tried** the canonical path above (list directories, inspect zip contents, search extracted or copied profile data read-only).
+3. **Do not** argue that transcripts are unavailable if the path exists; **use** it (zip listing, extract to temp read-only, ripgrep, etc.).
+4. **Never** delete, move, or rewrite under the backup mirror unless the user **explicitly** asks.
+
+## When work runs on Windows
+
+Follow **`windows-minimize-c-drive-writes.mdc`** — **`C:\`** is for mandatory paths only; caches and outputs go to **`D:\`** or the workspace.
