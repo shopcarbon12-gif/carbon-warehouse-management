@@ -54,10 +54,32 @@ export async function POST(req: Request) {
   const root = process.cwd();
   const relDir = path.join("public", "uploads", "mobile-apk", session.tid);
   const absDir = path.join(root, relDir);
-  await mkdir(absDir, { recursive: true });
   const fname = `${safeSegment(versionLabel)}.apk`;
   const absFile = path.join(absDir, fname);
-  await writeFile(absFile, buf);
+  try {
+    await mkdir(absDir, { recursive: true });
+    await writeFile(absFile, buf);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException)?.code;
+    console.error("[mobile/upload-apk] write failed", absFile, e);
+    const diskHint =
+      "Coolify: mount a writable volume on /app/public/uploads (or /app/public/uploads/mobile-apk). Redeploy replaces container disk without a volume.";
+    if (code === "ENOSPC") {
+      return NextResponse.json({ error: `Disk full while saving APK. ${diskHint}` }, { status: 507 });
+    }
+    if (code === "EACCES" || code === "EROFS") {
+      return NextResponse.json(
+        { error: `Cannot write APK under public/uploads (read-only or permission denied). ${diskHint}` },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json(
+      {
+        error: `Failed to write APK file${code ? ` (${code})` : ""}. ${diskHint}`,
+      },
+      { status: 500 },
+    );
+  }
 
   const apkUrl = `/uploads/mobile-apk/${session.tid}/${fname}`;
 
