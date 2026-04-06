@@ -59,7 +59,9 @@
     "epc:validate": "npx tsx scripts/validate-epc-encoding.ts",
     "printer:test": "npx tsx scripts/test-printer-connection.ts",
     "upload:mobile-apk": "node scripts/upload-mobile-apk.mjs",
-    "favicon:build": "node scripts/build-app-icons.mjs"
+    "favicon:build": "node scripts/build-app-icons.mjs",
+    "remotion:streetwear": "npm run dev --prefix remotion/streetwear-promo",
+    "remotion:streetwear:render": "npm run render --prefix remotion/streetwear-promo"
   },
   "dependencies": {
     "@radix-ui/react-tabs": "^1.1.13",
