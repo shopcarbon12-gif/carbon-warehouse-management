@@ -41,7 +41,7 @@ Then set `android/local.properties` to use **no-space** paths, for example:
 
 ```properties
 sdk.dir=D:/asdk
-flutter.sdk=D:/cwm/.tools/flutter
+flutter.sdk=D:/flutter
 ```
 
 Open/build from `D:\cwm\mobile\carbon_wms` (or keep using the junction paths in `local.properties` only).
@@ -78,7 +78,7 @@ echo $env:TEMP; echo $env:PUB_CACHE; echo $env:GRADLE_USER_HOME
 
 Then start Studio from **that** terminal (or run Flutter/Gradle there).
 
-Flutter SDK and Android SDK paths should also be on **`D:`** (e.g. `local.properties` with `D:/asdk` and `D:/cwm/.tools/flutter`).
+Flutter SDK and Android SDK paths should also be on **`D:`** (e.g. `local.properties` with `D:/asdk` and `D:/flutter`; fallback `D:/cwm/.tools/flutter` if you use the repo-bundled SDK).
 
 ### Release APK when `flutter test` fails
 
