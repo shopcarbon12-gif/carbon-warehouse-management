@@ -1,16 +1,16 @@
 /**
- * End-to-end: trigger Coolify deploy → poll until finished/failed/cancelled → on failure, re-queue and poll again.
+ * Exactly ONE Coolify deploy: POST webhook once, then poll until terminal.
+ * Does not re-queue on failure (no second webhook).
  *
- * **Each attempt POSTs the deploy webhook first** — a new deployment is queued every time.
- * Do not run `npm run deploy:coolify` immediately before this; you will stack two deploys.
- * For exactly one webhook + wait, use `npm run deploy:coolify:once`.
+ * Why this exists: `deploy:coolify:watch` always calls the webhook at the start of each
+ * attempt. Running `deploy:coolify` and then `deploy:coolify:watch` stacks two deploys.
  *
- * Loads COOLIFY_DEPLOY_WEBHOOK_URL + COOLIFY_API_TOKEN from env or `.env.coolify.local` (same keys as trigger script).
+ * Loads COOLIFY_DEPLOY_WEBHOOK_URL + COOLIFY_API_TOKEN from env or `.env.coolify.local`.
  *
- * Env:
- *   COOLIFY_WATCH_MAX_ATTEMPTS (default 5) — full trigger+poll cycles on failure
- *   COOLIFY_POLL_TIMEOUT_MS (default 1200000) — 20 minutes per deployment
- *   COOLIFY_POLL_INTERVAL_MS (default 8000)
+ * Poll-only (no webhook): set COOLIFY_DEPLOYMENT_UUID and COOLIFY_SKIP_DEPLOY_TRIGGER=1
+ * to wait for an already-queued deployment.
+ *
+ * Env: COOLIFY_POLL_TIMEOUT_MS (default 1200000), COOLIFY_POLL_INTERVAL_MS (default 8000)
  */
 import fs from "fs";
 import path from "path";
@@ -47,22 +47,25 @@ loadCoolifyLocal();
 
 const webhookUrl = process.env.COOLIFY_DEPLOY_WEBHOOK_URL?.trim();
 const token = process.env.COOLIFY_API_TOKEN?.trim();
+const skipTrigger =
+  process.env.COOLIFY_SKIP_DEPLOY_TRIGGER === "1" || process.env.COOLIFY_SKIP_DEPLOY_TRIGGER === "true";
+const existingUuid = process.env.COOLIFY_DEPLOYMENT_UUID?.trim();
 
-const maxAttempts = Math.max(1, Number(process.env.COOLIFY_WATCH_MAX_ATTEMPTS ?? 5) || 5);
 const pollTimeoutMs = Math.max(60_000, Number(process.env.COOLIFY_POLL_TIMEOUT_MS ?? 1_200_000) || 1_200_000);
 const pollIntervalMs = Math.max(3000, Number(process.env.COOLIFY_POLL_INTERVAL_MS ?? 8000) || 8000);
 
-if (!webhookUrl) {
-  console.error(
-    "COOLIFY_DEPLOY_WEBHOOK_URL missing. Set it or add to .env.coolify.local (see Coolify → Webhooks).",
-  );
+if (!token) {
+  console.error("COOLIFY_API_TOKEN required. Add to .env.coolify.local.");
   process.exit(1);
 }
 
-if (!token) {
-  console.error(
-    "COOLIFY_API_TOKEN required for deploy watch (polling GET /api/v1/deployments/{uuid}). Add to .env.coolify.local.",
-  );
+if (!skipTrigger && !webhookUrl) {
+  console.error("COOLIFY_DEPLOY_WEBHOOK_URL missing (or set COOLIFY_SKIP_DEPLOY_TRIGGER=1 + COOLIFY_DEPLOYMENT_UUID).");
+  process.exit(1);
+}
+
+if (skipTrigger && !existingUuid) {
+  console.error("COOLIFY_SKIP_DEPLOY_TRIGGER=1 requires COOLIFY_DEPLOYMENT_UUID.");
   process.exit(1);
 }
 
@@ -79,7 +82,7 @@ function apiBaseFromWebhook() {
 
 const apiBase = apiBaseFromWebhook();
 if (!apiBase) {
-  console.error("Could not derive Coolify API base URL from COOLIFY_DEPLOY_WEBHOOK_URL.");
+  console.error("Could not derive Coolify API base URL.");
   process.exit(1);
 }
 
@@ -113,15 +116,12 @@ async function triggerDeploy() {
     console.error("Trigger OK but no deployment_uuid in body:", body.slice(0, 400));
     return null;
   }
-  console.log("Deploy queued, deployment_uuid:", uuid);
+  console.log("Single deploy queued, deployment_uuid:", uuid);
   return uuid;
 }
 
 const terminal = new Set(["finished", "failed", "cancelled", "canceled"]);
 
-/**
- * @returns {'finished' | 'failed' | 'cancelled' | 'timeout' | 'poll_error'}
- */
 async function pollUntilTerminal(deploymentUuid) {
   const url = `${apiBase}/deployments/${deploymentUuid}`;
   const start = Date.now();
@@ -163,32 +163,19 @@ async function pollUntilTerminal(deploymentUuid) {
   return "timeout";
 }
 
-const retryDelayMs = Math.max(10_000, Number(process.env.COOLIFY_WATCH_RETRY_DELAY_MS ?? 20_000) || 20_000);
-
-for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-  console.log(`\n=== Deploy watch attempt ${attempt}/${maxAttempts} ===\n`);
-  const uuid = await triggerDeploy();
-  if (!uuid) {
-    console.error("Aborting: could not queue deployment.");
-    if (attempt < maxAttempts) {
-      console.log(`Retrying trigger in ${retryDelayMs / 1000}s…`);
-      await new Promise((r) => setTimeout(r, retryDelayMs));
-    }
-    continue;
-  }
-
-  const outcome = await pollUntilTerminal(uuid);
-  if (outcome === "finished") {
-    console.log("\nCoolify deployment finished successfully.\n");
-    process.exit(0);
-  }
-
-  console.error(`\nDeployment ended: ${outcome} (uuid ${uuid})\n`);
-  if (attempt < maxAttempts) {
-    console.log(`Re-queueing in ${retryDelayMs / 1000}s…`);
-    await new Promise((r) => setTimeout(r, retryDelayMs));
-  }
+let uuid = existingUuid;
+if (!skipTrigger) {
+  uuid = await triggerDeploy();
+  if (!uuid) process.exit(1);
+} else {
+  console.log("Skipping webhook (COOLIFY_SKIP_DEPLOY_TRIGGER); polling:", uuid);
 }
 
-console.error("Giving up after", maxAttempts, "attempt(s). Check Coolify UI and application logs.");
+const outcome = await pollUntilTerminal(uuid);
+if (outcome === "finished") {
+  console.log("\nCoolify deployment finished successfully.\n");
+  process.exit(0);
+}
+
+console.error(`\nDeployment ended: ${outcome} (uuid ${uuid})\n`);
 process.exit(1);
