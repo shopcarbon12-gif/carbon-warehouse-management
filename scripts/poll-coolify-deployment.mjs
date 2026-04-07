@@ -65,6 +65,10 @@ const url = `${base}/deployments/${deploymentUuid}`;
 const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
 
 const terminal = new Set(["finished", "failed", "cancelled", "canceled"]);
+/** Coolify 4.x may return `cancelled-by-user` — treat as terminal. */
+function isTerminalStatus(s) {
+  return terminal.has(s) || s.startsWith("cancel");
+}
 
 async function once() {
   const res = await fetch(url, { headers });
@@ -94,10 +98,14 @@ while (Date.now() - start < maxMs) {
   console.log(new Date().toISOString(), "status:", status);
 
   const s = String(status).toLowerCase();
-  if (terminal.has(s)) {
+  if (isTerminalStatus(s)) {
     if (s === "finished") {
       console.log("Deployment finished successfully.");
       process.exit(0);
+    }
+    if (s === "cancelled" || s === "canceled" || s.startsWith("cancel")) {
+      console.error("Deployment was cancelled:", status);
+      process.exit(2);
     }
     console.error("Deployment ended with:", status);
     process.exit(1);

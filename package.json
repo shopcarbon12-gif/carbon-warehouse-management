@@ -26,6 +26,7 @@
     "evidence:theme:report": "node scripts/generate-light-theme-report.mjs",
     "evidence:button-theme-pages": "node scripts/capture-button-theme-pages.mjs",
     "deploy:coolify": "node scripts/trigger-coolify-deploy.mjs",
+    "deploy:coolify:once": "node scripts/deploy-coolify-once.mjs",
     "deploy:coolify:watch": "node scripts/deploy-coolify-watch.mjs",
     "coolify:poll-deployment": "node scripts/poll-coolify-deployment.mjs",
     "coolify:set-db": "node scripts/coolify-set-database-url.mjs",
