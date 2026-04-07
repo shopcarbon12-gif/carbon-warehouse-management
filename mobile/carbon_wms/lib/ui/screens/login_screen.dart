@@ -67,6 +67,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   bool _rememberEmail = true;
   bool _offerBiometricSetupAfterSignIn = false;
   bool _bioCapableDevice = false;
+  /// True while [LocalAuthentication] is showing — hide the decorative fingerprint icon.
+  bool _biometricChallengeActive = false;
 
   @override
   void initState() {
@@ -462,12 +464,16 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _biometricSignIn() async {
+    if (_busy || _biometricChallengeActive) return;
+    setState(() {
+      _biometricChallengeActive = true;
+      _err = null;
+    });
     try {
       final ok = await LoginCredentialsStore.authenticateWithBiometric();
-      if (!ok || !mounted) {
-        if (mounted) {
-          _showLoginSnack('Biometric sign-in was cancelled or is unavailable.');
-        }
+      if (!mounted) return;
+      if (!ok) {
+        // User cancelled or dismissed system UI — return to normal login without nagging.
         return;
       }
       final api = context.read<WmsApiClient>();
@@ -487,6 +493,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     } on Object catch (e) {
       if (!mounted) return;
       _showLoginSnack(_formatLoginFailure(e));
+    } finally {
+      if (mounted) {
+        setState(() => _biometricChallengeActive = false);
+      }
     }
   }
 
@@ -849,21 +859,41 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: _busy ? null : _biometricSignIn,
-                                customBorder: const CircleBorder(),
-                                child: const Padding(
-                                  padding: EdgeInsets.all(4),
-                                  child: Icon(
-                                    Icons.fingerprint,
-                                    size: 96,
-                                    color: _primaryTeal,
+                            if (_biometricChallengeActive)
+                              SizedBox(
+                                height: 104,
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                    child: Text(
+                                      'Confirm on this device…',
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.3,
+                                        color: _primaryTeal,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _busy ? null : _biometricSignIn,
+                                  customBorder: const CircleBorder(),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(4),
+                                    child: Icon(
+                                      Icons.fingerprint,
+                                      size: 96,
+                                      color: _primaryTeal,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
                             if (_vaultEmail != null && _vaultEmail!.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 6),

@@ -26,7 +26,7 @@ class AppAuthGate extends StatefulWidget {
   State<AppAuthGate> createState() => _AppAuthGateState();
 }
 
-class _AppAuthGateState extends State<AppAuthGate> {
+class _AppAuthGateState extends State<AppAuthGate> with WidgetsBindingObserver {
   _Phase _phase = _Phase.booting;
   String _androidId = '';
   bool _pending = false;
@@ -34,11 +34,33 @@ class _AppAuthGateState extends State<AppAuthGate> {
   String? _otaLatestVersion;
   bool _otaDismissed = false;
   int _loginKey = 0;
+  WmsApiClient? _apiForLifecycle;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _apiForLifecycle = context.read<WmsApiClient>();
+      _boot();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      final api = _apiForLifecycle;
+      if (api != null) {
+        unawaited(api.setSessionToken(null));
+      }
+    }
   }
 
   Future<String> _resolveAndroidId() async {
