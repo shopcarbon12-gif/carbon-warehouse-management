@@ -49,4 +49,10 @@ if [ -n "$DATABASE_URL" ] && [ "${WMS_AUTO_SEED:-}" = "1" ]; then
   if [ "$_s" -ne 0 ]; then echo "wms: WARNING seed-bootstrap exited $_s — continuing" >&2; fi
 fi
 
+# Coolify named volumes at /app/public/uploads are often root-owned on first use; the app runs as
+# nextjs (uid 1001). Without this, OTA APK upload hits EACCES even when the volume is mounted.
+if [ -d /app/public/uploads ]; then
+  chown -R nextjs:nodejs /app/public/uploads 2>/dev/null || true
+fi
+
 exec su-exec nextjs:nodejs "$@"
