@@ -147,9 +147,10 @@ async function pollUntilTerminal(deploymentUuid) {
     const s = String(status).toLowerCase();
     console.log(new Date().toISOString(), "deployment status:", status);
 
-    if (terminal.has(s)) {
+    if (terminal.has(s) || s.startsWith("cancel")) {
       if (s === "finished") return "finished";
-      return s === "cancelled" || s === "canceled" ? "cancelled" : "failed";
+      if (s === "cancelled" || s === "canceled" || s.startsWith("cancel")) return "cancelled";
+      return "failed";
     }
 
     await new Promise((r) => setTimeout(r, pollIntervalMs));
