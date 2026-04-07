@@ -1,6 +1,9 @@
 /**
  * Ensures the WMS app has a Docker persistent volume for public uploads (OTA APKs, etc.).
- * Uses Coolify API: GET/POST /applications/{uuid}/storages (OpenAPI).
+ *
+ * 1) Preferred: GET/POST /applications/{uuid}/storages (newer Coolify).
+ * 2) Fallback: PATCH /applications/{uuid} with custom_docker_run_options `-v <name>:/app/public/uploads`
+ *    when the storages API returns 404 (e.g. Coolify 4.0.0-beta.463).
  *
  * Loads .env.coolify.local (COOLIFY_API_TOKEN, COOLIFY_BASE_URL or COOLIFY_DEPLOY_WEBHOOK_URL,
  * application uuid from webhook ?uuid=).
@@ -72,6 +75,8 @@ if (!token || !base || !appUuid) {
   process.exit(1);
 }
 
+const authHeaders = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+
 function uploadsAlreadyMounted(data) {
   const arr = data?.persistent_storages ?? [];
   return arr.some((s) => {
@@ -80,8 +85,63 @@ function uploadsAlreadyMounted(data) {
   });
 }
 
+/**
+ * Coolify beta without /storages: inject `docker run` `-v` so uploads survive redeploys.
+ * Merges with existing custom_docker_run_options (does not replace unrelated flags).
+ * @returns {Promise<boolean>} true if application was PATCHed (redeploy recommended)
+ */
+async function ensureViaDockerRunOptions() {
+  const appRes = await fetch(`${base}/applications/${appUuid}`, { headers: authHeaders });
+  const appText = await appRes.text();
+  let app;
+  try {
+    app = JSON.parse(appText);
+  } catch {
+    console.error("GET application: non-JSON", appRes.status, appText.slice(0, 400));
+    process.exit(1);
+  }
+  if (!appRes.ok) {
+    console.error("GET application failed:", appRes.status, appText.slice(0, 600));
+    process.exit(1);
+  }
+
+  const existing = String(app.custom_docker_run_options ?? "").trim();
+  if (existing.includes(MOUNT_PATH)) {
+    console.log("custom_docker_run_options already references", MOUNT_PATH + "; skipping patch.");
+    return false;
+  }
+
+  const volFlag = `-v ${VOLUME_NAME}:${MOUNT_PATH}`;
+  const merged = existing ? `${existing} ${volFlag}` : volFlag;
+
+  const patchRes = await fetch(`${base}/applications/${appUuid}`, {
+    method: "PATCH",
+    headers: { ...authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ custom_docker_run_options: merged }),
+  });
+  const patchText = await patchRes.text();
+  if (!patchRes.ok) {
+    console.error("PATCH custom_docker_run_options failed:", patchRes.status, patchText.slice(0, 800));
+    console.error(
+      "Fallback: Coolify UI → Application → Configuration → add Persistent Storage →",
+      MOUNT_PATH,
+    );
+    process.exit(1);
+  }
+  console.log(
+    "Storages API unavailable — set custom_docker_run_options (named Docker volume for uploads):",
+    merged,
+  );
+  return true;
+}
+
+function triggerDeploy() {
+  console.log("Triggering deploy…");
+  execSync("node scripts/trigger-coolify-deploy.mjs", { cwd: root, stdio: "inherit" });
+}
+
 const listRes = await fetch(`${base}/applications/${appUuid}/storages`, {
-  headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+  headers: authHeaders,
 });
 const listText = await listRes.text();
 let listData;
@@ -91,66 +151,62 @@ try {
   console.error("List storages: non-JSON", listRes.status, listText.slice(0, 400));
   process.exit(1);
 }
+
+if (!listRes.ok && listRes.status === 404) {
+  let ver = "";
+  try {
+    const vr = await fetch(`${base}/version`, { headers: authHeaders });
+    if (vr.ok) ver = (await vr.text()).trim().slice(0, 80);
+  } catch {
+    /* ignore */
+  }
+  console.warn(
+    "GET /applications/{uuid}/storages → 404",
+    ver ? `(${ver})` : "",
+    "— using custom_docker_run_options fallback.",
+  );
+  const patched = await ensureViaDockerRunOptions();
+  const force = process.env.COOLIFY_UPLOADS_FORCE_REDEPLOY === "1";
+  if (!noRedeploy && (patched || force)) {
+    triggerDeploy();
+  } else if (!noRedeploy && !patched) {
+    console.log(
+      "No PATCH needed (volume flag already in custom_docker_run_options). If the running container predates this, run: npm run deploy:coolify",
+    );
+  } else console.log("Skipped redeploy (--no-redeploy).");
+  await delay(50);
+  process.exit(0);
+}
+
 if (!listRes.ok) {
-  if (listRes.status === 404) {
-    let ver = "";
-    try {
-      const vr = await fetch(`${base}/version`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      });
-      if (vr.ok) ver = (await vr.text()).trim().slice(0, 80);
-    } catch {
-      /* ignore */
-    }
-    console.error(
-      "GET /applications/{uuid}/storages returned 404. This Coolify build",
-      ver ? `(${ver}) ` : "",
-      "likely predates the storage API (newer 4.0 betas add POST/GET .../storages).",
-    );
-    console.error(
-      "Fix: upgrade Coolify, then run: node scripts/coolify-ensure-uploads-volume.mjs",
-    );
-    console.error(
-      "Or add the volume in the UI: Configuration → Persistent Storage → + Add → Volume / Volume mount.",
-      "Destination: /app/public/uploads. Then Redeploy.",
-    );
-    console.error("Docs: https://coolify.io/docs/knowledge-base/persistent-storage");
-    await delay(150);
-    process.exit(3);
-  } else {
-    console.error("List storages failed:", listRes.status, listText.slice(0, 600));
+  console.error("List storages failed:", listRes.status, listText.slice(0, 600));
+  process.exit(1);
+}
+
+if (uploadsAlreadyMounted(listData)) {
+  console.log("Persistent mount under", MOUNT_PATH, "already present; skipping create.");
+} else {
+  const body = {
+    type: "persistent",
+    name: VOLUME_NAME,
+    mount_path: MOUNT_PATH,
+  };
+  const createRes = await fetch(`${base}/applications/${appUuid}/storages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const createText = await createRes.text();
+  if (!createRes.ok) {
+    console.error("Create storage failed:", createRes.status, createText.slice(0, 800));
     process.exit(1);
   }
-} else {
-  if (uploadsAlreadyMounted(listData)) {
-    console.log("Persistent mount under", MOUNT_PATH, "already present; skipping create.");
-  } else {
-    const body = {
-      type: "persistent",
-      name: VOLUME_NAME,
-      mount_path: MOUNT_PATH,
-    };
-    const createRes = await fetch(`${base}/applications/${appUuid}/storages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    const createText = await createRes.text();
-    if (!createRes.ok) {
-      console.error("Create storage failed:", createRes.status, createText.slice(0, 800));
-      process.exit(1);
-    }
-    console.log("Created persistent storage:", VOLUME_NAME, "→", MOUNT_PATH, createText ? createText.slice(0, 200) : "");
-  }
-
-  if (!noRedeploy) {
-    console.log("Triggering deploy…");
-    execSync("node scripts/trigger-coolify-deploy.mjs", { cwd: root, stdio: "inherit" });
-  } else {
-    console.log("Skipped redeploy (--no-redeploy). Redeploy in Coolify when ready.");
-  }
+  console.log("Created persistent storage:", VOLUME_NAME, "→", MOUNT_PATH, createText ? createText.slice(0, 200) : "");
 }
+
+if (!noRedeploy) triggerDeploy();
+else console.log("Skipped redeploy (--no-redeploy). Redeploy in Coolify when ready.");
