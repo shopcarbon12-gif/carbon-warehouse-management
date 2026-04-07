@@ -45,3 +45,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /android/build/
+
+# Versioned release copy at repo root (canonical Windows drop: D:\CarbonWmsRelease)
+/CarbonWMS V*.apk
