@@ -34,10 +34,11 @@ cp -f "$APK" "$RELEASE_ROOT/app-release.apk"
 sha1=$(sha1sum "$APK" | awk '{print $1}')
 printf '%s\n' "$sha1" > "$RELEASE_ROOT/app-release.apk.sha1"
 
-VERSION=""
+FULL_VERSION=""
 if [[ -f pubspec.yaml ]]; then
-  VERSION=$(grep -E '^version:' pubspec.yaml | head -1 | sed -E 's/^version:[[:space:]]+//;s/[[:space:]]+$//;s/^["'\'']//;s/["'\'']$//')
+  FULL_VERSION=$(grep -E '^version:' pubspec.yaml | head -1 | sed -E 's/^version:[[:space:]]+//;s/[[:space:]]+$//;s/^["'\'']//;s/["'\'']$//')
 fi
+VERSION="${FULL_VERSION%%+*}"
 if [[ -n "$VERSION" ]]; then
   VNAME="CarbonWMS V${VERSION}.apk"
   cp -f "$APK" "$RELEASE_ROOT/$VNAME"
