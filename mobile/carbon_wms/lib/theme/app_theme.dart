@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Carbon Industrial — light surfaces matching the login-screen palette.
+/// Carbon Industrial — light surfaces matching the login screen palette.
 abstract final class AppColors {
   static const Color background = Color(0xFFF5F5F5);
   static const Color surface = Color(0xFFECECEC);
@@ -16,7 +16,7 @@ abstract final class AppColors {
 }
 
 abstract final class AppTheme {
-  static ThemeData get dark {
+  static ThemeData get light {
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
