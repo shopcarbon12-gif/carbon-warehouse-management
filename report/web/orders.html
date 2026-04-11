@@ -14,8 +14,13 @@
 <div class="page-wrap">
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
-    <h1>Orders & Fulfillment</h1>
+    <h1>Orders &amp; Fulfillment</h1>
     <p class="subtitle">Displays a list of orders pulled from Lightspeed or internal sources. Currently a read-only table showing order references, source, status, number of lines, and creation date. The fulfillment workflow (pick, pack, ship) appears to be planned but not yet implemented.</p>
+  </div>
+  <div class="page-summary">
+    <div class="summary-stat"><div class="stat-num stat-good">1</div><div class="stat-label">Working well</div></div>
+    <div class="summary-stat"><div class="stat-num stat-issue">4</div><div class="stat-label">Issues</div></div>
+    <div class="summary-stat"><div class="stat-num stat-rec">3</div><div class="stat-label">Recommendations</div></div>
   </div>
 
   <div class="info-banner">ℹ️ This page appears to be in an early stage. It shows order data but has no interactive fulfillment actions yet — no picking, packing, or shipping workflows are present.</div>
@@ -24,10 +29,16 @@
     <h2>Page Header</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Page Title & Subtitle</div>
-        <span class="el-type tag-section">Header</span>
-        <div class="el-behavior">Shows "Orders & Fulfillment" with the warehouse name below it. A description says "pull from Lightspeed and internal sources; pick by zone, pack, ship." Three quick links: Integrations, Inventory Sync, Dashboard.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The description promises pick/pack/ship workflows that do not yet exist on this page. Either implement them or remove the description to avoid setting false expectations. The quick links are useful but could be styled more prominently as action buttons.</div>
+        <div class="el-header">
+          <div class="el-name">Page Title, Subtitle &amp; Quick Links</div>
+          <span class="el-type tag-section">Header</span>
+        </div>
+        <div class="el-behavior">Shows "Orders & Fulfillment" with the warehouse name. A description says "pull from Lightspeed and internal sources; pick by zone, pack, ship." Three quick links: Integrations, Inventory Sync, Dashboard.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">The three quick links (Integrations, Inventory Sync, Dashboard) provide useful navigation shortcuts from a page that will often be referenced alongside those tools.</div>
+          <div class="issue-block">The page description promises pick/pack/ship workflows that do not exist on this page. Setting that expectation in the subtitle and then showing a bare read-only table creates confusion about what the page is for right now.</div>
+          <div class="rec-block">Either replace the description to reflect the current capability ("View incoming orders from Lightspeed"), or add a clear "Coming soon" note for the pick/pack/ship workflow so users know it's planned, not missing.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -36,36 +47,55 @@
     <h2>Orders Table</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Orders Table</div>
-        <span class="el-type tag-table">Data Table</span>
-        <div class="el-behavior">Five columns: Ref (external order reference or internal ID), Source (where the order came from — e.g., "lightspeed"), Status (e.g., "open", "completed", "pending_pick"), Lines (count of line items), and Created date. No sorting, no filtering, no pagination. All orders load at once.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> With no filtering, this table becomes unusable once order volume grows. At minimum add status filtering (Show: Open / In Progress / Completed / All) and sort by date. Also, clicking a row should open order details — currently rows do nothing when clicked.</div>
+        <div class="el-header">
+          <div class="el-name">Orders Table</div>
+          <span class="el-type tag-table">Data Table</span>
+        </div>
+        <div class="el-behavior">Five columns: Ref, Source, Status, Lines (count), and Created date. No sorting, no filtering, no pagination. All orders load at once. Clicking a row does nothing.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">With no filtering, sorting, or pagination, this table becomes unusable as order volume grows. A warehouse with hundreds of orders sees them all in one unsorted list with no way to focus on what matters.</div>
+          <div class="issue-block">Clicking an order row does nothing — there is no order detail view, no way to see line items, no way to take any action on an order.</div>
+          <div class="rec-block">Add at minimum: status filter (Open / In Progress / Completed / All), sort by date, and a row click that shows order details with line items. These are the baseline features expected of any order management page.</div>
+        </div>
       </div>
       <div class="element-card">
-        <div class="el-name">Status Display</div>
-        <span class="el-type tag-table">Table Column</span>
-        <div class="el-behavior">Status values are displayed as raw database strings with underscores replaced by spaces (e.g., "pending pick" from "pending_pick"). No color coding.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Status labels need color-coding: "Open" = green, "Pending Pick" = yellow, "Completed" = grey/blue. A status without visual differentiation is hard to scan quickly.</div>
+        <div class="el-header">
+          <div class="el-name">Status Display</div>
+          <span class="el-type tag-table">Table Column</span>
+        </div>
+        <div class="el-behavior">Status values displayed as raw database strings with underscores replaced by spaces (e.g., "pending pick" from "pending_pick"). No color coding.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">Status labels without color coding require reading every cell to understand which orders need attention. "Open" and "Pending Pick" and "Completed" all look the same visually.</div>
+          <div class="rec-block">Color-code status badges: "Open" = green, "Pending Pick" = amber, "Completed" = grey. This allows an operator to immediately identify which orders require action without reading each row.</div>
+        </div>
       </div>
       <div class="element-card">
-        <div class="el-name">Empty State</div>
-        <span class="el-type tag-section">Empty State</span>
+        <div class="el-header">
+          <div class="el-name">Empty State</div>
+          <span class="el-type tag-section">Empty State</span>
+        </div>
         <div class="el-behavior">Shows: "No orders — connect database or sync from Lightspeed." Links to the two required actions.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The empty state message is acceptable. Add direct links: "Go to Integrations" and "Go to Inventory Sync" formatted as buttons rather than plain text.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">"Connect database" is developer language that has no meaning to a warehouse admin. The system is already connected to a database — this message will confuse operators who don't know what they're supposed to do.</div>
+          <div class="rec-block">Replace with: "No orders found. Sync from Lightspeed to pull the latest orders." Format the sync link as a button rather than plain text so the call to action is obvious.</div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Overall Orders Page Suggestions</h2>
+    <h2>Overall Assessment</h2>
+    <div class="overall-issues">
+      <strong>The Orders page is in an early-stage state</strong> — it displays order data but provides no way to interact with or act on any order. The promised pick/pack/ship workflow does not yet exist.
+    </div>
     <div class="suggest-box">
-      <strong>1. Fulfillment workflow:</strong> The page description promises pick/pack/ship functionality. Until this is built, the page is just a read-only list. Consider adding a note: "Picking workflow — coming soon."<br><br>
-      <strong>2. Order detail view:</strong> Clicking an order should open a detail view showing all line items, item quantities, and picking status per item.<br><br>
-      <strong>3. Manual order creation:</strong> Allow creating internal orders (not just syncing from Lightspeed) for warehouse transfers or internal fulfillment needs.<br><br>
-      <strong>4. Filter and sort:</strong> Essential for any order management page. Add at minimum: status filter, date range filter, and sort by date/status.
+      <strong>Key improvements:</strong><br>
+      1. Add filter by status and sort by date — baseline for any order list.<br>
+      2. Make rows clickable to show order detail with line items.<br>
+      3. Color-code status badges (Open/In Progress/Completed).<br>
+      4. Either remove or update the description that promises unfulfilled pick/pack/ship workflows.
     </div>
   </div>
-
 </div>
 </body>
 </html>

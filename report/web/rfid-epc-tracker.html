@@ -15,41 +15,28 @@
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
     <h1>EPC Tracker</h1>
-    <p class="subtitle">A search and investigation tool for finding individual RFID tags. Type an EPC code, item name, or SKU — the system finds the matching item and shows its full history. The most useful page for tracing where an item has been.</p>
+    <p class="subtitle">Look up any RFID tag or item by EPC code, SKU, or keyword. Shows a detail panel with the item's current status, bin, and a full history timeline of every event on that tag — scans, status changes, location moves. Minimum 2 characters to trigger search, 320ms debounce.</p>
+  </div>
+  <div class="page-summary">
+    <div class="summary-stat"><div class="stat-num stat-good">3</div><div class="stat-label">Working well</div></div>
+    <div class="summary-stat"><div class="stat-num stat-issue">2</div><div class="stat-label">Issues</div></div>
+    <div class="summary-stat"><div class="stat-num stat-rec">3</div><div class="stat-label">Recommendations</div></div>
   </div>
 
   <div class="report-section">
-    <h2>Search Bar</h2>
+    <h2>Search</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Search Input</div>
-        <span class="el-type tag-input">Search Field</span>
-        <div class="el-behavior">A large search field with a magnifying glass icon. As you type (with a short delay of about 320ms), it automatically searches without needing to press Enter. If you type a full EPC code (24 hexadecimal characters), it goes directly to that tag. If you type anything else (like a name or SKU), it shows a list of matching items to pick from. Works with as few as 2 characters typed.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The search delay is good. However, there is no placeholder text explaining what you can search for — adding "Search by EPC, SKU, or item name…" would help new users know what types of queries work. Also, the search should support barcode scanner input — most RFID/barcode scanners emit a string followed by Enter, so pressing Enter should trigger the search immediately.</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="report-section">
-    <h2>Search Results</h2>
-    <div class="element-list">
-      <div class="element-card">
-        <div class="el-name">Direct Match (single EPC)</div>
-        <span class="el-type tag-section">Result Display</span>
-        <div class="el-behavior">If you enter a full EPC code (24 hex characters), the system goes directly to showing that tag's details without asking you to pick from a list. The decoded SGTIN-96 data (what the EPC represents — Company prefix, item reference, serial number) is displayed alongside the item details.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The SGTIN-96 decoded data (company prefix, item reference, serial) is very technical. Most users just need to see "This tag belongs to: Black Dress, SKU-123, currently in Bin A4." The technical EPC breakdown should be collapsible for those who need it.</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">Pick List (multiple matches)</div>
-        <span class="el-type tag-section">Result List</span>
-        <div class="el-behavior">If your search matches multiple items, a list of options appears. Clicking one loads the full detail view for that specific EPC. Each option in the list shows relevant identifying information (SKU, description, EPC prefix).</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The pick list is good. Consider adding the current location/bin of each result in the list so users can identify the right one before clicking (e.g., two identical items in different locations).</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">No Match State</div>
-        <span class="el-type tag-section">Empty State</span>
-        <div class="el-behavior">When the focused EPC produces no results, the system shows a "not found" message. This could mean the EPC has never been seen by the system, or it was searched incorrectly.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The not-found message should suggest next steps: "This EPC was not found in the system. It may belong to another tenant, have been scanned but not uploaded yet, or be incorrectly formatted. Try scanning the physical tag again."</div>
+        <div class="el-header">
+          <div class="el-name">Live Search Input</div>
+          <span class="el-type tag-input">Text Input (debounced)</span>
+        </div>
+        <div class="el-behavior">Accepts any text query — EPC code (exact match), SKU, or keyword. Requires at least 2 characters. Results appear 320ms after typing stops. Direct EPC match jumps straight to that tag's detail view. Keyword search shows a results list to choose from.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">The two-mode behavior (exact EPC → direct detail, keyword → list) is smart — an admin who scans an EPC directly gets to the right place instantly. The 2-char minimum and debounce prevent pointless server calls.</div>
+          <div class="issue-block">No placeholder text tells users what formats are accepted. Entering a full EPC code vs a product name vs a partial SKU all produce different result types, but there is no hint of this in the UI.</div>
+          <div class="rec-block">Add a placeholder: "Search by EPC code, SKU, or item name." Consider a format toggle or a visual badge showing "EPC match" vs "Keyword search" mode when results are shown, so users understand why the result looks different.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -58,20 +45,45 @@
     <h2>Item Detail Panel</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Item Details Card</div>
-        <span class="el-type tag-section">Detail View</span>
-        <div class="el-behavior">Once an EPC is selected, shows full details: EPC code, SKU, current location, bin assignment, current status, and the decoded EPC structure. This is read-only information — you cannot edit anything from here.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Add quick action buttons in the detail panel: "Change Status," "Move to Different Bin," or "Flag for Review." Currently users must know to go to a completely separate page (Bulk Status Update) to make changes. Having shortcuts here would make the tracker much more actionable for floor supervisors investigating a specific item.</div>
+        <div class="el-header">
+          <div class="el-name">Item Detail Panel</div>
+          <span class="el-type tag-section">Detail View</span>
+        </div>
+        <div class="el-behavior">Shows all details for a selected tag: EPC code, associated product name/SKU, current status, current bin assignment, and the commissioning date. Displays prominently when an EPC is found.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">Showing all relevant item details in one panel — without navigating away — makes this the fastest diagnostic tool in the app for "where is this specific item right now?"</div>
+          <div class="issue-block">The current status is displayed as plain text with no color coding. A "stolen" item looks the same as an "in-stock" item visually. This slows down the reader's eyes during a busy investigation.</div>
+          <div class="rec-block">Apply status color coding: green for in-stock, red for stolen/damaged/tag_killed, amber for return/pending states. The status should be the most visually prominent piece of information in the detail panel.</div>
+        </div>
       </div>
+
       <div class="element-card">
-        <div class="el-name">History Timeline</div>
-        <span class="el-type tag-section">Timeline Component</span>
-        <div class="el-behavior">Shows a chronological list of everything that has happened to this specific tag: when it was first commissioned, when it moved between locations, when its status changed, when it was scanned by a reader. Each event shows the timestamp and what changed.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The timeline is the most valuable part of this page. Consider adding a visual map view if locations are physical spaces (showing movement between warehouse zones). Also, allow filtering the timeline by event type (e.g., "Show only location changes").</div>
+        <div class="el-header">
+          <div class="el-name">History Timeline</div>
+          <span class="el-type tag-section">Event Log</span>
+        </div>
+        <div class="el-behavior">A chronological list of every event associated with the tag: each scan reading, status change, bin assignment change, and commissioning event. Each entry shows timestamp, event type, and any associated metadata.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">Full tag history in a timeline format is exactly what's needed for investigating a lost or disputed item. Being able to see "this tag was last scanned 3 days ago at Bin A3, then nothing" answers questions that previously required checking raw database tables.</div>
+          <div class="issue-block">The timeline is flat — all event types look the same. A routine scan and a status change are displayed identically, making it hard to spot the important events quickly when a tag has hundreds of scan entries.</div>
+          <div class="rec-block">Use visual differentiation by event type: status changes in amber, location moves in blue, scans in grey, commissioning in teal. Allow filtering the timeline to show only "status changes" or "location changes" to cut through the noise of routine scans.</div>
+        </div>
       </div>
     </div>
   </div>
 
+  <div class="report-section">
+    <h2>Overall Assessment</h2>
+    <div class="overall-good">
+      <strong>The EPC Tracker is one of the most useful diagnostic tools in the app.</strong> The ability to look up any tag and see its complete history in one place directly supports the core warehouse management use case: knowing exactly where a specific item is and what happened to it.
+    </div>
+    <div class="suggest-box">
+      <strong>Top improvements:</strong><br>
+      1. Color-code item status in the detail panel — make "stolen" visually alarming, "in-stock" visually reassuring.<br>
+      2. Color-code timeline events by type — separate scans from status changes visually.<br>
+      3. Add search placeholder text.
+    </div>
+  </div>
 </div>
 </body>
 </html>

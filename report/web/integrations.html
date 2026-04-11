@@ -17,58 +17,94 @@
     <h1>Integrations</h1>
     <p class="subtitle">A read-only table showing all external systems connected to this tenant (e.g. Lightspeed POS). Shows current connection status, which location is linked, and when the last successful sync occurred.</p>
   </div>
+  <div class="page-summary">
+    <div class="summary-stat"><div class="stat-num stat-good">0</div><div class="stat-label">Working well</div></div>
+    <div class="summary-stat"><div class="stat-num stat-issue">5</div><div class="stat-label">Issues</div></div>
+    <div class="summary-stat"><div class="stat-num stat-rec">4</div><div class="stat-label">Recommendations</div></div>
+  </div>
 
   <div class="report-section">
     <h2>Integrations Table</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Provider Column</div>
-        <span class="el-type tag-table">Table Column</span>
-        <div class="el-behavior">Shows the name of the connected system (e.g., "lightspeed"). Text is automatically capitalized for display.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Show provider logos alongside text names for quick visual recognition. Also consider showing a colored status dot (green = connected, red = error, grey = not configured).</div>
+        <div class="el-header">
+          <div class="el-name">Provider &amp; Status Columns</div>
+          <span class="el-type tag-table">Table Columns</span>
+        </div>
+        <div class="el-behavior">Provider: shows the connected system name (e.g., "lightspeed"), auto-capitalized. Status: shows raw text — "active", "error", "pending" — with no color coding.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">Status values are plain text with no color coding. An "error" status looks the same as "active" at a glance — an admin checking connection health has to read each cell carefully rather than scanning visually.</div>
+          <div class="rec-block">Color-code the status pill: green badge for "active," red for "error," amber for "pending." Consider showing a provider logo icon alongside the name for quick visual recognition.</div>
+        </div>
       </div>
       <div class="element-card">
-        <div class="el-name">Status Column</div>
-        <span class="el-type tag-table">Table Column</span>
-        <div class="el-behavior">Shows the current status of the connection as raw text (e.g., "active", "error", "pending"). No color coding.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Status values should be color-coded: green badge for "active," red for "error," yellow for "pending." Raw text status values are easy to miss.</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">Location Column</div>
-        <span class="el-type tag-table">Table Column</span>
+        <div class="el-header">
+          <div class="el-name">Location Column</div>
+          <span class="el-type tag-table">Table Column</span>
+        </div>
         <div class="el-behavior">Shows which warehouse location the integration is linked to (e.g., "STORE-A"). If the integration is at the tenant level (not location-specific), it shows "tenant."</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> "tenant" is an internal term. Replace with "All locations" for clarity.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">"tenant" is an internal technical term. Warehouse admins using this page will not understand what "tenant" scope means in this context.</div>
+          <div class="rec-block">Replace "tenant" with "All locations" to make it immediately clear this integration applies across the entire warehouse system.</div>
+        </div>
       </div>
       <div class="element-card">
-        <div class="el-name">Last OK Column</div>
-        <span class="el-type tag-table">Table Column</span>
-        <div class="el-behavior">Shows the timestamp of the last successful API response from the integration (format: 2026-04-11T10:30:00). Shows "—" if never succeeded.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Show relative time ("2 hours ago") alongside the full timestamp. If "Last OK" was more than 24 hours ago, highlight in amber as a warning that the connection may be stale.</div>
+        <div class="el-header">
+          <div class="el-name">Last OK &amp; Last Job Columns</div>
+          <span class="el-type tag-table">Table Columns</span>
+        </div>
+        <div class="el-behavior">Last OK: timestamp of the last successful API response. Last Job: timestamp of the last sync job run (not necessarily successful). Both show "—" if not available.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">Both columns show raw ISO timestamps. Admins checking connection health need to mentally calculate how long ago each event was — "2026-04-09T10:30:00" doesn't immediately read as "2 days ago."</div>
+          <div class="issue-block">There is no "Last job result" column — you can see a job ran, but not whether it succeeded or failed. This makes diagnosing issues impossible from this page alone.</div>
+          <div class="rec-block">Show relative time ("2 hours ago") alongside the timestamp. Add a "Last job result" column (Success/Failure). Highlight "Last OK" in amber if it was more than 24 hours ago — this signals a potentially stale connection.</div>
+        </div>
       </div>
       <div class="element-card">
-        <div class="el-name">Last Job Column</div>
-        <span class="el-type tag-table">Table Column</span>
-        <div class="el-behavior">Shows the timestamp of the last sync job that ran (not necessarily successful). Helps diagnose if jobs are queued but never completing.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Adding a "Last job result" column (success/failure) would make this table much more actionable. Currently you can see a job ran but not if it succeeded.</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">Empty State</div>
-        <span class="el-type tag-section">Empty State</span>
+        <div class="el-header">
+          <div class="el-name">Empty State</div>
+          <span class="el-type tag-section">Empty State</span>
+        </div>
         <div class="el-behavior">When no integrations are configured, shows: "No integration rows — connect Lightspeed or seed data."</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Replace developer language with a helpful call-to-action: "No integrations configured. Go to Settings → General to set up your Lightspeed connection." Include a direct link.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">"seed data" is developer language with no meaning to an admin. This message exposes the development process rather than guiding the user.</div>
+          <div class="rec-block">Replace with: "No integrations configured yet. Go to Settings → General to set up your Lightspeed connection." Include a direct button link to Settings → General.</div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Overall Integrations Page Suggestions</h2>
-    <div class="suggest-box">
-      <strong>1. Read-only is limiting:</strong> Admins should be able to test the connection, force a sync, or disconnect an integration directly from this page rather than having to navigate to Settings.<br><br>
-      <strong>2. Add action buttons:</strong> "Test connection," "Sync now," and "View sync history" would make this page far more useful.<br><br>
-      <strong>3. No page refresh:</strong> The page loads integration data once and does not auto-refresh. A manual refresh button or auto-refresh every 60 seconds would be useful for monitoring connection health.
+    <h2>Page Actions</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-header">
+          <div class="el-name">Read-Only Page (No Actions)</div>
+          <span class="el-type tag-section">Page Capability</span>
+        </div>
+        <div class="el-behavior">This page is entirely read-only. There are no actions — no "Test connection," no "Force sync," no "Disconnect." Admins can only observe the status, then navigate elsewhere to act on it.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">A read-only integrations page forces admins to navigate to Settings just to test or force-sync a connection. Every time an integration breaks, the diagnostic flow is: check this page → navigate to Settings → re-authorize → come back to verify. This is too many steps.</div>
+          <div class="rec-block">Add action buttons per integration row: "Test connection" (verify the credentials are still valid), "Sync now" (force an immediate sync), and "View sync history" (link to the External Systems report filtered to that provider). This transforms the page from a read-only display into a useful control panel.</div>
+        </div>
+      </div>
     </div>
   </div>
 
+  <div class="report-section">
+    <h2>Overall Assessment</h2>
+    <div class="overall-issues">
+      <strong>The Integrations page shows data but cannot act on any of it.</strong> For admins monitoring integration health, the lack of color-coded status, relative timestamps, job results, and any action buttons makes this page nearly useless compared to what it could be.
+    </div>
+    <div class="suggest-box">
+      <strong>Key improvements:</strong><br>
+      1. Color-code status: green = active, red = error, amber = pending.<br>
+      2. Show relative time ("2 hours ago") for sync timestamps.<br>
+      3. Add a "Last job result" column (Success/Failure).<br>
+      4. Add action buttons: Test connection, Sync now, View history.<br>
+      5. Replace "tenant" with "All locations" and remove developer empty state text.
+    </div>
+  </div>
 </div>
 </body>
 </html>
