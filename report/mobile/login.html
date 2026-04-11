@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Login · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Login</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Login Screen</h1>
+    <p class="subtitle">The first screen staff see when opening the app. Contains the standard email/password login form, a biometric fingerprint shortcut, device identity display, and options to remember the email address and enable biometric login for future sessions.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Login Form</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Email Field</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">Standard email input. If the "Remember email" checkbox was previously checked, the last-used email address is pre-filled when the app opens. The keyboard type is set to email for easier entry on mobile.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The email pre-fill is a useful time-saver for devices assigned to a single user. Consider extending this to full "saved accounts" — a quick-pick list of previously logged-in emails so staff members can switch users on a shared device without retyping.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Password Field</div>
+        <span class="el-type tag-input">Password Input</span>
+        <div class="el-behavior">Standard password input with obscured text. No show/hide toggle is visible in the current design.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add a show/hide password toggle (eye icon) — a standard UX pattern for mobile password fields. Warehouse staff wearing gloves or working in poor lighting conditions often struggle with password entry; reducing friction here is worthwhile. Also, "forgot password" functionality should be accessible from this screen even if it redirects to a web browser.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Sign In Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Submits the email and password to the server for authentication. While logging in, a loading state appears. On success, navigates to the dashboard. On failure, an error message is displayed.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The button should be large and easy to tap — warehouse staff often use gloves. Ensure the tap target is at least 60px tall. Also ensure the button is disabled (not just styled as loading) while a login request is in flight, to prevent double-submission.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Biometric Login</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Fingerprint / Biometric Button</div>
+        <span class="el-type tag-button">Icon Button</span>
+        <div class="el-behavior">A fingerprint icon button that triggers biometric authentication (fingerprint or face recognition depending on device hardware). The biometric credential is stored in a secure vault on the device — the first time biometric login is set up, credentials are saved. On subsequent opens, if biometric login is enabled, this button can be tapped instead of typing the password. If biometric authentication fails, the user falls back to the email/password form.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The biometric button is a significant UX improvement for warehouse floor use. One issue: if a user changes their password on the web app, the saved biometric credential becomes stale and login will fail silently. Add handling for this — detect a 401 "invalid credentials" response during biometric login and prompt: "Your password may have changed. Please log in with your email and password to update your saved credentials."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Enable Biometric Login Checkbox</div>
+        <span class="el-type tag-input">Checkbox</span>
+        <div class="el-behavior">A checkbox labeled to enable biometric login for future sessions. When checked and the user successfully logs in with email/password, the credentials are saved to the secure vault, enabling the fingerprint button for future logins. The checkbox state persists between app sessions.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The checkbox label should explain what enabling this does: "Use fingerprint/face ID instead of password next time." Also, add a note about security: "Only enable this on your personal device." On shared devices used by multiple staff members, biometric login could allow unauthorized access if one person's fingerprint is enrolled on another's login.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Device Identity & Options</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Device Identity Line</div>
+        <span class="el-type tag-section">Info Display</span>
+        <div class="el-behavior">Shows a small text line with the device's MAC address and Android ID. This is the information that appears in the web admin's Device Binding page when the device tries to connect for the first time. The device sends this information to the server when logging in so an admin can identify and authorize it.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The MAC address and Android ID are technical identifiers that most staff won't understand. Either hide this line for normal staff and only show it in a "Device info" section accessible from settings, or replace the label with something more actionable: "Device ID (share with your admin if asked to authorize this device): [MAC] / [Android ID]." This framing helps staff understand why it's there without needing IT knowledge.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Remember Email Checkbox</div>
+        <span class="el-type tag-input">Checkbox</span>
+        <div class="el-behavior">When checked, the email address entered is saved locally and pre-filled the next time the login screen opens. Unchecking clears the saved email.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This works well for single-user devices. No significant concerns. The label is clear enough for the target users.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Server URL Display</div>
+        <span class="el-type tag-section">Locked Text</span>
+        <div class="el-behavior">Shows the server URL that the app is connecting to. This field is locked and cannot be changed from the login screen — it is configured at app build time or via a secure setting. The URL is visible so staff can confirm they are connecting to the correct server.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Showing a raw server URL (like "https://wms.company.internal") to all staff on the login screen exposes infrastructure information unnecessarily. Consider replacing it with a friendly name ("Connecting to: Carbon WMS Production") or hiding it behind a tap/long-press gesture for when support needs to verify the server. The URL is useful for debugging but not for daily use.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Mobile Login Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No "Forgot Password" link:</strong> There is no way for a staff member to recover their account from the mobile app. If they forget their password, they have to contact an admin to reset it. A "Forgot password" link that opens the web app's password reset in a browser would reduce admin workload.<br><br>
+      <strong>2. No version number visible:</strong> Support staff diagnosing an issue often need to know what version of the app the handheld is running. Show the app version number somewhere on the login screen (small, in the corner) so staff can report it without needing to dig into device settings.<br><br>
+      <strong>3. Biometric works great for warehouse floor use:</strong> This is a genuinely good UX decision for this environment. Users with gloves or dirty hands benefit greatly from fingerprint login. Ensure the fallback to email/password is equally smooth when biometrics fail.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

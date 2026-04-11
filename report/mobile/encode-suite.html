@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Encode Suite · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Encode Suite</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Encode Suite</h1>
+    <p class="subtitle">A three-tab screen for all RFID tag commissioning tasks on the handheld. Tab 1 (Search &amp; Encode): find a product by name or SKU and print an RFID label for it. Tab 2 (Scan &amp; Print): scan an existing RFID tag and reprint its label. Tab 3 (Upload): a retry queue for commission records that failed to sync to the server.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Tab 1 — Search &amp; Encode</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Product Search Field</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">A search field to find a product by name, SKU, or barcode. Results appear as a list below. Tapping a result selects it as the product to encode. Once selected, the staff member can generate a new RFID tag for that product and send it to the connected label printer.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Product names and SKUs from the catalog should be searchable offline (cached) so this works even when the server connection is slow. Encoding is often done at receiving, where network conditions may be poor. Also, the search results should show key information at a glance: product image thumbnail (if available), SKU, and current stock count — so staff can confirm they are encoding the right item.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Encode / Print Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">After selecting a product, tapping this button generates a new RFID tag code for the item, sends the encoding instruction to the connected label printer, and records the commissioned item in the server (or queues it for upload if offline). The label is printed with both the RFID code and a human-readable barcode/label.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The encode-and-print action should confirm what will happen: "Print 1 label for [Product Name] on [Printer Name]?" If the printer is not connected, this should be caught before the button is tapped — show printer status (connected/disconnected) proactively. After printing, show whether the commission record was sent to the server or queued for later upload.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Tab 2 — Scan &amp; Print</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Scan Existing Tag</div>
+        <span class="el-type tag-input">RFID Scan</span>
+        <div class="el-behavior">Scans an existing RFID tag and identifies the item it represents. Displays the item's product details. The staff member can then trigger a reprint of the label for that specific tag — useful when a label is damaged or unreadable.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The reprint workflow should clearly distinguish between "reprint the same label" and "encode a new tag for this item." Reprinting means the same EPC is printed again on a new label; encoding means a brand new tag code is generated. These are very different operations — the first is safe and reversible, the second creates a new inventory record. Label these options clearly.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Tab 3 — Upload (Retry Queue)</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Offline Commission Queue</div>
+        <span class="el-type tag-section">Queue Display</span>
+        <div class="el-behavior">Shows a list of commission records (encoded items) that could not be uploaded to the server when they were created — typically because the device was offline. Each queued record shows the item and the timestamp of when it was encoded. A "Retry upload" button attempts to send all queued records to the server.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The upload tab should show a count badge on the tab label when there are pending records: "Upload (3)" so staff know there is work waiting without switching tabs. Also, after a successful upload, clearly confirm how many records were synced. If some records fail to upload again, show which ones and why — don't just silently leave them in the queue.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Retry Upload Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Triggers a retry of all queued commission records. Shows a loading state while uploading. On success, the queue is cleared. On failure, failed records remain in the queue.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add an "Upload all when connected" auto-retry feature — when the device reconnects to the server, any queued records should upload automatically without requiring the staff member to remember to open the Upload tab. This is the most practical solution for offline encoding workflows.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Encode Suite Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Printer connection state is critical:</strong> All three tabs depend on a connected label printer. The printer connection status should be prominently displayed at the top of the Encode Suite screen (not buried in device settings). If the printer is disconnected, warn immediately and guide the staff member to fix it before trying to print.<br><br>
+      <strong>2. No label preview:</strong> Before printing, showing a preview of what the label will look like (similar to the web commissioning page) would help staff verify the right product and format before wasting a label.<br><br>
+      <strong>3. Batch encoding not supported:</strong> Encoding items one by one is slow for large receiving operations. A "batch mode" where the staff member scans barcodes of many items and then prints all labels in sequence would significantly speed up the receiving workflow.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

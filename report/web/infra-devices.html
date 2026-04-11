@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infrastructure Devices · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Infrastructure — Devices</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Infrastructure</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Infrastructure Devices</h1>
+    <p class="subtitle">The central registry of all physical hardware connected to CarbonWMS — RFID readers (fixed and handheld), label printers, and other devices. Each device is assigned to a warehouse location and optionally to a specific bin. This page is the source of truth for what hardware exists and where it is.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Filter Tabs</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Device Type Filter Tabs</div>
+        <span class="el-type tag-button">Tab Bar</span>
+        <div class="el-behavior">A row of tab buttons that filter the devices table by type: "All" (shows everything), plus one tab per device type (e.g., Handheld Reader, RFID Reader, Printer). The active tab is highlighted with the accent color. Clicking a tab immediately filters the list without reloading.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The device type tabs do not show a count badge (e.g., "Handheld Reader (3)"). Adding counts would let admins quickly see how many of each type are registered without switching tabs. Also, the tab labels come from internal type names like "handheld_reader" with underscores replaced by spaces — ensure the display names are user-friendly (e.g., "Handheld Scanners" not "handheld reader").</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Devices Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Devices Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows all registered devices in a table. Columns: Name (the device's friendly name), Type (the device category), IP / MAC (the network address — truncated with full text on hover), Location (location code and name), Bin (the specific bin assigned — "—" if none), Status (Online in green or Offline in grey strikethrough), and action buttons (Edit + a trash icon for Remove).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The "Online/Offline" status is shown but there is no indication of when this status was last checked or how it is determined. Is it a live ping, or just what was last reported? Add a "Last seen" timestamp next to the Online/Offline indicator (e.g., "Online · 2 min ago" or "Offline · last seen 3 days ago"). This helps distinguish between a device that is intentionally powered off vs one that has gone missing.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Empty State</div>
+        <span class="el-type tag-section">State</span>
+        <div class="el-behavior">When no devices match the selected filter tab, a centered empty state appears with a chip icon, the message "No devices registered in this category," a brief explanation ("Add your first Zebra printer or Carbon edge reader. Locations come from the warehouse map — assign each device so scan events can be attributed to a site (and optionally a bin)."), and a "Register a device" button.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The empty state message mentions "Zebra printer" and "Carbon edge reader" by name — this is good contextual guidance. Keep this language but ensure it matches the actual hardware used in the deployment. The empty state is well designed and actionable.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Add Device Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Opens a device editor modal for creating a new device entry. The modal allows setting the device name, type, network address, location, and bin. On save, the device is added to the registry and appears in the table.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The Add Device button and the "Register a device" empty state button both open the same modal — which is consistent. Consider adding a brief help note in the modal explaining what information is needed and why: "The network address (IP or MAC) is used to send print jobs to printers and to identify which reader reported a scan." Without context, admins may not know where to find these values.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Edit Button (per device)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Opens the device editor modal pre-filled with the device's current settings. All fields are editable.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> When editing a device that is currently Online, warn the admin that changes (like updating the network address or reassigning to a different location) may affect live scanning: "This device is currently active. Changes will take effect immediately and may briefly interrupt its connection."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Remove Button (per device)</div>
+        <span class="el-type tag-button">Danger Button (trash icon)</span>
+        <div class="el-behavior">Shows a browser confirmation dialog ("Remove '[name]' from the registry?") before deleting. On confirmation, the device is removed. No undo available.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Removing a device deletes it from the registry, which may affect scan attribution for any scans that come in from that device afterwards. Use a more descriptive confirmation: "Remove [Name]? Future scans from this device will not be attributed to a location. This cannot be undone." Also, if the device is currently Online, block or at least strongly warn: "This device appears to be online. Are you sure you want to remove it?"</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Infrastructure Devices Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No real-time health monitoring:</strong> The page shows Online/Offline status but no connection history, error logs, or metrics. For a production warehouse, knowing "this reader has been dropping off every evening at 8 PM" is critical for maintenance. A simple connection history log per device would help.<br><br>
+      <strong>2. No printer test:</strong> For registered printers, a "Send test print" button would allow admins to quickly verify the printer is connected and working without going to the commissioning page.<br><br>
+      <strong>3. Device grouping by location:</strong> In a multi-location deployment, the flat table becomes hard to navigate. Allow grouping devices by location so admins can see all devices at "Main Warehouse" together.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transfer In · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Transfer In</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Inventory</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Transfer In</h1>
+    <p class="subtitle">For receiving incoming shipments against existing transfer slips. Shows the same slips list as Transfer Out but without the ability to create new slips. The purpose here is to track what was received vs what was expected.</p>
+  </div>
+
+  <div class="info-banner">ℹ️ This page shares the same component as Transfer Out, but in "in" mode — so it shows the same slips list but hides the "Create new slip" form at the top.</div>
+
+  <div class="report-section">
+    <h2>Slips List Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Same Slips Table as Transfer Out</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows all transfer slips sorted newest first. Same columns as Transfer Out: Slip #, Source, Destination, Status, LS ID, and Actions. The description says "Open an existing slip and export receiving progress. Reconcile counts on the handheld, then update statuses in admin when complete."</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Since this page is specifically for receiving, consider filtering the slips to show only ones that are "in transit" (i.e., waiting to be received at this location). Showing all slips, including already-completed ones, clutters the view for receiving staff. Also, the page title says "Transfer in" but there is no visual difference from "Transfer out" — a different highlight color or a clear label on each row showing direction (IN or OUT) would help.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">CSV Export Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Downloads receiving progress — shows what was sent vs what was received vs what is still missing. This is the main tool for reconciling a received shipment.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The CSV export is useful for reconciliation, but it is a passive tool — the user has to manually compare. Consider adding an inline "mark as received" feature that lets receiving staff check off items directly in the web UI rather than going back and forth with a spreadsheet.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Print Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Same print functionality as Transfer Out — opens a new browser tab with an HTML table and auto-triggers the print dialog.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> A "receiving copy" of the slip should visually differ from the "sending copy" — different header, different columns visible. The receiving slip should emphasize the "Received" and "Missing" columns rather than "Sent."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Transfer In/Out Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Separate views for in vs out:</strong> Currently both pages show identical tables. The Transfer In page should show a different view optimized for receiving — e.g., sorted by "incoming to my location" first, with a "Mark Received" status button.<br><br>
+      <strong>2. Status updates:</strong> There is no way on the web to update a slip's status from "in transit" to "received." The description mentions doing this "in admin when complete" — but there is no admin status update button visible on this page.<br><br>
+      <strong>3. Barcode scanning to match:</strong> Receiving staff should be able to scan items with a barcode scanner and have the system automatically match them against the expected EPC list.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

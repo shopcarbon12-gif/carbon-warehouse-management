@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventory Legacy · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Inventory (Legacy View)</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Inventory</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Inventory (Legacy View)</h1>
+    <p class="subtitle">An older, simpler inventory table. Filterable by keyword and zone. Shows up to 80 items. Read-only. Being replaced by the Inventory Catalog.</p>
+  </div>
+
+  <div class="info-banner">⚠️ This page appears to be the older version of the Inventory Catalog. It is accessible via a direct link from the Catalog page. Consider evaluating whether it should be retired.</div>
+
+  <div class="report-section">
+    <h2>Filter Form</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Search Field (q=)</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">Filters results by SKU, asset ID, or item name. The search is submitted by clicking "Apply" — it is NOT a live search. The page reloads with results.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Page-reload searches feel dated. Modern expectation is live filtering as you type. At minimum, pressing Enter should submit the form without requiring the user to click Apply.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Zone Dropdown</div>
+        <span class="el-type tag-dropdown">Dropdown</span>
+        <div class="el-behavior">Filters by zone: All, "rfid", or "bin". Selecting a zone limits which inventory rows are shown. Submitted along with the search when "Apply" is clicked.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The zone names "rfid" and "bin" are internal codes that may confuse staff. Labels like "RFID Floor" and "Physical Bin" would be clearer.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Apply Button</div>
+        <span class="el-type tag-button">Submit Button</span>
+        <div class="el-behavior">Submits the filter form and reloads the page with filtered results.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Standard form submit. Works correctly. The button should be disabled and show a loading state while results are loading to prevent double-clicks.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Clear Link</div>
+        <span class="el-type tag-link">Link</span>
+        <div class="el-behavior">A link that reloads the page with no filters applied, resetting the view to show all items.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Works as expected. Adding an "×" icon to make it look like a clear button would make it more intuitive.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">"View exceptions" Link</div>
+        <span class="el-type tag-link">Link</span>
+        <div class="el-behavior">A link in the top-right of the filter row that jumps to the Alerts & Exceptions page.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Good contextual shortcut. Consider showing the count of open exceptions next to this link (e.g., "View exceptions (3)") so users know if there is anything to act on.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Inventory Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Results Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows up to 80 rows with columns: Asset (EPC-style ID), SKU, Name, Zone, and Quantity. The Asset ID is highlighted in teal. Rows highlight on hover. No way to sort by column. No way to click a row for more detail. No pagination — hard limit of 80 rows.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The 80-row hard limit is arbitrary and not communicated to users. A user seeing 80 results might not know there are more. Add a message like "Showing first 80 results — use search to narrow down." Also, column headers should be clickable for sorting. And clicking a row should open a detail view rather than doing nothing.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Empty State Message</div>
+        <span class="el-type tag-section">Empty State</span>
+        <div class="el-behavior">When no data is found, shows: "No rows — run npm run db:seed." This is a developer-only instruction that makes no sense to a warehouse operator.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Replace the empty state message with something user-friendly: "No inventory found. Try a different search term, or contact your administrator if you believe items should appear here." Remove the developer-facing database seed instruction entirely from the production build.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

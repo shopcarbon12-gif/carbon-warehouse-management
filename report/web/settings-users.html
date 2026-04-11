@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Users & Roles · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Settings — Users & Roles</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Settings</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Users &amp; Roles</h1>
+    <p class="subtitle">Two-tab page for managing who has access to CarbonWMS. The Users tab manages individual staff accounts — their email, role, and which warehouse locations they can access. The User Roles tab defines the roles themselves, including what each role is allowed to see.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Users Tab</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Users Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows all users in this tenant with four columns: a checkbox for selection, Email, Role (name of their assigned role), and Locations (the warehouse locations they can access, listed as short codes like "001 · Main Warehouse"). Each row has Edit and Remove text links. Rows can be individually checked for bulk operations.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The users table does not show any account status — whether the user has logged in recently, when their account was created, or if they are currently active. Adding a "Last login" column or a status badge (Active / Never logged in) would help admins identify inactive accounts. Also, the locations column can get very long for users with access to many locations — truncate it with "3 locations" text that expands on hover.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Add User Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Opens a modal to create a new user account. The modal asks for: email address, an optional password (if left empty, a password is auto-generated), a role selection (dropdown of available roles), and location access (a checkbox list of all warehouse locations). On success, a browser alert popup shows the temporary password with the message "User created. Temporary password: [password]. Copy it now; it will not be shown again."</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The temporary password is shown in a basic browser alert popup, which cannot be selected/copied easily on all devices. Replace this with a styled modal that displays the password in a clearly copyable text field with a "Copy to clipboard" button. Also consider sending the password by email instead of — or in addition to — showing it on screen, to reduce the chance of it being missed or forgotten.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Export Button</div>
+        <span class="el-type tag-button">Secondary Button</span>
+        <div class="el-behavior">Downloads a CSV file of all users, with columns: Email, Role, Locations. The file is named with today's date (e.g., "wms-users-2026-04-11.csv"). No confirmation required.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The export is useful for auditing. Consider adding a "Last login" date to the export as well. Also, the export downloads all users regardless of any active filters or selection — make it clear whether it exports all users or only selected ones.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Bulk Actions Dropdown</div>
+        <span class="el-type tag-button">Dropdown Button</span>
+        <div class="el-behavior">A dropdown with two options: "Remove selected from tenant" and "Export selected emails (CSV)." The dropdown closes when clicking outside. "Remove selected" shows a browser confirmation dialog ("Remove X user(s) from this tenant? They will lose access to this WMS tenant.") before deleting. "Export selected emails" downloads a CSV of just the email addresses of selected users. If no users are selected when clicking either option, a browser alert says "Select at least one user."</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> "Remove selected from tenant" is a destructive action — use a more styled confirmation modal instead of a browser dialog. Also, after bulk removal, show how many were successfully removed and if any failed (the code already tracks failures but shows a plain alert). Consider adding more bulk actions: "Change role for selected users" or "Assign selected to a location."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Edit User / Remove User Links</div>
+        <span class="el-type tag-button">Inline Links</span>
+        <div class="el-behavior">Edit opens the user modal pre-filled with their current email (disabled — cannot change), role, and locations. Remove shows a browser confirmation ("Remove [email] from this tenant?") and deletes the user immediately.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The email field is disabled in Edit mode — if an admin needs to fix a typo in an email, they would have to remove the user and re-add them. Consider allowing email changes with an appropriate warning. Also, the Remove confirmation should explicitly say what data will be lost (their session, their access, any device bindings) so the admin can make an informed decision.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>User Roles Tab</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Roles Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">A simple two-column table: Role name and an "Edit role" link. Lists all custom roles created for this tenant. No other information shown in the list view — to see what a role can access, you must click Edit.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The roles table should show a brief summary of what each role can access without having to open the editor. A "permissions preview" column showing something like "Can view: Inventory, Reports | Hidden: Settings, Admin" would make the table scannable at a glance.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Add Role Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Opens the role editor modal in "add" mode. The role starts with all sections set to "View" by default — meaning a new role can see everything unless sections are explicitly hidden.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Defaulting to full access for new roles is a potential security risk. Consider offering two starting templates: "Full access" and "Read only" — and let the admin choose before opening the editor. This way, creating a restricted role doesn't require manually hiding every section one by one.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Role Permissions Editor Modal</div>
+        <span class="el-type tag-section">Modal</span>
+        <div class="el-behavior">A full-height modal listing every page/section in the app. For each section, two toggle buttons appear: "View" (allow) and "Hide" (deny). Sections are grouped by page (Inventory, RFID, Reports, Settings, etc.). A role name field is at the top. Saving the role updates its permissions. Editing an existing role also shows a "Delete role" button in the bottom-left. The modal notes: "Permissions control page/section visibility (stored as JSON on the role). Enforcement in navigation can be wired in a follow-up." — meaning that permissions are saved but not fully enforced in the UI yet.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The note "enforcement in navigation can be wired in a follow-up" is a developer note that should not appear in the admin UI. Remove it or replace it with what admins need to know: whether hiding a section actually prevents access or just hides the navigation link. If enforcement is not yet complete, add a warning: "Note: Role restrictions are being rolled out. Some sections may still be visible to all users while this feature is finalized." Also, the permission editor would benefit from a "Select all / Hide all" toggle at the top of each group so admins can start from a clean slate for each section rather than clicking each one individually.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Delete Role Button (in modal)</div>
+        <span class="el-type tag-button">Danger Button</span>
+        <div class="el-behavior">Only shown when editing an existing role. Shows a browser confirmation: "Delete role '[name]'? Users must not reference it." If confirmed, deletes the role permanently. Does not automatically reassign users who had that role.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The warning "Users must not reference it" is vague. Before allowing deletion, check if any users are currently assigned to this role and show them: "3 users still have this role assigned: john@example.com, jane@example.com, ... Deleting this role will leave them without a role. Reassign them first." Block deletion if users would be orphaned, or offer to auto-assign them to a default role.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Users & Roles Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No password reset:</strong> Admins can create users with auto-generated passwords, but there's no "Reset password" option for existing users. Admins currently have no way to help a user who forgot their password except to remove and re-add them.<br><br>
+      <strong>2. No activity trail:</strong> User creation, removal, and role changes should appear in the activity audit log with timestamps and the admin who made the change.<br><br>
+      <strong>3. Role permissions are not fully enforced yet:</strong> The code itself notes this. Users should not be able to see settings pages that are hidden for their role — until this is implemented, the role system gives a false sense of security.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

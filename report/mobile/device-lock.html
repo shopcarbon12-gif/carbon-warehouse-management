@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Device Lock · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Device Lock Screen</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Device Lock / Not Authorized Screen</h1>
+    <p class="subtitle">A blocking screen shown when a user logs in successfully but their handheld device has not yet been authorized by an admin on the Device Binding settings page. The user is logged in but cannot access any features until the device is approved. This is a security control to prevent unauthorized devices from connecting to the warehouse system.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Lock Screen Content</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Unauthorized Device Message</div>
+        <span class="el-type tag-section">Blocking Screen</span>
+        <div class="el-behavior">When a device is not yet authorized, the user sees a screen explaining that their device needs approval before they can use the app. The screen shows the device's identifying information (MAC address / Android ID) so the user can report it to an admin for authorization. No app features are accessible from this screen.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The lock screen is a critical first-time user experience moment. The message needs to be clear and actionable — not just "Device not authorized" but a step-by-step explanation: "1. Your device needs to be approved by your manager. 2. Show them this screen or send them your Device ID: [MAC/Android ID]. 3. Once approved, tap the button below to retry." A plain error message leaves staff confused and requires an IT/admin call to resolve.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Device Identity Display</div>
+        <span class="el-type tag-section">Info Display</span>
+        <div class="el-behavior">Shows the device's MAC address and Android ID so the user can provide this information to the admin who needs to authorize the device. This is the same information shown on the login screen device identity line.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add a "Copy device ID" button that copies the identifying information to the clipboard so the staff member can paste it into a message to their manager. Verbally communicating a MAC address or Android ID is error-prone. Also, show a QR code encoding the device ID — a manager with a phone could scan it to get the device info without the staff member having to type anything.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Retry / Check Authorization Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">A button that re-checks whether the device has been authorized. After an admin approves the device on the web settings page, the user can tap this button to verify authorization and unlock the app without having to log out and back in.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The retry button is essential — make it prominent and clearly labeled: "Check if I've been approved." Also consider auto-polling every 30–60 seconds so the screen unlocks automatically once the admin approves it, without requiring the user to keep tapping. Show a last-checked timestamp: "Last checked: 2 minutes ago" so the user knows the check is happening.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Sign Out Option</div>
+        <span class="el-type tag-button">Secondary Button</span>
+        <div class="el-behavior">Allows the user to sign out and return to the login screen. This is important because the only way off the lock screen (other than getting authorized) is to sign out.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The sign-out option should be clearly visible — if a user logged in with the wrong account, they need to be able to easily go back. Label it: "Sign out — try a different account" to explain why they might want to use it.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Device Lock Screen Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Staff have no way to self-service:</strong> The entire flow depends on an admin seeing the pending device in the web settings and approving it. In a warehouse environment at shift start, multiple new devices trying to onboard simultaneously could bottleneck at the admin's screen. Consider a "Request authorization" feature that sends the admin a notification with the device info, rather than requiring the admin to proactively check the web settings page.<br><br>
+      <strong>2. No indication of who to contact:</strong> The lock screen should show who to contact for authorization — ideally the admin's name or a generic "Contact your store manager." Without this, first-time users are left guessing who can help them.<br><br>
+      <strong>3. Error vs pending are different states:</strong> A device that has never been seen (not in the system at all) is different from one that is in the system but pending approval. These should show different messages: "Your device hasn't been registered yet — log in to register it, then ask your manager to approve it" vs "Your device is registered and waiting for your manager to approve it."
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

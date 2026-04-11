@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RFID ↔ POS Compare · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>RFID ↔ POS Compare</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>RFID ↔ POS Compare (Developer Page)</h1>
+    <p class="subtitle">A developer/testing utility page for running compare operations using a hardcoded sample payload. Not intended for daily warehouse use — the real compare tool lives in Reports → POS Compare.</p>
+  </div>
+
+  <div class="info-banner">⚠️ This page appears to be a development/testing tool. It uses hardcoded sample data and is described as a way to "test" the compare API. It should likely not be accessible to regular warehouse staff.</div>
+
+  <div class="report-section">
+    <h2>Page Content</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Sample Payload Preview</div>
+        <span class="el-type tag-section">Code Display</span>
+        <div class="el-behavior">Shows a raw JSON code block displaying the hardcoded sample data that will be submitted when the button is clicked. Contains two sample items: "AVA MINI DRESS BLACK S" (2 in RFID, 2 in POS — matching) and "ISLA KNIT BLACK OS" (24 in RFID, 0 in POS — discrepancy).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Showing raw JSON to warehouse staff is not appropriate. This page should either be restricted to developers/admins only, or completely removed and replaced with the proper POS Compare report which uses real data.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Run Compare Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Labeled "Run compare (POST /api/compare/runs)". Clicking submits the hardcoded sample data to the API, creating a compare run in the database and generating exceptions for any discrepancies found. Shows "Running…" while in progress. After completion shows the run ID and how many exceptions were created.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The button label exposes the internal API endpoint path ("/api/compare/runs") which is technical and confusing for regular users. Also, repeatedly clicking this in production creates fake compare runs and fake exceptions in the real database. This page should be protected or removed from production.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Cross-links to Real Pages</div>
+        <span class="el-type tag-link">Links</span>
+        <div class="el-behavior">Two links near the top: "Reports → POS compare" (the real compare workspace) and "Operations exceptions" (where generated exceptions can be reviewed). These point users to the correct pages.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Good that these links are here. Consider making this entire page redirect to "Reports → POS Compare" and eliminating the demo functionality in production.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

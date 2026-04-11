@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Device Binding · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Settings — Device Binding</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Settings</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Device Binding (Handheld Authorization)</h1>
+    <p class="subtitle">The security gate for handheld RFID devices. Before a handheld can connect and work, an admin must authorize it here. The page shows all handhelds that have logged in once but have not yet been approved. Devices already authorized are not shown.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Pending Devices Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Pending Registrations Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows only handheld devices that have sent a login ping (appeared in the system) but have not been authorized yet. Columns shown: Location, Device Name, Android ID (the unique identifier of that specific Android device), Network/MAC address, Serial number, OS version and radio firmware version, whether it is authorized (always "No" on this view since only pending ones are shown), and an Authorize button. If no devices are pending, a message says: "No pending handheld registrations. Open the mobile app once (device ping) after login." — which tells the admin what to do next.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The empty state message is somewhat technical. Rewrite it in plain language: "No handhelds waiting for approval. When a staff member logs in on a new handheld for the first time, it will appear here." Also, the table currently shows only the pending/unauthorized devices. Add a toggle or tab to also show already-authorized devices so admins can review the full list of approved handhelds, revoke authorization, or rename them.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Authorize Button (per device)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">A blue "Authorize" button on each row. Clicking it immediately approves that handheld, allowing it to connect and use all RFID functions. The button is disabled while the request is in progress. Once authorized, the row disappears from the pending list (since the page only shows pending devices). There is no confirmation dialog before authorizing.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Authorizing a device is a security-sensitive action — it grants that device full access to scan inventory. Add a confirmation step: "Authorize device [Serial/Name] at [Location]? This will allow it to connect and perform scans." Also, after authorizing, show a brief success toast so the admin knows it worked, since the row simply disappears without any feedback.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Device Information Columns</div>
+        <span class="el-type tag-section">Data Display</span>
+        <div class="el-behavior">Each row shows technical device info gathered when the device first checked in: Android ID, network address/MAC, serial number, Android OS version (shown as "A14" for Android 14), and radio firmware version. This information helps the admin identify which physical device they are approving. If a field is not available, a dash (—) is shown.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Most warehouse admins will identify devices by their physical label (e.g., "Handheld #3") rather than an Android ID or MAC address. Allow the admin to give each device a friendly name (like "Receiving Bay 1" or "Store Floor 2") during or after authorization. The device name shown should be editable. Also add the date/time the device first appeared in the system so the admin knows how long it has been waiting.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Device Binding Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No way to revoke access:</strong> Once a device is authorized, there is no visible way to remove its authorization from this page. Admins need a "Revoke" button — for lost or stolen devices, or when an employee leaves.<br><br>
+      <strong>2. All authorized devices not visible:</strong> Seeing all connected and authorized devices in one list (not just pending) is essential for security management. Add a second tab or toggle for "Authorized" devices.<br><br>
+      <strong>3. No last-seen timestamp:</strong> It would be very useful to show when each authorized device last connected. A device that hasn't been seen in 30 days might be lost. Showing "Last seen: 3 days ago" helps admins maintain a clean device list.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

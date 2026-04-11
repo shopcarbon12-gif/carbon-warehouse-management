@@ -859,38 +859,32 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (_biometricChallengeActive)
-                              SizedBox(
-                                height: 104,
-                                child: Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                                    child: Text(
-                                      'Confirm on this device…',
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        height: 1.3,
-                                        color: _primaryTeal,
-                                      ),
-                                    ),
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _busy ? null : _biometricSignIn,
+                                customBorder: const CircleBorder(),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.fingerprint,
+                                    size: 96,
+                                    color: _primaryTeal,
                                   ),
                                 ),
-                              )
-                            else
-                              Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  onTap: _busy ? null : _biometricSignIn,
-                                  customBorder: const CircleBorder(),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(4),
-                                    child: Icon(
-                                      Icons.fingerprint,
-                                      size: 96,
-                                      color: _primaryTeal,
-                                    ),
+                              ),
+                            ),
+                            if (_biometricChallengeActive)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: Text(
+                                  'Confirm on this device…',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.3,
+                                    color: _primaryTeal,
                                   ),
                                 ),
                               ),

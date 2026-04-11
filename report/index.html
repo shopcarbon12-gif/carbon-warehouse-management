@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CarbonWMS · Full Review Report</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="hero">
+  <span class="badge">CarbonWMS · Full Review</span>
+  <h1>Complete UX & Behavior Report</h1>
+  <p>Every page of the web app and every screen of the mobile app reviewed — what each element does today, and what could be improved. Click any page below to read its full report.</p>
+  <div class="meta">Generated: April 2026 &nbsp;·&nbsp; Web App (Next.js) + Mobile App (Flutter/Android)</div>
+</div>
+
+<div class="page-wrap">
+
+  <!-- ═══════════════════════════════════════════
+       WEB APP
+  ═══════════════════════════════════════════ -->
+  <div class="section-group">
+    <h2>🌐 Web App — Shared Layout</h2>
+    <div class="card-grid">
+      <a href="web/navigation.html" class="nav-card">
+        <span class="card-title">Navigation & Sidebar</span>
+        <span class="card-sub">The left panel that wraps every page. Location switcher, accordion menus, sign-out.</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>🔐 Authentication</h2>
+    <div class="card-grid">
+      <a href="web/login.html" class="nav-card">
+        <span class="card-title">Login</span>
+        <span class="card-sub">Email + password sign-in form, error states, redirect after login.</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>📊 Dashboard</h2>
+    <div class="card-grid">
+      <a href="web/dashboard.html" class="nav-card">
+        <span class="card-title">Dashboard — Command Center</span>
+        <span class="card-sub">KPI tiles, hardware pulse strip, live scan counter, activity timeline, quick links.</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>📦 Inventory</h2>
+    <div class="card-grid">
+      <a href="web/inventory-catalog.html" class="nav-card">
+        <span class="card-title">Inventory Catalog</span>
+        <span class="card-sub">Main inventory view — Lightspeed item lines and RFID EPC view, search, export, add items.</span>
+        <div class="sub-links">
+          <a href="web/inventory-legacy.html">Legacy Inventory View</a>
+          <a href="web/inventory-bulk-status.html">Bulk Status Update</a>
+          <a href="web/inventory-sync.html">Lightspeed Sync</a>
+          <a href="web/inventory-transfer-out.html">Transfer Out</a>
+          <a href="web/inventory-transfer-in.html">Transfer In</a>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>📡 RFID & Hardware</h2>
+    <div class="card-grid">
+      <a href="web/rfid-landing.html" class="nav-card">
+        <span class="card-title">RFID Workflows</span>
+        <span class="card-sub">Landing page with links to encode portal, inventory, and handheld API docs.</span>
+        <div class="sub-links">
+          <a href="web/rfid-epc-tracker.html">EPC Tracker</a>
+          <a href="web/rfid-commissioning.html">Print / Commission Labels</a>
+          <a href="web/rfid-cycle-counts.html">Cycle Counts</a>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>⚠️ Operations</h2>
+    <div class="card-grid">
+      <a href="web/operations-exceptions.html" class="nav-card">
+        <span class="card-title">Operations — Exceptions</span>
+        <span class="card-sub">Floor workspace for RFID alarms. Filter, resolve, simulate.</span>
+        <div class="sub-links">
+          <a href="web/operations-transfers-legacy.html">Operations — Transfers (Legacy)</a>
+          <a href="web/alerts.html">Alerts & Exceptions (Admin View)</a>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>🔄 Compare & Integrations</h2>
+    <div class="card-grid">
+      <a href="web/compare.html" class="nav-card">
+        <span class="card-title">RFID ↔ POS Compare (Dev)</span>
+        <span class="card-sub">Sample payload runner for compare jobs.</span>
+        <div class="sub-links">
+          <a href="web/integrations.html">Integrations Status Table</a>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>📋 Orders</h2>
+    <div class="card-grid">
+      <a href="web/orders.html" class="nav-card">
+        <span class="card-title">Orders & Fulfillment</span>
+        <span class="card-sub">Table of orders from Lightspeed or internal sources, status and line count.</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>🗺️ Locations & Overview</h2>
+    <div class="card-grid">
+      <a href="web/overview-locations.html" class="nav-card">
+        <span class="card-title">Locations & Bins Manager</span>
+        <span class="card-sub">View all locations and their bins. Add/edit/delete bins. Bin inventory counts shown.</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>📑 Reports</h2>
+    <div class="card-grid">
+      <a href="web/reports-activity.html" class="nav-card">
+        <span class="card-title">Activity History</span>
+        <span class="card-sub">Main audit log — all system events, timestamped.</span>
+        <div class="sub-links">
+          <a href="web/reports-inventory-compare.html">POS Compare Report</a>
+          <a href="web/reports-uploads.html">Device Upload Logs</a>
+          <a href="web/reports-asset-movements.html">Asset Movements</a>
+          <a href="web/reports-status-logs.html">Status & Tag Logs</a>
+          <a href="web/reports-adjustments.html">Inventory Adjustments</a>
+          <a href="web/reports-replenishments.html">Replenishments</a>
+          <a href="web/reports-bulk-imports.html">Bulk Imports</a>
+          <a href="web/reports-external-systems.html">External Systems Report</a>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>⚙️ Settings</h2>
+    <div class="card-grid">
+      <a href="web/settings-general.html" class="nav-card">
+        <span class="card-title">General Settings</span>
+        <span class="card-sub">RFID defaults, Lightspeed OAuth config, bin defaults. Three-tab panel.</span>
+        <div class="sub-links">
+          <a href="web/settings-theme.html">Theme & Style</a>
+          <a href="web/settings-handheld.html">Handheld Settings</a>
+          <a href="web/settings-mobile-ota.html">Mobile OTA Releases</a>
+          <a href="web/settings-devices.html">Device Binding</a>
+          <a href="web/settings-status-labels.html">Status Labels (Clean 10)</a>
+          <a href="web/settings-epc-general.html">RFID EPC — General</a>
+          <a href="web/settings-epc-profiles.html">EPC Encoding Profiles</a>
+          <a href="web/settings-users.html">Users & Roles</a>
+          <a href="web/settings-locations.html">Warehouse Locations</a>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>🔌 Infrastructure</h2>
+    <div class="card-grid">
+      <a href="web/infra-devices.html" class="nav-card">
+        <span class="card-title">Infrastructure — Devices</span>
+        <span class="card-sub">Registry of all hardware: printers, fixed readers, handhelds. Filter by type, add/edit/remove.</span>
+        <div class="sub-links">
+          <a href="web/infra-lightspeed-sales.html">Lightspeed Sales (Diagnostic)</a>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section-group">
+    <h2>📄 Developer / Docs</h2>
+    <div class="card-grid">
+      <a href="web/handheld-api.html" class="nav-card">
+        <span class="card-title">Handheld Batch API</span>
+        <span class="card-sub">Developer docs for the batch upload endpoint. Device key auth, request/response shape.</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       MOBILE APP
+  ═══════════════════════════════════════════ -->
+  <div class="section-group">
+    <h2>📱 Mobile App (Android — CarbonWMS)</h2>
+    <div class="card-grid">
+      <a href="mobile/login.html" class="nav-card">
+        <span class="card-title">Login Screen</span>
+        <span class="card-sub">Email + password, biometric fingerprint sign-in, device identity display.</span>
+      </a>
+      <a href="mobile/dashboard.html" class="nav-card">
+        <span class="card-title">Dashboard (Home)</span>
+        <span class="card-sub">Module grid with 11 cards across Inventory, Operations, and Encode sections. RF power slider, OTA update button.</span>
+        <div class="sub-links">
+          <a href="mobile/item-lookup.html">Item Lookup</a>
+          <a href="mobile/barcode-intake.html">Barcode Intake (Non-RFID)</a>
+          <a href="mobile/fast-putaway.html">Fast Bin Putaway</a>
+          <a href="mobile/clean-bin.html">Clean Bin</a>
+          <a href="mobile/csv-cycle-session.html">CSV Cycle Session</a>
+          <a href="mobile/locate-tag.html">Locate Tag (Geiger)</a>
+          <a href="mobile/transfer-slips.html">Transfer Slips (OUT + IN)</a>
+          <a href="mobile/status-change.html">Change Status</a>
+          <a href="mobile/encode-suite.html">Encode Suite (Search & Encode / Scan & Print / Upload)</a>
+        </div>
+      </a>
+      <a href="mobile/handheld-settings.html" class="nav-card">
+        <span class="card-title">Handheld Settings</span>
+        <span class="card-sub">Biometric toggle, OTA update check, server URL, device identity info.</span>
+      </a>
+      <a href="mobile/device-lock.html" class="nav-card">
+        <span class="card-title">Device Lock Screen</span>
+        <span class="card-sub">Shown when device is not yet authorized by an admin. Device ID display, retry button.</span>
+      </a>
+    </div>
+  </div>
+
+</div><!-- /page-wrap -->
+</body>
+</html>

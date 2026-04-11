@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asset Movements · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Reports — Asset Movements</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Reports</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Asset Movements Report</h1>
+    <p class="subtitle">A report showing all recorded movements of RFID-tagged items — when items changed location, moved between zones, or were transferred between bins. Useful for tracing the physical journey of any item through the warehouse.</p>
+  </div>
+  <div class="report-section">
+    <h2>Movements Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Asset Movements Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows movement events with EPC, item details, source location/bin, destination location/bin, type of movement (transfer, scan, etc.), and timestamp. Read-only.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add filtering by EPC or SKU (to trace one specific item), by date range, by movement type, and by location. Without filters, this report becomes unusable at scale. Also add a CSV export button.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Report Toolbar</div>
+        <span class="el-type tag-section">Toolbar</span>
+        <div class="el-behavior">The shared report toolbar component — typically includes date range picker, search, and export options depending on the workspace.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Make sure the toolbar has a date range filter that defaults to "Today" so the report opens with relevant data rather than loading everything from the beginning of time.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

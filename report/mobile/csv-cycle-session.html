@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile CSV Cycle Session · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — CSV Cycle Session</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>CSV Cycle Session</h1>
+    <p class="subtitle">A cycle count tool that uses a CSV file as the expected inventory list. Staff load a CSV of expected items, then scan the RFID tags in a location. The app compares what was scanned against the expected list and highlights discrepancies — items missing from the scan, or unexpected items found that were not in the list.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>CSV Import</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Load CSV Button / File Picker</div>
+        <span class="el-type tag-input">File Input</span>
+        <div class="el-behavior">Allows the staff member to load a CSV file containing the expected list of items (typically exported from the web app or a buying/planning system). The CSV must contain EPC codes or item identifiers. Once loaded, the expected count is shown and the scanning session can begin.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The CSV file needs to come from somewhere — how does a staff member get a CSV onto their handheld device? This workflow requires either emailing the file to themselves, using a shared drive, or some other file transfer mechanism. Consider building a "Download expected list from server" option that fetches the expected CSV directly from the WMS web app for a specific bin or location, eliminating the manual file transfer entirely.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Scan Session</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Start / Stop Scan Button</div>
+        <span class="el-type tag-button">Large Button</span>
+        <div class="el-behavior">Starts or stops the RFID scan session. While scanning is active, all tags read by the RFID reader are captured and compared against the loaded CSV in real time. The scan can be paused and resumed. The total count of scanned tags is displayed live.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The start/stop button should have a very clear visual state — green and pulsing when scanning, grey when stopped. In a noisy warehouse environment, staff need to quickly glance and know if the scanner is active. Also, show a progress indicator comparing scanned vs expected: "Matched: 42/60 — keep scanning to find remaining items."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Match / Miss Summary</div>
+        <span class="el-type tag-section">Results Display</span>
+        <div class="el-behavior">Shows the comparison between the expected CSV items and what was scanned: matched items (found as expected), missing items (in the CSV but not scanned), and unexpected items (scanned but not in the CSV). This classification helps staff identify inventory discrepancies.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The classification results should be color-coded and immediately visible: green for matched, red for missing, yellow for unexpected. Show counts prominently: "42 matched · 8 missing · 3 unexpected." Tapping each category should show the specific items in that group. The "missing" list is especially important — these are items that should be in the location but weren't found.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Session Completion</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Submit / Upload Results</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">After scanning is complete, the results can be submitted to the server. The discrepancies (missing and unexpected items) are recorded and may trigger exceptions or alerts in the web app.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Before submitting, show a final summary screen with all three categories (matched/missing/unexpected) and a note about what will happen: "Submitting this count will record 8 missing and 3 unexpected items as inventory discrepancies. A manager will be notified." This sets expectations and confirms the count is finalized.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall CSV Cycle Session Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. CSV file delivery is cumbersome:</strong> The biggest friction point is getting the CSV onto the device. Building a direct "fetch expected list from server" option would eliminate this entirely and make the workflow practical for daily use.<br><br>
+      <strong>2. No location context:</strong> The screen should clearly show what location/bin the cycle count is for. The session has no built-in location binding — if the staff member scans items in the wrong area, there is no warning.<br><br>
+      <strong>3. Session timeout or battery death:</strong> If the device runs out of battery during a long scan session, the session is lost. Consider auto-saving progress periodically so the session can be resumed if interrupted.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

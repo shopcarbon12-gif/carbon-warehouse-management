@@ -4,40 +4,32 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-**Carbon WMS release APK (all agents):** After a release build, the canonical path to report is `D:\CarbonWmsRelease\CarbonWMS V{pubspec version}.apk` (from `mobile/carbon_wms/pubspec.yaml` `version:`). See `.cursor/rules/carbonwms-apk-versioned-filename.mdc` and `flutter-apk-after-mobile-edit.mdc`.
+**Carbon WMS release APK (all agents):** After a release build, the canonical APK path is `~/CarbonWmsRelease/CarbonWMS V{pubspec version}.apk` (version from `mobile/carbon_wms/pubspec.yaml`). Build with:
+```bash
+bash mobile/carbon_wms/scripts/build-release.sh
+```
 
 ---
 
-## Windows + D: (all agents) — keep C: from filling; local Docker
+## Linux build environment
 
-This project’s **handheld** build expects tooling on **D:**. Follow this so Cursor/agents and raw `flutter`/`gradle` commands do not silently grow **C:** (`%TEMP%`, `%LOCALAPPDATA%\Pub\Cache`, `%USERPROFILE%\.gradle`).
+All Flutter/Android builds run on **Linux Ubuntu**. Caches live under `.tools/` in the repo (Gradle, pub, tmp) — never in `~/.gradle` or system temp.
 
-### What we standardized (2026)
+### Flutter SDK
+Flutter is at `/home/carbondev/development/flutter/`. Ensure it is in `PATH`:
+```bash
+export PATH=”/home/carbondev/development/flutter/bin:$PATH”
+```
 
-1. **One-time per Windows user — User environment variables on D:**  
-   Run from `D:\cwm\mobile\carbon_wms` (or the real repo path):
-   ```powershell
-   .\scripts\install-user-build-env-on-d.ps1
-   ```
-   Creates **`D:\CarbonWmsTooling\{pub-cache,gradle-user-home,tmp,xdg-cache,xdg-config}`** and sets **User** `TEMP`, `TMP`, `TMPDIR`, `PUB_CACHE`, `GRADLE_USER_HOME`, `XDG_CACHE_HOME`, `XDG_CONFIG_HOME`. **Fully quit and reopen Cursor** (new terminals) so every Flutter/Gradle process picks this up — not only when `build-apk.ps1` runs.
+### Building a release APK
+```bash
+bash mobile/carbon_wms/scripts/build-release.sh
+```
+Output: `~/CarbonWmsRelease/CarbonWMS V<version>.apk`
 
-2. **Per-session / scripted builds — `_carbon_wms_d_env.ps1`**  
-   Dot-sourced by **`mobile/carbon_wms/scripts/build-apk.ps1`** and **`env-d-drive.ps1`**. Redirects caches to **`<repo>/.tools/...`** or, if the repo path **contains spaces**, to **`D:\CarbonWmsTooling\...`** (native-asset hooks break with spaced `PUB_CACHE`). **Raw `flutter` in a fresh terminal does not load this** — that is why **`install-user-build-env-on-d.ps1`** exists.
-
-3. **Junction for paths with spaces**  
-   Example: `mklink /J D:\cwm "D:\full\path\to\carbon-warehouse-management"`. Build and open **`D:\cwm\mobile\carbon_wms`**. Set **`android/local.properties`** to **no-space** `sdk.dir` / `flutter.sdk` (see **`mobile/carbon_wms/README.md`**). Explorer can show confusing free-space math when the repo is opened via two paths; optional long-term: clone **directly** under **`D:\`** without relying on a junction for “truth.”
-
-4. **Docker Desktop on D: (local Windows)**  
-   Install with CLI flags so binaries and WSL data stay on D:, e.g. `--installation-dir=D:\Docker\DockerDesktop` and `--wsl-default-data-root=D:\Docker\wsl` (see [Docker Windows install](https://docs.docker.com/desktop/setup/install/windows-install/#installer-flags)). **Coolify** still runs on the **Linux VPS**; this item is for **local** `docker compose` / Next parity — it avoids huge **C:** growth from default Docker/WSL placement.
-
-5. **Flutter SDK on D:**  
-   Prefer **`D:\flutter`** (official Windows stable zip extracted to that folder). **Cursor / VS Code:** **`.vscode/settings.json`** → **`dart.flutterSdkPath`**: `D:/flutter`. **`install-user-build-env-on-d.ps1`** also sets **`FLUTTER_ROOT`** and appends **`D:\flutter\bin`** to **User `Path`** when that SDK exists. **`build-apk.ps1`** resolves Flutter in order: **`FLUTTER_ROOT`**, **`D:\flutter`**, then **`<repo>/.tools/flutter`**.
-
-6. **Release APK script**  
-   **`.\scripts\build-apk.ps1`** enforces repo/SDK on D: and applies `_carbon_wms_d_env.ps1`. Use **`-SkipTests`** if **`flutter test`** fails (e.g. `objective_c` native-asset hooks) until the toolchain is fixed; still produces **`build/.../app-release.apk`** and copies to **`D:\CarbonWmsRelease`** per project rules.
+### Gradle memory
+Configured in `mobile/carbon_wms/android/gradle.properties` — heap capped at 3G, daemon idle timeout 5 minutes. Do not raise `-Xmx` without a clear reason.
 
 ### Reference
-
-- **`mobile/carbon_wms/README.md`** — Android Studio, `local.properties`, Gradle, junctions.  
-- **`.cursor/rules/windows-carbonwms-dev-disk.mdc`** — short duplicate of this section for Cursor (always applied).  
-- Production containers: **`.cursor/rules/nextjs-coolify-docker-hardening.mdc`** (not the same as local Docker Desktop).
+- **`mobile/carbon_wms/README.md`** — Android SDK setup, `local.properties`.
+- Production containers: **`.cursor/rules/nextjs-coolify-docker-hardening.mdc`**.

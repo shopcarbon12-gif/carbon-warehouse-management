@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Handheld API Docs · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Developer — Handheld API</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Developer Docs</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Handheld Batch API Documentation</h1>
+    <p class="subtitle">A minimal developer documentation page embedded in the app itself. Describes the API endpoint that handheld devices use to upload batches of scanned EPC codes to the server. This page is for developers integrating with the system, not for warehouse staff.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Page Content</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Authentication Instructions</div>
+        <span class="el-type tag-section">Documentation Text</span>
+        <div class="el-behavior">Explains that API requests must include a header called "X-WMS-Device-Key" whose value matches a secret environment variable called "WMS_DEVICE_KEY" configured on the server (in Coolify, the deployment platform). No further authentication method is described.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The authentication section mentions "Coolify" by name — this is a deployment-platform-specific detail that may not apply to all installations. Replace with a generic reference: "Set in your server's environment variables." Also, the docs do not explain how an admin obtains or rotates the WMS_DEVICE_KEY — add a brief note explaining where to find this value and what to do if it needs to be changed.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">POST /api/handheld/batches Endpoint Docs</div>
+        <span class="el-type tag-section">Documentation Text</span>
+        <div class="el-behavior">Describes a single API endpoint. The request body must be JSON with three fields: a batch_id (a unique identifier that allows safe retry — sending the same batch_id twice won't create duplicates), a location_id (the UUID of the warehouse location where the scan happened), and epcs (an array of 1 to 5000 RFID tag codes). The response contains whether it succeeded, whether it was a duplicate (already received), how many EPCs were accepted, and the batch ID. The server stores the batch and then processes it in the background.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The documentation is minimal but covers the essentials. Key improvements needed:<br>
+        1. Show a concrete example request body, not just a field list — developers should be able to copy-paste to test.<br>
+        2. Describe error responses — what HTTP status codes are returned for authentication failure, invalid data, or server errors?<br>
+        3. Explain "location_id" — how does a developer find the UUID for a location? (They need to look it up from another API or the database — this should be documented.)<br>
+        4. Describe what "enqueues handheld_process sync job" means from an operational standpoint — how long does processing take? Is there a way to check if a batch has been processed?</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Page Design & Placement</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Page Location (separate from main app)</div>
+        <span class="el-type tag-section">Page Structure</span>
+        <div class="el-behavior">This page lives at the URL path /docs/handheld-api — notably outside the main app's authenticated layout (the sidebar navigation). It appears to use a different layout (or no layout) with a simple centered monospace text format.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Since this page is outside the main navigation, it may be publicly accessible without login. If the API documentation contains any sensitive information (like the name of security headers), it should be protected behind authentication. Verify whether this page requires login to view.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Handheld API Docs Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Only one endpoint documented:</strong> The mobile app almost certainly calls more than one server API (for settings, OTA updates, status checks, etc.) but only the batch upload endpoint is documented here. The docs should cover all mobile-to-server API calls.<br><br>
+      <strong>2. No versioning or change history:</strong> If the API changes, there is no indication of what version this documentation describes or when it was last updated. Add a simple "Last updated" date or an API version number.<br><br>
+      <strong>3. No navigation or context:</strong> This page has no back link, no sidebar, and no indication that it is part of CarbonWMS. Add minimal navigation — at minimum a link back to the main app and a note that this is the CarbonWMS developer documentation. A developer who lands on this page via a direct link would have no idea what system they are looking at.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

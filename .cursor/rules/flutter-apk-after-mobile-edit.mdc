@@ -7,18 +7,17 @@ alwaysApply: true
 
 **After mobile work:** Per **`git-push-deploy-user-only.mdc`**, **commit and push** when the task is done if there are changes. **Do not** run Coolify **`deploy:coolify`** unless the user asks to deploy.
 
-When **this session** changes any file under **`mobile/carbon_wms/`** (including `packages/carbon_*_driver`, `android/`, `pubspec.yaml`, `lib/**/*.dart`, or `scripts/build-apk.ps1` / `_carbon_wms_d_env.ps1` / `install-user-build-env-on-d.ps1`), **before finishing the turn** you must:
+When **this session** changes any file under **`mobile/carbon_wms/`** (including `packages/carbon_*_driver`, `android/`, `pubspec.yaml`, `lib/**/*.dart`, or `scripts/build-release.sh`), **before finishing the turn** you must:
 
-1. **Run a release APK build** so the user always gets an up-to-date `app-release.apk`, unless they explicitly asked to skip the build.
-2. Use **D:** for temp/caches and **`D:\flutter`** (or **`FLUTTER_ROOT`**) for the SDK: **`build-apk.ps1`** dot-sources **`_carbon_wms_d_env.ps1`**; **`install-user-build-env-on-d.ps1`** sets User caches + **`FLUTTER_ROOT`** when **`D:\flutter`** exists. Workspace **`.vscode/settings.json`** points Dart/Flutter extensions at **`D:/flutter`**. From **`D:\cwm\mobile\carbon_wms`** (junction, no spaces) or the repo’s `mobile\carbon_wms` on **D:** run:
-   ```powershell
-   .\scripts\build-apk.ps1
+1. **Run a release APK build** so the user always gets an up-to-date APK, unless they explicitly asked to skip the build.
+2. Build runs on **Linux only** — from the repo root:
+   ```bash
+   bash mobile/carbon_wms/scripts/build-release.sh
    ```
-   If **`flutter test`** fails (e.g. **`objective_c`** hooks), use **`.\scripts\build-apk.ps1 -SkipTests`** and note that in the reply. See **`AGENTS.md`** and **`.cursor/rules/windows-carbonwms-dev-disk.mdc`**.
-3. **Confirm** exit success and report paths, sizes, and last modified times. **Lead with `D:\CarbonWmsRelease`** (hard lock — see **`apk-canonical-path-d-carbonwmsrelease.mdc`**):
-   - **`D:\CarbonWmsRelease\CarbonWMS V{pubspec-version}.apk`** and **`D:\CarbonWmsRelease\app-release.apk`** (and `.sha1` siblings).
-   - Then the Flutter output if useful: **`D:\cwm\mobile\carbon_wms\build\app\outputs\flutter-apk\app-release.apk`** (junction) or repo `mobile\carbon_wms\build\...`.
+3. **Confirm** exit success and report the APK path:
+   - **`~/CarbonWmsRelease/CarbonWMS V{pubspec-version}.apk`** — canonical Linux path
+   - The script also SCPs the APK to **`D:\CarbonWmsRelease\`** on the Windows PC automatically.
 
 **Exceptions (no build required):** edits that touch **only** `mobile/carbon_wms/README.md` or other docs with **no** code/config change.
 
-**Do not** tell the user to run the build manually if you can run it here; use a long timeout or background terminal and poll until Gradle/Flutter finishes.
+**Do not** tell the user to run the build manually if you can run it here.

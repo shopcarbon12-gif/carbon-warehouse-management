@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transfer Out · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Transfer Out</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Inventory</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Transfer Out</h1>
+    <p class="subtitle">Creates outbound transfer slips — documents that record which items are being sent from one location to another. Staff create a slip, optionally add specific RFID EPCs, then export or print it as a packing list for the floor.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Create New Slip Form</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Source Location Code Field</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">A text field where you type the location code for where items are being sent FROM (e.g., "STORE-A"). This is a free-text field — no dropdown of existing locations. Required to create a slip.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> A free-text field for location codes is error-prone — typos will create slips with invalid locations that can't be matched later. This should be a dropdown/searchable list populated from actual warehouse locations in the system. The field label says "Source location code" which is technical — "Sending From" would be clearer.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Destination Location Code Field</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">Same as above but for the location where items are going TO. Also free-text, also required.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Same improvement needed as Source field — replace with a dropdown list of real locations. Consider renaming to "Sending To."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">EPCs Textarea (Optional)</div>
+        <span class="el-type tag-input">Textarea</span>
+        <div class="el-behavior">Optional field where you paste specific RFID EPC codes of the items being transferred. Accepts whitespace, commas, semicolons as separators. If left empty, the slip is created without pre-assigned items (they can be scanned on the floor later).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The label says "EPCs (optional, whitespace-separated)" — consider also supporting scanning from a handheld to populate this field. Also, a live count of detected EPCs would be helpful.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Generate Transfer Slip Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Creates the slip in the database. Slip numbers start from 70,000+. After creation, a success message shows the slip number (e.g., "Created slip #70001"). The slips list below refreshes automatically.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> After creating a slip, the user likely wants to immediately print or export it. Add a shortcut button after creation: "View & Print Slip #70001" instead of making them find it in the list below.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Slips List Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Slips Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows all existing transfer slips sorted newest first. Columns: Slip number, Source location, Destination location, Status, LS Transfer ID (Lightspeed reference), and Actions. Each row shows the current status of the slip (e.g., open, completed).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The table has no filtering — if there are hundreds of slips, finding a specific one requires scrolling. Add search by slip number or location, and filter by status (Open/Completed/All). Also, the "LS" column header is cryptic — spell it out as "Lightspeed ID."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Select Button (per row)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Clicking "Select" on a slip highlights that row. It is not entirely clear from the code what selecting a slip enables beyond the visual highlight — it may be a precursor to additional actions.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> If "Select" is a stepping-stone to an action, the purpose should be clearer. Consider showing what actions become available after selecting a slip, or replacing the select mechanism with inline action buttons per row.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">CSV Button (per row)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Downloads the packing list for that slip as a CSV file. The CSV contains: ALU (item code), Name, Sent quantity, Received quantity, Missing quantity, and EPC codes. The file is named "transfer-slip-70001.csv".</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This is the most useful action. Consider making it the most prominent button (larger, with a download icon). The CSV column headers could be more descriptive — "ALU" means nothing to most warehouse workers; "Product Code" would be clearer.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">PDF/Print Button (per row)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Opens a new browser window with a simple HTML table of the slip's contents, then automatically triggers the browser's print dialog. The printout is a basic table with slip number, item details, and quantities. Designed to be printed and handed to warehouse staff.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The printout is very plain HTML. Consider adding a logo, the warehouse name, date/time of printing, and space for a signature at the bottom. Also, the print window opens in a new tab, which may be blocked by popup blockers — add a fallback message.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

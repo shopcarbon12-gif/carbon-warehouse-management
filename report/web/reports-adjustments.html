@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventory Adjustments · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Reports — Inventory Adjustments</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Reports</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Inventory Adjustments Report</h1>
+    <p class="subtitle">Records of quantity or location adjustments made to inventory — both automatic adjustments from system operations and manual corrections by staff. Essential for accountability and reconciliation.</p>
+  </div>
+  <div class="report-section">
+    <h2>Adjustments Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Adjustments Log</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows inventory adjustment events with EPC or SKU, type of adjustment, quantity delta (positive = added, negative = removed), reason/source, and timestamp. Uses the inventory audit log workspace component.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Show the net impact at the top: "Total adjustments today: +47 items added, -12 items removed, net +35." Also add filtering by adjustment type (manual vs. automatic) and date range. Add CSV export.</div>
+      </div>
+    </div>
+  </div>
+  <div class="report-section">
+    <h2>Overall Adjustments Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Approval workflow:</strong> Large manual adjustments (e.g., removing 50+ items) should require a second approver. This prevents accidental or fraudulent changes going unnoticed.<br><br>
+      <strong>2. Reason codes:</strong> Adjustments should have standardized reason codes (Received, Damaged, Sold, Count Correction, Theft) so patterns can be analyzed over time.
+    </div>
+  </div>
+</div>
+</body>
+</html>

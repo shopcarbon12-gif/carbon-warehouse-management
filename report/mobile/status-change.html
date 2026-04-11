@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Status Change · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Change Status</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Change Status</h1>
+    <p class="subtitle">Allows staff to scan one or more RFID tags and then bulk-update their status. Examples: scanning damaged items and marking them as "damaged," or confirming returned items as "return." Uses the Clean 10 status list. The current RFID scan session's EPCs are used as the target items.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Target Status Selection</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Status List</div>
+        <span class="el-type tag-input">Selection List</span>
+        <div class="el-behavior">Shows all 10 Clean 10 status options as a list of tappable choices. The staff member selects the target status they want to apply to the scanned items. System-only statuses that are hidden from staff pickers are not shown. Statuses with Super Admin restrictions may also be filtered based on the user's role.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The status list shows the internal status names (e.g., "in-stock," "tag_killed," "pending_visibility") which are not all intuitive. Use the display labels configured in the Status Labels settings page, and add a one-line description under each: "Damaged — Item is damaged and should not be sold." Staff selecting statuses in the field need to understand what each one means without guessing from the name.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Item Scan</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">RFID Scan Session (sessionEpcs)</div>
+        <span class="el-type tag-input">RFID Scan</span>
+        <div class="el-behavior">The screen uses the current RFID manager session to collect EPCs. Staff scan items and they are added to the session. The count of scanned EPCs is shown. The session can be cleared and started fresh. The session persists across screen navigations within the app until explicitly cleared.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The shared scan session (sessionEpcs) is a powerful pattern but can cause confusion: if a staff member scanned items on a different screen and then navigates here, the previously scanned items are still in the session. This could lead to accidentally changing the status of items from a previous operation. Always show the current session contents clearly ("3 items in session: [list them]") and offer a clear "Clear session and start fresh" button at the top of the screen.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Scanned Items Count / List</div>
+        <span class="el-type tag-section">Display</span>
+        <div class="el-behavior">Shows the count of EPCs currently in the session. A list of scanned item details (EPC, product name, current status) may also be shown.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Before committing a status change, show each item's current status alongside the proposed new one: "[Item name] — Current: in-stock → New: damaged." This prevents accidental incorrect assignments, especially for rare status values that look similar (e.g., "return" vs "in-stock" for recently returned items).</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Commit Status Change</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Apply Status Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Submits a bulk status change for all scanned EPCs to the selected target status. A POST request is sent to the server. On success, all items are updated. On failure, an error message appears. After successful commit, the session EPCs are cleared.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The commit button should clearly state what will happen: "Apply 'Damaged' to 5 items." After committing, show a success confirmation with a count: "5 items marked as Damaged." Also, if any items fail to update (e.g., due to Super Admin lock), show which specific items failed and why — don't just show a generic error.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Status Change Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Shared session state is confusing:</strong> The shared RFID session that persists across screens is a double-edged sword — it enables fast workflows but also causes accidental carry-over. Consider an explicit "start new status change session" action that guarantees a clean slate.<br><br>
+      <strong>2. No history/undo on mobile:</strong> A staff member who accidentally marks 10 items as "damaged" when they meant "return" has no mobile-side undo. They would need to open the web app, find each item, and change it back. An "Undo last bulk change" option (at least for the same session) would be very helpful.<br><br>
+      <strong>3. No transition warnings:</strong> Some status transitions may have business rules (e.g., you can't move from "sold" back to "in-stock" without special permission). The mobile app should warn when a transition is unusual: "Moving items from 'sold' to 'in-stock' — confirm this is intentional."
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

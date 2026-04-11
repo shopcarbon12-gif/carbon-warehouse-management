@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>POS Compare Report · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Reports — POS Compare</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Reports</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>POS Compare Report</h1>
+    <p class="subtitle">The most important reconciliation report. Compares what Lightspeed POS says should be in stock (expected quantity) versus what RFID tracking shows is actually in stock (found quantity). Highlights which items are missing or have extras, with CSV export and integration actions.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Summary Tiles</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Summary Stats (Total Expected, WMS Total, Missing, Extra)</div>
+        <span class="el-type tag-section">KPI Display</span>
+        <div class="el-behavior">Shows four aggregate numbers at the top: total items expected by POS, total found by RFID, total missing (in POS but not in RFID), and total extras (in RFID but not in POS). These give an instant health check of inventory accuracy.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add a simple accuracy percentage: "Inventory accuracy: 94.7%" (found ÷ expected × 100). This is the metric warehouse managers actually care about. Also show a trend: "Up 2.3% since last compare."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Comparison Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">SKU Comparison Rows (variances only)</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">The table by default shows only rows where there is a variance (missing > 0 OR extra > 0). Each row shows: SKU, item name, LS Item ID, expected quantity from Lightspeed, found quantity in RFID, missing count, and extra count. Rows can be selected with a checkbox.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Show ALL rows by default (not just variances) with a toggle to "Show variances only." Users may want to confirm that correct items have zero variance. Also, color-code the missing/extra columns: red for missing, yellow for extra.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Row Checkboxes (Select for Action)</div>
+        <span class="el-type tag-toggle">Checkbox</span>
+        <div class="el-behavior">Each row has a checkbox. Selecting rows enables bulk actions (like sending selected variances to an integration or marking them as reviewed).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add a "Select all variances" button to quickly select all problematic rows without having to check each one individually.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Action Buttons</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Pull from Lightspeed Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Triggers a fresh pull of POS quantity data from Lightspeed to update the comparison data. Shows the result of the pull (source and whether data was real or simulated).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This button should show the timestamp of the current POS data being used ("POS data last updated: 2 hours ago") so users know if they need to pull fresh data before comparing.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Export CSV Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Downloads all comparison rows as a CSV file with columns: SKU, Name, LS_ITEM_ID, Expected_LS, Found_WMS, Missing, Extra. The filename includes today's date.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Allow exporting only selected rows, or only variance rows, with a toggle. Also add a "Download full comparison (all items)" option separate from "Download variances only."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Send to Integration Button (for selected rows)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">For selected rows, triggers an integration action (likely pushing adjustment data back to Lightspeed or an accounting system). Shows result message.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This is a high-stakes action that pushes data to an external system. It must show a clear confirmation dialog: "You are about to send 12 variance adjustments to Lightspeed. This will modify stock quantities in your POS. Continue?" And it should require at least admin-level access.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Metadata / Source Info</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Meta Section (hints, endpoints)</div>
+        <span class="el-type tag-section">Info Panel</span>
+        <div class="el-behavior">Shows metadata about the comparison: where the expected qty came from, any hints or warnings, and API endpoint names. This is technical information.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Replace technical endpoint names with plain language: "POS data source: Lightspeed R-Series (synced 2 hours ago)." Remove raw API endpoint paths from the user-facing UI.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

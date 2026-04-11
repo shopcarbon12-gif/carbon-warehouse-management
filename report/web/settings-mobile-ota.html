@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile OTA Releases · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Settings — Mobile OTA</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Settings</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Mobile OTA Releases</h1>
+    <p class="subtitle">Manages over-the-air (OTA) updates for the CarbonWMS handheld Android app. Admins upload new APK files here, which are then pushed to handhelds. The "active" release is what handhelds download when they check for updates.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Upload New Release</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Version Label Input</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">A text field for the version number of the APK being uploaded. If you drag and drop an APK with a version in its filename (like "CarbonWMS v1.1.1+28.apk"), the system automatically detects and fills in the version label. Format expected: "v1.1.1+28".</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The auto-detection from filename is a great UX touch. Extend this to also auto-detect the version from inside the APK manifest file when uploaded, as a more reliable source. Also validate that the version is newer than the current active release to prevent accidentally downgrading.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">APK File Drop Zone / Browse Button</div>
+        <span class="el-type tag-input">File Input</span>
+        <div class="el-behavior">A drag-and-drop zone for the APK file. Can also be clicked to open a file browser. Only accepts ".apk" files. When a valid file is dropped, shows the filename and file size. Invalid file types show an error message.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Show a file size warning if the APK is unusually large (over 150MB), as this might indicate an error. Also show a checksum (MD5/SHA256) of the uploaded file so admins can verify it matches the build they intended to upload.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Upload Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Uploads the selected APK file along with the version label. Shows "Uploading [filename]…" during the upload. On success, the releases list refreshes to show the new entry. On failure, an error message appears.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Large APK files can take time to upload. Show a progress bar with percentage (not just "Uploading…") so the admin knows how much longer to wait. Also, if the upload is interrupted, a retry option should appear.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Releases List</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Releases Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows all uploaded APK releases. Columns: version label, upload date, whether it is the active release (the one handhelds will download). Each row has a "Set active" button to make that version the active release.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Clearly distinguish the currently active release visually — a green "ACTIVE" badge or highlighted row. Also show download count per release so admins can confirm handhelds are actually downloading the update.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Set Active Button (per release)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Sets the selected release as the one that will be served to handhelds via the OTA update API. Previous active release becomes inactive.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Setting a new active release should show a confirmation: "Make v1.1.1+28 the active release? All handhelds will be prompted to update the next time they check." Also consider a scheduled activation — "Activate at 11 PM tonight" for off-hours rollouts.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Mobile OTA Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Rollback safety:</strong> Clearly mark the previous active version so it can be quickly restored if the new version has issues on the floor.<br><br>
+      <strong>2. Update adoption tracking:</strong> Show how many of the authorized devices have already updated to the latest version (e.g., "7 of 12 devices updated").<br><br>
+      <strong>3. Release notes:</strong> Add a "Release notes" or "What's new" field when uploading so managers know what changed in each version without needing to ask developers.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

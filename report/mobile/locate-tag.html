@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Locate Tag · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Locate Tag (Geiger)</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Locate Tag (Geiger Mode)</h1>
+    <p class="subtitle">A "hot/cold" tag locating tool named after the Geiger counter concept. Staff enter or scan an EPC code, then physically walk around the warehouse while the handheld reads the signal strength of that specific tag. The beep frequency (and visual indicator) increases as the staff member gets closer to the item, guiding them to its exact location.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Target EPC Input</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">EPC / Tag Search Field</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">A field where the staff member enters the EPC code of the specific tag they want to find. This can be entered by typing, pasted from a copied value, or potentially pre-filled if navigating from an item lookup result. Once set, this becomes the "target EPC" that the scanner will listen for specifically.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Typing a full EPC code (a long hex string like "E28011606000020700F7A6DB") is error-prone. The Locate Tag screen should be reachable directly from an item's detail view (Item Lookup, Inventory list) via a "Find this tag" button that pre-fills the EPC automatically. Manually typing an EPC just to use this screen is impractical on a mobile keyboard.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Geiger Proximity Interface</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Hold-to-Scan Button</div>
+        <span class="el-type tag-button">Hold Button</span>
+        <div class="el-behavior">A button that must be held down to continuously scan. While held, the RFID reader transmits continuously and listens for the target EPC. As soon as the target EPC is detected, the proximity feedback starts. Releasing the button stops scanning. This "hold to scan" pattern prevents constant RFID transmission when the feature is not in use.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The hold-to-scan interaction is appropriate for power management but may be tiring during a long search (holding a button while walking through a warehouse). Consider a "continuous scan" toggle as an alternative — once enabled, scanning runs until stopped. For a quick locate, hold-to-scan is fine; for searching a large floor, continuous mode is better.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">RSSI Signal Strength Display</div>
+        <span class="el-type tag-section">Signal Indicator</span>
+        <div class="el-behavior">Shows the raw RSSI (signal strength) value from the RFID antenna when the target tag is detected. The RSSI value ranges from a large negative number (far away, e.g., -85 dBm) to a smaller negative number (close, e.g., -45 dBm). Higher values mean closer proximity. The display updates in real time as the handheld moves.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The raw RSSI number (e.g., "-63 dBm") is meaningless to warehouse staff. Replace or supplement it with a visual proximity indicator — a signal strength bar (like Wi-Fi bars), a color gradient from cold blue (far) to warm red (close), or simply a large text label: "Getting warmer..." / "Very close!" / "Right there!" The Geiger beeping handles audio cues, but the visual should be equally intuitive.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Geiger Beep Audio</div>
+        <span class="el-type tag-section">Audio Feedback</span>
+        <div class="el-behavior">The app plays an audio beep that increases in frequency as the target tag gets closer — like a Geiger counter. At a distance, beeps are slow (once every few seconds). Very close to the tag, beeps become rapid and nearly continuous. The RSSI value is mapped to a beep interval using a proximity formula. This audio feedback allows staff to navigate by sound without constantly looking at the screen.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The Geiger audio is an excellent, intuitive design choice for this type of tool. One improvement: add a haptic (vibration) feedback option as well, since warehouse environments are often noisy and staff may have earbuds in or noise-canceling hearing protection. Also, ensure the audio beep works when the device is in silent mode — silent mode should only affect notification sounds, not active operational tools.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Locate Tag Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No "navigate from item detail":</strong> The biggest friction is starting a locate session — staff need to know the EPC before they can use this tool. Adding a "Locate this item" button on every item detail card (in Item Lookup, inventory lists, cycle count mismatches) would make this tool dramatically more useful.<br><br>
+      <strong>2. No visual proximity map:</strong> Even a simple floor plan or grid view showing the relative direction of the tag would be a significant upgrade. RFID direction-finding is technically limited, but RSSI strength could at least indicate "getting warmer" with a simple arrow or radial gradient.<br><br>
+      <strong>3. Tag not found handling:</strong> If the staff member scans an entire area and the target tag is never detected, the app should acknowledge this clearly: "Tag not detected in this area — it may be too far away, blocked, or its status may indicate it is not in active inventory." A fallback suggestion helps rather than leaving the staff member wondering if the tool is broken.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

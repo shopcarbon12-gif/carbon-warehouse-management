@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Locations Settings · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Settings — Locations</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Settings</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Warehouse Locations</h1>
+    <p class="subtitle">Manages the physical warehouse locations (stores, warehouses, distribution centers) in the system. Each location has a short code, a name, an optional Lightspeed shop ID for inventory sync, an active/disabled status, and a list of users who can access it. The active location in the sidebar is picked from this list.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Locations Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Locations Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows all warehouse locations in a table with columns: Location name, Code (short identifier like "001"), Lightspeed shop ID (a number linking this location to a Lightspeed POS shop for inventory sync — shown in teal if set, "—" if not), Status (a pill button showing "Active" in green or "Disabled" in grey — and clicking it immediately toggles the status), Assigned users (the email addresses of users who have access to this location), and Edit/Remove action links.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The "Active/Disabled" status button toggles immediately on click with no confirmation — disabling a location could affect all users assigned to it and cut off their access. Add a confirmation: "Disable [Location name]? Users assigned only to this location will lose access until it is re-enabled." Also, the assigned users column can overflow with many emails — truncate and show a count like "4 users" with a hover/click to see the full list.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Add Location Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Opens a modal to create a new warehouse location. The modal asks for: a short code (required, cannot be changed after creation), a location name (required), an optional Lightspeed shop ID, an Active checkbox (checked by default), and a scrollable checkbox list of all users to assign to this location.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The short code field says "cannot be changed after creation" (it is disabled when editing). This is a significant constraint — if someone makes a typo in the code, they must delete and recreate the entire location. At minimum, warn the user before they save: "The location code cannot be changed after saving. Make sure '001' is correct." Also, add a placeholder with format guidance: "Short code (e.g., 001, NYC-01) — used in device configs and reports."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Edit Location Link</div>
+        <span class="el-type tag-button">Inline Link</span>
+        <div class="el-behavior">Opens the same modal pre-filled with the location's current data. The short code field is disabled (cannot be changed). All other fields are editable: name, Lightspeed shop ID, active status, and user assignments.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> When editing user assignments for a location, the modal shows all users as a flat checkbox list. If there are many users, this becomes hard to scan. Add search/filter functionality or at minimum sort users alphabetically by email. Also, show whether currently assigned users are active or have ever logged in — this helps clean up orphaned assignments.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Remove Location Link</div>
+        <span class="el-type tag-button">Inline Link (destructive)</span>
+        <div class="el-behavior">Shows a browser confirmation: "Delete location '[name]'? Related data may be removed per database rules." On confirmation, deletes the location permanently. No further information about what "related data" refers to.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> "Related data may be removed per database rules" is too vague for an admin making a real decision. Before allowing deletion, show a specific impact summary: "Deleting this location will also remove: all bins in this location, all inventory records tied to this location, and remove access for X users assigned here. This cannot be undone." If this is truly irreversible, require typing the location name to confirm deletion.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Lightspeed Shop ID Section</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Lightspeed Shop ID Field</div>
+        <span class="el-type tag-input">Number Input</span>
+        <div class="el-behavior">An optional numeric ID that maps this warehouse location to a specific shop in Lightspeed POS. The page's footer note explains: "Lightspeed shop ID maps to the numeric shop identifier in your Lightspeed admin URLs (R-Series / Retail). Use it to target inventory sync per shop." Leaving it empty means this location is not linked to a Lightspeed shop.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The explanation at the bottom of the table is easy to miss. Move the help text into the form field itself as a helper label, and also explain what happens when it's empty: "Leave blank if this location does not sync with Lightspeed." Also add a visual indicator in the locations table — perhaps a Lightspeed icon — next to locations that have a shop ID configured, so admins can quickly see which locations are synced.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Locations Settings Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Immutable location code is risky:</strong> Once a short code is set, it cannot be changed. This code flows into device configurations, reports, and transfer records. Allowing it to be changed (with a clear migration warning) would be safer than forcing deletion and recreation.<br><br>
+      <strong>2. No audit log for location changes:</strong> Adding, disabling, or deleting a location is a high-impact admin action. All changes should appear in the activity audit with a timestamp and who made the change.<br><br>
+      <strong>3. No location-level inventory summary:</strong> Showing a quick stat next to each location ("245 items in stock · 3 bins") would give admins useful context when managing locations, especially when deciding whether it's safe to disable or delete one.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

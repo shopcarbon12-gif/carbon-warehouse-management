@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cycle Counts · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Cycle Counts</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · RFID & Hardware</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Cycle Counts</h1>
+    <p class="subtitle">A physical inventory count tool. Select a location and bin, then scan RFID tags (or simulate scanning). The system compares what was scanned against what should be there and classifies each tag as matched, missing, misplaced, or unrecognized. Then you commit the count to record the results.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Location & Bin Selection</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Location Dropdown</div>
+        <span class="el-type tag-dropdown">Dropdown</span>
+        <div class="el-behavior">Populated from the system's location registry. Selecting a location updates the bin dropdown to show only bins belonging to that location. Required before starting a count.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The active session location should be pre-selected by default to save time. Most users will be counting the location they are already working in.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Bin Dropdown</div>
+        <span class="el-type tag-dropdown">Dropdown</span>
+        <div class="el-behavior">Populated after selecting a location. Shows all bins at that location along with their current in-stock count (so you can see "Bin A4 — 23 items" before starting). Selecting a bin loads the expected items for that bin.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Showing the in-stock count in the dropdown is helpful — it sets the expectation for how many items should be found. Consider also showing a "last counted" date per bin to help prioritize which bins need counting.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Scanning Controls</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Start / Stop Scan Button</div>
+        <span class="el-type tag-button">Toggle Button</span>
+        <div class="el-behavior">A button that toggles RFID scanning on/off. When scanning is active, the system listens for incoming RFID reads via a live stream. All detected EPCs are added to the scanned list in real time. The button changes label and style when active.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> There should be a clear visual indicator that scanning is currently active — not just a button label change. A pulsing green "SCANNING LIVE" banner at the top of the screen would be much more obvious, especially when the user is looking at the results list rather than the button.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Shuffle / Simulate Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">A "shuffle" button (icon) that simulates a scan by randomly marking some expected EPCs as misplaced or unrecognized. This is a demo/testing feature — it lets you see the classification system in action without real hardware.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This simulation button should not be visible in a production environment — it could confuse warehouse staff who might click it accidentally and think they have a real scan result. Either hide it in production mode or label it very clearly as "TEST MODE - Simulate scan."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Clear / Reset (implied)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Presumably there is a way to clear the scanned list and start over. This would be needed when a count was started accidentally or the wrong bin was selected.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Make sure there is a clearly labeled "Start over" or "Clear scanned items" button with a confirmation dialog, since clearing a partially completed count cannot be undone.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Classification Results</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Matched Items</div>
+        <span class="el-type tag-section">Result Category</span>
+        <div class="el-behavior">Items that were in the expected list AND were scanned. These are correct — the item is where it should be.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Show the matched count prominently with a green indicator. A count like "23 of 30 expected found" gives instant status.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Missing Items</div>
+        <span class="el-type tag-section">Result Category</span>
+        <div class="el-behavior">Items that were expected in this bin but were NOT scanned. Either they are genuinely missing, or the RFID reader missed them (possible with tags in difficult-to-read positions).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Highlight missing items in amber/red. For each missing item, show its last known location and last scan date so staff can investigate. Also note that RFID can miss reads, so consider adding a "Re-scan missed items" button before treating them as missing.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Misplaced Items</div>
+        <span class="el-type tag-section">Result Category</span>
+        <div class="el-behavior">Items that were scanned but belong to a DIFFERENT bin (they are in the wrong place). The system can detect this because it knows which EPCs should be in which bins.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> For each misplaced item, show where it should be (the correct bin) alongside where it was found. This makes it easy for staff to know where to move it.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Unrecognized Items</div>
+        <span class="el-type tag-section">Result Category</span>
+        <div class="el-behavior">RFID tags that were scanned but do not exist in the system at all. Could be tags from a different company, corrupted tags, or items that were never properly commissioned.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Unrecognized tags should automatically generate an "Unknown Asset" exception that appears on the Alerts page, so they don't just get counted and forgotten.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Commit Count Modal</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Commit Button → Modal</div>
+        <span class="el-type tag-button">Button → Modal</span>
+        <div class="el-behavior">Opens a confirmation modal summarizing the variance before it is recorded. Shows totals for matched, missing, misplaced, and unrecognized items. Confirming the commit writes the count results to the database as an official inventory count.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The commit modal should clearly state the consequences: "Committing this count will update inventory records. Missing items will be flagged for investigation. Misplaced items will need to be physically relocated." This helps staff understand the weight of confirming the operation.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Dashboard · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Dashboard (Home)</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Dashboard / Home Screen</h1>
+    <p class="subtitle">The main navigation hub after logging in. Displays a grid of large tappable cards organized into three sections: Inventory (5 cards), Operations (3 cards), and Encode (3 cards). Also contains the RF power slider in the app bar, an OTA update button, and a sign-out button.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>App Bar Controls</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">RF Power Slider</div>
+        <span class="el-type tag-input">Slider</span>
+        <div class="el-behavior">A horizontal slider in the app bar that controls the RFID reader's transmission power level. Adjusting this changes how far the scanner can read tags — higher power reads farther but also picks up more tags from adjacent areas (which can cause false reads). The current power setting is shown next to the slider. Changes take effect immediately on the connected RFID hardware.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The RF power slider is an important control but easy to accidentally adjust. On a touchscreen, scrolling near the app bar could inadvertently change the power setting mid-scan. Consider moving it to a dedicated settings screen or adding a lock/confirmation gesture. Also, add labels for the slider ends: "Low (precise)" on the left and "High (extended range)" on the right — most staff won't know what the raw power numbers mean.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">OTA Update Button (with green dot badge)</div>
+        <span class="el-type tag-button">Icon Button</span>
+        <div class="el-behavior">A button in the app bar that manually checks for a newer version of the app. A green dot badge appears on the button when an update is available. The app also automatically checks for updates every 3 minutes in the background while the dashboard is open. When an update is available, tapping the button prompts the user to download and install the new APK.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The green dot badge is a clear visual indicator. Make sure it clearly communicates urgency when a required update is waiting (some OTA updates may be mandatory for compatibility). Also, after an update is downloaded and installed, the app should automatically restart or clearly prompt the user to relaunch, rather than leaving them on the old version. Show the new version number in the update prompt so staff can report which version they updated to.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Sign Out Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Signs the current user out of the app and returns to the login screen. The session is cleared, but the remembered email and biometric setting are preserved for the next login.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add a brief confirmation before signing out: "Sign out? Any unsaved scan session data will be lost." This prevents accidental sign-outs, which can be disruptive if a scan session is in progress.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Module Grid — Inventory Section</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Inventory Module Cards (5 cards)</div>
+        <span class="el-type tag-button">Large Tappable Cards</span>
+        <div class="el-behavior">Five large cards in the Inventory section: Item Lookup, Barcode Intake, Fast Putaway, Clean Bin, and CSV Cycle Session. Each card shows an icon and a label. Tapping navigates to the corresponding screen. The cards are large enough to be tapped while wearing gloves.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The five Inventory cards represent very different levels of task importance and frequency of use. Consider letting admins configure a "Favorites" or reordering the cards by frequency of use at a location level. For example, a receiving bay might use Barcode Intake constantly, while a picking floor mainly uses Fast Putaway. Also, some of these functions (like Clean Bin) are less common and could be moved to a secondary menu to keep the main screen focused.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Module Grid — Operations Section</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Operations Module Cards (3 cards)</div>
+        <span class="el-type tag-button">Large Tappable Cards</span>
+        <div class="el-behavior">Three cards in the Operations section: Locate Tag (Geiger), Transfer Slips, and Change Status. Each navigates to its respective workflow screen. These represent daily warehouse floor operations.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The Operations label for "Change Status" is somewhat ambiguous — what status? Add a brief sub-label to each card (one line of smaller text) explaining its purpose: "Change Status — Update an item's condition (sold, damaged, etc.)" These sub-labels would especially help new staff navigate without training.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Module Grid — Encode Section</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Encode Module Cards (3 cards)</div>
+        <span class="el-type tag-button">Large Tappable Cards</span>
+        <div class="el-behavior">Three cards in the Encode section: Search & Encode, Scan & Print, and Upload (for pushing previously commissioned items to the server). These functions are primarily used by receiving staff and the team responsible for putting RFID tags on new merchandise.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The "Encode" section name may not be intuitive to all warehouse staff. Many will not know what "encoding" means in this context. Consider renaming it to "Tag Printing" or "RFID Tagging" to be more descriptive. Also, the Upload card (for the commission retry queue) should show a badge with the number of items waiting to be uploaded, so staff know whether there is pending work.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Mobile Dashboard Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No location indicator:</strong> The dashboard does not show which warehouse location the device is currently assigned to. For staff who work across multiple sites, this is important context. Show the current location name prominently (e.g., "Main Warehouse — Floor 2") in the app bar or at the top of the screen.<br><br>
+      <strong>2. Role-based card visibility:</strong> All 11 cards are shown to all logged-in staff. If a user's role doesn't include encoding duties, the Encode section cards should be hidden. Showing irrelevant options creates confusion and the risk of accidental use.<br><br>
+      <strong>3. Active scan session indicator:</strong> If a scan session is currently active (from a previous screen), the dashboard should show a persistent indicator so staff know they need to complete or discard it. An "Active session in progress" banner would prevent accidentally abandoning uncommitted scans.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

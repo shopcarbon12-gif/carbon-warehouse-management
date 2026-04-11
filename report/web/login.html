@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Login Page</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App</div>
+</div>
+<div class="page-wrap">
+
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Login Page</h1>
+    <p class="subtitle">The first thing anyone sees when visiting the system. It is a centered card with an email and password field. If you are already logged in, you are automatically sent to the Dashboard (or wherever you were trying to go).</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Page Layout</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Developer Notice Banner (top of page)</div>
+        <span class="el-type tag-section">Informational Banner</span>
+        <div class="el-behavior">A "Dev Local DB" banner can appear above the login card. This is only shown in development mode (when the system is connected to a local database instead of the live production one). It warns developers they are not looking at real data.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This banner is for developers only. Make sure it is completely hidden in production so it does not confuse or concern warehouse staff. A brightly colored warning banner on a login screen can alarm users unnecessarily.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Login Card</div>
+        <span class="el-type tag-section">Container</span>
+        <div class="el-behavior">A white/dark bordered box centered on the screen. Contains the "Sign in" title, a small note about what database the system is using, and the login form. Maximum width is 384px (about the width of a phone screen), so it is easy to read.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The subtitle under "Sign in" currently says "Sign in with a user that exists in the database behind DATABASE_URL (local seed or production)." — This is a technical message intended for developers, not for warehouse staff. It should be replaced with something friendly like "Enter your work email and password to continue."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Form Fields & Buttons</h2>
+    <div class="element-list">
+
+      <div class="element-card">
+        <div class="el-name">Email Field</div>
+        <span class="el-type tag-input">Input Field</span>
+        <div class="el-behavior">A standard email input. Has placeholder text showing an example email. Marked as required, so the browser will show a warning if you try to submit without filling it in. Uses autocomplete to suggest saved emails from the browser.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The placeholder shows "e.g. admin@example.com (local seed)" — again, this is developer language that should be replaced with something like "Your work email" for production. The field label says just "Email" in very small light grey text, which might be hard to read in bright warehouse lighting.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Password Field</div>
+        <span class="el-type tag-input">Input Field</span>
+        <div class="el-behavior">A standard password field that hides the typed characters. No "show password" toggle button is visible on the web version. It uses browser autocomplete to suggest saved passwords. Required field.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> There is no "show/hide password" eye button on the web login. This is a very standard UX feature — users often make typos in the password field and cannot see what they typed. Adding a toggle to reveal the password would reduce login failures. Also, there is no "Forgot password" link — if a user forgets their password they have no self-service option.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Sign In Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">A solid teal/green button that spans the full width of the form. While signing in, it changes text to "Signing in…" and becomes disabled (greyed out) to prevent double-clicks. After a successful login, the user is redirected to the Dashboard or to the page they originally tried to access.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The loading state shows "Signing in…" which is clear. However, if the server is slow, there is no timeout message — the button just stays in the loading state forever. Adding a timeout (e.g., 30 seconds) with a message like "This is taking longer than expected…" would reduce user frustration.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Error Message</div>
+        <span class="el-type tag-section">Error Display</span>
+        <div class="el-behavior">If login fails (wrong password, server error, etc.), a small red text message appears below the password field explaining what went wrong (e.g., "Login failed" or "Network error"). The message disappears when you try again.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The error messages are short but not very helpful. "Login failed" does not tell the user if they typed the wrong password or if their account is locked. Consider distinguishing between "Incorrect email or password" and "Your account has been disabled." Also, after 5 failed attempts, consider adding a brief cooldown period to prevent password guessing.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Automatic Redirect Behavior</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Already Logged In Redirect</div>
+        <span class="el-type tag-section">Page Behavior</span>
+        <div class="el-behavior">If you visit the login page while already signed in, the system immediately redirects you to the Dashboard without showing the login form at all. If you tried to access a specific page before being redirected to login, the system remembers where you were going and takes you there after you sign in (using a "next" URL parameter).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This is good and expected behavior. However, if the session has expired and the user is in the middle of doing something (like filling in a form), they lose all their unsaved work when redirected to login. A more graceful approach would be to show a "Your session has expired, please sign in again" modal instead of a hard redirect, then return them to exactly where they were.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Login Page Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Clean up developer text:</strong> Remove all developer-facing language (database hints, example emails) for the production version.<br><br>
+      <strong>2. Add show/hide password toggle:</strong> Standard feature, reduces login frustration.<br><br>
+      <strong>3. Add "Forgot password" link:</strong> Even if it just shows an admin contact email, this is better than nothing.<br><br>
+      <strong>4. Add company branding:</strong> The login page shows just "Sign in" with no logo or company name. Adding the Carbon logo and company name would make it feel more professional and help users confirm they are on the right system.<br><br>
+      <strong>5. Better error specificity:</strong> Help users understand what went wrong without giving away security information.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

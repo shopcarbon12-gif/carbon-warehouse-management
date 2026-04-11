@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Replenishments Report · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Reports — Replenishments</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Reports</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Replenishments Report</h1>
+    <p class="subtitle">A log of replenishment activities — items moved from back-of-house storage to sales floor bins. Helps managers understand how frequently bins are restocked and identify high-demand products that deplete quickly.</p>
+  </div>
+  <div class="report-section">
+    <h2>Replenishments Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Replenishments Log</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows replenishment events — items, quantities, source bin, destination bin, who performed the replenishment, and when. Uses the replenishments report workspace component.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Highlight items that have been replenished multiple times in one day — these are fast-moving products that may need their bin capacity increased or more frequent restocking. Add filtering by date range, item, and bin. Add CSV export.</div>
+      </div>
+    </div>
+  </div>
+  <div class="report-section">
+    <h2>Overall Replenishments Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Proactive alerts:</strong> If a bin that was replenished yesterday is now empty again, an automatic low-stock alert should be generated. This turns the replenishment report from reactive to proactive.<br><br>
+      <strong>2. Link to Cycle Counts:</strong> Cross-reference with cycle count data — bins that frequently need replenishment should be prioritized for regular cycle counts to confirm accuracy.
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bulk Imports · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Reports — Bulk Imports</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Reports</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Bulk Imports Report</h1>
+    <p class="subtitle">An audit trail for bulk CSV and EPC import operations. Every time a large batch of items is imported (via file upload or batch API), a record is created here showing how many rows were processed and which succeeded or failed.</p>
+  </div>
+  <div class="report-section">
+    <h2>Bulk Imports Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Import Job Log</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows import job records. Typical columns: Job ID or timestamp, import type (CSV, API), total rows submitted, rows successfully processed, rows failed, and status. Uses the bulk imports workspace component.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> For failed rows, show exactly what went wrong — a "View errors" drill-down per job would let operators fix and re-import the failed items. Currently there is no way to know which specific items failed without checking the raw database.</div>
+      </div>
+    </div>
+  </div>
+  <div class="report-section">
+    <h2>Overall Bulk Imports Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Re-import failed rows:</strong> Add a "Retry failed rows" button per job that re-processes only the items that failed the first time.<br><br>
+      <strong>2. Download original file:</strong> Allow downloading the original file that was uploaded so operators can reference what was submitted.<br><br>
+      <strong>3. Notify on completion:</strong> For large import jobs that take time to process, an email or in-app notification when the job is done would be more user-friendly than having to check this page manually.
+    </div>
+  </div>
+</div>
+</body>
+</html>

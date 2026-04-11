@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status Labels · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Settings — Status Labels</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Settings</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Status Labels (Clean 10)</h1>
+    <p class="subtitle">Manages the 10 fixed item statuses that exist in CarbonWMS — known as the "Clean 10." Each status has a set of rules that are permanently fixed (such as whether the status counts as sellable, whether scanners respond to it, and whether staff can see it). Admins can only change the display name and a legacy system ID number for each status.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Status Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Status Rules Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Displays all 10 statuses in a table. Columns: Status name, System ID (a number used by integrations), Web sellable (Yes/No — whether items in this status count toward available quantity), Scanner (Yes or "Ignore" — whether RFID readers respond to tags in this status), UI visible (Yes/No — whether this status appears in search and reports), Icons (a set of three emoji indicators), and an Edit button. The icons shown in a small badge panel are: 👑 (Super Admin lock — staff cannot change items out of this status without a super admin), 👻 (Ghost — scanner ignores reads completely, no beep, no count), and 🤖 (System only — hidden from staff's status change options). Empty icon slots show a dash.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The emoji icons (👑 👻 🤖) are clever but not self-explanatory to new admins. Add a legend below or above the table explaining what each icon means. The tooltips exist on hover, but many users never discover hover text. A simple legend card ("👑 = Super Admin required to change · 👻 = Scanner ignores these items · 🤖 = Hidden from staff menus") would make this page much clearer.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">View / Edit Label Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Opens a detailed popup for that status. The popup shows: the status's internal name, a description of what the status means, a full "Hard-wired rule summary" panel (read-only) listing all its flags and what they mean in plain language, an editable "Display label" field (an optional custom name that appears in the UI instead of the internal name), and an editable "Legacy system ID" field (a number used by older connected systems). Saving updates only these two fields. The behavior rules themselves cannot be changed.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The popup layout is well-structured. One improvement: the "Hard-wired rule summary" panel uses phrases like "Web sellable: Yes — quantity sync follows this flag." This is clear, but could be even simpler. Also, the "Display label" field could use a placeholder example, e.g., "e.g. In Stock (or leave empty to use the default name)." Finally, show a preview of how the label will look in the inventory table while typing.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Status Descriptions Reference</h2>
+    <div class="suggest-box">
+      The 10 fixed statuses and what they mean to warehouse staff (for reference in any documentation or training):
+      <br><br>
+      <strong>in-stock:</strong> Normal item present in the warehouse, counts as sellable.<br>
+      <strong>return:</strong> Item returned by a customer, may need inspection.<br>
+      <strong>damaged:</strong> Item is damaged; should not be sold.<br>
+      <strong>sold:</strong> Item has been sold at the POS; scanner ignores it (ghost).<br>
+      <strong>stolen:</strong> Item flagged as stolen; Super Admin lock applies.<br>
+      <strong>tag_killed:</strong> RFID tag has been intentionally deactivated (e.g., at checkout); scanner ignores it.<br>
+      <strong>UNKNOWN:</strong> Status is not yet determined; system-only.<br>
+      <strong>pending_visibility:</strong> Item is in the system but not yet confirmed in stock.<br>
+      <strong>in-transit:</strong> Item is moving between locations.<br>
+      <strong>pending_transaction:</strong> Item is part of a pending sale or transfer, not yet finalized.<br>
+      <br>
+      <strong>Suggestion:</strong> These descriptions (or similar ones) should appear on the status labels settings page itself so admins understand what each status represents. New admins often ask "what is UNKNOWN?" or "why is tag_killed separate from sold?" — a brief description on this page would answer those questions.
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Status Labels Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Read-only but not explained:</strong> Most of the important fields on this page cannot be edited, but this is not explained until the user clicks Edit. Consider adding a brief note at the top: "The behavior rules for each status are fixed by the system. You can only change the display name shown to staff and the legacy ID for integrations."<br><br>
+      <strong>2. No search or filter:</strong> With only 10 statuses, filtering is not urgent, but as this page grows (if statuses are ever expanded), basic sorting by name or flag would be useful.<br><br>
+      <strong>3. Icon legend missing from the page:</strong> As noted above, the emoji icons need a visible legend, not just hover tooltips.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

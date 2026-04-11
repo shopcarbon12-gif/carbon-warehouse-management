@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activity History · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Reports — Activity History</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Reports</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Activity History Report</h1>
+    <p class="subtitle">Shows a scrollable log of the last 200 system events in reverse chronological order. Every action taken in the system — tag scans, status changes, logins, imports, exception resolutions — generates an entry here. Auto-refreshes when the page regains focus.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>The Activity Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Activity Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Two columns: "When" (exact timestamp in the user's local time zone, formatted to the second) and "Event" (description of what happened). Events are formatted as concatenated strings: "action · entity — detail." The table shows up to 200 rows. Newest events appear first.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The event format "update · rfid_asset — E280..." is technical and machine-readable. For a report that managers review, events should be written in plain language: "RFID tag E280... moved to Bin A4" or "User admin@carbon.com resolved exception #123." Consider translating event types to human-readable descriptions.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">When Column (Timestamp)</div>
+        <span class="el-type tag-table">Table Column</span>
+        <div class="el-behavior">Shows exact date and time of each event, formatted using the browser's locale. Uses a monospace font for easy reading of timestamps.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add relative time ("2 minutes ago," "Yesterday at 3:45 PM") on hover or as a secondary label. Also consider showing which user performed the action — currently there is no "Who" column.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Loading State</div>
+        <span class="el-type tag-section">Loading</span>
+        <div class="el-behavior">Shows "Loading…" while fetching data. No error state is visually distinct — if the API call fails, the table may just show "No audit rows."</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Distinguish between "No audit rows (nothing has happened yet)" and "Failed to load data (network error)." These require different user actions.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Empty State</div>
+        <span class="el-type tag-section">Empty State</span>
+        <div class="el-behavior">Shows "No audit rows." when the table is empty.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Clarify: "No activity recorded yet. Events will appear here as actions are taken in the system."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Activity History Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No filtering:</strong> 200 rows of mixed events are hard to review. Add filter by: date range, event type (scan / status change / login / import), and user. This turns the log from a raw dump into a useful audit tool.<br><br>
+      <strong>2. No export:</strong> Auditors often need this data in a spreadsheet. Add a "Download CSV" button.<br><br>
+      <strong>3. Hard limit of 200:</strong> For compliance purposes, all events should be accessible. Add pagination or a date-range filter so older events can be retrieved.<br><br>
+      <strong>4. No "Who" column:</strong> Every audit event should show which user performed the action. This is essential for accountability.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

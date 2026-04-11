@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Device Upload Logs · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Reports — Device Upload Logs</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Reports</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Device Upload Logs</h1>
+    <p class="subtitle">A report showing every batch upload that handheld devices have sent to the server. Each time a handheld completes a scan session and syncs, a record appears here with the device ID, batch ID, number of EPCs uploaded, and timestamps.</p>
+  </div>
+  <div class="report-section">
+    <h2>Upload Logs Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Upload Logs Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows all handheld batch uploads. Typical columns include: Device identifier, Batch ID, Location, EPC count, and upload timestamp. Data is read-only. The workspace component handles loading and display.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add filtering by device (so you can see all uploads from one specific handheld), by date range, and by location. Also add a CSV export option so this data can be shared in reports or audits. Consider showing whether each batch was processed successfully or had errors.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Empty/Loading States</div>
+        <span class="el-type tag-section">States</span>
+        <div class="el-behavior">Shows a loading indicator while data is being fetched. Shows an empty state message if no uploads have been recorded.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The empty state should explain what triggers uploads: "No uploads recorded yet. Upload logs appear here when handhelds sync their scan sessions to the server."</div>
+      </div>
+    </div>
+  </div>
+  <div class="report-section">
+    <h2>Overall Upload Logs Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Device health monitoring:</strong> This report could double as a device health dashboard — if a device hasn't uploaded in 24 hours, flag it as potentially offline or not being used.<br><br>
+      <strong>2. Link to device registry:</strong> Each device ID shown should be a clickable link to that device's entry in the device registry (Infrastructure → Devices).<br><br>
+      <strong>3. EPC drill-down:</strong> Clicking a row should expand it to show the individual EPCs that were uploaded in that batch.
+    </div>
+  </div>
+</div>
+</body>
+</html>

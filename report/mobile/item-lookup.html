@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Item Lookup · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Item Lookup</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Item Lookup</h1>
+    <p class="subtitle">Allows floor staff to search for an item by scanning its RFID tag or barcode, or by typing part of its description or SKU. Returns the item's current status, location, and details. Primarily used when a staff member needs to quickly find information about a specific item on the floor.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Search Input</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Search / EPC Input</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">A text field where the user can type a search query. The search matches against EPCs (the RFID tag codes), barcodes, SKU numbers, and item descriptions. Scanning an RFID tag on a physical item automatically fills this field with the EPC code. The search is triggered after the user types or a tag is scanned.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The search field should have a clear placeholder explaining what it accepts: "Scan a tag, or type an EPC, barcode, or item name." Also, after a scan populates the field and results appear, the field should stay visible (not auto-dismiss the keyboard) so the user can easily scan another item.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Search Results</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Item Result Card</div>
+        <span class="el-type tag-section">Result Display</span>
+        <div class="el-behavior">When a match is found, shows the item's details: product name, SKU, EPC code, current status (one of the Clean 10 statuses), the bin it is assigned to, and any other relevant metadata. For a direct EPC match (exact tag scanned), the result is shown immediately without a results list. For text searches, a list of matching items may appear.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The item result card should make the most important information visually prominent — the item's current status should be the biggest/most visible piece of information, using color coding (green for in-stock, red for damaged/stolen, etc.). Staff most often use Item Lookup to answer "is this item supposed to be here?" — the status answer should be immediately obvious without reading.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">EPC Profile Matching</div>
+        <span class="el-type tag-section">Data Processing</span>
+        <div class="el-behavior">When an RFID tag is scanned, the app checks its EPC code against the configured encoding profiles to decode the product ID and serial number from the tag's bit pattern. If the code matches a known profile, the decoded item is shown. If no profile matches, an unknown tag message appears.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> When a tag cannot be matched to any known profile, the error message should be specific: "This tag was not encoded by this system" vs "This tag exists in the system but could not be decoded." These are different problems with different solutions. The first means the tag came from another system; the second means there may be a profile configuration issue.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">No Results State</div>
+        <span class="el-type tag-section">State</span>
+        <div class="el-behavior">When no matching items are found, a message appears indicating that nothing was found for the search query.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The "no results" state should suggest next steps: "No item found for this EPC. If this is a new tag, it may need to be commissioned first. Or try searching by item name or SKU." This guides staff rather than leaving them with a dead end.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Item Lookup Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No status change action from here:</strong> When a staff member looks up an item and sees it has the wrong status, they currently have to navigate to the Change Status screen separately. A shortcut action on the result card ("Change this item's status") would streamline the workflow.<br><br>
+      <strong>2. No history of recent lookups:</strong> Staff frequently look up the same items repeatedly during a shift. A "Recent lookups" list on the search screen (showing the last 5–10 items) would save time and allow quick re-access.<br><br>
+      <strong>3. No location context in result:</strong> The result shows what bin an item is assigned to, but not whether the item was found in the right place. For cycle-count-style use, showing "Expected bin: A3 — Currently assigned to: A3 ✓" or "Expected bin: A3 — Currently assigned to: B7 ⚠" would be very useful.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

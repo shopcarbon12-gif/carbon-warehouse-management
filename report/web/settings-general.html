@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>General Settings · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Settings — General</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Settings</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>General Settings (Infrastructure Settings)</h1>
+    <p class="subtitle">The main configuration page for the WMS. Organized into three tabs: RFID settings (reader defaults), Integrations (Lightspeed OAuth credentials and connection setup), and Bins (default bin configuration). All changes are saved to the database for the tenant.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>RFID Tab</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">RFID Settings Fields</div>
+        <span class="el-type tag-input">Form Fields</span>
+        <div class="el-behavior">Contains RFID-specific defaults for this tenant: EPC filter value, read power settings, antenna configuration, and session parameters. These affect how all RFID readers at this tenant behave by default.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> RFID settings like "filter value" and "session parameters" are very technical. Each field should have a plain-language tooltip or help text explaining what it controls and what happens if it is changed. Wrong settings can cause all readers to stop working correctly.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Integrations Tab (Lightspeed)</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Lightspeed Readiness Panel</div>
+        <span class="el-type tag-section">Status Panel</span>
+        <div class="el-behavior">Shows whether the Lightspeed live catalog connection is ready. Green panel = all credentials are configured and a real sync can run. Amber panel = something is missing, lists exactly what needs to be configured. Missing items include: Client ID, Account ID, LS_CLIENT_SECRET (server environment variable), and LS_REFRESH_TOKEN.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This readiness panel is excellent UX — it clearly tells the user what is missing and what to do. The one improvement: the steps mention "Coolify → WMS → Environment" which is a specific deployment platform. This should be written generically: "In your server's environment variables" with Coolify-specific instructions shown only if Coolify is detected.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Client ID Field</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">Allows saving the Lightspeed Client ID in the database (as an alternative to the environment variable). The saved value supplements or overrides the environment variable.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Storing OAuth client IDs in the database rather than environment variables has security implications. There should be a note explaining why one method is preferred over the other. Also, the field should mask the value after saving (like a password field) so credentials are not visible to anyone who opens the settings page.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">OAuth Flow (Start OAuth Button)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Initiates the Lightspeed OAuth authorization flow — opens Lightspeed's authorization page in the browser. The callback URL for the OAuth redirect is shown so it can be configured in Lightspeed's developer portal.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The OAuth flow involves multiple steps across two systems (CarbonWMS and Lightspeed). A step-by-step wizard guide (Step 1: Copy this callback URL → Step 2: Open Lightspeed developer portal → Step 3: Paste and authorize) would make this much less error-prone.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Bins Tab</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Bin Default Settings</div>
+        <span class="el-type tag-input">Form Fields</span>
+        <div class="el-behavior">Configuration for default bin behavior — likely including default bin capacity, naming conventions, or zone assignments for new bins.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Bin defaults should have descriptive help text explaining how each default is applied — e.g., "Default capacity: used when creating a new bin without specifying capacity."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall General Settings Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Save button state:</strong> It should be very clear when unsaved changes exist — a persistent "Unsaved changes" banner or a highlighted Save button. Currently users might navigate away thinking they saved when they didn't.<br><br>
+      <strong>2. Change history:</strong> Settings changes should be logged in the activity audit so administrators can see who changed what and when.<br><br>
+      <strong>3. Dangerous settings warning:</strong> Some RFID settings, if changed incorrectly, will break all reader functionality. Changing these should show a warning: "Changing this value will affect all readers at this tenant. Changes take effect on the next reader sync."
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

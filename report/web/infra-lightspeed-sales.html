@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lightspeed Sales · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Infrastructure — Lightspeed Sales</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Infrastructure</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Lightspeed Sales</h1>
+    <p class="subtitle">A diagnostic tool for viewing raw sales transaction data pulled directly from the Lightspeed POS (R-Series) API. This is an admin-only page used to verify that the Lightspeed connection is working and to inspect individual sales records. Data is not loaded automatically — it must be manually requested.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Controls</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Load Recent Sales Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Fetches the first page of recent sales from the Lightspeed API and displays them in the table. The button text changes to "Loading…" while fetching. On failure, an amber error message appears below the controls. On success, the table is populated with 25 records. The page does not load data automatically when opened — the admin must click this button.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The page is blank and shows no data until this button is clicked. This is confusing — add a clear instruction at the top of the page before any data loads: "Click 'Load recent sales' to pull the latest transactions from Lightspeed. This page is for diagnostics only — it shows raw data from the POS and does not affect your inventory." Also, show the date/time range of the records returned after loading so admins know what "recent" means.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Previous Page / Next Page Buttons</div>
+        <span class="el-type tag-button">Pagination Buttons</span>
+        <div class="el-behavior">Navigate through pages of 25 sales records. Previous Page is disabled on the first page (offset 0). Next Page is disabled when fewer than 25 rows are returned (end of data) or when the current offset plus 25 reaches the total count. A counter shows "offset X · reported total Y" between the buttons.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The counter "offset 25 · reported total 150" is developer-style language. Replace with user-friendly pagination: "Showing sales 26–50 of 150" or just simple "Page 2 of 6." Also, the Previous/Next buttons are only enabled after the first "Load recent sales" click — add a visual state explaining this (e.g., grayed out with tooltip "Load sales first").</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Sales Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Sales Data Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Displays raw sales records from Lightspeed. Columns: Sale ID (internal Lightspeed ID), Time (the timestamp of the sale), Total (the calculated total amount), Done (whether the sale was completed — "true"/"false" from the Lightspeed API), Void (whether the sale was voided), Reference (a reference number), and Shop (the shop ID). All values are displayed as raw API strings. Empty values show "—".</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> All columns show raw API data without any formatting. The "Done" and "Void" columns show "true"/"false" strings — display these as simple Yes/No or checkmarks for readability. The "Time" column shows an ISO timestamp — format it as a readable date/time. The "Total" column shows the raw numeric string — format it as a currency amount with the appropriate symbol. Also, add a "View details" link per row to see the full line items of a sale (if the API supports it).</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Empty State</div>
+        <span class="el-type tag-section">State</span>
+        <div class="el-behavior">When no data has been loaded yet, the table shows: "No rows — load sales (R-Series API, admin only)." This message is developer-facing and describes the technical API name.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Replace the empty state with something clearer: "No sales loaded yet. Click 'Load recent sales' above to fetch transactions from Lightspeed." The current message ("R-Series API, admin only") adds no value for the admin trying to use the page.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Error Display</div>
+        <span class="el-type tag-section">Error State</span>
+        <div class="el-behavior">If the API call fails, an amber warning-styled message appears below the controls showing the error text. Common failures: Lightspeed credentials not configured, token expired, or API rate limit reached.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The error message shows raw API error text which may include technical details. Add actionable guidance based on common error types: if the error mentions authentication or token, add a link to the Lightspeed OAuth settings: "Lightspeed connection issue — go to Settings → Integrations to re-authorize." If it is a rate limit, explain: "Lightspeed limits how often this data can be requested. Please wait a moment and try again."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Lightspeed Sales Page Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Purely diagnostic — no actions:</strong> This page is read-only and shows raw data. Its purpose is to verify the connection is working. Make this explicit by labeling it as a "Diagnostic" tool in the page title and adding a brief explanation of what an admin should look for when diagnosing issues.<br><br>
+      <strong>2. No date range filter:</strong> Currently loads only "recent" sales starting from the newest. There is no way to look up sales from a specific date range. Adding even a simple date picker would make this much more useful for diagnosing specific integration issues.<br><br>
+      <strong>3. No connection status shown:</strong> This page should show whether the Lightspeed connection is currently authorized before loading data. If the OAuth token is expired, loading will fail — surface this at the top: "Lightspeed: Connected ✓" or "Lightspeed: Not authorized — go to Settings to re-connect."
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

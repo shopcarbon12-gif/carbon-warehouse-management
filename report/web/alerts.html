@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alerts & Exceptions · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Alerts & Exceptions</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Alerts & Exceptions (Admin View)</h1>
+    <p class="subtitle">An admin-level table listing all system exceptions. Unlike the Operations → Exceptions floor workspace (which is designed for floor supervisors), this page is for managers and admins to get a broader view. Each change made here creates an audit record.</p>
+  </div>
+
+  <div class="info-banner">ℹ️ This page is separate from <strong>Operations → Exceptions</strong>. Both show exceptions but with different audiences in mind. This page is the admin-level view; the Operations page is for floor staff.</div>
+
+  <div class="report-section">
+    <h2>Page Header Links</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Link to Operations → Exceptions</div>
+        <span class="el-type tag-link">Link</span>
+        <div class="el-behavior">A teal link labeled "Operations → Exceptions" near the top of the page. Takes you to the floor workspace for handling exceptions in real time.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Good that the two pages are cross-linked. However, users may be confused about which page to use. A brief description like "For real-time floor work, use the Operations workspace. This page is for admin review and bulk actions." would clarify the difference.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Link to Audit Log</div>
+        <span class="el-type tag-link">Link</span>
+        <div class="el-behavior">A link to "Audit log" which should take you to the audit/activity report. Note: the link points to "/reports/audit" which may not exist as a direct route — it might redirect to the activity history report.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Verify this link actually works and points to the correct page. A broken link on an admin page erodes trust in the system.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Exceptions Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Exceptions Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Loads all exceptions from the database on page load. Shows four columns: Type (exception category), Detail (description of what happened), State (current status: new, assigned, resolved, or ignored), and Actions. Data auto-loads when the page opens — no manual refresh button is visible.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The table has no filtering or sorting. An admin reviewing exceptions needs to be able to filter by type, date range, and state. Also, the table auto-refreshes only on page load — adding an auto-refresh interval (like the Operations page) would keep the admin view current without needing to reload the page.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Resolve Button (per row)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Only shown for exceptions in "new" or "assigned" state. Clicking immediately changes the exception's state to "resolved" and refreshes the table. No confirmation dialog, no reason/note required.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Resolving an exception without leaving a note creates an incomplete audit trail. The system should require at minimum a brief reason: "Why is this resolved?" with a short text field. This is especially important for admin-level actions.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Ignore Button (per row)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Only shown for exceptions in "new" or "assigned" state. Clicking changes the state to "ignored" and refreshes the table. Again — no confirmation, no reason required.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> "Ignore" should also require a brief note. Additionally, ignoring an exception should be distinguishable from resolving it — "Ignored" exceptions should be visually different from "Resolved" ones in the table (e.g., different color tag).</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Empty State</div>
+        <span class="el-type tag-section">Empty State</span>
+        <div class="el-behavior">When there are no exceptions, the table shows: "No exceptions — run compare or seed data." This again exposes developer language ("seed data") in a user-facing context.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Replace with: "No open exceptions. Everything looks good." Remove the developer instruction entirely from production.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Loading State</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Loading Indicator</div>
+        <span class="el-type tag-section">Loading State</span>
+        <div class="el-behavior">While data loads, the page shows "Loading…" in the table area. There is no error handling shown if the API call fails — the table simply stays empty if the API doesn't respond.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add error state handling: "Could not load exceptions. Please refresh the page or contact support if the problem persists."</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

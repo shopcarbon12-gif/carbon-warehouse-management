@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Theme & Style · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Settings — Theme & Style</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Settings</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Theme & Style</h1>
+    <p class="subtitle">Lets each user pick their preferred visual style for the web app. Four preset combinations of color mode and font size. The preference is saved in the user's browser (not their account), so it needs to be set again on a different computer.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Theme Preset Cards</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Dark · Default Type</div>
+        <span class="el-type tag-button">Preset Card Button</span>
+        <div class="el-behavior">Dark background with standard font size (~18px root). The former default "large" scale. When selected, shows a teal accent ring around the card and active styling.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The description "matches the former 'large' scale" implies there was a size change at some point. Remove historical notes from the UI — just describe the current state: "Dark background · Standard text size."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Dark · Extra Large Type</div>
+        <span class="el-type tag-button">Preset Card Button</span>
+        <div class="el-behavior">Dark background with larger font size. Description: "Larger root + roomier fields." The extra large scale makes form fields slightly taller too. Useful for users who find the default text too small.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This is a great accessibility feature. Consider adding a third intermediate size ("Compact") for power users who prefer a denser layout to see more data on screen at once.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Light · Default Type</div>
+        <span class="el-type tag-button">Preset Card Button</span>
+        <div class="el-behavior">Light/white background with standard font size. Useful for bright environments where a dark screen is harder to read.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> In bright warehouse environments with fluorescent lighting, a light theme is often easier to read on desktop screens. This is a practical option that should be highlighted as suitable for day shift office use.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Light · Extra Large Type</div>
+        <span class="el-type tag-button">Preset Card Button</span>
+        <div class="el-behavior">Light background with larger fonts. Combines both accessibility features.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Good combination for accessibility. Each card should include a small preview thumbnail so users can see what the theme looks like before selecting it.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Theme Settings Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Browser-only storage is limiting:</strong> The theme preference is saved in the browser (localStorage), not in the user's account. Warehouse staff often switch between computers (desktop at receiving, laptop at the office). Saving the preference server-side per user would fix this.<br><br>
+      <strong>2. Live preview:</strong> Clicking a card should immediately change the app's appearance without needing to navigate away. This already works (the theme provider applies immediately), which is great.<br><br>
+      <strong>3. System preference detection:</strong> Add a 5th option: "Use system setting" that automatically switches between dark/light based on the OS preference. This is now standard in modern apps.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

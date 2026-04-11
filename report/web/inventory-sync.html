@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lightspeed Sync · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Lightspeed Sync</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Inventory</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Lightspeed Sync</h1>
+    <p class="subtitle">The page for synchronizing the product catalog from Lightspeed POS into CarbonWMS. Has two tabs: "Sync Engine" (manual sync + history) and "Live Compare" (real-time POS vs RFID comparison).</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Sync Engine Tab</h2>
+    <div class="element-list">
+
+      <div class="element-card">
+        <div class="el-name">Last Success Tile</div>
+        <span class="el-type tag-section">Status Display</span>
+        <div class="el-behavior">Shows the exact date and time when the last successful sync completed (pulled real data from Lightspeed). If a sync has never been done successfully, it shows "—". Auto-refreshes every 20 seconds.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Consider adding a "time ago" label: "Last synced 2 hours ago" is more immediately meaningful than an exact timestamp. Also, if the last sync was more than 24 hours ago, the tile should turn amber to signal the data might be stale.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Synchronized SKUs Count Tile</div>
+        <span class="el-type tag-section">Status Display</span>
+        <div class="el-behavior">Shows the total number of SKU rows currently in the catalog database. The technical description mentions "custom_skus rows in the matrix catalog" — this is internal language. Auto-refreshes every 20 seconds.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The technical note "Total custom_skus rows in the matrix catalog" should be hidden from regular users. A simpler label like "Products in catalog" is sufficient. Also, this number alone is not enough context — was the last sync partial or complete? Did it add new items or remove discontinued ones?</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Trigger Manual Sync Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">A full-width teal button with a refresh icon. Clicking it immediately starts a sync with Lightspeed. The button shows a spinning icon and says "Syncing…" while the process runs. After completing, a summary message appears showing: how the sync finished, how many SKU rows were updated, where the data came from (e.g., "R-Series", "simulated"), and any warnings.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The sync source label "simulated" is a red flag that should be very visible — if the system is using fake data because real credentials are not configured, the page should display a prominent warning banner rather than a small text note in the result message. Also, the sync has no visible progress bar — for large catalogs, users don't know if it is running for 5 seconds or 5 minutes.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Sync History Log</div>
+        <span class="el-type tag-table">Table / Timeline</span>
+        <div class="el-behavior">Below the sync panel, a history of past sync runs is shown. Includes timestamp, outcome (success/failure), source, and number of records updated. This section loads separately from the main sync panel.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> If sync jobs are running automatically in the background (via a scheduled worker), those should show up in the history too, not just manually triggered ones. Also, failed syncs should show the error reason so users can diagnose problems.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Live Compare Tab</h2>
+    <div class="element-list">
+
+      <div class="element-card">
+        <div class="el-name">Compare Engine / POS vs RFID</div>
+        <span class="el-type tag-section">Comparison Tool</span>
+        <div class="el-behavior">Compares POS (Lightspeed) on-hand quantities against RFID in-stock EPC counts at the active location. Shows per-SKU discrepancies. The description notes this uses "mock" POS data in some configurations.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> If the data being compared is "mock" (simulated/fake), this should be displayed prominently with a warning banner. Users might take corrective actions based on fake discrepancy data, which would cause real problems. Also, the comparison should clearly show the date/time of the POS data used for the comparison.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Background Jobs / Sync Panel</div>
+        <span class="el-type tag-section">Worker Jobs</span>
+        <div class="el-behavior">Shows scheduled background sync jobs queued in the database. The description says to run "npm run worker" to process them — a developer instruction that should not appear on a user-facing page.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Remove all developer instructions from the production UI. Replace with a simple status indicator showing whether the background worker is running and when it last processed jobs. If the worker is not running, show an alert.</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

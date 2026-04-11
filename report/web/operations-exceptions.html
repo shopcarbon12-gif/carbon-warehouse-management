@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operations Exceptions · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Operations — Exceptions</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Operations</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Operations — Exceptions (Floor Workspace)</h1>
+    <p class="subtitle">The main workspace for floor supervisors to handle RFID alarms and exceptions — things like dock alarms (items leaving without authorization), unexpected tag reads, or system anomalies. Refreshes automatically every 10 seconds.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Filter Buttons</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">OPEN / RESOLVED / ALL Filter Buttons</div>
+        <span class="el-type tag-button">Filter Toggle</span>
+        <div class="el-behavior">Three buttons to filter the exceptions list. Clicking one highlights it and updates the table below. Default is "OPEN" — so by default you see only unresolved items. "RESOLVED" shows everything that has been dealt with. "ALL" shows everything.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The filter buttons work well but could be enhanced by showing counts: "OPEN (4) · RESOLVED (23) · ALL (27)". This gives instant triage information without having to switch views. Currently a user has to switch to "ALL" to understand the full scope of activity.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Action Buttons</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Simulate Dock Alarm Button</div>
+        <span class="el-type tag-button">Danger Button</span>
+        <div class="el-behavior">A button (styled as a warning/danger action) that creates a simulated dock alarm exception in the database. Used for testing or demonstrations. Shows "Working…" while running and then shows a toast message with the alarm ID.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This is a testing/demo feature that should not be visible in a production environment. Accidentally simulating a dock alarm would add fake exceptions to the real system. Hide this button in production mode, or add a very obvious "TESTING ONLY" label and confirmation dialog.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Refresh Button</div>
+        <span class="el-type tag-button">Icon Button</span>
+        <div class="el-behavior">Manually refreshes the exceptions list. The list also auto-refreshes every 10 seconds, so this button is mainly for users who want to check for updates immediately.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Show a "Last updated X seconds ago" indicator near the refresh button. This reassures users that the auto-refresh is working without having to click manually.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Exceptions Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Exceptions List / Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows exception rows with: exception type, timestamp, current state (open/resolved), and who handled it. Clicking a row opens the resolution modal. The list is sorted with most recent first. Rows are color-coded by severity.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The exception type names are technical (e.g., "DOCK_EXIT_UNAUTHORIZED"). For floor staff, translate these into plain language: "Item left building without authorization" is much clearer than "DOCK_EXIT_UNAUTHORIZED." The resolution history per exception (who changed what and when) should also be visible when expanding a row.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Row Click → Resolution Modal</div>
+        <span class="el-type tag-section">Modal</span>
+        <div class="el-behavior">Clicking a row opens a detailed modal. The modal shows full exception details and allows the user to set a resolution — typically adding a note explaining what happened and marking it as resolved. Once resolved, it disappears from the OPEN view.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The resolution modal should require a reason/note before allowing resolution — this creates an audit trail. Currently it is possible to resolve exceptions without any explanation. Also, the modal should show related information: which item triggered the alarm, its current location, and its last known position.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Toast Notifications</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Toast / Notification Messages</div>
+        <span class="el-type tag-section">Notification</span>
+        <div class="el-behavior">Brief pop-up messages (toasts) appear at the top or bottom of the screen when actions complete — e.g., "Simulated dock alarm · abc12345…". They auto-dismiss after a few seconds.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The toast messages are very brief. For critical operations (resolving a high-severity exception), consider a more persistent confirmation: "Exception marked as resolved. This was logged in the audit trail."</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

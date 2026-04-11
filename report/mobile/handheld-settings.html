@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Handheld Settings · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Handheld Settings</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Handheld Settings</h1>
+    <p class="subtitle">Device-level settings for the handheld. Accessible from the app bar or settings icon. Includes security settings (biometric toggle), OTA update controls, server connection information, and device identity details. These settings affect only the current physical device, not the tenant configuration.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Security Settings</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Biometric Login Toggle</div>
+        <span class="el-type tag-toggle">Toggle Switch</span>
+        <div class="el-behavior">Enables or disables biometric authentication (fingerprint/face) for this device. When turned off, the user must always enter their email and password to log in. When turned on, biometric credentials are saved in the device's secure vault. Turning off clears the saved biometric credentials.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> When turning off biometric login, confirm with the user: "Disable fingerprint login? You will need to enter your password each time." Also, when turning on, explain the security implication: "Anyone who can unlock this device will be able to log in as you." This is important for shared devices — if another staff member's fingerprint is registered on the device's Android lock screen, they could gain access to this user's WMS account.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Update Settings</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Check for Update Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Manually triggers a check for a new app version from the server's OTA update API. Shows the current app version and, after checking, shows whether an update is available. If an update is available, an install prompt appears. This is the same check that the dashboard runs automatically every 3 minutes.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> After checking, always display the result — "Up to date: v1.1.1+28" or "Update available: v1.1.2+29 — tap to install." Don't just show a loading spinner and then nothing if there's no update available. Also, show the last check timestamp: "Last checked: 4 minutes ago."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Current App Version Display</div>
+        <span class="el-type tag-section">Info Display</span>
+        <div class="el-behavior">Shows the currently installed version of the mobile app. Format: version number from pubspec.yaml (e.g., "v1.1.1+28" where 1.1.1 is the version name and 28 is the build number).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The version display is important for support and diagnosis. Make it easy to copy — a long-press or "Copy" button next to the version number lets staff quickly share it with support staff when reporting an issue.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Device Information</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Server URL Display</div>
+        <span class="el-type tag-section">Locked Display</span>
+        <div class="el-behavior">Shows the server address the app is connected to. The URL is read-only and cannot be changed by the user — it is compiled into the app. This is shown so support staff can verify the device is connected to the right server.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Replace the raw server URL with a user-friendly server name, and move the technical URL behind a "Show details" tap. Most staff don't need to know the server address; support staff who do can tap to reveal it. This also reduces the chance of staff accidentally thinking the URL is something they need to change.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Device Identity Info</div>
+        <span class="el-type tag-section">Info Display</span>
+        <div class="el-behavior">Shows the device's Android ID, MAC address, serial number, and other hardware identifiers. These are the same values displayed on the web Device Binding page. This information helps an admin identify and authorize the device.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add a "Share device ID" button that copies all the device identity information to the clipboard in a formatted, easy-to-paste format: "Device ID: [MAC] / [Android ID]". This makes it much easier for a staff member to send their device info to an admin over a messaging app without reading out long hex strings verbally.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Handheld Settings Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No logout from settings:</strong> The sign-out button is on the dashboard, not in settings. If a user navigates to settings expecting to find sign-out options, they won't find it. Consider adding a sign-out option in the settings screen as well.<br><br>
+      <strong>2. No data clear option:</strong> If a device has cached data or a corrupted local state, there is no way to clear it from settings. A "Clear app data / Force resync" option would help support staff troubleshoot devices without requiring a full app reinstall.<br><br>
+      <strong>3. Settings changes should not require a restart:</strong> If any setting change (like biometric toggle) requires an app restart to take effect, this should be explicitly stated. Silently broken settings are frustrating.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

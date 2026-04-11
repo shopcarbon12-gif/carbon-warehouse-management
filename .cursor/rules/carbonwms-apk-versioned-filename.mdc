@@ -7,15 +7,16 @@ alwaysApply: true
 
 Whenever you **generate a new release APK** for Carbon WMS (`mobile/carbon_wms`):
 
-1. Read **`mobile/carbon_wms/pubspec.yaml`** → field **`version:`** (Flutter format **`x.y.z+build`**, e.g. **`0.1.10+14`**).
-2. **You must** persist the artifact under this **exact naming pattern** (space after `CarbonWMS`, capital **V**, then full pubspec version including `+build`):
+1. Read **`mobile/carbon_wms/pubspec.yaml`** → field **`version:`** (Flutter format **`x.y.z+build`**). Strip the `+build` part to get the semver only.
+2. **You must** persist the artifact under this **exact naming pattern** (space after `CarbonWMS`, capital **V**, semver only — no `+build`):
 
-   **`CarbonWMS V0.1.10+14.apk`**
+   **`CarbonWMS Vx.y.z.apk`**
 
-   (Replace `0.1.10+14` with the current `version:` value.)
+   e.g. pubspec `1.1.1+28` → filename `CarbonWMS V1.1.1.apk`
 
-3. **`app-release.apk`** alone is **not** sufficient as the only drop — it is **not version-specific** and is easy to confuse across builds. The **versioned** name is the **canonical** file for humans, OTA upload labels, and archives.
-4. **Implementation:** run **`mobile/carbon_wms/scripts/build-apk.ps1`** (from `D:\cwm\mobile\carbon_wms` junction when the path has spaces). It copies the versioned APK to **`D:\CarbonWmsRelease\`** by default (`-ReleaseRoot` to override) **and** writes a matching **`.sha1`** file.
-5. When you finish a mobile build turn, **report** paths under **`D:\CarbonWmsRelease`** first (see **`apk-canonical-path-d-carbonwmsrelease.mdc`**), not only `app-release.apk` under `build/`.
+3. The `+build` number increments in pubspec with every build but is **never** included in the APK filename.
+4. When a new version is released, bump semver: `1.1.1` → `1.1.2`, reset build to `+1`.
 
-**No exceptions** unless the user explicitly asked to skip the versioned copy for that turn.
+3. **`app-release.apk`** alone is **not** sufficient — it is not version-specific. The **versioned** name is the canonical file.
+4. **Implementation:** run `bash mobile/carbon_wms/scripts/build-release.sh` from the repo root on Linux. It copies the versioned APK to **`~/CarbonWmsRelease/`** and SCPs it to **`D:\CarbonWmsRelease\`** on the Windows PC.
+5. When you finish a mobile build turn, report **`~/CarbonWmsRelease/CarbonWMS V{version}.apk`** as the canonical path.

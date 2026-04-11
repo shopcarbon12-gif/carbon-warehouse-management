@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Barcode Intake · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Barcode Intake</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Barcode Intake</h1>
+    <p class="subtitle">A workflow for receiving new merchandise that does not yet have RFID tags. Staff scan the barcode on each item, the system records the receipt, and the item is queued for RFID tagging. This bridges the gap between barcode-only receiving and full RFID-tracked inventory.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Scan Interface</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Barcode Scan Input</div>
+        <span class="el-type tag-input">Scan / Text Input</span>
+        <div class="el-behavior">A field that accepts barcode scans from the device's built-in barcode scanner or camera. When a barcode is scanned, the system looks up the corresponding item in the catalog. If found, the item is added to the intake session. If not found, an error or "unknown item" state is shown.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The scan field should give clear audio/visual feedback for each successful scan (a beep + green flash) and for failures (a different beep + red flash). In a busy receiving area with many items, staff need immediate confirmation without looking at the screen for every item.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Scanned Items List</div>
+        <span class="el-type tag-section">List Display</span>
+        <div class="el-behavior">Shows the items scanned in the current session with their names and quantities. Multiple scans of the same barcode increment the count for that item rather than creating duplicate entries.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add a per-item remove button so staff can correct a mistaken scan without clearing the entire session. Show the running count clearly: "12 items scanned" at the top. Also, provide a way to add a manual quantity override for cases where a staff member is processing a large quantity of the same item (scanning 50 identical items one by one is slow).</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Commit / Confirm Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Finalizes the intake session and submits it to the server. After committing, the items are recorded as received and queued for RFID tagging. The session is then cleared.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The commit button should show a summary before finalizing: "Commit intake of 12 items? This will mark them as received and queue them for RFID tagging." Staff should confirm they haven't missed any items before committing. After commit, show a clear success screen with a count of items processed and an option to start a new intake session.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Barcode Intake Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No draft/pause feature:</strong> If a staff member needs to step away mid-intake (break, question, distraction), the session should be saveable as a draft. Losing progress on a large receiving batch is frustrating.<br><br>
+      <strong>2. No duplicate detection within session:</strong> If the same barcode is scanned twice on different items (e.g., two of the same SKU that need separate serial numbers), the system should handle this gracefully — counting them as two units, not flagging as an error.<br><br>
+      <strong>3. Integration with receiving workflow:</strong> Ideally, barcode intake should link to a purchase order or delivery receipt so the received items can be matched against what was expected. Currently it appears to be a freeform intake without expected-quantity validation.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

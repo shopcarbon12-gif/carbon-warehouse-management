@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EPC General Settings · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Settings — RFID EPC General</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Settings</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>RFID EPC General Settings</h1>
+    <p class="subtitle">Controls the global encoding rules used when generating RFID tags for this warehouse. Every tag written by the system follows these rules. Getting this wrong means tags won't be read correctly by scanners or won't match the expected item data. This is an advanced configuration page.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Encoding Settings Form</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Encoding Standard Dropdown</div>
+        <span class="el-type tag-input">Dropdown</span>
+        <div class="el-behavior">A dropdown with two options: "SENITRON (default)" and "Custom." SENITRON is the encoding format used by Senitron RFID hardware. Choosing SENITRON means tags are generated according to Senitron's specific bit layout. Choosing Custom allows using a different layout defined in the EPC Profiles page. This setting applies to all tag generation for this tenant.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The terms "SENITRON" and "Custom" will be meaningless to most users. Add a brief explanation below the dropdown: "SENITRON (default): Use this if your RFID readers and printers are Senitron hardware. Custom: Use this if you have a different encoding layout — configure it in EPC Profiles below." Also, changing this setting after tags have already been printed could break scanning for existing tags. Add a warning: "Changing the encoding standard will affect all future tag printing. Existing printed tags will not be updated."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Company Prefix Field</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">A text field for entering the company's hexadecimal prefix — a unique identifier embedded in every tag generated. The field only accepts uppercase hex characters (0–9, A–F) up to 12 characters long. The input is automatically uppercased as you type. If left empty when saving, it defaults to "F0A0B".</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The word "hexadecimal" and the concept of a company prefix are very technical. Add a tooltip or help text: "Your company's unique identifier embedded in every RFID tag. This was set during initial setup. Do not change it unless you are re-configuring your entire tag system — doing so will make all existing tags unreadable." The default "F0A0B" fallback is a risk — if a user accidentally clears the field and saves, their prefix silently changes to the default. Add a confirmation or at minimum a warning when saving with the default value.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Active EPC Profile Dropdown</div>
+        <span class="el-type tag-input">Dropdown</span>
+        <div class="el-behavior">An optional dropdown showing all configured EPC profiles. Selecting one makes it the "active" profile — the default layout used when encoding tags. Can also be set to "— None —" meaning no specific profile is enforced. The dropdown is populated from the EPC Profiles list (the sub-page for configuring bit layouts).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> When "None" is selected, what layout is actually used? This is unclear. There should be a note explaining what happens when no profile is active: "If no profile is selected, the system will use the SENITRON default bit layout." Also, profile names in the dropdown may not be meaningful — include a brief description of each profile's encoding scheme (e.g., "Store A — 40-bit item / 36-bit serial").</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Save / Reset Buttons</div>
+        <span class="el-type tag-button">Primary/Secondary Buttons</span>
+        <div class="el-behavior">Save applies the changes and shows either "Saved." (success) or an error message. Reset discards unsaved changes and returns the fields to the last saved values. Both buttons are disabled while a save is in progress.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The "Saved." message disappears quickly and is easy to miss. Make success messages more visible and persistent (at least 5 seconds). Also, since this is a high-impact setting, consider requiring a typed confirmation (like typing "CONFIRM") before saving — or at minimum a clear warning dialog: "Changing EPC settings affects all tag generation. Are you sure?"</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall EPC General Settings Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No audit trail:</strong> Changes to the encoding standard or company prefix should be logged in the activity audit with the old and new values. This is critical for diagnosing tag generation issues after a configuration change.<br><br>
+      <strong>2. Impact warning missing:</strong> This is one of the highest-impact settings in the entire application. Changing the company prefix or encoding standard without understanding the implications can break all tag scanning. The page needs a visible warning banner at the top, not just field-level help text.<br><br>
+      <strong>3. Relationship to EPC Profiles is unclear:</strong> This page references EPC Profiles but does not link to them. Adding a direct link to "Manage EPC Profiles" from this page would help admins navigate the configuration flow.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status & Tag Logs · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Reports — Status & Tag Logs</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Reports</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Status & Tag Logs Report</h1>
+    <p class="subtitle">A history of all status changes applied to RFID tags. Every time an item's status changes (e.g., from "In Stock" to "Sold," or from "Return" to "In Stock"), an entry is recorded here with the old status, new status, who made the change, and when.</p>
+  </div>
+  <div class="report-section">
+    <h2>Status Log Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Status Log Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Loads status change history. Shows EPC, item details, old status, new status, changed by (user or system), and timestamp. Uses the shared status-logs workspace component.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add filtering by: status transition (e.g., "show all items that went from In Stock to Damaged"), date range, user who made the change, and specific EPC or SKU. This report is most powerful as an investigation tool — filtering is essential.</div>
+      </div>
+    </div>
+  </div>
+  <div class="report-section">
+    <h2>Overall Status Logs Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Suspicious pattern detection:</strong> Flag unusual status patterns — e.g., an item going from "In Stock" to "Sold" and back to "In Stock" multiple times in one day. This could indicate a scan error or data problem.<br><br>
+      <strong>2. Bulk change visibility:</strong> When a bulk status update changes 200 EPCs at once, those 200 entries all appear in this log. They should be grouped visually as one bulk operation with an expand option, rather than 200 individual lines.
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>External Systems Report · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Reports — External Systems</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Reports</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>External Systems Report</h1>
+    <p class="subtitle">A log of all communication events between CarbonWMS and external systems — outgoing API calls, webhook deliveries, sync events, and responses received. Useful for diagnosing integration issues.</p>
+  </div>
+  <div class="report-section">
+    <h2>External System Events Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Event Log</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows events for all integrations: system name, event type, direction (outbound/inbound), status (success/failure), and timestamp. Uses the external systems report workspace component.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> For failed events, show the error details (HTTP status code, error message) to allow diagnosis without needing to check server logs. Also add filtering by system (Lightspeed, etc.), event type, and status (success/failure only).</div>
+      </div>
+    </div>
+  </div>
+  <div class="report-section">
+    <h2>Overall External Systems Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Alerting on failure:</strong> Consecutive failures from an external system should trigger an alert visible on the Dashboard and in the Alerts section. Currently failures are only discoverable by checking this report manually.<br><br>
+      <strong>2. Retry button:</strong> For failed outbound events, a "Retry" button would allow re-sending without having to find and re-trigger the original action.
+    </div>
+  </div>
+</div>
+</body>
+</html>

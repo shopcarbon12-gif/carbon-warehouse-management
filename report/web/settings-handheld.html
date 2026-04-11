@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Handheld Settings · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Settings — Handheld</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Settings</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>Handheld Settings</h1>
+    <p class="subtitle">Controls behavior of the CarbonWMS mobile app on handheld RFID devices. Settings here are pushed to all handhelds at the active location. The page uses toggle switches for each setting. Changes are saved with a Save button.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Toggle Switches</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Individual Toggle Switches (multiple)</div>
+        <span class="el-type tag-toggle">Toggle Switches</span>
+        <div class="el-behavior">A list of on/off toggles controlling handheld behavior. Each toggle has a label. Settings are loaded from the server when the page opens. Changing a toggle only updates the local UI state — changes must be saved with the Save button to take effect on devices. Examples of toggle settings: auto-read scanning, beep on read, confirmation dialog before committing, show item names vs EPCs only, etc.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Each toggle should have a brief description below the label explaining what it does when on vs off. For example: "Auto-read: When ON, the reader scans continuously. When OFF, each scan must be manually triggered." Currently toggles show labels only, which can be ambiguous.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Save Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Saves all toggle changes to the server. Shows "Saving…" while in progress. After saving, a success or error message appears. Changes take effect on connected handhelds at their next sync (typically when the app refreshes its settings).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The Save button should be disabled (greyed out) when there are no unsaved changes. Also, after saving, show clearly: "Settings saved — handhelds will receive these changes at their next sync." This removes uncertainty about when changes apply.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Loading / Error States</div>
+        <span class="el-type tag-section">States</span>
+        <div class="el-behavior">While loading current settings, the page shows a loading state. If loading fails, an error message appears. The settings are fetched fresh each time the page opens.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> If the settings fail to load, the toggles might show incorrect default states. Make sure to clearly disable all toggles and show an error message if the settings could not be loaded, rather than showing potentially wrong defaults that a user might save accidentally.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Handheld Settings Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Per-device vs tenant-wide:</strong> Currently these settings apply to all handhelds at a location. Consider allowing per-device overrides for specific use cases (e.g., one handheld used for receiving might need different settings than one used for cycle counts).<br><br>
+      <strong>2. Settings preview:</strong> A "Preview on handheld" simulation showing how the app will behave with the selected settings would be very helpful for new admins.<br><br>
+      <strong>3. Rollback:</strong> Allow reverting to the previous saved settings in case a change causes problems on the floor.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

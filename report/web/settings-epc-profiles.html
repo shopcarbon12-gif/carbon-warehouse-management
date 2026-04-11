@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EPC Profiles · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Settings — EPC Profiles</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Settings</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>EPC Encoding Profiles</h1>
+    <p class="subtitle">Defines the exact bit-level layout used when generating RFID tag codes. Each profile specifies where in the 96-bit tag code the item identifier and serial number are stored. Multiple profiles can exist, but only one is active at a time. Profiles are also synced to mobile devices. This is a technical advanced-configuration page.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Profiles Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Profiles List Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows all configured EPC encoding profiles in a table. Columns: Profile name, EPC prefix (a hex value shown in teal), Item start/length (two numbers representing where in the tag the item identifier begins and how many bits it uses), Serial start/length (same concept for the serial number portion), Active (Yes/No — whether this profile is included in mobile sync), and Edit/Remove action links. If no profiles exist, the table shows an empty state.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The columns "Item start bit" and "Item length" will be completely opaque to anyone who is not an RFID engineer. Add a brief explanation below the table: "These numbers tell the system exactly where in each tag's code to find the product ID and serial number. Only change these if you know your hardware's encoding layout." Also, consider adding a visual diagram of the 96-bit tag layout showing where each segment falls — even a simple text diagram would help.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Add Profile Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Opens a modal form to create a new EPC profile. The button is disabled while a save operation is in progress or while data is still loading. Clicking opens the profile editor modal.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Before an admin creates a new profile, they should understand the implications. Add a brief note near the button: "Adding a new profile does not change your current setup. You must activate it in EPC General Settings and ensure your hardware matches the new layout before using it for tag generation."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Edit / Remove Links (per profile)</div>
+        <span class="el-type tag-button">Inline Links</span>
+        <div class="el-behavior">Each row has "Edit" (teal link) and "Remove" (red link). Edit opens the same profile modal pre-filled with the profile's current values. Remove shows a browser confirmation dialog ("Remove this profile?") and then deletes it immediately. There is no undo.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The "Remove" action is permanent and could break tag generation if the removed profile is still referenced somewhere. The browser confirm dialog is a bare minimum. Add a better warning: "Removing this profile is permanent. If any devices or configurations reference it, tag generation may stop working. Are you sure?" Also, if a profile is currently marked as active in the EPC General Settings, block deletion and explain why: "This profile is currently active. Set a different active profile before removing it."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Profile Editor Modal</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Profile ID Field</div>
+        <span class="el-type tag-input">Text Input (disabled on edit)</span>
+        <div class="el-behavior">A unique identifier for the profile, auto-generated when adding. When editing an existing profile, this field is disabled — the ID cannot be changed. The auto-generated format is "p_" followed by a short random string based on the current time.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Profile IDs like "p_m5g7xk" are meaningless to admins. Consider using a human-readable auto-generated name as the default, or allow the admin to specify a meaningful ID (e.g., "senitron-store-a") when creating. The ID should only matter for technical/integration purposes.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Bit Position Fields (Item / Serial)</div>
+        <span class="el-type tag-input">Number Inputs (4 fields)</span>
+        <div class="el-behavior">Four number inputs: Item start bit, Item length, Serial start bit, Serial length. Defaults are: item starts at bit 32, length 40 bits; serial starts at bit 80, length 36 bits. These tell the system exactly how to read and write tag data. No validation beyond basic number parsing.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> These fields are the most technically sensitive in the entire application. An incorrect value will cause every tag to fail. Add: (1) a real-time preview showing the total bits used vs the 96-bit limit, (2) validation that start + length does not exceed 96 bits and that segments don't overlap, (3) help text explaining what each value controls in plain language.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Active Checkbox</div>
+        <span class="el-type tag-input">Checkbox</span>
+        <div class="el-behavior">When checked, this profile is marked as "active" — meaning it will be included when mobile devices sync their profile list. Being "active" here is different from being the "selected active profile" in EPC General Settings. A profile must be active here to even appear in the active profile dropdown on the General Settings page.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The label "Active (included in mobile sync)" is confusing because there is a separate concept of "active profile" in the General Settings page. Rename this to "Enabled (visible to devices)" or "Available for use" to distinguish it from the "currently selected" concept. Add a tooltip: "When enabled, this profile is sent to all mobile devices and can be selected as the active encoding profile."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall EPC Profiles Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No duplicate/clone option:</strong> When a user wants to create a slightly different profile based on an existing one, they must re-enter all values manually. A "Clone" button would save time and reduce errors.<br><br>
+      <strong>2. No validation on bit overlap or total length:</strong> The form accepts any numbers without checking if they make sense. A tag with item bits at positions 50–90 and serial bits at positions 60–96 would overlap — the system should detect this.<br><br>
+      <strong>3. Relationship to tag printing is not shown:</strong> There is no way to see "which tags were printed using this profile" or "how many items in the inventory use this layout." This information would help admins decide whether a profile can be safely edited or removed.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

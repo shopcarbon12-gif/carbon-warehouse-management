@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Fast Putaway · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Fast Putaway</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Fast Bin Putaway</h1>
+    <p class="subtitle">A two-phase workflow for quickly assigning RFID-tagged items to a specific bin. Phase 1: scan the item tag. Phase 2: scan the bin's barcode. The item is then recorded as belonging to that bin. Designed for speed — staff can process many items rapidly. Also supports "color scope" — assigning a specific color attribute to a bin assignment.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Phase 1 — Scan Item</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Item Scan (RFID)</div>
+        <span class="el-type tag-input">RFID Scan</span>
+        <div class="el-behavior">The screen starts in item-scan mode. The RFID reader waits for a tag to be read. When a valid item tag is scanned, the item's details (name, SKU, current bin) are displayed briefly and the screen transitions to Phase 2 (bin scan). If the tag is not recognized, an error is shown.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Phase transitions should be very obvious on a small screen. After scanning an item, use a large clear visual indicator: "Item scanned: [Product Name] — Now scan the bin." Staff moving quickly may miss subtle state changes. Also, allow canceling a scanned item and returning to Phase 1 without restarting the entire workflow.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Phase 2 — Scan Bin</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Bin Scan (Barcode)</div>
+        <span class="el-type tag-input">Barcode Scan</span>
+        <div class="el-behavior">After an item is scanned, the screen switches to bin-scan mode. The staff member scans the barcode label on the storage bin. The item is then assigned to that bin in the system. After a successful assignment, the screen returns to Phase 1, ready for the next item.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The transition back to Phase 1 after a successful assignment should include a visible counter: "12 items putaway this session." This gives staff a running total and confirms each assignment worked. Also, add a short delay or "undo last" option (5-second window) in case a staff member scans the wrong bin — mis-assignments are easy to make when working fast.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Color Scope Bottom Sheet</div>
+        <span class="el-type tag-section">Modal</span>
+        <div class="el-behavior">A bottom sheet (slide-up panel) that can be opened to assign a "color scope" to a bin assignment. The color scope is a business-specific attribute that associates the item with a color category when placed in that bin. This is relevant for inventory organization by color at certain locations.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The "color scope" feature may be confusing to staff who don't know what it means. Rename it to something more descriptive of the actual business use case, or add a brief explanation on the bottom sheet: "Color scope assigns a color category to items in this bin, used for inventory organization." Also, make it clear whether the color scope is optional or required for certain workflows — if it is always optional, say so.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Bottom Action Bar</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Tactical Bottom Bar Buttons</div>
+        <span class="el-type tag-button">Large Bottom Bar Buttons</span>
+        <div class="el-behavior">The bottom of the screen has large, full-width buttons (designed for use with gloves) built with the TacticalEmeraldButton and TacticalSlateButton components. The green (Emerald) button is the primary action; the grey (Slate) button is secondary or cancel. Both are at least 80px tall for easy tapping.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The large bottom bar buttons are an excellent design decision for warehouse floor use. Ensure button labels clearly describe the action (not just "Confirm" but "Save bin assignment") so staff know exactly what will happen. Also, the green/grey color coding is intuitive: green = proceed, grey = go back — maintain this consistently across all screens.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Fast Putaway Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No session summary:</strong> When a staff member finishes a putaway session and goes back to the dashboard, there is no summary of how many items were put away or a log of the assignments made. A session summary screen would help with verification and catching mistakes.<br><br>
+      <strong>2. No "already in this bin" detection:</strong> If a staff member scans an item that is already in the target bin, the system should alert them: "This item is already in bin A3 — no change needed." This prevents unnecessary re-assignments and helps catch accidental duplicate scans.<br><br>
+      <strong>3. Multi-item scan before bin:</strong> Consider an "advanced mode" where staff can scan multiple items before scanning the bin — useful when placing a whole armful of items into the same bin at once. The current one-item-one-bin sequential flow is fast for singles but slow for batch placements.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

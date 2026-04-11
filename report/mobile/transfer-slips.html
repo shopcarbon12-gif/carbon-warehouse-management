@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Transfer Slips · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Transfer Slips</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Transfer Slips</h1>
+    <p class="subtitle">A two-tab screen for managing inventory transfers between locations. The OUT tab is for creating and scanning outgoing transfers — listing items being sent out. The IN tab is for receiving and confirming incoming transfers — marking a transfer as received. Transfer slips are numbered from 70000+ for easy reference.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Transfer OUT Tab</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Create Transfer Slip Form</div>
+        <span class="el-type tag-input">Form</span>
+        <div class="el-behavior">A form to create a new transfer slip. Fields include destination location name and destination location code (both free-text, pre-filled with the current device's location code for the sending side). Once the slip is created, the scan session begins for adding items to it.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The destination location fields are free-text, which means typos are possible and there is no validation against known locations. Replace with a dropdown of known warehouse locations pulled from the server, or at minimum validate the entered code against the known location list before creating the slip. Pre-filling the destination with the device's own location code is likely a bug — an outgoing transfer's destination should be another location, not the same one.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Item Scan (RFID) for Transfer</div>
+        <span class="el-type tag-input">RFID Scan</span>
+        <div class="el-behavior">After the transfer slip is created, the staff member scans RFID tags to add items to the transfer. Each scanned item is added to the slip's item list. The running count of scanned items is shown.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Show the scanned items in a scrollable list with the ability to remove individual items (for correction). Also show whether each scanned item's current status is appropriate for transfer — for example, scanning a "sold" item onto a transfer slip might be a mistake and should show a warning.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Commit Transfer Slip</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Finalizes the transfer slip and changes the scanned items to "in-transit" status. The slip gets its number (70000+), and the receiving location can then see it in the IN tab. The source location's inventory shows these items as in-transit.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Before committing, show a summary: "Transfer #70042 — 15 items to [Destination]. Committing will set these items to in-transit status." After committing, display the slip number prominently so the staff member can communicate it to the receiving team: "Transfer slip #70042 created — share this number with the receiving location."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Transfer IN Tab</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Select Transfer Slip</div>
+        <span class="el-type tag-input">Dropdown / Search</span>
+        <div class="el-behavior">The receiving staff member selects the incoming transfer slip by its number. The slip list shows pending transfers destined for the current location. The expected item count is shown for the selected slip.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The slip selection UI should show additional context for each slip: the sending location, the number of items, and when it was created. A staff member looking at a list of transfer numbers without context ("70042, 70043, 70045") cannot tell which one to select. Show: "Transfer #70042 — 15 items from Main Warehouse — Created 2 hours ago."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Mark Transfer as Received</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">Confirms that the transfer was received. The items' status changes from "in-transit" to "in-stock" at the receiving location. The transfer slip is marked as complete.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> A simple "mark as received" without scanning individual items means the receiving side has no way to verify that all expected items actually arrived. Add an optional scan step: "Scan received items to verify count — or confirm all X items received without scanning." At minimum, show the expected vs received count discrepancy if partial receipt is possible.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Transfer Slips Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No shortage/overage handling on receipt:</strong> The current receipt flow is all-or-nothing. Real warehouse transfers sometimes arrive with missing or extra items. The system should allow partial receipt and record the discrepancy.<br><br>
+      <strong>2. Slip number should be more prominent:</strong> Transfer slips are numbered for a reason — so teams can communicate about them verbally. The slip number should be large and visible on screen after creation so staff can immediately report it to colleagues.<br><br>
+      <strong>3. No PDF/print option from mobile:</strong> The web app can print transfer slips as PDFs. The mobile app has no way to access or share this. For field use, a "Share slip details" option (even just the text) would help coordinate between the sending and receiving teams.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

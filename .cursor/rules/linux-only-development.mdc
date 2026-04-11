@@ -1,0 +1,37 @@
+---
+description: Hard lock — all development, builds, and tooling run on Linux only. Windows is SSH client only.
+alwaysApply: true
+---
+
+# Linux-only development — hard lock (all agents)
+
+## Rule
+
+**All development, builds, and tooling for this project run exclusively on Linux.**
+
+Windows is used **only** as an SSH client to connect to the Linux machine via VS Code Remote SSH. Nothing else.
+
+## Non-negotiable
+
+1. **Never** suggest running `flutter`, `gradle`, `npm`, `node`, `dart`, or any build command on Windows.
+2. **Never** reference Android Studio on Windows as a build tool — it is installed but must not be used for this project.
+3. **Never** suggest opening, configuring, or using Android Studio on Windows for builds, SDK management, or anything else related to this project.
+4. **Never** reference `build-apk.ps1`, `gradlew.bat`, or any `.ps1` build script — they no longer exist.
+5. **Never** write files to Windows paths (`C:\`, `D:\`, `%APPDATA%`, `%LOCALAPPDATA%`, etc.) except `D:\CarbonWmsRelease\` which receives the finished APK via SCP.
+6. **Never** suggest installing Flutter, JDK, Gradle, or Android SDK on Windows.
+
+## Allowed Windows involvement (explicit user permission required)
+
+- Receiving the finished APK at `D:\CarbonWmsRelease\` via SCP after a Linux build.
+- Anything else only if the user explicitly says "do this on Windows" in that specific message.
+
+## Where everything runs
+
+| Task | Where |
+|---|---|
+| Flutter APK build | Linux — `bash mobile/carbon_wms/scripts/build-release.sh` |
+| Next.js dev / build | Linux |
+| Gradle | Linux — caches in `.tools/gradle-user-home/` |
+| Dart pub cache | Linux — `.tools/pub-cache/` |
+| Database | Linux (Docker / Coolify) |
+| All terminal commands | Linux SSH terminal in VS Code |

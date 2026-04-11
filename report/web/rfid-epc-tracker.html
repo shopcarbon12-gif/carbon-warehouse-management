@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EPC Tracker · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>EPC Tracker</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · RFID & Hardware</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-web">🌐 Web App</span>
+    <h1>EPC Tracker</h1>
+    <p class="subtitle">A search and investigation tool for finding individual RFID tags. Type an EPC code, item name, or SKU — the system finds the matching item and shows its full history. The most useful page for tracing where an item has been.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Search Bar</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Search Input</div>
+        <span class="el-type tag-input">Search Field</span>
+        <div class="el-behavior">A large search field with a magnifying glass icon. As you type (with a short delay of about 320ms), it automatically searches without needing to press Enter. If you type a full EPC code (24 hexadecimal characters), it goes directly to that tag. If you type anything else (like a name or SKU), it shows a list of matching items to pick from. Works with as few as 2 characters typed.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The search delay is good. However, there is no placeholder text explaining what you can search for — adding "Search by EPC, SKU, or item name…" would help new users know what types of queries work. Also, the search should support barcode scanner input — most RFID/barcode scanners emit a string followed by Enter, so pressing Enter should trigger the search immediately.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Search Results</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Direct Match (single EPC)</div>
+        <span class="el-type tag-section">Result Display</span>
+        <div class="el-behavior">If you enter a full EPC code (24 hex characters), the system goes directly to showing that tag's details without asking you to pick from a list. The decoded SGTIN-96 data (what the EPC represents — Company prefix, item reference, serial number) is displayed alongside the item details.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The SGTIN-96 decoded data (company prefix, item reference, serial) is very technical. Most users just need to see "This tag belongs to: Black Dress, SKU-123, currently in Bin A4." The technical EPC breakdown should be collapsible for those who need it.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Pick List (multiple matches)</div>
+        <span class="el-type tag-section">Result List</span>
+        <div class="el-behavior">If your search matches multiple items, a list of options appears. Clicking one loads the full detail view for that specific EPC. Each option in the list shows relevant identifying information (SKU, description, EPC prefix).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The pick list is good. Consider adding the current location/bin of each result in the list so users can identify the right one before clicking (e.g., two identical items in different locations).</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">No Match State</div>
+        <span class="el-type tag-section">Empty State</span>
+        <div class="el-behavior">When the focused EPC produces no results, the system shows a "not found" message. This could mean the EPC has never been seen by the system, or it was searched incorrectly.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The not-found message should suggest next steps: "This EPC was not found in the system. It may belong to another tenant, have been scanned but not uploaded yet, or be incorrectly formatted. Try scanning the physical tag again."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Item Detail Panel</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Item Details Card</div>
+        <span class="el-type tag-section">Detail View</span>
+        <div class="el-behavior">Once an EPC is selected, shows full details: EPC code, SKU, current location, bin assignment, current status, and the decoded EPC structure. This is read-only information — you cannot edit anything from here.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Add quick action buttons in the detail panel: "Change Status," "Move to Different Bin," or "Flag for Review." Currently users must know to go to a completely separate page (Bulk Status Update) to make changes. Having shortcuts here would make the tracker much more actionable for floor supervisors investigating a specific item.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">History Timeline</div>
+        <span class="el-type tag-section">Timeline Component</span>
+        <div class="el-behavior">Shows a chronological list of everything that has happened to this specific tag: when it was first commissioned, when it moved between locations, when its status changed, when it was scanned by a reader. Each event shows the timestamp and what changed.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The timeline is the most valuable part of this page. Consider adding a visual map view if locations are physical spaces (showing movement between warehouse zones). Also, allow filtering the timeline by event type (e.g., "Show only location changes").</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Clean Bin · CarbonWMS Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="site-header">
+  <div><div class="logo">CarbonWMS Review</div><h1>Mobile — Clean Bin</h1></div>
+  <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Mobile App</div>
+</div>
+<div class="page-wrap">
+  <div class="report-header">
+    <span class="platform-badge platform-mobile">📱 Mobile App</span>
+    <h1>Clean Bin</h1>
+    <p class="subtitle">A maintenance workflow that removes all item assignments from a specific bin. Used when a bin is being emptied, reorganized, or repurposed. Staff scan the bin's barcode and the system clears all records of items assigned to that bin. This is a destructive operation — it cannot be undone.</p>
+  </div>
+
+  <div class="report-section">
+    <h2>Bin Scan</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Bin Barcode Input</div>
+        <span class="el-type tag-input">Barcode Scan</span>
+        <div class="el-behavior">The screen asks the staff member to scan the barcode on the bin they want to clean. Once scanned, the bin code is displayed and the system shows what will be cleared. The staff member then confirms and the server removes all EPC assignments for that bin via a POST to the clean-bin API.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Before clearing, the app should show exactly what will be deleted: "Bin A3 currently has 47 items assigned. Cleaning this bin will remove all assignments. Items will not be deleted, but they will no longer be linked to this bin." This gives the staff member critical context before committing to an irreversible action.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Confirm Clean Action</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">After scanning the bin, a confirm button submits the clean request to the server. On success, a confirmation message appears. There is no undo available — the assignments are immediately cleared.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This is one of the most destructive actions in the mobile app — clearing a full bin could represent hundreds of inventory records being unlinked. Require an explicit confirmation step: show the bin code and item count, then require the staff member to tap a clearly labeled button like "Clear all 47 items from this bin." Consider requiring a supervisor PIN or biometric re-authentication for this action, since accidental bin clears could cause significant inventory reconciliation work.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Result State</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Success / Error Feedback</div>
+        <span class="el-type tag-section">State</span>
+        <div class="el-behavior">After the clean operation, the app shows a success or error state. On success, the bin is confirmed as cleaned. On error, an error message appears.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The success state should clearly log what happened: "Bin A3 cleaned — 47 item assignments removed." This creates a mental record for the staff member. Also, this action should appear in the web activity audit log so admins can see when and which bins were cleaned, and by whom.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Overall Clean Bin Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. No undo is a serious risk:</strong> A staff member who accidentally scans the wrong bin and confirms could wipe out dozens of inventory records with no recovery path. Consider a short grace period (30 seconds) during which the action can be reversed, or implement a "soft clear" that marks assignments as pending removal until confirmed from the web app.<br><br>
+      <strong>2. No record of what was cleared:</strong> After cleaning a bin, there is no log in the mobile app of which items were affected. If the action was a mistake, there's no way to know what was in the bin before cleaning. Log the affected items (even just their EPCs and count) before clearing so there is a recovery option.<br><br>
+      <strong>3. Needs access restriction:</strong> This action should not be available to all staff roles — it should require a supervisor or manager role. A junior floor worker accidentally cleaning a bin could cause significant work.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
