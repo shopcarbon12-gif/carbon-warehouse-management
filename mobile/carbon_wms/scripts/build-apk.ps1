@@ -115,6 +115,16 @@ if (-not (Test-Path $androidGradle)) {
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+# Write key.properties pointing to the Windows keystore
+$keystorePath = "D:\CarbonWmsRelease\carbon-wms-release.jks"
+$keyPropsPath = Join-Path $here "android\key.properties"
+[System.IO.File]::WriteAllText($keyPropsPath, @"
+storePassword=CarbonWMS2026!
+keyPassword=CarbonWMS2026!
+keyAlias=carbon-wms
+storeFile=$($keystorePath -replace '\\','/')
+"@)
+
 & $flutter pub get
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

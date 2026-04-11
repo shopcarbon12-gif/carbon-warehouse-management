@@ -1,9 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+val keyPropsFile = rootProject.file("key.properties")
+val keyProps = Properties()
+if (keyPropsFile.exists()) keyProps.load(keyPropsFile.inputStream())
 
 android {
     namespace = "com.shopcarbon.wms"
@@ -30,13 +36,21 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file(keyProps["storeFile"] as? String ?: "")
+            storePassword = keyProps["storePassword"] as? String ?: ""
+            keyAlias = keyProps["keyAlias"] as? String ?: ""
+            keyPassword = keyProps["keyPassword"] as? String ?: ""
+        }
+    }
+
     buildTypes {
         release {
             // Zebra API3 AAR references optional Apache/SLF4J/BouncyCastle stacks; R8 fails if minify strips them.
             isMinifyEnabled = false
             isShrinkResources = false
-            // TODO: Add your own signing config for the release build.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keyPropsFile.exists()) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

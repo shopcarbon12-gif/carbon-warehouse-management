@@ -20,6 +20,17 @@ FULL_VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}')
 SEM_VERSION="${FULL_VERSION%%+*}"
 APK_NAME="CarbonWMS V${SEM_VERSION}.apk"
 
+KEYSTORE="$HOME/.android/carbon-wms-release.jks"
+KEY_PROPS="$MOBILE_DIR/android/key.properties"
+
+# Ensure key.properties points to the Linux keystore
+cat > "$KEY_PROPS" << EOF
+storePassword=CarbonWMS2026!
+keyPassword=CarbonWMS2026!
+keyAlias=carbon-wms
+storeFile=$KEYSTORE
+EOF
+
 echo "Building CarbonWMS $FULL_VERSION (APK: $APK_NAME)..."
 
 flutter build apk --release
