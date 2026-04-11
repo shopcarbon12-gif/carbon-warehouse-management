@@ -11,6 +11,12 @@
 #   - SSH access to Windows PC (Elior@192.168.1.2)
 set -euo pipefail
 
+# Ensure Flutter SDK is on PATH for bare/nohup shells that don't source ~/.bashrc.
+FLUTTER_SDK="/home/carbondev/development/flutter/bin"
+if [ -d "$FLUTTER_SDK" ] && [[ ":$PATH:" != *":$FLUTTER_SDK:"* ]]; then
+  export PATH="$FLUTTER_SDK:$PATH"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOBILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_DIR="$(cd "$MOBILE_DIR/../.." && pwd)"

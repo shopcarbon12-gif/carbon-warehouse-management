@@ -28,8 +28,7 @@ ENV NEXT_REACT_COMPILER=0
 ENV NODE_OPTIONS=--max-old-space-size=6144
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Avoid `npm run build` here: package.json runs db:migrate first, which needs DATABASE_URL.
-# Migrations run at container start via docker-entrypoint (WMS_AUTO_MIGRATE) or Coolify hooks.
+# scripts/build.mjs skips db:migrate when DOCKER_BUILD=1; call it or next build directly.
 # Always webpack in Docker (not Turbopack); matches `next build --webpack` recommendations for CI.
 RUN node ./node_modules/next/dist/bin/next build --webpack
 

@@ -6,7 +6,7 @@
     "dev": "node scripts/run-next-dev.mjs",
     "dev:turbo": "node scripts/run-next-dev.mjs --turbo",
     "clean:next": "node scripts/clean-next-cache.mjs",
-    "build": "npm run db:migrate && node ./node_modules/next/dist/bin/next build --webpack",
+    "build": "node scripts/build.mjs",
     "start": "node ./node_modules/next/dist/bin/next start",
     "lint": "eslint",
     "db:up": "docker compose up -d",
