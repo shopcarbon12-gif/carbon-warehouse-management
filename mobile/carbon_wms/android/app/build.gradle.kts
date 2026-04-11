@@ -46,6 +46,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+        }
         release {
             // Zebra API3 AAR references optional Apache/SLF4J/BouncyCastle stacks; R8 fails if minify strips them.
             isMinifyEnabled = false
