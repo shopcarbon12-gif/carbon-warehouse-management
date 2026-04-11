@@ -30,7 +30,7 @@ void main() {
           ),
         ],
         child: MaterialApp(
-          theme: AppTheme.dark,
+          theme: AppTheme.light,
           home: const DashboardScreen(),
         ),
       ),
