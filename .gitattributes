@@ -1,1 +1,2 @@
 scripts/docker-entrypoint.sh text eol=lf
+mobile/carbon_wms/scripts/*.sh text eol=lf
