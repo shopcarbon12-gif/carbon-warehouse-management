@@ -139,20 +139,6 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
               );
             },
           ),
-          FutureBuilder<String>(
-            future: HandheldDeviceIdentity.primaryDeviceIdForServer(),
-            builder: (context, snap) {
-              final id = snap.data ?? '';
-              final short = id.length > 12 ? '${id.substring(0, 8)}…' : id;
-              return ListTile(
-                title: const Text('Device ID (Android)'),
-                subtitle: Text(
-                  id.isEmpty ? '—' : short,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                ),
-              );
-            },
-          ),
           const Divider(height: 32),
           FilledButton.icon(
             onPressed: _busy ? null : _checkOta,
