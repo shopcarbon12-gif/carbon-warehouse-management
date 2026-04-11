@@ -171,7 +171,7 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
               onPressed: _busyLookup ? null : () => unawaited(_resolvePreview()),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.background,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               child: Text(
@@ -187,7 +187,7 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
                 onPressed: () => unawaited(_commitIntake()),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.slateActionDark,
-                  foregroundColor: AppColors.textMain,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
                 child: const Text(
@@ -238,7 +238,7 @@ class _IntakePreviewCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppColors.background,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  border: Border.all(color: AppColors.border),
                 ),
                 child: const Center(
                   child: Icon(Icons.inventory_2_outlined, size: 56, color: AppColors.textMuted),

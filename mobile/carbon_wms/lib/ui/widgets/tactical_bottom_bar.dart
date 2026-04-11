@@ -54,7 +54,7 @@ class TacticalEmeraldButton extends StatelessWidget {
     return _TacticalButton(
       height: _kTacticalButtonHeight,
       background: AppColors.primary,
-      foreground: AppColors.background,
+      foreground: Colors.white,
       label: label,
       onPressed: onPressed,
       onLongPressStart: onLongPressStart,
@@ -79,7 +79,7 @@ class TacticalSlateButton extends StatelessWidget {
     return _TacticalButton(
       height: _kTacticalButtonHeight,
       background: AppColors.slateActionDark,
-      foreground: AppColors.textMain,
+      foreground: Colors.white,
       label: label,
       onPressed: onPressed,
     );

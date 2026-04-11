@@ -1,28 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Carbon Industrial — strict dark surfaces for warehouse floor use.
+/// Carbon Industrial — light surfaces matching the login-screen palette.
 abstract final class AppColors {
-  static const Color background = Color(0xFF0F1115);
-  static const Color surface = Color(0xFF1E2128);
-  static const Color primary = Color(0xFF10B981);
+  static const Color background = Color(0xFFF5F5F5);
+  static const Color surface = Color(0xFFECECEC);
+  static const Color primary = Color(0xFF1B7D7D);
   static const Color success = Color(0xFF34D399);
-  static const Color textMain = Color(0xFFF8FAFC);
-  static const Color textMuted = Color(0xFF94A3B8);
-  static const Color slateAction = Color(0xFF475569);
-  static const Color slateActionDark = Color(0xFF334155);
+  static const Color textMain = Color(0xFF171D1D);
+  static const Color textMuted = Color(0xFF8A9090);
+  static const Color slateAction = Color(0xFF4A5454);
+  static const Color slateActionDark = Color(0xFF6A7070);
+  /// Light border for input outlines and separators.
+  static const Color border = Color(0xFFBCC9C9);
 }
 
 abstract final class AppTheme {
   static ThemeData get dark {
     final base = ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       scaffoldBackgroundColor: AppColors.background,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         surface: AppColors.surface,
         primary: AppColors.primary,
-        onPrimary: AppColors.background,
+        onPrimary: Colors.white,
         secondary: AppColors.slateAction,
         onSurface: AppColors.textMain,
         error: Color(0xFFEF4444),
@@ -56,11 +58,11 @@ abstract final class AppTheme {
         fillColor: AppColors.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF334155)),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF334155)),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
