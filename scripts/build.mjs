@@ -16,11 +16,24 @@ if (skip) {
     "[build] Skipping db:migrate (SKIP_DB_MIGRATE/DOCKER_BUILD is set).",
   );
 } else {
-  execFileSync("npm", ["run", "db:migrate"], { stdio: "inherit" });
+  try {
+    execFileSync("npm", ["run", "db:migrate"], { stdio: "inherit" });
+  } catch (err) {
+    console.error(
+      "\n[build] db:migrate failed — is Postgres running? " +
+        "Set SKIP_DB_MIGRATE=1 to skip migrations (e.g. CI without a local DB).\n",
+    );
+    process.exit(err?.status ?? 1);
+  }
 }
 
-execFileSync(
-  process.execPath,
-  ["./node_modules/next/dist/bin/next", "build", "--webpack"],
-  { stdio: "inherit" },
-);
+try {
+  execFileSync(
+    process.execPath,
+    ["./node_modules/next/dist/bin/next", "build", "--webpack"],
+    { stdio: "inherit" },
+  );
+} catch (err) {
+  console.error("\n[build] next build failed.\n");
+  process.exit(err?.status ?? 1);
+}
