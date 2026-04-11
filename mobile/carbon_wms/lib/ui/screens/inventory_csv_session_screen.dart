@@ -134,7 +134,7 @@ class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  border: Border.all(color: AppColors.border),
                   color: AppColors.surface,
                 ),
                 child: m.manualCsvRows.isEmpty

@@ -198,7 +198,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
               onPressed: _busyLookup ? null : () => unawaited(_performLookup()),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.background,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               child: Text(
@@ -227,7 +227,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                   label: const Text('LOCATE TAG (GEIGER)'),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.background,
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                 ),
@@ -299,7 +299,7 @@ class _LookupCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppColors.background,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF334155)),
+                  border: Border.all(color: AppColors.border),
                 ),
                 child: const Center(
                   child: Icon(Icons.image_outlined, size: 48, color: AppColors.textMuted),

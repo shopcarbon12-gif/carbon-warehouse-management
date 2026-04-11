@@ -276,7 +276,10 @@ class _TransferSlipsScreenState extends State<TransferSlipsScreen>
           const SizedBox(height: 8),
           FilledButton(
             onPressed: _busy ? null : () => unawaited(_appendScansToSlip()),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.slateActionDark),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.slateActionDark,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('APPEND SESSION EPCS TO SLIP'),
           ),
         ],

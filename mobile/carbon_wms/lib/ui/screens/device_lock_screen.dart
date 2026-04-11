@@ -36,7 +36,7 @@ class DeviceLockScreen extends StatelessWidget {
               SelectableText(
                 androidId,
                 style: const TextStyle(
-                  color: Colors.white70,
+                  color: AppColors.textMuted,
                   fontFamily: 'monospace',
                   fontSize: 12,
                 ),
