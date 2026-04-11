@@ -216,17 +216,9 @@ async function main() {
       console.error(`
 Target Postgres is not reachable from this PC (firewall or DB port not published to the internet).
 
-Fix one of:
-  1) Coolify → Postgres → expose the mapped port on 0.0.0.0 and open it in the VPS firewall, or
-  2) SSH tunnel, then copy bins:
-       npm run db:copy-bins:tunnel
-     (needs ssh to the Coolify server; forwards local 15432 → server 127.0.0.1:3000 by default)
+Fix: Coolify → Postgres → expose the mapped port on 0.0.0.0 and open it in the VPS firewall.
 
-Manual tunnel (terminal 1, leave open):
-  ssh -N -L 15432:127.0.0.1:3000 root@YOUR_VPS_IP
-
-Then (terminal 2), same user/password/db as .env.coolify.local but host 127.0.0.1 port 15432:
-  set TARGET_DATABASE_URL=postgresql://USER:PASS@127.0.0.1:15432/postgres
+Then set TARGET_DATABASE_URL and run:
   npm run db:copy-bins
 `);
     }
