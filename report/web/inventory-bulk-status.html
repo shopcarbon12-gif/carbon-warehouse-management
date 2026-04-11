@@ -15,80 +15,65 @@
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
     <h1>Bulk Status Update</h1>
-    <p class="subtitle">A power-tool page for admins. Paste a list of EPC codes, choose a target status, and apply the change to all of them at once. Some dangerous status transitions are behind an additional Super Admin checkbox. This page can change the status of thousands of items in one action.</p>
-  </div>
-  <div class="page-summary">
-    <div class="summary-stat"><div class="stat-num stat-good">2</div><div class="stat-label">Working well</div></div>
-    <div class="summary-stat"><div class="stat-num stat-issue">4</div><div class="stat-label">Issues</div></div>
-    <div class="summary-stat"><div class="stat-num stat-rec">4</div><div class="stat-label">Recommendations</div></div>
+    <p class="subtitle">Lets authorized users paste a list of RFID EPC codes and change all of their statuses at once. Regular users can only use safe status options. Super Admins have access to all statuses including dangerous system ones.</p>
   </div>
 
   <div class="report-section">
-    <h2>Input Form</h2>
+    <h2>Role Note</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Target Status Dropdown</div>
-          <span class="el-type tag-dropdown">Dropdown</span>
-        </div>
-        <div class="el-behavior">Shows all 10 Clean 10 statuses. Selecting one sets the target status for the bulk operation. Some statuses only appear if the "risky transitions" checkbox is checked and the user is a Super Admin.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Hiding dangerous statuses behind a separate Super Admin checkbox is the right two-layer protection for destructive operations.</div>
-          <div class="issue-block">Status names use internal identifiers (in-stock, tag_killed, pending_visibility) that are not self-explanatory to all admin users. A new admin may not know the difference between "sold" and "tag_killed."</div>
-          <div class="rec-block">Show a one-line description next to each status in the dropdown: "tag_killed — RFID chip deactivated at checkout; scanner will ignore it." This prevents mis-selection.</div>
-        </div>
-      </div>
-
-      <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">EPC Textarea</div>
-          <span class="el-type tag-input">Large Text Area</span>
-        </div>
-        <div class="el-behavior">A large text area where the admin pastes EPC codes, one per line. There is no limit shown on how many EPCs can be entered. No validation of EPC format is shown before submission.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">No count is shown as the user types — pasting 500 EPCs looks the same as pasting 5000. There is no format validation, so a pasted list with trailing spaces, empty lines, or wrong format silently fails per EPC. No preview of what items will be affected before committing.</div>
-          <div class="rec-block">Show a live count: "437 EPCs entered" as the user types/pastes. Validate format and show how many are recognized: "435 valid · 2 not found in this tenant." Add a preview step showing the items before applying the change.</div>
-        </div>
-      </div>
-
-      <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Risky Transitions Checkbox (Super Admin only)</div>
-          <span class="el-type tag-toggle">Checkbox (Role-Gated)</span>
-        </div>
-        <div class="el-behavior">Only visible to Super Admins. Checking it unlocks additional status options in the dropdown that are considered dangerous — like statuses with Super Admin locks. The checkbox is hidden entirely for regular admins.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Role-based visibility of dangerous options is exactly the right pattern. Regular admins can't even see the risky transitions option exists.</div>
-        </div>
-      </div>
-
-      <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Apply Button</div>
-          <span class="el-type tag-button">Primary Button (Destructive)</span>
-        </div>
-        <div class="el-behavior">Immediately applies the selected status to all EPCs in the textarea. No intermediate confirmation step. After completion, shows success or error counts.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">There is no confirmation dialog before applying. A mis-paste or a wrong status selection applies immediately. Changing the status of 1,000 items and then discovering the wrong status was selected has no undo path.</div>
-          <div class="rec-block">Add a required confirmation step: show the target status, the count of EPCs, and a preview of 3–5 item names before applying. The confirm button should read "Apply 'damaged' to 437 items" — making the user read what they are about to do. Add an audit log entry for every bulk operation with the before/after states.</div>
-        </div>
+        <div class="el-name">Role Warning Text</div>
+        <span class="el-type tag-section">Informational</span>
+        <div class="el-behavior">A small note at the top explains what the user can and cannot do based on their role. Regular users see: "System workflow targets are hidden — Super Admin only." Super Admins see: "All Clean 10 targets are available; use Override for risky transitions."</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The term "Clean 10" is an internal system vocabulary. For most staff users, this means nothing. Consider using plain language or providing a tooltip/link explaining what these statuses mean.</div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Overall Assessment</h2>
-    <div class="overall-issues">
-      <strong>No confirmation before a bulk destructive operation</strong> is the critical problem here. This page can change thousands of inventory records in one click. A single bad paste or wrong dropdown selection with no review step is an unacceptable risk for production inventory data.
-    </div>
-    <div class="suggest-box">
-      <strong>Must-fix before next release:</strong><br>
-      1. Add a preview/confirmation step before applying.<br>
-      2. Show live EPC count as user types.<br>
-      3. Validate EPC format and show found/not-found counts.<br>
-      4. Log all bulk operations with before/after state in the audit trail.
+    <h2>Form Controls</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Target Status Dropdown</div>
+        <span class="el-type tag-dropdown">Dropdown</span>
+        <div class="el-behavior">A dropdown to pick the new status you want to apply to all the pasted EPCs. Regular users see only safe, staff-facing statuses (like "In Stock", "Sold", etc.). Super Admins see all statuses including system-internal ones. The first option in the list is selected by default.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> There is no preview of what the selected status means or what happens when it is applied. A brief description under the dropdown (e.g., "In Stock: item is available for sale and visible to RFID readers") would help users choose correctly. Also, consider grouping statuses visually — e.g., "Normal statuses" vs "Super Admin statuses."</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Allow Risky Transitions Checkbox</div>
+        <span class="el-type tag-toggle">Checkbox</span>
+        <div class="el-behavior">A checkbox labeled "Allow risky transitions (Super Admin only)". It is disabled (greyed out, cannot be checked) for regular users. For Super Admins, checking it allows moving items between statuses that would normally be blocked — for example, moving something from a locked system state back to a normal state.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> When checked, there is no second confirmation or warning before running the bulk operation. Given that this can affect many items at once and the changes are described as "risky," a confirmation dialog summarizing what will happen is essential: "You are about to move 450 EPCs from [status] to [status]. This cannot be automatically reversed. Continue?"</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">EPC Text Area</div>
+        <span class="el-type tag-input">Textarea</span>
+        <div class="el-behavior">A large text box where you paste or type EPC codes. EPCs can be separated by spaces, commas, semicolons, or new lines — the system handles all of these automatically. The box accepts any formatting and cleans it up before processing. Minimum height of 180px.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> There is no live count showing how many EPCs have been detected in the pasted text. Adding "Detected: 47 EPCs" that updates as you type would give users confidence they pasted the right amount. Also, consider adding a "Clear" button inside the textarea and a "Paste from clipboard" button for convenience.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Apply Bulk Status Button</div>
+        <span class="el-type tag-button">Primary Button</span>
+        <div class="el-behavior">A teal button that submits the operation. It shows "Working…" while processing and is disabled during that time. After completion, a message appears showing how many EPCs were updated (e.g., "Updated 47 EPC(s) at the active location.").</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> After a successful bulk update, there is no way to undo the operation. For regular users this is fine since they can only pick safe statuses. But for Super Admins using the Override option, a brief undo window (e.g., 30 seconds with an "Undo" button) could prevent costly mistakes. Also, the success message disappears if you click elsewhere — it should persist until dismissed.</div>
+      </div>
+
     </div>
   </div>
+
+  <div class="report-section">
+    <h2>Overall Bulk Status Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. Preview before applying:</strong> Show a summary of how many EPCs were detected and what the current vs target status would be before running the operation.<br><br>
+      <strong>2. Result breakdown:</strong> After running, show which EPCs succeeded, which were skipped (already in target status), and which failed (not found or locked).<br><br>
+      <strong>3. Activity log link:</strong> After a bulk update, show a direct link to the relevant audit log entries so the user can verify what was changed.<br><br>
+      <strong>4. File upload option:</strong> Allow uploading a CSV or TXT file of EPCs instead of only pasting — useful when dealing with hundreds of codes from a scanner export.
+    </div>
+  </div>
+
 </div>
 </body>
 </html>

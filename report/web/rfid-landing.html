@@ -3,61 +3,55 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RFID Landing · CarbonWMS Review</title>
+<title>RFID Workflows Landing · CarbonWMS Review</title>
 <link rel="stylesheet" href="../style.css">
 </head>
 <body>
 <div class="site-header">
-  <div><div class="logo">CarbonWMS Review</div><h1>RFID Workflows</h1></div>
+  <div><div class="logo">CarbonWMS Review</div><h1>RFID Workflows (Landing)</h1></div>
   <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · RFID & Hardware</div>
 </div>
 <div class="page-wrap">
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
-    <h1>RFID Workflows — Landing Page</h1>
-    <p class="subtitle">A simple hub page with links to three areas: an external legacy tag encoding portal (external URL), the Inventory Catalog, and the Handheld API developer docs. No tools or data of its own — purely a navigation page.</p>
-  </div>
-  <div class="page-summary">
-    <div class="summary-stat"><div class="stat-num stat-good">0</div><div class="stat-label">Working well</div></div>
-    <div class="summary-stat"><div class="stat-num stat-issue">3</div><div class="stat-label">Issues</div></div>
-    <div class="summary-stat"><div class="stat-num stat-rec">2</div><div class="stat-label">Recommendations</div></div>
+    <h1>RFID Workflows (Landing Page)</h1>
+    <p class="subtitle">A simple navigation/landing page for RFID-related workflows. Provides three links: the external Carbon WMS legacy encode portal, the internal inventory search, and the handheld batch API documentation.</p>
   </div>
 
+  <div class="info-banner">ℹ️ This is a landing page only — it has no functionality of its own, just links to other places. It could be replaced by better in-page navigation or removed if its content is accessible from the sidebar.</div>
+
   <div class="report-section">
-    <h2>Navigation Links</h2>
+    <h2>Links on This Page</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Link to External Legacy Encode Portal</div>
-          <span class="el-type tag-link">External Link</span>
-        </div>
-        <div class="el-behavior">Opens an external URL for an older tag encoding system. Opens in a new tab. No description of what the external portal does or why a user would need it.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">A plain link to an external system with no explanation is confusing. Users don't know whether they should use the external portal or the built-in Commissioning page. Having both options creates uncertainty about which is correct.</div>
-          <div class="rec-block">Add a brief description: "External legacy encoder — use only for [specific use case]. For new tag printing, use the Print / Commission page instead." If the legacy portal is being phased out, add a deprecation notice and a timeline for removal.</div>
-        </div>
+        <div class="el-name">Carbon WMS Legacy Encode (External Link)</div>
+        <span class="el-type tag-link">External Link</span>
+        <div class="el-behavior">Links to an external website (app.senitron.net) — the legacy RFID encoding portal. Opens in a new browser tab. Described as being used for "deep encode and LS PO flows."</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Sending users to an external legacy system from within the main application creates a context-switch that can be confusing. The link should have a clear label that this is an external system ("External: opens in a new tab"), and ideally a note explaining when to use it vs. the internal commissioning tool.</div>
       </div>
-
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Page Purpose</div>
-          <span class="el-type tag-section">Page Layout</span>
-        </div>
-        <div class="el-behavior">This page exists as a hub/landing for RFID features. However, all the features it links to (Inventory, Commissioning, Cycle Counts) are already accessible directly from the sidebar navigation.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">A landing page that only links to things already in the sidebar navigation adds a step without adding value. The RFID section in the sidebar already organizes all RFID features — a separate landing page is redundant.</div>
-          <div class="rec-block">Consider removing this landing page entirely and relying on the sidebar accordion for RFID navigation. Or repurpose it as an RFID status dashboard showing reader health, recent scans, and commissioning queue — content that actually belongs on a "landing" page.</div>
-        </div>
+        <div class="el-name">Search Inventory Link</div>
+        <span class="el-type tag-link">Internal Link</span>
+        <div class="el-behavior">Links to the legacy Inventory page (/inventory).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This should point to the modern Inventory Catalog (/inventory/catalog) instead of the legacy inventory page.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Handheld Batch API Link</div>
+        <span class="el-type tag-link">Internal Link</span>
+        <div class="el-behavior">Links to the Handheld API documentation page (/handheld) which shows the curl command example.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This link is only useful for developers and device integrators — regular warehouse staff have no use for it. Consider moving this to a Developer Resources section separate from the main navigation.</div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Overall Assessment</h2>
-    <div class="overall-issues">
-      <strong>This page adds friction without adding value.</strong> Users who click "RFID & Hardware" in the sidebar land here and then have to click again to reach actual tools. The page should either be removed (link the sidebar directly to EPC Tracker or Commissioning) or transformed into a real RFID health dashboard with useful at-a-glance information.
+    <h2>Overall Landing Page Suggestions</h2>
+    <div class="suggest-box">
+      <strong>1. This page adds little value:</strong> All three links are accessible from the sidebar. This landing page is an extra click with no real content. Consider removing it and making the RFID sidebar item go directly to the EPC Tracker (the most commonly used RFID tool).<br><br>
+      <strong>2. If keeping the landing:</strong> Add tiles or cards for each RFID workflow with a brief description of what each one does — making it a useful "RFID quick start" hub rather than just a list of links.
     </div>
   </div>
+
 </div>
 </body>
 </html>

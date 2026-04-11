@@ -12,118 +12,113 @@
   <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App</div>
 </div>
 <div class="page-wrap">
+
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
     <h1>Dashboard — Command Center</h1>
-    <p class="subtitle">The home screen after login. Shows a snapshot of the warehouse: 3 KPI tiles, a hardware status strip, a real-time scan counter fed by a live server connection, an activity timeline, and a quick links bar. Data refreshes every 15 seconds.</p>
-  </div>
-  <div class="page-summary">
-    <div class="summary-stat"><div class="stat-num stat-good">3</div><div class="stat-label">Working well</div></div>
-    <div class="summary-stat"><div class="stat-num stat-issue">5</div><div class="stat-label">Issues</div></div>
-    <div class="summary-stat"><div class="stat-num stat-rec">6</div><div class="stat-label">Recommendations</div></div>
+    <p class="subtitle">The main overview page. Shows key numbers, hardware status, and a timeline of recent activity. Data refreshes automatically every 15 seconds. A live RFID scan counter updates in real time through a streaming connection to the hardware.</p>
   </div>
 
   <div class="report-section">
-    <h2>KPI Tiles</h2>
+    <h2>Page Header</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">KPI Tiles — Catalog · Alerts · RFID In-Stock</div>
-          <span class="el-type tag-link">Clickable Cards</span>
-        </div>
-        <div class="el-behavior">Three large tiles at the top. Catalog Items count links to Inventory Catalog, Open Alerts count links to the Alerts page, RFID In-Stock count links to Inventory. All three auto-refresh every 15 seconds.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Clicking a tile to navigate directly to the relevant page is a natural, efficient design. Auto-refresh keeps numbers accurate without user action.</div>
-          <div class="issue-block">The Alerts tile looks the same whether there are 0 or 50 open alerts — it does not change color or show any urgency. A manager glancing at the dashboard cannot tell at a glance if something is wrong.</div>
-          <div class="rec-block">Make the Alerts tile turn amber/red when the count is above zero. Consider adding a small change indicator to the stock tile (↑ +12 today) so the number has context. Numbers without context are just numbers.</div>
-        </div>
+        <div class="el-name">"Command center / Operations overview" Header</div>
+        <span class="el-type tag-section">Informational</span>
+        <div class="el-behavior">Shows the title "Operations overview" with a subtitle explaining that KPIs refresh every 15 seconds. A "Syncing…" indicator appears briefly when data is being refreshed in the background. If the data fails to load, a red "KPI load error" message appears instead.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The subtitle contains technical language: "RFID edge stream (SSE) updates the live scan counter." For non-technical warehouse managers, this could be rewritten as "Live scan count updates automatically." Also, the "Syncing…" indicator is very small and easy to miss — a subtle progress bar across the top might be more noticeable.</div>
       </div>
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>KPI Cards (Key Numbers)</h2>
+    <div class="element-list">
+
+      <div class="element-card">
+        <div class="el-name">Total Active Inventory (Teal Card)</div>
+        <span class="el-type tag-link">Clickable Card</span>
+        <div class="el-behavior">Shows the total number of RFID-tracked items currently in the system for the active location. Clicking the card navigates to the Inventory Catalog page. While loading, the card shows an animated placeholder pulse. The number is a large bold count.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> There is no trend indicator (e.g., up or down arrow compared to yesterday). A simple "+12 since yesterday" indicator would make this number much more useful. Also, the card title "Total active inventory" is clear, but adding a brief description like "items with in-stock RFID tags" would help new users understand what they are looking at.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Receiving Concerns (Amber Card)</div>
+        <span class="el-type tag-link">Clickable Card</span>
+        <div class="el-behavior">Shows the count of items that have been flagged as having receiving issues — items that arrived but have discrepancies. Clicking the card goes to the Alerts page where these can be reviewed and resolved.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The label "Receiving concerns" is somewhat vague. A number of "5" here raises the question: 5 what exactly? Labeling it "5 items flagged during receiving" or adding a tooltip explaining what a "receiving concern" is would be clearer for users new to the system.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Unknown Assets (Violet Card)</div>
+        <span class="el-type tag-link">Clickable Card</span>
+        <div class="el-behavior">Shows the count of RFID tags that have been scanned by readers but do not match any known item in the database. These could be tags from another system, damaged tags, or items that were never properly registered. Clicking goes to the Inventory page.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Unknown assets can be a sign of a serious problem (items slipping through without being cataloged) or a minor one (a stray tag from a box). The card would be more actionable if clicking it went directly to a filtered view showing only the unknown assets, not the entire inventory.</div>
+      </div>
+
     </div>
   </div>
 
   <div class="report-section">
     <h2>Hardware Pulse Strip</h2>
     <div class="element-list">
+
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Hardware Status Row (Readers · Printers · Handhelds)</div>
-          <span class="el-type tag-section">Status Strip</span>
-        </div>
-        <div class="el-behavior">A row of indicator dots showing connected hardware — RFID readers, printers, and handhelds — with counts and online/offline labels.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">The counts shown here are hardcoded in the source code — they are not pulled from the real device registry. A reader going offline does not change this display. This is the most misleading element in the entire web app: operators making floor decisions based on "3 readers online" when that number is fake.</div>
-          <div class="rec-block">Pull device counts and status from the Infrastructure Devices registry API. Show actual device names with live Online/Offline states. Remove the hardcoded values entirely — displaying wrong data is worse than displaying no data.</div>
-        </div>
+        <div class="el-name">Live Scans (Session) Counter</div>
+        <span class="el-type tag-section">Live Counter</span>
+        <div class="el-behavior">Shows how many RFID tags have been scanned by the fixed readers since you opened this page. It updates in real time via a streaming connection (Server-Sent Events). If readers are active and scanning, this number ticks up continuously. The pill glows green when the count is greater than 0.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The counter resets to 0 every time you reload the page (it is session-based). This means it is not useful for tracking how many scans happened during a workday. Consider showing both "this session" and a daily total. Also, the counter never resets itself — if 10,000 items are scanned over a long shift, it just shows a large number with no context.</div>
       </div>
+
+      <div class="element-card">
+        <div class="el-name">Hardware Pill Cards (Readers, Antennas, Printers, Handhelds)</div>
+        <span class="el-type tag-section">Status Display</span>
+        <div class="el-behavior">Four fixed-count pills showing the number of each hardware type. Currently hardcoded to: 1 Reader, 9 Antennas, 1 Printer, 0 Handhelds. Green glowing dots appear next to types with a count greater than 0. The numbers are static — they do not reflect real-time device status.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> These numbers are hardcoded in the source code, not pulled from the device registry. This means they will never change even if you add or remove hardware. This section should connect to the live device registry to show actual device counts. Also, "0 Handhelds" with no context looks like a problem — it should either show something like "Not connected" or be hidden when zero.</div>
+      </div>
+
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Live Scan Counter</h2>
+    <h2>Recent Activity Timeline</h2>
     <div class="element-list">
+
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Live Scan Stream Counter</div>
-          <span class="el-type tag-section">Real-Time Feed (SSE)</span>
-        </div>
-        <div class="el-behavior">A counter that increases in real time as RFID tags are scanned anywhere in the warehouse. Uses a persistent server connection (SSE) that pushes events as they happen — no polling needed.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Real-time push without polling is the right technical approach. Operators can immediately see that scanning activity is happening. The live nature makes the dashboard feel alive and trustworthy.</div>
-          <div class="issue-block">Only a total count is shown. A number like "1,247 scans" with no time frame, location breakdown, or comparison to yesterday is hard to interpret. The user can't tell if this is normal or abnormal activity.</div>
-          <div class="rec-block">Add a compact activity graph (sparkline) for the last 30 minutes so a sudden drop or spike is immediately visible. Show "today" and "last hour" sub-counts. This turns a raw number into a useful signal.</div>
-        </div>
+        <div class="el-name">Activity List (Last 10 Audit Events)</div>
+        <span class="el-type tag-table">Timeline</span>
+        <div class="el-behavior">Shows the 10 most recent things that happened in the system — tag scans, status changes, imports, logins, etc. Each item shows what happened, which entity was affected, and the exact date/time. Items are connected by a vertical line to create a timeline effect. If nothing has happened yet, it shows "No audit events yet."</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The entries are formatted as machine-readable text (e.g., "update · rfid_asset — detail here"). For a warehouse manager, this should be rewritten in plain language: "Tag E280... moved from Bin A to Bin B" or "Status changed for SKU-123 from In Stock to Sold." Also, there is no way to filter or search the activity from here — you have to go to the full Activity History report.</div>
       </div>
+
+      <div class="element-card">
+        <div class="el-name">"View all" Link</div>
+        <span class="el-type tag-link">Link</span>
+        <div class="el-behavior">A small link at the top of the activity panel that takes you to the full Activity History report page where you can see up to 200 audit events.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> This is good. Consider also allowing inline filtering — for example, a dropdown on the dashboard activity to show only "Today's activity" or filter by event type.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Quick Links Bar (Bottom of Activity Section)</div>
+        <span class="el-type tag-link">Link Bar</span>
+        <div class="el-behavior">A small row of links at the bottom of the activity section: "Inventory · Compare · Integrations · Commissioning". These are shortcuts to commonly used pages.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> These links are barely visible — they sit in a grey box below the timeline and look like secondary content. They could be styled as larger, more prominent action buttons to serve as a proper "quick actions" area for the most common daily workflows.</div>
+      </div>
+
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Activity Timeline</h2>
-    <div class="element-list">
-      <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Activity Timeline — Last 10 Events</div>
-          <span class="el-type tag-section">Audit Feed</span>
-        </div>
-        <div class="el-behavior">A list of the 10 most recent system events — status changes, sync completions, user actions — with timestamps. Refreshes every 15 seconds.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Surfacing recent activity on the home screen lets a manager catch unexpected actions without opening full audit logs.</div>
-          <div class="issue-block">10 events disappear quickly during busy periods. There is no user name shown per event — a manager can see "Status changed to damaged" but not who did it. The audit feed is also not filtered, so routine high-volume scan events crowd out meaningful actions.</div>
-          <div class="rec-block">Increase to 20 entries. Add who performed each action ("by john@..."). Filter out repetitive bulk scan events and show only meaningful actions: status changes, user logins, sync results, device authorization. Add a "View full log →" link at the bottom.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="report-section">
-    <h2>Quick Links Bar</h2>
-    <div class="element-list">
-      <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Quick Links</div>
-          <span class="el-type tag-link">Navigation Shortcuts</span>
-        </div>
-        <div class="el-behavior">A row of shortcut links to commonly used pages — Inventory, Commissioning, Cycle Counts, etc. Same links for every user regardless of role.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">A receiving-team member sees Commissioning shortcuts. A manager sees Cycle Count shortcuts. Irrelevant links add clutter and slow down navigation for everyone.</div>
-          <div class="rec-block">Show quick links based on the logged-in user's role. A floor supervisor → Exceptions and Cycle Counts. A receiving team member → Commissioning and Barcode Intake. Role-specific shortcuts reduce noise and help new staff find their workflow immediately.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="report-section">
-    <h2>Overall Assessment</h2>
-    <div class="overall-issues">
-      <strong>Critical: hardcoded hardware strip.</strong> This must be fixed before anything else — displaying fabricated device counts to operators who make real decisions based on them is an active operational risk.
-    </div>
+    <h2>Overall Dashboard Suggestions</h2>
     <div class="suggest-box">
-      <strong>Priority fix order:</strong><br>
-      1. Replace hardcoded hardware strip with live device data.<br>
-      2. Add color/urgency to the Alerts tile when count &gt; 0.<br>
-      3. Add "by [user]" to activity timeline entries.<br>
-      4. Role-based quick links.
+      <strong>1. Refresh behavior:</strong> The dashboard auto-refreshes every 15 seconds, but there is no visible "last updated at [time]" indicator. Adding this gives users confidence the data is current.<br><br>
+      <strong>2. Date/time context:</strong> The dashboard shows no current date or time. In a warehouse that runs multiple shifts, this matters — staff should see "Today: Monday April 11" prominently.<br><br>
+      <strong>3. Make KPI cards actionable:</strong> Each KPI should link to a page that shows the relevant data, ideally pre-filtered. Currently, "Unknown Assets" links to the general Inventory page — it should link to a filtered view of unknowns.<br><br>
+      <strong>4. No "nothing to do" state:</strong> When everything is fine (0 concerns, 0 unknowns), the dashboard should congratulate or reassure the user: "All good — no open exceptions." Right now it just shows 0s without any context.<br><br>
+      <strong>5. Hardware hardcoding:</strong> Fix the hardware pill counts to pull from the real device registry rather than being hardcoded.
     </div>
   </div>
+
 </div>
 </body>
 </html>

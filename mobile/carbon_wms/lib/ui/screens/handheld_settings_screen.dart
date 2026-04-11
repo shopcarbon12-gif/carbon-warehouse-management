@@ -141,7 +141,11 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
           ),
           const Divider(height: 32),
           FilledButton.icon(
-            onPressed: _busy ? null : _checkOta,
+            onPressed: _busy
+                ? null
+                : _lastStatus != null
+                    ? () => setState(() => _lastStatus = null)
+                    : _checkOta,
             icon: _busy
                 ? const SizedBox(
                     width: 18,
