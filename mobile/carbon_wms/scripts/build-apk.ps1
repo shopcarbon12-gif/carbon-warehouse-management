@@ -166,7 +166,8 @@ if ($ReleaseRoot) {
   Get-Item -LiteralPath $destApk | Format-List FullName, Length, LastWriteTime
 
   if ($pubVersion) {
-    $versionedName = "CarbonWMS V$pubVersion.apk"
+    $semVer = $pubVersion -replace '\+.*$', ''
+    $versionedName = "CarbonWMS V$semVer.apk"
     $versionedPath = Join-Path $destDir $versionedName
     $versionedShaPath = Join-Path $destDir "$versionedName.sha1"
     Copy-Item -LiteralPath $apk -Destination $versionedPath -Force
