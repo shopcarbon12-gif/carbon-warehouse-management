@@ -44,7 +44,7 @@ WINDOWS_DEST="D:/CarbonWmsRelease"
 echo "Copying to Windows $WINDOWS_IP:$WINDOWS_DEST/$APK_NAME ..."
 scp -o StrictHostKeyChecking=no \
     "$LINUX_RELEASE_DIR/$APK_NAME" \
-    "${WINDOWS_USER}@${WINDOWS_IP}:${WINDOWS_DEST}/${APK_NAME}"
+    "${WINDOWS_USER}@${WINDOWS_IP}:/D:/CarbonWmsRelease/${APK_NAME}"
 
 echo ""
 echo "Done. Release APK: $APK_NAME"
