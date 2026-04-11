@@ -12,131 +12,115 @@
   <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Inventory</div>
 </div>
 <div class="page-wrap">
+
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
     <h1>Inventory Catalog</h1>
-    <p class="subtitle">The main inventory view. Two tabs: Lightspeed (shows product lines synced from the POS — SKU, description, vendor, price) and RFID (shows individual scanned tags with their status and bin location). Search, pagination at 50 rows per page, CSV export, and admin-only sync controls.</p>
-  </div>
-  <div class="page-summary">
-    <div class="summary-stat"><div class="stat-num stat-good">4</div><div class="stat-label">Working well</div></div>
-    <div class="summary-stat"><div class="stat-num stat-issue">5</div><div class="stat-label">Issues</div></div>
-    <div class="summary-stat"><div class="stat-num stat-rec">5</div><div class="stat-label">Recommendations</div></div>
+    <p class="subtitle">The main product catalog page. Shows items synced from Lightspeed (SKU, name, vendor, price, stock counts) alongside a separate RFID view showing which tags exist in the system. Supports search, pagination, CSV export, and manual item entry.</p>
   </div>
 
   <div class="report-section">
-    <h2>Tab Navigation</h2>
+    <h2>Page Header Area</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Lightspeed Tab / RFID Tab</div>
-          <span class="el-type tag-section">Tabs</span>
-        </div>
-        <div class="el-behavior">Two tabs at the top. Lightspeed tab shows synced catalog lines from the POS system. RFID tab shows individual tagged items with their current status, bin, and EPC code. Switching tabs preserves the search query.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Separating the catalog view (what should exist) from the RFID view (what actually exists physically) is a clean distinction that matches how warehouse staff think about inventory.</div>
-          <div class="issue-block">The tab labels "Lightspeed" and "RFID" are technical platform names, not task-oriented language. A new employee doesn't know what "Lightspeed" means in this context.</div>
-          <div class="rec-block">Rename to "Product Catalog" and "Tagged Items" or "Physical Stock." Include item counts in the tab label: "Tagged Items (4,231)" so users know roughly how much data each tab contains.</div>
-        </div>
+        <div class="el-name">Page Title & Description</div>
+        <span class="el-type tag-section">Header</span>
+        <div class="el-behavior">Shows "Inventory catalog" with a subtitle explaining the page contains Lightspeed item lines and a separate RFID view. Admin users see additional buttons; regular users see a more limited interface.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The subtitle is technical. Replace with plain language: "Browse your product catalog and see which items have active RFID tags."</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">"Legacy inventory" Link</div>
+        <span class="el-type tag-link">Link</span>
+        <div class="el-behavior">A small teal link in the top-right that goes to the older flat inventory table. Marked implicitly as legacy.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> If the legacy view is being phased out, this link should include a note "(old version — will be removed)" or simply be removed. Showing both creates confusion about which one to use.</div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Search</h2>
+    <h2>Tabs: Lightspeed vs RFID View</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Search Field</div>
-          <span class="el-type tag-input">Text Input (debounced)</span>
-        </div>
-        <div class="el-behavior">A search field that triggers after the user stops typing (320ms debounce). Searches across SKU, product name, and EPC depending on the active tab. Results update without pressing Enter.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Debounced live search is the right pattern — avoids flooding the server on every keystroke while still feeling responsive.</div>
-          <div class="issue-block">There is no placeholder text explaining what can be searched. A user on the RFID tab doesn't know whether they can type a product name or only an EPC code.</div>
-          <div class="rec-block">Add a tab-specific placeholder: on Lightspeed tab — "Search by SKU, name, or vendor"; on RFID tab — "Search by EPC, SKU, or name." A clear prompt removes the guessing.</div>
-        </div>
+        <div class="el-name">Lightspeed Tab</div>
+        <span class="el-type tag-button">Tab</span>
+        <div class="el-behavior">Default view. Shows the product catalog synced from Lightspeed POS: item name, SKU, UPC barcode, vendor, color, size, retail price, and POS on-hand quantity. Paginated — 50 items per page. Has a search box that filters by name or SKU as you type (with a small delay). Clicking a row opens a detail modal.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The table has many columns. On smaller laptop screens, users have to scroll horizontally. Consider letting users choose which columns to show/hide, or collapsing less-used ones (like UPC) by default.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">RFID Tab</div>
+        <span class="el-type tag-button">Tab</span>
+        <div class="el-behavior">Shows the RFID-specific view — individual EPC tags associated with items, their current location, bin, and status. Different data from the Lightspeed tab: here you see individual physical tags, not just SKU counts.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> It would be very useful to be able to switch between these two views while keeping the same search query — e.g., search for "Black Dress" in the Lightspeed tab, then switch to RFID to see which physical tags exist for that item.</div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Data Table</h2>
+    <h2>Search & Filter</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Inventory Table (50 rows/page)</div>
-          <span class="el-type tag-table">Data Table</span>
-        </div>
-        <div class="el-behavior">Shows inventory rows paginated at 50 per page. Columns vary by tab — Lightspeed shows SKU, description, vendor, price, quantity. RFID shows EPC, SKU, status, bin, last-seen date. Clicking a row opens a detail modal.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Row-click to open detail is intuitive. The separate columns per tab are appropriate — the two data sets have different relevant attributes.</div>
-          <div class="issue-block">50 rows per page with no option to change is inflexible. Admins doing data reviews often want to see 100+ rows. There is also no column sorting — clicking a column header does nothing.</div>
-          <div class="rec-block">Add page size options (25 / 50 / 100). Make column headers sortable — especially "Status" and "Last Seen" on the RFID tab, which are the most commonly used filters during a discrepancy review.</div>
-        </div>
-      </div>
-
-      <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Item Detail Modal</div>
-          <span class="el-type tag-section">Modal</span>
-        </div>
-        <div class="el-behavior">Clicking a row opens a modal showing full details for that item: all fields, EPC history, current bin assignment, and status history. Admins can trigger actions from here.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">A full detail panel without leaving the table is the right design — users can quickly check an item and return to browsing without navigating away.</div>
-          <div class="issue-block">No keyboard navigation between items. Once a modal is open, the user must close it and click another row. With 50 rows per page, reviewing many items is slow.</div>
-          <div class="rec-block">Add previous/next arrow buttons in the modal to step through items one by one without closing and reopening. This is especially useful during a review session.</div>
-        </div>
+        <div class="el-name">Search Box</div>
+        <span class="el-type tag-input">Search Input</span>
+        <div class="el-behavior">A text field above the table. As you type, there is a short delay (debounce) and then the table updates to show only matching items. Matches on item name or SKU. Search state is maintained when you switch pages.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> When there are no results for a search, the message should be more helpful: "No items found for 'blue dress'. Try a different search term or check if the catalog has been synced recently." Also, searching by UPC/barcode would be useful for scanning barcodes directly into the search field.</div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Actions</h2>
+    <h2>Action Buttons (Admin Only)</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Export CSV Button</div>
-          <span class="el-type tag-button">Secondary Button</span>
-        </div>
-        <div class="el-behavior">Downloads a CSV of the currently visible inventory data. Exports all rows matching the current search filter, not just the current page.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Exporting all filtered rows (not just the visible page) is the correct behavior — users shouldn't have to page through the entire table to get a full export.</div>
-          <div class="issue-block">No feedback is shown during export — no spinner, no download started notification. For large exports, the button appears unresponsive.</div>
-          <div class="rec-block">Show a brief "Preparing download…" state on the button after clicking. For very large exports, consider a toast: "Export ready — check your Downloads folder."</div>
-        </div>
+        <div class="el-name">Lightspeed Sync Button (dropdown)</div>
+        <span class="el-type tag-button">Button with Dropdown</span>
+        <div class="el-behavior">A button with a down arrow that opens a menu with sync options. Allows admins to manually trigger a Lightspeed catalog sync directly from this page. Shows sync status/results after running. Only visible to Admin role users.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The sync takes time and there is no progress indicator during the sync. A spinning animation or progress message would reassure users it is working. Also, showing "Last synced 2 hours ago" near this button would help users decide if they need to sync.</div>
       </div>
-
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Sync Buttons (Admin Only)</div>
-          <span class="el-type tag-button">Admin Action Buttons</span>
-        </div>
-        <div class="el-behavior">Buttons to manually trigger a Lightspeed catalog sync. Only visible to admin-role users. Pulls the latest product data from Lightspeed and updates the local catalog.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Hiding admin-only sync controls from regular staff is correct — prevents accidental triggering of a heavy background operation.</div>
-          <div class="issue-block">No indication of when the last sync ran or whether the current catalog data is fresh. A catalog that hasn't synced in 3 days may show outdated prices or missing products.</div>
-          <div class="rec-block">Show "Last synced: 2 hours ago" near the sync button. If the last sync was more than 24 hours ago, highlight this in amber as a warning.</div>
-        </div>
+        <div class="el-name">Export CSV Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Downloads the currently visible catalog items as a CSV file. The file is named with today's date (e.g., "lightspeed-catalog-2026-04-11.csv"). Contains: Item Name, SKU, UPC, Vendor, Color, Size, Retail Price, Quantity (LS).</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The export downloads only what matches the current search/filter. The filename and a count of exported rows should be confirmed to the user (e.g., "Downloading 47 items..."). Also consider letting users choose columns to include in the export.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Add New Item Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Opens an inline form to manually add a product to the catalog (for items not in Lightspeed). Fields include: Matrix UPC, Description, SKU, Vendor, Color, Size.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Manually adding items that then get overwritten on the next Lightspeed sync would be confusing. A warning should be shown: "Note: manually added items may be overwritten if they conflict with the next Lightspeed sync." Also clarify if these items will appear in Lightspeed or only in the WMS.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Import Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Allows bulk importing of catalog items, presumably from a CSV or similar format. The exact UI for this is within the "More" dropdown menu.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Provide a downloadable template CSV so users know exactly what format is expected before uploading. A preview of what will be imported before committing the import would also prevent mistakes.</div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Overall Assessment</h2>
-    <div class="overall-good">
-      <strong>The two-tab catalog is a strong design</strong> — separating POS products from physical RFID tags matches exactly how warehouse staff and managers think about the distinction between "what we ordered" and "what we actually have."
-    </div>
-    <div class="overall-issues">
-      <strong>Missing column sorting</strong> on the RFID tab makes discrepancy reviews slow. Sorting by "Status" to see all damaged items together, or by "Last Seen" to find items not scanned recently, are the most common investigative patterns.
-    </div>
-    <div class="suggest-box">
-      <strong>Top priorities:</strong><br>
-      1. Sortable columns on RFID tab (Status, Last Seen).<br>
-      2. Better tab labels — "Product Catalog" and "Tagged Items."<br>
-      3. Search placeholder text per tab.<br>
-      4. "Last synced" timestamp near sync buttons.
+    <h2>Pagination</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Pagination Controls</div>
+        <span class="el-type tag-button">Navigation</span>
+        <div class="el-behavior">Shows 50 items per page. Previous/Next page buttons let you navigate through pages. The current page number is shown. When you search, it resets back to page 1.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Consider showing "Showing 51–100 of 1,247 items" so users know how deep they are in the catalog. Also, allowing users to change the page size (25/50/100 per page) would be helpful for power users doing catalog reviews.</div>
+      </div>
     </div>
   </div>
+
+  <div class="report-section">
+    <h2>Item Detail Modal</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Row Click → Detail Modal</div>
+        <span class="el-type tag-section">Modal Popup</span>
+        <div class="el-behavior">Clicking any row in the Lightspeed tab opens a detail panel (likely a modal or drawer) showing full item details including all attributes, price history, and associated RFID tags for that SKU.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The modal should allow editing item details (for admin users), not just viewing them. Also, a direct link to "see this item in Lightspeed" would be useful for cross-referencing.</div>
+      </div>
+    </div>
+  </div>
+
 </div>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Legacy Inventory · CarbonWMS Review</title>
+<title>Inventory Legacy · CarbonWMS Review</title>
 <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -14,65 +14,66 @@
 <div class="page-wrap">
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
-    <h1>Inventory — Legacy View</h1>
-    <p class="subtitle">An older flat inventory table, kept alongside the newer Catalog page. Has a filter form with text search and zone filter, shows up to 80 rows, and is read-only. No actions can be taken from this view.</p>
-  </div>
-  <div class="page-summary">
-    <div class="summary-stat"><div class="stat-num stat-good">0</div><div class="stat-label">Working well</div></div>
-    <div class="summary-stat"><div class="stat-num stat-issue">4</div><div class="stat-label">Issues</div></div>
-    <div class="summary-stat"><div class="stat-num stat-rec">2</div><div class="stat-label">Recommendations</div></div>
+    <h1>Inventory (Legacy View)</h1>
+    <p class="subtitle">An older, simpler inventory table. Filterable by keyword and zone. Shows up to 80 items. Read-only. Being replaced by the Inventory Catalog.</p>
   </div>
 
+  <div class="info-banner">⚠️ This page appears to be the older version of the Inventory Catalog. It is accessible via a direct link from the Catalog page. Consider evaluating whether it should be retired.</div>
+
   <div class="report-section">
-    <h2>Filter Form &amp; Table</h2>
+    <h2>Filter Form</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Filter Form (q= and zone=)</div>
-          <span class="el-type tag-input">Search Form</span>
-        </div>
-        <div class="el-behavior">A search form with a text query field and a zone dropdown. Submitting the form reloads the page with filter parameters in the URL. Results are limited to 80 rows with no pagination.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">An 80-row hard limit with no pagination means any search returning more than 80 items silently drops the rest. Users have no way to know results were cut off, and no way to see the remaining items. This is a data integrity problem — staff may conclude an item doesn't exist when it just wasn't in the first 80 results.</div>
-          <div class="rec-block">Either add pagination or, better, migrate users entirely to the Inventory Catalog page which handles this properly. The legacy page should show a clear notice: "Showing first 80 results — use the Inventory Catalog for full search."</div>
-        </div>
+        <div class="el-name">Search Field (q=)</div>
+        <span class="el-type tag-input">Text Input</span>
+        <div class="el-behavior">Filters results by SKU, asset ID, or item name. The search is submitted by clicking "Apply" — it is NOT a live search. The page reloads with results.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Page-reload searches feel dated. Modern expectation is live filtering as you type. At minimum, pressing Enter should submit the form without requiring the user to click Apply.</div>
       </div>
-
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Empty State Message</div>
-          <span class="el-type tag-section">State</span>
-        </div>
-        <div class="el-behavior">When no items match the filter, a message is shown. The message text is developer-authored and intended for internal use.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">The empty state text is written for developers, not warehouse staff. It contains technical references that would confuse a floor worker who just searched for an item and found nothing.</div>
-          <div class="rec-block">Replace with: "No items found matching your search. Try different keywords or check the Inventory Catalog for a full search."</div>
-        </div>
+        <div class="el-name">Zone Dropdown</div>
+        <span class="el-type tag-dropdown">Dropdown</span>
+        <div class="el-behavior">Filters by zone: All, "rfid", or "bin". Selecting a zone limits which inventory rows are shown. Submitted along with the search when "Apply" is clicked.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The zone names "rfid" and "bin" are internal codes that may confuse staff. Labels like "RFID Floor" and "Physical Bin" would be clearer.</div>
       </div>
-
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Read-Only Table</div>
-          <span class="el-type tag-table">Data Table</span>
-        </div>
-        <div class="el-behavior">The table is display-only. No actions, no exports, no sorting, no clicking into an item detail. It exists purely to view data.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">A completely read-only page with a hard 80-row limit and no export means it is nearly useless compared to the Inventory Catalog page, which has all these features. There is no reason for both to exist simultaneously.</div>
-          <div class="rec-block">Deprecate and eventually remove this page. Add a prominent banner at the top: "This is an older view. For full inventory search, export, and actions, go to the Inventory Catalog." Link directly to the Catalog.</div>
-        </div>
+        <div class="el-name">Apply Button</div>
+        <span class="el-type tag-button">Submit Button</span>
+        <div class="el-behavior">Submits the filter form and reloads the page with filtered results.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Standard form submit. Works correctly. The button should be disabled and show a loading state while results are loading to prevent double-clicks.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Clear Link</div>
+        <span class="el-type tag-link">Link</span>
+        <div class="el-behavior">A link that reloads the page with no filters applied, resetting the view to show all items.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Works as expected. Adding an "×" icon to make it look like a clear button would make it more intuitive.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">"View exceptions" Link</div>
+        <span class="el-type tag-link">Link</span>
+        <div class="el-behavior">A link in the top-right of the filter row that jumps to the Alerts & Exceptions page.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Good contextual shortcut. Consider showing the count of open exceptions next to this link (e.g., "View exceptions (3)") so users know if there is anything to act on.</div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Overall Assessment</h2>
-    <div class="overall-issues">
-      <strong>This page should be removed or replaced</strong> with a redirect to the Inventory Catalog. It offers strictly less functionality than the Catalog page, has a hard data limit that silently drops results, and the empty-state text is developer language. Keeping it in the sidebar creates confusion about which inventory view to use.
-    </div>
-    <div class="suggest-box">
-      <strong>Recommended action:</strong> Add a top-of-page banner directing users to the Inventory Catalog. Plan removal within the next development cycle. There is no UX benefit to maintaining two separate inventory views with different capabilities.
+    <h2>Inventory Table</h2>
+    <div class="element-list">
+      <div class="element-card">
+        <div class="el-name">Results Table</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows up to 80 rows with columns: Asset (EPC-style ID), SKU, Name, Zone, and Quantity. The Asset ID is highlighted in teal. Rows highlight on hover. No way to sort by column. No way to click a row for more detail. No pagination — hard limit of 80 rows.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The 80-row hard limit is arbitrary and not communicated to users. A user seeing 80 results might not know there are more. Add a message like "Showing first 80 results — use search to narrow down." Also, column headers should be clickable for sorting. And clicking a row should open a detail view rather than doing nothing.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Empty State Message</div>
+        <span class="el-type tag-section">Empty State</span>
+        <div class="el-behavior">When no data is found, shows: "No rows — run npm run db:seed." This is a developer-only instruction that makes no sense to a warehouse operator.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Replace the empty state message with something user-friendly: "No inventory found. Try a different search term, or contact your administrator if you believe items should appear here." Remove the developer-facing database seed instruction entirely from the production build.</div>
+      </div>
     </div>
   </div>
+
 </div>
 </body>
 </html>

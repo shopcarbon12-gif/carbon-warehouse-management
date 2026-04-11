@@ -15,53 +15,44 @@
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
     <h1>Transfer In</h1>
-    <p class="subtitle">The receiving side of the transfer system. Shows all incoming transfer slips destined for the current location. Each slip can be marked as received. Uses the same component as Transfer Out in "receive" mode — no slip creation form is shown.</p>
-  </div>
-  <div class="page-summary">
-    <div class="summary-stat"><div class="stat-num stat-good">1</div><div class="stat-label">Working well</div></div>
-    <div class="summary-stat"><div class="stat-num stat-issue">3</div><div class="stat-label">Issues</div></div>
-    <div class="summary-stat"><div class="stat-num stat-rec">3</div><div class="stat-label">Recommendations</div></div>
+    <p class="subtitle">For receiving incoming shipments against existing transfer slips. Shows the same slips list as Transfer Out but without the ability to create new slips. The purpose here is to track what was received vs what was expected.</p>
   </div>
 
+  <div class="info-banner">ℹ️ This page shares the same component as Transfer Out, but in "in" mode — so it shows the same slips list but hides the "Create new slip" form at the top.</div>
+
   <div class="report-section">
-    <h2>Incoming Slips Table</h2>
+    <h2>Slips List Table</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Incoming Transfer Slips List</div>
-          <span class="el-type tag-table">Data Table</span>
-        </div>
-        <div class="el-behavior">Shows transfer slips created by other locations that are destined for this location. Columns: slip number, sending location, item count, created date, status. Each slip shows a "Mark as Received" button.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Showing only incoming transfers (not all transfers in the system) keeps the list focused and relevant for the receiving team.</div>
-          <div class="issue-block">There is no way to verify what was actually received vs what was expected. Marking a slip as "received" is all-or-nothing — if a transfer of 15 items arrives with only 13, the system has no way to record the 2-item shortage.</div>
-          <div class="rec-block">Add an optional scan-to-verify step before marking received: "Scan received items or confirm all X items received without scanning." If scanning reveals a short count, record the discrepancy. At minimum, add a notes field on the receive action: "Received 13 of 15 — 2 items missing."</div>
-        </div>
+        <div class="el-name">Same Slips Table as Transfer Out</div>
+        <span class="el-type tag-table">Data Table</span>
+        <div class="el-behavior">Shows all transfer slips sorted newest first. Same columns as Transfer Out: Slip #, Source, Destination, Status, LS ID, and Actions. The description says "Open an existing slip and export receiving progress. Reconcile counts on the handheld, then update statuses in admin when complete."</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Since this page is specifically for receiving, consider filtering the slips to show only ones that are "in transit" (i.e., waiting to be received at this location). Showing all slips, including already-completed ones, clutters the view for receiving staff. Also, the page title says "Transfer in" but there is no visual difference from "Transfer out" — a different highlight color or a clear label on each row showing direction (IN or OUT) would help.</div>
       </div>
-
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Mark as Received Button</div>
-          <span class="el-type tag-button">Action Button</span>
-        </div>
-        <div class="el-behavior">Changes the slip status from "in-transit" to "received" and updates all included items to "in-stock" at this location. No confirmation shown. No partial receipt supported.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">No confirmation before changing item statuses. Clicking "Received" on the wrong slip changes the status of someone else's items to in-stock at the wrong location.</div>
-          <div class="rec-block">Show a confirmation: "Mark Transfer #70043 (15 items from Main Warehouse) as received? This will add all items to your in-stock inventory." Include the sending location name prominently so the user can confirm they have the right slip.</div>
-        </div>
+        <div class="el-name">CSV Export Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Downloads receiving progress — shows what was sent vs what was received vs what is still missing. This is the main tool for reconciling a received shipment.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The CSV export is useful for reconciliation, but it is a passive tool — the user has to manually compare. Consider adding an inline "mark as received" feature that lets receiving staff check off items directly in the web UI rather than going back and forth with a spreadsheet.</div>
+      </div>
+      <div class="element-card">
+        <div class="el-name">Print Button</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">Same print functionality as Transfer Out — opens a new browser tab with an HTML table and auto-triggers the print dialog.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> A "receiving copy" of the slip should visually differ from the "sending copy" — different header, different columns visible. The receiving slip should emphasize the "Received" and "Missing" columns rather than "Sent."</div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Overall Assessment</h2>
-    <div class="overall-issues">
-      <strong>No partial receipt support</strong> means the system cannot accurately record reality — transfers in real warehouses routinely arrive with shortages. Every transfer is recorded as "all items received" even if some are missing, creating phantom inventory that will show up as missing items later during cycle counts.
-    </div>
+    <h2>Overall Transfer In/Out Suggestions</h2>
     <div class="suggest-box">
-      <strong>Key improvement:</strong> Add a notes/quantity field on the receive action to capture shortages. Even without a full scan workflow, letting a receiving staff member type "received 13 of 15" and recording that discrepancy would be a significant data quality improvement.
+      <strong>1. Separate views for in vs out:</strong> Currently both pages show identical tables. The Transfer In page should show a different view optimized for receiving — e.g., sorted by "incoming to my location" first, with a "Mark Received" status button.<br><br>
+      <strong>2. Status updates:</strong> There is no way on the web to update a slip's status from "in transit" to "received." The description mentions doing this "in admin when complete" — but there is no admin status update button visible on this page.<br><br>
+      <strong>3. Barcode scanning to match:</strong> Receiving staff should be able to scan items with a barcode scanner and have the system automatically match them against the expected EPC list.
     </div>
   </div>
+
 </div>
 </body>
 </html>

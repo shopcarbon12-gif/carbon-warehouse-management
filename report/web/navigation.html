@@ -8,113 +8,141 @@
 </head>
 <body>
 <div class="site-header">
-  <div><div class="logo">CarbonWMS Review</div><h1>Navigation & Sidebar</h1></div>
+  <div>
+    <div class="logo">CarbonWMS Review</div>
+    <h1>Navigation & Sidebar</h1>
+  </div>
   <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · Shared Layout</div>
 </div>
+
 <div class="page-wrap">
+
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
-    <h1>Navigation &amp; Sidebar</h1>
-    <p class="subtitle">The persistent left sidebar visible on every page. Contains the logo, a location switcher, a Dashboard link, five collapsible accordion sections (Inventory, RFID &amp; Hardware, Reports, Integrations, Settings), and a Sign Out button at the bottom.</p>
-  </div>
-  <div class="page-summary">
-    <div class="summary-stat"><div class="stat-num stat-good">3</div><div class="stat-label">Working well</div></div>
-    <div class="summary-stat"><div class="stat-num stat-issue">4</div><div class="stat-label">Issues</div></div>
-    <div class="summary-stat"><div class="stat-num stat-rec">4</div><div class="stat-label">Recommendations</div></div>
+    <h1>Navigation & Sidebar</h1>
+    <p class="subtitle">This sidebar wraps every page in the web app. It is the main way users move around the system. It appears on the left side of the screen on desktop and slides in as a drawer on mobile.</p>
   </div>
 
   <div class="report-section">
-    <h2>Header &amp; Branding</h2>
+    <h2>Top of the Sidebar</h2>
+    <div class="element-list">
+
+      <div class="element-card">
+        <div class="el-name">CarbonWMS Logo / Title Link</div>
+        <span class="el-type tag-link">Clickable Link</span>
+        <div class="el-behavior">Clicking the "CarbonWMS" name or the "WMS" badge at the top-left of the sidebar takes the user back to the Dashboard. It shows the branding text "WMS", then "CarbonWMS", then "RFID operations" underneath.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The subtitle "RFID operations" is very generic. Consider showing the currently active location name here (e.g. "Warehouse A") so the user always knows at a glance which location they are working in.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Location Switcher</div>
+        <span class="el-type tag-dropdown">Dropdown</span>
+        <div class="el-behavior">Sits right below the logo. Lets the user switch between warehouse locations they have access to. The currently active location affects all data shown throughout the system — inventory counts, exceptions, transfers, etc.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> When the user switches locations, there is no confirmation or visual flash to indicate the switch happened and all data has refreshed. Adding a brief toast message like "Switched to Warehouse B" would prevent confusion. Also consider showing a color-coded badge per location to make them visually distinct.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Close Sidebar Button (Mobile only)</div>
+        <span class="el-type tag-button">Button</span>
+        <div class="el-behavior">A small X button appears in the top-right corner of the sidebar on mobile. Tapping it closes the sidebar panel. On desktop this button is hidden since the sidebar is always visible.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The X button is small (only the icon, no label). On devices with thick fingers or gloves (warehouse workers often wear gloves), this could be hard to tap. Consider making the tap target larger — at least 44×44 pixels.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Dashboard Link (Top)</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Logo / Home Link</div>
-          <span class="el-type tag-link">Clickable Logo</span>
-        </div>
-        <div class="el-behavior">The CarbonWMS logo at the top of the sidebar. Clicking it navigates to the dashboard.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Logo-as-home-button is a universal web convention — every user instinctively knows to click the logo to get back to the start.</div>
-        </div>
+        <div class="el-name">Dashboard</div>
+        <span class="el-type tag-link">Navigation Link</span>
+        <div class="el-behavior">A standalone link at the very top of the navigation list (above all the accordion groups). Clicking it goes to the Dashboard. When you are on the Dashboard, this link becomes highlighted in the accent color with a ring around it.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The Dashboard is the only item that sits outside of an accordion group, making it easy to find. Good. However, it would be helpful to show a notification badge here if there are unresolved exceptions, so users can see at a glance that something needs attention from any page.</div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Location Switcher</h2>
+    <h2>Accordion Navigation Groups</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">The sidebar has 5 collapsible accordion sections. Clicking the section header expands or collapses it. When you are on a page inside a section, that section automatically expands.</p>
+
+    <div class="element-list">
+
+      <div class="element-card">
+        <div class="el-name">Inventory (section)</div>
+        <span class="el-type tag-section">Accordion Group</span>
+        <div class="el-behavior">Contains: Catalog, Locations & Bins, Cycle Counts, Transfer Out, Transfer In, Bulk Status, and "Transfers (legacy)". Expands when you are on any of those pages. The chevron arrow rotates 180° when open.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The item "Transfers (legacy)" is labeled as legacy inside a modern section, which signals it probably should not be here long-term. Consider either removing it or adding a small deprecation warning when users click it, directing them to the newer Transfer In/Out pages.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">RFID & Hardware (section)</div>
+        <span class="el-type tag-section">Accordion Group</span>
+        <div class="el-behavior">Contains: EPC Tracker, Print/Commission, Exceptions, and Devices. The "Exceptions" item has a red pulsing dot badge on its icon, meaning there are items that need attention. This badge is always visible when this section is open — it does not show a count, just a permanent red dot.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The red dot on Exceptions is always on — it never goes away, even if all exceptions are resolved. This creates "alert fatigue" where users start ignoring it because it never changes. The badge should dynamically reflect the actual count of open exceptions (e.g., "3") and disappear entirely when there are none.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Reports (section)</div>
+        <span class="el-type tag-section">Accordion Group</span>
+        <div class="el-behavior">Contains 9 report links: POS Compare, Device Upload Logs, Activity History, Asset Movements, Status & Tag Logs, Inventory Adjustments, Replenishments, Bulk Imports, External Systems.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Nine reports in one flat list can be overwhelming. Consider grouping them visually — e.g., "Inventory Reports" vs "System/Audit Reports". Also, the labels like "POS compare" could be clearer — something like "POS vs RFID Stock Compare" is instantly understandable by a warehouse manager.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Integrations (section)</div>
+        <span class="el-type tag-section">Accordion Group</span>
+        <div class="el-behavior">Contains two links: "Lightspeed Sync" and "LS Sales". Both are related to the Lightspeed POS integration.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> With only 2 items, this section could be merged into another group (perhaps Settings or Infrastructure) to reduce the number of accordion groups the user has to navigate. Or, as the system grows with more integrations, this will make more sense.</div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-name">Settings (section)</div>
+        <span class="el-type tag-section">Accordion Group</span>
+        <div class="el-behavior">Contains 10 items: General Settings, Theme & Style, Handheld Settings, Mobile OTA, Device Binding, Status Labels, RFID EPC General, EPC Profiles, Users & Roles, Locations. It expands when you are on any settings page.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> Ten items is a lot for one section. Some items like "RFID EPC General" and "EPC Profiles" are very technical and would confuse most staff users. Consider hiding these behind a "Super Admin only" sub-group, or only showing them when the user's role has access. This would make the Settings section much less intimidating for regular users.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Bottom of the Sidebar</h2>
+    <div class="element-list">
+
+      <div class="element-card">
+        <div class="el-name">Sign Out Button</div>
+        <span class="el-type tag-button">Button (Form Submit)</span>
+        <div class="el-behavior">A small teal "Sign out" text link at the very bottom of the sidebar. Clicking it submits a server action that clears the session and logs the user out. There is no confirmation dialog — it signs you out immediately.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> With no confirmation, a user could accidentally sign out if they click the wrong thing while scrolling. A simple "Are you sure?" confirmation (or an undo grace period) would prevent frustration. Also, it's easy to miss — it looks the same as a regular text link rather than a distinct button with a logout icon.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="report-section">
+    <h2>Mobile Behavior</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Location Switcher Dropdown</div>
-          <span class="el-type tag-dropdown">Dropdown</span>
-        </div>
-        <div class="el-behavior">A dropdown at the top of the sidebar that lets the user switch between the warehouse locations they have access to. The currently selected location determines what inventory data, device scans, and reports are shown across the entire app. Changing the location reloads the relevant data.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">A persistent location context visible in the sidebar means the user always knows which site they are viewing. Switching is fast and applies globally.</div>
-          <div class="issue-block">When a user switches locations, there is no visual confirmation that the switch happened and that the page data has updated. A brief "Now viewing: Main Warehouse" toast or highlight would prevent confusion when switching quickly.</div>
-          <div class="rec-block">After switching, show a brief flash/highlight on the location name and a small toast notification. Also consider remembering the last selected location between sessions so the user doesn't have to re-select on every login.</div>
-        </div>
+        <div class="el-name">Mobile Overlay & Backdrop</div>
+        <span class="el-type tag-button">Overlay</span>
+        <div class="el-behavior">On mobile, the sidebar slides in from the left and a dark transparent backdrop covers the rest of the screen. Clicking/tapping the backdrop closes the sidebar. This is standard mobile drawer behavior and works correctly.</div>
+        <div class="suggest-box"><strong>Suggestion:</strong> The sidebar closes automatically when you tap a navigation link, which is good. However, there is no way to open the sidebar from within the content area — a hamburger menu button in the top header bar would make it easier to open the sidebar without having to swipe from the edge.</div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Navigation Accordion Sections</h2>
-    <div class="element-list">
-      <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Accordion Groups (5 sections)</div>
-          <span class="el-type tag-section">Collapsible Navigation</span>
-        </div>
-        <div class="el-behavior">Five collapsible groups: Inventory, RFID &amp; Hardware, Reports, Integrations, Settings. Each expands to show its sub-pages. Only the section containing the current page is open by default. Clicking a section header opens or closes it.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Accordion navigation keeps the sidebar compact. Showing only the current section open reduces visual noise — a manager in Reports isn't distracted by the full Settings list.</div>
-          <div class="issue-block">All five sections are shown to every user regardless of their role. A receiving staff member who can't access Settings still sees the Settings group. This creates confusion about what they are allowed to do, and makes the sidebar longer than it needs to be for most users.</div>
-          <div class="rec-block">Hide navigation sections the logged-in user does not have access to based on their role. A role with no access to Settings should not see the Settings section at all. This also serves as a security signal — visible links invite curiosity clicks.</div>
-        </div>
-      </div>
-
-      <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Active Page Indicator</div>
-          <span class="el-type tag-section">Visual State</span>
-        </div>
-        <div class="el-behavior">The currently active page link is highlighted in the sidebar to show which page the user is on.</div>
-        <div class="feedback-blocks">
-          <div class="good-block">Clear active state highlighting is a basic but important UX requirement — users should always know where they are in the app. This is implemented correctly.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="report-section">
-    <h2>Sign Out</h2>
-    <div class="element-list">
-      <div class="element-card">
-        <div class="el-header">
-          <div class="el-name">Sign Out Button</div>
-          <span class="el-type tag-button">Action Button</span>
-        </div>
-        <div class="el-behavior">Located at the very bottom of the sidebar. Submits a server action that clears the session and redirects to the login page. No confirmation dialog is shown.</div>
-        <div class="feedback-blocks">
-          <div class="issue-block">No confirmation before signing out means an accidental click on Sign Out (which is easy when scrolling the sidebar) immediately ends the session. Any work in progress — an unsaved form, a half-completed cycle count — is lost without warning.</div>
-          <div class="rec-block">Add a single confirmation: "Sign out? Any unsaved changes will be lost." One extra click is a very small price for preventing accidental logouts during active work.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="report-section">
-    <h2>Overall Assessment</h2>
-    <div class="overall-good">
-      <strong>The sidebar works:</strong> accordion structure, logo link, active page highlighting, and location switcher are all solid foundational choices for a warehouse management app.
-    </div>
-    <div class="overall-issues">
-      <strong>Role-based visibility is missing.</strong> Every user sees every navigation section. This is a security concern (curious staff can discover pages they shouldn't know about) and a UX problem (sidebar is cluttered for most users).
-    </div>
+    <h2>Overall Sidebar Suggestions</h2>
     <div class="suggest-box">
-      <strong>Priority fix:</strong> Hide nav sections based on user role. This single change cleans up the sidebar for all users and reduces accidental access to admin-only areas.
+      <strong>1. User info at bottom:</strong> There is no display of which user is currently logged in. Adding the user's name or email near the Sign Out button would help users confirm they are in the right account.<br><br>
+      <strong>2. Active location more prominent:</strong> The Location Switcher is easy to miss. The current location should be displayed more clearly — possibly in the site header or as a persistent badge so users always know which warehouse data they are viewing.<br><br>
+      <strong>3. Search/quick jump:</strong> With many pages across 5 accordion groups, adding a search box at the top of the sidebar (like pressing "/" to filter nav items) would save time for power users.<br><br>
+      <strong>4. Role-based visibility:</strong> All navigation items are visible to all users regardless of role. Items the user cannot access (due to permissions) should either be hidden or shown greyed out with a lock icon, rather than showing the page but restricting it after the click.
     </div>
   </div>
+
 </div>
 </body>
 </html>

@@ -859,35 +859,24 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: _busy ? null : _biometricSignIn,
-                                customBorder: const CircleBorder(),
-                                child: const Padding(
-                                  padding: EdgeInsets.all(4),
-                                  child: Icon(
-                                    Icons.fingerprint,
-                                    size: 96,
-                                    color: _primaryTeal,
+                            if (!_biometricChallengeActive)
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _busy ? null : _biometricSignIn,
+                                  customBorder: const CircleBorder(),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(4),
+                                    child: Icon(
+                                      Icons.fingerprint,
+                                      size: 96,
+                                      color: _primaryTeal,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                            if (_biometricChallengeActive)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                child: Text(
-                                  'Confirm on this device…',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.3,
-                                    color: _primaryTeal,
-                                  ),
-                                ),
-                              ),
+                              )
+                            else
+                              const SizedBox(height: 104),
                             if (_vaultEmail != null && _vaultEmail!.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 6),
@@ -900,6 +889,20 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                                     fontWeight: FontWeight.w600,
                                     color: _primaryTeal,
                                     fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            if (_biometricChallengeActive)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  'Confirm on this device…',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.3,
+                                    color: _primaryTeal,
                                   ),
                                 ),
                               ),
