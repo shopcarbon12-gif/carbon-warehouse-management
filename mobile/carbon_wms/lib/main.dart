@@ -35,7 +35,7 @@ class CarbonWmsRoot extends StatelessWidget {
       child: MaterialApp(
         title: 'CarbonWMS',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.dark,
+        theme: AppTheme.light,
         home: const AppAuthGate(),
       ),
     );
