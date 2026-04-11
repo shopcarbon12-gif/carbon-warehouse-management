@@ -14,48 +14,69 @@
 <div class="page-wrap">
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
-    <h1>Locations & Bins Manager</h1>
-    <p class="subtitle">Where you manage all warehouse locations and the bins within each location. Lets you view, add, edit, and delete bins. Each bin shows its current in-stock item count. Also accessible via the old "/locations" URL which redirects here.</p>
+    <h1>Locations &amp; Bins Manager</h1>
+    <p class="subtitle">Where you manage all warehouse locations and the bins within each location. View, add, edit, and delete bins. Each bin shows its current in-stock item count. Also accessible via the old "/locations" URL which redirects here.</p>
+  </div>
+  <div class="page-summary">
+    <div class="summary-stat"><div class="stat-num stat-good">3</div><div class="stat-label">Working well</div></div>
+    <div class="summary-stat"><div class="stat-num stat-issue">3</div><div class="stat-label">Issues</div></div>
+    <div class="summary-stat"><div class="stat-num stat-rec">4</div><div class="stat-label">Recommendations</div></div>
   </div>
 
   <div class="report-section">
     <h2>Location Selector</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Location List / Tabs</div>
-        <span class="el-type tag-button">Selector</span>
-        <div class="el-behavior">A list or tab strip showing all warehouse locations (e.g., "Warehouse A," "Store B"). Clicking one selects it and loads that location's bins. The first location is selected by default on page load. If a previously selected location is no longer in the list (e.g., deleted), it resets to the first available.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> For tenants with many locations, the list could become very long. Consider adding a search/filter within the location list. Also show the total bin count per location as a small badge: "Warehouse A (12 bins)."</div>
+        <div class="el-header">
+          <div class="el-name">Location List / Tabs</div>
+          <span class="el-type tag-button">Selector</span>
+        </div>
+        <div class="el-behavior">A list or tab strip showing all warehouse locations. Clicking one selects it and loads that location's bins. The first location is selected by default. If a previously selected location is deleted, it resets to the first available.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">The contextual location selector — where picking a location immediately loads its bins — is a clean and efficient layout for a multi-location warehouse. It avoids deep nested navigation.</div>
+          <div class="rec-block">Show a total bin count badge next to each location name: "Warehouse A (12 bins)." For tenants with many locations, add a search/filter within the location list.</div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Bins Grid / List</h2>
+    <h2>Bins Grid</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Bin Cards / Grid</div>
-        <span class="el-type tag-section">Grid Display</span>
-        <div class="el-behavior">Shows all bins for the selected location as cards or list items. Each bin displays its code, name, and current in-stock item count. The layout is a grid that adapts to screen size.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The bin count is the most important information — make it large and prominent. Consider color-coding bins: green for normal, yellow for nearly empty (needs replenishment), red for overloaded or 0 items.</div>
+        <div class="el-header">
+          <div class="el-name">Bin Cards / Grid</div>
+          <span class="el-type tag-section">Grid Display</span>
+        </div>
+        <div class="el-behavior">Shows all bins for the selected location as cards. Each bin displays its code, name, and current in-stock item count. The layout is a responsive grid.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">Showing the current item count on each bin card gives admins immediate inventory context while managing bins — this is exactly the right information to display here.</div>
+          <div class="issue-block">All bins look identical regardless of how many items they have. A bin with 0 items and a bin at full capacity are styled the same, giving no visual signal about inventory health per bin.</div>
+          <div class="rec-block">Color-code bin cards: green for normal, amber for nearly empty (needs replenishment), red for 0 items or over-capacity. Make the item count the most prominent number in the card design.</div>
+        </div>
       </div>
       <div class="element-card">
-        <div class="el-name">Add Bin Button (+ icon)</div>
-        <span class="el-type tag-button">Button</span>
-        <div class="el-behavior">A button with a plus icon and label (possibly "Add bin" or PackagePlus icon). Only active when a location is selected. Clicking opens the Bin Editor Drawer to create a new bin for the selected location.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The add button is contextual (only works when a location is selected) — if no location is selected, it should be visibly disabled with a tooltip explaining why.</div>
+        <div class="el-header">
+          <div class="el-name">Add Bin Button</div>
+          <span class="el-type tag-button">Primary Button</span>
+        </div>
+        <div class="el-behavior">A button with a plus icon. Only active when a location is selected. Opens the Bin Editor Drawer to create a new bin for the selected location.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">The add button is contextually tied to the selected location — it only creates bins for the currently active location, preventing the common mistake of adding a bin to the wrong location.</div>
+          <div class="rec-block">When no location is selected, visibly disable the button and show a tooltip: "Select a location first to add a bin." This removes ambiguity about why the button may not work.</div>
+        </div>
       </div>
       <div class="element-card">
-        <div class="el-name">Edit Bin Button (pencil icon, per bin)</div>
-        <span class="el-type tag-button">Button</span>
-        <div class="el-behavior">A small pencil icon on each bin card. Clicking opens the Bin Editor Drawer pre-filled with that bin's data for editing. Only visible to users with the "canCleanBins" permission (admin role).</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The edit icon is small. On touch screens and for warehouse workers, larger tap targets would be more reliable. Consider showing the edit button more prominently in a bin details panel that opens on click.</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">Delete Bin Button (trash icon, per bin)</div>
-        <span class="el-type tag-button">Button</span>
-        <div class="el-behavior">A trash icon on each bin card. Presumably deletes the bin after a confirmation prompt. Only visible to authorized users.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Deleting a bin that still has items assigned to it should either be blocked or show a warning: "This bin has 23 active items. Deleting it will leave those items with no bin assignment. Are you sure?" Permanent deletions should always require confirmation.</div>
+        <div class="el-header">
+          <div class="el-name">Edit &amp; Delete Bin Buttons (per bin)</div>
+          <span class="el-type tag-button">Icon Buttons</span>
+        </div>
+        <div class="el-behavior">Pencil icon opens the Bin Editor Drawer pre-filled for editing. Trash icon deletes the bin. Both presumably require admin permission (canCleanBins). Pencil icons are small.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">Deleting a bin that still has items assigned to it is allowed without a warning about what will happen to those items. Deleting a bin with 47 items could leave those items without a bin assignment — floating at location-level only.</div>
+          <div class="issue-block">The edit and delete icons are small touch targets. On touch screens or for staff with large hands, tapping the correct icon reliably is difficult.</div>
+          <div class="rec-block">Block deletion of bins that still contain items, or show a specific warning: "This bin has 47 active items. Deleting it will leave them without a bin assignment. Consider moving items first." Also increase the tap target size for edit/delete icons — minimum 44x44px.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -64,14 +85,32 @@
     <h2>Bin Editor Drawer</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Bin Editor (Add / Edit)</div>
-        <span class="el-type tag-section">Side Drawer / Modal</span>
-        <div class="el-behavior">A slide-in panel (drawer) from the side that shows a form for adding or editing a bin. Fields include bin code and name. Saving creates or updates the bin and refreshes the list. Closing the drawer without saving discards any changes.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The drawer should have clear "Save" and "Cancel" buttons with distinct styling. Also add validation feedback — if a bin code already exists, show an error before the user submits. For new bins, suggest a code format based on existing bins (e.g., if bins are "A1, A2, A3," suggest "A4" for the next one).</div>
+        <div class="el-header">
+          <div class="el-name">Bin Editor (Add / Edit)</div>
+          <span class="el-type tag-section">Side Drawer</span>
+        </div>
+        <div class="el-behavior">A slide-in panel for adding or editing a bin. Fields include bin code and name. Saving creates or updates the bin. Closing without saving discards changes.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">There is no validation shown if a bin code already exists when creating a new bin. The operator only finds out about the conflict after submitting.</div>
+          <div class="rec-block">Validate the bin code in real time as the user types — show an inline message if the code is already taken: "Bin code 'A4' is already used in this location." For new bins, suggest the next code in the sequence based on existing bins (e.g., if A1, A2, A3 exist, suggest A4).</div>
+        </div>
       </div>
     </div>
   </div>
 
+  <div class="report-section">
+    <h2>Overall Assessment</h2>
+    <div class="overall-good">
+      <strong>The Locations & Bins Manager has a clear and logical layout.</strong> The contextual location selector, real-time item counts, and permission-gated edit controls are all solid design decisions for managing warehouse physical structure.
+    </div>
+    <div class="suggest-box">
+      <strong>Key improvements:</strong><br>
+      1. Color-code bin cards by inventory health (0 items = red, low = amber, normal = green).<br>
+      2. Block or clearly warn before deleting bins that still contain items.<br>
+      3. Add real-time bin code validation in the editor drawer.<br>
+      4. Increase touch target size on edit/delete icons.
+    </div>
+  </div>
 </div>
 </body>
 </html>

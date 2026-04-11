@@ -17,33 +17,62 @@
     <h1>RFID ↔ POS Compare (Developer Page)</h1>
     <p class="subtitle">A developer/testing utility page for running compare operations using a hardcoded sample payload. Not intended for daily warehouse use — the real compare tool lives in Reports → POS Compare.</p>
   </div>
+  <div class="page-summary">
+    <div class="summary-stat"><div class="stat-num stat-good">1</div><div class="stat-label">Working well</div></div>
+    <div class="summary-stat"><div class="stat-num stat-issue">3</div><div class="stat-label">Issues</div></div>
+    <div class="summary-stat"><div class="stat-num stat-rec">2</div><div class="stat-label">Recommendations</div></div>
+  </div>
 
-  <div class="info-banner">⚠️ This page appears to be a development/testing tool. It uses hardcoded sample data and is described as a way to "test" the compare API. It should likely not be accessible to regular warehouse staff.</div>
+  <div class="info-banner">⚠️ This page appears to be a development/testing tool. It uses hardcoded sample data and should not be accessible to regular warehouse staff.</div>
 
   <div class="report-section">
     <h2>Page Content</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Sample Payload Preview</div>
-        <span class="el-type tag-section">Code Display</span>
-        <div class="el-behavior">Shows a raw JSON code block displaying the hardcoded sample data that will be submitted when the button is clicked. Contains two sample items: "AVA MINI DRESS BLACK S" (2 in RFID, 2 in POS — matching) and "ISLA KNIT BLACK OS" (24 in RFID, 0 in POS — discrepancy).</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Showing raw JSON to warehouse staff is not appropriate. This page should either be restricted to developers/admins only, or completely removed and replaced with the proper POS Compare report which uses real data.</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">Run Compare Button</div>
-        <span class="el-type tag-button">Primary Button</span>
-        <div class="el-behavior">Labeled "Run compare (POST /api/compare/runs)". Clicking submits the hardcoded sample data to the API, creating a compare run in the database and generating exceptions for any discrepancies found. Shows "Running…" while in progress. After completion shows the run ID and how many exceptions were created.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The button label exposes the internal API endpoint path ("/api/compare/runs") which is technical and confusing for regular users. Also, repeatedly clicking this in production creates fake compare runs and fake exceptions in the real database. This page should be protected or removed from production.</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">Cross-links to Real Pages</div>
-        <span class="el-type tag-link">Links</span>
+        <div class="el-header">
+          <div class="el-name">Cross-links to Real Pages</div>
+          <span class="el-type tag-link">Navigation Links</span>
+        </div>
         <div class="el-behavior">Two links near the top: "Reports → POS compare" (the real compare workspace) and "Operations exceptions" (where generated exceptions can be reviewed). These point users to the correct pages.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Good that these links are here. Consider making this entire page redirect to "Reports → POS Compare" and eliminating the demo functionality in production.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">The links to the real compare page and the exceptions page are helpful — someone who lands here accidentally can immediately find where they should actually be.</div>
+        </div>
+      </div>
+      <div class="element-card">
+        <div class="el-header">
+          <div class="el-name">Sample Payload Preview</div>
+          <span class="el-type tag-section">Code Display</span>
+        </div>
+        <div class="el-behavior">Shows a raw JSON code block displaying hardcoded sample data that will be submitted when the button is clicked. Contains two sample items with known quantities for testing the compare API.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">Showing raw JSON code to warehouse staff is not appropriate for a production UI. The only users who need to understand this are developers testing the API — this page should never be in the hands of warehouse operators.</div>
+          <div class="rec-block">Restrict this page to admin/developer roles only via role-based access control, or remove it from the sidebar entirely. If kept, add a large banner: "DEVELOPER TESTING TOOL — Not for production warehouse use."</div>
+        </div>
+      </div>
+      <div class="element-card">
+        <div class="el-header">
+          <div class="el-name">Run Compare Button</div>
+          <span class="el-type tag-button">Primary Button</span>
+        </div>
+        <div class="el-behavior">Labeled "Run compare (POST /api/compare/runs)". Clicking submits the hardcoded sample data to the API, creating a compare run in the database and generating exceptions for any discrepancies. Shows "Running…" while in progress. After completion shows the run ID and exception count.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">The button label exposes the internal API endpoint path ("/api/compare/runs") which is technical and confusing. More critically, clicking this in production creates fake compare runs and fake exceptions in the live system — requiring manual cleanup.</div>
+          <div class="issue-block">Repeatedly clicking this button creates multiple fake compare runs that pollute the exception history and activity log, potentially masking real issues.</div>
+          <div class="rec-block">Either remove this button in production (via an environment flag) or add a confirmation dialog: "This will create a test compare run using fake data in the LIVE system, generating fake exceptions. This is for developer testing only. Continue?"</div>
+        </div>
       </div>
     </div>
   </div>
 
+  <div class="report-section">
+    <h2>Overall Assessment</h2>
+    <div class="overall-issues">
+      <strong>This page should not exist in a production warehouse environment.</strong> It uses hardcoded fake data, exposes raw API paths, and creates real database records when clicked. The correct compare tool for warehouse use is Reports → POS Compare.
+    </div>
+    <div class="suggest-box">
+      <strong>Recommendation:</strong> Remove this page from the sidebar navigation in production. Consider making it available only via a hidden developer URL, or add environment-based protection so it only renders in non-production environments. Until it's gated, any warehouse staff member who finds it can inadvertently create fake exceptions in the live system.
+    </div>
+  </div>
 </div>
 </body>
 </html>

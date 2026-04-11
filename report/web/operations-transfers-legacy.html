@@ -17,23 +17,38 @@
     <h1>Operations — Transfers (Legacy)</h1>
     <p class="subtitle">An RFID-driven transfer tool where you select a destination and then scan items via a live RFID stream. Items are staged (reviewed) before being committed as a transfer. This is the older transfer workflow — consider using Transfer In/Out instead.</p>
   </div>
+  <div class="page-summary">
+    <div class="summary-stat"><div class="stat-num stat-good">1</div><div class="stat-label">Working well</div></div>
+    <div class="summary-stat"><div class="stat-num stat-issue">4</div><div class="stat-label">Issues</div></div>
+    <div class="summary-stat"><div class="stat-num stat-rec">4</div><div class="stat-label">Recommendations</div></div>
+  </div>
 
-  <div class="info-banner">⚠️ This page is labeled "Legacy" in the sidebar navigation. It may be replaced by the newer Transfer In/Out pages.</div>
+  <div class="info-banner">⚠️ This page is labeled "Legacy" in the sidebar navigation. It is being replaced by the newer Transfer In/Out pages.</div>
 
   <div class="report-section">
     <h2>Destination Selection</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Destination Location Dropdown</div>
-        <span class="el-type tag-dropdown">Dropdown</span>
-        <div class="el-behavior">Populated from the locations registry. Selecting a location then enables the bin dropdown for that location. Must be selected before scanning can be meaningful.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The current location (where items are being moved FROM) is never specified in this workflow — only the destination. This makes the transfer history incomplete. The source should be captured automatically based on the item's current location when scanned.</div>
+        <div class="el-header">
+          <div class="el-name">Destination Location Dropdown</div>
+          <span class="el-type tag-dropdown">Dropdown</span>
+        </div>
+        <div class="el-behavior">Populated from the locations registry. Selecting a location enables the bin dropdown for that location. Must be selected before scanning.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">Only the destination is specified — the source (where items are being moved FROM) is never explicitly recorded. The source is inferred from each item's current location at scan time, which is implicit and cannot be verified by the person creating the transfer.</div>
+          <div class="rec-block">Capture the source location explicitly, or at minimum show a confirmation step that summarizes: "Moving items from [source locations] → [destination]." This makes the transfer record complete and verifiable.</div>
+        </div>
       </div>
       <div class="element-card">
-        <div class="el-name">Destination Bin Dropdown</div>
-        <span class="el-type tag-dropdown">Dropdown</span>
-        <div class="el-behavior">Populated after selecting a location. Shows bins with their in-stock counts. Optional — you can commit a transfer to a location without specifying a specific bin.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Making bin selection optional could lead to inventory being deposited at a location-level without bin precision. Consider making bin selection required, or at minimum showing a warning if no bin is selected.</div>
+        <div class="el-header">
+          <div class="el-name">Destination Bin Dropdown</div>
+          <span class="el-type tag-dropdown">Dropdown</span>
+        </div>
+        <div class="el-behavior">Populated after selecting a location. Shows bins with their in-stock counts. Optional — you can commit a transfer to a location without specifying a bin.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">Making bin selection optional allows inventory to be deposited at a location level without bin-level precision. Items that arrive with no bin assignment float as "location-level" stock, breaking cycle count accuracy.</div>
+          <div class="rec-block">Either make bin selection required, or show a clear warning when proceeding without a bin: "No bin selected — items will be assigned to [Location] without a bin. This reduces inventory precision."</div>
+        </div>
       </div>
     </div>
   </div>
@@ -42,38 +57,67 @@
     <h2>Scanning</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Live RFID Scan Stream</div>
-        <span class="el-type tag-section">Live Stream</span>
-        <div class="el-behavior">The page connects to a real-time RFID event stream. When fixed readers are scanning and the scan context is set to "TRANSFER", EPCs are automatically added to the staging area. This avoids manual EPC entry.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The requirement to have the scan context set to "TRANSFER" is a technical detail that floor workers should not need to manage manually. This context should be set automatically when a transfer workflow is open, and reset when the page is closed.</div>
+        <div class="el-header">
+          <div class="el-name">Live RFID Scan Stream</div>
+          <span class="el-type tag-section">Live Stream</span>
+        </div>
+        <div class="el-behavior">Connects to a real-time RFID event stream. When fixed readers are scanning and the scan context is set to "TRANSFER", EPCs are automatically added to the staging area. Avoids manual EPC entry.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">Using the live RFID stream for transfers is efficient — items are added to the transfer list as they pass through the reader zone without manual entry.</div>
+          <div class="issue-block">The scan context must be manually set to "TRANSFER" for this to work. Floor staff should not need to configure scan contexts — this is a technical operation that can silently break the workflow if forgotten.</div>
+          <div class="rec-block">Set the scan context to "TRANSFER" automatically when this page opens, and reset it automatically when the page is closed or the transfer is committed. The context management should be invisible to the user.</div>
+        </div>
       </div>
       <div class="element-card">
-        <div class="el-name">Manual EPC Entry Field</div>
-        <span class="el-type tag-input">Text Input</span>
+        <div class="el-header">
+          <div class="el-name">Manual EPC Entry Field</div>
+          <span class="el-type tag-input">Text Input</span>
+        </div>
         <div class="el-behavior">A field to manually type or paste an EPC code, as an alternative to live scanning. Useful when the reader is not available or for adding specific known tags.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Add an "Add" button next to this field. Pressing Enter after typing should also add the EPC to the list.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">The manual entry field has no explicit "Add" button shown. Pressing Enter should add the EPC — if this is not implemented, the field is just a display input with no obvious action.</div>
+          <div class="rec-block">Add a visible "Add" button next to the field. Pressing Enter after typing should also add the EPC. Show validation immediately if the EPC is not found in the system.</div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Staged Items</h2>
+    <h2>Staged Items &amp; Commit</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Staged Items List</div>
-        <span class="el-type tag-table">Table</span>
-        <div class="el-behavior">Shows all EPCs that have been scanned or added manually, along with their current location, bin, and status. This is the "review before commit" step — the user can see what they are about to transfer.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Allow removing individual items from the staged list before committing. Currently it appears all staged items are committed together. Also, show item names/SKUs alongside EPCs so staff can visually verify they have the right items.</div>
+        <div class="el-header">
+          <div class="el-name">Staged Items List</div>
+          <span class="el-type tag-table">Table</span>
+        </div>
+        <div class="el-behavior">Shows all EPCs scanned or added manually, with their current location, bin, and status. This is the "review before commit" step.</div>
+        <div class="feedback-blocks">
+          <div class="issue-block">There is no way to remove individual items from the staged list before committing — all staged items are committed together. A mis-scan cannot be corrected without discarding the entire session.</div>
+          <div class="rec-block">Allow removing individual items from the staged list with a trash icon per row. Show item names/SKUs alongside EPCs so staff can visually verify they have the right items before committing.</div>
+        </div>
       </div>
       <div class="element-card">
-        <div class="el-name">Commit Transfer Button → Modal</div>
-        <span class="el-type tag-button">Button → Confirmation Modal</span>
-        <div class="el-behavior">Opens a confirmation modal summarizing what will be transferred. Confirming commits all staged EPCs to the selected destination location and bin, updating their location in the database and writing an audit record.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The commit modal should show a clear summary: "Moving 15 items from [various sources] to Bin A4, Warehouse B." Also clarify whether this updates inventory immediately or is queued for a worker process.</div>
+        <div class="el-header">
+          <div class="el-name">Commit Transfer Button → Modal</div>
+          <span class="el-type tag-button">Button → Confirmation Modal</span>
+        </div>
+        <div class="el-behavior">Opens a confirmation modal summarizing what will be transferred. Confirming commits all staged EPCs to the selected destination, updating their location in the database and writing an audit record.</div>
+        <div class="feedback-blocks">
+          <div class="rec-block">The commit modal should clearly state: "Moving X items from [source locations] to Bin A4, Warehouse B. Items will immediately appear as in-stock at the destination." Make the impact explicit so the operator can verify before confirming.</div>
+        </div>
       </div>
     </div>
   </div>
 
+  <div class="report-section">
+    <h2>Overall Assessment</h2>
+    <div class="overall-issues">
+      <strong>This is a legacy page being replaced by the newer Transfer In/Out workflow.</strong> The source-location gap and the requirement to manually configure scan contexts are fundamental design issues. The newer Transfer In/Out pages address these properly with numbered slips and clear source/destination records.
+    </div>
+    <div class="suggest-box">
+      <strong>Recommendation:</strong> Consider removing this page from the sidebar navigation and redirecting users to the Transfer Out page. If it must remain, add a clear notice at the top explaining when to use this vs Transfer In/Out, and add the ability to remove individual staged items before committing.
+    </div>
+  </div>
 </div>
 </body>
 </html>

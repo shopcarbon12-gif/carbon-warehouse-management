@@ -3,117 +3,116 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Print / Commission · CarbonWMS Review</title>
+<title>Commissioning · CarbonWMS Review</title>
 <link rel="stylesheet" href="../style.css">
 </head>
 <body>
 <div class="site-header">
-  <div><div class="logo">CarbonWMS Review</div><h1>Print / Commission</h1></div>
+  <div><div class="logo">CarbonWMS Review</div><h1>Print / Commission Labels</h1></div>
   <div class="breadcrumb"><a href="../index.html">← Back to index</a> · Web App · RFID & Hardware</div>
 </div>
 <div class="page-wrap">
   <div class="report-header">
     <span class="platform-badge platform-web">🌐 Web App</span>
-    <h1>Print / Commission (RFID Commissioning)</h1>
-    <p class="subtitle">The most technically complex page in the system. Used to assign new RFID tags (EPCs) to products and send print jobs to RFID label printers. Involves searching the catalog, generating EPC codes, configuring printer settings, previewing labels, and tracking print history.</p>
+    <h1>Print / Commission Labels</h1>
+    <p class="subtitle">The tag printing workflow. Search the product catalog, configure how many labels to print and to which bin, review the label preview on a canvas, and send to the connected label printer. Status bar shows each stage: IDLE → GENERATING → PRINTING → SETTLE → DONE. Includes a print logs modal for history.</p>
+  </div>
+  <div class="page-summary">
+    <div class="summary-stat"><div class="stat-num stat-good">3</div><div class="stat-label">Working well</div></div>
+    <div class="summary-stat"><div class="stat-num stat-issue">4</div><div class="stat-label">Issues</div></div>
+    <div class="summary-stat"><div class="stat-num stat-rec">4</div><div class="stat-label">Recommendations</div></div>
   </div>
 
   <div class="report-section">
-    <h2>Product Search</h2>
+    <h2>Product Search &amp; Selection</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Search Input (Product)</div>
-        <span class="el-type tag-input">Search Field</span>
-        <div class="el-behavior">Type to search for a product from the catalog. After a 280ms delay, results appear as a dropdown list. Requires at least 2 characters. Each result shows the SKU, item ID, description, and UPC. Clicking a result selects it and prepares the EPC generation form.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> After selecting a product, it is not immediately obvious the product has been "selected" — consider highlighting the selected product with a clear confirmation panel. Also, support scanning a barcode directly into this search field (barcode scanners typically press Enter after scanning, so the system should handle that).</div>
+        <div class="el-header">
+          <div class="el-name">Product Search</div>
+          <span class="el-type tag-input">Search Input</span>
+        </div>
+        <div class="el-behavior">A search field to find a product from the Lightspeed catalog by SKU or name. Results appear in a dropdown list. Selecting a product sets it as the item to be tagged.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">Searching the catalog directly from this page means the product is correctly linked to the tag at the point of encoding — no separate lookup step required.</div>
+          <div class="issue-block">After selecting a product, the user sees the SKU and name but no stock level. Someone printing 10 labels for an item that already has 40 tagged copies may be creating duplicates unknowingly.</div>
+          <div class="rec-block">Show the current in-stock RFID count next to the selected product: "Current RFID tags: 12 in-stock." This lets the operator decide whether they actually need to print more labels.</div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>EPC Generation Settings</h2>
+    <h2>Print Configuration</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Quantity Field</div>
-        <span class="el-type tag-input">Number Input</span>
-        <div class="el-behavior">How many RFID tags to generate and print for the selected item. Defaults to 1. Each print job generates sequentially numbered EPCs starting from the next available serial number.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Add a max limit and a warning if the quantity seems unusually high. Also show "Next serial number: 147" so the user knows what the generated EPCs will look like before printing.</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">Bin Assignment Dropdown</div>
-        <span class="el-type tag-dropdown">Dropdown</span>
-        <div class="el-behavior">A dropdown to select which bin the newly commissioned items should be placed in. Populated from the active location's bin list. This assigns the items to a bin at the moment of commissioning so they appear correctly in inventory reports.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> If the active location has many bins, the dropdown can become very long. A searchable dropdown would be better. Also clarify what "no bin selected" means — does it put items in an unassigned state?</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">"Add to Inventory" Checkbox</div>
-        <span class="el-type tag-toggle">Checkbox</span>
-        <div class="el-behavior">When checked, the commissioned EPCs are immediately added to the inventory count at the selected location/bin. When unchecked, EPCs are generated and printed but not yet reflected in inventory (useful for staging or testing).</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> This is a critical checkbox — checking it has immediate real consequences for stock counts. It should be more visually prominent with a clearer label like "Add these items to inventory now" and perhaps an explanation of what happens if it is left unchecked.</div>
+        <div class="el-header">
+          <div class="el-name">Quantity, Bin, Add-to-Inventory Settings</div>
+          <span class="el-type tag-input">Settings Panel</span>
+        </div>
+        <div class="el-behavior">Options: how many labels to print (quantity), which bin to assign the tagged items to, and whether to add the new items to the inventory automatically after printing. These settings persist between print jobs in the same session.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">The "add to inventory automatically" toggle is a smart option — it removes a separate step for the most common workflow (print then receive).</div>
+          <div class="issue-block">Settings persist between print jobs within a session but are forgotten on page reload. If someone refreshes mid-job, they may start printing with wrong settings and not notice until labels come out wrong.</div>
+          <div class="rec-block">Save the last-used bin and quantity to localStorage so they survive page refreshes. Show a visible reminder of the current settings before each print job: "Printing 5 labels → Bin A3 → Auto-add to inventory."</div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Settings Panel</h2>
+    <h2>Label Preview &amp; Print Status</h2>
     <div class="element-list">
       <div class="element-card">
-        <div class="el-name">Settings Toggle / Panel</div>
-        <span class="el-type tag-button">Expandable Panel</span>
-        <div class="el-behavior">A settings panel that can be opened/closed. Contains printer configuration: printer IP/hostname, ZPL settings, label dimensions, EPC encoding parameters. Defaults are loaded from the system configuration.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> These technical settings (ZPL printer language, EPC partition bits, etc.) are beyond most staff users. Consider having a simplified "use saved printer settings" mode that is the default, with an "Advanced settings" link for technicians only.</div>
+        <div class="el-header">
+          <div class="el-name">Label Preview Canvas</div>
+          <span class="el-type tag-section">Visual Preview</span>
+        </div>
+        <div class="el-behavior">A canvas element that renders a visual preview of the label that will be printed — showing the EPC barcode, QR code, and product text exactly as it will appear on the physical label.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">Label preview before printing is excellent — it prevents misprints and saves label stock. Seeing exactly what will be printed builds confidence in the workflow.</div>
+        </div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-header">
+          <div class="el-name">Status Bar (IDLE → GENERATING → PRINTING → SETTLE → DONE)</div>
+          <span class="el-type tag-section">Progress Indicator</span>
+        </div>
+        <div class="el-behavior">A status bar with five stages that lights up as the print job progresses. Each stage has a distinct state. The bar provides real-time feedback on where the job is in the process.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">Multi-stage progress is far better than a single spinner — operators know whether the delay is in tag generation, label formatting, or printer communication. This directly helps diagnose where a stuck job is failing.</div>
+          <div class="issue-block">If a stage fails (e.g., printer is unreachable), the bar stops at that stage but the error message appears below, away from the visual status indicator. The connection between "stuck at PRINTING" and "printer offline" requires reading two separate UI areas.</div>
+          <div class="rec-block">Show the error message directly under the stuck stage indicator: the PRINTING stage block turns red with "Printer unreachable — check network connection and printer power." This creates an immediate, clear connection between the failure point and its cause.</div>
+        </div>
+      </div>
+
+      <div class="element-card">
+        <div class="el-header">
+          <div class="el-name">Print Logs Modal</div>
+          <span class="el-type tag-section">History Modal</span>
+        </div>
+        <div class="el-behavior">A button that opens a modal showing the history of all print jobs: product, quantity, timestamp, and success/failure status. Useful for auditing and troubleshooting.</div>
+        <div class="feedback-blocks">
+          <div class="good-block">Having an accessible print history without leaving the page is the right design. Operators can reference recent jobs without navigating to a separate Reports page.</div>
+          <div class="issue-block">The print logs are session-only or limited in history depth — long-term commissioning history requires going to the Reports section.</div>
+          <div class="rec-block">Add a direct "View full commissioning history →" link inside the modal that opens the relevant report page. This creates a natural escalation path from quick reference to deep audit.</div>
+        </div>
       </div>
     </div>
   </div>
 
   <div class="report-section">
-    <h2>Label Preview</h2>
-    <div class="element-list">
-      <div class="element-card">
-        <div class="el-name">Preview Button & Canvas</div>
-        <span class="el-type tag-button">Button / Canvas</span>
-        <div class="el-behavior">Opens a label preview showing exactly how the printed label will look — including the EPC barcode, item name, SKU, and other fields laid out as they will appear on the physical label. Rendered as a canvas graphic.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> This is excellent UX — previewing before printing saves wasted labels. Consider showing the preview automatically when all required fields are filled in, rather than requiring an extra button click.</div>
-      </div>
+    <h2>Overall Assessment</h2>
+    <div class="overall-good">
+      <strong>The commissioning workflow is well-designed</strong> — catalog search, visual label preview, multi-stage progress, and print history are all present. The print preview canvas in particular is a feature that directly prevents waste and errors.
+    </div>
+    <div class="suggest-box">
+      <strong>Key improvements:</strong><br>
+      1. Show current RFID stock count for the selected product to prevent over-tagging.<br>
+      2. Inline error messages on the status bar stage that failed.<br>
+      3. Persist settings across page reloads.
     </div>
   </div>
-
-  <div class="report-section">
-    <h2>Print / Commission Process</h2>
-    <div class="element-list">
-      <div class="element-card">
-        <div class="el-name">Status Bar</div>
-        <span class="el-type tag-section">Status Display</span>
-        <div class="el-behavior">Shows the current phase of the commissioning process: IDLE → GENERATING → PRINTING → SETTLE → DONE (or ERROR). Each phase has a visual indicator and timer. The "settle" phase waits 1.2 seconds after printing completes before allowing the next print job, to ensure the printer is ready.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> The phase names (IDLE, SETTLE, etc.) are technical. For a warehouse operator, showing "Ready," "Sending to printer…," "Waiting for printer…," "Done — labels printed!" would be more natural. Also show the elapsed time more prominently.</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">Generated EPCs Display</div>
-        <span class="el-type tag-section">Output</span>
-        <div class="el-behavior">After a successful print job, the generated EPC codes are displayed. These are the unique identifiers encoded into the physical labels that were just printed. Each EPC follows the SGTIN-96 standard.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Show a "Copy all EPCs" button next to the generated list so they can be easily pasted into other tools (like the Bulk Status Update page). Also provide a way to download the list as a text file.</div>
-      </div>
-      <div class="element-card">
-        <div class="el-name">Error / Message Display</div>
-        <span class="el-type tag-section">Status</span>
-        <div class="el-behavior">If something goes wrong (printer unreachable, encoding failed, etc.), an error message appears. Success messages also appear here. Both types are styled differently.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Error messages for printer issues should include actionable guidance: "Could not reach printer at [IP address]. Check that the printer is powered on and connected to the network." Generic errors like "Print failed" without a reason are not helpful for floor staff.</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="report-section">
-    <h2>Print Logs Modal</h2>
-    <div class="element-list">
-      <div class="element-card">
-        <div class="el-name">Print Logs Button / Modal</div>
-        <span class="el-type tag-button">Button → Modal</span>
-        <div class="el-behavior">Opens a modal/popup showing the history of print jobs on this page (within the current session). Shows what was printed, when, how many labels, and which EPCs were generated.</div>
-        <div class="suggest-box"><strong>Suggestion:</strong> Print logs should persist across sessions and be available in the Reports section, not just while the page is open. If a user accidentally closes the tab after printing, they lose the record of what EPCs were generated.</div>
-      </div>
-    </div>
-  </div>
-
 </div>
 </body>
 </html>
