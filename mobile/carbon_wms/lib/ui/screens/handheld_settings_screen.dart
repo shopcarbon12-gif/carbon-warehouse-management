@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
@@ -8,9 +10,11 @@ import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
-import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
+import 'package:carbon_wms/ui/screens/dashboard_screen.dart' show DashboardScreen;
 
-/// Server URL, identity, OTA check, and biometric preferences.
+
+/// Server URL, identity, OTA check, biometric, sound, and scanner source preferences.
 class HandheldSettingsScreen extends StatefulWidget {
   const HandheldSettingsScreen({super.key});
 
@@ -19,34 +23,80 @@ class HandheldSettingsScreen extends StatefulWidget {
 }
 
 class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
+  // ── OTA ───────────────────────────────────────────────────────────────────
   bool _busy = false;
   String? _lastStatus;
-  bool _bioReloading = true;
-  bool _bioEligible = false;
-  bool _bioEnrolled = false;
+
+  // ── Biometric ─────────────────────────────────────────────────────────────
+  bool _bioReloading   = true;
+  bool _bioEligible    = false;
+  bool _bioEnrolled    = false;
   bool _offerAfterSignIn = false;
+
+  // ── Sound ─────────────────────────────────────────────────────────────────
+  static const _keySoundEnabled = 'wms_sound_tag_read_v1';
+  static const _keyVolume       = 'wms_tag_read_volume_v1';
+  bool   _soundEnabled = false;
+  double _volume       = 0.8; // 0.0 – 1.0
+
+  // ── Scanner source ────────────────────────────────────────────────────────
+  static const _keyScannerSource = 'wms_scanner_source_v1';
+  // 'hardware' | 'camera'
+  String _scannerSource = 'hardware';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _reloadBiometricSection());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _reloadBiometricSection();
+      await _loadLocalPrefs();
+    });
   }
+
+  Future<void> _loadLocalPrefs() async {
+    final p = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _soundEnabled  = p.getBool(_keySoundEnabled)  ?? false;
+      _volume        = p.getDouble(_keyVolume)       ?? 0.8;
+      _scannerSource = p.getString(_keyScannerSource) ?? 'hardware';
+    });
+  }
+
+  Future<void> _setSoundEnabled(bool v) async {
+    setState(() => _soundEnabled = v);
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_keySoundEnabled, v);
+  }
+
+  Future<void> _setVolume(double v) async {
+    setState(() => _volume = v);
+    final p = await SharedPreferences.getInstance();
+    await p.setDouble(_keyVolume, v);
+  }
+
+  Future<void> _setScannerSource(String src) async {
+    setState(() => _scannerSource = src);
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_keyScannerSource, src);
+  }
+
+  // ── Biometric ─────────────────────────────────────────────────────────────
 
   Future<void> _reloadBiometricSection() async {
     setState(() => _bioReloading = true);
     final eligible = await LoginCredentialsStore.canUseBiometricPasswordVault();
     final enrolled = await LoginCredentialsStore.hasVaultedCredentials();
-    final offer = await LoginCredentialsStore.getOfferBiometricSetupAfterSignIn();
+    final offer    = await LoginCredentialsStore.getOfferBiometricSetupAfterSignIn();
     if (!mounted) return;
     setState(() {
-      _bioEligible = eligible;
-      _bioEnrolled = enrolled;
-      _offerAfterSignIn = offer;
-      _bioReloading = false;
+      _bioEligible       = eligible;
+      _bioEnrolled       = enrolled;
+      _offerAfterSignIn  = offer;
+      _bioReloading      = false;
     });
   }
 
-  /// On when vault is active, or user asked for post–sign-in setup offer.
   bool get _biometricSwitchValue => _bioEnrolled || _offerAfterSignIn;
 
   Future<void> _onBiometricSwitch(bool v) async {
@@ -63,23 +113,22 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
     if (mounted) await _reloadBiometricSection();
   }
 
+  // ── OTA ───────────────────────────────────────────────────────────────────
+
   Future<void> _checkOta() async {
     if (!mounted) return;
-    setState(() {
-      _busy = true;
-      _lastStatus = null;
-    });
+    setState(() { _busy = true; _lastStatus = null; });
     try {
-      final api = context.read<WmsApiClient>();
+      final api  = context.read<WmsApiClient>();
       final info = await PackageInfo.fromPlatform();
-      final aid = await HandheldDeviceIdentity.primaryDeviceIdForServer();
-      final st = await api.fetchMobileStatus(
-        version: info.version,
+      final aid  = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+      final st   = await api.fetchMobileStatus(
+        version:   info.version,
         androidId: aid.isEmpty || aid == 'HANDHELD_OFFLINE' ? null : aid,
       );
       final authorized = st['authorized'] == true;
-      final url = (st['downloadUrl'] as String?)?.trim();
-      final latest = (st['latestVersion'] as String?)?.trim();
+      final url    = (st['downloadUrl']    as String?)?.trim();
+      final latest = (st['latestVersion']  as String?)?.trim();
       final update = st['updateAvailable'] == true;
       if (!mounted) return;
       setState(() {
@@ -89,211 +138,460 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
           if (latest != null && latest.isNotEmpty)
             'server label: $latest'
           else
-            'server label: (none — no release row for this device\'s tenant; upload in WMS → Mobile OTA)',
+            "server label: (none — no release row for this device's tenant; upload in WMS → Mobile OTA)",
           if (url != null && url.isNotEmpty) 'download: $url' else 'download: (none)',
           'update flag: $update',
         ].join('\n');
       });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _lastStatus = 'Error: $e';
-        });
-      }
+      if (mounted) setState(() { _busy = false; _lastStatus = 'Error: $e'; });
     }
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    return CarbonScaffold(
-      pageTitle: 'SETTINGS',
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          FutureBuilder<PackageInfo>(
-            future: PackageInfo.fromPlatform(),
-            builder: (context, snap) {
-              final p = snap.data;
-              return ListTile(
-                title: const Text('App version', style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600)),
-                subtitle: Text(
-                  p == null ? '…' : '${p.version} · build ${p.buildNumber}',
-                  style: const TextStyle(color: AppColors.textMuted, fontFamily: 'monospace', fontSize: 12),
+    final isDark      = Theme.of(context).brightness == Brightness.dark;
+    final bg          = isDark ? const Color(0xFF111A1A) : const Color(0xFFF5F5F5);
+    final cardColor   = isDark ? const Color(0xFF1C2828) : Colors.white;
+    final mutedColor  = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
+    final mainColor   = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
+    final divColor    = isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.07);
+
+    return Scaffold(
+      backgroundColor: bg,
+      appBar: AppBar(
+        backgroundColor: isDark ? const Color(0xFF111A1A) : Colors.white,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        automaticallyImplyLeading: false,
+        titleSpacing: 12,
+        title: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: () {
+                Navigator.of(context).popUntil((r) => r.isFirst);
+                DashboardScreen.scaffoldKey.currentState?.openDrawer();
+              },
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/carbon_logo.png',
+                  width: 36,
+                  height: 36,
+                  fit: BoxFit.cover,
                 ),
-              );
-            },
-          ),
-          FutureBuilder<String>(
-            future: context.read<WmsApiClient>().resolveBaseUrl(),
-            builder: (context, snap) {
-              final u = snap.data ?? '';
-              return ListTile(
-                title: const Text('WMS server', style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600)),
-                subtitle: SelectableText(
-                  u.isEmpty ? '(not configured)' : u,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontFamily: 'monospace',
-                    fontSize: 12,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Carbon',
+                  style: GoogleFonts.manrope(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                    color: mainColor,
                   ),
                 ),
-              );
-            },
-          ),
-          const Divider(height: 32),
-          FilledButton.icon(
-            onPressed: _busy
-                ? null
-                : _lastStatus != null
-                    ? () => setState(() => _lastStatus = null)
-                    : _checkOta,
-            icon: _busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.system_update_alt),
-            label: Text(_busy ? 'Checking…' : 'Check OTA / authorization'),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+                WmsText(
+                  color: isDark ? const Color(0xFF4DB6AC) : AppColors.primary,
+                  fontSize: 18,
+                ),
+              ],
             ),
-          ),
-          if (_lastStatus != null) ...[
-            const SizedBox(height: 16),
-            SelectableText(
-              _lastStatus!,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontFamily: 'monospace',
-                fontSize: 11,
-                height: 1.4,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text(
+                '/',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: mainColor),
+              ),
+            ),
+            Text(
+              'SETTINGS',
+              style: GoogleFonts.manrope(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+                color: isDark ? const Color(0xFF4DB6AC) : AppColors.primary,
               ),
             ),
           ],
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+        children: [
+
+          // ── APP VERSION + OTA ────────────────────────────────────────────
+          _Label('App', mutedColor),
+          const SizedBox(height: 8),
+          _Card(
+            color: cardColor,
+            child: FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (context, snap) {
+                final p = snap.data;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            p == null ? '…' : p.version,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 5),
+                            child: Text(
+                              p == null ? '' : 'build ${p.buildNumber}',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: mutedColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 24, color: divColor),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: _busy
+                            ? null
+                            : _lastStatus != null
+                                ? () => setState(() => _lastStatus = null)
+                                : _checkOta,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: Row(
+                            children: [
+                              _busy
+                                  ? const SizedBox(width: 20, height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                                  : const Icon(Icons.system_update_alt, color: AppColors.primary, size: 20),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _busy ? 'Checking…' : _lastStatus != null ? 'Tap to clear result' : 'Check OTA / Authorization',
+                                  style: GoogleFonts.manrope(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: mainColor,
+                                  ),
+                                ),
+                              ),
+                              Icon(Icons.chevron_right, color: mutedColor, size: 20),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_lastStatus != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: SelectableText(
+                          _lastStatus!,
+                          style: TextStyle(color: mutedColor, fontFamily: 'monospace', fontSize: 11, height: 1.5),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+
           const SizedBox(height: 24),
-          const Divider(height: 32),
-          Consumer<RfidManager>(
-            builder: (ctx, rfid, _) {
-              final linked = rfid.activeScanner != null;
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  linked ? Icons.rss_feed : Icons.rss_feed_outlined,
-                  color: linked ? AppColors.primary : AppColors.textMuted,
-                ),
-                title: const Text(
-                  'RFID Hardware',
-                  style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  linked ? 'Scanner linked — ready' : 'N/A — no hardware scanner linked',
-                  style: TextStyle(
-                    color: linked ? AppColors.primary : AppColors.textMuted,
-                    fontFamily: 'monospace',
-                    fontSize: 12,
+
+          // ── RFID ANTENNA POWER ───────────────────────────────────────────
+          _Label('RFID', mutedColor),
+          const SizedBox(height: 8),
+          _Card(
+            color: cardColor,
+            child: Consumer2<MobileSettingsRepository, RfidManager>(
+              builder: (ctx, settings, rfid, _) {
+                final power = settings.config.transferOutAntennaPower;
+                final hwLinked = rfid.isHardwareLinked;
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Antenna Power',
+                            style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700,
+                              color: hwLinked ? mainColor : mutedColor)),
+                          Text(
+                            hwLinked ? '$power dBm' : 'N/A',
+                            style: GoogleFonts.spaceGrotesk(fontSize: 20, fontWeight: FontWeight.w800,
+                              color: hwLinked ? AppColors.primary : mutedColor),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      if (hwLinked) ...[
+                        Slider(
+                          value: power.toDouble(),
+                          min: 0, max: 30, divisions: 30,
+                          activeColor: AppColors.primary,
+                          label: '$power dBm',
+                          onChanged: (v) => settings.setGlobalAntennaPower(v.round()),
+                        ),
+                        Text('Applies to transfer-in and transfer-out scans.',
+                          style: TextStyle(color: mutedColor, fontSize: 12, height: 1.4)),
+                      ] else
+                        Text('No RFID hardware detected on this device.',
+                          style: TextStyle(color: mutedColor, fontSize: 12, height: 1.4,
+                            fontStyle: FontStyle.italic)),
+                    ],
                   ),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── SOUND ────────────────────────────────────────────────────────
+          _Label('Sound', mutedColor),
+          const SizedBox(height: 8),
+          _Card(
+            color: cardColor,
+            child: Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  title: Text('Sound while reading tags',
+                    style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: mainColor)),
+                  value: _soundEnabled,
+                  activeThumbColor: AppColors.primary,
+                  onChanged: _setSoundEnabled,
                 ),
-                trailing: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: linked
-                        ? AppColors.primary.withValues(alpha: 0.12)
-                        : AppColors.textMuted.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    linked ? 'LINKED' : 'N/A',
-                    style: TextStyle(
-                      color: linked ? AppColors.primary : AppColors.textMuted,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
-                      letterSpacing: 0.8,
+                if (_soundEnabled) ...[
+                  Divider(height: 1, color: divColor),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: Row(
+                      children: [
+                        Text('MUTE',
+                          style: GoogleFonts.spaceGrotesk(fontSize: 11, fontWeight: FontWeight.w700,
+                            letterSpacing: 1.4, color: mutedColor)),
+                        Expanded(
+                          child: Slider(
+                            value: _volume, min: 0, max: 1, divisions: 10,
+                            activeColor: AppColors.primary,
+                            label: '${(_volume * 100).round()}%',
+                            onChanged: _setVolume,
+                          ),
+                        ),
+                        Text('${(_volume * 100).round()}%',
+                          style: GoogleFonts.spaceGrotesk(fontSize: 13, fontWeight: FontWeight.w700,
+                            color: AppColors.primary)),
+                      ],
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-          const Divider(height: 32),
-          Consumer<MobileSettingsRepository>(
-            builder: (ctx, settings, _) {
-              final power = settings.config.transferOutAntennaPower;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'RFID Antenna Power',
-                    style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.5),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$power dBm',
-                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 20),
-                  ),
-                  Slider(
-                    value: power.toDouble(),
-                    min: 0,
-                    max: 30,
-                    divisions: 30,
-                    activeColor: AppColors.primary,
-                    label: '$power dBm',
-                    onChanged: (v) => settings.setGlobalAntennaPower(v.round()),
-                  ),
-                  const Text(
-                    'Applies to transfer-in and transfer-out scans.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.4),
-                  ),
                 ],
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-          const Divider(height: 32),
-          const Text(
-            'Biometric sign-in',
-            style: TextStyle(
-              color: AppColors.textMain,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-              letterSpacing: 0.5,
+              ],
             ),
           ),
+
+          const SizedBox(height: 24),
+
+          // ── BARCODE SCANNER SOURCE ───────────────────────────────────────
+          _Label('Barcode Scanner Source', mutedColor),
+          const SizedBox(height: 8),
+          _Card(
+            color: cardColor,
+            child: Column(
+              children: [
+                _ScannerSourceTile(
+                  icon: Icons.settings_input_hdmi_outlined,
+                  title: 'Hardware Scanner (Wedge)',
+                  subtitle: 'Built-in trigger gun or pistol grip',
+                  value: 'hardware',
+                  groupValue: _scannerSource,
+                  mainColor: mainColor,
+                  mutedColor: mutedColor,
+                  onChanged: _setScannerSource,
+                ),
+                Divider(height: 1, color: divColor),
+                _ScannerSourceTile(
+                  icon: Icons.photo_camera_outlined,
+                  title: 'Camera Scanner',
+                  subtitle: 'Use device camera to scan barcodes',
+                  value: 'camera',
+                  groupValue: _scannerSource,
+                  mainColor: mainColor,
+                  mutedColor: mutedColor,
+                  onChanged: _setScannerSource,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── BIOMETRIC ────────────────────────────────────────────────────
+          _Label('Biometric Sign-in', mutedColor),
           const SizedBox(height: 8),
           if (_bioReloading)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            )
+            const Center(child: Padding(
+              padding: EdgeInsets.all(16),
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ))
           else if (!_bioEligible)
-            const Text(
-              'Not available on this device (rugged scanners do not use biometric sign-in here).',
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 13,
-                height: 1.35,
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                'Not available on this device.',
+                style: TextStyle(color: mutedColor, fontSize: 13, height: 1.35),
               ),
             )
-          else ...[
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Fingerprint or face sign-in', style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600)),
-              subtitle: Text(
-                _bioEnrolled
-                    ? 'Biometric sign-in is enabled. Logging out keeps fingerprint/face sign-in; turn off here to clear the saved session token.'
-                    : _offerAfterSignIn
-                        ? 'After your next password sign-in, you can confirm to enable fingerprint or face unlock.'
-                        : 'Turn on to allow the optional setup prompt after you sign in with password.',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.35),
+          else
+            _Card(
+              color: cardColor,
+              child: SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                title: Text('Fingerprint or face sign-in',
+                  style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: mainColor)),
+                subtitle: Text(
+                  _bioEnrolled
+                      ? 'Enabled. Turn off to clear saved session token.'
+                      : _offerAfterSignIn
+                          ? 'You will be prompted after next password sign-in.'
+                          : 'Turn on to enable setup prompt after sign-in.',
+                  style: TextStyle(color: mutedColor, fontSize: 12, height: 1.35),
+                ),
+                value: _biometricSwitchValue,
+                activeThumbColor: AppColors.primary,
+                onChanged: _onBiometricSwitch,
               ),
-              value: _biometricSwitchValue,
-              activeThumbColor: AppColors.primary,
-              onChanged: _onBiometricSwitch,
+            ),
+
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Supporting widgets ────────────────────────────────────────────────────────
+
+class _Label extends StatelessWidget {
+  const _Label(this.text, this.color);
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text.toUpperCase(),
+      style: GoogleFonts.spaceGrotesk(
+        color: color,
+        fontWeight: FontWeight.w700,
+        fontSize: 11,
+        letterSpacing: 2.0,
+      ),
+    );
+  }
+}
+
+class _Card extends StatelessWidget {
+  const _Card({required this.child, required this.color});
+  final Widget child;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      clipBehavior: Clip.hardEdge,
+      child: child,
+    );
+  }
+}
+
+class _ScannerSourceTile extends StatelessWidget {
+  const _ScannerSourceTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.groupValue,
+    required this.mainColor,
+    required this.mutedColor,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String value;
+  final String groupValue;
+  final Color mainColor;
+  final Color mutedColor;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value == groupValue;
+    return InkWell(
+      onTap: () => onChanged(value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: selected ? AppColors.primary : mutedColor, size: 22),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(
+                    color: mainColor, fontWeight: FontWeight.w600, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: TextStyle(
+                    color: mutedColor, fontSize: 12)),
+                ],
+              ),
+            ),
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected ? AppColors.primary : Colors.grey,
+                  width: 2,
+                ),
+                color: selected ? AppColors.primary : Colors.transparent,
+              ),
+              child: selected
+                  ? const Icon(Icons.check, size: 14, color: Colors.white)
+                  : null,
             ),
           ],
-        ],
+        ),
       ),
     );
   }

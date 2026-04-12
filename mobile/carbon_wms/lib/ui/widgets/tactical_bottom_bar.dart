@@ -86,6 +86,22 @@ class TacticalSlateButton extends StatelessWidget {
   }
 }
 
+/// Wraps an RFID-dependent widget: dims + blocks interaction when hardware is not linked.
+class RfidLockedWrapper extends StatelessWidget {
+  const RfidLockedWrapper({super.key, required this.hwLinked, required this.child});
+  final bool hwLinked;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (hwLinked) return child;
+    return Opacity(
+      opacity: 0.35,
+      child: IgnorePointer(child: child),
+    );
+  }
+}
+
 class _TacticalButton extends StatelessWidget {
   const _TacticalButton({
     required this.height,

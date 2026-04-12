@@ -137,13 +137,14 @@ abstract final class AppTheme {
     );
   }
 
-  /// Headline: bold, uppercase, tight tracking (industrial).
+  /// Headline: bold, uppercase, tight tracking (industrial). Theme-aware.
   static TextStyle headline(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GoogleFonts.inter(
       fontSize: 13,
       fontWeight: FontWeight.w800,
       letterSpacing: 1.4,
-      color: AppColors.textMuted,
+      color: isDark ? const Color(0xFF7A9090) : AppColors.textMuted,
     );
   }
 }

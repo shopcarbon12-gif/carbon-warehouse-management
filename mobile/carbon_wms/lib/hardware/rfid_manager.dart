@@ -84,6 +84,15 @@ class RfidManager extends ChangeNotifier {
 
   RfidScanner? get activeScanner => _active;
 
+  /// True only when a real native RFID link is established (Zebra BT or Chainway built-in).
+  /// False on regular Android phones, simulators, or when hardware is not paired.
+  bool get isHardwareLinked {
+    final s = _active;
+    if (s is ZebraScanner) return s.isNativeLinked;
+    if (s is ChainwayScanner) return s.isNativeLinked;
+    return false;
+  }
+
   List<String> get sessionEpcs => List<String>.unmodifiable(_sessionOrder);
 
   int get sessionCount => _sessionOrder.length;

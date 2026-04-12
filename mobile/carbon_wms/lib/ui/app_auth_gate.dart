@@ -122,10 +122,12 @@ class _AppAuthGateState extends State<AppAuthGate> with WidgetsBindingObserver {
     final authorized = status['authorized'] == true;
     final registered = status['registered'] == true;
     final bypass = status['bypassDeviceLock'] == true;
-    final updateAvailable = status['updateAvailable'] == true;
     final downloadUrl = status['downloadUrl'] as String?;
     final latestRaw = status['latestVersion'];
     final latestLabel = latestRaw is String ? latestRaw.trim() : '';
+    // Only show OTA dialog if server version is strictly newer than installed.
+    final serverNewer = latestLabel.isNotEmpty && _isVersionNewer(latestLabel, version);
+    final updateAvailable = status['updateAvailable'] == true && serverNewer;
 
     if (mounted) {
       setState(() {
@@ -151,6 +153,21 @@ class _AppAuthGateState extends State<AppAuthGate> with WidgetsBindingObserver {
       _pending = false;
     }
     if (mounted) setState(() => _phase = _Phase.lock);
+  }
+
+  bool _isVersionNewer(String server, String installed) {
+    List<int> parse(String v) =>
+        v.split('.').map((p) => int.tryParse(p) ?? 0).toList();
+    final s = parse(server);
+    final i = parse(installed);
+    final len = s.length > i.length ? s.length : i.length;
+    for (var x = 0; x < len; x++) {
+      final sv = x < s.length ? s[x] : 0;
+      final iv = x < i.length ? i[x] : 0;
+      if (sv > iv) return true;
+      if (sv < iv) return false;
+    }
+    return false;
   }
 
   void _maybeShowOta() {

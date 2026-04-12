@@ -9,6 +9,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
 import 'package:carbon_wms/services/handheld_client_info.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
@@ -616,10 +617,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         ),
       ),
       const SizedBox(height: 10),
-      Text(
-        'CarbonWMS',
-        textAlign: TextAlign.center,
-        style: _brandTitleStyle,
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text('Carbon', style: _brandTitleStyle),
+          WmsText(color: _primaryTeal, fontSize: _brandTitleStyle.fontSize ?? 28, strokeWidth: 0.7),
+        ],
       ),
       const SizedBox(height: 8),
       Text(

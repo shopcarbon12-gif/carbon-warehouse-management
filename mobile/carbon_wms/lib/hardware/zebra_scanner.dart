@@ -17,6 +17,7 @@ class ZebraScanner implements RfidScanner {
   bool _connected = false;
   bool _scanning = false;
   bool _nativeLinked = false;
+  bool get isNativeLinked => _nativeLinked;
   StreamSubscription<RfidTagRead>? _nativeSub;
   HandheldRuntimeConfig _runtime = HandheldRuntimeConfig.fallback;
 

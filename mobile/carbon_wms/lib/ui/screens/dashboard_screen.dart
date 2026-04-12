@@ -22,6 +22,7 @@ import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
+import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
 import 'package:carbon_wms/ui/widgets/ota_update_dialog.dart';
 
 // ─── palette additions (dashboard only) ────────────────────────────────────
@@ -29,6 +30,9 @@ const Color _surfaceContainerLow  = Color(0xFFEEF4F3);
 const Color _surfaceContainerHigh = Color(0xFFE2EEEC);
 
 class DashboardScreen extends StatefulWidget {
+  /// Global key so any screen can call [DashboardScreen.scaffoldKey.currentState?.openDrawer()].
+  static final scaffoldKey = GlobalKey<ScaffoldState>();
+
   const DashboardScreen({
     super.key,
     this.onLogout,
@@ -268,8 +272,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: Colors.white,
+      key: DashboardScreen.scaffoldKey,
+      backgroundColor: isDark ? const Color(0xFF111A1A) : Colors.white,
       appBar: _buildAppBar(context),
       drawer: _buildDrawer(context),
       body: _buildBody(context),
@@ -281,6 +287,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // DRAWER
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildDrawer(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final rawName = (_userEmail?.split('@').first ?? '').replaceAll('.', ' ');
     final displayName = rawName.isEmpty
         ? 'Operator'
@@ -288,7 +295,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final email = _userEmail ?? '—';
 
     return Drawer(
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? const Color(0xFF1C2828) : Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -343,10 +350,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _DrawerItem(
               icon: Icons.sync,
               label: 'Refresh Settings / Permissions',
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                unawaited(_syncMobileSettings());
-                unawaited(_refreshDashboardStats());
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Syncing settings…'), duration: Duration(seconds: 1)),
+                );
+                await _syncMobileSettings();
+                await _refreshDashboardStats();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Settings refreshed.'), duration: Duration(seconds: 2)),
+                  );
+                }
               },
             ),
             const SizedBox(height: 4),
@@ -378,8 +393,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // APP BAR
   // ═══════════════════════════════════════════════════════════════════════════
   PreferredSizeWidget _buildAppBar(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AppBar(
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? const Color(0xFF111A1A) : Colors.white,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       leadingWidth: 56,
@@ -402,14 +418,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
       titleSpacing: 6,
-      title: Text(
-        'CarbonWMS',
-        style: GoogleFonts.manrope(
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.3,
-          color: AppColors.textMain,
-        ),
+      title: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Carbon',
+            style: GoogleFonts.manrope(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+              color: isDark ? const Color(0xFFE0ECEC) : AppColors.textMain,
+            ),
+          ),
+          WmsText(
+            color: isDark ? const Color(0xFF4DB6AC) : AppColors.primary,
+            fontSize: 20,
+          ),
+        ],
       ),
       actions: [
         Stack(
@@ -432,7 +458,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.success,
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 1.5),
+                    border: Border.all(color: isDark ? const Color(0xFF111A1A) : Colors.white, width: 1.5),
                   ),
                 ),
               ),
@@ -456,8 +482,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildBody(BuildContext context) {
     return Consumer2<RfidManager, MobileSettingsRepository>(
       builder: (context, rfid, settings, _) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         final readerConnected = rfid.activeScanner != null;
-        final synced = settings.lastSyncRoot != null;
+        final hardwareLinked  = rfid.isHardwareLinked;
+
+        final mutedColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
+        final mainColor  = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
+        final cardColor  = isDark ? const Color(0xFF1C2828) : _surfaceContainerLow;
+        final cardHigh   = isDark ? const Color(0xFF243030) : _surfaceContainerHigh;
 
         return CustomScrollView(
           slivers: [
@@ -469,25 +501,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     _StatCard(
                       label: 'LIVE SCAN',
-                      value: '0',
+                      value: hardwareLinked ? '0' : 'N/A',
                       dot: true,
-                      dotColor: readerConnected ? Colors.green : AppColors.textMuted,
+                      dotColor: hardwareLinked ? Colors.green : AppColors.textMuted,
+                      cardColor: cardColor, mainColor: mainColor, mutedColor: mutedColor,
                     ),
                     const SizedBox(width: 8),
                     _StatCard(
                       label: 'INVENTORY',
-                      value: _statsLoading
-                          ? '…'
-                          : (_inventoryUnits != null
-                              ? _fmtNum(_inventoryUnits!)
-                              : (synced ? '—' : '—')),
+                      value: _statsLoading ? '…' : (_inventoryUnits != null ? _fmtNum(_inventoryUnits!) : '—'),
                       onTap: () => _push(const InventoryLookupScreen()),
+                      cardColor: cardColor, mainColor: mainColor, mutedColor: mutedColor,
                     ),
                     const SizedBox(width: 8),
                     _StatCard(
                       label: 'RECEIVING',
                       value: _statsLoading ? '…' : (_orderOpen?.toString() ?? '—'),
                       onTap: () => _push(const TransferSlipsScreen()),
+                      cardColor: cardColor, mainColor: mainColor, mutedColor: mutedColor,
                     ),
                   ],
                 ),
@@ -507,10 +538,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Text(
                           'LOCATIONS',
                           style: GoogleFonts.spaceGrotesk(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 2.0,
-                            color: AppColors.textMuted,
+                            fontSize: 12, fontWeight: FontWeight.w700,
+                            letterSpacing: 2.0, color: mutedColor,
                           ),
                         ),
                       ],
@@ -522,19 +551,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (_locations.length > 1)
                           GestureDetector(
                             onTap: _pickLocation,
-                            child: const Padding(
-                              padding: EdgeInsets.only(right: 8),
-                              child: Icon(Icons.menu, size: 22, color: AppColors.textMuted),
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Icon(Icons.menu, size: 22, color: mutedColor),
                             ),
                           ),
                         Expanded(
                           child: Text(
                             _currentLocationName,
                             style: GoogleFonts.manrope(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -1.0,
-                              color: AppColors.textMain,
+                              fontSize: 22, fontWeight: FontWeight.w800,
+                              letterSpacing: -1.0, color: mainColor,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -559,28 +586,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   childAspectRatio: 1,
                   children: [
                     _HeroTile(
-                      icon: Icons.inventory_2_outlined,
-                      label: 'Inventory',
-                      teal: false,
+                      icon: Icons.inventory_2_outlined, label: 'Inventory',
+                      teal: false, cardColor: cardColor, cardHigh: cardHigh, mainColor: mainColor,
                       onTap: () => _push(const InventoryLookupScreen()),
                     ),
                     _HeroTile(
-                      icon: Icons.precision_manufacturing_outlined,
-                      label: 'Operations',
-                      teal: true,
+                      icon: Icons.precision_manufacturing_outlined, label: 'Operations',
+                      teal: true, cardColor: cardColor, cardHigh: cardHigh, mainColor: mainColor,
                       onTap: () => _push(const TransferSlipsScreen()),
                     ),
                     _HeroTile(
-                      icon: Icons.qr_code_scanner,
-                      label: 'Bin Assign',
-                      teal: false,
-                      highSurface: true,
+                      icon: Icons.qr_code_scanner, label: 'Bin Assign',
+                      teal: false, highSurface: true, cardColor: cardColor, cardHigh: cardHigh, mainColor: mainColor,
                       onTap: () => _push(const FastPutawayScreen()),
                     ),
                     _HeroTile(
-                      icon: Icons.local_shipping_outlined,
-                      label: 'Transfers',
-                      teal: false,
+                      icon: Icons.local_shipping_outlined, label: 'Transfers',
+                      teal: false, cardColor: cardColor, cardHigh: cardHigh, mainColor: mainColor,
                       onTap: () => _push(const BarcodeIntakeScreen()),
                     ),
                   ],
@@ -598,10 +620,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Text(
                       'HARDWARE PULSE',
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2.0,
-                        color: AppColors.textMuted,
+                        fontSize: 12, fontWeight: FontWeight.w700,
+                        letterSpacing: 2.0, color: mutedColor,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -609,18 +629,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       crossAxisCount: 2,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8, crossAxisSpacing: 8,
                       childAspectRatio: 2.8,
                       children: [
-                        _PulseCard(
-                          label: 'Readers',
-                          value: readerConnected ? '1' : '0',
-                          active: readerConnected,
-                        ),
-                        const _PulseCard(label: 'Antennas', value: '—', active: false, noSource: true),
-                        const _PulseCard(label: 'Printers', value: '—', active: false, noSource: true),
-                        const _PulseCard(label: 'Handhelds', value: '—', active: false, noSource: true),
+                        _PulseCard(label: 'Readers', value: readerConnected ? '1' : '0',
+                          active: readerConnected, cardColor: cardColor, mainColor: mainColor, mutedColor: mutedColor),
+                        _PulseCard(label: 'Antennas', value: '—', active: false, noSource: true,
+                          cardColor: cardColor, mainColor: mainColor, mutedColor: mutedColor),
+                        _PulseCard(label: 'Printers', value: '—', active: false, noSource: true,
+                          cardColor: cardColor, mainColor: mainColor, mutedColor: mutedColor),
+                        _PulseCard(label: 'Handhelds', value: '—', active: false, noSource: true,
+                          cardColor: cardColor, mainColor: mainColor, mutedColor: mutedColor),
                       ],
                     ),
                   ],
@@ -629,20 +648,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
 
             // ── F. Operator + Throughput ──────────────────────────────
-            const SliverToBoxAdapter(
+            SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                 child: Row(
                   children: [
-                    Expanded(
-                      child: _InfoCard(label: 'Operator', value: '—', trailing: null),
-                    ),
-                    SizedBox(width: 12),
+                    const Expanded(child: _InfoCard(label: 'Operator', value: '—')),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _InfoCard(
-                        label: 'Throughput',
-                        value: '—',
-                        trailing: Icon(Icons.trending_up, color: AppColors.textMuted, size: 18),
+                        label: 'Throughput', value: '—',
+                        trailing: Icon(Icons.trending_up, color: mutedColor, size: 18),
                       ),
                     ),
                   ],
@@ -654,25 +670,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
-                child: Text(
-                  'MORE TOOLS',
+                child: Text('MORE TOOLS',
                   style: GoogleFonts.spaceGrotesk(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.0,
-                    color: AppColors.textMuted,
-                  ),
-                ),
+                    fontSize: 12, fontWeight: FontWeight.w700,
+                    letterSpacing: 2.0, color: mutedColor)),
               ),
             ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 32),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 1.1,
+                  crossAxisCount: 3, mainAxisSpacing: 8,
+                  crossAxisSpacing: 8, childAspectRatio: 1.1,
                 ),
                 delegate: SliverChildListDelegate([
                   _SmallTile(icon: LucideIcons.layers,        label: 'Putaway',   onTap: () => _push(const FastPutawayScreen())),
@@ -717,6 +726,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // BOTTOM NAV
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildBottomNav(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     const items = [
       (icon: Icons.dashboard, label: 'Dash'),
       (icon: Icons.inventory_2_outlined, label: 'Stock'),
@@ -726,10 +736,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Container(
       height: 72 + MediaQuery.of(context).padding.bottom,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFEDF2F1), width: 1)),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C2828) : Colors.white,
+        border: Border(top: BorderSide(color: isDark ? Colors.white12 : const Color(0xFFEDF2F1), width: 1)),
+        boxShadow: isDark ? null : const [
           BoxShadow(color: Color(0x0A000000), blurRadius: 24, offset: Offset(0, -8)),
         ],
       ),
@@ -746,7 +756,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                   decoration: BoxDecoration(
-                    color: active ? _surfaceContainerHigh : Colors.transparent,
+                    color: active
+                        ? (isDark ? const Color(0xFF243030) : _surfaceContainerHigh)
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Column(
@@ -800,7 +812,8 @@ class _DrawerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = color ?? AppColors.textMain;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = color ?? (isDark ? const Color(0xFFE0ECEC) : AppColors.textMain);
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -836,6 +849,9 @@ class _StatCard extends StatelessWidget {
   const _StatCard({
     required this.label,
     required this.value,
+    required this.cardColor,
+    required this.mainColor,
+    required this.mutedColor,
     this.dot = false,
     this.dotColor,
     this.onTap,
@@ -843,6 +859,9 @@ class _StatCard extends StatelessWidget {
 
   final String label;
   final String value;
+  final Color cardColor;
+  final Color mainColor;
+  final Color mutedColor;
   final bool dot;
   final Color? dotColor;
   final VoidCallback? onTap;
@@ -854,10 +873,7 @@ class _StatCard extends StatelessWidget {
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: _surfaceContainerLow,
-            borderRadius: BorderRadius.circular(4),
-          ),
+          decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(4)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -865,37 +881,26 @@ class _StatCard extends StatelessWidget {
                 children: [
                   if (dot)
                     Container(
-                      width: 8,
-                      height: 8,
+                      width: 8, height: 8,
                       margin: const EdgeInsets.only(right: 6),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: dotColor ?? AppColors.textMuted,
+                        color: dotColor ?? mutedColor,
                       ),
                     ),
                   Flexible(
-                    child: Text(
-                      label,
+                    child: Text(label,
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.4,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
+                        fontSize: 12, fontWeight: FontWeight.w700,
+                        letterSpacing: 1.4, color: mutedColor)),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
-              Text(
-                value,
+              Text(value,
                 style: GoogleFonts.manrope(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
-                  color: AppColors.textMain,
-                ),
-              ),
+                  fontSize: 28, fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5, color: mainColor)),
             ],
           ),
         ),
@@ -910,6 +915,9 @@ class _HeroTile extends StatelessWidget {
     required this.label,
     required this.teal,
     required this.onTap,
+    required this.cardColor,
+    required this.cardHigh,
+    required this.mainColor,
     this.highSurface = false,
   });
 
@@ -918,18 +926,19 @@ class _HeroTile extends StatelessWidget {
   final bool teal;
   final bool highSurface;
   final VoidCallback onTap;
+  final Color cardColor;
+  final Color cardHigh;
+  final Color mainColor;
 
   @override
   Widget build(BuildContext context) {
     final bg = teal
         ? AppColors.primary
-        : highSurface
-            ? _surfaceContainerHigh
-            : _surfaceContainerLow;
-    final fg = teal ? Colors.white : AppColors.textMain;
+        : highSurface ? cardHigh : cardColor;
+    final fg = teal ? Colors.white : mainColor;
     final watermarkColor = teal
         ? Colors.white.withValues(alpha: 0.12)
-        : AppColors.textMain.withValues(alpha: 0.05);
+        : mainColor.withValues(alpha: 0.07);
 
     return Material(
       color: bg,
@@ -976,6 +985,9 @@ class _PulseCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.active,
+    required this.cardColor,
+    required this.mainColor,
+    required this.mutedColor,
     this.noSource = false,
   });
 
@@ -983,25 +995,22 @@ class _PulseCard extends StatelessWidget {
   final String value;
   final bool active;
   final bool noSource;
+  final Color cardColor;
+  final Color mainColor;
+  final Color mutedColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: _surfaceContainerLow,
-        borderRadius: BorderRadius.circular(2),
-      ),
+      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(2)),
       child: Row(
         children: [
           Container(
-            width: 7,
-            height: 7,
+            width: 7, height: 7,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: active
-                  ? AppColors.primary
-                  : AppColors.textMuted.withValues(alpha: 0.2),
+              color: active ? AppColors.primary : mutedColor.withValues(alpha: 0.3),
             ),
           ),
           const SizedBox(width: 10),
@@ -1009,25 +1018,14 @@ class _PulseCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                label.toUpperCase(),
+              Text(label.toUpperCase(),
                 style: GoogleFonts.spaceGrotesk(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.0,
-                  color: AppColors.textMuted,
-                ),
-              ),
-              Text(
-                value,
+                  fontSize: 11, fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0, color: mutedColor)),
+              Text(value,
                 style: GoogleFonts.manrope(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: noSource
-                      ? AppColors.textMain.withValues(alpha: 0.6)
-                      : AppColors.textMain,
-                ),
-              ),
+                  fontSize: 15, fontWeight: FontWeight.w700,
+                  color: noSource ? mainColor.withValues(alpha: 0.6) : mainColor)),
             ],
           ),
         ],
@@ -1037,11 +1035,7 @@ class _PulseCard extends StatelessWidget {
 }
 
 class _InfoCard extends StatelessWidget {
-  const _InfoCard({
-    required this.label,
-    required this.value,
-    this.trailing,
-  });
+  const _InfoCard({required this.label, required this.value, this.trailing});
 
   final String label;
   final String value;
@@ -1049,36 +1043,28 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1C2828) : _surfaceContainerLow;
+    final mainColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
+    final mutedColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _surfaceContainerLow,
-        borderRadius: BorderRadius.circular(2),
-      ),
+      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(2)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label.toUpperCase(),
+          Text(label.toUpperCase(),
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.5,
-              color: AppColors.textMuted,
-            ),
-          ),
+              fontSize: 12, fontWeight: FontWeight.w700,
+              letterSpacing: 1.5, color: mutedColor)),
           const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
-                child: Text(
-                  value,
+                child: Text(value,
                   style: GoogleFonts.manrope(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMain.withValues(alpha: 0.6),
-                  ),
-                ),
+                    fontSize: 15, fontWeight: FontWeight.w700,
+                    color: mainColor.withValues(alpha: 0.6))),
               ),
               if (trailing != null) trailing!,
             ],
@@ -1090,11 +1076,7 @@ class _InfoCard extends StatelessWidget {
 }
 
 class _SmallTile extends StatelessWidget {
-  const _SmallTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
+  const _SmallTile({required this.icon, required this.label, required this.onTap});
 
   final IconData icon;
   final String label;
@@ -1102,8 +1084,12 @@ class _SmallTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1C2828) : _surfaceContainerLow;
+    final iconColor = isDark ? const Color(0xFF7A9090) : AppColors.slateAction;
+    final textColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
     return Material(
-      color: _surfaceContainerLow,
+      color: cardColor,
       borderRadius: BorderRadius.circular(2),
       child: InkWell(
         onTap: onTap,
@@ -1113,17 +1099,12 @@ class _SmallTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 20, color: AppColors.slateAction),
+              Icon(icon, size: 20, color: iconColor),
               const Spacer(),
-              Text(
-                label.toUpperCase(),
+              Text(label.toUpperCase(),
                 style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                  color: AppColors.textMuted,
-                ),
-              ),
+                  fontSize: 11, fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6, color: textColor)),
             ],
           ),
         ),
