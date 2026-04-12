@@ -86,10 +86,8 @@ class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
     final m = context.watch<RfidManager>();
 
     return CarbonScaffold(
+      pageTitle: 'INVENTORY CSV',
       bottomBar: TacticalBottomBar(
-        children: [
-          TacticalEmeraldButton(
-            label: 'SIMULATE RFID TAG',
             onPressed: () => m.addSimulatedEpc(randomDemoEpc()),
           ),
           TacticalSlateButton(

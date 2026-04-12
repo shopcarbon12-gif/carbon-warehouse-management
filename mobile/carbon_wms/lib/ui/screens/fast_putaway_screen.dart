@@ -141,6 +141,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
+      pageTitle: 'FAST PUTAWAY',
       body: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         color: _flashOk ? const Color(0xFFD1FAE5) : AppColors.background,

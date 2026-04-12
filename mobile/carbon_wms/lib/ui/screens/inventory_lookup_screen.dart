@@ -152,6 +152,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
+      pageTitle: 'LOOKUP',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

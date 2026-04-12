@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
@@ -106,7 +107,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
-      title: 'Handheld settings',
+      pageTitle: 'SETTINGS',
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -173,6 +174,49 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             ),
           ],
           const SizedBox(height: 24),
+          const Divider(height: 32),
+          Consumer<RfidManager>(
+            builder: (ctx, rfid, _) {
+              final linked = rfid.activeScanner != null;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  linked ? Icons.rss_feed : Icons.rss_feed_outlined,
+                  color: linked ? AppColors.primary : AppColors.textMuted,
+                ),
+                title: const Text(
+                  'RFID Hardware',
+                  style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  linked ? 'Scanner linked — ready' : 'N/A — no hardware scanner linked',
+                  style: TextStyle(
+                    color: linked ? AppColors.primary : AppColors.textMuted,
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                ),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: linked
+                        ? AppColors.primary.withValues(alpha: 0.12)
+                        : AppColors.textMuted.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    linked ? 'LINKED' : 'N/A',
+                    style: TextStyle(
+                      color: linked ? AppColors.primary : AppColors.textMuted,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           const Divider(height: 32),
           Consumer<MobileSettingsRepository>(
             builder: (ctx, settings, _) {
