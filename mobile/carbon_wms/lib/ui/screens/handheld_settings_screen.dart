@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
+import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -114,10 +115,10 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             builder: (context, snap) {
               final p = snap.data;
               return ListTile(
-                title: const Text('App version'),
+                title: const Text('App version', style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600)),
                 subtitle: Text(
                   p == null ? '…' : '${p.version} · build ${p.buildNumber}',
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  style: const TextStyle(color: AppColors.textMuted, fontFamily: 'monospace', fontSize: 12),
                 ),
               );
             },
@@ -127,7 +128,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             builder: (context, snap) {
               final u = snap.data ?? '';
               return ListTile(
-                title: const Text('WMS server'),
+                title: const Text('WMS server', style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600)),
                 subtitle: SelectableText(
                   u.isEmpty ? '(not configured)' : u,
                   style: const TextStyle(
@@ -173,9 +174,44 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
           ],
           const SizedBox(height: 24),
           const Divider(height: 32),
+          Consumer<MobileSettingsRepository>(
+            builder: (ctx, settings, _) {
+              final power = settings.config.transferOutAntennaPower;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'RFID Antenna Power',
+                    style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$power dBm',
+                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 20),
+                  ),
+                  Slider(
+                    value: power.toDouble(),
+                    min: 0,
+                    max: 30,
+                    divisions: 30,
+                    activeColor: AppColors.primary,
+                    label: '$power dBm',
+                    onChanged: (v) => settings.setGlobalAntennaPower(v.round()),
+                  ),
+                  const Text(
+                    'Applies to transfer-in and transfer-out scans.',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.4),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          const Divider(height: 32),
           const Text(
             'Biometric sign-in',
             style: TextStyle(
+              color: AppColors.textMain,
               fontWeight: FontWeight.w700,
               fontSize: 13,
               letterSpacing: 0.5,
@@ -199,7 +235,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
           else ...[
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Fingerprint or face sign-in'),
+              title: const Text('Fingerprint or face sign-in', style: TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600)),
               subtitle: Text(
                 _bioEnrolled
                     ? 'Biometric sign-in is enabled. Logging out keeps fingerprint/face sign-in; turn off here to clear the saved session token.'

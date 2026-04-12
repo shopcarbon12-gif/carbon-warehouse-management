@@ -73,6 +73,70 @@ abstract final class AppTheme {
     );
   }
 
+  static ThemeData get dark {
+    const bg = Color(0xFF111A1A);
+    const surface = Color(0xFF1C2828);
+    const primary = Color(0xFF4DB6AC);
+    const textMain = Color(0xFFE0ECEC);
+    const textMuted = Color(0xFF7A9090);
+
+    final base = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: bg,
+      colorScheme: const ColorScheme.dark(
+        surface: surface,
+        primary: primary,
+        onPrimary: Colors.black,
+        secondary: Color(0xFF6A8080),
+        onSurface: textMain,
+        error: Color(0xFFEF4444),
+      ),
+    );
+
+    return base.copyWith(
+      appBarTheme: AppBarTheme(
+        elevation: 0,
+        centerTitle: false,
+        backgroundColor: bg,
+        foregroundColor: textMain,
+        titleTextStyle: GoogleFonts.inter(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
+          color: textMain,
+        ),
+      ),
+      drawerTheme: const DrawerThemeData(backgroundColor: surface),
+      textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
+        bodyColor: textMain,
+        displayColor: textMain,
+      ),
+      cardTheme: CardThemeData(
+        color: surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: const Color(0xFF243030),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF3A5050)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF3A5050)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: primary, width: 2),
+        ),
+        labelStyle: const TextStyle(color: textMuted),
+      ),
+    );
+  }
+
   /// Headline: bold, uppercase, tight tracking (industrial).
   static TextStyle headline(BuildContext context) {
     return GoogleFonts.inter(

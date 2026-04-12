@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
+import 'package:carbon_wms/services/theme_notifier.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/app_auth_gate.dart';
 
@@ -12,8 +13,27 @@ void main() {
   runApp(const CarbonWmsRoot());
 }
 
-class CarbonWmsRoot extends StatelessWidget {
+class CarbonWmsRoot extends StatefulWidget {
   const CarbonWmsRoot({super.key});
+
+  @override
+  State<CarbonWmsRoot> createState() => _CarbonWmsRootState();
+}
+
+class _CarbonWmsRootState extends State<CarbonWmsRoot> {
+  final _themeNotifier = ThemeNotifier();
+
+  @override
+  void initState() {
+    super.initState();
+    _themeNotifier.load();
+  }
+
+  @override
+  void dispose() {
+    _themeNotifier.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,12 +51,17 @@ class CarbonWmsRoot extends StatelessWidget {
             );
           },
         ),
+        ChangeNotifierProvider<ThemeNotifier>.value(value: _themeNotifier),
       ],
-      child: MaterialApp(
-        title: 'CarbonWMS',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        home: const AppAuthGate(),
+      child: Consumer<ThemeNotifier>(
+        builder: (_, notifier, __) => MaterialApp(
+          title: 'CarbonWMS',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: notifier.mode,
+          home: const AppAuthGate(),
+        ),
       ),
     );
   }

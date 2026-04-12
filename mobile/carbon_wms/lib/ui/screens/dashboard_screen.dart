@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -8,8 +9,8 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
-import 'package:carbon_wms/services/handheld_runtime_config.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
+import 'package:carbon_wms/services/theme_notifier.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/barcode_intake_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
@@ -21,8 +22,11 @@ import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
-import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/ota_update_dialog.dart';
+
+// ─── palette additions (dashboard only) ────────────────────────────────────
+const Color _surfaceContainerLow  = Color(0xFFEEF4F3);
+const Color _surfaceContainerHigh = Color(0xFFE2EEEC);
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
@@ -34,7 +38,6 @@ class DashboardScreen extends StatefulWidget {
 
   final Future<void> Function()? onLogout;
   final String? otaDownloadUrl;
-  /// Server label from `/api/mobile/status` (e.g. OTA release version).
   final String? otaLatestVersion;
 
   @override
@@ -48,6 +51,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _otaLatestVersion;
   bool _otaPeriodicDialogShown = false;
 
+  int _navIndex = 0;
+
+  // dashboard stats
+  int? _inventoryUnits;
+  int? _orderOpen;
+  bool _statsLoading = false;
+
+  // user identity
+  String? _userEmail;
+
+  // locations
+  List<Map<String, String>> _locations = [];
+  String _currentLocationName = 'Orlando Warehouse';
+
   @override
   void initState() {
     super.initState();
@@ -56,8 +73,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_syncMobileSettings());
       unawaited(_refreshOtaHints(notifyUser: false));
+      unawaited(_loadUserEmail());
+      unawaited(_loadLocations());
+      unawaited(_refreshDashboardStats());
       _otaPoll = Timer.periodic(const Duration(minutes: 3), (_) {
         unawaited(_refreshOtaHints(notifyUser: true));
+        unawaited(_refreshDashboardStats());
       });
     });
   }
@@ -76,6 +97,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     if (widget.otaLatestVersion != oldWidget.otaLatestVersion) {
       _otaLatestVersion = widget.otaLatestVersion;
+    }
+  }
+
+  Future<void> _loadLocations() async {
+    if (!mounted) return;
+    try {
+      final api = context.read<WmsApiClient>();
+      final locs = await api.fetchSessionLocations();
+      if (!mounted) return;
+      setState(() {
+        _locations = locs;
+        if (locs.isNotEmpty) _currentLocationName = locs.first['name'] ?? locs.first['code'] ?? _currentLocationName;
+      });
+    } catch (_) {}
+  }
+
+  void _pickLocation() {
+    if (_locations.length <= 1) return;
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (ctx) => ListView(
+        shrinkWrap: true,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Text('Select Location', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
+          ..._locations.map((loc) {
+            final name = loc['name'] ?? loc['code'] ?? '';
+            final selected = name == _currentLocationName;
+            return ListTile(
+              title: Text(name),
+              trailing: selected ? const Icon(Icons.check, color: AppColors.primary) : null,
+              onTap: () {
+                setState(() => _currentLocationName = name);
+                Navigator.pop(ctx);
+              },
+            );
+          }),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _loadUserEmail() async {
+    if (!mounted) return;
+    final api = context.read<WmsApiClient>();
+    final email = await api.getSavedLoginEmail();
+    if (!mounted) return;
+    setState(() => _userEmail = email);
+  }
+
+  Future<void> _refreshDashboardStats() async {
+    if (!mounted || _statsLoading) return;
+    if (mounted) setState(() => _statsLoading = true);
+    try {
+      final api = context.read<WmsApiClient>();
+      final stats = await api.fetchDashboardStats();
+      if (!mounted) return;
+      setState(() {
+        _inventoryUnits = (stats['inventory_units'] as num?)?.toInt();
+        _orderOpen = (stats['order_open'] as num?)?.toInt();
+        _statsLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _statsLoading = false);
     }
   }
 
@@ -98,9 +187,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         androidId: androidId.isEmpty || androidId == 'HANDHELD_OFFLINE' ? null : androidId,
       );
       final url = (st['downloadUrl'] as String?)?.trim();
-      final upd = st['updateAvailable'] == true;
       final latestRaw = st['latestVersion'];
       final latest = latestRaw is String ? latestRaw.trim() : '';
+      // Only treat as update if server version is strictly newer than installed.
+      final serverNewer = latest.isNotEmpty && _isVersionNewer(latest, info.version);
+      final upd = st['updateAvailable'] == true && serverNewer;
       if (!mounted) return;
       setState(() {
         _effectiveOtaUrl = (url != null && url.isNotEmpty) ? url : null;
@@ -127,9 +218,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
       }
-    } catch (_) {
-      /* keep last known OTA URL */
-    }
+    } catch (_) {}
   }
 
   String? get _otaForInstall {
@@ -138,313 +227,870 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return u.trim();
   }
 
-  Future<void> _installOta(BuildContext context) async {
+  Future<void> _installOta(BuildContext ctx) async {
     final url = _otaForInstall;
-    if (url == null || url.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (url == null) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
         const SnackBar(
           content: Text(
-            'No OTA URL — set an active release in WMS → Settings → Mobile OTA, '
-            'and ensure this device is authorized.',
+            'No OTA URL — upload an active APK in WMS (Settings → Mobile OTA) '
+            'and authorize this device.',
           ),
         ),
       );
       return;
     }
     try {
-      await context.read<WmsApiClient>().downloadAndInstallApk(url);
+      await ctx.read<WmsApiClient>().downloadAndInstallApk(url);
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('$e')));
       }
     }
   }
 
+  void _push(Widget screen) =>
+      Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => screen));
+
+  void _onNavTap(int idx) {
+    if (idx == _navIndex) return;
+    setState(() => _navIndex = idx);
+    switch (idx) {
+      case 1:
+        _push(const InventoryLookupScreen());
+      case 2:
+        _push(const TransferSlipsScreen());
+      case 3:
+        _push(const EncodeSuiteScreen(initialTab: 0));
+    }
+    setState(() => _navIndex = 0);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return CarbonScaffold(
-      title: 'Carbon WMS',
-      actions: [
-        IconButton(
-          tooltip: 'Handheld settings',
-          icon: const Icon(Icons.settings_outlined),
-          onPressed: () => Navigator.of(context).push<void>(
-            MaterialPageRoute<void>(builder: (_) => const HandheldSettingsScreen()),
-          ),
-        ),
-        Consumer<MobileSettingsRepository>(
-          builder: (context, settings, _) {
-            final p = settings.config.transferOutAntennaPower
-                .toDouble()
-                .clamp(0.0, kAntennaPowerDbmMax.toDouble());
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Tooltip(
-                  message: 'RF power (0–30 dBm)',
-                  child: Icon(Icons.settings_input_antenna, size: 20),
-                ),
-                SizedBox(
-                  width: 130,
-                  child: Slider(
-                    value: p,
-                    min: 0,
-                    max: kAntennaPowerDbmMax.toDouble(),
-                    divisions: kAntennaPowerDbmMax,
-                    label: '${p.round()} dBm',
-                    onChanged: (v) async {
-                      await settings.setGlobalAntennaPower(v.round());
-                      if (context.mounted) {
-                        await context.read<RfidManager>().reapplyHandheldHardwareSettings();
-                      }
-                    },
-                  ),
-                ),
-                Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.center,
-                  children: [
-                    IconButton(
-                      tooltip: 'Download & install update',
-                      icon: const Icon(Icons.system_update_alt),
-                      onPressed: () => _installOta(context),
-                    ),
-                    if (_updateAvailable)
-                      Positioned(
-                        right: 6,
-                        top: 10,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: AppColors.success,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.background, width: 1),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                if (widget.onLogout != null)
-                  IconButton(
-                    tooltip: 'Sign out',
-                    icon: const Icon(Icons.logout),
-                    onPressed: () => widget.onLogout!(),
-                  ),
-              ],
-            );
-          },
-        ),
-      ],
-      body: Column(
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: _buildAppBar(context),
+      drawer: _buildDrawer(context),
+      body: _buildBody(context),
+      bottomNavigationBar: _buildBottomNav(context),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DRAWER
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildDrawer(BuildContext context) {
+    final rawName = (_userEmail?.split('@').first ?? '').replaceAll('.', ' ');
+    final displayName = rawName.isEmpty
+        ? 'Operator'
+        : rawName.split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+    final email = _userEmail ?? '—';
+
+    return Drawer(
+      backgroundColor: Colors.white,
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-                  sliver: SliverToBoxAdapter(
-                    child: Text('MODULES', style: AppTheme.headline(context)),
-                  ),
+          // ── Colored user header ──────────────────────────────────────
+          Container(
+            width: double.infinity,
+            color: AppColors.primary,
+            padding: EdgeInsets.fromLTRB(24, MediaQuery.of(context).padding.top + 32, 24, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                CircleAvatar(
+                  radius: 52,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                  child: const Icon(Icons.person, size: 58, color: Colors.white),
                 ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverToBoxAdapter(
-                    child: Text(
-                      'Inventory',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppColors.textMuted,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
+                const SizedBox(height: 20),
+                Text(
+                  displayName,
+                  style: GoogleFonts.manrope(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  sliver: SliverGrid(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 1.05,
-                    ),
-                    delegate: SliverChildListDelegate([
-                      _DashCard(
-                        icon: LucideIcons.search,
-                        label: 'Item Lookup',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(builder: (_) => const InventoryLookupScreen()),
-                        ),
-                      ),
-                      _DashCard(
-                        icon: LucideIcons.inbox,
-                        label: 'Non-RFID Intake',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(builder: (_) => const BarcodeIntakeScreen()),
-                        ),
-                      ),
-                      _DashCard(
-                        icon: LucideIcons.layers,
-                        label: 'Fast bin putaway',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(builder: (_) => const FastPutawayScreen()),
-                        ),
-                      ),
-                      _DashCard(
-                        icon: LucideIcons.trash2,
-                        label: 'Clean bin',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(builder: (_) => const CleanBinScreen()),
-                        ),
-                      ),
-                      _DashCard(
-                        icon: LucideIcons.fileUp,
-                        label: 'CSV cycle session',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(builder: (_) => const InventoryCsvSessionScreen()),
-                        ),
-                      ),
-                    ]),
+                const SizedBox(height: 6),
+                Text(
+                  email,
+                  style: GoogleFonts.manrope(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withValues(alpha: 0.8),
                   ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverToBoxAdapter(
-                    child: Text(
-                      'Operations',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppColors.textMuted,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  sliver: SliverGrid(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 1.05,
-                    ),
-                    delegate: SliverChildListDelegate([
-                      _DashCard(
-                        icon: LucideIcons.radio,
-                        label: 'Locate tag (Geiger)',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(builder: (_) => const LocateTagScreen()),
-                        ),
-                      ),
-                      _DashCard(
-                        icon: LucideIcons.arrowLeftRight,
-                        label: 'Transfer slips',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(builder: (_) => const TransferSlipsScreen()),
-                        ),
-                      ),
-                      _DashCard(
-                        icon: LucideIcons.clipboardList,
-                        label: 'Change Status',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(builder: (_) => const StatusChangeScreen()),
-                        ),
-                      ),
-                    ]),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverToBoxAdapter(
-                    child: Text(
-                      'Encode',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppColors.textMuted,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                  sliver: SliverGrid(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 1.05,
-                    ),
-                    delegate: SliverChildListDelegate([
-                      _DashCard(
-                        icon: LucideIcons.scanLine,
-                        label: 'Search & Encode',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const EncodeSuiteScreen(initialTab: 0),
-                          ),
-                        ),
-                      ),
-                      _DashCard(
-                        icon: LucideIcons.printer,
-                        label: 'Scan & Print',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const EncodeSuiteScreen(initialTab: 1),
-                          ),
-                        ),
-                      ),
-                      _DashCard(
-                        icon: LucideIcons.upload,
-                        label: 'Upload',
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const EncodeSuiteScreen(initialTab: 2),
-                          ),
-                        ),
-                      ),
-                    ]),
-                  ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          if (_otaForInstall == null)
-            Material(
-              color: AppColors.surface,
-              elevation: 6,
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_amber_rounded, color: AppColors.textMuted, size: 20),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'No OTA URL — upload an active APK in WMS (Settings → Mobile OTA) '
-                          'and authorize this device.',
-                          style: TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.35),
+          const SizedBox(height: 20),
+            _DrawerItem(
+              icon: Icons.settings_outlined,
+              label: 'Settings',
+              onTap: () {
+                Navigator.pop(context);
+                _push(const HandheldSettingsScreen());
+              },
+            ),
+            const SizedBox(height: 4),
+            _DrawerItem(
+              icon: Icons.sync,
+              label: 'Refresh Settings / Permissions',
+              onTap: () {
+                Navigator.pop(context);
+                unawaited(_syncMobileSettings());
+                unawaited(_refreshDashboardStats());
+              },
+            ),
+            const SizedBox(height: 4),
+            Consumer<ThemeNotifier>(
+              builder: (_, notifier, __) => _DrawerItem(
+                icon: Icons.palette_outlined,
+                label: 'Switch Theme',
+                onTap: () => notifier.toggle(),
+              ),
+            ),
+            const Spacer(),
+            _DrawerItem(
+              icon: Icons.power_settings_new,
+              label: 'Sign Out',
+              color: const Color(0xFFEF4444),
+              large: true,
+              onTap: () {
+                Navigator.pop(context);
+                widget.onLogout!();
+              },
+            ),
+            const SizedBox(height: 80),
+          ],
+        ),
+      );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // APP BAR
+  // ═══════════════════════════════════════════════════════════════════════════
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
+      leadingWidth: 56,
+      leading: Builder(
+        builder: (ctx) => Center(
+          child: Padding(
+            padding: const EdgeInsets.only(left: 14),
+            child: GestureDetector(
+              onTap: () => Scaffold.of(ctx).openDrawer(),
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/carbon_logo.png',
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      titleSpacing: 6,
+      title: Text(
+        'CarbonWMS',
+        style: GoogleFonts.manrope(
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.3,
+          color: AppColors.textMain,
+        ),
+      ),
+      actions: [
+        Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            IconButton(
+              tooltip: 'Download & install update',
+              icon: const Icon(Icons.system_update_alt, size: 27),
+              color: AppColors.textMuted,
+              onPressed: () => _installOta(context),
+            ),
+            if (_updateAvailable)
+              Positioned(
+                right: 6,
+                top: 10,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: AppColors.success,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        if (widget.onLogout != null)
+          IconButton(
+            tooltip: 'Sign out',
+            icon: const Icon(Icons.power_settings_new, size: 27),
+            color: AppColors.textMuted,
+            onPressed: () => widget.onLogout!(),
+          ),
+        const SizedBox(width: 4),
+      ],
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BODY
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildBody(BuildContext context) {
+    return Consumer2<RfidManager, MobileSettingsRepository>(
+      builder: (context, rfid, settings, _) {
+        final readerConnected = rfid.activeScanner != null;
+        final synced = settings.lastSyncRoot != null;
+
+        return CustomScrollView(
+          slivers: [
+            // ── B. Stat cards ──────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: Row(
+                  children: [
+                    _StatCard(
+                      label: 'LIVE SCAN',
+                      value: '0',
+                      dot: true,
+                      dotColor: readerConnected ? Colors.green : AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 8),
+                    _StatCard(
+                      label: 'INVENTORY',
+                      value: _statsLoading
+                          ? '…'
+                          : (_inventoryUnits != null
+                              ? _fmtNum(_inventoryUnits!)
+                              : (synced ? '—' : '—')),
+                      onTap: () => _push(const InventoryLookupScreen()),
+                    ),
+                    const SizedBox(width: 8),
+                    _StatCard(
+                      label: 'RECEIVING',
+                      value: _statsLoading ? '…' : (_orderOpen?.toString() ?? '—'),
+                      onTap: () => _push(const TransferSlipsScreen()),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── C. Locations block ────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        if (_locations.length > 1) const SizedBox(width: 30),
+                        Text(
+                          'LOCATIONS',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 2.0,
+                            color: AppColors.textMuted,
+                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (_locations.length > 1)
+                          GestureDetector(
+                            onTap: _pickLocation,
+                            child: const Padding(
+                              padding: EdgeInsets.only(right: 8),
+                              child: Icon(Icons.menu, size: 22, color: AppColors.textMuted),
+                            ),
+                          ),
+                        Expanded(
+                          child: Text(
+                            _currentLocationName,
+                            style: GoogleFonts.manrope(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -1.0,
+                              color: AppColors.textMain,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── D. 2×2 Hero tile grid ─────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              sliver: SliverToBoxAdapter(
+                child: GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1,
+                  children: [
+                    _HeroTile(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Inventory',
+                      teal: false,
+                      onTap: () => _push(const InventoryLookupScreen()),
+                    ),
+                    _HeroTile(
+                      icon: Icons.precision_manufacturing_outlined,
+                      label: 'Operations',
+                      teal: true,
+                      onTap: () => _push(const TransferSlipsScreen()),
+                    ),
+                    _HeroTile(
+                      icon: Icons.qr_code_scanner,
+                      label: 'Bin Assign',
+                      teal: false,
+                      highSurface: true,
+                      onTap: () => _push(const FastPutawayScreen()),
+                    ),
+                    _HeroTile(
+                      icon: Icons.local_shipping_outlined,
+                      label: 'Transfers',
+                      teal: false,
+                      onTap: () => _push(const BarcodeIntakeScreen()),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── E. Hardware Pulse ─────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'HARDWARE PULSE',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2.0,
+                        color: AppColors.textMuted,
                       ),
-                      TextButton(
-                        onPressed: () => unawaited(_refreshOtaHints(notifyUser: false)),
-                        child: const Text('Retry'),
+                    ),
+                    const SizedBox(height: 12),
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                      childAspectRatio: 2.8,
+                      children: [
+                        _PulseCard(
+                          label: 'Readers',
+                          value: readerConnected ? '1' : '0',
+                          active: readerConnected,
+                        ),
+                        const _PulseCard(label: 'Antennas', value: '—', active: false, noSource: true),
+                        const _PulseCard(label: 'Printers', value: '—', active: false, noSource: true),
+                        const _PulseCard(label: 'Handhelds', value: '—', active: false, noSource: true),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── F. Operator + Throughput ──────────────────────────────
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _InfoCard(label: 'Operator', value: '—', trailing: null),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: _InfoCard(
+                        label: 'Throughput',
+                        value: '—',
+                        trailing: Icon(Icons.trending_up, color: AppColors.textMuted, size: 18),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── G. MORE TOOLS ─────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
+                child: Text(
+                  'MORE TOOLS',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2.0,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 32),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 1.1,
+                ),
+                delegate: SliverChildListDelegate([
+                  _SmallTile(icon: LucideIcons.layers,        label: 'Putaway',   onTap: () => _push(const FastPutawayScreen())),
+                  _SmallTile(icon: LucideIcons.trash2,        label: 'Clean Bin', onTap: () => _push(const CleanBinScreen())),
+                  _SmallTile(icon: LucideIcons.fileUp,        label: 'CSV',       onTap: () => _push(const InventoryCsvSessionScreen())),
+                  _SmallTile(icon: LucideIcons.radio,         label: 'Geiger',    onTap: () => _push(const LocateTagScreen())),
+                  _SmallTile(icon: LucideIcons.clipboardList, label: 'Status',    onTap: () => _push(const StatusChangeScreen())),
+                  _SmallTile(icon: LucideIcons.printer,       label: 'Print',     onTap: () => _push(const EncodeSuiteScreen(initialTab: 1))),
+                  _SmallTile(icon: LucideIcons.upload,        label: 'Upload',    onTap: () => _push(const EncodeSuiteScreen(initialTab: 2))),
+                ]),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Returns true only if [server] version is strictly greater than [installed].
+  bool _isVersionNewer(String server, String installed) {
+    List<int> parse(String v) =>
+        v.split('.').map((p) => int.tryParse(p) ?? 0).toList();
+    final s = parse(server);
+    final i = parse(installed);
+    final len = s.length > i.length ? s.length : i.length;
+    for (var x = 0; x < len; x++) {
+      final sv = x < s.length ? s[x] : 0;
+      final iv = x < i.length ? i[x] : 0;
+      if (sv > iv) return true;
+      if (sv < iv) return false;
+    }
+    return false;
+  }
+
+  String _fmtNum(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return n.toString();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BOTTOM NAV
+  // ═══════════════════════════════════════════════════════════════════════════
+  Widget _buildBottomNav(BuildContext context) {
+    const items = [
+      (icon: Icons.dashboard, label: 'Dash'),
+      (icon: Icons.inventory_2_outlined, label: 'Stock'),
+      (icon: Icons.precision_manufacturing_outlined, label: 'Ops'),
+      (icon: Icons.qr_code_scanner, label: 'Tags'),
+    ];
+
+    return Container(
+      height: 72 + MediaQuery.of(context).padding.bottom,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFEDF2F1), width: 1)),
+        boxShadow: [
+          BoxShadow(color: Color(0x0A000000), blurRadius: 24, offset: Offset(0, -8)),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: List.generate(items.length, (i) {
+            final item = items[i];
+            final active = i == _navIndex;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => _onNavTap(i),
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: active ? _surfaceContainerHigh : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        item.icon,
+                        size: 22,
+                        color: active ? AppColors.primary : AppColors.textMuted,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        item.label,
+                        style: GoogleFonts.manrope(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: active ? AppColors.primary : AppColors.textMuted,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WIDGETS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _DrawerItem extends StatelessWidget {
+  const _DrawerItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+    this.large = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool large;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = color ?? AppColors.textMain;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 26,
+              child: Icon(icon, size: large ? 26 : 24, color: fg),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.manrope(
+                  fontSize: large ? 17 : 14,
+                  fontWeight: large ? FontWeight.w800 : FontWeight.w700,
+                  letterSpacing: -0.1,
+                  color: fg,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.label,
+    required this.value,
+    this.dot = false,
+    this.dotColor,
+    this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final bool dot;
+  final Color? dotColor;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: _surfaceContainerLow,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (dot)
+                    Container(
+                      width: 8,
+                      height: 8,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: dotColor ?? AppColors.textMuted,
+                      ),
+                    ),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.4,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                value,
+                style: GoogleFonts.manrope(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: AppColors.textMain,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroTile extends StatelessWidget {
+  const _HeroTile({
+    required this.icon,
+    required this.label,
+    required this.teal,
+    required this.onTap,
+    this.highSurface = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool teal;
+  final bool highSurface;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = teal
+        ? AppColors.primary
+        : highSurface
+            ? _surfaceContainerHigh
+            : _surfaceContainerLow;
+    final fg = teal ? Colors.white : AppColors.textMain;
+    final watermarkColor = teal
+        ? Colors.white.withValues(alpha: 0.12)
+        : AppColors.textMain.withValues(alpha: 0.05);
+
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(2),
+      clipBehavior: Clip.hardEdge,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(2),
+        child: Stack(
+          children: [
+            Positioned(
+              right: 8,
+              bottom: 8,
+              child: Icon(icon, size: 92, color: watermarkColor),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(icon, size: 36, color: fg),
+                  Text(
+                    label.toUpperCase(),
+                    style: GoogleFonts.manrope(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.2,
+                      color: fg,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PulseCard extends StatelessWidget {
+  const _PulseCard({
+    required this.label,
+    required this.value,
+    required this.active,
+    this.noSource = false,
+  });
+
+  final String label;
+  final String value;
+  final bool active;
+  final bool noSource;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: _surfaceContainerLow,
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: active
+                  ? AppColors.primary
+                  : AppColors.textMuted.withValues(alpha: 0.2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              Text(
+                value,
+                style: GoogleFonts.manrope(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: noSource
+                      ? AppColors.textMain.withValues(alpha: 0.6)
+                      : AppColors.textMain,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _DashCard extends StatelessWidget {
-  const _DashCard({
+class _InfoCard extends StatelessWidget {
+  const _InfoCard({
+    required this.label,
+    required this.value,
+    this.trailing,
+  });
+
+  final String label;
+  final String value;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _surfaceContainerLow,
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.5,
+              color: AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  value,
+                  style: GoogleFonts.manrope(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMain.withValues(alpha: 0.6),
+                  ),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SmallTile extends StatelessWidget {
+  const _SmallTile({
     required this.icon,
     required this.label,
     required this.onTap,
@@ -457,24 +1103,25 @@ class _DashCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(14),
+      color: _surfaceContainerLow,
+      borderRadius: BorderRadius.circular(2),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
+        borderRadius: BorderRadius.circular(2),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 36, color: AppColors.primary),
+              Icon(icon, size: 20, color: AppColors.slateAction),
               const Spacer(),
               Text(
                 label.toUpperCase(),
-                style: AppTheme.headline(context).copyWith(
-                  color: AppColors.textMain,
-                  fontSize: 12,
-                  letterSpacing: 1.1,
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                  color: AppColors.textMuted,
                 ),
               ),
             ],

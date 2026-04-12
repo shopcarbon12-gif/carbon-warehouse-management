@@ -470,6 +470,26 @@ class WmsApiClient {
     return h;
   }
 
+  /// Active locations for the signed-in user (`GET /api/locations`) — returns [{code, name}].
+  Future<List<Map<String, String>>> fetchSessionLocations() async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/locations');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode == 401 || res.statusCode == 403) return [];
+    if (res.statusCode < 200 || res.statusCode >= 300) return [];
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) return [];
+    final out = <Map<String, String>>[];
+    for (final item in decoded) {
+      if (item is Map) {
+        final code = item['code']?.toString() ?? '';
+        final name = item['name']?.toString() ?? code;
+        if (code.isNotEmpty) out.add({'code': code, 'name': name});
+      }
+    }
+    return out;
+  }
+
   /// Active location codes for the signed-in user (`GET /api/locations`).
   Future<List<String>> fetchSessionLocationCodes() async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
@@ -757,6 +777,19 @@ class WmsApiClient {
     final decoded = jsonDecode(res.body);
     if (decoded is Map<String, dynamic>) return decoded;
     return <String, dynamic>{};
+  }
+
+  /// `GET /api/dashboard/summary` — inventory units, open orders, exceptions (Bearer auth).
+  Future<Map<String, dynamic>> fetchDashboardStats() async {
+    try {
+      final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+      final uri = Uri.parse('$base/api/dashboard/summary');
+      final res = await _http.get(uri, headers: await sessionAuthHeaders());
+      if (res.statusCode < 200 || res.statusCode >= 300) return {};
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {}
+    return {};
   }
 
   void close() => _http.close();
