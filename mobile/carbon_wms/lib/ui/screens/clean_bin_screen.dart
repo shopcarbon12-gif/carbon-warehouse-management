@@ -59,7 +59,6 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
-      pageTitle: 'CLEAN BIN',
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(

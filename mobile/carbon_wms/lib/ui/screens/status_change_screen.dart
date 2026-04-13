@@ -83,8 +83,11 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     final items = manager.sessionEpcs;
 
     return CarbonScaffold(
-      pageTitle: 'STATUS CHANGE',
       bottomBar: TacticalBottomBar(
+        children: [
+          TacticalEmeraldButton(
+            label: 'SIMULATE SCAN',
+            onPressed: () => manager.addSimulatedEpc(randomDemoEpc()),
           ),
           TacticalSlateButton(
             label: _busy ? '…' : 'APPLY BULK STATUS',

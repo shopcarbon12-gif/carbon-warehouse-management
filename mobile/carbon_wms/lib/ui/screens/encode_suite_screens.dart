@@ -44,7 +44,6 @@ class _EncodeSuiteScreenState extends State<EncodeSuiteScreen>
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
-      pageTitle: 'ENCODE',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
