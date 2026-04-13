@@ -214,7 +214,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             Text(
               'SETTINGS',
               style: GoogleFonts.manrope(
-                fontSize: 12,
+                fontSize: 16,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.6,
                 color: isDark ? const Color(0xFF4DB6AC) : AppColors.primary,

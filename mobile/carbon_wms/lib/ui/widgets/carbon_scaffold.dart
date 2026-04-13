@@ -146,7 +146,7 @@ class CarbonScaffold extends StatelessWidget {
               Text(
                 label,
                 style: GoogleFonts.manrope(
-                  fontSize: 12,
+                  fontSize: 16,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.6,
                   color: wmsTeal,
