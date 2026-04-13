@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,133 +11,31 @@ import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
 import 'package:carbon_wms/ui/screens/dashboard_screen.dart' show DashboardScreen;
-import 'package:carbon_wms/ui/screens/epc_detail_screen.dart';
-import 'package:carbon_wms/ui/screens/bin_assign_settings_screen.dart';
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const Color _surface    = Color(0xFFFFFFFF);
 const Color _surfaceLow = Color(0xFFF3F3F4);
 const Color _surfaceMid = Color(0xFFEEEEEE);
 
-const Color _tealDark   = Color(0xFF1B7D7D);
-const Color _tealLight  = Color(0xFF2BA3A3);
+// Two teal variants used in action buttons
+const Color _tealDark   = Color(0xFF1B7D7D); // ADD BIN (matches AppColors.primary light)
+const Color _tealLight  = Color(0xFF2BA3A3); // ADD ITEM (lighter teal)
+
+// Dark-mode equivalents
 const Color _tealDarkDk  = Color(0xFF1B7D7D);
 const Color _tealLightDk = Color(0xFF4DB6AC);
 
-// ── SKU parsing ───────────────────────────────────────────────────────────────
-
-/// Parse scanned barcode into its components.
-///
-/// No C prefix: base=7, color=chars8-9, size=remainder
-///   searchKey (specific color) = first 9 chars
-///   searchKey (all colors)     = first 7 chars
-///
-/// With C prefix: base=9(incl C), color=chars10-11, size=remainder
-///   searchKey (specific color) = first 11 chars
-///   searchKey (all colors)     = first 9 chars
-class _SkuParts {
-  const _SkuParts({
-    required this.raw,
-    required this.base,
-    required this.colorCode,
-    required this.sizeCode,
-    required this.searchKeySpecific,
-    required this.searchKeyAllColors,
-  });
-
-  final String raw;
-  final String base;
-  final String colorCode;
-  final String sizeCode;
-  final String searchKeySpecific;
-  final String searchKeyAllColors;
-
-  static _SkuParts parse(String sku) {
-    final s = sku.trim().toUpperCase();
-    if (s.startsWith('C') && s.length >= 9) {
-      // C prefix: base = first 9 chars
-      final base  = s.substring(0, 9);
-      final color = s.length >= 11 ? s.substring(9, 11) : '';
-      final size  = s.length > 11  ? s.substring(11)    : '';
-      return _SkuParts(
-        raw: s,
-        base: base,
-        colorCode: color,
-        sizeCode: size,
-        searchKeySpecific:  s.length >= 11 ? s.substring(0, 11) : s,
-        searchKeyAllColors: base,
-      );
-    } else if (s.length >= 7) {
-      // No C prefix: base = first 7 chars
-      final base  = s.substring(0, 7);
-      final color = s.length >= 9 ? s.substring(7, 9) : '';
-      final size  = s.length > 9  ? s.substring(9)    : '';
-      return _SkuParts(
-        raw: s,
-        base: base,
-        colorCode: color,
-        sizeCode: size,
-        searchKeySpecific:  s.length >= 9 ? s.substring(0, 9) : s,
-        searchKeyAllColors: base,
-      );
-    }
-    return _SkuParts(
-      raw: s, base: s, colorCode: '', sizeCode: '',
-      searchKeySpecific: s, searchKeyAllColors: s,
-    );
-  }
-}
-
-/// Format raw 5-char bin code (e.g. "2B03L") → "2-B-03-L".
-String _formatBinCode(String raw) {
-  final s = raw.trim().toUpperCase().replaceAll(RegExp(r'[-\s]'), '');
-  if (s.length == 5) {
-    return '${s[0]}-${s[1]}-${s.substring(2, 4)}-${s[4]}';
-  }
-  return raw.trim().toUpperCase();
-}
-
-// ── Stored item model ─────────────────────────────────────────────────────────
-
-class _StoredItem {
-  _StoredItem({
-    required this.sku,
-    required this.description,
-    required this.qty,
-    required this.customSkuId,
-    required this.binId,
-    this.epcs = const [],
-  });
-
-  final String sku;
-  final String description;
-  final int    qty;
-  final String customSkuId;
-  final String binId;
-  final List<String> epcs;
-
-  _StoredItem copyWith({int? qty, List<String>? epcs}) => _StoredItem(
-    sku: sku,
-    description: description,
-    qty: qty ?? this.qty,
-    customSkuId: customSkuId,
-    binId: binId,
-    epcs: epcs ?? this.epcs,
-  );
-
-  static _StoredItem fromMap(Map<String, dynamic> m, {String binId = ''}) {
-    final epcsRaw = m['epcs'];
-    final epcs = epcsRaw is List ? epcsRaw.map((e) => e.toString()).toList() : <String>[];
-    return _StoredItem(
-      sku: m['sku']?.toString() ?? m['customSku']?.toString() ?? '',
-      description: m['description']?.toString() ?? m['title']?.toString() ?? '',
-      qty: (m['qty'] as int?) ?? (m['quantity'] as int?) ?? epcs.length,
-      customSkuId: m['customSkuId']?.toString() ?? m['id']?.toString() ?? '',
-      binId: m['binId']?.toString() ?? binId,
-      epcs: epcs,
-    );
-  }
-}
+/// Sample data shown in design/preview mode before real data is wired.
+const _kSampleBin = '2-B-03-L';
+const _kSampleItems = <Map<String, dynamic>>[
+  {'sku': '112225207S', 'description': 'TYLER SHIRT BLACK S', 'qty': 24},
+  {'sku': '112225207M', 'description': 'TYLER SHIRT BLACK M', 'qty': 150},
+  {'sku': '112225207L', 'description': 'TYLER SHIRT BLACK L', 'qty': 50},
+  {'sku': '112225207M', 'description': 'TYLER SHIRT BLACK M', 'qty': 150},
+  {'sku': '112225207L', 'description': 'TYLER SHIRT BLACK L', 'qty': 50},
+  {'sku': '112225207XL','description': 'TYLER SHIRT BLACK XL','qty': 30},
+  {'sku': '112225207XS','description': 'TYLER SHIRT BLACK XS','qty': 12},
+];
 
 /// Bin Assign — fast 2D putaway with hardware wedge, camera, or manual entry.
 class FastPutawayScreen extends StatefulWidget {
@@ -148,32 +45,32 @@ class FastPutawayScreen extends StatefulWidget {
   State<FastPutawayScreen> createState() => _FastPutawayScreenState();
 }
 
+enum _PutawayPhase { scanItem, scanBin }
+
 class _FastPutawayScreenState extends State<FastPutawayScreen> {
+  _PutawayPhase _phase = _PutawayPhase.scanItem;
   final _scanFocus  = FocusNode();
   final _hiddenCtrl = TextEditingController();
 
-  // ── Bin state ──
-  String _currentBin   = '';   // formatted bin code e.g. "2-B-03-L"
-  String _currentBinId = '';   // DB id for API calls
-  bool   _binActive    = false;
+  String _pendingSku  = ''; // used by color-scope modal
+  String _currentBin  = _kSampleBin; // design preview: pre-filled
+  bool   _busy        = false;
+  bool   _flashOk     = false;
 
-  // ── UI state ──
-  bool   _busy     = false;
-  bool   _flashOk  = false;
-  bool   _awaitingBinScan = true;   // true = waiting for bin, false = waiting for item
+  String _scopeForBin = 'all_colors';
+  String _skuForBin   = '';
 
-  // ── Stored contents ──
-  List<_StoredItem> _storedContents = [];
-  List<_StoredItem> _undoSnapshot   = [];   // snapshot before clean
+  List<Map<String, dynamic>> _storedContents = List.of(_kSampleItems);
+  int get _storedTotal => _storedContents.fold(0, (sum, e) => sum + ((e['qty'] as int?) ?? 0));
 
-  int get _storedTotal => _storedContents.fold(0, (sum, e) => sum + e.qty);
+  bool get _binActive => _currentBin.isNotEmpty;
 
-  // ── Settings ──
   @override
   void initState() {
     super.initState();
-    _loadSettings();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scanFocus.requestFocus());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scanFocus.requestFocus();
+    });
   }
 
   @override
@@ -183,474 +80,160 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     super.dispose();
   }
 
-  Future<void> _loadSettings() async {
-    // Reload any settings that affect scan behaviour (reserved for future use).
-    await SharedPreferences.getInstance();
+  Future<bool> _isCameraSource() async {
+    final p = await SharedPreferences.getInstance();
+    return (p.getString('wms_scanner_source_v1') ?? 'hardware') == 'camera';
   }
 
-  // ── Scan dispatch ─────────────────────────────────────────────────────────
+  Future<String?> _maybeCameraScan(String title) async {
+    if (!await _isCameraSource()) return null;
+    if (!mounted) return null;
+    return openCameraBarcodeScanner(context, title: title);
+  }
 
-  void _onScanSubmit(String raw) {
-    final v = raw.trim();
-    if (v.isEmpty) return;
+  String? _parseColorHint(String sku) {
+    final parts = sku.split(RegExp(r'[-_/]'));
+    if (parts.length < 2) return null;
+    return parts.last.trim().toUpperCase();
+  }
+
+  // ── Scan handlers ─────────────────────────────────────────────────────────
+
+  Future<void> _onItemSubmit(String raw) async {
+    final sku = raw.trim();
+    if (sku.isEmpty) return;
     _hiddenCtrl.clear();
-    if (_awaitingBinScan) {
-      unawaited(_handleBinScan(v));
-    } else {
-      unawaited(_handleItemScan(v));
-    }
-  }
-
-  // ── Bin scan flow ─────────────────────────────────────────────────────────
-
-  Future<void> _handleBinScan(String raw) async {
-    final code = _formatBinCode(raw);
-    setState(() => _busy = true);
-    try {
-      final api = context.read<WmsApiClient>();
-      // Look up bin in WMS
-      final bins = await api.fetchBins();
-      final match = bins.cast<Map<String, dynamic>?>().firstWhere(
-        (b) => b != null && (b['code']?.toString().toUpperCase() == code.toUpperCase()),
-        orElse: () => null,
-      );
-
-      if (match == null) {
-        // Bin doesn't exist — prompt to create
-        setState(() => _busy = false);
-        if (!mounted) return;
-        final create = await _showCreateBinDialog(code);
-        if (create != true) {
-          _scanFocus.requestFocus();
-          return;
-        }
-        setState(() => _busy = true);
-        final created = await api.createBin(code);
-        final newId = created['id']?.toString() ?? created['binId']?.toString() ?? '';
-        setState(() {
-          _busy = false;
-          _currentBin   = code;
-          _currentBinId = newId;
-          _binActive    = true;
-          _storedContents = [];
-          _awaitingBinScan = false;
-        });
-        _flashSuccess();
-        _scanFocus.requestFocus();
-        return;
-      }
-
-      // Bin exists — load contents
-      final binId = match['id']?.toString() ?? match['binId']?.toString() ?? '';
-      List<_StoredItem> items = [];
-      if (binId.isNotEmpty) {
-        try {
-          final contents = await api.fetchBinContents(binId);
-          final rawItems = contents['items'] ?? contents['storedContents'] ?? contents['rows'];
-          if (rawItems is List) {
-            items = rawItems
-                .whereType<Map<String, dynamic>>()
-                .map((m) => _StoredItem.fromMap(m, binId: binId))
-                .where((i) => i.sku.isNotEmpty)
-                .toList();
-          }
-        } catch (_) {
-          // contents fetch failed — show empty, not fatal
-        }
-      }
-
-      setState(() {
-        _busy = false;
-        _currentBin   = code;
-        _currentBinId = binId;
-        _binActive    = true;
-        _storedContents = items;
-        _awaitingBinScan = false;
-      });
-      _flashSuccess();
-    } catch (e) {
-      if (mounted) {
-        setState(() => _busy = false);
-        _showError('Bin lookup failed: $e');
-      }
-    }
-    if (mounted) _scanFocus.requestFocus();
-  }
-
-  // ── Item scan flow ────────────────────────────────────────────────────────
-
-  Future<void> _handleItemScan(String raw) async {
-    final parts = _SkuParts.parse(raw);
-    setState(() => _busy = true);
-    try {
-      final api = context.read<WmsApiClient>();
-
-      // 1. Search catalog by specific-color key
-      final specificRow = await api.catalogGridSearchFirstRow(parts.searchKeySpecific);
-
-      if (specificRow == null) {
-        setState(() => _busy = false);
-        if (!mounted) return;
-        _showError('Item not found in catalog: ${parts.raw}');
-        _scanFocus.requestFocus();
-        return;
-      }
-
-      setState(() => _busy = false);
-
-      // 2. Show assign popup
-      if (!mounted) return;
-      await _showAssignPopup(skuParts: parts, catalogRow: specificRow);
-    } catch (e) {
-      if (mounted) {
-        setState(() => _busy = false);
-        _showError('Item scan failed: $e');
-        _scanFocus.requestFocus();
-      }
-    }
-  }
-
-  // ── Assign popup ──────────────────────────────────────────────────────────
-
-  Future<void> _showAssignPopup({
-    required _SkuParts skuParts,
-    required Map<String, dynamic> catalogRow,
-  }) async {
+    final hint = _parseColorHint(sku) ?? sku;
+    if (!mounted) return;
     final isDark   = Theme.of(context).brightness == Brightness.dark;
     final sheetBg  = isDark ? const Color(0xFF1C2828) : _surface;
     final btnMid   = isDark ? const Color(0xFF243030) : _surfaceMid;
     final textMain = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
-
-    final title    = catalogRow['title']?.toString() ?? catalogRow['description']?.toString() ?? '';
-    final matrixId = catalogRow['matrixId']?.toString() ?? catalogRow['productId']?.toString() ?? '';
-    final colorCode = skuParts.colorCode;
-    final colorLabel = colorCode.isNotEmpty ? 'COLOR $colorCode' : 'THIS COLOR';
-    final api = context.read<WmsApiClient>();
-
     await showModalBottomSheet<void>(
       context: context,
-      isScrollControlled: true,
       backgroundColor: sheetBg,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
       ),
-      builder: (ctx) {
-        return _AssignPopup(
-          sku: skuParts.raw,
-          title: title,
-          colorCode: colorCode,
-          colorLabel: colorLabel,
-          matrixId: matrixId,
-          sheetBg: sheetBg,
-          btnMid: btnMid,
-          textMain: textMain,
-          onAssignSingleColor: () async {
-            Navigator.pop(ctx);
-            await _doAssign(skuScanned: skuParts.raw, scope: 'single_color');
-          },
-          onAssignAllColors: () async {
-            Navigator.pop(ctx);
-            await _doAssign(skuScanned: skuParts.searchKeyAllColors, scope: 'all_colors');
-          },
-          onAssignSelectedColors: (List<String> selectedSkus) async {
-            Navigator.pop(ctx);
-            for (final s in selectedSkus) {
-              await _doAssign(skuScanned: s, scope: 'single_color');
-            }
-          },
-          api: api,
-        );
-      },
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('COLOR SCOPE',
+                style: GoogleFonts.spaceGrotesk(fontSize: 11, fontWeight: FontWeight.w700,
+                  letterSpacing: 2.0, color: AppColors.textMuted)),
+              const SizedBox(height: 6),
+              Text(sku,
+                style: GoogleFonts.spaceGrotesk(fontSize: 20, fontWeight: FontWeight.w700, color: textMain)),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _scopeForBin = 'all_colors';
+                  _skuForBin   = sku;
+                  setState(() { _pendingSku = sku; _phase = _PutawayPhase.scanBin; });
+                  WidgetsBinding.instance.addPostFrameCallback((_) => _scanFocus.requestFocus());
+                },
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary, foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(4))),
+                ),
+                child: Text('ASSIGN ALL COLORS',
+                  style: GoogleFonts.manrope(fontWeight: FontWeight.w800, fontSize: 14)),
+              ),
+              const SizedBox(height: 10),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _scopeForBin = 'single_color';
+                  _skuForBin   = sku;
+                  setState(() { _pendingSku = sku; _phase = _PutawayPhase.scanBin; });
+                  WidgetsBinding.instance.addPostFrameCallback((_) => _scanFocus.requestFocus());
+                },
+                style: FilledButton.styleFrom(
+                  backgroundColor: btnMid, foregroundColor: textMain,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(4))),
+                ),
+                child: Text('ONLY THIS COLOR · $hint',
+                  style: GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 14)),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
-
     if (mounted) _scanFocus.requestFocus();
   }
 
-  Future<void> _doAssign({required String skuScanned, required String scope}) async {
+  Future<void> _onBinSubmit(String raw) async {
+    final bin = raw.trim().toUpperCase();
+    if (bin.isEmpty || _skuForBin.isEmpty) return;
+    _hiddenCtrl.clear();
     setState(() => _busy = true);
     try {
       final api      = context.read<WmsApiClient>();
       final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       final result   = await api.postPutawayAssign(
         deviceId:   deviceId,
-        binCode:    _currentBin,
-        skuScanned: skuScanned,
-        scope:      scope,
+        binCode:    bin,
+        skuScanned: _skuForBin,
+        scope:      _scopeForBin,
       );
-
-      // Reload bin contents (RFID quantities)
-      List<_StoredItem> newItems = _storedContents;
-      if (_currentBinId.isNotEmpty) {
-        try {
-          final contents = await api.fetchBinContents(_currentBinId);
-          final rawItems = contents['items'] ?? contents['storedContents'] ?? contents['rows'];
-          if (rawItems is List) {
-            newItems = rawItems
-                .whereType<Map<String, dynamic>>()
-                .map((m) => _StoredItem.fromMap(m, binId: _currentBinId))
-                .where((i) => i.sku.isNotEmpty)
-                .toList();
-          }
-        } catch (_) {
-          // If bin contents fetch fails, try to build from API result
-          final raw = result['storedContents'];
-          if (raw is List) {
-            newItems = raw
-                .whereType<Map<String, dynamic>>()
-                .map((m) => _StoredItem.fromMap(m, binId: _currentBinId))
-                .toList();
-          }
-        }
-      }
+      if (!mounted) return;
+      final contents = result['storedContents'];
+      final List<Map<String, dynamic>> items = contents is List
+          ? contents.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map)).toList()
+          : <Map<String, dynamic>>[];
 
       setState(() {
-        _busy = false;
-        _storedContents = newItems;
+        _busy           = false;
+        _flashOk        = true;
+        _currentBin     = bin;
+        _storedContents = items;
+        _phase          = _PutawayPhase.scanItem;
+        _pendingSku     = '';
+        _skuForBin      = '';
       });
-      _flashSuccess();
+      await Future<void>.delayed(const Duration(milliseconds: 450));
+      if (mounted) setState(() => _flashOk = false);
     } catch (e) {
       if (mounted) {
         setState(() => _busy = false);
-        _showError('Assign failed: $e');
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Putaway failed: $e')));
       }
     }
     if (mounted) _scanFocus.requestFocus();
   }
 
-  // ── Clean & Empty ─────────────────────────────────────────────────────────
-
-  Future<void> _onCleanBin() async {
-    if (_currentBin.isEmpty) return;
-    final confirm = await _showConfirmDialog(
-      title: 'CLEAN & EMPTY BIN',
-      body: 'This will remove ALL items assigned to bin $_currentBin.\nThis action can be undone.',
-      confirmLabel: 'CLEAN',
-      destructive: true,
-    );
-    if (confirm != true) return;
-
-    // Snapshot for undo
-    _undoSnapshot = List.of(_storedContents);
-
-    setState(() => _busy = true);
-    try {
-      final api = context.read<WmsApiClient>();
-      await api.postCleanBinByCode(_currentBin);
-      setState(() {
-        _busy = false;
-        _storedContents = [];
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Bin $_currentBin cleaned.'),
-          action: SnackBarAction(label: 'UNDO', onPressed: _onUndoClean),
-          duration: const Duration(seconds: 8),
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _busy = false);
-        _showError('Clean failed: $e');
-      }
-    }
-  }
-
-  Future<void> _onUndoClean() async {
-    if (_undoSnapshot.isEmpty || _currentBin.isEmpty) return;
-    setState(() => _busy = true);
-    try {
-      final api      = context.read<WmsApiClient>();
-      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
-      for (final item in _undoSnapshot) {
-        await api.postPutawayAssign(
-          deviceId:   deviceId,
-          binCode:    _currentBin,
-          skuScanned: item.sku,
-          scope:      'single_color',
-        );
-      }
-      // Reload after re-assign
-      List<_StoredItem> restored = _undoSnapshot;
-      if (_currentBinId.isNotEmpty) {
-        try {
-          final contents = await api.fetchBinContents(_currentBinId);
-          final rawItems = contents['items'] ?? contents['storedContents'] ?? contents['rows'];
-          if (rawItems is List) {
-            restored = rawItems
-                .whereType<Map<String, dynamic>>()
-                .map((m) => _StoredItem.fromMap(m, binId: _currentBinId))
-                .where((i) => i.sku.isNotEmpty)
-                .toList();
-          }
-        } catch (_) {}
-      }
-      setState(() {
-        _busy = false;
-        _storedContents = restored;
-        _undoSnapshot   = [];
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() => _busy = false);
-        _showError('Undo failed: $e');
-      }
-    }
-  }
-
-  // ── Swipe delete item ─────────────────────────────────────────────────────
-
-  Future<void> _onDeleteItem(_StoredItem item) async {
-    final confirm = await _showConfirmDialog(
-      title: 'REMOVE ITEM',
-      body: 'Remove ${item.sku} from bin $_currentBin?',
-      confirmLabel: 'REMOVE',
-      destructive: true,
-    );
-    if (confirm != true) {
-      setState(() {}); // re-render to restore dismissed item
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      final api = context.read<WmsApiClient>();
-      await api.removeSkuFromBin(binId: _currentBinId, sku: item.sku);
-      setState(() {
-        _busy = false;
-        _storedContents.remove(item);
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          // restore item if delete failed
-          if (!_storedContents.contains(item)) _storedContents.add(item);
-        });
-        _showError('Remove failed: $e');
-      }
-    }
-  }
-
-  // ── Add bin / item buttons ────────────────────────────────────────────────
-
-  Future<void> _tapAddBin({bool camera = false}) async {
-    setState(() => _awaitingBinScan = true);
-    if (camera) {
-      final code = await _scanWithCamera('Scan bin label');
+  void _addNewBin() {
+    setState(() { _phase = _PutawayPhase.scanBin; _pendingSku = ''; });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final code = await _maybeCameraScan('Scan bin label');
       if (code != null && code.isNotEmpty && mounted) {
-        await _handleBinScan(code);
+        await _onBinSubmit(code);
       } else {
         _scanFocus.requestFocus();
       }
-    } else {
-      _scanFocus.requestFocus();
-    }
+    });
   }
 
-  Future<void> _tapAddItem({bool camera = false}) async {
-    if (!_binActive) return;
-    setState(() => _awaitingBinScan = false);
-    if (camera) {
-      final code = await _scanWithCamera('Scan item barcode');
+  void _addNewItem() {
+    setState(() { _phase = _PutawayPhase.scanItem; _pendingSku = ''; });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final code = await _maybeCameraScan('Scan item barcode');
       if (code != null && code.isNotEmpty && mounted) {
-        await _handleItemScan(code);
+        await _onItemSubmit(code);
       } else {
         _scanFocus.requestFocus();
       }
-    } else {
-      _scanFocus.requestFocus();
-    }
-  }
-
-  Future<String?> _scanWithCamera(String title) async {
-    // Unlock orientation for camera
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    try {
-      return await openCameraBarcodeScanner(context, title: title);
-    } finally {
-      await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    }
-  }
-
-  // ── Reset for next entry ──────────────────────────────────────────────────
-
-  void _resetForNextEntry() {
-    setState(() {
-      _currentBin      = '';
-      _currentBinId    = '';
-      _binActive       = false;
-      _storedContents  = [];
-      _awaitingBinScan = true;
-    });
-    _scanFocus.requestFocus();
-  }
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  void _flashSuccess() {
-    setState(() => _flashOk = true);
-    Future.delayed(const Duration(milliseconds: 450), () {
-      if (mounted) setState(() => _flashOk = false);
     });
   }
-
-  void _showError(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  Future<bool?> _showCreateBinDialog(String code) => showDialog<bool>(
-    context: context,
-    builder: (ctx) {
-      final isDark   = Theme.of(ctx).brightness == Brightness.dark;
-      final textMain = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
-      return AlertDialog(
-        title: Text('BIN NOT FOUND',
-          style: GoogleFonts.manrope(fontWeight: FontWeight.w800, color: textMain)),
-        content: Text('Bin $code does not exist in WMS.\nCreate it now?',
-          style: GoogleFonts.manrope(color: textMain)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false),
-            child: Text('CANCEL', style: GoogleFonts.manrope(color: AppColors.textMuted))),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('CREATE', style: GoogleFonts.manrope(fontWeight: FontWeight.w800))),
-        ],
-      );
-    },
-  );
-
-  Future<bool?> _showConfirmDialog({
-    required String title,
-    required String body,
-    required String confirmLabel,
-    bool destructive = false,
-  }) => showDialog<bool>(
-    context: context,
-    builder: (ctx) {
-      final isDark   = Theme.of(ctx).brightness == Brightness.dark;
-      final textMain = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
-      return AlertDialog(
-        title: Text(title,
-          style: GoogleFonts.manrope(fontWeight: FontWeight.w800, color: textMain)),
-        content: Text(body, style: GoogleFonts.manrope(color: textMain)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false),
-            child: Text('CANCEL', style: GoogleFonts.manrope(color: AppColors.textMuted))),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: destructive ? Colors.red.shade700 : AppColors.primary),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(confirmLabel,
-              style: GoogleFonts.manrope(fontWeight: FontWeight.w800))),
-        ],
-      );
-    },
-  );
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -668,7 +251,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     return Scaffold(
       backgroundColor: bg,
       resizeToAvoidBottomInset: false,
-      appBar: _buildAppBar(isDark: isDark, mainColor: mainColor),
+      appBar: _buildAppBar(isDark: isDark, mainColor: mainColor, mutedColor: mutedColor),
       body: Column(
         children: [
           // ── Hidden hardware-wedge receiver ──────────────────────────────
@@ -678,13 +261,21 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               controller: _hiddenCtrl,
               focusNode: _scanFocus,
               autofocus: true,
-              onSubmitted: _onScanSubmit,
+              onSubmitted: (v) {
+                if (_phase == _PutawayPhase.scanItem) {
+                  unawaited(_onItemSubmit(v));
+                } else {
+                  unawaited(_onBinSubmit(v));
+                }
+              },
             ),
           ),
 
+          // ── Busy overlay ────────────────────────────────────────────────
           if (_busy)
             const LinearProgressIndicator(minHeight: 2),
 
+          // ── Flash overlay ───────────────────────────────────────────────
           if (_flashOk)
             const LinearProgressIndicator(
               value: 1,
@@ -693,17 +284,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               minHeight: 3,
             ),
 
-          // ── Scan mode hint ──────────────────────────────────────────────
-          _ScanModeHint(
-            awaitingBin: _awaitingBinScan,
-            binActive: _binActive,
-            isDark: isDark,
-            mutedColor: mutedColor,
-          ),
-
           // ── Fixed top: bin info ─────────────────────────────────────────
           _BinInfoBlock(
             binCode: _currentBin,
+            pendingSku: _pendingSku,
             isActive: _binActive,
             isDark: isDark,
             bgLow: bgLow,
@@ -729,40 +313,17 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                     itemCount: _storedContents.length,
                     itemBuilder: (context, i) {
                       final item = _storedContents[i];
+                      final sku  = item['sku']  as String? ?? '—';
+                      final desc = item['description'] as String? ?? '';
+                      final qty  = item['qty']  as int? ?? item['quantity'] as int? ?? 0;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: Dismissible(
-                          key: ValueKey('${item.sku}_$i'),
-                          direction: DismissDirection.startToEnd,
-                          confirmDismiss: (_) async {
-                            await _onDeleteItem(item);
-                            return false; // we handle removal ourselves
-                          },
-                          background: Container(
-                            alignment: Alignment.centerLeft,
-                            padding: const EdgeInsets.only(left: 20),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade600,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Icon(Icons.delete_outline, color: Colors.white, size: 26),
-                          ),
-                          child: _StoredItemRow(
-                            item: item,
-                            bgLow: bgLow,
-                            mainColor: mainColor,
-                            onTap: () {
-                              Navigator.push(context, MaterialPageRoute(
-                                builder: (_) => EpcDetailScreen(
-                                  sku: item.sku,
-                                  description: item.description,
-                                  binCode: _currentBin,
-                                  customSkuId: item.customSkuId,
-                                  initialEpcs: item.epcs,
-                                ),
-                              ));
-                            },
-                          ),
+                        child: _StoredItemRow(
+                          sku: sku,
+                          description: desc,
+                          quantity: qty,
+                          bgLow: bgLow,
+                          mainColor: mainColor,
                         ),
                       );
                     },
@@ -778,14 +339,18 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             mutedColor: mutedColor,
             tealDark: tealDark,
             tealLight: tealLight,
-            binActive: _binActive,
-            onCleanBin: _onCleanBin,
-            onUndoClean: _onUndoClean,
-            onAddBin: () => _tapAddBin(),
-            onAddBinCamera: () => _tapAddBin(camera: true),
-            onAddItem: () => _tapAddItem(),
-            onAddItemCamera: () => _tapAddItem(camera: true),
-            onNextEntry: _resetForNextEntry,
+            onCleanBin: () {/* wire later */},
+            onUndoClean: () {/* wire later */},
+            onAddBin: _addNewBin,
+            onAddBinCamera: () async {
+              final code = await openCameraBarcodeScanner(context, title: 'Scan bin label');
+              if (code != null && code.isNotEmpty && mounted) unawaited(_onBinSubmit(code));
+            },
+            onAddItem: _addNewItem,
+            onAddItemCamera: () async {
+              final code = await openCameraBarcodeScanner(context, title: 'Scan item barcode');
+              if (code != null && code.isNotEmpty && mounted) unawaited(_onItemSubmit(code));
+            },
           ),
 
           // ── Bottom navigation ───────────────────────────────────────────
@@ -800,6 +365,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   PreferredSizeWidget _buildAppBar({
     required bool isDark,
     required Color mainColor,
+    required Color mutedColor,
   }) {
     final wmsTeal = isDark ? const Color(0xFF4DB6AC) : AppColors.primary;
     final barBg = isDark ? const Color(0xFF111A1A) : _surface;
@@ -848,72 +414,13 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             child: Text('/',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: mainColor)),
           ),
-          Expanded(
-            child: Text(
-              'BIN ASSIGN',
-              style: GoogleFonts.manrope(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: wmsTeal,
-              ),
-            ),
-          ),
-          // Gear icon → settings
-          IconButton(
-            icon: Icon(Icons.settings_outlined, color: mainColor, size: 22),
-            onPressed: () async {
-              await Navigator.push(context, MaterialPageRoute(
-                builder: (_) => const BinAssignSettingsScreen(),
-              ));
-              _loadSettings();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SCAN MODE HINT — shows what scanner is waiting for
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _ScanModeHint extends StatelessWidget {
-  const _ScanModeHint({
-    required this.awaitingBin,
-    required this.binActive,
-    required this.isDark,
-    required this.mutedColor,
-  });
-
-  final bool  awaitingBin;
-  final bool  binActive;
-  final bool  isDark;
-  final Color mutedColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = awaitingBin ? 'SCAN BIN' : 'SCAN ITEM';
-    final color = awaitingBin
-        ? (isDark ? const Color(0xFF4DB6AC) : AppColors.primary)
-        : mutedColor;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-      child: Row(
-        children: [
-          Container(
-            width: 8, height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
           Text(
-            label,
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 11,
+            'BIN ASSIGN',
+            style: GoogleFonts.manrope(
+              fontSize: 12,
               fontWeight: FontWeight.w700,
-              letterSpacing: 2.0,
-              color: color,
+              letterSpacing: 0.6,
+              color: wmsTeal,
             ),
           ),
         ],
@@ -929,6 +436,7 @@ class _ScanModeHint extends StatelessWidget {
 class _BinInfoBlock extends StatelessWidget {
   const _BinInfoBlock({
     required this.binCode,
+    required this.pendingSku,
     required this.isActive,
     required this.isDark,
     required this.bgLow,
@@ -938,6 +446,7 @@ class _BinInfoBlock extends StatelessWidget {
   });
 
   final String binCode;
+  final String pendingSku;
   final bool   isActive;
   final bool   isDark;
   final Color  bgLow;
@@ -953,85 +462,73 @@ class _BinInfoBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Center(
-        child: IntrinsicWidth(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      decoration: BoxDecoration(
+        color: bgLow,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Label row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'CURRENT BIN LOCATION',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 2.0,
-                      color: mutedColor,
-                    ),
-                  ),
-                  _StatusBadge(active: isActive),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-                decoration: BoxDecoration(
-                  color: bgLow,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    if (isActive)
-                      Text(
-                        binCode,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 42,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
-                          letterSpacing: 1.2,
-                        ),
-                      )
-                    else
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-                        decoration: BoxDecoration(
-                          color: bg,
-                          borderRadius: BorderRadius.circular(40),
-                          border: Border.all(color: AppColors.primary, width: 2),
-                        ),
-                        child: Text(
-                          '',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _locationLine,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: mutedColor,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
+              Text(
+                'CURRENT BIN LOCATION',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2.0,
+                  color: mutedColor,
                 ),
               ),
+              _StatusBadge(active: isActive),
             ],
           ),
-        ),
+          const SizedBox(height: 10),
+          // Bin code — big teal text when active, input-style box when inactive
+          if (isActive)
+            Text(
+              binCode,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 42,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primary,
+                letterSpacing: 1.2,
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(40),
+                border: Border.all(color: AppColors.primary, width: 2),
+              ),
+              child: Text(
+                '',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          const SizedBox(height: 4),
+          Text(
+            _locationLine,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: mutedColor,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1089,7 +586,7 @@ class _StoredItemsHeader extends StatelessWidget {
           Text(
             'STORED ITEMS',
             style: GoogleFonts.manrope(
-              fontSize: 18,
+              fontSize: 15,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.2,
               color: mainColor,
@@ -1098,7 +595,7 @@ class _StoredItemsHeader extends StatelessWidget {
           Text(
             '$itemCount ITEMS TOTAL',
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 15,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               color: mutedColor,
               letterSpacing: 0.5,
@@ -1127,7 +624,7 @@ class _EmptyItemsPlaceholder extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          'SCAN BIN TO BEGIN',
+          'TRIGGER OR TAP TO ADD ITEM',
           textAlign: TextAlign.center,
           style: GoogleFonts.spaceGrotesk(
             fontSize: 12,
@@ -1142,245 +639,70 @@ class _EmptyItemsPlaceholder extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// STORED ITEM ROW — swipeable
+// STORED ITEM ROW
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _StoredItemRow extends StatelessWidget {
   const _StoredItemRow({
-    required this.item,
+    required this.sku,
+    required this.description,
+    required this.quantity,
     required this.bgLow,
     required this.mainColor,
-    required this.onTap,
-  });
-
-  final _StoredItem item;
-  final Color  bgLow;
-  final Color  mainColor;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: bgLow,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'SKU:  ${item.sku}',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: mainColor,
-                    ),
-                  ),
-                  if (item.description.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      item.description,
-                      style: GoogleFonts.manrope(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF171D1D),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 18),
-            const SizedBox(width: 4),
-            Text(
-              'x${item.qty}',
-              style: GoogleFonts.manrope(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: AppColors.primary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ASSIGN POPUP — color scope selection
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class _AssignPopup extends StatefulWidget {
-  const _AssignPopup({
-    required this.sku,
-    required this.title,
-    required this.colorCode,
-    required this.colorLabel,
-    required this.matrixId,
-    required this.sheetBg,
-    required this.btnMid,
-    required this.textMain,
-    required this.onAssignSingleColor,
-    required this.onAssignAllColors,
-    required this.onAssignSelectedColors,
-    required this.api,
   });
 
   final String sku;
-  final String title;
-  final String colorCode;
-  final String colorLabel;
-  final String matrixId;
-  final Color sheetBg;
-  final Color btnMid;
-  final Color textMain;
-  final VoidCallback onAssignSingleColor;
-  final VoidCallback onAssignAllColors;
-  final void Function(List<String>) onAssignSelectedColors;
-  final WmsApiClient api;
-
-  @override
-  State<_AssignPopup> createState() => _AssignPopupState();
-}
-
-class _AssignPopupState extends State<_AssignPopup> {
-  bool _loadingColors = false;
-  List<Map<String, dynamic>> _colorRows = [];
-  final Set<String> _checkedSkus = {};
-  bool _showColorPicker = false;
+  final String description;
+  final int    quantity;
+  final Color  bgLow;
+  final Color  mainColor;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('ASSIGN TO BIN',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 11, fontWeight: FontWeight.w700,
-                letterSpacing: 2.0, color: AppColors.textMuted)),
-            const SizedBox(height: 6),
-            Text(widget.sku,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 20, fontWeight: FontWeight.w700, color: widget.textMain)),
-            if (widget.title.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(widget.title,
-                style: GoogleFonts.manrope(
-                  fontSize: 13, color: AppColors.textMuted)),
-            ],
-            const SizedBox(height: 20),
-
-            // ASSIGN ONLY THIS COLOR
-            FilledButton(
-              onPressed: widget.onAssignSingleColor,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(4))),
-              ),
-              child: Text('ONLY ${widget.colorLabel}',
-                style: GoogleFonts.manrope(fontWeight: FontWeight.w800, fontSize: 14)),
-            ),
-            const SizedBox(height: 10),
-
-            // ASSIGN ALL COLORS
-            FilledButton(
-              onPressed: widget.onAssignAllColors,
-              style: FilledButton.styleFrom(
-                backgroundColor: widget.btnMid,
-                foregroundColor: widget.textMain,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(4))),
-              ),
-              child: Text('ASSIGN ALL COLORS',
-                style: GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 14,
-                  color: widget.textMain)),
-            ),
-            const SizedBox(height: 10),
-
-            // PICK SPECIFIC COLORS
-            OutlinedButton(
-              onPressed: _loadingColors ? null : _toggleColorPicker,
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(4))),
-                side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
-              ),
-              child: _loadingColors
-                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text('PICK COLORS…',
-                      style: GoogleFonts.manrope(fontWeight: FontWeight.w700, fontSize: 13,
-                        color: AppColors.primary)),
-            ),
-
-            // Color checkboxes (expanded when opened)
-            if (_showColorPicker && _colorRows.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              ..._colorRows.map((row) {
-                final sku = row['sku']?.toString() ?? row['customSku']?.toString() ?? '';
-                final label = row['description']?.toString() ?? row['title']?.toString() ?? sku;
-                final checked = _checkedSkus.contains(sku);
-                return CheckboxListTile(
-                  dense: true,
-                  value: checked,
-                  onChanged: (v) => setState(() {
-                    if (v == true) { _checkedSkus.add(sku); } else { _checkedSkus.remove(sku); }
-                  }),
-                  title: Text(label, style: GoogleFonts.manrope(fontSize: 13, color: widget.textMain)),
-                  subtitle: Text(sku, style: GoogleFonts.spaceGrotesk(fontSize: 11, color: AppColors.textMuted)),
-                  activeColor: AppColors.primary, // ignore: deprecated_member_use
-                  contentPadding: EdgeInsets.zero,
-                );
-              }),
-              if (_checkedSkus.isNotEmpty)
-                FilledButton(
-                  onPressed: () => widget.onAssignSelectedColors(_checkedSkus.toList()),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(4))),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: bgLow,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SKU:  $sku',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: mainColor,
                   ),
-                  child: Text('ASSIGN ${_checkedSkus.length} SELECTED',
-                    style: GoogleFonts.manrope(fontWeight: FontWeight.w800, fontSize: 14)),
                 ),
-            ],
-          ],
-        ),
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    description,
+                    style: GoogleFonts.manrope(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Text(
+            'x$quantity',
+            style: GoogleFonts.manrope(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+            ),
+          ),
+        ],
       ),
     );
-  }
-
-  Future<void> _toggleColorPicker() async {
-    if (_showColorPicker) {
-      setState(() => _showColorPicker = false);
-      return;
-    }
-    if (_colorRows.isNotEmpty) {
-      setState(() => _showColorPicker = true);
-      return;
-    }
-    setState(() => _loadingColors = true);
-    try {
-      final rows = await widget.api.fetchCatalogByMatrixId(widget.matrixId);
-      setState(() {
-        _colorRows = rows;
-        _loadingColors = false;
-        _showColorPicker = rows.isNotEmpty;
-      });
-    } catch (_) {
-      setState(() => _loadingColors = false);
-    }
   }
 }
 
@@ -1397,14 +719,12 @@ class _BottomControlsBlock extends StatelessWidget {
     required this.mutedColor,
     required this.tealDark,
     required this.tealLight,
-    required this.binActive,
     required this.onCleanBin,
     required this.onUndoClean,
     required this.onAddBin,
     required this.onAddBinCamera,
     required this.onAddItem,
     required this.onAddItemCamera,
-    required this.onNextEntry,
   });
 
   final bool  isDark;
@@ -1414,14 +734,12 @@ class _BottomControlsBlock extends StatelessWidget {
   final Color mutedColor;
   final Color tealDark;
   final Color tealLight;
-  final bool  binActive;
   final VoidCallback onCleanBin;
   final VoidCallback onUndoClean;
   final VoidCallback onAddBin;
   final VoidCallback onAddBinCamera;
   final VoidCallback onAddItem;
   final VoidCallback onAddItemCamera;
-  final VoidCallback onNextEntry;
 
   @override
   Widget build(BuildContext context) {
@@ -1439,11 +757,16 @@ class _BottomControlsBlock extends StatelessWidget {
             ),
             child: Row(
               children: [
+                // Broom icon — left tap zone
                 _IconTapZone(
                   onTap: onCleanBin,
-                  child: const Icon(Icons.cleaning_services_outlined,
-                    color: AppColors.textMuted, size: 22),
+                  child: const Icon(
+                    Icons.cleaning_services_outlined,
+                    color: AppColors.textMuted,
+                    size: 22,
+                  ),
                 ),
+                // Center label — main clean action
                 Expanded(
                   child: InkWell(
                     onTap: onCleanBin,
@@ -1462,10 +785,14 @@ class _BottomControlsBlock extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Undo icon — right tap zone (different behaviour)
                 _IconTapZone(
                   onTap: onUndoClean,
-                  child: const Icon(Icons.undo_rounded,
-                    color: AppColors.textMuted, size: 22),
+                  child: const Icon(
+                    Icons.undo_rounded,
+                    color: AppColors.textMuted,
+                    size: 22,
+                  ),
                 ),
               ],
             ),
@@ -1474,39 +801,17 @@ class _BottomControlsBlock extends StatelessWidget {
           // ── READY FOR NEXT ENTRY ──────────────────────────────────────
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'READY FOR NEXT ENTRY',
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.0,
-                    color: mutedColor,
-                  ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'READY FOR NEXT ENTRY',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2.0,
+                  color: mutedColor,
                 ),
-                if (binActive)
-                  GestureDetector(
-                    onTap: onNextEntry,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'RESET',
-                        style: GoogleFonts.manrope(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.0,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
           ),
           // ── ADD BIN + ADD ITEM ────────────────────────────────────────
@@ -1517,7 +822,6 @@ class _BottomControlsBlock extends StatelessWidget {
                   label: 'ADD BIN',
                   mainIcon: Icons.warehouse_outlined,
                   color: tealDark,
-                  enabled: true,
                   onMain: onAddBin,
                   onCamera: onAddBinCamera,
                 ),
@@ -1527,8 +831,7 @@ class _BottomControlsBlock extends StatelessWidget {
                 child: _DualActionButton(
                   label: 'ADD ITEM',
                   mainIcon: Icons.add_circle_outline,
-                  color: binActive ? tealLight : AppColors.textMuted.withValues(alpha: 0.4),
-                  enabled: binActive,
+                  color: tealLight,
                   onMain: onAddItem,
                   onCamera: onAddItemCamera,
                 ),
@@ -1542,20 +845,19 @@ class _BottomControlsBlock extends StatelessWidget {
   }
 }
 
+/// A button with a main tap zone + an embedded camera icon tap zone on the right.
 class _DualActionButton extends StatelessWidget {
   const _DualActionButton({
     required this.label,
     required this.mainIcon,
     required this.color,
-    required this.enabled,
     required this.onMain,
     required this.onCamera,
   });
 
-  final String       label;
-  final IconData     mainIcon;
-  final Color        color;
-  final bool         enabled;
+  final String      label;
+  final IconData    mainIcon;
+  final Color       color;
   final VoidCallback onMain;
   final VoidCallback onCamera;
 
@@ -1568,9 +870,10 @@ class _DualActionButton extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // Main label tap zone
           Expanded(
             child: InkWell(
-              onTap: enabled ? onMain : null,
+              onTap: onMain,
               borderRadius: const BorderRadius.horizontal(left: Radius.circular(6)),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1593,10 +896,16 @@ class _DualActionButton extends StatelessWidget {
               ),
             ),
           ),
+          // Vertical divider
           Container(width: 1, height: 36, color: Colors.white24),
+          // Camera tap zone
           _IconTapZone(
-            onTap: enabled ? onCamera : () {},
-            child: const Icon(Icons.photo_camera_outlined, color: Colors.white, size: 20),
+            onTap: onCamera,
+            child: const Icon(
+              Icons.photo_camera_outlined,
+              color: Colors.white,
+              size: 20,
+            ),
           ),
         ],
       ),
@@ -1604,6 +913,7 @@ class _DualActionButton extends StatelessWidget {
   }
 }
 
+/// Small square tap zone for icons inside composite buttons.
 class _IconTapZone extends StatelessWidget {
   const _IconTapZone({required this.onTap, required this.child});
   final VoidCallback onTap;
@@ -1648,10 +958,10 @@ class _BottomNavBar extends StatelessWidget {
           height: 60,
           child: Row(
             children: [
-              _NavItem(icon: Icons.dashboard_outlined,               label: 'DASH',  active: false, onTap: () => Navigator.of(context).maybePop()),
-              _NavItem(icon: Icons.inventory_2_outlined,             label: 'STOCK', active: false, onTap: () {}),
-              _NavItem(icon: Icons.precision_manufacturing_outlined, label: 'OPS',   active: false, onTap: () {}),
-              _NavItem(icon: Icons.qr_code_scanner,                  label: 'TAGS',  active: true,  onTap: () {}),
+              _NavItem(icon: Icons.dashboard_outlined,            label: 'DASH',  active: false, onTap: () => Navigator.of(context).maybePop()),
+              _NavItem(icon: Icons.inventory_2_outlined,          label: 'STOCK', active: false, onTap: () {}),
+              _NavItem(icon: Icons.precision_manufacturing_outlined, label: 'OPS', active: false, onTap: () {}),
+              _NavItem(icon: Icons.qr_code_scanner,              label: 'TAGS',  active: true,  onTap: () {}),
             ],
           ),
         ),
