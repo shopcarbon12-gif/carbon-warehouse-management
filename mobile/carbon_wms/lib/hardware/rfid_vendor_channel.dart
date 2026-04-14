@@ -23,6 +23,7 @@ class RfidVendorChannel {
 
   static const MethodChannel _method = MethodChannel('carbon_wms/rfid');
   static const EventChannel _events = EventChannel('carbon_wms/rfid_tag_stream');
+  static const EventChannel _hardwareBarcodeEvents = EventChannel('carbon_wms/hardware_barcode');
 
   static Future<String?> ping() async {
     try {
@@ -59,6 +60,47 @@ class RfidVendorChannel {
     } on MissingPluginException {
       return false;
     }
+  }
+
+  static Future<Map<String, dynamic>> deviceDiagnostics() async {
+    if (!_isAndroid) return const <String, dynamic>{};
+    try {
+      final m = await _method.invokeMethod<dynamic>('device.diagnostics');
+      if (m is Map) return Map<String, dynamic>.from(m);
+      return const <String, dynamic>{};
+    } on MissingPluginException {
+      return const <String, dynamic>{};
+    } catch (_) {
+      return const <String, dynamic>{};
+    }
+  }
+
+  static Future<void> scannerStart2d() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('scanner.start2d');
+    } catch (_) {}
+  }
+
+  static Future<void> scannerStop2d() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('scanner.stop2d');
+    } catch (_) {}
+  }
+
+  static Future<void> scannerEnableTriggerRelay() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('scanner.enableTriggerRelay');
+    } catch (_) {}
+  }
+
+  static Future<void> scannerDisableTriggerRelay() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('scanner.disableTriggerRelay');
+    } catch (_) {}
   }
 
   /// Optional [readerName] substring to pick one reader when multiple are paired (e.g. `RFD8500`).
@@ -158,6 +200,14 @@ class RfidVendorChannel {
       final rssi = m['rssi'] is num ? (m['rssi'] as num).round() : null;
       return RfidTagRead.tryParse(hex, rssi: rssi);
     }).where((r) => r != null).cast<RfidTagRead>();
+  }
+
+  static Stream<String> hardwareBarcodeStream() {
+    if (!_isAndroid) return const Stream<String>.empty();
+    return _hardwareBarcodeEvents.receiveBroadcastStream().map((dynamic e) {
+      final s = e?.toString() ?? '';
+      return s.trim();
+    }).where((s) => s.isNotEmpty);
   }
 
   static bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;

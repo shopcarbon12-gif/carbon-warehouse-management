@@ -151,7 +151,16 @@ class RfidManager extends ChangeNotifier {
     try {
       final info = await DeviceInfoPlugin().androidInfo;
       final m = info.manufacturer.toLowerCase();
-      if (m.contains('chainway')) {
+      final brand = info.brand.toLowerCase();
+      final model = info.model.toLowerCase();
+      final product = info.product.toLowerCase();
+      final isChainwayHandset = m.contains('chainway') ||
+          brand.contains('chainway') ||
+          model.contains('c72') ||
+          product.contains('c72') ||
+          model.contains('chainway') ||
+          product.contains('chainway');
+      if (isChainwayHandset) {
         await useChainway();
         return;
       }

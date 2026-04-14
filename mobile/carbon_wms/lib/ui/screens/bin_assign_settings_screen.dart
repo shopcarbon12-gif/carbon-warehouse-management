@@ -62,6 +62,12 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
     setState(() => _manualMode = v);
     unawaited(_save(_kManualMode, v));
     if (v) {
+      setState(() {
+        _manualBin = true;
+        _manualAddItem = true;
+      });
+      unawaited(_save(_kManualBin, true));
+      unawaited(_save(_kManualAddItem, true));
       // When manual mode is on, scanner source is 'manual'
       unawaited(_saveScannerSource('manual'));
     } else {

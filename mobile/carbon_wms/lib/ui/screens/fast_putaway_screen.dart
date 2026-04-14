@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show SystemChrome, DeviceOrientation;
+import 'package:flutter/services.dart' show DeviceOrientation, EventChannel, SystemChrome;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/theme_notifier.dart';
@@ -115,6 +117,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _scanFocus  = FocusNode();
   final _hiddenCtrl = TextEditingController();
+  StreamSubscription<dynamic>? _hardwareBarcodeSub;
 
   String _pendingSku  = '';
   String _currentBin  = '';
@@ -140,6 +143,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   bool              _showUndo       = false;
 
   int get _storedTotal => _storedContents.fold(0, (sum, e) => sum + e.qty);
+  bool get _shouldUseHardwareScanner => _scannerSource == 'hardware' || _externalScanner;
 
   void _resetForNextEntry() {
     setState(() {
@@ -150,6 +154,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _awaitingBinScan = true;
     });
     _scanFocus.requestFocus();
+    unawaited(_startHardware2dScan());
   }
 
   Future<void> _load() async {
@@ -163,6 +168,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _externalScanner = p.getBool('bin_assign_external_scanner')   ?? false;
       _cameraEnabled   = p.getBool('bin_assign_camera_enabled')     ?? true;
     });
+    _syncHardwareBarcodeStream();
+    if (_shouldUseHardwareScanner) {
+      unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
+      unawaited(_startHardware2dScan());
+    }
   }
 
   @override
@@ -177,9 +187,55 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   @override
   void dispose() {
+    _hardwareBarcodeSub?.cancel();
+    unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+    unawaited(_stopHardware2dScan());
+    _hardwareBarcodeSub = null;
     _hiddenCtrl.dispose();
     _scanFocus.dispose();
     super.dispose();
+  }
+
+  /// Hardware wedge + OEM scan broadcasts (see [CarbonHardwareBarcodeRelay] on Android).
+  void _dispatchScanLine(String raw) {
+    final v = raw.trim();
+    if (v.isEmpty || !mounted || _busy) return;
+    unawaited(_stopHardware2dScan());
+    if (_awaitingBinScan) {
+      unawaited(_handleBinScan(v));
+    } else {
+      unawaited(_onItemSubmit(v));
+    }
+  }
+
+  Future<void> _startHardware2dScan() async {
+    if (!_shouldUseHardwareScanner) return;
+    await RfidVendorChannel.scannerStart2d();
+  }
+
+  Future<void> _stopHardware2dScan() async {
+    if (!_shouldUseHardwareScanner) return;
+    await RfidVendorChannel.scannerStop2d();
+  }
+
+  void _syncHardwareBarcodeStream() {
+    _hardwareBarcodeSub?.cancel();
+    _hardwareBarcodeSub = null;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    final useHw = _shouldUseHardwareScanner;
+    if (!useHw) {
+      unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+      return;
+    }
+    unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
+    _hardwareBarcodeSub =
+        const EventChannel('carbon_wms/hardware_barcode').receiveBroadcastStream().listen(
+      (dynamic e) {
+        if (!mounted || _busy) return;
+        _dispatchScanLine(e?.toString() ?? '');
+      },
+      onError: (_) {},
+    );
   }
 
   Future<void> _loadUserEmail() async {
@@ -306,6 +362,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     return raw.trim().toUpperCase();
   }
 
+  String _normalizeBinForCompare(String raw) =>
+      raw.trim().toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+
   // ── Bin Scan Handler ──────────────────────────────────────────────────────
 
   Future<void> _handleBinScan(String raw) async {
@@ -315,8 +374,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     try {
       final api = context.read<WmsApiClient>();
       final bins = await api.fetchBins();
+      final want = _normalizeBinForCompare(code);
       final match = bins.cast<Map<String, dynamic>?>().firstWhere(
-        (b) => b != null && (b['code']?.toString().toUpperCase() == code.toUpperCase()),
+        (b) => b != null && _normalizeBinForCompare(b['code']?.toString() ?? '') == want,
         orElse: () => null,
       );
       if (!mounted) return;
@@ -351,6 +411,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _storedContents  = items;
     });
     _scanFocus.requestFocus();
+    unawaited(_startHardware2dScan());
   }
 
   void _showCreateBinDialog(String code) {
@@ -951,6 +1012,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   void _addNewBin() {
     setState(() { _awaitingBinScan = true; _pendingSku = ''; });
+    unawaited(_startHardware2dScan());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final code = await _maybeCameraScan('SCAN BIN LOCATION');
       if (code != null && code.isNotEmpty && mounted) {
@@ -963,6 +1025,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   void _addNewItem() {
     setState(() { _awaitingBinScan = false; _pendingSku = ''; });
+    unawaited(_startHardware2dScan());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final code = await _maybeCameraScan('SCAN ITEM');
       if (code != null && code.isNotEmpty && mounted) {
@@ -980,7 +1043,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         builder: (_) => const BinAssignSettingsScreen(),
       ),
     );
-    if (mounted) await _load();
+    if (mounted) {
+      await _load();
+      FocusScope.of(context).unfocus();
+      _scanFocus.requestFocus();
+    }
   }
 
   @override
@@ -1002,7 +1069,14 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       resizeToAvoidBottomInset: false,
       appBar: _buildAppBar(isDark: isDark, mainColor: mainColor, mutedColor: mutedColor),
       body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
+        onTap: () {
+          FocusScope.of(context).unfocus();
+          if (_scannerSource == 'hardware' || _externalScanner) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _scanFocus.requestFocus();
+            });
+          }
+        },
         behavior: HitTestBehavior.translucent,
         child: Column(
         children: [
@@ -1016,12 +1090,17 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               showCursor: false,
               enableIMEPersonalizedLearning: false,
               keyboardType: TextInputType.none,
+              textInputAction: TextInputAction.done,
+              onChanged: (v) {
+                if (!v.contains('\n') && !v.contains('\r')) return;
+                final line = v.replaceAll('\r', '').split(RegExp(r'[\r\n]+')).first.trim();
+                _hiddenCtrl.clear();
+                if (line.isNotEmpty) _dispatchScanLine(line);
+              },
               onSubmitted: (v) {
-                if (_awaitingBinScan) {
-                  unawaited(_handleBinScan(v));
-                } else {
-                  unawaited(_onItemSubmit(v));
-                }
+                final line = v.replaceAll('\r', '').split(RegExp(r'[\r\n]+')).first.trim();
+                _hiddenCtrl.clear();
+                if (line.isNotEmpty) _dispatchScanLine(line);
               },
             ),
           ),

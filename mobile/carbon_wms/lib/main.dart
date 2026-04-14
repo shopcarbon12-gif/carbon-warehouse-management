@@ -12,6 +12,17 @@ import 'package:carbon_wms/ui/app_auth_gate.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+      systemNavigationBarColor: Color(0xFF2A2F2F),
+      systemNavigationBarIconBrightness: Brightness.light,
+      systemNavigationBarDividerColor: Color(0xFF2A2F2F),
+      systemNavigationBarContrastEnforced: false,
+    ),
+  );
   runApp(const CarbonWmsRoot());
 }
 

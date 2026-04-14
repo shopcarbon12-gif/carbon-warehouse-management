@@ -1,8 +1,10 @@
 package com.shopcarbon.wms
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -16,6 +18,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterFragmentActivity() {
   private var zebraController: CarbonZebraRfidController? = null
   private var chainwayController: CarbonChainwayRfidController? = null
+  private var hardwareBarcodeRelay: CarbonHardwareBarcodeRelay? = null
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -29,8 +32,12 @@ class MainActivity : FlutterFragmentActivity() {
 
     val zebra = CarbonZebraRfidController(this)
     val chainway = CarbonChainwayRfidController(this)
+    val barcodeRelay = CarbonHardwareBarcodeRelay(this)
     zebraController = zebra
     chainwayController = chainway
+    hardwareBarcodeRelay = barcodeRelay
+
+    EventChannel(messenger, "carbon_wms/hardware_barcode").setStreamHandler(barcodeRelay)
 
     EventChannel(messenger, "carbon_wms/rfid_tag_stream").setStreamHandler(
       object : EventChannel.StreamHandler {
@@ -54,6 +61,70 @@ class MainActivity : FlutterFragmentActivity() {
         "chainway.sdkPresent" -> {
           val c = chainway.resolveUhfClass()
           result.success(c != null)
+        }
+        "device.openScannerSettings" -> {
+          val ok =
+            runCatching {
+              startActivity(
+                Intent().apply {
+                  setClassName("com.rscja.scanner", "com.rscja.scanner.ui.MainActivity")
+                  addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+              )
+              true
+            }.getOrElse {
+              runCatching {
+                startActivity(
+                  packageManager.getLaunchIntentForPackage("com.rscja.scanner")?.apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                  } ?: error("scanner package not found"),
+                )
+                true
+              }.getOrDefault(false)
+            }
+          result.success(ok)
+        }
+        "device.openAndroidAppSettings" -> {
+          runCatching {
+            startActivity(
+              Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+              },
+            )
+          }
+          result.success(true)
+        }
+        "device.diagnostics" -> {
+          val chainwaySdk = chainway.resolveUhfClass() != null
+          val zebraSdk = classPresent(ZEBRA_RFID_READER)
+          result.success(
+            mapOf(
+              "manufacturer" to (Build.MANUFACTURER ?: ""),
+              "model" to (Build.MODEL ?: ""),
+              "brand" to (Build.BRAND ?: ""),
+              "chainwaySdkPresent" to chainwaySdk,
+              "zebraSdkPresent" to zebraSdk,
+              "chainwayLastError" to chainway.getLastError(),
+              "zebraLastError" to zebra.getLastError(),
+            ),
+          )
+        }
+        "scanner.start2d" -> {
+          hardwareBarcodeRelay?.startHardwareScan()
+          result.success(true)
+        }
+        "scanner.stop2d" -> {
+          hardwareBarcodeRelay?.stopHardwareScan()
+          result.success(true)
+        }
+        "scanner.enableTriggerRelay" -> {
+          hardwareBarcodeRelay?.activateTriggerRelay()
+          result.success(true)
+        }
+        "scanner.disableTriggerRelay" -> {
+          hardwareBarcodeRelay?.dispose()
+          result.success(true)
         }
         "zebra.connect" -> {
           val args = call.arguments as? Map<*, *>
@@ -127,6 +198,8 @@ class MainActivity : FlutterFragmentActivity() {
     }
     zebraController?.dispose()
     chainwayController?.dispose()
+    hardwareBarcodeRelay?.dispose()
+    hardwareBarcodeRelay = null
     zebraController = null
     chainwayController = null
     super.onDestroy()

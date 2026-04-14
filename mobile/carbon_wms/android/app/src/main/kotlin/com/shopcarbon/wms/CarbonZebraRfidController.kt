@@ -46,6 +46,9 @@ class CarbonZebraRfidController(
   private var readersAttached: Boolean = false
   private var reader: RFIDReader? = null
   private var eventHandler: RfidEventsListener? = null
+  @Volatile private var lastError: String? = null
+
+  fun getLastError(): String? = lastError
 
   fun setTagSink(sink: EventChannel.EventSink?) {
     tagSink = sink
@@ -63,8 +66,10 @@ class CarbonZebraRfidController(
         val r = pickReader() ?: error("No Zebra RFID reader found. Pair an RFD8500 (Bluetooth) or connect USB.")
         reader = r
         connectAndConfigureReader()
+        lastError = null
         mainHandler.post { onDone(null) }
       } catch (e: Throwable) {
+        lastError = e.message ?: e.javaClass.simpleName
         disconnectSync()
         mainHandler.post { onDone(e) }
       }
@@ -94,8 +99,10 @@ class CarbonZebraRfidController(
         r.Actions.Inventory.perform()
         mainHandler.post { result.success(null) }
       } catch (e: InvalidUsageException) {
+        lastError = e.message ?: e.javaClass.simpleName
         mainHandler.post { result.error("INVENTORY_FAILED", e.message ?: "perform failed", null) }
       } catch (e: OperationFailureException) {
+        lastError = e.message ?: e.javaClass.simpleName
         mainHandler.post { result.error("INVENTORY_FAILED", e.message ?: "perform failed", null) }
       }
     }

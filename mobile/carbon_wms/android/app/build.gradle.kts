@@ -30,7 +30,8 @@ android {
         applicationId = "com.shopcarbon.wms"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = maxOf(flutter.minSdkVersion, 29)
+        // c72e (Chainway) ships API 27; Zebra API3 AAR minSdk is 24.
+        minSdk = maxOf(flutter.minSdkVersion, 27)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

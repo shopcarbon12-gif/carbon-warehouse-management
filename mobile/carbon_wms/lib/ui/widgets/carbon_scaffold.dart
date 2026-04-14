@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -195,6 +196,18 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
         : (widget.title != null && widget.title!.isNotEmpty && widget.title != 'Carbon WMS')
             ? widget.title!.toUpperCase()
             : '';
+
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Color(0xFF2A2F2F),
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: Color(0xFF2A2F2F),
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
 
     return Scaffold(
       key: _scaffoldKey,

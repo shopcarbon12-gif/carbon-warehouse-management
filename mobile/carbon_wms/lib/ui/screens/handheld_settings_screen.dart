@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
@@ -22,6 +26,7 @@ class HandheldSettingsScreen extends StatefulWidget {
 }
 
 class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
+  static const MethodChannel _device = MethodChannel('carbon_wms/rfid');
   // ── OTA ───────────────────────────────────────────────────────────────────
   bool _busy = false;
   String? _lastStatus;
@@ -42,6 +47,10 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
   static const _keyScannerSource = 'wms_scanner_source_v1';
   // 'hardware' | 'camera'
   String _scannerSource = 'hardware';
+  StreamSubscription<String>? _scannerSub;
+  String _lastScannerEvent = 'none';
+  DateTime? _lastScannerEventAt;
+  Map<String, dynamic> _diag = const <String, dynamic>{};
 
   @override
   void initState() {
@@ -49,7 +58,15 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _reloadBiometricSection();
       await _loadLocalPrefs();
+      _attachScannerDiagnosticsStream();
+      await _refreshDiagnostics();
     });
+  }
+
+  @override
+  void dispose() {
+    _scannerSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadLocalPrefs() async {
@@ -78,6 +95,65 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
     setState(() => _scannerSource = src);
     final p = await SharedPreferences.getInstance();
     await p.setString(_keyScannerSource, src);
+    _attachScannerDiagnosticsStream();
+  }
+
+  void _attachScannerDiagnosticsStream() {
+    _scannerSub?.cancel();
+    if (_scannerSource != 'hardware') return;
+    _scannerSub = RfidVendorChannel.hardwareBarcodeStream().listen((v) {
+      if (!mounted) return;
+      setState(() {
+        _lastScannerEvent = v;
+        _lastScannerEventAt = DateTime.now();
+      });
+    });
+  }
+
+  Future<void> _refreshDiagnostics() async {
+    final d = await RfidVendorChannel.deviceDiagnostics();
+    if (!mounted) return;
+    setState(() => _diag = d);
+  }
+
+  Future<void> _openScannerSettings() async {
+    try {
+      final ok = await _device.invokeMethod<bool>('device.openScannerSettings');
+      if (!mounted) return;
+      if (ok == true) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Scanner settings app was not found on this device.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open scanner settings.')),
+      );
+    }
+  }
+
+  Future<void> _openAndroidAppSettings() async {
+    try {
+      await _device.invokeMethod<void>('device.openAndroidAppSettings');
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open Android app settings.')),
+      );
+    }
+  }
+
+  Future<void> _refreshHardwareStatus() async {
+    final rfid = context.read<RfidManager>();
+    await rfid.autoDetectHardware();
+    await rfid.reapplyHandheldHardwareSettings();
+    await _reloadBiometricSection();
+    await _loadLocalPrefs();
+    await _refreshDiagnostics();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Hardware settings refreshed.')),
+    );
   }
 
   // ── Biometric ─────────────────────────────────────────────────────────────
@@ -152,7 +228,6 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark      = Theme.of(context).brightness == Brightness.dark;
-    final bg          = isDark ? const Color(0xFF111A1A) : const Color(0xFFF5F5F5);
     final cardColor   = isDark ? const Color(0xFF1C2828) : Colors.white;
     final mutedColor  = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
     final mainColor   = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
@@ -301,6 +376,153 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                   ),
                 );
               },
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── BARCODE / DEVICE SCANNER ────────────────────────────────────
+          _Label('Barcode / Scanner', mutedColor),
+          const SizedBox(height: 8),
+          _Card(
+            color: cardColor,
+            child: Column(
+              children: [
+                _ScannerSourceTile(
+                  icon: Icons.qr_code_scanner,
+                  title: 'Hardware scanner',
+                  subtitle: 'Use side trigger / native scanner service.',
+                  value: 'hardware',
+                  groupValue: _scannerSource,
+                  mainColor: mainColor,
+                  mutedColor: mutedColor,
+                  onChanged: _setScannerSource,
+                ),
+                Divider(height: 1, color: divColor),
+                _ScannerSourceTile(
+                  icon: Icons.camera_alt_outlined,
+                  title: 'Camera scanner',
+                  subtitle: 'Use the in-app camera scanner flow.',
+                  value: 'camera',
+                  groupValue: _scannerSource,
+                  mainColor: mainColor,
+                  mutedColor: mutedColor,
+                  onChanged: _setScannerSource,
+                ),
+                Divider(height: 1, color: divColor),
+                ListTile(
+                  leading: const Icon(Icons.tune, color: AppColors.primary),
+                  title: Text(
+                    'Open Device Scanner Settings',
+                    style: GoogleFonts.manrope(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: mainColor,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Configure scanner output mode, suffix, and trigger behavior.',
+                    style: TextStyle(color: mutedColor, fontSize: 12),
+                  ),
+                  trailing: Icon(Icons.open_in_new, color: mutedColor, size: 18),
+                  onTap: _openScannerSettings,
+                ),
+                Divider(height: 1, color: divColor),
+                ListTile(
+                  leading: const Icon(Icons.refresh, color: AppColors.primary),
+                  title: Text(
+                    'Refresh Settings / Permissions',
+                    style: GoogleFonts.manrope(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: mainColor,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Re-check hardware bridge and reload scanner preferences.',
+                    style: TextStyle(color: mutedColor, fontSize: 12),
+                  ),
+                  trailing: Icon(Icons.chevron_right, color: mutedColor, size: 20),
+                  onTap: _refreshHardwareStatus,
+                ),
+                Divider(height: 1, color: divColor),
+                ListTile(
+                  leading: const Icon(Icons.bug_report, color: AppColors.primary),
+                  title: Text(
+                    'Refresh Diagnostics',
+                    style: GoogleFonts.manrope(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: mainColor,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Reload native scanner/RFID runtime status.',
+                    style: TextStyle(color: mutedColor, fontSize: 12),
+                  ),
+                  trailing: Icon(Icons.chevron_right, color: mutedColor, size: 20),
+                  onTap: _refreshDiagnostics,
+                ),
+                Divider(height: 1, color: divColor),
+                ListTile(
+                  leading: const Icon(Icons.settings_applications, color: AppColors.primary),
+                  title: Text(
+                    'Open Android App Permissions',
+                    style: GoogleFonts.manrope(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: mainColor,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Open system permissions for CarbonWMS.',
+                    style: TextStyle(color: mutedColor, fontSize: 12),
+                  ),
+                  trailing: Icon(Icons.chevron_right, color: mutedColor, size: 20),
+                  onTap: _openAndroidAppSettings,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ── LIVE DIAGNOSTICS ────────────────────────────────────────────
+          _Label('Live Diagnostics', mutedColor),
+          const SizedBox(height: 8),
+          _Card(
+            color: cardColor,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              child: DefaultTextStyle(
+                style: TextStyle(color: mutedColor, fontSize: 12.5, height: 1.45),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'scanner source: $_scannerSource',
+                      style: TextStyle(color: mainColor, fontWeight: FontWeight.w700, fontSize: 13),
+                    ),
+                    const SizedBox(height: 6),
+                    Text('last scanner event: $_lastScannerEvent'),
+                    Text(
+                      'last scanner event at: ${_lastScannerEventAt?.toIso8601String() ?? 'never'}',
+                    ),
+                    const SizedBox(height: 10),
+                    Text('manufacturer: ${_diag['manufacturer'] ?? '-'}'),
+                    Text('model: ${_diag['model'] ?? '-'}'),
+                    Text('brand: ${_diag['brand'] ?? '-'}'),
+                    Text('chainway sdk present: ${_diag['chainwaySdkPresent'] ?? false}'),
+                    Text('zebra sdk present: ${_diag['zebraSdkPresent'] ?? false}'),
+                    Text(
+                      'chainway last error: ${(_diag['chainwayLastError'] ?? '').toString().isEmpty ? 'none' : _diag['chainwayLastError']}',
+                    ),
+                    Text(
+                      'zebra last error: ${(_diag['zebraLastError'] ?? '').toString().isEmpty ? 'none' : _diag['zebraLastError']}',
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
 

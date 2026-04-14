@@ -3,5 +3,10 @@ Zebra RFID API3 for Android
 - Source: ZebraDevs/RFID-Android-Inventory-Sample (GitHub)
 - License: See ZEBRA_EULA in that repository; https://github.com/ZebraDevs/RFID-Android-Inventory-Sample/blob/master/ZEBRA_EULA_LICENSE.md
 
-Chainway DeviceAPI (optional)
-- Not redistributed here. Add DeviceAPI JAR/AAR + native .so from Chainway support for your handset model to this folder, then rebuild.
+Chainway DeviceAPI (required for built-in UHF on C72 / c72e, etc.)
+- Not redistributed here. Request the Android SDK for your exact model from Chainway support.
+- Copy into android/app/libs/:
+  - DeviceAPI / rscja *.jar (or AAR) matching the firmware
+  - Any bundled lib*.so for your ABI (armeabi-v7a / arm64-v8a) into jniLibs if the vendor instructs you to
+- Rebuild the app. Without these, Settings shows antenna power N/A (native UHF never links).
+- Barcode: if the physical scan trigger still does nothing, open the device “Scanner” / “Keyboard Emulator” utility and set output to broadcast intent or keyboard wedge with suffix CR/LF; CarbonWMS listens for common OEM decode broadcasts and for wedge text with newline.

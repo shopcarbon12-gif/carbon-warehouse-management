@@ -3,6 +3,7 @@ package com.shopcarbon.wms
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
@@ -27,6 +28,9 @@ class CarbonChainwayRfidController(
 
   /** Output power in dBm (0–30); applied via reflection when DeviceAPI exposes setPower. */
   private val requestedPowerDbm = AtomicInteger(30)
+  @Volatile private var lastError: String? = null
+
+  fun getLastError(): String? = lastError
 
   fun setTagSink(sink: EventChannel.EventSink?) {
     tagSink = sink
@@ -39,12 +43,16 @@ class CarbonChainwayRfidController(
     }
   }
 
-  fun resolveUhfClass(): Class<*>? {
+   fun resolveUhfClass(): Class<*>? {
     val names =
       listOf(
         "com.rscja.deviceapi.RFIDWithUHFUART",
         "com.rscja.deviceapi.module.RFIDWithUHFUART",
         "com.rscja.deviceapi.RFIDWithUHF",
+        "com.rscja.deviceapi.RFIDWithUHFRLM",
+        "com.rscja.deviceapi.module.RFIDWithUHFRLM",
+        "com.rscja.deviceapi.RFIDWithUHFUsbToUart",
+        "com.rscja.deviceapi.RFIDWithUHFABR",
       )
     for (n in names) {
       try {
@@ -60,13 +68,16 @@ class CarbonChainwayRfidController(
     executor.execute {
       try {
         disconnectSync()
-        val cls = resolveUhfClass() ?: error("Chainway DeviceAPI class not found. Add vendor JAR to app/libs/.")
+        val cls = resolveUhfClass() ?: error("Chainway DeviceAPI class not found. Add vendor JAR + .so from Chainway to app/libs/.")
         uhfClass = cls
-        val inst = getStaticInstance(cls) ?: error("Chainway UHF getInstance() not found.")
+        val inst = getStaticInstance(cls, context.applicationContext) ?: error("Chainway UHF getInstance() not found.")
         uhfInstance = inst
         invokeInit(cls, inst)
+        lastError = null
         mainHandler.post { onDone(null) }
       } catch (e: Throwable) {
+        Log.e("CarbonChainway", "connect failed: ${e.message}", e)
+        lastError = e.message ?: e.javaClass.simpleName
         disconnectSync()
         mainHandler.post { onDone(e) }
       }
@@ -120,6 +131,7 @@ class CarbonChainwayRfidController(
           }.also { it.start() }
         mainHandler.post { result.success(null) }
       } catch (e: Exception) {
+        lastError = e.message ?: e.javaClass.simpleName
         mainHandler.post { result.error("INVENTORY_FAILED", e.message ?: "chainway_start", null) }
       }
     }
@@ -151,20 +163,24 @@ class CarbonChainwayRfidController(
     if (cls != null && inst != null) {
       runCatching { cls.getMethod("stopInventory").invoke(inst) }
       runCatching { cls.getMethod("free").invoke(inst) }
+      runCatching { cls.getMethod("close").invoke(inst) }
     }
     uhfClass = null
     uhfInstance = null
   }
 
-  private fun getStaticInstance(cls: Class<*>): Any? {
-    return runCatching {
-      val m = cls.getMethod("getInstance")
-      m.invoke(null)
-    }.getOrElse {
-      runCatching {
-        cls.getDeclaredField("INSTANCE").apply { isAccessible = true }.get(null)
-      }.getOrNull()
+  private fun getStaticInstance(cls: Class<*>, appCtx: Context): Any? {
+    runCatching {
+      val m = cls.getMethod("getInstance", Context::class.java)
+      return m.invoke(null, appCtx)
     }
+    runCatching {
+      val m = cls.getMethod("getInstance")
+      return m.invoke(null)
+    }
+    return runCatching {
+      cls.getDeclaredField("INSTANCE").apply { isAccessible = true }.get(null)
+    }.getOrNull()
   }
 
   /** Best-effort: common Chainway UHF APIs use `setPower(int)` in dBm (often 0–30). */
