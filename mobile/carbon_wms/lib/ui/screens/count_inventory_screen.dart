@@ -498,10 +498,18 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                                 .where((s) => s.isNotEmpty)
                                 .toList();
                             final desc = descParts.isEmpty ? 'ITEM DESCRIPTION' : descParts.join(' ');
+                            final extra = <String>[
+                              'Asset ID: ${g.assetId}',
+                              if (g.vendor.trim().isNotEmpty) 'Vendor: ${g.vendor}',
+                              'Unique EPCs in session: ${g.epcs.length}',
+                              if (g.cached) 'Details source: offline cache',
+                              if (!g.cached && (g.sku.isNotEmpty || g.name.isNotEmpty)) 'Details source: catalog lookup',
+                            ];
                             return _CountItemContainer(
                               sku: g.sku.trim().isEmpty ? g.assetId : g.sku,
                               description: desc,
                               qtyText: 'x${g.qty}',
+                              expandedLines: extra,
                             );
                           },
                         )
@@ -829,68 +837,112 @@ class _CountBottomShortcuts extends StatelessWidget {
   }
 }
 
-class _CountItemContainer extends StatelessWidget {
+class _CountItemContainer extends StatefulWidget {
   const _CountItemContainer({
     required this.sku,
     required this.description,
     required this.qtyText,
+    this.expandedLines = const <String>[],
   });
 
   final String sku;
   final String description;
   final String qtyText;
+  final List<String> expandedLines;
+
+  @override
+  State<_CountItemContainer> createState() => _CountItemContainerState();
+}
+
+class _CountItemContainerState extends State<_CountItemContainer> {
+  static const _collapsedBodyHeight = 58.0;
+
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
+    final descStyle = GoogleFonts.manrope(
+      fontSize: 13.5,
+      fontWeight: FontWeight.w700,
+      color: AppColors.textMain,
+      letterSpacing: 0.3,
+      height: 1.0,
+    );
+
     return Material(
       color: const Color(0xFFEFF3F7),
       borderRadius: BorderRadius.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'SKU:  $sku',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.textMain,
-                      letterSpacing: 0.2,
-                    ),
+      child: InkWell(
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SKU:  ${widget.sku}',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.textMain,
+                          letterSpacing: 0.2,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      SizedBox(
+                        height: _expanded ? null : _collapsedBodyHeight,
+                        width: double.infinity,
+                        child: ClipRect(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.description,
+                                style: descStyle,
+                                maxLines: _expanded ? null : 1,
+                                overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                              ),
+                              if (_expanded && widget.expandedLines.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                for (final line in widget.expandedLines)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Text(line, style: descStyle),
+                                  ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    description,
-                    style: GoogleFonts.manrope(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textMain,
-                      letterSpacing: 0.3,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            Padding(
-              padding: const EdgeInsets.only(top: 1),
-              child: Text(
-                qtyText,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
-                  letterSpacing: 0.4,
                 ),
-              ),
+                const SizedBox(width: 10),
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    widget.qtyText,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                      letterSpacing: 0.4,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
