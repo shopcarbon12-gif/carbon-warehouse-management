@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -378,10 +379,19 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final showPreviewRow = !hasRealRows && _previewSingleItemContainer;
     final assetCount = _epcRows.length;
     final skuCount = groups.where((g) => g.sku.trim().isNotEmpty).length;
+    final summaryValueText = showPreviewRow ? '0' : '$assetCount';
+    final summarySkuValueText = showPreviewRow ? '0' : '$skuCount';
+    final epcSummaryTileWidth = _countSummaryTileTightWidth(label: 'Total EPCs', value: summaryValueText);
+    final skuSummaryTileWidth = _countSummaryTileTightWidth(label: 'Total SKUs', value: summarySkuValueText);
+    final continueButtonWidth = _continueButtonTightWidth();
     final tileColor = isDark ? const Color(0xFF1C2828) : const Color(0xFFEEF4F3);
     final textColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
     final mutedColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
     final watermarkColor = isDark ? const Color(0x66A0B3B3) : const Color(0x2995A5A7);
+
+    const bottomShortcutsHeight = 78.0;
+    const actionBarHeight = 60.0;
+    const listExtraBottomPad = bottomShortcutsHeight + actionBarHeight + 8;
 
     return CarbonScaffold(
       pageTitle: 'count',
@@ -403,139 +413,204 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                 style: GoogleFonts.spaceGrotesk(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: 3.0,
+                  letterSpacing: 2.4,
                   color: AppColors.primary,
                 ),
               ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final tileWidth = ((constraints.maxWidth - 4) / 2).clamp(160.0, 166.0);
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: tileWidth,
-                        child: _CountSummaryTile(
-                          label: 'Total EPCs',
-                          value: '$assetCount',
-                          icon: Icons.inventory_2_outlined,
-                          tileColor: tileColor,
-                          textColor: textColor,
-                          mutedColor: mutedColor,
-                          watermarkColor: watermarkColor,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: tileWidth,
-                        child: _CountSummaryTile(
-                          label: 'Total SKUs',
-                          value: '$skuCount',
-                          icon: Icons.precision_manufacturing_outlined,
-                          tileColor: tileColor,
-                          textColor: textColor,
-                          mutedColor: mutedColor,
-                          watermarkColor: watermarkColor,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
-                child: hasRealRows || showPreviewRow
-                    ? ListView.separated(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        itemCount: hasRealRows ? groups.length : 1,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (_, i) {
-                          if (!hasRealRows) {
-                            return const _CountItemContainer(
-                              sku: '112225207S',
-                              description: 'TYLER SHIRT BLACK S',
-                              qtyText: 'x24',
-                            );
-                          }
-                          final g = groups[i];
-                          final descParts = [g.name, g.color, g.size]
-                              .map((s) => s.trim())
-                              .where((s) => s.isNotEmpty)
-                              .toList();
-                          final desc = descParts.isEmpty ? 'ITEM DESCRIPTION' : descParts.join(' ');
-                          return _CountItemContainer(
-                            sku: g.sku.trim().isEmpty ? g.assetId : g.sku,
-                            description: desc,
-                            qtyText: 'x${g.qty}',
-                          );
-                        },
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
               child: Row(
                 children: [
                   Expanded(
                     child: SizedBox(
-                      height: 44,
-                      child: FilledButton(
-                        onPressed: _connecting ? null : _toggleScan,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF0A7C80),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              _scanOn ? 'STOP' : 'START',
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.8,
-                              ),
+                      height: 54,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: _CountSummaryTile(
+                              label: 'Total EPCs',
+                              value: summaryValueText,
+                              icon: Icons.inventory_2_outlined,
+                              tileColor: tileColor,
+                              textColor: textColor,
+                              mutedColor: mutedColor,
+                              watermarkColor: watermarkColor,
+                              width: epcSummaryTileWidth,
+                              fitValue: false,
                             ),
-                            Icon(_scanOn ? Icons.stop_circle_outlined : Icons.play_circle_outline, size: 20),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: SizedBox(
-                      height: 44,
-                      child: FilledButton(
-                        onPressed: hasRealRows ? _openContinue : null,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF2BA3A3),
-                          disabledBackgroundColor: const Color(0xFF2BA3A3),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                        ),
+                      height: 54,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: _CountSummaryTile(
+                              label: 'Total SKUs',
+                              value: summarySkuValueText,
+                              icon: Icons.precision_manufacturing_outlined,
+                              tileColor: tileColor,
+                              textColor: textColor,
+                              mutedColor: mutedColor,
+                              watermarkColor: watermarkColor,
+                              width: skuSummaryTileWidth,
+                              fitValue: false,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                      child: hasRealRows || showPreviewRow
+                          ? ListView.separated(
+                              padding: const EdgeInsets.only(bottom: listExtraBottomPad),
+                              itemCount: hasRealRows ? groups.length : 20,
+                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              itemBuilder: (_, i) {
+                                if (!hasRealRows) {
+                                  final n = i + 1;
+                                  return _CountItemContainer(
+                                    sku: '112225207S',
+                                    description: 'TYLER SHIRT BLACK S  ·  sample $n of 20',
+                                    qtyText: 'x$n',
+                                  );
+                                }
+                                final g = groups[i];
+                                final descParts = [g.name, g.color, g.size]
+                                    .map((s) => s.trim())
+                                    .where((s) => s.isNotEmpty)
+                                    .toList();
+                                final desc = descParts.isEmpty ? 'ITEM DESCRIPTION' : descParts.join(' ');
+                                return _CountItemContainer(
+                                  sku: g.sku.trim().isEmpty ? g.assetId : g.sku,
+                                  description: desc,
+                                  qtyText: 'x${g.qty}',
+                                );
+                              },
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: bottomShortcutsHeight,
+                    child: Material(
+                      color: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'CONTINUE',
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.5,
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: SizedBox(
+                                  width: continueButtonWidth,
+                                  height: 40,
+                                  child: FilledButton(
+                                    onPressed: _connecting ? null : _toggleScan,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                          _scanOn ? const Color(0xFFBF2E2E) : const Color(0xFF0A7C80),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(
+                                              _scanOn ? 'STOP' : 'START',
+                                              style: GoogleFonts.spaceGrotesk(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 1.8,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        SizedBox(
+                                          width: 20,
+                                          child: Icon(
+                                            _scanOn ? Icons.stop_circle_outlined : Icons.play_circle_outline,
+                                            size: 20,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                            const Icon(Icons.arrow_forward, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: SizedBox(
+                                  width: continueButtonWidth,
+                                  height: 40,
+                                  child: FilledButton(
+                                    onPressed: (hasRealRows || showPreviewRow) ? _openContinue : null,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2BA3A3),
+                                      disabledBackgroundColor: const Color(0xFF2BA3A3),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(
+                                              'CONTINUE',
+                                              style: GoogleFonts.spaceGrotesk(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 1.5,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const SizedBox(
+                                          width: 20,
+                                          child: Icon(Icons.arrow_forward, size: 20, color: Colors.white),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -561,6 +636,8 @@ class _CountSummaryTile extends StatelessWidget {
     required this.textColor,
     required this.mutedColor,
     required this.watermarkColor,
+    this.width,
+    this.fitValue = true,
   });
 
   final String label;
@@ -570,15 +647,19 @@ class _CountSummaryTile extends StatelessWidget {
   final Color textColor;
   final Color mutedColor;
   final Color watermarkColor;
+  final double? width;
+  final bool fitValue;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final tile = SizedBox(
       height: 54,
       child: Material(
         color: tileColor,
         borderRadius: BorderRadius.circular(2),
+        clipBehavior: Clip.none,
         child: Stack(
+          clipBehavior: Clip.none,
           children: [
             Positioned(
               right: 4,
@@ -595,26 +676,38 @@ class _CountSummaryTile extends StatelessWidget {
                     style: GoogleFonts.manrope(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: mutedColor,
+                      color: Color.alphaBlend(const Color(0x26000000), mutedColor),
                     ),
                   ),
                   SizedBox(
                     width: double.infinity,
-                    child: FittedBox(
-                      alignment: Alignment.centerLeft,
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        value,
-                        maxLines: 1,
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -1.0,
-                          color: textColor,
-                          height: 1.0,
-                        ),
-                      ),
-                    ),
+                    child: fitValue
+                        ? FittedBox(
+                            alignment: Alignment.centerLeft,
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              value,
+                              maxLines: 1,
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -1.0,
+                                color: textColor,
+                                height: 1.0,
+                              ),
+                            ),
+                          )
+                        : Text(
+                            value,
+                            maxLines: 1,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 34,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -1.0,
+                              color: textColor,
+                              height: 1.0,
+                            ),
+                          ),
                   ),
                 ],
               ),
@@ -623,7 +716,62 @@ class _CountSummaryTile extends StatelessWidget {
         ),
       ),
     );
+
+    if (width == null) return tile;
+    return SizedBox(width: width, child: tile);
   }
+}
+
+double _countSummaryTileTightWidth({required String label, required String value}) {
+  const horizontalPadding = 9.0 * 2;
+  const minContentWidth = 1.0;
+  final labelPainter = TextPainter(
+    text: TextSpan(
+      text: label,
+      style: GoogleFonts.manrope(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: Colors.black,
+      ),
+    ),
+    maxLines: 1,
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final valuePainter = TextPainter(
+    text: TextSpan(
+      text: value,
+      style: GoogleFonts.spaceGrotesk(
+        fontSize: 34,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -1.0,
+        height: 1.0,
+      ),
+    ),
+    maxLines: 1,
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final contentW = math.max(labelPainter.size.width, valuePainter.size.width).clamp(minContentWidth, double.infinity);
+  return horizontalPadding + contentW;
+}
+
+double _continueButtonTightWidth() {
+  const horizontalPadding = 12.0 * 2;
+  const gap = 8.0;
+  const iconSlot = 20.0;
+  final painter = TextPainter(
+    text: TextSpan(
+      text: 'CONTINUE',
+      style: GoogleFonts.spaceGrotesk(
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.5,
+        color: Colors.white,
+      ),
+    ),
+    maxLines: 1,
+    textDirection: TextDirection.ltr,
+  )..layout();
+  return horizontalPadding + painter.size.width + gap + iconSlot;
 }
 
 class _CountBottomShortcuts extends StatelessWidget {
@@ -707,7 +855,7 @@ class _CountItemContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: const Color(0xFFEFF3F7),
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.zero,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
         child: Row(
@@ -721,7 +869,7 @@ class _CountItemContainer extends StatelessWidget {
                     'SKU:  $sku',
                     style: GoogleFonts.spaceGrotesk(
                       fontSize: 15.5,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w900,
                       color: AppColors.textMain,
                       letterSpacing: 0.2,
                     ),
