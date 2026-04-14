@@ -690,6 +690,18 @@ class WmsApiClient {
     return <String, dynamic>{};
   }
 
+  /// `DELETE /api/bins/:binCode/sku/:sku` — removes a SKU assignment from a bin.
+  Future<void> removeSkuFromBin(String binCode, String sku) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final encodedBin = Uri.encodeComponent(binCode.trim());
+    final encodedSku = Uri.encodeComponent(sku.trim());
+    final uri = Uri.parse('$base/api/bins/$encodedBin/sku/$encodedSku');
+    final res = await _http.delete(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+  }
+
   Future<Map<String, dynamic>?> fetchItemDetailByEpc(String epc) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/mobile/item-detail').replace(
@@ -790,6 +802,65 @@ class WmsApiClient {
       if (decoded is Map<String, dynamic>) return decoded;
     } catch (_) {}
     return {};
+  }
+
+  /// `GET /api/inventory/catalog?view=grid&matrixId=:id` — all color rows for a product matrix.
+  Future<List<dynamic>> fetchCatalogMatrixRows(String matrixId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/catalog').replace(
+      queryParameters: {'view': 'grid', 'page': '1', 'limit': '100', 'matrixId': matrixId},
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) return [];
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      final rows = decoded['rows'];
+      return rows is List ? rows : [];
+    }
+    return [];
+  }
+
+  /// `GET /api/bins` — returns list of all bins.
+  Future<List<dynamic>> fetchBins() async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/bins');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is List ? decoded : [];
+  }
+
+  /// `GET /api/bins/:id/contents` — returns RFID EPC contents for a bin.
+  Future<List<dynamic>> fetchBinContents(String binId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/bins/$binId/contents');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is List ? decoded : [];
+  }
+
+  /// `POST /api/bins` — creates a new bin with the given code.
+  Future<Map<String, dynamic>> createBin(String code) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/bins');
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'code': code}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : {};
   }
 
   void close() => _http.close();

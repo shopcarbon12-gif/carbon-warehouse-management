@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bin Assign — Full Behaviour Spec</title>
+  <style>
+    :root {
+      --teal:       #1B7D7D;
+      --teal-light: #2BA3A3;
+      --teal-pale:  #E6F4F4;
+      --red:        #D32F2F;
+      --red-pale:   #FDECEA;
+      --green:      #2E7D32;
+      --green-pale: #EDF7EE;
+      --grey:       #607D7B;
+      --grey-pale:  #F4F7F7;
+      --dark:       #111A1A;
+      --ink:        #1C2828;
+      --muted:      #5A7070;
+      --border:     #D0E4E4;
+      --code-bg:    #0D1F1F;
+      --code-text:  #A8D8D0;
+      --badge-bg:   #1B7D7D;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #F0F6F6;
+      color: var(--ink);
+      line-height: 1.6;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--dark);
+      padding: 32px 48px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      border-bottom: 3px solid var(--teal);
+    }
+    header .logo {
+      width: 48px; height: 48px;
+      background: var(--teal);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; color: white; font-weight: 900;
+    }
+    header h1 {
+      font-size: 28px; font-weight: 800; color: #E0ECEC;
+      letter-spacing: -0.5px;
+    }
+    header h1 span { color: var(--teal-light); }
+    header p { color: #7A9090; font-size: 14px; margin-top: 2px; }
+
+    /* ── LAYOUT ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 40px 32px; }
+
+    /* ── TOC ── */
+    .toc {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 40px;
+    }
+    .toc h2 { font-size: 13px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 12px; }
+    .toc ol { padding-left: 20px; }
+    .toc li { margin: 6px 0; }
+    .toc a { color: var(--teal); text-decoration: none; font-weight: 500; font-size: 14px; }
+    .toc a:hover { text-decoration: underline; }
+
+    /* ── SECTION ── */
+    section {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 28px;
+      overflow: hidden;
+    }
+    .section-header {
+      background: var(--teal-pale);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .section-header .num {
+      width: 30px; height: 30px;
+      background: var(--teal);
+      color: white;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800;
+      flex-shrink: 0;
+    }
+    .section-header h2 { font-size: 17px; font-weight: 800; color: var(--dark); }
+    .section-body { padding: 24px 28px; }
+
+    /* ── SUBSECTION ── */
+    .sub { margin-bottom: 24px; }
+    .sub:last-child { margin-bottom: 0; }
+    .sub-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.4px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sub-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── HUMAN LANG ── */
+    .human {
+      background: var(--grey-pale);
+      border-left: 4px solid var(--teal);
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      font-size: 14px;
+      color: var(--ink);
+      margin-bottom: 14px;
+    }
+    .human strong { color: var(--teal); }
+
+    /* ── CODE BLOCK ── */
+    .code-wrap { position: relative; margin-bottom: 14px; }
+    .code-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--teal-light);
+      background: #0D2E2E;
+      padding: 6px 14px;
+      border-radius: 8px 8px 0 0;
+      display: inline-block;
+    }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-text);
+      padding: 16px 18px;
+      border-radius: 0 8px 8px 8px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 13px;
+      overflow-x: auto;
+      line-height: 1.7;
+    }
+    .kw  { color: #4DB6AC; font-weight: 700; }
+    .str { color: #A5D6A7; }
+    .cmt { color: #4A6666; font-style: italic; }
+    .fn  { color: #80CBC4; }
+    .num { color: #F48FB1; }
+    .var { color: #E0ECEC; }
+
+    /* ── FLOW DIAGRAM ── */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 14px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 12px 0;
+      border-left: 2px solid var(--border);
+      padding-left: 20px;
+      margin-left: 12px;
+      position: relative;
+    }
+    .flow-step::before {
+      content: '';
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--teal);
+      position: absolute;
+      left: -7px;
+      top: 16px;
+      flex-shrink: 0;
+    }
+    .flow-step.red::before { background: var(--red); }
+    .flow-step.green::before { background: var(--green); }
+    .flow-step:last-child { border-left-color: transparent; }
+    .flow-step-body { flex: 1; }
+    .flow-step-body p { font-size: 14px; color: var(--ink); }
+    .flow-step-body .note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    /* ── TABLE ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 14px 0;
+    }
+    th {
+      background: var(--teal-pale);
+      color: var(--teal);
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 2px solid var(--border);
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--ink);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--grey-pale); }
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .badge-teal  { background: var(--teal-pale);  color: var(--teal); }
+    .badge-red   { background: var(--red-pale);   color: var(--red); }
+    .badge-green { background: var(--green-pale); color: var(--green); }
+    .badge-grey  { background: #ECEFF1; color: #546E7A; }
+
+    /* ── ALERT BOXES ── */
+    .alert {
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-size: 14px;
+      margin: 12px 0;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .alert-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+    .alert.warn  { background: #FFF8E1; border-left: 4px solid #F59E0B; }
+    .alert.info  { background: var(--teal-pale); border-left: 4px solid var(--teal); }
+    .alert.danger{ background: var(--red-pale);  border-left: 4px solid var(--red); }
+    .alert.ok    { background: var(--green-pale);border-left: 4px solid var(--green); }
+
+    /* ── API PILL ── */
+    .api {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--code-bg);
+      color: var(--code-text);
+      font-family: monospace;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      margin: 3px 2px;
+    }
+    .api .method { color: #F48FB1; font-weight: 700; }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center;
+      padding: 32px;
+      color: var(--muted);
+      font-size: 13px;
+      border-top: 1px solid var(--border);
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">C</div>
+  <div>
+    <h1>Carbon<span>WMS</span> / BIN ASSIGN</h1>
+    <p>Full Behaviour Specification — Human Language + Code Language</p>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- TOC -->
+  <div class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#s1">Default Mode</a></li>
+      <li><a href="#s2">Scan Bin (Step 1)</a></li>
+      <li><a href="#s3">Scan Item (Step 2)</a></li>
+      <li><a href="#s4">Same Product Different Color Flow</a></li>
+      <li><a href="#s5">New Product Flow</a></li>
+      <li><a href="#s6">Stored Items Display</a></li>
+      <li><a href="#s7">SKU Row Tap → EPC Detail Screen</a></li>
+      <li><a href="#s8">Swipe to Delete</a></li>
+      <li><a href="#s9">Clean & Empty Bin</a></li>
+      <li><a href="#s10">Ready for Next Entry</a></li>
+      <li><a href="#s11">Settings (Gear Icon)</a></li>
+      <li><a href="#s12">Camera Behaviour</a></li>
+      <li><a href="#s13">Locking Rules</a></li>
+      <li><a href="#s14">API Reference</a></li>
+      <li><a href="#s15">SKU Parsing Reference</a></li>
+    </ol>
+  </div>
+
+  <!-- 1. DEFAULT MODE -->
+  <section id="s1">
+    <div class="section-header">
+      <div class="num">1</div>
+      <h2>Default Mode</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        Every single time a worker enters this screen — whether they just logged in, came back from another screen, or were here before — the screen <strong>resets completely</strong>. Nothing from the previous session is remembered. The bin box is empty, the badge says INACTIVE, there are no stored items, and the only thing they can do is scan a bin.
+      </div>
+      <div class="sub">
+        <div class="sub-title">State on load</div>
+        <table>
+          <tr><th>Element</th><th>State</th></tr>
+          <tr><td>Bin box</td><td><span class="badge badge-grey">EMPTY</span></td></tr>
+          <tr><td>Badge</td><td><span class="badge badge-grey">INACTIVE</span></td></tr>
+          <tr><td>Stored items list</td><td><span class="badge badge-grey">EMPTY</span></td></tr>
+          <tr><td>Bottom label</td><td><span class="badge badge-red">TRIGGER TO ADD BIN — red bold</span></td></tr>
+          <tr><td>ADD BIN button</td><td><span class="badge badge-teal">ACTIVE</span></td></tr>
+          <tr><td>ADD ITEM button</td><td><span class="badge badge-grey">LOCKED</span></td></tr>
+          <tr><td>ADD ITEM camera</td><td><span class="badge badge-grey">LOCKED</span></td></tr>
+          <tr><td>ADD BIN camera</td><td><span class="badge badge-teal">ACTIVE (if camera enabled)</span></td></tr>
+        </table>
+      </div>
+      <div class="sub">
+        <div class="sub-title">Code</div>
+        <div class="code-wrap">
+          <div class="code-label">DART — State reset on initState / didChangeDependencies</div>
+          <pre>
+<span class="kw">void</span> <span class="fn">_resetToDefault</span>() {
+  setState(() {
+    _currentBin     = <span class="str">''</span>;          <span class="cmt">// empty bin</span>
+    _currentBinId   = <span class="kw">null</span>;        <span class="cmt">// no bin UUID</span>
+    _storedContents = [];           <span class="cmt">// no items</span>
+    _undoSnapshot   = <span class="kw">null</span>;        <span class="cmt">// no undo buffer</span>
+    _phase          = _PutawayPhase.scanBin;
+    _bottomLabel    = <span class="str">'TRIGGER TO ADD BIN'</span>;
+    _labelIsRed     = <span class="kw">true</span>;
+    _binConfirmed   = <span class="kw">false</span>;        <span class="cmt">// locks ADD ITEM</span>
+  });
+}
+
+<span class="kw">@override</span>
+<span class="kw">void</span> <span class="fn">initState</span>() {
+  <span class="kw">super</span>.initState();
+  <span class="fn">_resetToDefault</span>();
+}</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. SCAN BIN -->
+  <section id="s2">
+    <div class="section-header">
+      <div class="num">2</div>
+      <h2>Step 1 — Scan Bin</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        The worker picks up the handheld gun (or uses camera / Bluetooth scanner) and scans the barcode on the bin shelf. The raw scan comes in as something like <strong>2B03L</strong> — the app always reformats it to <strong>2-B-03-L</strong> before displaying or sending to the server. Then the app checks if that bin already exists in the WMS system.
+      </div>
+
+      <div class="sub">
+        <div class="sub-title">Formatting rule</div>
+        <div class="human">
+          Raw scan is always 5 characters in the pattern <strong>X-X-XX-X</strong>. The app splits them with dashes automatically. <strong>2B03L → 2-B-03-L</strong>
+        </div>
+        <div class="code-wrap">
+          <div class="code-label">DART — Format bin code</div>
+          <pre>
+<span class="kw">String</span> <span class="fn">_formatBinCode</span>(<span class="kw">String</span> raw) {
+  <span class="kw">final</span> s = raw.replaceAll(<span class="kw">RegExp</span>(<span class="str">r'[^A-Za-z0-9]'</span>), <span class="str">''</span>).toUpperCase();
+  <span class="kw">if</span> (s.length != <span class="num">5</span>) <span class="kw">return</span> s; <span class="cmt">// fallback — show as-is</span>
+  <span class="kw">return</span> <span class="str">'</span>${s[<span class="num">0</span>]}<span class="str">-</span>${s[<span class="num">1</span>]}<span class="str">-</span>${s.substring(<span class="num">2</span>, <span class="num">4</span>)}<span class="str">-</span>${s[<span class="num">4</span>]}<span class="str">'</span>;
+  <span class="cmt">// 2B03L → 2-B-03-L</span>
+}</pre>
+        </div>
+      </div>
+
+      <div class="sub">
+        <div class="sub-title">Flow</div>
+        <div class="flow">
+          <div class="flow-step">
+            <div class="flow-step-body">
+              <p>Worker scans bin barcode → raw value received</p>
+              <div class="note">Hardware wedge fires hidden TextField onSubmitted, camera returns string, Bluetooth keyboard fires same TextField</div>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-body">
+              <p>Format raw → <strong>X-X-XX-X</strong> → display immediately in bin box</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-body">
+              <p>API call: <span class="api"><span class="method">GET</span> /api/locations/bins</span> → filter response by code</p>
+            </div>
+          </div>
+          <div class="flow-step green">
+            <div class="flow-step-body">
+              <p><strong>Bin found</strong> → badge = ACTIVE → load stored contents → label → "TRIGGER TO ADD ITEM" (red) → unlock ADD ITEM</p>
+            </div>
+          </div>
+          <div class="flow-step red">
+            <div class="flow-step-body">
+              <p><strong>Bin not found</strong> → popup: "This bin does not exist. Would you like to add it?"</p>
+              <div class="note">Input pre-filled with formatted code. Confirm → POST new bin → proceed as ACTIVE. Cancel → close popup, stay on screen.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sub">
+        <div class="sub-title">Code</div>
+        <div class="code-wrap">
+          <div class="code-label">DART — Bin scan handler</div>
+          <pre>
+<span class="kw">Future</span>&lt;<span class="kw">void</span>&gt; <span class="fn">_onBinScanned</span>(<span class="kw">String</span> raw) <span class="kw">async</span> {
+  <span class="kw">final</span> code = <span class="fn">_formatBinCode</span>(raw);
+  setState(() => _currentBin = code);
+
+  <span class="kw">final</span> api   = context.read&lt;<span class="kw">WmsApiClient</span>&gt;();
+  <span class="kw">final</span> bins  = <span class="kw">await</span> api.<span class="fn">fetchBins</span>();           <span class="cmt">// GET /api/locations/bins</span>
+  <span class="kw">final</span> found = bins.firstWhereOrNull(
+    (b) => b[<span class="str">'code'</span>] == code
+  );
+
+  <span class="kw">if</span> (found != <span class="kw">null</span>) {
+    <span class="kw">await</span> <span class="fn">_confirmBin</span>(found[<span class="str">'id'</span>], code);
+  } <span class="kw">else</span> {
+    <span class="fn">_showNewBinDialog</span>(code);
+  }
+}
+
+<span class="kw">Future</span>&lt;<span class="kw">void</span>&gt; <span class="fn">_confirmBin</span>(<span class="kw">String</span> id, <span class="kw">String</span> code) <span class="kw">async</span> {
+  <span class="kw">final</span> contents = <span class="kw">await</span> api.<span class="fn">fetchBinContents</span>(id); <span class="cmt">// GET /api/locations/bins/contents?binId=</span>
+  setState(() {
+    _currentBinId   = id;
+    _currentBin     = code;
+    _binConfirmed   = <span class="kw">true</span>;
+    _storedContents = contents;
+    _bottomLabel    = <span class="str">'TRIGGER TO ADD ITEM'</span>;
+    _labelIsRed     = <span class="kw">true</span>;
+  });
+}</pre>
+        </div>
+        <div class="code-wrap">
+          <div class="code-label">DART — Create new bin dialog</div>
+          <pre>
+<span class="kw">void</span> <span class="fn">_showNewBinDialog</span>(<span class="kw">String</span> prefilledCode) {
+  <span class="kw">final</span> ctrl = TextEditingController(text: prefilledCode);
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: <span class="kw">const</span> Text(<span class="str">'Bin not found'</span>),
+      content: Column(children: [
+        <span class="kw">const</span> Text(<span class="str">'This bin does not exist. Would you like to add it?'</span>),
+        TextField(controller: ctrl),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: <span class="kw">const</span> Text(<span class="str">'Cancel'</span>)),
+        FilledButton(
+          onPressed: () <span class="kw">async</span> {
+            Navigator.pop(context);
+            <span class="kw">final</span> id = <span class="kw">await</span> api.<span class="fn">createBin</span>(ctrl.text); <span class="cmt">// POST /api/locations/bins</span>
+            <span class="kw">await</span> <span class="fn">_confirmBin</span>(id, ctrl.text);
+          },
+          child: <span class="kw">const</span> Text(<span class="str">'Add Bin'</span>),
+        ),
+      ],
+    ),
+  );
+}</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. SCAN ITEM -->
+  <section id="s3">
+    <div class="section-header">
+      <div class="num">3</div>
+      <h2>Step 2 — Scan Item</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        After the bin is confirmed, the worker scans the barcode on the item. The app reads the SKU, figures out which product and color it belongs to (by stripping the size off the end), and searches the WMS catalog. A popup asks to confirm the assignment.
+      </div>
+
+      <div class="sub">
+        <div class="sub-title">SKU structure</div>
+        <table>
+          <tr><th>Type</th><th>Base</th><th>Color (ZZ)</th><th>Size (Y+)</th><th>Full example</th><th>Search key (base+color)</th></tr>
+          <tr>
+            <td><span class="badge badge-teal">No C</span></td>
+            <td>First 7 digits</td>
+            <td>Next 2 chars</td>
+            <td>Remainder</td>
+            <td><code>112220507XS</code></td>
+            <td><code>112220507</code> (9 chars)</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-red">With C</span></td>
+            <td>First 9 chars (incl. C)</td>
+            <td>Next 2 chars</td>
+            <td>Remainder</td>
+            <td><code>C227219020711</code></td>
+            <td><code>C2272190207</code> (11 chars)</td>
+          </tr>
+        </table>
+        <table>
+          <tr><th>Goal</th><th>No C</th><th>With C</th></tr>
+          <tr><td>Specific color</td><td>First 9 chars</td><td>First 11 chars</td></tr>
+          <tr><td>All colors</td><td>First 7 chars</td><td>First 9 chars</td></tr>
+        </table>
+      </div>
+
+      <div class="sub">
+        <div class="sub-title">Code — SKU parser</div>
+        <div class="code-wrap">
+          <div class="code-label">DART — Parse SKU into parts</div>
+          <pre>
+<span class="kw">class</span> SkuParts {
+  <span class="kw">final</span> <span class="kw">String</span> base;        <span class="cmt">// 7 or 9 chars (incl C)</span>
+  <span class="kw">final</span> <span class="kw">String</span> baseColor;   <span class="cmt">// 9 or 11 chars — search key for specific color</span>
+  <span class="kw">final</span> <span class="kw">String</span> colorCode;   <span class="cmt">// ZZ — 2 chars</span>
+  <span class="kw">final</span> <span class="kw">String</span> size;         <span class="cmt">// remainder</span>
+  <span class="kw">const</span> SkuParts({
+    <span class="kw">required this</span>.base,
+    <span class="kw">required this</span>.baseColor,
+    <span class="kw">required this</span>.colorCode,
+    <span class="kw">required this</span>.size,
+  });
+}
+
+SkuParts <span class="fn">parseSku</span>(<span class="kw">String</span> sku) {
+  <span class="kw">final</span> s = sku.trim().toUpperCase();
+  <span class="kw">final</span> hasC  = s.startsWith(<span class="str">'C'</span>);
+  <span class="kw">final</span> baseLen = hasC ? <span class="num">9</span> : <span class="num">7</span>;   <span class="cmt">// base length</span>
+  <span class="kw">final</span> bcLen   = hasC ? <span class="num">11</span> : <span class="num">9</span>;  <span class="cmt">// base+color length</span>
+
+  <span class="kw">if</span> (s.length &lt; bcLen) {
+    <span class="cmt">// Too short — treat entire string as base+color, no size</span>
+    <span class="kw">return</span> SkuParts(base: s.substring(<span class="num">0</span>, baseLen.clamp(<span class="num">0</span>, s.length)),
+                    baseColor: s, colorCode: <span class="str">''</span>, size: <span class="str">''</span>);
+  }
+
+  <span class="kw">return</span> SkuParts(
+    base:      s.substring(<span class="num">0</span>, baseLen),
+    baseColor: s.substring(<span class="num">0</span>, bcLen),   <span class="cmt">// search key for specific color</span>
+    colorCode: s.substring(baseLen, bcLen),
+    size:      s.substring(bcLen),
+  );
+}</pre>
+        </div>
+        <div class="code-wrap">
+          <div class="code-label">DART — Item scan handler</div>
+          <pre>
+<span class="kw">Future</span>&lt;<span class="kw">void</span>&gt; <span class="fn">_onItemScanned</span>(<span class="kw">String</span> raw) <span class="kw">async</span> {
+  <span class="kw">final</span> parts   = <span class="fn">parseSku</span>(raw);
+  setState(() => _busy = <span class="kw">true</span>);
+
+  <span class="cmt">// Search catalog by base+color (no size)</span>
+  <span class="kw">final</span> result = <span class="kw">await</span> api.<span class="fn">catalogGridSearchFirstRow</span>(parts.baseColor);
+  <span class="cmt">// GET /api/inventory/catalog?view=grid&amp;q=112220507</span>
+
+  setState(() => _busy = <span class="kw">false</span>);
+  <span class="kw">if</span> (result == <span class="kw">null</span>) { <span class="fn">_showNotFoundSnack</span>(); <span class="kw">return</span>; }
+
+  <span class="fn">_showAssignDialog</span>(
+    itemName:  result[<span class="str">'description'</span>] <span class="kw">as</span> <span class="kw">String</span>,
+    skuParts:  parts,
+    matrixId:  result[<span class="str">'id'</span>] <span class="kw">as</span> <span class="kw">String</span>,
+  );
+}</pre>
+        </div>
+        <div class="code-wrap">
+          <div class="code-label">DART — Assign confirmation dialog</div>
+          <pre>
+<span class="kw">void</span> <span class="fn">_showAssignDialog</span>({
+  <span class="kw">required</span> <span class="kw">String</span> itemName,
+  <span class="kw">required</span> SkuParts skuParts,
+  <span class="kw">required</span> <span class="kw">String</span> matrixId,
+}) {
+  <span class="kw">bool</span> addAnother = <span class="kw">false</span>;
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setSt) => AlertDialog(
+        title: Text(<span class="str">'Assign to bin?'</span>),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(<span class="str">'Would you like to assign </span>${itemName}<span class="str"> to this bin?'</span>),
+          CheckboxListTile(
+            value: addAnother,
+            onChanged: (v) => setSt(() => addAnother = v ?? <span class="kw">false</span>),
+            title: Text(<span class="str">'Add another item?'</span>),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(<span class="str">'No'</span>)),
+          FilledButton(
+            onPressed: () <span class="kw">async</span> {
+              Navigator.pop(ctx);
+              <span class="cmt">// Assign all sizes of this color to bin</span>
+              <span class="kw">await</span> api.<span class="fn">postPutawayAssign</span>(
+                binCode: _currentBin,
+                skuScanned: skuParts.baseColor,
+                scope: <span class="str">'single_color'</span>,   <span class="cmt">// base+color = one color, all sizes</span>
+              );
+              <span class="kw">await</span> <span class="fn">_refreshContents</span>();
+              <span class="kw">if</span> (addAnother) <span class="fn">_showNextProductDialog</span>(skuParts, matrixId);
+            },
+            child: Text(<span class="str">'Yes'</span>),
+          ),
+        ],
+      ),
+    ),
+  );
+}</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. SAME PRODUCT DIFFERENT COLOR -->
+  <section id="s4">
+    <div class="section-header">
+      <div class="num">4</div>
+      <h2>Same Product Different Color Flow</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        If the worker checked "Add another item?" and chose "Same product different color", the app searches the full product matrix (base only, no color). It shows a list of all available colors that are <strong>not yet assigned</strong> to this bin. The worker checks one or more colors and taps YES. The app assigns all sizes of each selected color in the background, then shows the same question again.
+      </div>
+      <div class="flow">
+        <div class="flow-step"><div class="flow-step-body"><p>Search base only: <code>GET /api/inventory/catalog?view=grid&amp;q=1122205</code></p></div></div>
+        <div class="flow-step"><div class="flow-step-body"><p>Get all custom SKUs for matrix: <code>GET /api/inventory/catalog?matrixId=</code></p></div></div>
+        <div class="flow-step"><div class="flow-step-body"><p>Filter out colors already assigned to this bin</p></div></div>
+        <div class="flow-step"><div class="flow-step-body"><p>Show color list with checkboxes (multi-select)</p></div></div>
+        <div class="flow-step green"><div class="flow-step-body"><p>YES → for each checked color: <code>POST /api/inventory/putaway-assign</code> with <code>scope: single_color</code> → refresh → show "same or new?" popup again</p></div></div>
+        <div class="flow-step red"><div class="flow-step-body"><p>NO → go back to previous popup</p></div></div>
+      </div>
+      <div class="code-wrap">
+        <div class="code-label">DART — Assign multiple colors</div>
+        <pre>
+<span class="kw">Future</span>&lt;<span class="kw">void</span>&gt; <span class="fn">_assignColors</span>(
+  <span class="kw">List</span>&lt;<span class="kw">String</span>&gt; colorSkus,   <span class="cmt">// each is a baseColor key e.g. "112220507"</span>
+) <span class="kw">async</span> {
+  <span class="kw">for</span> (<span class="kw">final</span> colorSku <span class="kw">in</span> colorSkus) {
+    <span class="kw">await</span> api.<span class="fn">postPutawayAssign</span>(
+      binCode:    _currentBin,
+      skuScanned: colorSku,
+      scope:      <span class="str">'single_color'</span>,
+    );
+  }
+  <span class="kw">await</span> <span class="fn">_refreshContents</span>();
+}</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. NEW PRODUCT -->
+  <section id="s5">
+    <div class="section-header">
+      <div class="num">5</div>
+      <h2>New Product Flow</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        Worker chose "New product" — all popups close, the screen returns to scan mode waiting for the next item barcode. Label shows <strong>"TRIGGER TO ADD ITEM"</strong> in red.
+      </div>
+      <div class="code-wrap">
+        <div class="code-label">DART</div>
+        <pre>
+setState(() {
+  _phase       = _PutawayPhase.scanItem;
+  _bottomLabel = <span class="str">'TRIGGER TO ADD ITEM'</span>;
+  _labelIsRed  = <span class="kw">true</span>;
+});
+<span class="fn">_requestScanFocus</span>();   <span class="cmt">// refocus hidden TextField</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. STORED ITEMS -->
+  <section id="s6">
+    <div class="section-header">
+      <div class="num">6</div>
+      <h2>Stored Items Display</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        The list shows every SKU assigned to this bin. The counter at the top shows how many <strong>unique color groups</strong> are assigned (not the total number of physical items). Each row shows the item name, color, size, and how many physical RFID tags (EPCs) exist for that SKU. Rows with zero EPCs are hidden — they're still assigned, just not shown.
+      </div>
+      <div class="alert info"><span class="alert-icon">ℹ️</span><div>Quantities shown are <strong>EPC counts from RFID</strong> — not catalog quantities from Lightspeed. The app assigns SKU details only; physical counts come from scanned RFID tags.</div></div>
+      <div class="alert warn"><span class="alert-icon">⚠️</span><div>When a bin is scanned and confirmed, existing contents are loaded immediately. <strong>New assignments add to existing — never overwrite.</strong></div></div>
+      <div class="code-wrap">
+        <div class="code-label">DART — Refresh bin contents</div>
+        <pre>
+<span class="kw">Future</span>&lt;<span class="kw">void</span>&gt; <span class="fn">_refreshContents</span>() <span class="kw">async</span> {
+  <span class="kw">if</span> (_currentBinId == <span class="kw">null</span>) <span class="kw">return</span>;
+  <span class="kw">final</span> rows = <span class="kw">await</span> api.<span class="fn">fetchBinContents</span>(_currentBinId!);
+  <span class="cmt">// GET /api/locations/bins/contents?binId=</span>
+  <span class="cmt">// Returns: [{ sku, description, color_code, size, qty (epc_count) }]</span>
+
+  setState(() {
+    <span class="cmt">// Hide rows with 0 EPCs from display (still assigned in DB)</span>
+    _storedContents = rows.where((r) => (r[<span class="str">'qty'</span>] <span class="kw">as</span> <span class="kw">int</span>) > <span class="num">0</span>).toList();
+
+    <span class="cmt">// Counter = unique base+color groups</span>
+    _uniqueColorCount = rows
+      .map((r) => r[<span class="str">'sku'</span>] <span class="kw">as</span> <span class="kw">String</span>)
+      .map((sku) => parseSku(sku).baseColor)
+      .toSet()
+      .length;
+
+    _bottomLabel = <span class="str">'READY FOR NEXT ENTRY'</span>;
+    _labelIsRed  = <span class="kw">false</span>;
+  });
+}</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. EPC DETAIL -->
+  <section id="s7">
+    <div class="section-header">
+      <div class="num">7</div>
+      <h2>SKU Row Tap → EPC Detail Screen</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        Tapping any SKU row opens a new screen showing all individual RFID tag numbers (EPCs) for that SKU in this bin. Tapping any EPC number opens the Geiger screen with that EPC pre-filled, so the worker can physically locate the item on the shelf.
+      </div>
+      <div class="code-wrap">
+        <div class="code-label">DART — Navigate to EPC detail</div>
+        <pre>
+<span class="fn">Navigator.push</span>(context, MaterialPageRoute(
+  builder: (_) => EpcDetailScreen(
+    sku:         row[<span class="str">'sku'</span>],
+    description: row[<span class="str">'description'</span>],
+    binId:       _currentBinId!,
+  ),
+));
+
+<span class="cmt">// EPC detail screen — tap EPC → Geiger</span>
+<span class="fn">Navigator.push</span>(context, MaterialPageRoute(
+  builder: (_) => LocateTagScreen(prefilledEpc: epc),
+));</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. SWIPE TO DELETE -->
+  <section id="s8">
+    <div class="section-header">
+      <div class="num">8</div>
+      <h2>Swipe to Delete</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        Swipe a row to the right and a red trash icon appears on the left. Tap it and a confirmation popup asks "Are you sure?". YES removes that specific SKU and all its EPCs from the bin — nothing is deleted from the catalog or anywhere else in the system.
+      </div>
+      <div class="alert danger"><span class="alert-icon">🗑️</span><div>Delete from bin only. Catalog, inventory records, and EPC registrations are <strong>never touched</strong>.</div></div>
+      <div class="code-wrap">
+        <div class="code-label">DART — Dismissible row</div>
+        <pre>
+Dismissible(
+  key: ValueKey(row[<span class="str">'sku'</span>]),
+  direction: DismissDirection.startToEnd,   <span class="cmt">// swipe right</span>
+  confirmDismiss: (_) <span class="kw">async</span> {
+    <span class="kw">return await</span> <span class="fn">_confirmDelete</span>(row[<span class="str">'sku'</span>]);  <span class="cmt">// shows YES/NO dialog</span>
+  },
+  onDismissed: (_) <span class="kw">async</span> {
+    <span class="kw">await</span> api.<span class="fn">removeSkuFromBin</span>(
+      binId: _currentBinId!,
+      sku:   row[<span class="str">'sku'</span>],
+    );
+    <span class="kw">await</span> <span class="fn">_refreshContents</span>();
+  },
+  background: Container(
+    color: Colors.red,
+    alignment: Alignment.centerLeft,
+    padding: EdgeInsets.only(left: <span class="num">20</span>),
+    child: Icon(Icons.delete, color: Colors.white),
+  ),
+  child: _StoredItemRow(row: row),
+)</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. CLEAN & EMPTY -->
+  <section id="s9">
+    <div class="section-header">
+      <div class="num">9</div>
+      <h2>Clean & Empty Bin</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        Tapping CLEAN & EMPTY BIN asks for confirmation first. If confirmed, all items are cleared from the bin and an UNDO button appears. Tapping UNDO restores everything exactly as it was before the clean. If all EPCs for all assigned SKUs are already 0, the bin can auto-empty itself.
+      </div>
+      <div class="code-wrap">
+        <div class="code-label">DART — Clean bin with undo snapshot</div>
+        <pre>
+<span class="kw">Future</span>&lt;<span class="kw">void</span>&gt; <span class="fn">_onCleanBin</span>() <span class="kw">async</span> {
+  <span class="kw">final</span> confirmed = <span class="kw">await</span> <span class="fn">_showConfirm</span>(<span class="str">'Are you sure you want to empty this bin?'</span>);
+  <span class="kw">if</span> (!confirmed) <span class="kw">return</span>;
+
+  <span class="cmt">// Save snapshot for undo</span>
+  _undoSnapshot = List.of(_storedContents);
+
+  <span class="kw">await</span> api.<span class="fn">postCleanBinByCode</span>(_currentBin);
+  <span class="cmt">// POST /api/mobile/clean-bin  { binCode }</span>
+
+  setState(() {
+    _storedContents = [];
+    _showUndo = <span class="kw">true</span>;
+  });
+}
+
+<span class="kw">Future</span>&lt;<span class="kw">void</span>&gt; <span class="fn">_onUndo</span>() <span class="kw">async</span> {
+  <span class="kw">if</span> (_undoSnapshot == <span class="kw">null</span>) <span class="kw">return</span>;
+  <span class="cmt">// Re-assign each SKU back to bin</span>
+  <span class="kw">for</span> (<span class="kw">final</span> row <span class="kw">in</span> _undoSnapshot!) {
+    <span class="kw">await</span> api.<span class="fn">postPutawayAssign</span>(
+      binCode:    _currentBin,
+      skuScanned: row[<span class="str">'sku'</span>],
+      scope:      <span class="str">'single_color'</span>,
+    );
+  }
+  <span class="kw">await</span> <span class="fn">_refreshContents</span>();
+  setState(() { _showUndo = <span class="kw">false</span>; _undoSnapshot = <span class="kw">null</span>; });
+}</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10. READY FOR NEXT ENTRY -->
+  <section id="s10">
+    <div class="section-header">
+      <div class="num">10</div>
+      <h2>Ready for Next Entry</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        After each successful assignment, the screen refreshes showing all stored items. The bin stays active. The label goes back to "READY FOR NEXT ENTRY" in normal color. The worker can tap ADD ITEM again to scan another item into the same bin.
+      </div>
+      <div class="alert ok"><span class="alert-icon">✅</span><div>Bin stays assigned. ADD ITEM stays unlocked. Worker just taps ADD ITEM or scans directly to continue.</div></div>
+    </div>
+  </section>
+
+  <!-- 11. SETTINGS -->
+  <section id="s11">
+    <div class="section-header">
+      <div class="num">11</div>
+      <h2>Settings (Gear Icon)</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        A gear icon in the top-right corner opens the Bin Assign settings. These settings only affect this screen. Manual mode lets workers type instead of scan. External scanner enables a Bluetooth keyboard-style barcode scanner. Camera can be toggled based on device type.
+      </div>
+      <table>
+        <tr><th>Setting</th><th>Default</th><th>Notes</th></tr>
+        <tr><td>Manual Mode</td><td><span class="badge badge-grey">DISABLED</span></td><td>Master toggle — expands sub-options when ON</td></tr>
+        <tr><td>↳ Bin Location (manual entry)</td><td><span class="badge badge-grey">DISABLED</span></td><td>Text input + confirm button in bin box</td></tr>
+        <tr><td>↳ Enable Add Item (manual entry)</td><td><span class="badge badge-grey">DISABLED</span></td><td>Text box with smart search logic</td></tr>
+        <tr><td>↳ External Scanner</td><td><span class="badge badge-grey">DISABLED</span></td><td>Bluetooth 2D scanner as keyboard — auto-advance after each scan</td></tr>
+        <tr><td>Camera</td><td><span class="badge badge-teal">AUTO</span></td><td>ON for regular Android, OFF when RFID device connected</td></tr>
+      </table>
+
+      <div class="sub">
+        <div class="sub-title">Manual entry — input logic</div>
+        <table>
+          <tr><th>What user typed</th><th>Behaviour</th></tr>
+          <tr><td>Full SKU with size (e.g. <code>112220507XS</code>)</td><td>Strip size → base+color → same assign flow</td></tr>
+          <tr><td>Base+color (9 or 11 chars)</td><td>Same assign flow, no stripping needed</td></tr>
+          <tr><td>Base only (7 or 9 chars)</td><td>Show color selection screen (multi-checkbox)</td></tr>
+          <tr><td>Partial / name / description</td><td>Search WMS catalog → dropdown results → continue same flow</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12. CAMERA -->
+  <section id="s12">
+    <div class="section-header">
+      <div class="num">12</div>
+      <h2>Camera Behaviour</h2>
+    </div>
+    <div class="section-body">
+      <div class="human">
+        Camera opens on tap of the camera icon inside ADD BIN or ADD ITEM. The camera screen shows an instruction at the top so the worker knows what to scan. It works in both portrait and landscape — the device orientation lock is overridden just for the camera screen.
+      </div>
+      <table>
+        <tr><th>Button</th><th>Screen overlay text</th><th>Active when</th></tr>
+        <tr><td>ADD BIN camera</td><td><strong>SCAN BIN LOCATION</strong></td><td>No bin assigned yet</td></tr>
+        <tr><td>ADD ITEM camera</td><td><strong>SCAN ITEM</strong></td><td>Bin confirmed</td></tr>
+      </table>
+      <div class="code-wrap">
+        <div class="code-label">DART — Override orientation for camera screen only</div>
+        <pre>
+<span class="kw">Future</span>&lt;<span class="kw">String</span>?&gt; <span class="fn">_openCamera</span>(<span class="kw">String</span> overlayLabel) <span class="kw">async</span> {
+  <span class="cmt">// Unlock all orientations before opening camera</span>
+  <span class="kw">await</span> SystemChrome.<span class="fn">setPreferredOrientations</span>([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+  <span class="kw">final</span> result = <span class="kw">await</span> <span class="fn">openCameraBarcodeScanner</span>(context, title: overlayLabel);
+  <span class="cmt">// Re-lock to portrait after camera closes</span>
+  <span class="kw">await</span> SystemChrome.<span class="fn">setPreferredOrientations</span>([DeviceOrientation.portraitUp]);
+  <span class="kw">return</span> result;
+}</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 13. LOCKING RULES -->
+  <section id="s13">
+    <div class="section-header">
+      <div class="num">13</div>
+      <h2>Locking Rules Summary</h2>
+    </div>
+    <div class="section-body">
+      <table>
+        <tr><th>Element</th><th>Locked when</th></tr>
+        <tr><td>ADD ITEM button</td><td>No bin confirmed</td></tr>
+        <tr><td>ADD ITEM camera icon</td><td>No bin confirmed</td></tr>
+        <tr><td>ADD BIN camera icon</td><td>Bin already assigned</td></tr>
+        <tr><td>Everything except ADD BIN</td><td>No bin confirmed</td></tr>
+      </table>
+      <div class="code-wrap">
+        <div class="code-label">DART — Lock wrapper</div>
+        <pre>
+<span class="kw">Widget</span> <span class="fn">_locked</span>(<span class="kw">Widget</span> child, {<span class="kw">required bool</span> locked}) {
+  <span class="kw">if</span> (!locked) <span class="kw">return</span> child;
+  <span class="kw">return</span> Opacity(
+    opacity: <span class="num">0.35</span>,
+    child: IgnorePointer(child: child),
+  );
+}</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 14. API REFERENCE -->
+  <section id="s14">
+    <div class="section-header">
+      <div class="num">14</div>
+      <h2>API Reference</h2>
+    </div>
+    <div class="section-body">
+      <table>
+        <tr><th>Action</th><th>Method</th><th>Endpoint</th><th>Auth</th></tr>
+        <tr><td>Check bin exists</td><td><span class="badge badge-teal">GET</span></td><td><code>/api/locations/bins</code></td><td>Session</td></tr>
+        <tr><td>Create new bin</td><td><span class="badge badge-red">POST</span></td><td><code>/api/locations/bins</code></td><td>Session</td></tr>
+        <tr><td>Load bin contents</td><td><span class="badge badge-teal">GET</span></td><td><code>/api/locations/bins/contents?binId=</code></td><td>Session</td></tr>
+        <tr><td>Search catalog (color)</td><td><span class="badge badge-teal">GET</span></td><td><code>/api/inventory/catalog?view=grid&q=</code></td><td>Session</td></tr>
+        <tr><td>Get all colors (matrix)</td><td><span class="badge badge-teal">GET</span></td><td><code>/api/inventory/catalog?matrixId=</code></td><td>Session</td></tr>
+        <tr><td>Assign SKU to bin</td><td><span class="badge badge-red">POST</span></td><td><code>/api/inventory/putaway-assign</code></td><td>Handheld</td></tr>
+        <tr><td>Clean bin</td><td><span class="badge badge-red">POST</span></td><td><code>/api/mobile/clean-bin</code></td><td>Session</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 15. SKU PARSING -->
+  <section id="s15">
+    <div class="section-header">
+      <div class="num">15</div>
+      <h2>SKU Parsing Quick Reference</h2>
+    </div>
+    <div class="section-body">
+      <table>
+        <tr><th>Input SKU</th><th>Base</th><th>Color (ZZ)</th><th>Size</th><th>Search (specific color)</th><th>Search (all colors)</th></tr>
+        <tr><td><code>112220507XS</code></td><td><code>1122205</code></td><td><code>07</code></td><td><code>XS</code></td><td><code>112220507</code></td><td><code>1122205</code></td></tr>
+        <tr><td><code>112220507M</code></td><td><code>1122205</code></td><td><code>07</code></td><td><code>M</code></td><td><code>112220507</code></td><td><code>1122205</code></td></tr>
+        <tr><td><code>C227219020711</code></td><td><code>C22721902</code></td><td><code>07</code></td><td><code>11</code></td><td><code>C2272190207</code></td><td><code>C22721902</code></td></tr>
+        <tr><td><code>C2272190207XL</code></td><td><code>C22721902</code></td><td><code>07</code></td><td><code>XL</code></td><td><code>C2272190207</code></td><td><code>C22721902</code></td></tr>
+      </table>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  CarbonWMS — Bin Assign Behaviour Spec &nbsp;·&nbsp; Generated 2026-04-13 &nbsp;·&nbsp; Internal use only
+</footer>
+
+</body>
+</html>

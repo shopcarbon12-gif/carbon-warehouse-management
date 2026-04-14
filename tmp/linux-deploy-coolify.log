@@ -1,0 +1,22 @@
+
+> carbon-warehouse-management@0.1.0 deploy:coolify
+> node scripts/trigger-coolify-deploy.mjs
+
+node:internal/deps/undici/undici:11360
+    Error.captureStackTrace(err, this);
+          ^
+
+TypeError: fetch failed
+    at Object.fetch (node:internal/deps/undici/undici:11360:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async file:///home/carbondev/dev/carbon-warehouse-management/scripts/trigger-coolify-deploy.mjs:62:11 {
+  cause: ConnectTimeoutError: Connect Timeout Error
+      at onConnectTimeout (node:internal/deps/undici/undici:6616:28)
+      at node:internal/deps/undici/undici:6574:50
+      at Immediate._onImmediate (node:internal/deps/undici/undici:6605:13)
+      at process.processImmediate (node:internal/timers:476:21) {
+    code: 'UND_ERR_CONNECT_TIMEOUT'
+  }
+}
+
+Node.js v18.19.1

@@ -1,0 +1,109 @@
+  Flutter Project: mobile/carbon_wms
+
+  Root: /home/carbondev/dev/carbon-warehouse-management/mobile/carbon_wms/
+
+  ---
+  pubspec.yaml
+
+  - Flutter SDK ^3.5.0, version 1.1.1+2
+  - State management: provider: ^6.1.2
+  - Icons: lucide_icons, Fonts: Google Fonts (Inter) + custom NeuzeitGrotesk
+  - Assets: assets/carbon_logo.png, assets/app_icon.png
+  - Key packages: http, shared_preferences, mobile_scanner, audioplayers, local_auth, flutter_secure_storage, device_info_plus, install_plugin
+  - Custom drivers: carbon_chainway_driver, carbon_zebra_driver (local packages)
+
+  ---
+  Entry & Routing
+
+  ┌─────────────────────┬───────────────────────────┐
+  │        File         │           Path            │
+  ├─────────────────────┼───────────────────────────┤
+  │ main.dart           │ lib/main.dart             │
+  ├─────────────────────┼───────────────────────────┤
+  │ Auth gate / routing │ lib/ui/app_auth_gate.dart │
+  └─────────────────────┴───────────────────────────┘
+
+  - No named routes / go_router — uses Navigator.push + _Phase state enum in AppAuthGate
+  - Providers registered in main.dart: WmsApiClient, MobileSettingsRepository, RfidManager
+
+  ---
+  Screens
+
+  ┌───────────────────────────┬──────────────────────────────────────────────────┐
+  │          Screen           │                       Path                       │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ DashboardScreen           │ lib/ui/screens/dashboard_screen.dart             │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ LoginScreen               │ lib/ui/screens/login_screen.dart                 │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ DeviceLockScreen          │ lib/ui/screens/device_lock_screen.dart           │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ InventoryLookupScreen     │ lib/ui/screens/inventory_lookup_screen.dart      │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ BarcodeIntakeScreen       │ lib/ui/screens/barcode_intake_screen.dart        │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ FastPutawayScreen         │ lib/ui/screens/fast_putaway_screen.dart          │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ CleanBinScreen            │ lib/ui/screens/clean_bin_screen.dart             │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ InventoryCsvSessionScreen │ lib/ui/screens/inventory_csv_session_screen.dart │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ LocateTagScreen           │ lib/ui/screens/locate_tag_screen.dart            │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ TransferSlipsScreen       │ lib/ui/screens/transfer_slips_screen.dart        │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ StatusChangeScreen        │ lib/ui/screens/status_change_screen.dart         │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ EncodeSuiteScreen         │ lib/ui/screens/encode_suite_screens.dart         │
+  ├───────────────────────────┼──────────────────────────────────────────────────┤
+  │ HandheldSettingsScreen    │ lib/ui/screens/handheld_settings_screen.dart     │
+  └───────────────────────────┴──────────────────────────────────────────────────┘
+
+  ---
+  Theme & Design System
+
+  ┌─────────────────────┬──────────────────────────┐
+  │        File         │           Path           │
+  ├─────────────────────┼──────────────────────────┤
+  │ AppTheme, AppColors │ lib/theme/app_theme.dart │
+  └─────────────────────┴──────────────────────────┘
+
+  Key colors: background #F5F5F5, surface #ECECEC, primary #1B7D7D (teal), success #34D399, textMuted #8A9090
+
+  ---
+  Shared Widgets
+
+  ┌───────────────────────────────────────────────────────────────┬────────────────────────────────────────────┐
+  │                            Widget                             │                    Path                    │
+  ├───────────────────────────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ CarbonScaffold                                                │ lib/ui/widgets/carbon_scaffold.dart        │
+  ├───────────────────────────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ TacticalBottomBar, TacticalEmeraldButton, TacticalSlateButton │ lib/ui/widgets/tactical_bottom_bar.dart    │
+  ├───────────────────────────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ OtaUpdateDialog                                               │ lib/ui/widgets/ota_update_dialog.dart      │
+  ├───────────────────────────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ CameraBarcodeScanner                                          │ lib/ui/widgets/camera_barcode_scanner.dart │
+  └───────────────────────────────────────────────────────────────┴────────────────────────────────────────────┘
+
+  ---
+  State Management & Services
+
+  ┌───────────────────────────────────────────┬──────────────────────────────────────────────┐
+  │                   File                    │                     Path                     │
+  ├───────────────────────────────────────────┼──────────────────────────────────────────────┤
+  │ MobileSettingsRepository (ChangeNotifier) │ lib/services/mobile_settings_repository.dart │
+  ├───────────────────────────────────────────┼──────────────────────────────────────────────┤
+  │ RfidManager (ChangeNotifier)              │ lib/hardware/rfid_manager.dart               │
+  ├───────────────────────────────────────────┼──────────────────────────────────────────────┤
+  │ WmsApiClient                              │ lib/network/wms_api_client.dart              │
+  ├───────────────────────────────────────────┼──────────────────────────────────────────────┤
+  │ HandheldDeviceIdentity                    │ lib/services/handheld_device_identity.dart   │
+  ├───────────────────────────────────────────┼──────────────────────────────────────────────┤
+  │ HandheldRuntimeConfig                     │ lib/services/handheld_runtime_config.dart    │
+  ├───────────────────────────────────────────┼──────────────────────────────────────────────┤
+  │ EpcTenantSync                             │ lib/services/epc_tenant_sync.dart            │
+  ├───────────────────────────────────────────┼──────────────────────────────────────────────┤
+  │ ZebraScanner                              │ lib/hardware/zebra_scanner.dart              │
+  ├───────────────────────────────────────────┼──────────────────────────────────────────────┤
+  │ ChainwayScanner                           │ lib/hardware/chainway_scanner.dart           │
+  └───────────────────────────────────────────┴──────────────────────────────────────────────┘

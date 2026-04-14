@@ -1,0 +1,7 @@
+bash: line 1: flutter: command not found
+bash: line 1: flutter: command not found
+Could not find an option or flag "-C".
+
+Run 'flutter -h' (or 'flutter <command> -h') for available flutter commands and options.
+Error: No pubspec.yaml file found.
+This command should be run from the root of your Flutter project.

@@ -1,0 +1,301 @@
+
+show me preview of the apk
+Bash Check release APK directory and current version
+IN
+ls ~/CarbonWmsRelease/ 2>/dev/null && cat mobile/carbon_wms/pubspec.yaml | grep "^version:"
+
+OUT
+CarbonWMS V0.1.11+27.apk
+CarbonWMS V1.1.1.apk
+version: 1.1.1+28
+[rerun: b1]
+Bash List APK files with sizes and dump APK manifest info
+IN
+ls -lh ~/CarbonWmsRelease/ && echo "---" && aapt dump badging ~/CarbonWmsRelease/"CarbonWMS V1.1.1.apk" 2>/dev/null | head -40
+
+OUT
+total 175M
+-rw-rw-r-- 1 carbondev carbondev 88M Apr 10 20:27 CarbonWMS V0.1.11+27.apk
+-rw-rw-r-- 1 carbondev carbondev 88M Apr 10 22:19 CarbonWMS V1.1.1.apk
+---
+[rerun: b2]
+Bash Find aapt tool location
+IN
+export PATH="/home/carbondev/development/flutter/bin:$PATH" && which aapt || find /home/carbondev/.tools /home/carbondev/Android /home/carbondev/development -name "aapt" 2>/dev/null | head -5
+
+OUT
+/home/carbondev/Android/Sdk/build-tools/34.0.0/aapt
+/home/carbondev/Android/Sdk/build-tools/28.0.3/aapt
+/home/carbondev/Android/Sdk/build-tools/35.0.0/aapt
+[rerun: b3]
+Bash Dump APK manifest info using aapt
+IN
+/home/carbondev/Android/Sdk/build-tools/35.0.0/aapt dump badging ~/CarbonWmsRelease/"CarbonWMS V1.1.1.apk" 2>&1 | head -60
+
+OUT
+package: name='com.shopcarbon.wms' versionCode='1' versionName='1.1.1' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+sdkVersion:'29'
+targetSdkVersion:'36'
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='android.permission.USE_BIOMETRIC'
+uses-permission: name='android.permission.ACCESS_WIFI_STATE'
+uses-permission: name='android.permission.READ_PHONE_STATE'
+uses-permission: name='android.permission.REQUEST_INSTALL_PACKAGES'
+uses-permission: name='android.permission.BLUETOOTH' maxSdkVersion='30'
+uses-permission: name='android.permission.BLUETOOTH_ADMIN' maxSdkVersion='30'
+uses-permission: name='android.permission.ACCESS_FINE_LOCATION' maxSdkVersion='30'
+uses-permission: name='android.permission.BLUETOOTH_CONNECT'
+uses-permission: name='android.permission.BLUETOOTH_SCAN'
+uses-permission: name='android.permission.BLUETOOTH_PRIVILEGED'
+uses-permission: name='android.permission.ACCESS_COARSE_LOCATION'
+uses-permission: name='android.permission.WRITE_EXTERNAL_STORAGE'
+uses-permission: name='android.permission.READ_EXTERNAL_STORAGE'
+uses-permission: name='android.permission.CAMERA'
+uses-permission: name='android.permission.USE_FINGERPRINT'
+uses-permission: name='com.shopcarbon.wms.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+uses-permission: name='android.permission.ACCESS_NETWORK_STATE'
+application-label:'CarbonWMS'
+application-label-af:'CarbonWMS'
+application-label-am:'CarbonWMS'
+application-label-ar:'CarbonWMS'
+application-label-as:'CarbonWMS'
+application-label-az:'CarbonWMS'
+application-label-be:'CarbonWMS'
+application-label-bg:'CarbonWMS'
+application-label-bn:'CarbonWMS'
+application-label-bs:'CarbonWMS'
+application-label-ca:'CarbonWMS'
+application-label-cs:'CarbonWMS'
+application-label-da:'CarbonWMS'
+application-label-de:'CarbonWMS'
+application-label-el:'CarbonWMS'
+application-label-en-AU:'CarbonWMS'
+application-label-en-CA:'CarbonWMS'
+application-label-en-GB:'CarbonWMS'
+application-label-en-IN:'CarbonWMS'
+application-label-en-XC:'CarbonWMS'
+application-label-es:'CarbonWMS'
+application-label-es-US:'CarbonWMS'
+application-label-et:'CarbonWMS'
+application-label-eu:'CarbonWMS'
+application-label-fa:'CarbonWMS'
+application-label-fi:'CarbonWMS'
+application-label-fr:'CarbonWMS'
+application-label-fr-CA:'CarbonWMS'
+application-label-gl:'CarbonWMS'
+application-label-gu:'CarbonWMS'
+application-label-hi:'CarbonWMS'
+application-label-hr:'CarbonWMS'
+application-label-hu:'CarbonWMS'
+application-label-hy:'CarbonWMS'
+application-label-in:'CarbonWMS'
+application-label-is:'CarbonWMS'
+application-label-it:'CarbonWMS'
+application-label-iw:'CarbonWMS'
+application-label-ja:'CarbonWMS'
+[rerun: b4]
+Bash Get key APK info fields
+IN
+/home/carbondev/Android/Sdk/build-tools/35.0.0/aapt dump badging ~/CarbonWmsRelease/"CarbonWMS V1.1.1.apk" 2>&1 | grep -E "^(package|sdkVersion|targetSdkVersion|application-label:|application-icon|launchable|native-code|feature|densities)" | head -30
+
+OUT
+package: name='com.shopcarbon.wms' versionCode='1' versionName='1.1.1' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+sdkVersion:'29'
+targetSdkVersion:'36'
+application-label:'CarbonWMS'
+application-icon-120:'res/BW.xml'
+application-icon-160:'res/BW.xml'
+application-icon-240:'res/BW.xml'
+application-icon-320:'res/BW.xml'
+application-icon-480:'res/BW.xml'
+application-icon-640:'res/BW.xml'
+application-icon-65534:'res/BW.xml'
+launchable-activity: name='com.shopcarbon.wms.MainActivity'  label='' icon=''
+feature-group: label=''
+densities: '120' '160' '240' '320' '480' '640' '65534'
+native-code: 'arm64-v8a' 'armeabi-v7a' 'x86_64'
+[rerun: b5]
+Here's the APK preview for the latest build:
+
+File: ~/CarbonWmsRelease/CarbonWMS V1.1.1.apk
+Size: 88 MB
+Built: Apr 10, 22:19
+
+Package Info
+
+Field	Value
+Package	com.shopcarbon.wms
+Version Name	1.1.1
+Version Code	1
+Min SDK	29 (Android 10)
+Target SDK	36 (Android 16)
+Compiled SDK	36
+Architectures: arm64-v8a, armeabi-v7a, x86_64
+
+Permissions:
+
+INTERNET
+USE_BIOMETRIC / USE_FINGERPRINT
+CAMERA
+BLUETOOTH, BLUETOOTH_CONNECT, BLUETOOTH_SCAN
+ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION
+ACCESS_WIFI_STATE, ACCESS_NETWORK_STATE
+READ_PHONE_STATE
+REQUEST_INSTALL_PACKAGES
+READ/WRITE_EXTERNAL_STORAGE
+Note: The current pubspec.yaml version is 1.1.1+28 but the APK's versionCode is 1. This is because the build number (+28) maps to versionCode — a mismatch worth checking. The previous APK V0.1.11+27.apk had +27, so it seems the release build may not be passing --build-number correctly.
+
+show me in the emculator
+Bash Check connected devices and emulators
+IN
+/home/carbondev/Android/Sdk/platform-tools/adb devices
+
+OUT
+List of devices attached
+[rerun: b1]
+No emulator is running. Let me check what AVDs are available.
+
+Bash List available Android Virtual Devices
+IN
+/home/carbondev/Android/Sdk/emulator/emulator -list-avds 2>/dev/null
+
+OUT
+galaxy_s25_ultra
+[rerun: b2]
+Found galaxy_s25_ultra. Let me check the start-emulator script and then launch it.
+
+Read start-emulator.sh
+The script uses noVNC for browser access. I'll start the emulator stack, then install the release APK. This will be viewable at http://localhost:6080/vnc.html.
+
+Bash Start virtual display, VNC, and noVNC
+IN
+pkill -f "Xvfb :99" 2>/dev/null || true; pkill -f "x11vnc.*5999" 2>/dev/null || true; pkill -f "websockify.*6080" 2>/dev/null || true; sleep 1
+Xvfb :99 -screen 0 1440x3120x24 &
+sleep 1
+x11vnc -display :99 -nopw -listen localhost -xkb -ncache 10 -ncache_cr -quiet -rfbport 5999 &
+sleep 1
+websockify --web /usr/share/novnc/ 6080 localhost:5999 &
+sleep 1
+echo "VNC stack started"
+
+OUT
+Exit code 144
+[rerun: b3]
+Bash Kill existing VNC processes
+IN
+pkill -f "Xvfb :99" 2>/dev/null; pkill -f "x11vnc.*5999" 2>/dev/null; pkill -f "websockify.*6080" 2>/dev/null; echo "killed"
+
+OUT
+Exit code 144
+[rerun: b4]
+Bash Start Xvfb virtual display
+IN
+Xvfb :99 -screen 0 1440x3120x24 &
+echo "xvfb pid: $!"
+
+OUT
+xvfb pid: 4919
+[rerun: b5]
+Bash Start x11vnc VNC server
+IN
+sleep 1 && x11vnc -display :99 -nopw -listen localhost -xkb -ncache 10 -ncache_cr -quiet -rfbport 5999 &
+echo "x11vnc pid: $!"
+
+OUT
+x11vnc pid: 4926
+[rerun: b6]
+Bash Start noVNC websockify
+IN
+sleep 1 && websockify --web /usr/share/novnc/ 6080 localhost:5999 &
+echo "websockify pid: $!"
+
+OUT
+websockify pid: 4932
+[rerun: b7]
+Bash Start Android emulator in background
+IN
+DISPLAY=:99 /home/carbondev/Android/Sdk/emulator/emulator \
+  -avd galaxy_s25_ultra \
+  -no-audio \
+  -gpu swiftshader_indirect \
+  -no-snapshot-save &
+echo "emulator pid: $!"
+
+OUT
+emulator pid: 4938
+[rerun: b8]
+Bash Wait for emulator to fully boot
+IN
+echo "Waiting for emulator to boot..."
+/home/carbondev/Android/Sdk/platform-tools/adb wait-for-device
+until /home/carbondev/Android/Sdk/platform-tools/adb shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do
+  sleep 3
+  echo "still booting..."
+done
+echo "Emulator ready!"
+
+OUT
+Waiting for emulator to boot...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+still booting...
+Emulator ready!
+[rerun: b9]
+Emulator is booted. Now installing the release APK:
+
+Bash Install release APK on emulator
+IN
+/home/carbondev/Android/Sdk/platform-tools/adb install -r ~/CarbonWmsRelease/"CarbonWMS V1.1.1.apk"
+
+OUT
+Command running in background with ID: boahv4ugu. Output is being written to: /tmp/claude-1000/-home-carbondev-dev-carbon-warehouse-management/6b1d448f-f2ef-42b2-ac03-b43e34d75f37/tasks/boahv4ugu.output
+[rerun: b10]
+You can view the emulator right now at:
+
+http://localhost:6080/vnc.html
+
+The APK is installing in the background. Once done, I'll launch the app automatically.
+
+Read boahv4ugu.output
+TaskOutput task: "boahv4ugu"
+OUT
+<retrieval_status>success</retrieval_status>
+
+<task_id>boahv4ugu</task_id>
+
+<task_type>local_bash</task_type>
+
+<status>completed</status>
+
+<exit_code>0</exit_code>
+
+<output>
+Performing Streamed Install
+Success
+</output>
+APK installed successfully. Now launching it:
+
+Bash Launch CarbonWMS app on emulator
+IN
+/home/carbondev/Android/Sdk/platform-tools/adb shell am start -n com.shopcarbon.wms/.MainActivity
+
+OUT
+Starting: Intent { cmp=com.shopcarbon.wms/.MainActivity }
+[rerun: b11]
+App is launched. Open http://localhost:6080/vnc.html in your browser to see it running on the emulator.
+

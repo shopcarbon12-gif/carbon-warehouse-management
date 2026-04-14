@@ -1,0 +1,23 @@
+
+> carbon-warehouse-management@0.1.0 build
+> npm run db:migrate && node ./node_modules/next/dist/bin/next build --webpack
+
+
+> carbon-warehouse-management@0.1.0 db:migrate
+> npx tsx scripts/migrate-incremental.ts
+
+Postgres refused the connection (nothing listening on DATABASE_URL).
+  Start local DB: docker compose up -d
+  Then: npm run db:migrate
+Error: connect ECONNREFUSED 127.0.0.1:5432
+    at /home/carbondev/dev/carbon-warehouse-management/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at applySqlFile (/home/carbondev/dev/carbon-warehouse-management/scripts/migrate-shared.ts:29:5)
+    at runFullMigration (/home/carbondev/dev/carbon-warehouse-management/scripts/migrate-shared.ts:116:17)
+    at main (/home/carbondev/dev/carbon-warehouse-management/scripts/migrate-incremental.ts:11:17) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5432
+}
