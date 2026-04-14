@@ -19,6 +19,7 @@ class MainActivity : FlutterFragmentActivity() {
   private var zebraController: CarbonZebraRfidController? = null
   private var chainwayController: CarbonChainwayRfidController? = null
   private var hardwareBarcodeRelay: CarbonHardwareBarcodeRelay? = null
+  private var hardwareTriggerRelay: CarbonHardwareTriggerRelay? = null
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -33,11 +34,14 @@ class MainActivity : FlutterFragmentActivity() {
     val zebra = CarbonZebraRfidController(this)
     val chainway = CarbonChainwayRfidController(this)
     val barcodeRelay = CarbonHardwareBarcodeRelay(this)
+    val triggerRelay = CarbonHardwareTriggerRelay(this)
     zebraController = zebra
     chainwayController = chainway
     hardwareBarcodeRelay = barcodeRelay
+    hardwareTriggerRelay = triggerRelay
 
     EventChannel(messenger, "carbon_wms/hardware_barcode").setStreamHandler(barcodeRelay)
+    EventChannel(messenger, "carbon_wms/hardware_trigger").setStreamHandler(triggerRelay)
 
     EventChannel(messenger, "carbon_wms/rfid_tag_stream").setStreamHandler(
       object : EventChannel.StreamHandler {
@@ -199,7 +203,9 @@ class MainActivity : FlutterFragmentActivity() {
     zebraController?.dispose()
     chainwayController?.dispose()
     hardwareBarcodeRelay?.dispose()
+    hardwareTriggerRelay?.dispose()
     hardwareBarcodeRelay = null
+    hardwareTriggerRelay = null
     zebraController = null
     chainwayController = null
     super.onDestroy()

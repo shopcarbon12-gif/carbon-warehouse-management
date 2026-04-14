@@ -32,6 +32,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   final Map<String, Map<String, dynamic>> _assetCache =
       <String, Map<String, dynamic>>{};
   StreamSubscription<RfidTagRead>? _readsSub;
+  StreamSubscription<String>? _triggerSub;
   Timer? _scanInactivityTimer;
   bool _scanOn = false;
   bool _connecting = false;
@@ -51,6 +52,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   @override
   void dispose() {
     _readsSub?.cancel();
+    _triggerSub?.cancel();
     _scanInactivityTimer?.cancel();
     unawaited(context.read<RfidManager>().stopLocateScanning());
     super.dispose();
@@ -99,6 +101,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (scanner != null) {
       _readsSub = scanner.tagReadStream.listen(_onTagRead, onError: (_) {});
     }
+    await _triggerSub?.cancel();
+    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((evt) {
+      if (evt == 'down') {
+        unawaited(_toggleScan());
+      }
+    }, onError: (_) {});
     if (!mounted) return;
     setState(() {
       _connecting = false;

@@ -22,8 +22,12 @@ class RfidVendorChannel {
   RfidVendorChannel._();
 
   static const MethodChannel _method = MethodChannel('carbon_wms/rfid');
-  static const EventChannel _events = EventChannel('carbon_wms/rfid_tag_stream');
-  static const EventChannel _hardwareBarcodeEvents = EventChannel('carbon_wms/hardware_barcode');
+  static const EventChannel _events =
+      EventChannel('carbon_wms/rfid_tag_stream');
+  static const EventChannel _hardwareBarcodeEvents =
+      EventChannel('carbon_wms/hardware_barcode');
+  static const EventChannel _hardwareTriggerEvents =
+      EventChannel('carbon_wms/hardware_trigger');
 
   static Future<String?> ping() async {
     try {
@@ -104,11 +108,13 @@ class RfidVendorChannel {
   }
 
   /// Optional [readerName] substring to pick one reader when multiple are paired (e.g. `RFD8500`).
-  static Future<RfidNativeConnectResult> connectZebra({String? readerName}) async {
+  static Future<RfidNativeConnectResult> connectZebra(
+      {String? readerName}) async {
     if (!_isAndroid) return RfidNativeConnectResult.useStub;
     try {
       await _method.invokeMethod<void>('zebra.connect', <String, dynamic>{
-        if (readerName != null && readerName.trim().isNotEmpty) 'readerName': readerName.trim(),
+        if (readerName != null && readerName.trim().isNotEmpty)
+          'readerName': readerName.trim(),
       });
       return RfidNativeConnectResult.linked;
     } on PlatformException catch (e) {
@@ -183,7 +189,8 @@ class RfidVendorChannel {
     if (!_isAndroid) return;
     final p = dbm.clamp(0, 30);
     try {
-      await _method.invokeMethod<void>('rfid.setAntennaPower', <String, dynamic>{'dbm': p});
+      await _method.invokeMethod<void>(
+          'rfid.setAntennaPower', <String, dynamic>{'dbm': p});
     } on MissingPluginException {
       /* iOS / unit tests */
     } catch (_) {
@@ -193,13 +200,17 @@ class RfidVendorChannel {
 
   /// Tag reads from native layer (`epc` hex string, optional `rssi`).
   static Stream<RfidTagRead> tagReadStream() {
-    return _events.receiveBroadcastStream().map((dynamic e) {
-      if (e is! Map) return null;
-      final m = Map<String, dynamic>.from(e);
-      final hex = m['epc']?.toString().trim().toUpperCase() ?? '';
-      final rssi = m['rssi'] is num ? (m['rssi'] as num).round() : null;
-      return RfidTagRead.tryParse(hex, rssi: rssi);
-    }).where((r) => r != null).cast<RfidTagRead>();
+    return _events
+        .receiveBroadcastStream()
+        .map((dynamic e) {
+          if (e is! Map) return null;
+          final m = Map<String, dynamic>.from(e);
+          final hex = m['epc']?.toString().trim().toUpperCase() ?? '';
+          final rssi = m['rssi'] is num ? (m['rssi'] as num).round() : null;
+          return RfidTagRead.tryParse(hex, rssi: rssi);
+        })
+        .where((r) => r != null)
+        .cast<RfidTagRead>();
   }
 
   static Stream<String> hardwareBarcodeStream() {
@@ -210,5 +221,13 @@ class RfidVendorChannel {
     }).where((s) => s.isNotEmpty);
   }
 
-  static bool get _isAndroid => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  static Stream<String> hardwareTriggerStream() {
+    if (!_isAndroid) return const Stream<String>.empty();
+    return _hardwareTriggerEvents.receiveBroadcastStream().map((dynamic e) {
+      return (e?.toString() ?? '').trim().toLowerCase();
+    }).where((s) => s == 'down' || s == 'up');
+  }
+
+  static bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 }
