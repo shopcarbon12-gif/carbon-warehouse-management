@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Senitron Device File Audit Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; line-height: 1.45; }
+    h1, h2, h3 { margin-top: 24px; }
+    code { background: #f2f2f2; padding: 2px 4px; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #fafafa; }
+    .note { background: #eef7ff; border-left: 4px solid #1f6feb; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Senitron-Related Files Audit (Handheld)</h1>
+  <p><strong>Date:</strong> 2026-04-14</p>
+  <p><strong>Device package:</strong> <code>com.senitron.senitron_chainway_handheld_app</code></p>
+
+  <h2>Executive Summary</h2>
+  <ul>
+    <li>Senitron is a Flutter-based Android app with native UHF support libraries embedded in its APK.</li>
+    <li>The device stores rich operational output in shared storage under <code>/sdcard/SenitronRFID</code>, including inventory CSV exports and metadata JSON files.</li>
+    <li>Scanner behavior appears configurable by XML in shared storage under <code>/sdcard/Scanner/data</code>.</li>
+    <li>Private app data directories were not readable due lack of root / <code>run-as</code> restrictions.</li>
+  </ul>
+
+  <h2>Collection Scope and Access</h2>
+  <table>
+    <tr><th>Area</th><th>Result</th><th>Notes</th></tr>
+    <tr>
+      <td>Package metadata</td>
+      <td>Collected</td>
+      <td><code>dumpsys package</code> provided version, permissions, providers, paths.</td>
+    </tr>
+    <tr>
+      <td>APK static contents</td>
+      <td>Collected</td>
+      <td><code>base.apk</code> pulled and listed locally.</td>
+    </tr>
+    <tr>
+      <td>Shared storage files</td>
+      <td>Collected</td>
+      <td><code>/sdcard/SenitronRFID</code>, <code>/sdcard/Scanner/data</code>, selected files pulled.</td>
+    </tr>
+    <tr>
+      <td>Private app sandbox</td>
+      <td>Blocked</td>
+      <td><code>su</code> not available; <code>run-as</code> denied (not debuggable).</td>
+    </tr>
+  </table>
+
+  <h2>Key Artifacts Found</h2>
+  <h3>1) Installed APK</h3>
+  <ul>
+    <li>APK path: <code>/data/app/com.senitron.senitron_chainway_handheld_app-.../base.apk</code></li>
+    <li>Version: <code>2.123.0</code> (from package metadata)</li>
+    <li>Embedded native libs include:
+      <ul>
+        <li><code>libDeviceAPIM.so</code></li>
+        <li><code>libDeviceAPIQ.so</code></li>
+        <li><code>libIDFingerprintAlg.so</code></li>
+        <li><code>libflutter.so</code>, <code>libapp.so</code></li>
+      </ul>
+    </li>
+    <li>This strongly indicates direct integration with OEM device APIs, not just generic keyboard wedge use.</li>
+  </ul>
+
+  <h3>2) Senitron Data Exports</h3>
+  <ul>
+    <li>Folder: <code>/sdcard/SenitronRFID</code></li>
+    <li>Subfolders:
+      <ul>
+        <li><code>Inventory/</code> contains many session CSV files.</li>
+        <li><code>Data/</code> contains paired <code>-Info</code>, <code>-J1</code>, <code>-J2</code> files in JSON and DAT formats.</li>
+      </ul>
+    </li>
+    <li>Sample <code>-Info.json</code> contains session summary fields:
+      <ul>
+        <li><code>user_name</code>, <code>datetime</code>, <code>items_count</code>, <code>assets_count</code>, <code>note</code></li>
+      </ul>
+    </li>
+    <li>Sample inventory CSV row format:
+      <ul>
+        <li><code>EPC,timestamp,zone/bin</code></li>
+      </ul>
+    </li>
+  </ul>
+
+  <h3>3) Scanner Configuration Files</h3>
+  <ul>
+    <li>Folder: <code>/sdcard/Scanner/data</code></li>
+    <li>Files:
+      <ul>
+        <li><code>KeyboardHelperParam.xml</code></li>
+        <li><code>MOTOParameters.xml</code></li>
+      </ul>
+    </li>
+    <li><code>KeyboardHelperParam.xml</code> includes useful keys:
+      <ul>
+        <li><code>scanner_etBroadcast=com.scanner.broadcast</code></li>
+        <li><code>scanner_etBroadcastKey=data</code></li>
+        <li><code>scanner_target=2</code> (broadcast path)</li>
+        <li><code>scanner_uhf_power=30</code></li>
+      </ul>
+    </li>
+    <li>This confirms practical scanner broadcast contracts and defaults used on this handheld.</li>
+  </ul>
+
+  <h2>How This Can Help CarbonWMS</h2>
+  <table>
+    <tr><th>Finding</th><th>Reusable Value</th><th>Recommendation</th></tr>
+    <tr>
+      <td>Session file model (<code>Info + CSV + detail parts</code>)</td>
+      <td>High</td>
+      <td>Use similar export bundle design in CarbonWMS Count Inventory for auditability and recovery.</td>
+    </tr>
+    <tr>
+      <td>Scanner XML with broadcast action/key</td>
+      <td>High</td>
+      <td>Keep CarbonWMS defaults aligned to <code>com.scanner.broadcast</code> + <code>data</code>, with fallback aliases.</td>
+    </tr>
+    <tr>
+      <td>Native DeviceAPI libraries bundled in app</td>
+      <td>Medium</td>
+      <td>Do not copy binaries directly; use vendor SDK from official source and match firmware version.</td>
+    </tr>
+    <tr>
+      <td>Flutter app packaging structure</td>
+      <td>Medium</td>
+      <td>Useful only as architecture hint, not source reuse.</td>
+    </tr>
+  </table>
+
+  <h2>What To Preserve / Deep Check Again</h2>
+  <ol>
+    <li><strong>Preserve:</strong> <code>/sdcard/SenitronRFID/Inventory/*.csv</code> and matching <code>Data/*-Info*</code> files for mapping and QA fixtures.</li>
+    <li><strong>Preserve:</strong> <code>/sdcard/Scanner/data/*.xml</code> as known-good scanner behavior baselines.</li>
+    <li><strong>Deep check next:</strong> private sandbox DB/preferences if rooted build becomes available (currently blocked).</li>
+    <li><strong>Deep check next:</strong> decompiled Dart symbol map from APK only for behavior understanding, without reusing proprietary code.</li>
+  </ol>
+
+  <h2>Constraints / Legal Safety</h2>
+  <div class="note">
+    <p>Direct code or binary copying from Senitron is not recommended. Keep this report as behavior and data-contract intelligence only. Reimplement in CarbonWMS using your own code and officially provided SDKs.</p>
+  </div>
+
+  <h2>Files Pulled Locally During Audit</h2>
+  <ul>
+    <li><code>/home/carbondev/senitron-base.apk</code></li>
+    <li><code>/home/carbondev/senitron-sample-info.json</code></li>
+    <li><code>/home/carbondev/senitron-sample-inventory.csv</code></li>
+    <li><code>/home/carbondev/senitron-keyboard-helper.xml</code></li>
+    <li><code>/home/carbondev/senitron-deviceapi-log.txt</code></li>
+  </ul>
+</body>
+</html>

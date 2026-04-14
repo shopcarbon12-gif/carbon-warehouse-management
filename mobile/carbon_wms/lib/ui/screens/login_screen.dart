@@ -35,8 +35,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   /// Bundled from brand kit: `Neuzeit Grotesk W01 Regular.otf` (bold via [FontWeight.w700]).
   static const String _kBrandFontFamily = 'NeuzeitGrotesk';
   static const double _logoCornerRadius = 14;
+
   /// Smaller on-screen square; [BoxFit.cover] zooms the mark inside the clip.
   static const double _logoDisplaySize = 120;
+
   /// Reserved height for MAC / Android ID so USER EMAIL lines up whether or not the line shows.
   static const double _deviceLineReserveHeight = 36;
 
@@ -51,6 +53,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   static const Color _labelAboveField = Color(0xFF4A5454);
   static const Color _textBlack = Color(0xFF171D1D);
   static const Color _primaryTeal = Color(0xFF1B7D7D);
+
   /// Subtitle: slightly darker than [_labelGrey], not as strong as body black.
   static const Color _subtitleGrey = Color(0xFF6A7070);
 
@@ -68,6 +71,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   bool _rememberEmail = true;
   bool _offerBiometricSetupAfterSignIn = false;
   bool _bioCapableDevice = false;
+
   /// True while [LocalAuthentication] is showing — hide the decorative fingerprint icon.
   bool _biometricChallengeActive = false;
 
@@ -101,8 +105,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
     _rememberEmail = await api.getRememberLoginEmail();
     final saved = await api.getSavedLoginEmail();
-    final offerBio = await LoginCredentialsStore.getOfferBiometricSetupAfterSignIn();
-    final bioCapable = await LoginCredentialsStore.canUseBiometricPasswordVault();
+    final offerBio =
+        await LoginCredentialsStore.getOfferBiometricSetupAfterSignIn();
+    final bioCapable =
+        await LoginCredentialsStore.canUseBiometricPasswordVault();
     if (!mounted) return;
     if (_rememberEmail && saved != null && saved.isNotEmpty) {
       _email.text = saved;
@@ -170,7 +176,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         version: ver,
         androidId: androidId.isEmpty ? null : androidId,
       );
-      final approved = st['authorized'] == true || st['bypassDeviceLock'] == true;
+      final approved =
+          st['authorized'] == true || st['bypassDeviceLock'] == true;
       showLine = !approved;
     } catch (_) {
       showLine = true;
@@ -308,7 +315,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: const Color(0xFF2D2D2D),
-        content: Text(message, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.3)),
+        content: Text(message,
+            style: const TextStyle(
+                color: Colors.white, fontSize: 14, height: 1.3)),
       ),
     );
   }
@@ -324,7 +333,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           title: Text(title),
           content: Text(message),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
           ],
         ),
       ),
@@ -373,7 +383,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         if (bioOk) {
           final token = await api.getSessionToken();
           if (token != null && token.isNotEmpty) {
-            await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(false);
+            await LoginCredentialsStore.setBiometricEnrollmentPromptSkipped(
+                false);
             await LoginCredentialsStore.storeBiometricEnrollment(
               email: email.trim(),
               sessionToken: token,
@@ -520,9 +531,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               child: Checkbox(
                 value: value,
                 side: const BorderSide(color: _primaryTeal, width: 1.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(3)),
                 fillColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected)) return _primaryTeal;
+                  if (states.contains(WidgetState.selected))
+                    return _primaryTeal;
                   return Colors.transparent;
                 }),
                 checkColor: Colors.white,
@@ -622,7 +635,10 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text('Carbon', style: _brandTitleStyle),
-          WmsText(color: _primaryTeal, fontSize: _brandTitleStyle.fontSize ?? 28, strokeWidth: 0.7),
+          WmsText(
+              color: _primaryTeal,
+              fontSize: _brandTitleStyle.fontSize ?? 28,
+              strokeWidth: 0.7),
         ],
       ),
       const SizedBox(height: 8),
@@ -775,7 +791,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 height: 44,
                 child: Center(
                   child: Icon(
-                    _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                    _obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
                     size: _iconDnsLockEye,
                     color: _labelGrey,
                   ),
@@ -819,9 +837,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark.copyWith(
+      value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: Colors.transparent,
-        systemNavigationBarColor: _bg,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: const Color(0xFF2A2F2F),
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: const Color(0xFF2A2F2F),
+        systemNavigationBarContrastEnforced: false,
       ),
       child: Theme(
         data: _loginShellTheme(),
@@ -832,132 +854,139 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
             child: AnimatedPadding(
               duration: const Duration(milliseconds: 120),
               curve: Curves.easeOutCubic,
-              padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+              padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 22, vertical: 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                  if (_vaultReady) ...[
-                    Expanded(
-                      flex: 5,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return SingleChildScrollView(
-                            physics: const ClampingScrollPhysics(),
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: _loginScrollableFormChildren(),
+                    if (_vaultReady) ...[
+                      Expanded(
+                        flex: 5,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              physics: const ClampingScrollPhysics(),
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                    minWidth: constraints.maxWidth),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: _loginScrollableFormChildren(),
+                                ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (!_biometricChallengeActive)
-                              Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  onTap: _busy ? null : _biometricSignIn,
-                                  customBorder: const CircleBorder(),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(4),
-                                    child: Icon(
-                                      Icons.fingerprint,
-                                      size: 96,
+                      Expanded(
+                        flex: 2,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!_biometricChallengeActive)
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: _busy ? null : _biometricSignIn,
+                                    customBorder: const CircleBorder(),
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(4),
+                                      child: Icon(
+                                        Icons.fingerprint,
+                                        size: 96,
+                                        color: _primaryTeal,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              else
+                                const SizedBox(height: 104),
+                              if (_vaultEmail != null &&
+                                  _vaultEmail!.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    '(${_vaultEmail!})',
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w600,
+                                      color: _primaryTeal,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              if (_biometricChallengeActive)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    'Confirm on this device…',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.3,
                                       color: _primaryTeal,
                                     ),
                                   ),
                                 ),
-                              )
-                            else
-                              const SizedBox(height: 104),
-                            if (_vaultEmail != null && _vaultEmail!.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  '(${_vaultEmail!})',
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600,
-                                    color: _primaryTeal,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            if (_biometricChallengeActive)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  'Confirm on this device…',
-                                  textAlign: TextAlign.center,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.3,
-                                    color: _primaryTeal,
-                                  ),
-                                ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ] else
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return SingleChildScrollView(
-                            physics: const ClampingScrollPhysics(),
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: _loginScrollableFormChildren(),
+                    ] else
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              physics: const ClampingScrollPhysics(),
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                    minWidth: constraints.maxWidth),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: _loginScrollableFormChildren(),
+                                ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  SizedBox(
-                    height: _fieldHeight,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: _busy ? null : _submit,
-                        borderRadius: BorderRadius.circular(10),
-                        child: Ink(
-                          decoration: BoxDecoration(
-                            color: _primaryTeal,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Center(
-                            child: Text(
-                              _busy ? 'SIGNING IN…' : 'SIGN IN',
-                              style: GoogleFonts.inter(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.1,
-                                color: Colors.white,
+                    SizedBox(
+                      height: _fieldHeight,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _busy ? null : _submit,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              color: _primaryTeal,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: Text(
+                                _busy ? 'SIGNING IN…' : 'SIGN IN',
+                                style: GoogleFonts.inter(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.1,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
                   ],
                 ),
               ),

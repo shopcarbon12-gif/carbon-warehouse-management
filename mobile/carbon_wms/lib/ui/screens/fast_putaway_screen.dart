@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show DeviceOrientation, EventChannel, SystemChrome;
+import 'package:flutter/services.dart'
+    show DeviceOrientation, EventChannel, SystemChrome, SystemUiOverlayStyle;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,23 +23,28 @@ import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-const Color _surface    = Color(0xFFFFFFFF);
+const Color _surface = Color(0xFFFFFFFF);
 const Color _surfaceLow = Color(0xFFF3F3F4);
 const Color _surfaceMid = Color(0xFFEEEEEE);
 
 // Two teal variants used in action buttons
-const Color _tealDark   = Color(0xFF1B7D7D); // ADD BIN (matches AppColors.primary light)
-const Color _tealLight  = Color(0xFF2BA3A3); // ADD ITEM (lighter teal)
+const Color _tealDark =
+    Color(0xFF1B7D7D); // ADD BIN (matches AppColors.primary light)
+const Color _tealLight = Color(0xFF2BA3A3); // ADD ITEM (lighter teal)
 
 // Dark-mode equivalents
-const Color _tealDarkDk  = Color(0xFF1B7D7D);
+const Color _tealDarkDk = Color(0xFF1B7D7D);
 const Color _tealLightDk = Color(0xFF4DB6AC);
-
 
 // ── SKU Parsing ───────────────────────────────────────────────────────────────
 
 class _SkuParts {
-  final String raw, base, colorCode, sizeCode, searchKeySpecific, searchKeyAllColors;
+  final String raw,
+      base,
+      colorCode,
+      sizeCode,
+      searchKeySpecific,
+      searchKeyAllColors;
   const _SkuParts({
     required this.raw,
     required this.base,
@@ -51,27 +57,37 @@ class _SkuParts {
   static _SkuParts parse(String sku) {
     final s = sku.trim().toUpperCase();
     if (s.startsWith('C') && s.length >= 9) {
-      final base  = s.substring(0, 9);
+      final base = s.substring(0, 9);
       final color = s.length >= 11 ? s.substring(9, 11) : '';
-      final size  = s.length > 11  ? s.substring(11)    : '';
+      final size = s.length > 11 ? s.substring(11) : '';
       return _SkuParts(
-        raw: s, base: base, colorCode: color, sizeCode: size,
-        searchKeySpecific:   s.length >= 11 ? s.substring(0, 11) : s,
-        searchKeyAllColors:  base,
+        raw: s,
+        base: base,
+        colorCode: color,
+        sizeCode: size,
+        searchKeySpecific: s.length >= 11 ? s.substring(0, 11) : s,
+        searchKeyAllColors: base,
       );
     } else if (s.length >= 7) {
-      final base  = s.substring(0, 7);
+      final base = s.substring(0, 7);
       final color = s.length >= 9 ? s.substring(7, 9) : '';
-      final size  = s.length > 9  ? s.substring(9)    : '';
+      final size = s.length > 9 ? s.substring(9) : '';
       return _SkuParts(
-        raw: s, base: base, colorCode: color, sizeCode: size,
-        searchKeySpecific:   s.length >= 9 ? s.substring(0, 9) : s,
-        searchKeyAllColors:  base,
+        raw: s,
+        base: base,
+        colorCode: color,
+        sizeCode: size,
+        searchKeySpecific: s.length >= 9 ? s.substring(0, 9) : s,
+        searchKeyAllColors: base,
       );
     }
     return _SkuParts(
-      raw: s, base: s, colorCode: '', sizeCode: '',
-      searchKeySpecific: s, searchKeyAllColors: s,
+      raw: s,
+      base: s,
+      colorCode: '',
+      sizeCode: '',
+      searchKeySpecific: s,
+      searchKeyAllColors: s,
     );
   }
 }
@@ -86,9 +102,9 @@ class _StoredItem {
     required this.epcs,
   });
 
-  final String       sku;
-  final String       description;
-  final int          qty;
+  final String sku;
+  final String description;
+  final int qty;
   final List<String> epcs;
 
   static _StoredItem fromMap(Map<String, dynamic> m) {
@@ -97,10 +113,10 @@ class _StoredItem {
         ? rawEpcs.map((e) => e.toString()).toList()
         : <String>[];
     return _StoredItem(
-      sku:         m['sku']?.toString()         ?? '',
+      sku: m['sku']?.toString() ?? '',
       description: m['description']?.toString() ?? '',
-      qty:         m['qty'] as int?             ?? m['quantity'] as int? ?? epcs.length,
-      epcs:        epcs,
+      qty: m['qty'] as int? ?? m['quantity'] as int? ?? epcs.length,
+      epcs: epcs,
     );
   }
 }
@@ -115,63 +131,63 @@ class FastPutawayScreen extends StatefulWidget {
 
 class _FastPutawayScreenState extends State<FastPutawayScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  final _scanFocus  = FocusNode();
+  final _scanFocus = FocusNode();
   final _hiddenCtrl = TextEditingController();
   StreamSubscription<dynamic>? _hardwareBarcodeSub;
 
-  String _pendingSku  = '';
-  String _currentBin  = '';
+  String _pendingSku = '';
+  String _currentBin = '';
   String _currentBinId = '';
-  bool   _binActive   = false;
-  bool   _busy        = false;
-  bool   _flashOk     = false;
-  bool   _awaitingBinScan = true;
+  bool _binActive = false;
+  bool _busy = false;
+  bool _flashOk = false;
+  bool _awaitingBinScan = true;
 
-  String _scannerSource   = 'hardware';
-  bool   _manualMode      = false;
-  bool   _manualBin       = false;
-  bool   _manualAddItem   = false;
-  bool   _externalScanner = false;
-  bool   _cameraEnabled   = true;
+  String _scannerSource = 'hardware';
+  bool _manualMode = false;
+  bool _manualBin = false;
+  bool _manualAddItem = false;
+  bool _externalScanner = false;
+  bool _cameraEnabled = true;
 
   String _scopeForBin = 'all_colors';
-  String _skuForBin   = '';
+  String _skuForBin = '';
   String? _userEmail;
 
   List<_StoredItem> _storedContents = [];
-  List<_StoredItem> _undoSnapshot   = [];
-  bool              _showUndo       = false;
+  List<_StoredItem> _undoSnapshot = [];
+  bool _showUndo = false;
+  DateTime _ignoreScansUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
   int get _storedTotal => _storedContents.fold(0, (sum, e) => sum + e.qty);
-  bool get _shouldUseHardwareScanner => _scannerSource == 'hardware' || _externalScanner;
+  bool get _shouldUseHardwareScanner =>
+      _scannerSource == 'hardware' || _externalScanner;
 
   void _resetForNextEntry() {
     setState(() {
-      _currentBin      = '';
-      _currentBinId    = '';
-      _binActive       = false;
-      _storedContents  = [];
+      _currentBin = '';
+      _currentBinId = '';
+      _binActive = false;
+      _storedContents = [];
       _awaitingBinScan = true;
     });
     _scanFocus.requestFocus();
-    unawaited(_startHardware2dScan());
   }
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _scannerSource   = p.getString('wms_scanner_source_v1')       ?? 'hardware';
-      _manualMode      = p.getBool('bin_assign_manual_mode')        ?? false;
-      _manualBin       = p.getBool('bin_assign_manual_bin')         ?? false;
-      _manualAddItem   = p.getBool('bin_assign_manual_add_item')    ?? false;
-      _externalScanner = p.getBool('bin_assign_external_scanner')   ?? false;
-      _cameraEnabled   = p.getBool('bin_assign_camera_enabled')     ?? true;
+      _scannerSource = p.getString('wms_scanner_source_v1') ?? 'hardware';
+      _manualMode = p.getBool('bin_assign_manual_mode') ?? false;
+      _manualBin = p.getBool('bin_assign_manual_bin') ?? false;
+      _manualAddItem = p.getBool('bin_assign_manual_add_item') ?? false;
+      _externalScanner = p.getBool('bin_assign_external_scanner') ?? false;
+      _cameraEnabled = p.getBool('bin_assign_camera_enabled') ?? true;
     });
     _syncHardwareBarcodeStream();
     if (_shouldUseHardwareScanner) {
       unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
-      unawaited(_startHardware2dScan());
     }
   }
 
@@ -200,17 +216,28 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   void _dispatchScanLine(String raw) {
     final v = raw.trim();
     if (v.isEmpty || !mounted || _busy) return;
+    if (DateTime.now().isBefore(_ignoreScansUntil)) return;
+    final normalized = v.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    final blockedNoise = <String>{
+      'START',
+      'STOP',
+      'TIMEOUT',
+      'TRIGGER',
+      'KEYDOWN',
+      'KEYUP',
+      'SCANNING',
+      'SCAN',
+      'NULL',
+      'NUL',
+    };
+    if (blockedNoise.contains(normalized)) return;
+    if (_awaitingBinScan && normalized.length < 5) return;
     unawaited(_stopHardware2dScan());
     if (_awaitingBinScan) {
       unawaited(_handleBinScan(v));
     } else {
       unawaited(_onItemSubmit(v));
     }
-  }
-
-  Future<void> _startHardware2dScan() async {
-    if (!_shouldUseHardwareScanner) return;
-    await RfidVendorChannel.scannerStart2d();
   }
 
   Future<void> _stopHardware2dScan() async {
@@ -228,8 +255,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       return;
     }
     unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
-    _hardwareBarcodeSub =
-        const EventChannel('carbon_wms/hardware_barcode').receiveBroadcastStream().listen(
+    _hardwareBarcodeSub = const EventChannel('carbon_wms/hardware_barcode')
+        .receiveBroadcastStream()
+        .listen(
       (dynamic e) {
         if (!mounted || _busy) return;
         _dispatchScanLine(e?.toString() ?? '');
@@ -258,7 +286,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     final rawName = (_userEmail?.split('@').first ?? '').replaceAll('.', ' ');
     final displayName = rawName.isEmpty
         ? 'Operator'
-        : rawName.split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+        : rawName
+            .split(' ')
+            .map(
+                (w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+            .join(' ');
     final email = _userEmail ?? '—';
     return Drawer(
       backgroundColor: isDark ? const Color(0xFF1C2828) : Colors.white,
@@ -268,23 +300,33 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           Container(
             width: double.infinity,
             color: AppColors.primary,
-            padding: EdgeInsets.fromLTRB(24, MediaQuery.of(context).padding.top + 32, 24, 32),
+            padding: EdgeInsets.fromLTRB(
+                24, MediaQuery.of(context).padding.top + 32, 24, 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 CircleAvatar(
                   radius: 52,
                   backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  child: const Icon(Icons.person, size: 58, color: Colors.white),
+                  child:
+                      const Icon(Icons.person, size: 58, color: Colors.white),
                 ),
                 const SizedBox(height: 20),
                 Text(displayName,
-                  style: GoogleFonts.manrope(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white),
-                  textAlign: TextAlign.center, overflow: TextOverflow.ellipsis),
+                    style: GoogleFonts.manrope(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 6),
                 Text(email,
-                  style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.8)),
-                  textAlign: TextAlign.center, overflow: TextOverflow.ellipsis),
+                    style: GoogleFonts.manrope(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white.withValues(alpha: 0.8)),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -295,12 +337,17 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           const SizedBox(height: 4),
           _buildDrawerItem(Icons.settings_outlined, 'Settings', () {
             Navigator.pop(context);
-            Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const HandheldSettingsScreen()));
+            Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                    builder: (_) => const HandheldSettingsScreen()));
           }),
           const SizedBox(height: 4),
           Consumer<ThemeNotifier>(
             builder: (_, notifier, __) => _buildDrawerItem(
-              Icons.palette_outlined, 'Switch Theme', () => notifier.toggle(),
+              Icons.palette_outlined,
+              'Switch Theme',
+              () => notifier.toggle(),
             ),
           ),
           const Spacer(),
@@ -310,7 +357,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     );
   }
 
-  Widget _buildDrawerItem(IconData icon, String label, VoidCallback onTap, {Color? color, bool large = false}) {
+  Widget _buildDrawerItem(IconData icon, String label, VoidCallback onTap,
+      {Color? color, bool large = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final fg = color ?? (isDark ? const Color(0xFFE0ECEC) : AppColors.textMain);
     return InkWell(
@@ -319,10 +367,18 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Row(
           children: [
-            SizedBox(width: 26, child: Icon(icon, size: large ? 26 : 24, color: fg)),
+            SizedBox(
+                width: 26, child: Icon(icon, size: large ? 26 : 24, color: fg)),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.manrope(fontSize: large ? 17 : 14, fontWeight: large ? FontWeight.w800 : FontWeight.w700, letterSpacing: -0.1, color: fg))),
+            Expanded(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                        fontSize: large ? 17 : 14,
+                        fontWeight: large ? FontWeight.w800 : FontWeight.w700,
+                        letterSpacing: -0.1,
+                        color: fg))),
           ],
         ),
       ),
@@ -341,7 +397,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       if (!mounted) return null;
       return await openCameraBarcodeScanner(context, title: title);
     } finally {
-      await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      await SystemChrome.setPreferredOrientations(
+          [DeviceOrientation.portraitUp]);
     }
   }
 
@@ -369,6 +426,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   Future<void> _handleBinScan(String raw) async {
     final code = _formatBinCode(raw);
+    final normalized = _normalizeBinForCompare(code);
+    if (normalized.length < 3) {
+      // Ignore accidental short trigger noise.
+      _hiddenCtrl.clear();
+      return;
+    }
     _hiddenCtrl.clear();
     setState(() => _busy = true);
     try {
@@ -376,9 +439,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       final bins = await api.fetchBins();
       final want = _normalizeBinForCompare(code);
       final match = bins.cast<Map<String, dynamic>?>().firstWhere(
-        (b) => b != null && _normalizeBinForCompare(b['code']?.toString() ?? '') == want,
-        orElse: () => null,
-      );
+            (b) =>
+                b != null &&
+                _normalizeBinForCompare(b['code']?.toString() ?? '') == want,
+            orElse: () => null,
+          );
       if (!mounted) return;
       if (match != null) {
         await _confirmBin(match['id']?.toString() ?? '', code);
@@ -400,18 +465,18 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     final contents = await api.fetchBinContents(binId);
     final List<_StoredItem> items = contents
         .whereType<Map>()
-        .map<_StoredItem>((e) => _StoredItem.fromMap(Map<String, dynamic>.from(e)))
+        .map<_StoredItem>(
+            (e) => _StoredItem.fromMap(Map<String, dynamic>.from(e)))
         .toList();
     if (!mounted) return;
     setState(() {
-      _currentBin      = _formatBinCode(code);
-      _currentBinId    = binId;
-      _binActive       = true;
+      _currentBin = _formatBinCode(code);
+      _currentBinId = binId;
+      _binActive = true;
       _awaitingBinScan = false;
-      _storedContents  = items;
+      _storedContents = items;
     });
     _scanFocus.requestFocus();
-    unawaited(_startHardware2dScan());
   }
 
   void _showCreateBinDialog(String code) {
@@ -453,16 +518,16 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                 if (!mounted) return;
                 final binId = result['id']?.toString() ?? '';
                 setState(() {
-                  _currentBin      = newCode;
-                  _currentBinId    = binId;
-                  _binActive       = true;
+                  _currentBin = newCode;
+                  _currentBinId = binId;
+                  _binActive = true;
                   _awaitingBinScan = false;
-                  _storedContents  = [];
+                  _storedContents = [];
                 });
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Create bin failed: $e')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Create bin failed: $e')));
                 }
               } finally {
                 if (mounted) {
@@ -472,7 +537,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               }
             },
             style: FilledButton.styleFrom(
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             ),
             child: const Text('CREATE'),
           ),
@@ -483,24 +549,26 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   // ── Assignment helpers ────────────────────────────────────────────────────
 
-  Future<void> _doAssign({required String skuScanned, required String scope}) async {
-    final api      = context.read<WmsApiClient>();
+  Future<void> _doAssign(
+      {required String skuScanned, required String scope}) async {
+    final api = context.read<WmsApiClient>();
     final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
     await api.postPutawayAssign(
-      deviceId:   deviceId,
-      binCode:    _currentBin,
+      deviceId: deviceId,
+      binCode: _currentBin,
       skuScanned: skuScanned,
-      scope:      scope,
+      scope: scope,
     );
   }
 
   Future<void> _refreshContents() async {
     if (_currentBinId.isEmpty) return;
-    final api      = context.read<WmsApiClient>();
+    final api = context.read<WmsApiClient>();
     final contents = await api.fetchBinContents(_currentBinId);
-    final items    = contents
+    final items = contents
         .whereType<Map>()
-        .map<_StoredItem>((e) => _StoredItem.fromMap(Map<String, dynamic>.from(e)))
+        .map<_StoredItem>(
+            (e) => _StoredItem.fromMap(Map<String, dynamic>.from(e)))
         .toList();
     if (mounted) setState(() => _storedContents = items);
   }
@@ -522,7 +590,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('CLEAN'),
@@ -537,10 +606,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       await context.read<WmsApiClient>().postCleanBinByCode(_currentBin);
       if (!mounted) return;
       setState(() {
-        _undoSnapshot   = snapshot;
+        _undoSnapshot = snapshot;
         _storedContents = [];
-        _showUndo       = true;
-        _busy           = false;
+        _showUndo = true;
+        _busy = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -579,7 +648,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFFEF4444),
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('DELETE BIN'),
@@ -596,9 +666,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       await context.read<WmsApiClient>().deleteBin(_currentBinId);
       if (!mounted) return;
       setState(() {
-        _undoSnapshot   = snapshot;
-        _showUndo       = true;
-        _busy           = false;
+        _undoSnapshot = snapshot;
+        _showUndo = true;
+        _busy = false;
       });
       _resetForNextEntry();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -607,7 +677,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           content: Text('Bin $deletedBin deleted.'),
           action: SnackBarAction(
             label: 'UNDO',
-            onPressed: () => unawaited(_onUndoDeleteBin(deletedBin, deletedBinId, snapshot)),
+            onPressed: () =>
+                unawaited(_onUndoDeleteBin(deletedBin, deletedBinId, snapshot)),
           ),
         ),
       );
@@ -620,7 +691,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     }
   }
 
-  Future<void> _onUndoDeleteBin(String binCode, String binId, List<_StoredItem> snapshot) async {
+  Future<void> _onUndoDeleteBin(
+      String binCode, String binId, List<_StoredItem> snapshot) async {
     setState(() => _busy = true);
     try {
       final api = context.read<WmsApiClient>();
@@ -630,10 +702,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       for (final item in snapshot) {
         await api.postPutawayAssign(
-          deviceId:   deviceId,
-          binCode:    binCode,
+          deviceId: deviceId,
+          binCode: binCode,
           skuScanned: item.sku,
-          scope:      'single_color',
+          scope: 'single_color',
         );
       }
       if (!mounted) return;
@@ -653,18 +725,22 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (_undoSnapshot.isEmpty || _currentBin.isEmpty) return;
     setState(() => _busy = true);
     try {
-      final api      = context.read<WmsApiClient>();
+      final api = context.read<WmsApiClient>();
       final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       for (final item in _undoSnapshot) {
         await api.postPutawayAssign(
-          deviceId:   deviceId,
-          binCode:    _currentBin,
+          deviceId: deviceId,
+          binCode: _currentBin,
           skuScanned: item.sku,
-          scope:      'single_color',
+          scope: 'single_color',
         );
       }
       await _refreshContents();
-      if (mounted) setState(() { _showUndo = false; _undoSnapshot = []; });
+      if (mounted)
+        setState(() {
+          _showUndo = false;
+          _undoSnapshot = [];
+        });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -701,7 +777,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Colors.red,
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('REMOVE'),
@@ -712,7 +789,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      await context.read<WmsApiClient>().removeSkuFromBin(_currentBin, item.sku);
+      await context
+          .read<WmsApiClient>()
+          .removeSkuFromBin(_currentBin, item.sku);
       await _refreshContents();
       if (mounted) _checkAutoEmptyRule(_storedContents);
     } catch (e) {
@@ -757,23 +836,27 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero),
               ),
               onPressed: () async {
                 Navigator.pop(ctx);
                 setState(() => _busy = true);
                 try {
-                  await _doAssign(skuScanned: skuParts.searchKeySpecific, scope: 'single_color');
+                  await _doAssign(
+                      skuScanned: skuParts.searchKeySpecific,
+                      scope: 'single_color');
                   await _refreshContents();
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text('Assign failed: $e')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Assign failed: $e')));
                   }
                 } finally {
                   if (mounted) setState(() => _busy = false);
                 }
-                if (mounted && addAnother) _showNextProductDialog(skuParts, matrixId);
+                if (mounted && addAnother)
+                  _showNextProductDialog(skuParts, matrixId);
                 if (mounted) _scanFocus.requestFocus();
               },
               child: const Text('YES'),
@@ -803,7 +886,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             ),
             onPressed: () {
               Navigator.pop(ctx);
@@ -820,7 +904,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   void _showSameProductColorsDialog(_SkuParts skuParts, String matrixId) {
     // checked set and available rows are shared across FutureBuilder + actions
-    final checked   = <int>{};
+    final checked = <int>{};
     List<Map<String, dynamic>> availableRows = [];
 
     showDialog<void>(
@@ -832,7 +916,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           content: SizedBox(
             width: double.maxFinite,
             child: FutureBuilder<List<dynamic>>(
-              future: context.read<WmsApiClient>().fetchCatalogMatrixRows(matrixId),
+              future:
+                  context.read<WmsApiClient>().fetchCatalogMatrixRows(matrixId),
               builder: (ctx2, snap) {
                 if (snap.connectionState != ConnectionState.done) {
                   return const Padding(
@@ -841,32 +926,35 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                   );
                 }
                 final rows = snap.data ?? [];
-                final assignedKeys = _storedContents
-                    .map((e) => e.sku.toUpperCase())
-                    .toSet();
+                final assignedKeys =
+                    _storedContents.map((e) => e.sku.toUpperCase()).toSet();
                 availableRows = rows
                     .whereType<Map>()
-                    .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+                    .map<Map<String, dynamic>>(
+                        (e) => Map<String, dynamic>.from(e))
                     .where((r) {
-                      final sku = r['custom_sku']?.toString().toUpperCase() ??
-                          r['sku']?.toString().toUpperCase() ?? '';
-                      final parts = _SkuParts.parse(sku);
-                      return !assignedKeys.contains(parts.searchKeySpecific.toUpperCase());
-                    })
-                    .toList();
+                  final sku = r['custom_sku']?.toString().toUpperCase() ??
+                      r['sku']?.toString().toUpperCase() ??
+                      '';
+                  final parts = _SkuParts.parse(sku);
+                  return !assignedKeys
+                      .contains(parts.searchKeySpecific.toUpperCase());
+                }).toList();
 
                 if (availableRows.isEmpty) {
-                  return const Text('All colors are already assigned to this bin.');
+                  return const Text(
+                      'All colors are already assigned to this bin.');
                 }
 
                 return SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: availableRows.asMap().entries.map((entry) {
-                      final i   = entry.key;
+                      final i = entry.key;
                       final row = entry.value;
                       final sku = row['custom_sku']?.toString() ??
-                          row['sku']?.toString() ?? '';
+                          row['sku']?.toString() ??
+                          '';
                       final parts = _SkuParts.parse(sku);
                       final label = '${parts.colorCode}'
                           '${parts.sizeCode.isNotEmpty ? " · ${parts.sizeCode}" : ""}';
@@ -874,13 +962,18 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                         dense: true,
                         value: checked.contains(i),
                         onChanged: (v) => setSt(() {
-                          if (v == true) { checked.add(i); } else { checked.remove(i); }
+                          if (v == true) {
+                            checked.add(i);
+                          } else {
+                            checked.remove(i);
+                          }
                         }),
                         title: Text(
                           label.isNotEmpty ? label : sku,
                           style: const TextStyle(fontSize: 13),
                         ),
-                        subtitle: Text(sku, style: const TextStyle(fontSize: 11)),
+                        subtitle:
+                            Text(sku, style: const TextStyle(fontSize: 11)),
                       );
                     }).toList(),
                   ),
@@ -898,7 +991,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             ),
             FilledButton(
               style: FilledButton.styleFrom(
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero),
               ),
               onPressed: () async {
                 Navigator.pop(ctx);
@@ -910,7 +1004,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                       .toList();
                   for (final row in selectedRows) {
                     final sku = row['custom_sku']?.toString() ??
-                        row['sku']?.toString() ?? '';
+                        row['sku']?.toString() ??
+                        '';
                     if (sku.isEmpty) continue;
                     final parts = _SkuParts.parse(sku);
                     await _doAssign(
@@ -921,8 +1016,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                   await _refreshContents();
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text('Color assign failed: $e')));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Color assign failed: $e')));
                   }
                 } finally {
                   if (mounted) {
@@ -949,16 +1044,21 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     setState(() => _busy = true);
     try {
       final skuParts = _SkuParts.parse(sku);
-      final api  = context.read<WmsApiClient>();
-      final row  = await api.catalogGridSearchFirstRow(skuParts.searchKeySpecific);
+      final api = context.read<WmsApiClient>();
+      final row =
+          await api.catalogGridSearchFirstRow(skuParts.searchKeySpecific);
       if (!mounted) return;
       final itemName = row?['title']?.toString() ??
           row?['description']?.toString() ??
           skuParts.raw;
-      final matrixId = row?['matrix_id']?.toString() ??
-          row?['matrixId']?.toString() ?? '';
-      setState(() { _pendingSku = sku; _busy = false; });
-      _showAssignDialog(itemName: itemName, skuParts: skuParts, matrixId: matrixId);
+      final matrixId =
+          row?['matrix_id']?.toString() ?? row?['matrixId']?.toString() ?? '';
+      setState(() {
+        _pendingSku = sku;
+        _busy = false;
+      });
+      _showAssignDialog(
+          itemName: itemName, skuParts: skuParts, matrixId: matrixId);
     } catch (e) {
       if (mounted) {
         setState(() => _busy = false);
@@ -974,29 +1074,33 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     _hiddenCtrl.clear();
     setState(() => _busy = true);
     try {
-      final api      = context.read<WmsApiClient>();
+      final api = context.read<WmsApiClient>();
       final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
-      final result   = await api.postPutawayAssign(
-        deviceId:   deviceId,
-        binCode:    bin,
+      final result = await api.postPutawayAssign(
+        deviceId: deviceId,
+        binCode: bin,
         skuScanned: _skuForBin,
-        scope:      _scopeForBin,
+        scope: _scopeForBin,
       );
       if (!mounted) return;
       final contents = result['storedContents'];
       final List<_StoredItem> items = contents is List
-          ? contents.whereType<Map>().map<_StoredItem>((e) => _StoredItem.fromMap(Map<String, dynamic>.from(e))).toList()
+          ? contents
+              .whereType<Map>()
+              .map<_StoredItem>(
+                  (e) => _StoredItem.fromMap(Map<String, dynamic>.from(e)))
+              .toList()
           : <_StoredItem>[];
 
       setState(() {
-        _busy            = false;
-        _flashOk         = true;
-        _currentBin      = bin;
-        _binActive       = true;
+        _busy = false;
+        _flashOk = true;
+        _currentBin = bin;
+        _binActive = true;
         _awaitingBinScan = false;
-        _storedContents  = items;
-        _pendingSku      = '';
-        _skuForBin       = '';
+        _storedContents = items;
+        _pendingSku = '';
+        _skuForBin = '';
       });
       await Future<void>.delayed(const Duration(milliseconds: 450));
       if (mounted) setState(() => _flashOk = false);
@@ -1011,8 +1115,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   }
 
   void _addNewBin() {
-    setState(() { _awaitingBinScan = true; _pendingSku = ''; });
-    unawaited(_startHardware2dScan());
+    setState(() {
+      _awaitingBinScan = true;
+      _pendingSku = '';
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final code = await _maybeCameraScan('SCAN BIN LOCATION');
       if (code != null && code.isNotEmpty && mounted) {
@@ -1024,8 +1130,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   }
 
   void _addNewItem() {
-    setState(() { _awaitingBinScan = false; _pendingSku = ''; });
-    unawaited(_startHardware2dScan());
+    setState(() {
+      _awaitingBinScan = false;
+      _pendingSku = '';
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final code = await _maybeCameraScan('SCAN ITEM');
       if (code != null && code.isNotEmpty && mounted) {
@@ -1045,6 +1153,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     );
     if (mounted) {
       await _load();
+      _hiddenCtrl.clear();
+      _ignoreScansUntil =
+          DateTime.now().add(const Duration(milliseconds: 1800));
       FocusScope.of(context).unfocus();
       _scanFocus.requestFocus();
     }
@@ -1052,14 +1163,25 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark     = Theme.of(context).brightness == Brightness.dark;
-    final bg         = isDark ? const Color(0xFF111A1A) : _surface;
-    final bgLow      = isDark ? const Color(0xFF1C2828) : _surfaceLow;
-    final bgMid      = isDark ? const Color(0xFF243030) : _surfaceMid;
-    final mainColor  = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF111A1A) : _surface;
+    final bgLow = isDark ? const Color(0xFF1C2828) : _surfaceLow;
+    final bgMid = isDark ? const Color(0xFF243030) : _surfaceMid;
+    final mainColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
     final mutedColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
-    final tealDark   = isDark ? _tealDarkDk  : _tealDark;
-    final tealLight  = isDark ? _tealLightDk : _tealLight;
+    final tealDark = isDark ? _tealDarkDk : _tealDark;
+    final tealLight = isDark ? _tealLightDk : _tealLight;
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Color(0xFF2A2F2F),
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: Color(0xFF2A2F2F),
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
 
     return Scaffold(
       key: _scaffoldKey,
@@ -1067,7 +1189,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       drawer: _buildDrawer(),
       backgroundColor: bg,
       resizeToAvoidBottomInset: false,
-      appBar: _buildAppBar(isDark: isDark, mainColor: mainColor, mutedColor: mutedColor),
+      appBar: _buildAppBar(
+          isDark: isDark, mainColor: mainColor, mutedColor: mutedColor),
       body: GestureDetector(
         onTap: () {
           FocusScope.of(context).unfocus();
@@ -1079,155 +1202,168 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         },
         behavior: HitTestBehavior.translucent,
         child: Column(
-        children: [
-          // ── Hidden hardware-wedge receiver ──────────────────────────────
-          Offstage(
-            offstage: true,
-            child: TextField(
-              controller: _hiddenCtrl,
-              focusNode: _scanFocus,
-              autofocus: false,
-              showCursor: false,
-              enableIMEPersonalizedLearning: false,
-              keyboardType: TextInputType.none,
-              textInputAction: TextInputAction.done,
-              onChanged: (v) {
-                if (!v.contains('\n') && !v.contains('\r')) return;
-                final line = v.replaceAll('\r', '').split(RegExp(r'[\r\n]+')).first.trim();
-                _hiddenCtrl.clear();
-                if (line.isNotEmpty) _dispatchScanLine(line);
-              },
-              onSubmitted: (v) {
-                final line = v.replaceAll('\r', '').split(RegExp(r'[\r\n]+')).first.trim();
-                _hiddenCtrl.clear();
-                if (line.isNotEmpty) _dispatchScanLine(line);
-              },
-            ),
-          ),
-
-          // ── Busy overlay ────────────────────────────────────────────────
-          if (_busy)
-            const LinearProgressIndicator(minHeight: 2),
-
-          // ── Flash overlay ───────────────────────────────────────────────
-          if (_flashOk)
-            const LinearProgressIndicator(
-              value: 1,
-              backgroundColor: Color(0xFFD1FAE5),
-              color: Color(0xFF34D399),
-              minHeight: 3,
-            ),
-
-          // ── Fixed top: bin info ─────────────────────────────────────────
-          _BinInfoBlock(
-            binCode: _currentBin,
-            pendingSku: _pendingSku,
-            isActive: _binActive,
-            isDark: isDark,
-            bgLow: bgLow,
-            bg: bg,
-            mainColor: mainColor,
-            mutedColor: mutedColor,
-            manualBin: _manualBin,
-            onManualBinSubmit: (code) => unawaited(_handleBinScan(code)),
-            onBinDirectSelect: (id, code) => unawaited(_confirmBin(id, code)),
-          ),
-
-          // ── Fixed header: STORED ITEMS ──────────────────────────────────
-          _StoredItemsHeader(
-            total: _storedTotal,
-            itemCount: _storedContents.length,
-            mainColor: mainColor,
-            mutedColor: mutedColor,
-          ),
-
-          // ── Items list or empty placeholder ─────────────────────────────
-          if (_storedContents.where((e) => e.qty > 0).isEmpty) ...[
-            _EmptyItemsPlaceholder(
-              bgLow: bgLow,
-              mutedColor: mutedColor,
-              isManualMode: _manualAddItem,
-              onManualInput: _manualAddItem ? (sku) => unawaited(_onItemSubmit(sku)) : null,
-            ),
-            const Spacer(),
-          ] else
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                itemCount: _storedContents.where((e) => e.qty > 0).length,
-                itemBuilder: (context, i) {
-                  final visible = _storedContents.where((e) => e.qty > 0).toList();
-                  final item = visible[i];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Dismissible(
-                      key: ValueKey(item.sku),
-                      direction: DismissDirection.startToEnd,
-                      confirmDismiss: (_) async {
-                        await _onSwipeDeleteItem(item);
-                        return false; // list is rebuilt via _refreshContents
-                      },
-                      background: Container(
-                        color: Colors.red,
-                        alignment: Alignment.centerLeft,
-                        padding: const EdgeInsets.only(left: 20),
-                        child: const Icon(Icons.delete_outline, color: Colors.white, size: 26),
-                      ),
-                      child: GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute<void>(
-                            builder: (_) => EpcDetailScreen(
-                              sku:         item.sku,
-                              description: item.description,
-                              epcs:        item.epcs,
-                            ),
-                          ),
-                        ),
-                        child: _StoredItemRow(
-                          sku:         item.sku,
-                          description: item.description,
-                          quantity:    item.qty,
-                          bgLow:       bgLow,
-                          mainColor:   mainColor,
-                        ),
-                      ),
-                    ),
-                  );
+          children: [
+            // ── Hidden hardware-wedge receiver ──────────────────────────────
+            Offstage(
+              offstage: true,
+              child: TextField(
+                controller: _hiddenCtrl,
+                focusNode: _scanFocus,
+                autofocus: false,
+                showCursor: false,
+                enableIMEPersonalizedLearning: false,
+                keyboardType: TextInputType.none,
+                textInputAction: TextInputAction.done,
+                onChanged: (v) {
+                  if (!v.contains('\n') && !v.contains('\r')) return;
+                  final line = v
+                      .replaceAll('\r', '')
+                      .split(RegExp(r'[\r\n]+'))
+                      .first
+                      .trim();
+                  _hiddenCtrl.clear();
+                  if (line.isNotEmpty) _dispatchScanLine(line);
+                },
+                onSubmitted: (v) {
+                  final line = v
+                      .replaceAll('\r', '')
+                      .split(RegExp(r'[\r\n]+'))
+                      .first
+                      .trim();
+                  _hiddenCtrl.clear();
+                  if (line.isNotEmpty) _dispatchScanLine(line);
                 },
               ),
             ),
 
-          // ── Fixed bottom controls ───────────────────────────────────────
-          _BottomControlsBlock(
-            isDark: isDark,
-            bg: bg,
-            bgMid: bgMid,
-            mainColor: mainColor,
-            mutedColor: mutedColor,
-            tealDark: tealDark,
-            tealLight: tealLight,
-            binActive: _binActive,
-            cameraEnabled: _cameraEnabled,
-            onCleanBin: () => unawaited(_onCleanBin()),
-            onDeleteBin: () => unawaited(_onDeleteBin()),
-            onUndoClean: () => unawaited(_onUndoClean()),
-            onAddBin: _addNewBin,
-            onAddBinCamera: () async {
-              final code = await _scanWithCamera('SCAN BIN LOCATION');
-              if (code != null && code.isNotEmpty && mounted) unawaited(_handleBinScan(code));
-            },
-            onAddItem: _addNewItem,
-            onAddItemCamera: () async {
-              final code = await _scanWithCamera('SCAN ITEM');
-              if (code != null && code.isNotEmpty && mounted) unawaited(_onItemSubmit(code));
-            },
-          ),
+            // ── Busy overlay ────────────────────────────────────────────────
+            if (_busy) const LinearProgressIndicator(minHeight: 2),
 
-          // ── Bottom navigation ───────────────────────────────────────────
-          _BottomNavBar(isDark: isDark, bgLow: bgLow),
-        ],
-      ),
+            // ── Flash overlay ───────────────────────────────────────────────
+            if (_flashOk)
+              const LinearProgressIndicator(
+                value: 1,
+                backgroundColor: Color(0xFFD1FAE5),
+                color: Color(0xFF34D399),
+                minHeight: 3,
+              ),
+
+            // ── Fixed top: bin info ─────────────────────────────────────────
+            _BinInfoBlock(
+              binCode: _currentBin,
+              pendingSku: _pendingSku,
+              isActive: _binActive,
+              isDark: isDark,
+              bgLow: bgLow,
+              bg: bg,
+              mainColor: mainColor,
+              mutedColor: mutedColor,
+              manualBin: _manualBin,
+              onManualBinSubmit: (code) => unawaited(_handleBinScan(code)),
+              onBinDirectSelect: (id, code) => unawaited(_confirmBin(id, code)),
+            ),
+
+            // ── Fixed header: STORED ITEMS ──────────────────────────────────
+            _StoredItemsHeader(
+              total: _storedTotal,
+              itemCount: _storedContents.length,
+              mainColor: mainColor,
+              mutedColor: mutedColor,
+            ),
+
+            // ── Items list or empty placeholder ─────────────────────────────
+            if (_storedContents.where((e) => e.qty > 0).isEmpty) ...[
+              _EmptyItemsPlaceholder(
+                bgLow: bgLow,
+                mutedColor: mutedColor,
+                isManualMode: _manualAddItem,
+                onManualInput: _manualAddItem
+                    ? (sku) => unawaited(_onItemSubmit(sku))
+                    : null,
+              ),
+              const Spacer(),
+            ] else
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  itemCount: _storedContents.where((e) => e.qty > 0).length,
+                  itemBuilder: (context, i) {
+                    final visible =
+                        _storedContents.where((e) => e.qty > 0).toList();
+                    final item = visible[i];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Dismissible(
+                        key: ValueKey(item.sku),
+                        direction: DismissDirection.startToEnd,
+                        confirmDismiss: (_) async {
+                          await _onSwipeDeleteItem(item);
+                          return false; // list is rebuilt via _refreshContents
+                        },
+                        background: Container(
+                          color: Colors.red,
+                          alignment: Alignment.centerLeft,
+                          padding: const EdgeInsets.only(left: 20),
+                          child: const Icon(Icons.delete_outline,
+                              color: Colors.white, size: 26),
+                        ),
+                        child: GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => EpcDetailScreen(
+                                sku: item.sku,
+                                description: item.description,
+                                epcs: item.epcs,
+                              ),
+                            ),
+                          ),
+                          child: _StoredItemRow(
+                            sku: item.sku,
+                            description: item.description,
+                            quantity: item.qty,
+                            bgLow: bgLow,
+                            mainColor: mainColor,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+            // ── Fixed bottom controls ───────────────────────────────────────
+            _BottomControlsBlock(
+              isDark: isDark,
+              bg: bg,
+              bgMid: bgMid,
+              mainColor: mainColor,
+              mutedColor: mutedColor,
+              tealDark: tealDark,
+              tealLight: tealLight,
+              binActive: _binActive,
+              cameraEnabled: _cameraEnabled,
+              onCleanBin: () => unawaited(_onCleanBin()),
+              onDeleteBin: () => unawaited(_onDeleteBin()),
+              onUndoClean: () => unawaited(_onUndoClean()),
+              onAddBin: _addNewBin,
+              onAddBinCamera: () async {
+                final code = await _scanWithCamera('SCAN BIN LOCATION');
+                if (code != null && code.isNotEmpty && mounted)
+                  unawaited(_handleBinScan(code));
+              },
+              onAddItem: _addNewItem,
+              onAddItemCamera: () async {
+                final code = await _scanWithCamera('SCAN ITEM');
+                if (code != null && code.isNotEmpty && mounted)
+                  unawaited(_onItemSubmit(code));
+              },
+            ),
+
+            // ── Bottom navigation ───────────────────────────────────────────
+            _BottomNavBar(isDark: isDark, bgLow: bgLow),
+          ],
+        ),
       ),
     );
   }
@@ -1287,7 +1423,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 7),
             child: Text('/',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.black)),
+                style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black)),
           ),
           Text(
             'BIN ASSIGN',
@@ -1325,13 +1464,13 @@ class _BinInfoBlock extends StatefulWidget {
 
   final String binCode;
   final String pendingSku;
-  final bool   isActive;
-  final bool   isDark;
-  final Color  bgLow;
-  final Color  bg;
-  final Color  mainColor;
-  final Color  mutedColor;
-  final bool   manualBin;
+  final bool isActive;
+  final bool isDark;
+  final Color bgLow;
+  final Color bg;
+  final Color mainColor;
+  final Color mutedColor;
+  final bool manualBin;
   final ValueChanged<String>? onManualBinSubmit;
   final void Function(String id, String code)? onBinDirectSelect;
 
@@ -1398,10 +1537,13 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
         _showDropdown = _focusNode.hasFocus;
       });
     } else {
-      final matches = _allBins.where((b) {
-        final code = (b['code']?.toString() ?? '').toUpperCase();
-        return code.contains(query);
-      }).take(8).toList();
+      final matches = _allBins
+          .where((b) {
+            final code = (b['code']?.toString() ?? '').toUpperCase();
+            return code.contains(query);
+          })
+          .take(8)
+          .toList();
       setState(() {
         _filteredBins = matches;
         _showDropdown = _focusNode.hasFocus;
@@ -1420,7 +1562,10 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
 
   String get _locationLine {
     final p = widget.binCode.split(RegExp(r'[-_]'));
-    if (p.length < 4) return widget.binCode.isNotEmpty ? widget.binCode : 'AISLE | ZONE | SHELF | SIDE';
+    if (p.length < 4)
+      return widget.binCode.isNotEmpty
+          ? widget.binCode
+          : 'AISLE | ZONE | SHELF | SIDE';
     return 'AISLE ${p[0]} | ZONE ${p[1]} | SHELF ${p[2]} | SIDE ${p[3]}';
   }
 
@@ -1439,192 +1584,203 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
       onTap: () => _focusNode.unfocus(),
       behavior: HitTestBehavior.translucent,
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Label and badge OUTSIDE the box
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'CURRENT BIN LOCATION',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2.0,
-                  color: widget.mutedColor,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Label and badge OUTSIDE the box
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'CURRENT BIN LOCATION',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2.0,
+                    color: widget.mutedColor,
+                  ),
                 ),
-              ),
-              _StatusBadge(active: widget.isActive),
-            ],
+                _StatusBadge(active: widget.isActive),
+              ],
+            ),
           ),
-        ),
-        // Box with bin code and location
-        Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.zero,
-                border: Border.all(color: AppColors.primary, width: 2),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (widget.isActive)
+          // Box with bin code and location
+          Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.zero,
+                  border: Border.all(color: AppColors.primary, width: 2),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.isActive)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                          child: Text(
+                            widget.binCode,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 42,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (widget.manualBin)
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          inputDecorationTheme:
+                              const InputDecorationTheme(filled: false),
+                        ),
+                        child: TextField(
+                          controller: _binCtrl,
+                          focusNode: _focusNode,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Enter bin code...',
+                            hintStyle: TextStyle(
+                                color: Colors.grey.shade400, fontSize: 16),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 18),
+                            border: InputBorder.none,
+                          ),
+                          textCapitalization: TextCapitalization.characters,
+                          onSubmitted: (_) => _onVerify(),
+                        ),
+                      )
+                    else
+                      // Empty placeholder — same height as text input
+                      const SizedBox(
+                        width: double.infinity,
+                        height: 60,
+                      ),
+                    const SizedBox(height: 4),
                     Center(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                        padding: const EdgeInsets.only(bottom: 10),
                         child: Text(
-                          widget.binCode,
+                          _locationLine,
                           style: GoogleFonts.spaceGrotesk(
-                            fontSize: 42,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                            letterSpacing: 1.2,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: widget.mutedColor,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
-                    )
-                  else if (widget.manualBin)
-                    Theme(
-                      data: Theme.of(context).copyWith(
-                        inputDecorationTheme: const InputDecorationTheme(filled: false),
-                      ),
-                      child: TextField(
-                        controller: _binCtrl,
-                        focusNode: _focusNode,
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Enter bin code...',
-                          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 16),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
-                          border: InputBorder.none,
-                        ),
-                        textCapitalization: TextCapitalization.characters,
-                        onSubmitted: (_) => _onVerify(),
-                      ),
-                    )
-                  else
-                    // Empty placeholder — same height as text input
-                    const SizedBox(
-                      width: double.infinity,
-                      height: 60,
-                    ),
-                  const SizedBox(height: 4),
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Text(
-                        _locationLine,
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: widget.mutedColor,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Dropdown search results
-            if (widget.manualBin && _showDropdown)
-              Container(
-                margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                constraints: const BoxConstraints(maxHeight: 240),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  padding: EdgeInsets.zero,
-                  itemCount: _filteredBins.length + 1,
-                  separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
-                  itemBuilder: (_, i) {
-                    // First item is always "Add new bin"
-                    if (i == 0) {
-                      final typed = _binCtrl.text.trim();
+              ),
+              // Dropdown search results
+              if (widget.manualBin && _showDropdown)
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.3)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: _filteredBins.length + 1,
+                    separatorBuilder: (_, __) =>
+                        Divider(height: 1, color: Colors.grey.shade200),
+                    itemBuilder: (_, i) {
+                      // First item is always "Add new bin"
+                      if (i == 0) {
+                        final typed = _binCtrl.text.trim();
+                        return InkWell(
+                          onTap: () {
+                            if (typed.isNotEmpty) {
+                              _focusNode.unfocus();
+                              setState(() => _showDropdown = false);
+                              widget.onManualBinSubmit?.call(typed);
+                              _binCtrl.clear();
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 12),
+                            child: Row(
+                              children: [
+                                Icon(Icons.add_circle_outline,
+                                    size: 18, color: AppColors.primary),
+                                const SizedBox(width: 10),
+                                Text(
+                                  typed.isEmpty
+                                      ? 'Add new bin'
+                                      : 'Add new bin "$typed"',
+                                  style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                      final bin = _filteredBins[i - 1];
+                      final code = bin['code']?.toString() ?? '';
+                      final query = _binCtrl.text.trim().toUpperCase();
                       return InkWell(
-                        onTap: () {
-                          if (typed.isNotEmpty) {
-                            _focusNode.unfocus();
-                            setState(() => _showDropdown = false);
-                            widget.onManualBinSubmit?.call(typed);
-                            _binCtrl.clear();
-                          }
-                        },
+                        onTap: () => _selectBin(bin),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
                           child: Row(
                             children: [
-                              Icon(Icons.add_circle_outline, size: 18, color: AppColors.primary),
+                              Icon(Icons.inventory_2_outlined,
+                                  size: 18, color: AppColors.primary),
                               const SizedBox(width: 10),
-                              Text(
-                                typed.isEmpty ? 'Add new bin' : 'Add new bin "$typed"',
-                                style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
+                              Expanded(
+                                child: _HighlightText(
+                                  text: code,
+                                  query: query,
+                                  style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textMain,
+                                  ),
+                                  highlightStyle: GoogleFonts.spaceGrotesk(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
                       );
-                    }
-                    final bin = _filteredBins[i - 1];
-                    final code = bin['code']?.toString() ?? '';
-                    final query = _binCtrl.text.trim().toUpperCase();
-                    return InkWell(
-                      onTap: () => _selectBin(bin),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        child: Row(
-                          children: [
-                            Icon(Icons.inventory_2_outlined, size: 18, color: AppColors.primary),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _HighlightText(
-                                text: code,
-                                query: query,
-                                style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textMain,
-                                ),
-                                highlightStyle: GoogleFonts.spaceGrotesk(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                    },
+                  ),
                 ),
-              ),
-          ],
-        ),
-      ],
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1675,8 +1831,10 @@ class _HighlightText extends StatelessWidget {
     if (idx < 0) return Text(text, style: style);
     return Text.rich(TextSpan(children: [
       if (idx > 0) TextSpan(text: text.substring(0, idx), style: style),
-      TextSpan(text: text.substring(idx, idx + query.length), style: highlightStyle),
-      if (idx + query.length < text.length) TextSpan(text: text.substring(idx + query.length), style: style),
+      TextSpan(
+          text: text.substring(idx, idx + query.length), style: highlightStyle),
+      if (idx + query.length < text.length)
+        TextSpan(text: text.substring(idx + query.length), style: style),
     ]));
   }
 }
@@ -1693,8 +1851,8 @@ class _StoredItemsHeader extends StatelessWidget {
     required this.mutedColor,
   });
 
-  final int   total;
-  final int   itemCount;
+  final int total;
+  final int itemCount;
   final Color mainColor;
   final Color mutedColor;
 
@@ -1813,8 +1971,7 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
   }
 
   void _selectResult(Map<String, dynamic> row) {
-    final sku = row['custom_sku']?.toString() ??
-        row['sku']?.toString() ?? '';
+    final sku = row['custom_sku']?.toString() ?? row['sku']?.toString() ?? '';
     if (sku.isEmpty) return;
     _focusNode.unfocus();
     setState(() {
@@ -1851,22 +2008,35 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                         decoration: InputDecoration(
                           labelText: 'Search item',
                           hintText: 'Name, UPC, SKU, or Asset ID...',
-                          border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
-                          enabledBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero),
-                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: AppColors.primary, width: 2)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          border: const OutlineInputBorder(
+                              borderRadius: BorderRadius.zero),
+                          enabledBorder: const OutlineInputBorder(
+                              borderRadius: BorderRadius.zero),
+                          focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                              borderSide: BorderSide(
+                                  color: AppColors.primary, width: 2)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
                           isDense: true,
                           suffixIcon: _searching
                               ? const Padding(
                                   padding: EdgeInsets.all(12),
-                                  child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                  child: SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2)),
                                 )
                               : null,
                         ),
                         onSubmitted: (v) {
                           if (v.isNotEmpty) {
                             _focusNode.unfocus();
-                            setState(() { _showDropdown = false; _results = []; });
+                            setState(() {
+                              _showDropdown = false;
+                              _results = [];
+                            });
                             _controller.clear();
                             widget.onManualInput?.call(v);
                           }
@@ -1894,7 +2064,8 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
               constraints: const BoxConstraints(maxHeight: 240),
               decoration: BoxDecoration(
                 color: Colors.white,
-                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.1),
@@ -1907,17 +2078,21 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                 shrinkWrap: true,
                 padding: EdgeInsets.zero,
                 itemCount: _results.length,
-                separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
+                separatorBuilder: (_, __) =>
+                    Divider(height: 1, color: Colors.grey.shade200),
                 itemBuilder: (_, i) {
                   final row = _results[i];
                   final sku = row['custom_sku']?.toString() ??
-                      row['sku']?.toString() ?? '';
+                      row['sku']?.toString() ??
+                      '';
                   final name = row['title']?.toString() ??
-                      row['description']?.toString() ?? '';
+                      row['description']?.toString() ??
+                      '';
                   return InkWell(
                     onTap: () => _selectResult(row),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1971,9 +2146,9 @@ class _StoredItemRow extends StatelessWidget {
 
   final String sku;
   final String description;
-  final int    quantity;
-  final Color  bgLow;
-  final Color  mainColor;
+  final int quantity;
+  final Color bgLow;
+  final Color mainColor;
 
   @override
   Widget build(BuildContext context) {
@@ -2048,15 +2223,15 @@ class _BottomControlsBlock extends StatelessWidget {
     required this.onAddItemCamera,
   });
 
-  final bool  isDark;
+  final bool isDark;
   final Color bg;
   final Color bgMid;
   final Color mainColor;
   final Color mutedColor;
   final Color tealDark;
   final Color tealLight;
-  final bool  binActive;
-  final bool  cameraEnabled;
+  final bool binActive;
+  final bool cameraEnabled;
   final VoidCallback onCleanBin;
   final VoidCallback onDeleteBin;
   final VoidCallback onUndoClean;
@@ -2192,9 +2367,9 @@ class _DualActionButton extends StatelessWidget {
     this.showCamera = true,
   });
 
-  final String      label;
-  final IconData    mainIcon;
-  final Color       color;
+  final String label;
+  final IconData mainIcon;
+  final Color color;
   final VoidCallback onMain;
   final VoidCallback onCamera;
   final bool showCamera;
@@ -2273,7 +2448,7 @@ class _IconTapZone extends StatelessWidget {
 
 class _BottomNavBar extends StatelessWidget {
   const _BottomNavBar({required this.isDark, required this.bgLow});
-  final bool  isDark;
+  final bool isDark;
   final Color bgLow;
 
   @override
@@ -2283,7 +2458,8 @@ class _BottomNavBar extends StatelessWidget {
         color: bgLow,
         border: Border(
           top: BorderSide(
-            color: isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
+            color:
+                isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
             width: 1,
           ),
         ),
@@ -2294,16 +2470,36 @@ class _BottomNavBar extends StatelessWidget {
           height: 60,
           child: Row(
             children: [
-              _NavItem(icon: Icons.dashboard_outlined,            label: 'DASH',  active: false, onTap: () => Navigator.of(context).maybePop()),
-              _NavItem(icon: Icons.inventory_2_outlined,          label: 'STOCK', active: false, onTap: () {
-                Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const InventoryLookupScreen()));
-              }),
-              _NavItem(icon: Icons.precision_manufacturing_outlined, label: 'OPS', active: false, onTap: () {
-                Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const TransferSlipsScreen()));
-              }),
-              _NavItem(icon: Icons.qr_code_scanner,              label: 'TAGS',  active: false, onTap: () {
-                Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const EncodeSuiteScreen(initialTab: 0)));
-              }),
+              _NavItem(
+                  icon: Icons.dashboard_outlined,
+                  label: 'DASH',
+                  active: false,
+                  onTap: () => Navigator.of(context).maybePop()),
+              _NavItem(
+                  icon: Icons.inventory_2_outlined,
+                  label: 'STOCK',
+                  active: false,
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => const InventoryLookupScreen()));
+                  }),
+              _NavItem(
+                  icon: Icons.precision_manufacturing_outlined,
+                  label: 'OPS',
+                  active: false,
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => const TransferSlipsScreen()));
+                  }),
+              _NavItem(
+                  icon: Icons.qr_code_scanner,
+                  label: 'TAGS',
+                  active: false,
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) =>
+                            const EncodeSuiteScreen(initialTab: 0)));
+                  }),
             ],
           ),
         ),
@@ -2321,8 +2517,8 @@ class _NavItem extends StatelessWidget {
   });
 
   final IconData icon;
-  final String   label;
-  final bool     active;
+  final String label;
+  final bool active;
   final VoidCallback onTap;
 
   @override

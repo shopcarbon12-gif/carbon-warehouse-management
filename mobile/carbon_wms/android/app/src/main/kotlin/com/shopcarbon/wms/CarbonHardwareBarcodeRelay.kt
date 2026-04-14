@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import io.flutter.plugin.common.EventChannel
 import java.nio.charset.Charset
@@ -19,6 +21,9 @@ class CarbonHardwareBarcodeRelay(
 ) : EventChannel.StreamHandler {
   private var sink: EventChannel.EventSink? = null
   private var receiver: BroadcastReceiver? = null
+  private val mainHandler = Handler(Looper.getMainLooper())
+  private var scanTimeoutRunnable: Runnable? = null
+  @Volatile private var scanActive = false
 
   override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
     sink = events
@@ -35,6 +40,7 @@ class CarbonHardwareBarcodeRelay(
 
   fun dispose() {
     unregister()
+    stopHardwareScan()
     sink = null
   }
 
@@ -46,17 +52,22 @@ class CarbonHardwareBarcodeRelay(
           if (intent == null) return
           when (intent.action) {
             KEY_DOWN_ACTION -> {
-              startHardwareScan()
+              if (scanActive) {
+                stopHardwareScan()
+              } else {
+                startHardwareScan()
+              }
               return
             }
             KEY_UP_ACTION -> {
-              stopHardwareScan()
+              // Keep scan on until decode or timeout; do not hard-stop on key-up.
               return
             }
           }
           val s = extractBarcode(intent) ?: return
           val t = s.trim()
           if (t.isEmpty()) return
+          stopHardwareScan()
           sink?.success(t)
         }
       }
@@ -95,16 +106,6 @@ class CarbonHardwareBarcodeRelay(
       val bytes = intent.getByteArrayExtra(key) ?: continue
       utf8String(bytes)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
     }
-    intent.extras?.let { b ->
-      for (key in b.keySet()) {
-        val v = b.get(key) ?: continue
-        when (v) {
-          is String -> v.trim().takeIf { it.isNotEmpty() }?.let { return it }
-          is ByteArray -> utf8String(v)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-          is CharArray -> String(v).trim().takeIf { it.isNotEmpty() }?.let { return it }
-        }
-      }
-    }
     intent.dataString?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
     return null
   }
@@ -121,13 +122,28 @@ class CarbonHardwareBarcodeRelay(
     }
 
   fun startHardwareScan() {
+    scanActive = true
+    cancelScanTimeout()
     runCatching { context.sendBroadcast(Intent(ACTION_SCAN_START)) }
-    // Some firmware variants use this as a one-shot trigger.
-    runCatching { context.sendBroadcast(Intent(ACTION_SCAN_PULSE)) }
+    scheduleScanTimeout(SCAN_TIMEOUT_MS)
   }
 
   fun stopHardwareScan() {
+    scanActive = false
+    cancelScanTimeout()
     runCatching { context.sendBroadcast(Intent(ACTION_SCAN_STOP)) }
+  }
+
+  private fun scheduleScanTimeout(ms: Long) {
+    val r = Runnable { stopHardwareScan() }
+    scanTimeoutRunnable = r
+    mainHandler.postDelayed(r, ms)
+  }
+
+  private fun cancelScanTimeout() {
+    val r = scanTimeoutRunnable ?: return
+    mainHandler.removeCallbacks(r)
+    scanTimeoutRunnable = null
   }
 
   private companion object {
@@ -171,6 +187,6 @@ class CarbonHardwareBarcodeRelay(
     const val KEY_UP_ACTION = "com.rscja.android.KEY_UP"
     const val ACTION_SCAN_START = "android.intent.action.BARCODESTARTSCAN"
     const val ACTION_SCAN_STOP = "android.intent.action.BARCODESTOPSCAN"
-    const val ACTION_SCAN_PULSE = "android.intent.action.BARCODESCAN"
+    const val SCAN_TIMEOUT_MS = 15000L
   }
 }
