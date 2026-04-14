@@ -8,12 +8,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/theme_notifier.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
-import 'package:carbon_wms/ui/screens/dashboard_screen.dart' show DashboardScreen;
 import 'package:carbon_wms/ui/screens/bin_assign_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/epc_detail_screen.dart';
+import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
+import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
+import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
+import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const Color _surface    = Color(0xFFFFFFFF);
@@ -108,6 +112,7 @@ class FastPutawayScreen extends StatefulWidget {
 }
 
 class _FastPutawayScreenState extends State<FastPutawayScreen> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _scanFocus  = FocusNode();
   final _hiddenCtrl = TextEditingController();
 
@@ -119,11 +124,16 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   bool   _flashOk     = false;
   bool   _awaitingBinScan = true;
 
-  String _scannerSource = 'hardware';
-  bool   _manualMode    = false;
+  String _scannerSource   = 'hardware';
+  bool   _manualMode      = false;
+  bool   _manualBin       = false;
+  bool   _manualAddItem   = false;
+  bool   _externalScanner = false;
+  bool   _cameraEnabled   = true;
 
   String _scopeForBin = 'all_colors';
   String _skuForBin   = '';
+  String? _userEmail;
 
   List<_StoredItem> _storedContents = [];
   List<_StoredItem> _undoSnapshot   = [];
@@ -146,8 +156,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     final p = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _scannerSource = p.getString('wms_scanner_source_v1') ?? 'hardware';
-      _manualMode    = p.getBool('bin_assign_manual_mode') ?? false;
+      _scannerSource   = p.getString('wms_scanner_source_v1')       ?? 'hardware';
+      _manualMode      = p.getBool('bin_assign_manual_mode')        ?? false;
+      _manualBin       = p.getBool('bin_assign_manual_bin')         ?? false;
+      _manualAddItem   = p.getBool('bin_assign_manual_add_item')    ?? false;
+      _externalScanner = p.getBool('bin_assign_external_scanner')   ?? false;
+      _cameraEnabled   = p.getBool('bin_assign_camera_enabled')     ?? true;
     });
   }
 
@@ -156,6 +170,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _load();
+      _loadUserEmail();
       _resetForNextEntry();
     });
   }
@@ -165,6 +180,97 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     _hiddenCtrl.dispose();
     _scanFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadUserEmail() async {
+    final api = context.read<WmsApiClient>();
+    final email = await api.getSavedLoginEmail();
+    if (mounted) setState(() => _userEmail = email);
+  }
+
+  void _toggleDrawer() {
+    final state = _scaffoldKey.currentState;
+    if (state != null && state.isDrawerOpen) {
+      Navigator.of(context).pop();
+    } else {
+      state?.openDrawer();
+    }
+  }
+
+  Widget _buildDrawer() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final rawName = (_userEmail?.split('@').first ?? '').replaceAll('.', ' ');
+    final displayName = rawName.isEmpty
+        ? 'Operator'
+        : rawName.split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+    final email = _userEmail ?? '—';
+    return Drawer(
+      backgroundColor: isDark ? const Color(0xFF1C2828) : Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: double.infinity,
+            color: AppColors.primary,
+            padding: EdgeInsets.fromLTRB(24, MediaQuery.of(context).padding.top + 32, 24, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                CircleAvatar(
+                  radius: 52,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                  child: const Icon(Icons.person, size: 58, color: Colors.white),
+                ),
+                const SizedBox(height: 20),
+                Text(displayName,
+                  style: GoogleFonts.manrope(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white),
+                  textAlign: TextAlign.center, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 6),
+                Text(email,
+                  style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.8)),
+                  textAlign: TextAlign.center, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildDrawerItem(Icons.dashboard_outlined, 'Dashboard', () {
+            Navigator.of(context).popUntil((r) => r.isFirst);
+          }),
+          const SizedBox(height: 4),
+          _buildDrawerItem(Icons.settings_outlined, 'Settings', () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const HandheldSettingsScreen()));
+          }),
+          const SizedBox(height: 4),
+          Consumer<ThemeNotifier>(
+            builder: (_, notifier, __) => _buildDrawerItem(
+              Icons.palette_outlined, 'Switch Theme', () => notifier.toggle(),
+            ),
+          ),
+          const Spacer(),
+          const SizedBox(height: 80),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDrawerItem(IconData icon, String label, VoidCallback onTap, {Color? color, bool large = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = color ?? (isDark ? const Color(0xFFE0ECEC) : AppColors.textMain);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          children: [
+            SizedBox(width: 26, child: Icon(icon, size: large ? 26 : 24, color: fg)),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.manrope(fontSize: large ? 17 : 14, fontWeight: large ? FontWeight.w800 : FontWeight.w700, letterSpacing: -0.1, color: fg))),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Camera with orientation unlock ───────────────────────────────────────
@@ -390,6 +496,94 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         setState(() => _busy = false);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Clean failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _onDeleteBin() async {
+    if (!_binActive || _currentBinId.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('Delete Bin?'),
+        content: Text(
+          'This will permanently delete bin $_currentBin and all its contents from the system.\n\nThis action can be undone with the undo button.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('DELETE BIN'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final snapshot = List<_StoredItem>.from(_storedContents);
+      final deletedBin = _currentBin;
+      final deletedBinId = _currentBinId;
+      await context.read<WmsApiClient>().deleteBin(_currentBinId);
+      if (!mounted) return;
+      setState(() {
+        _undoSnapshot   = snapshot;
+        _showUndo       = true;
+        _busy           = false;
+      });
+      _resetForNextEntry();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text('Bin $deletedBin deleted.'),
+          action: SnackBarAction(
+            label: 'UNDO',
+            onPressed: () => unawaited(_onUndoDeleteBin(deletedBin, deletedBinId, snapshot)),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _onUndoDeleteBin(String binCode, String binId, List<_StoredItem> snapshot) async {
+    setState(() => _busy = true);
+    try {
+      final api = context.read<WmsApiClient>();
+      // Re-create the bin
+      await api.createBin(binCode);
+      // Re-assign all items
+      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+      for (final item in snapshot) {
+        await api.postPutawayAssign(
+          deviceId:   deviceId,
+          binCode:    binCode,
+          skuScanned: item.sku,
+          scope:      'single_color',
+        );
+      }
+      if (!mounted) return;
+      // Re-confirm the bin
+      await _handleBinScan(binCode);
+      setState(() => _busy = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Undo failed: $e')));
       }
     }
   }
@@ -779,7 +973,15 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     });
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
+  Future<void> _openSettings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => const BinAssignSettingsScreen(),
+      ),
+    );
+    if (mounted) await _load();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -793,10 +995,16 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     final tealLight  = isDark ? _tealLightDk : _tealLight;
 
     return Scaffold(
+      key: _scaffoldKey,
+      drawerEnableOpenDragGesture: false,
+      drawer: _buildDrawer(),
       backgroundColor: bg,
       resizeToAvoidBottomInset: false,
       appBar: _buildAppBar(isDark: isDark, mainColor: mainColor, mutedColor: mutedColor),
-      body: Column(
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: Column(
         children: [
           // ── Hidden hardware-wedge receiver ──────────────────────────────
           Offstage(
@@ -804,7 +1012,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             child: TextField(
               controller: _hiddenCtrl,
               focusNode: _scanFocus,
-              autofocus: true,
+              autofocus: false,
+              showCursor: false,
+              enableIMEPersonalizedLearning: false,
+              keyboardType: TextInputType.none,
               onSubmitted: (v) {
                 if (_awaitingBinScan) {
                   unawaited(_handleBinScan(v));
@@ -838,6 +1049,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             bg: bg,
             mainColor: mainColor,
             mutedColor: mutedColor,
+            manualBin: _manualBin,
+            onManualBinSubmit: (code) => unawaited(_handleBinScan(code)),
+            onBinDirectSelect: (id, code) => unawaited(_confirmBin(id, code)),
           ),
 
           // ── Fixed header: STORED ITEMS ──────────────────────────────────
@@ -848,18 +1062,22 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             mutedColor: mutedColor,
           ),
 
-          // ── Scrollable items list ───────────────────────────────────────
-          Expanded(
-            child: () {
-              // Filter: hide rows with qty == 0 from UI (keep in background list)
-              final visible = _storedContents.where((e) => e.qty > 0).toList();
-              if (visible.isEmpty) {
-                return _EmptyItemsPlaceholder(bgLow: bgLow, mutedColor: mutedColor);
-              }
-              return ListView.builder(
+          // ── Items list or empty placeholder ─────────────────────────────
+          if (_storedContents.where((e) => e.qty > 0).isEmpty) ...[
+            _EmptyItemsPlaceholder(
+              bgLow: bgLow,
+              mutedColor: mutedColor,
+              isManualMode: _manualAddItem,
+              onManualInput: _manualAddItem ? (sku) => unawaited(_onItemSubmit(sku)) : null,
+            ),
+            const Spacer(),
+          ] else
+            Expanded(
+              child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                itemCount: visible.length,
+                itemCount: _storedContents.where((e) => e.qty > 0).length,
                 itemBuilder: (context, i) {
+                  final visible = _storedContents.where((e) => e.qty > 0).toList();
                   final item = visible[i];
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -898,9 +1116,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                     ),
                   );
                 },
-              );
-            }(),
-          ),
+              ),
+            ),
 
           // ── Fixed bottom controls ───────────────────────────────────────
           _BottomControlsBlock(
@@ -912,7 +1129,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             tealDark: tealDark,
             tealLight: tealLight,
             binActive: _binActive,
+            cameraEnabled: _cameraEnabled,
             onCleanBin: () => unawaited(_onCleanBin()),
+            onDeleteBin: () => unawaited(_onDeleteBin()),
             onUndoClean: () => unawaited(_onUndoClean()),
             onAddBin: _addNewBin,
             onAddBinCamera: () async {
@@ -929,6 +1148,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           // ── Bottom navigation ───────────────────────────────────────────
           _BottomNavBar(isDark: isDark, bgLow: bgLow),
         ],
+      ),
       ),
     );
   }
@@ -950,27 +1170,15 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       titleSpacing: 12,
       actions: [
         IconButton(
-          icon: Icon(Icons.settings_outlined, color: mutedColor, size: 22),
-          onPressed: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (_) => const BinAssignSettingsScreen(),
-              ),
-            );
-            // Reload settings when returning from settings screen
-            if (mounted) await _load();
-          },
+          icon: Icon(Icons.settings_outlined, color: Colors.black, size: 28),
+          onPressed: _openSettings,
         ),
       ],
       title: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           GestureDetector(
-            onTap: () {
-              Navigator.of(context).popUntil((r) => r.isFirst);
-              DashboardScreen.scaffoldKey.currentState?.openDrawer();
-            },
+            onTap: _toggleDrawer,
             child: ClipOval(
               child: Image.asset(
                 'assets/carbon_logo.png',
@@ -1000,12 +1208,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 7),
             child: Text('/',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: mainColor)),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.black)),
           ),
           Text(
             'BIN ASSIGN',
             style: GoogleFonts.manrope(
-              fontSize: 12,
+              fontSize: 16,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.6,
               color: wmsTeal,
@@ -1021,7 +1229,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 // BIN INFO BLOCK — fixed at top
 // ═══════════════════════════════════════════════════════════════════════════════
 
-class _BinInfoBlock extends StatelessWidget {
+class _BinInfoBlock extends StatefulWidget {
   const _BinInfoBlock({
     required this.binCode,
     required this.pendingSku,
@@ -1031,6 +1239,9 @@ class _BinInfoBlock extends StatelessWidget {
     required this.bg,
     required this.mainColor,
     required this.mutedColor,
+    this.manualBin = false,
+    this.onManualBinSubmit,
+    this.onBinDirectSelect,
   });
 
   final String binCode;
@@ -1041,82 +1252,298 @@ class _BinInfoBlock extends StatelessWidget {
   final Color  bg;
   final Color  mainColor;
   final Color  mutedColor;
+  final bool   manualBin;
+  final ValueChanged<String>? onManualBinSubmit;
+  final void Function(String id, String code)? onBinDirectSelect;
+
+  @override
+  State<_BinInfoBlock> createState() => _BinInfoBlockState();
+}
+
+class _BinInfoBlockState extends State<_BinInfoBlock> {
+  final _binCtrl = TextEditingController();
+  final _focusNode = FocusNode();
+  List<Map<String, dynamic>> _allBins = [];
+  List<Map<String, dynamic>> _filteredBins = [];
+  bool _showDropdown = false;
+  bool _binsLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _binCtrl.addListener(_onTextChanged);
+    _focusNode.addListener(_onFocusChanged);
+  }
+
+  @override
+  void dispose() {
+    _binCtrl.removeListener(_onTextChanged);
+    _focusNode.removeListener(_onFocusChanged);
+    _binCtrl.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (_focusNode.hasFocus && !_binsLoaded) {
+      _loadBins();
+    }
+    if (!_focusNode.hasFocus) {
+      setState(() => _showDropdown = false);
+    }
+  }
+
+  Future<void> _loadBins() async {
+    try {
+      final api = context.read<WmsApiClient>();
+      final bins = await api.fetchBins();
+      if (mounted) {
+        setState(() {
+          _allBins = bins.cast<Map<String, dynamic>>();
+          _binsLoaded = true;
+          _filterBins();
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _onTextChanged() {
+    _filterBins();
+  }
+
+  void _filterBins() {
+    final query = _binCtrl.text.trim().toUpperCase();
+    if (query.isEmpty) {
+      setState(() {
+        _filteredBins = _allBins.take(8).toList();
+        _showDropdown = _focusNode.hasFocus;
+      });
+    } else {
+      final matches = _allBins.where((b) {
+        final code = (b['code']?.toString() ?? '').toUpperCase();
+        return code.contains(query);
+      }).take(8).toList();
+      setState(() {
+        _filteredBins = matches;
+        _showDropdown = _focusNode.hasFocus;
+      });
+    }
+  }
+
+  void _selectBin(Map<String, dynamic> bin) {
+    final code = bin['code']?.toString() ?? '';
+    final id = bin['id']?.toString() ?? '';
+    _focusNode.unfocus();
+    setState(() => _showDropdown = false);
+    _binCtrl.clear();
+    widget.onBinDirectSelect?.call(id, code);
+  }
 
   String get _locationLine {
-    final p = binCode.split(RegExp(r'[-_]'));
-    if (p.length < 4) return binCode.isNotEmpty ? binCode : 'AISLE | ZONE | SHELF | SIDE';
+    final p = widget.binCode.split(RegExp(r'[-_]'));
+    if (p.length < 4) return widget.binCode.isNotEmpty ? widget.binCode : 'AISLE | ZONE | SHELF | SIDE';
     return 'AISLE ${p[0]} | ZONE ${p[1]} | SHELF ${p[2]} | SIDE ${p[3]}';
+  }
+
+  void _onVerify() {
+    final code = _binCtrl.text.trim();
+    if (code.isEmpty) return;
+    _focusNode.unfocus();
+    setState(() => _showDropdown = false);
+    widget.onManualBinSubmit?.call(code);
+    _binCtrl.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      decoration: BoxDecoration(
-        color: bgLow,
-        borderRadius: BorderRadius.zero,
-      ),
+    return GestureDetector(
+      onTap: () => _focusNode.unfocus(),
+      behavior: HitTestBehavior.translucent,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Label row
-          Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Label and badge OUTSIDE the box
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'CURRENT BIN LOCATION',
                 style: GoogleFonts.spaceGrotesk(
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 2.0,
-                  color: mutedColor,
+                  color: widget.mutedColor,
                 ),
               ),
-              _StatusBadge(active: isActive),
+              _StatusBadge(active: widget.isActive),
             ],
           ),
-          const SizedBox(height: 10),
-          // Bin code — big teal text when active, input-style box when inactive
-          if (isActive)
-            Text(
-              binCode,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 42,
-                fontWeight: FontWeight.w800,
-                color: AppColors.primary,
-                letterSpacing: 1.2,
-              ),
-            )
-          else
+        ),
+        // Box with bin code and location
+        Column(
+          children: [
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
               decoration: BoxDecoration(
-                color: bg,
+                color: Colors.white,
                 borderRadius: BorderRadius.zero,
                 border: Border.all(color: AppColors.primary, width: 2),
               ),
-              child: Text(
-                '',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.isActive)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                      child: Text(
+                        widget.binCode,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 42,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    )
+                  else if (widget.manualBin)
+                    Theme(
+                      data: Theme.of(context).copyWith(
+                        inputDecorationTheme: const InputDecorationTheme(filled: false),
+                      ),
+                      child: TextField(
+                        controller: _binCtrl,
+                        focusNode: _focusNode,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Enter bin code...',
+                          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 16),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+                          border: InputBorder.none,
+                        ),
+                        textCapitalization: TextCapitalization.characters,
+                        onSubmitted: (_) => _onVerify(),
+                      ),
+                    )
+                  else
+                    // Empty placeholder — same height as text input
+                    const SizedBox(
+                      width: double.infinity,
+                      height: 60,
+                    ),
+                  const SizedBox(height: 4),
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        _locationLine,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: widget.mutedColor,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          const SizedBox(height: 4),
-          Text(
-            _locationLine,
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: mutedColor,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
+            // Dropdown search results
+            if (widget.manualBin && _showDropdown)
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                constraints: const BoxConstraints(maxHeight: 240),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.zero,
+                  itemCount: _filteredBins.length + 1,
+                  separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
+                  itemBuilder: (_, i) {
+                    // First item is always "Add new bin"
+                    if (i == 0) {
+                      final typed = _binCtrl.text.trim();
+                      return InkWell(
+                        onTap: () {
+                          if (typed.isNotEmpty) {
+                            _focusNode.unfocus();
+                            setState(() => _showDropdown = false);
+                            widget.onManualBinSubmit?.call(typed);
+                            _binCtrl.clear();
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(Icons.add_circle_outline, size: 18, color: AppColors.primary),
+                              const SizedBox(width: 10),
+                              Text(
+                                typed.isEmpty ? 'Add new bin' : 'Add new bin "$typed"',
+                                style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    final bin = _filteredBins[i - 1];
+                    final code = bin['code']?.toString() ?? '';
+                    final query = _binCtrl.text.trim().toUpperCase();
+                    return InkWell(
+                      onTap: () => _selectBin(bin),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        child: Row(
+                          children: [
+                            Icon(Icons.inventory_2_outlined, size: 18, color: AppColors.primary),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _HighlightText(
+                                text: code,
+                                query: query,
+                                style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textMain,
+                                ),
+                                highlightStyle: GoogleFonts.spaceGrotesk(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ],
       ),
     );
   }
@@ -1144,6 +1571,32 @@ class _StatusBadge extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _HighlightText extends StatelessWidget {
+  const _HighlightText({
+    required this.text,
+    required this.query,
+    required this.style,
+    required this.highlightStyle,
+  });
+  final String text;
+  final String query;
+  final TextStyle style;
+  final TextStyle highlightStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    if (query.isEmpty) return Text(text, style: style);
+    final upper = text.toUpperCase();
+    final idx = upper.indexOf(query);
+    if (idx < 0) return Text(text, style: style);
+    return Text.rich(TextSpan(children: [
+      if (idx > 0) TextSpan(text: text.substring(0, idx), style: style),
+      TextSpan(text: text.substring(idx, idx + query.length), style: highlightStyle),
+      if (idx + query.length < text.length) TextSpan(text: text.substring(idx + query.length), style: style),
+    ]));
   }
 }
 
@@ -1183,7 +1636,7 @@ class _StoredItemsHeader extends StatelessWidget {
           Text(
             '$itemCount ITEMS TOTAL',
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 12,
+              fontSize: 15,
               fontWeight: FontWeight.w600,
               color: mutedColor,
               letterSpacing: 0.5,
@@ -1195,32 +1648,88 @@ class _StoredItemsHeader extends StatelessWidget {
   }
 }
 
-class _EmptyItemsPlaceholder extends StatelessWidget {
-  const _EmptyItemsPlaceholder({required this.bgLow, required this.mutedColor});
+class _EmptyItemsPlaceholder extends StatefulWidget {
+  const _EmptyItemsPlaceholder({
+    required this.bgLow,
+    required this.mutedColor,
+    this.isManualMode = false,
+    this.onManualInput,
+  });
   final Color bgLow;
   final Color mutedColor;
+  final bool isManualMode;
+  final Function(String)? onManualInput;
+
+  @override
+  State<_EmptyItemsPlaceholder> createState() => _EmptyItemsPlaceholderState();
+}
+
+class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Match the exact height of a _StoredItemRow:
+    // padding 16v + SKU(16pt ~20px) + 4px spacer + desc(14pt ~18px) + padding 16v
+    const double itemRowHeight = 74;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 28),
+        height: itemRowHeight,
         decoration: BoxDecoration(
-          color: bgLow,
+          color: widget.bgLow,
           borderRadius: BorderRadius.zero,
         ),
-        child: Text(
-          'TRIGGER OR TAP TO ADD ITEM',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.spaceGrotesk(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.4,
-            color: mutedColor,
-          ),
-        ),
+        child: widget.isManualMode
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: TextField(
+                  controller: _controller,
+                  decoration: InputDecoration(
+                    labelText: 'Search item SKU',
+                    hintText: 'Enter SKU...',
+                    border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+                    enabledBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: AppColors.primary, width: 2)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    isDense: true,
+                  ),
+                  onSubmitted: (v) {
+                    if (v.isNotEmpty) {
+                      widget.onManualInput?.call(v);
+                      _controller.clear();
+                    }
+                  },
+                ),
+                ),
+              )
+            : Center(
+                child: Text(
+                  'TRIGGER OR TAP TO ADD ITEM',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.4,
+                    color: widget.mutedColor,
+                  ),
+                ),
+              ),
       ),
     );
   }
@@ -1248,7 +1757,7 @@ class _StoredItemRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
         color: bgLow,
         borderRadius: BorderRadius.zero,
@@ -1262,17 +1771,17 @@ class _StoredItemRow extends StatelessWidget {
                 Text(
                   'SKU:  $sku',
                   style: GoogleFonts.spaceGrotesk(
-                    fontSize: 14,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: mainColor,
                   ),
                 ),
                 if (description.isNotEmpty) ...[
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 4),
                   Text(
                     description,
                     style: GoogleFonts.manrope(
-                      fontSize: 12,
+                      fontSize: 14,
                       color: AppColors.textMuted,
                     ),
                   ),
@@ -1308,7 +1817,9 @@ class _BottomControlsBlock extends StatelessWidget {
     required this.tealDark,
     required this.tealLight,
     required this.binActive,
+    required this.cameraEnabled,
     required this.onCleanBin,
+    required this.onDeleteBin,
     required this.onUndoClean,
     required this.onAddBin,
     required this.onAddBinCamera,
@@ -1324,7 +1835,9 @@ class _BottomControlsBlock extends StatelessWidget {
   final Color tealDark;
   final Color tealLight;
   final bool  binActive;
+  final bool  cameraEnabled;
   final VoidCallback onCleanBin;
+  final VoidCallback onDeleteBin;
   final VoidCallback onUndoClean;
   final VoidCallback onAddBin;
   final VoidCallback onAddBinCamera;
@@ -1347,9 +1860,9 @@ class _BottomControlsBlock extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Broom icon — left tap zone
+                // Broom icon — DELETE bin completely
                 _IconTapZone(
-                  onTap: onCleanBin,
+                  onTap: onDeleteBin,
                   child: const Icon(
                     Icons.cleaning_services_outlined,
                     color: AppColors.textMuted,
@@ -1397,8 +1910,8 @@ class _BottomControlsBlock extends StatelessWidget {
                   ? Text(
                       'READY FOR NEXT ENTRY',
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
                         letterSpacing: 2.0,
                         color: mutedColor,
                       ),
@@ -1406,7 +1919,7 @@ class _BottomControlsBlock extends StatelessWidget {
                   : Text(
                       'TRIGGER TO ADD BIN',
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 11,
+                        fontSize: 14,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 2.0,
                         color: Colors.red,
@@ -1424,6 +1937,7 @@ class _BottomControlsBlock extends StatelessWidget {
                   color: tealDark,
                   onMain: onAddBin,
                   onCamera: onAddBinCamera,
+                  showCamera: cameraEnabled,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1434,6 +1948,7 @@ class _BottomControlsBlock extends StatelessWidget {
                   color: binActive ? tealLight : Colors.grey,
                   onMain: binActive ? onAddItem : () {},
                   onCamera: binActive ? onAddItemCamera : () {},
+                  showCamera: cameraEnabled,
                 ),
               ),
             ],
@@ -1453,6 +1968,7 @@ class _DualActionButton extends StatelessWidget {
     required this.color,
     required this.onMain,
     required this.onCamera,
+    this.showCamera = true,
   });
 
   final String      label;
@@ -1460,6 +1976,7 @@ class _DualActionButton extends StatelessWidget {
   final Color       color;
   final VoidCallback onMain;
   final VoidCallback onCamera;
+  final bool showCamera;
 
   @override
   Widget build(BuildContext context) {
@@ -1492,17 +2009,19 @@ class _DualActionButton extends StatelessWidget {
               ),
             ),
           ),
-          // Vertical divider
-          Container(width: 1, height: 36, color: Colors.white24),
-          // Camera tap zone
-          _IconTapZone(
-            onTap: onCamera,
-            child: const Icon(
-              Icons.photo_camera_outlined,
-              color: Colors.white,
-              size: 20,
+          if (showCamera) ...[
+            // Vertical divider
+            Container(width: 1, height: 36, color: Colors.white24),
+            // Camera tap zone
+            _IconTapZone(
+              onTap: onCamera,
+              child: const Icon(
+                Icons.photo_camera_outlined,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1555,9 +2074,15 @@ class _BottomNavBar extends StatelessWidget {
           child: Row(
             children: [
               _NavItem(icon: Icons.dashboard_outlined,            label: 'DASH',  active: false, onTap: () => Navigator.of(context).maybePop()),
-              _NavItem(icon: Icons.inventory_2_outlined,          label: 'STOCK', active: false, onTap: () {}),
-              _NavItem(icon: Icons.precision_manufacturing_outlined, label: 'OPS', active: false, onTap: () {}),
-              _NavItem(icon: Icons.qr_code_scanner,              label: 'TAGS',  active: true,  onTap: () {}),
+              _NavItem(icon: Icons.inventory_2_outlined,          label: 'STOCK', active: false, onTap: () {
+                Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const InventoryLookupScreen()));
+              }),
+              _NavItem(icon: Icons.precision_manufacturing_outlined, label: 'OPS', active: false, onTap: () {
+                Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const TransferSlipsScreen()));
+              }),
+              _NavItem(icon: Icons.qr_code_scanner,              label: 'TAGS',  active: false, onTap: () {
+                Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const EncodeSuiteScreen(initialTab: 0)));
+              }),
             ],
           ),
         ),

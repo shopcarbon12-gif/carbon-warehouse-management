@@ -10,8 +10,7 @@ import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
-import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
-import 'package:carbon_wms/ui/screens/dashboard_screen.dart' show DashboardScreen;
+import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 
 /// Server URL, identity, OTA check, biometric, sound, and scanner source preferences.
@@ -159,70 +158,8 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
     final mainColor   = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
     final divColor    = isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.07);
 
-    return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF111A1A) : Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        automaticallyImplyLeading: false,
-        titleSpacing: 12,
-        title: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            GestureDetector(
-              onTap: () {
-                Navigator.of(context).popUntil((r) => r.isFirst);
-                DashboardScreen.scaffoldKey.currentState?.openDrawer();
-              },
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/carbon_logo.png',
-                  width: 36,
-                  height: 36,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Carbon',
-                  style: GoogleFonts.manrope(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                    color: mainColor,
-                  ),
-                ),
-                WmsText(
-                  color: isDark ? const Color(0xFF4DB6AC) : AppColors.primary,
-                  fontSize: 18,
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Text(
-                '/',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: mainColor),
-              ),
-            ),
-            Text(
-              'SETTINGS',
-              style: GoogleFonts.manrope(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: isDark ? const Color(0xFF4DB6AC) : AppColors.primary,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return CarbonScaffold(
+      pageTitle: 'SETTINGS',
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
         children: [
@@ -408,40 +345,6 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                     ),
                   ),
                 ],
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // ── BARCODE SCANNER SOURCE ───────────────────────────────────────
-          _Label('Barcode Scanner Source', mutedColor),
-          const SizedBox(height: 8),
-          _Card(
-            color: cardColor,
-            child: Column(
-              children: [
-                _ScannerSourceTile(
-                  icon: Icons.settings_input_hdmi_outlined,
-                  title: 'Hardware Scanner (Wedge)',
-                  subtitle: 'Built-in trigger gun or pistol grip',
-                  value: 'hardware',
-                  groupValue: _scannerSource,
-                  mainColor: mainColor,
-                  mutedColor: mutedColor,
-                  onChanged: _setScannerSource,
-                ),
-                Divider(height: 1, color: divColor),
-                _ScannerSourceTile(
-                  icon: Icons.photo_camera_outlined,
-                  title: 'Camera Scanner',
-                  subtitle: 'Use device camera to scan barcodes',
-                  value: 'camera',
-                  groupValue: _scannerSource,
-                  mainColor: mainColor,
-                  mutedColor: mutedColor,
-                  onChanged: _setScannerSource,
-                ),
               ],
             ),
           ),

@@ -690,12 +690,12 @@ class WmsApiClient {
     return <String, dynamic>{};
   }
 
-  /// `DELETE /api/bins/:binCode/sku/:sku` — removes a SKU assignment from a bin.
+  /// `DELETE /api/locations/bins/:binCode/sku/:sku` — removes a SKU assignment from a bin.
   Future<void> removeSkuFromBin(String binCode, String sku) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final encodedBin = Uri.encodeComponent(binCode.trim());
     final encodedSku = Uri.encodeComponent(sku.trim());
-    final uri = Uri.parse('$base/api/bins/$encodedBin/sku/$encodedSku');
+    final uri = Uri.parse('$base/api/locations/bins/$encodedBin/sku/$encodedSku');
     final res = await _http.delete(uri, headers: await sessionAuthHeaders());
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);
@@ -820,10 +820,10 @@ class WmsApiClient {
     return [];
   }
 
-  /// `GET /api/bins` — returns list of all bins.
+  /// `GET /api/locations/bins` — returns list of all bins.
   Future<List<dynamic>> fetchBins() async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
-    final uri = Uri.parse('$base/api/bins');
+    final uri = Uri.parse('$base/api/locations/bins');
     final res = await _http.get(uri, headers: await sessionAuthHeaders());
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);
@@ -832,10 +832,12 @@ class WmsApiClient {
     return decoded is List ? decoded : [];
   }
 
-  /// `GET /api/bins/:id/contents` — returns RFID EPC contents for a bin.
+  /// `GET /api/locations/bins/contents?binId=:id` — returns grouped contents for a bin.
   Future<List<dynamic>> fetchBinContents(String binId) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
-    final uri = Uri.parse('$base/api/bins/$binId/contents');
+    final uri = Uri.parse('$base/api/locations/bins/contents').replace(
+      queryParameters: {'binId': binId},
+    );
     final res = await _http.get(uri, headers: await sessionAuthHeaders());
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);
@@ -844,23 +846,46 @@ class WmsApiClient {
     return decoded is List ? decoded : [];
   }
 
-  /// `POST /api/bins` — creates a new bin with the given code.
+  /// `POST /api/locations/bins` — creates a new bin with the given code.
   Future<Map<String, dynamic>> createBin(String code) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
-    final uri = Uri.parse('$base/api/bins');
+    // Fetch the session's location ID first
+    final locUri = Uri.parse('$base/api/locations');
+    final locRes = await _http.get(locUri, headers: await sessionAuthHeaders());
+    String? locationId;
+    if (locRes.statusCode >= 200 && locRes.statusCode < 300) {
+      final locDecoded = jsonDecode(locRes.body);
+      if (locDecoded is List && locDecoded.isNotEmpty) {
+        locationId = locDecoded[0]['id']?.toString();
+      }
+    }
+    if (locationId == null || locationId.isEmpty) {
+      throw WmsApiException(400, 'Could not resolve location ID');
+    }
+    final uri = Uri.parse('$base/api/locations/bins');
     final res = await _http.post(
       uri,
       headers: {
         ...await sessionAuthHeaders(),
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'code': code}),
+      body: jsonEncode({'code': code, 'locationId': locationId}),
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);
     }
     final decoded = jsonDecode(res.body);
     return decoded is Map<String, dynamic> ? decoded : {};
+  }
+
+  /// `DELETE /api/locations/bins/:id` — archives/deletes a bin completely.
+  Future<void> deleteBin(String binId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/locations/bins/$binId');
+    final res = await _http.delete(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
   }
 
   void close() => _http.close();
