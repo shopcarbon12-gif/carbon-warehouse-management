@@ -2341,7 +2341,7 @@ class _BottomControlsBlock extends StatelessWidget {
                 child: _DualActionButton(
                   label: 'ADD ITEM',
                   mainIcon: Icons.add_circle_outline,
-                  color: binActive ? tealLight : Colors.grey,
+                  color: tealLight,
                   onMain: binActive ? onAddItem : () {},
                   onCamera: binActive ? onAddItemCamera : () {},
                   showCamera: cameraEnabled,

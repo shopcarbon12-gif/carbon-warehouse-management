@@ -20,10 +20,10 @@ import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_csv_session_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
+import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
-import 'package:carbon_wms/ui/screens/count_inventory_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
 import 'package:carbon_wms/ui/widgets/ota_update_dialog.dart';
 
@@ -278,7 +278,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _navIndex = idx);
     switch (idx) {
       case 1:
-        _push(const CountInventoryScreen());
+        _push(const InventoryHubScreen());
       case 2:
         _push(const TransferSlipsScreen());
       case 3:
@@ -470,7 +470,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Text(
             'Carbon',
-            style: GoogleFonts.manrope(
+            style: GoogleFonts.spaceGrotesk(
               fontSize: 20,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.3,
@@ -660,7 +660,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       cardColor: cardColor,
                       cardHigh: cardHigh,
                       mainColor: mainColor,
-                      onTap: () => _push(const CountInventoryScreen()),
+                      onTap: () => _push(const InventoryHubScreen()),
                     ),
                     _HeroTile(
                       icon: Icons.precision_manufacturing_outlined,

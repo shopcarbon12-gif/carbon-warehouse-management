@@ -14,11 +14,15 @@ import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/epc_asset_decoder.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
+import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
+import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 const _countInvPrefsKey = 'count_inventory_module_settings_v1';
 const _assetCachePrefsKey = 'count_inventory_asset_cache_v1';
+const _previewSingleItemContainer = true;
 
 class CountInventoryScreen extends StatefulWidget {
   const CountInventoryScreen({super.key});
@@ -30,8 +34,8 @@ class CountInventoryScreen extends StatefulWidget {
 class _CountInventoryScreenState extends State<CountInventoryScreen> {
   final Map<String, _SessionEpcRow> _epcRows = <String, _SessionEpcRow>{};
   final Map<String, _GroupedRow> _groupedRows = <String, _GroupedRow>{};
-  final Map<String, Map<String, dynamic>> _assetCache =
-      <String, Map<String, dynamic>>{};
+  final Map<String, Map<String, dynamic>> _assetCache = <String, Map<String, dynamic>>{};
+  String _currentLocationName = 'Orlando Warehouse';
   StreamSubscription<RfidTagRead>? _readsSub;
   StreamSubscription<String>? _triggerSub;
   Timer? _scanInactivityTimer;
@@ -39,8 +43,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   bool _connecting = false;
   bool _busyLookup = false;
   String? _status;
-  _CountInventoryModuleSettings _moduleSettings =
-      _CountInventoryModuleSettings.defaults;
+  _CountInventoryModuleSettings _moduleSettings = _CountInventoryModuleSettings.defaults;
 
   @override
   void initState() {
@@ -83,7 +86,20 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     }
     if (!mounted) return;
     setState(() {});
+    await _loadLocationName();
     await _ensureScannerReady();
+  }
+
+  Future<void> _loadLocationName() async {
+    if (!mounted) return;
+    try {
+      final api = context.read<WmsApiClient>();
+      final locs = await api.fetchSessionLocations();
+      if (!mounted || locs.isEmpty) return;
+      final next = (locs.first['name'] ?? locs.first['code'] ?? '').trim();
+      if (next.isEmpty) return;
+      setState(() => _currentLocationName = next);
+    } catch (_) {}
   }
 
   Future<void> _ensureScannerReady() async {
@@ -126,8 +142,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _openModuleSettings() async {
-    final next =
-        await Navigator.of(context).push<_CountInventoryModuleSettings>(
+    final next = await Navigator.of(context).push<_CountInventoryModuleSettings>(
       MaterialPageRoute<_CountInventoryModuleSettings>(
         builder: (_) => _CountInventorySettingsScreen(initial: _moduleSettings),
       ),
@@ -200,8 +215,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (mounted) setState(() {});
   }
 
-  void _applyLookup(String assetId, Map<String, dynamic> row,
-      {required bool fromCache}) {
+  void _applyLookup(String assetId, Map<String, dynamic> row, {required bool fromCache}) {
     final g = _groupedRows[assetId];
     if (g == null) return;
     g.sku = (row['sku'] ?? '').toString();
@@ -255,10 +269,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       );
       return;
     }
-    final epcs = group.epcs
-        .map((e) => _epcRows[e])
-        .whereType<_SessionEpcRow>()
-        .toList()
+    final epcs = group.epcs.map((e) => _epcRows[e]).whereType<_SessionEpcRow>().toList()
       ..sort((a, b) => a.epc.compareTo(b.epc));
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -279,12 +290,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final header =
         'asset_id,sku,name,color,size,qty,epc,prefix_hex,serial,first_seen_utc,last_seen_utc,lookup_source\n';
     final b = StringBuffer(header);
-    final groups = _groupedRows.values.toList()
-      ..sort((a, c) => a.assetId.compareTo(c.assetId));
+    final groups = _groupedRows.values.toList()..sort((a, c) => a.assetId.compareTo(c.assetId));
     for (final g in groups) {
-      final source = g.cached
-          ? 'cache'
-          : (g.sku.isEmpty && g.name.isEmpty ? 'unresolved' : 'lookup');
+      final source = g.cached ? 'cache' : (g.sku.isEmpty && g.name.isEmpty ? 'unresolved' : 'lookup');
       for (final epc in g.epcs) {
         final row = _epcRows[epc];
         if (row == null) continue;
@@ -293,8 +301,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         );
       }
     }
-    final baseDir = await getExternalStorageDirectory() ??
-        await getApplicationDocumentsDirectory();
+    final baseDir = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
     final dir = Directory('${baseDir.path}/reports');
     if (!await dir.exists()) {
       await dir.create(recursive: true);
@@ -306,8 +313,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _openContinue() async {
-    final groups = _groupedRows.values.toList()
-      ..sort((a, b) => a.assetId.compareTo(b.assetId));
+    final groups = _groupedRows.values.toList()..sort((a, b) => a.assetId.compareTo(b.assetId));
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => _CountInventoryContinueScreen(
@@ -321,6 +327,29 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         ),
       ),
     );
+  }
+
+  void _onBottomShortcutTap(int index) {
+    switch (index) {
+      case 0:
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      case 1:
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        } else {
+          Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(builder: (_) => const InventoryHubScreen()),
+          );
+        }
+      case 2:
+        Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(builder: (_) => const TransferSlipsScreen()),
+        );
+      case 3:
+        Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(builder: (_) => const EncodeSuiteScreen(initialTab: 0)),
+        );
+    }
   }
 
   Map<String, dynamic> _buildBackendPreviewPayload(List<_GroupedRow> groups) {
@@ -343,182 +372,389 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final groups = _groupedRows.values.toList()
-      ..sort((a, b) => a.assetId.compareTo(b.assetId));
-    final assetCount = _epcRows.length;
-    final skuCount = groups.where((e) => e.sku.isNotEmpty).length;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final card = isDark ? const Color(0xFF1C2828) : Colors.white;
-    final muted = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
-    final main = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
-    final qtyBg = isDark ? const Color(0xFF2E3A3A) : const Color(0xFFF4F0CF);
+    final groups = _groupedRows.values.toList()..sort((a, b) => a.assetId.compareTo(b.assetId));
+    final hasRealRows = groups.isNotEmpty;
+    final showPreviewRow = !hasRealRows && _previewSingleItemContainer;
+    final assetCount = _epcRows.length;
+    final skuCount = groups.where((g) => g.sku.trim().isNotEmpty).length;
+    final tileColor = isDark ? const Color(0xFF1C2828) : const Color(0xFFEEF4F3);
+    final textColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
+    final mutedColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
+    final watermarkColor = isDark ? const Color(0x66A0B3B3) : const Color(0x2995A5A7);
 
     return CarbonScaffold(
-      pageTitle: 'COUNT INVENTORY',
+      pageTitle: 'count',
       actions: [
         IconButton(
           icon: const Icon(Icons.settings_outlined),
           onPressed: _openModuleSettings,
         ),
       ],
-      body: Column(
-        children: [
-          if (_status != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: isDark ? const Color(0xFF243030) : const Color(0xFFEAF3F2),
+      body: ColoredBox(
+        color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
               child: Text(
-                _status!,
-                style: GoogleFonts.manrope(
-                    fontSize: 13, fontWeight: FontWeight.w700, color: main),
+                _currentLocationName.toUpperCase(),
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 3.0,
+                  color: AppColors.primary,
+                ),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                        color: const Color(0xFFF4F0CF),
-                        borderRadius: BorderRadius.circular(6)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Column(
-                      children: [
-                        Text('$assetCount',
-                            style: GoogleFonts.manrope(
-                                fontSize: 42, fontWeight: FontWeight.w700)),
-                        Text('ASSET(s) READ',
-                            style: GoogleFonts.manrope(
-                                fontSize: 14, fontWeight: FontWeight.w700)),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                        color: const Color(0xFFF4F0CF),
-                        borderRadius: BorderRadius.circular(6)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Column(
-                      children: [
-                        Text('$skuCount',
-                            style: GoogleFonts.manrope(
-                                fontSize: 42, fontWeight: FontWeight.w700)),
-                        Text('SKU(s) READ',
-                            style: GoogleFonts.manrope(
-                                fontSize: 14, fontWeight: FontWeight.w700)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final tileWidth = ((constraints.maxWidth - 4) / 2).clamp(160.0, 166.0);
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: tileWidth,
+                        child: _CountSummaryTile(
+                          label: 'Total EPCs',
+                          value: '$assetCount',
+                          icon: Icons.inventory_2_outlined,
+                          tileColor: tileColor,
+                          textColor: textColor,
+                          mutedColor: mutedColor,
+                          watermarkColor: watermarkColor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: tileWidth,
+                        child: _CountSummaryTile(
+                          label: 'Total SKUs',
+                          value: '$skuCount',
+                          icon: Icons.precision_manufacturing_outlined,
+                          tileColor: tileColor,
+                          textColor: textColor,
+                          mutedColor: mutedColor,
+                          watermarkColor: watermarkColor,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-          Expanded(
-            child: ListView.separated(
-              itemCount: groups.length,
-              separatorBuilder: (_, __) => Divider(
-                  height: 1, color: Colors.black.withValues(alpha: 0.08)),
-              itemBuilder: (_, i) {
-                final g = groups[i];
-                final subtitle = [g.name, g.color, g.size]
-                    .where((e) => e.trim().isNotEmpty)
-                    .join(' · ');
-                return Material(
-                  color: card,
-                  child: InkWell(
-                    onTap: () => _openGroupDetails(g),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(g.assetId,
-                                    style: GoogleFonts.manrope(
-                                        fontSize: 36,
-                                        fontWeight: FontWeight.w700,
-                                        height: 1.05)),
-                                const SizedBox(height: 4),
-                                Text(
-                                  g.sku.isEmpty ? 'SKU pending' : g.sku,
-                                  style: GoogleFonts.manrope(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      color: main),
-                                ),
-                                if (subtitle.isNotEmpty)
-                                  Text(
-                                    subtitle,
-                                    style: GoogleFonts.manrope(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: muted),
-                                  ),
-                              ],
+            const SizedBox(height: 8),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+                child: hasRealRows || showPreviewRow
+                    ? ListView.separated(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        itemCount: hasRealRows ? groups.length : 1,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          if (!hasRealRows) {
+                            return const _CountItemContainer(
+                              sku: '112225207S',
+                              description: 'TYLER SHIRT BLACK S',
+                              qtyText: 'x24',
+                            );
+                          }
+                          final g = groups[i];
+                          final descParts = [g.name, g.color, g.size]
+                              .map((s) => s.trim())
+                              .where((s) => s.isNotEmpty)
+                              .toList();
+                          final desc = descParts.isEmpty ? 'ITEM DESCRIPTION' : descParts.join(' ');
+                          return _CountItemContainer(
+                            sku: g.sku.trim().isEmpty ? g.assetId : g.sku,
+                            description: desc,
+                            qtyText: 'x${g.qty}',
+                          );
+                        },
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: FilledButton(
+                        onPressed: _connecting ? null : _toggleScan,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0A7C80),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _scanOn ? 'STOP' : 'START',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.8,
+                              ),
                             ),
-                          ),
-                          Container(
-                            width: 56,
-                            height: 36,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                                color: qtyBg,
-                                borderRadius: BorderRadius.circular(12)),
-                            child: Text('${g.qty}',
-                                style: GoogleFonts.manrope(
-                                    fontSize: 24, fontWeight: FontWeight.w700)),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.chevron_right, size: 34),
-                        ],
+                            Icon(_scanOn ? Icons.stop_circle_outlined : Icons.play_circle_outline, size: 20),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-          Container(
-            color: isDark ? const Color(0xFF1C2828) : const Color(0xFFF5F5F5),
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _connecting ? null : _toggleScan,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF0C4A7B),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: FilledButton(
+                        onPressed: hasRealRows ? _openContinue : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF2BA3A3),
+                          disabledBackgroundColor: const Color(0xFF2BA3A3),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'CONTINUE',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward, size: 20),
+                          ],
+                        ),
+                      ),
                     ),
-                    child: Text(_scanOn ? 'STOP' : 'START',
-                        style: GoogleFonts.manrope(
-                            fontSize: 32, fontWeight: FontWeight.w700)),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: groups.isEmpty ? null : _openContinue,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF0C4A7B),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: Text('CONTINUE',
-                        style: GoogleFonts.manrope(
-                            fontSize: 32, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            _CountBottomShortcuts(onTap: _onBottomShortcutTap),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CountSummaryTile extends StatelessWidget {
+  const _CountSummaryTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.tileColor,
+    required this.textColor,
+    required this.mutedColor,
+    required this.watermarkColor,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tileColor;
+  final Color textColor;
+  final Color mutedColor;
+  final Color watermarkColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 54,
+      child: Material(
+        color: tileColor,
+        borderRadius: BorderRadius.circular(2),
+        child: Stack(
+          children: [
+            Positioned(
+              right: 4,
+              bottom: 0,
+              child: Icon(icon, size: 52, color: watermarkColor),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(9, 2, 9, 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.manrope(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: mutedColor,
+                    ),
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FittedBox(
+                      alignment: Alignment.centerLeft,
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -1.0,
+                          color: textColor,
+                          height: 1.0,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CountBottomShortcuts extends StatelessWidget {
+  const _CountBottomShortcuts({required this.onTap});
+
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inactive = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
+    final activeBg = isDark ? const Color(0xFF243030) : const Color(0xFFE2EEEC);
+    const items = [
+      (icon: Icons.dashboard, label: 'Dash', active: false),
+      (icon: Icons.inventory_2_outlined, label: 'Stock', active: true),
+      (icon: Icons.precision_manufacturing_outlined, label: 'Ops', active: false),
+      (icon: Icons.qr_code_scanner, label: 'Tags', active: false),
+    ];
+
+    return Container(
+      height: 78,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C2828) : Colors.white,
+        border: Border(top: BorderSide(color: isDark ? Colors.white12 : const Color(0xFFEDF2F1))),
+      ),
+      child: Row(
+        children: items.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final item = entry.value;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => onTap(idx),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                decoration: BoxDecoration(
+                  color: item.active ? activeBg : Colors.transparent,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      item.icon,
+                      size: 22,
+                      color: item.active ? AppColors.primary : inactive,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.label,
+                      style: GoogleFonts.manrope(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                        color: item.active ? AppColors.primary : inactive,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class _CountItemContainer extends StatelessWidget {
+  const _CountItemContainer({
+    required this.sku,
+    required this.description,
+    required this.qtyText,
+  });
+
+  final String sku;
+  final String description;
+  final String qtyText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFEFF3F7),
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'SKU:  $sku',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textMain,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  Text(
+                    description,
+                    style: GoogleFonts.manrope(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textMain,
+                      letterSpacing: 0.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text(
+                qtyText,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -563,13 +799,10 @@ class _CountInventoryItemDetailsScreen extends StatelessWidget {
               itemBuilder: (_, i) {
                 final r = rows[i];
                 return ListTile(
-                  title: Text(r.epc,
-                      style: GoogleFonts.manrope(
-                          fontSize: 16, fontWeight: FontWeight.w700)),
+                  title: Text(r.epc, style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w700)),
                   subtitle: Text(
                     'serial ${r.serial} · scans ${r.scans}',
-                    style: GoogleFonts.manrope(
-                        fontSize: 13, fontWeight: FontWeight.w600),
+                    style: GoogleFonts.manrope(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                   trailing: const Icon(Icons.radar),
                   onTap: () {
@@ -603,12 +836,10 @@ class _CountInventoryContinueScreen extends StatefulWidget {
   final Widget settingsButton;
 
   @override
-  State<_CountInventoryContinueScreen> createState() =>
-      _CountInventoryContinueScreenState();
+  State<_CountInventoryContinueScreen> createState() => _CountInventoryContinueScreenState();
 }
 
-class _CountInventoryContinueScreenState
-    extends State<_CountInventoryContinueScreen> {
+class _CountInventoryContinueScreenState extends State<_CountInventoryContinueScreen> {
   bool _overrideExisting = false;
   bool _saving = false;
   String? _status;
@@ -626,8 +857,7 @@ class _CountInventoryContinueScreenState
         payload['overrideMode'] = _overrideExisting ? 'replace' : 'additive';
         payload['uploadEnabled'] = false;
         final file = File('${path.replaceAll('.csv', '')}_upload_preview.json');
-        await file
-            .writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
+        await file.writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
         previewPath = file.path;
       }
       if (!mounted) return;
@@ -653,23 +883,16 @@ class _CountInventoryContinueScreenState
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
         children: [
-          Text('Upload to Carbon Jeans (001 - Orlando Warehouse)',
-              style: GoogleFonts.manrope(
-                  fontSize: 24, fontWeight: FontWeight.w700)),
+          Text('Upload to Carbon Jeans (001 - Orlando Warehouse)', style: GoogleFonts.manrope(fontSize: 24, fontWeight: FontWeight.w700)),
           const SizedBox(height: 14),
           CheckboxListTile(
             value: _overrideExisting,
             onChanged: (v) => setState(() => _overrideExisting = v == true),
             title: Text(
               'Override Entire Cloud Quantities (Warning)',
-              style: GoogleFonts.manrope(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFFBF2E2E)),
+              style: GoogleFonts.manrope(fontSize: 22, fontWeight: FontWeight.w700, color: const Color(0xFFBF2E2E)),
             ),
-            subtitle: Text(
-                'If checked: replace existing quantities and zero missing items',
-                style: GoogleFonts.manrope(fontSize: 16)),
+            subtitle: Text('If checked: replace existing quantities and zero missing items', style: GoogleFonts.manrope(fontSize: 16)),
             controlAffinity: ListTileControlAffinity.trailing,
           ),
           const SizedBox(height: 12),
@@ -681,17 +904,12 @@ class _CountInventoryContinueScreenState
             ),
             child: Text(
               'Upload is currently disabled for this phase.\nCSV save is active.\nRows prepared: ${widget.groupedRows.length}',
-              style: GoogleFonts.manrope(
-                  fontSize: 16, fontWeight: FontWeight.w600),
+              style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ),
           if (_status != null) ...[
             const SizedBox(height: 10),
-            Text(_status!,
-                style: GoogleFonts.manrope(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary)),
+            Text(_status!, style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primary)),
           ],
           const SizedBox(height: 24),
           Row(
@@ -704,9 +922,7 @@ class _CountInventoryContinueScreenState
                     disabledBackgroundColor: const Color(0xFF5B6E7E),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  child: Text('UPLOAD',
-                      style: GoogleFonts.manrope(
-                          fontSize: 30, fontWeight: FontWeight.w700)),
+                  child: Text('UPLOAD', style: GoogleFonts.manrope(fontSize: 30, fontWeight: FontWeight.w700)),
                 ),
               ),
               const SizedBox(width: 16),
@@ -719,8 +935,7 @@ class _CountInventoryContinueScreenState
                   ),
                   child: Text(
                     _saving ? 'SAVING…' : 'SAVE TO FILE',
-                    style: GoogleFonts.manrope(
-                        fontSize: 24, fontWeight: FontWeight.w700),
+                    style: GoogleFonts.manrope(fontSize: 24, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -738,12 +953,10 @@ class _CountInventorySettingsScreen extends StatefulWidget {
   final _CountInventoryModuleSettings initial;
 
   @override
-  State<_CountInventorySettingsScreen> createState() =>
-      _CountInventorySettingsScreenState();
+  State<_CountInventorySettingsScreen> createState() => _CountInventorySettingsScreenState();
 }
 
-class _CountInventorySettingsScreenState
-    extends State<_CountInventorySettingsScreen> {
+class _CountInventorySettingsScreenState extends State<_CountInventorySettingsScreen> {
   late int _power;
   late double _rssi;
   bool _busy = false;
@@ -778,8 +991,7 @@ class _CountInventorySettingsScreenState
           icon: const Icon(Icons.save_outlined),
           onPressed: () {
             Navigator.of(context).pop(
-              _CountInventoryModuleSettings(
-                  rfidPowerDbm: _power, rssiDistance: _rssi),
+              _CountInventoryModuleSettings(rfidPowerDbm: _power, rssiDistance: _rssi),
             );
           },
         ),
@@ -787,9 +999,7 @@ class _CountInventorySettingsScreenState
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
         children: [
-          Text('RFID Power (0-30dbm)',
-              style: GoogleFonts.manrope(
-                  fontSize: 32, fontWeight: FontWeight.w700)),
+          Text('RFID Power (0-30dbm)', style: GoogleFonts.manrope(fontSize: 32, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -803,15 +1013,11 @@ class _CountInventorySettingsScreenState
                   onChanged: (v) => setState(() => _power = v.round()),
                 ),
               ),
-              Text('$_power\ndbm',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 20)),
+              Text('$_power\ndbm', textAlign: TextAlign.center, style: const TextStyle(fontSize: 20)),
             ],
           ),
           const SizedBox(height: 20),
-          Text('RSSI',
-              style: GoogleFonts.manrope(
-                  fontSize: 32, fontWeight: FontWeight.w700)),
+          Text('RSSI', style: GoogleFonts.manrope(fontSize: 32, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -836,8 +1042,7 @@ class _CountInventorySettingsScreenState
             ),
             child: Text(
               _busy ? 'RESTARTING…' : 'Restart RFID Controller',
-              style: GoogleFonts.manrope(
-                  fontSize: 30, fontWeight: FontWeight.w700),
+              style: GoogleFonts.manrope(fontSize: 30, fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -873,8 +1078,7 @@ class _CountInventoryModuleSettings {
       if (m is! Map<String, dynamic>) return null;
       return _CountInventoryModuleSettings(
         rfidPowerDbm: ((m['rfidPowerDbm'] as num?)?.round() ?? 30).clamp(0, 30),
-        rssiDistance:
-            ((m['rssiDistance'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0),
+        rssiDistance: ((m['rssiDistance'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0),
       );
     } catch (_) {
       return null;

@@ -21,7 +21,7 @@ class WmsText extends StatelessWidget {
     this.strokeWidth = 1.2,
   });
 
-  final Color  color;
+  final Color color;
   final double fontSize;
   final double strokeWidth;
 
@@ -40,10 +40,10 @@ class WmsText extends StatelessWidget {
           'WMS',
           style: _base().copyWith(
             foreground: Paint()
-              ..style       = PaintingStyle.stroke
+              ..style = PaintingStyle.stroke
               ..strokeWidth = strokeWidth
-              ..strokeJoin  = StrokeJoin.round
-              ..color       = color,
+              ..strokeJoin = StrokeJoin.round
+              ..color = color,
           ),
         ),
         // Fill layer — solid colour on top
@@ -117,9 +117,12 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
     final rawName = (_userEmail?.split('@').first ?? '').replaceAll('.', ' ');
     final displayName = rawName.isEmpty
         ? 'Operator'
-        : rawName.split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+        : rawName
+            .split(' ')
+            .map(
+                (w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+            .join(' ');
     final email = _userEmail ?? '—';
-    final fg = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
 
     return Drawer(
       backgroundColor: isDark ? const Color(0xFF1C2828) : Colors.white,
@@ -129,26 +132,34 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
           Container(
             width: double.infinity,
             color: AppColors.primary,
-            padding: EdgeInsets.fromLTRB(24, MediaQuery.of(context).padding.top + 32, 24, 32),
+            padding: EdgeInsets.fromLTRB(
+                24, MediaQuery.of(context).padding.top + 32, 24, 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 CircleAvatar(
                   radius: 52,
                   backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  child: const Icon(Icons.person, size: 58, color: Colors.white),
+                  child:
+                      const Icon(Icons.person, size: 58, color: Colors.white),
                 ),
                 const SizedBox(height: 20),
                 Text(
                   displayName,
-                  style: GoogleFonts.manrope(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white),
+                  style: GoogleFonts.manrope(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white),
                   textAlign: TextAlign.center,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 6),
                 Text(
                   email,
-                  style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.8)),
+                  style: GoogleFonts.manrope(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.8)),
                   textAlign: TextAlign.center,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -156,14 +167,23 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
             ),
           ),
           const SizedBox(height: 20),
-          _DrawerItem(icon: Icons.dashboard_outlined, label: 'Dashboard', onTap: () {
-            Navigator.of(context).popUntil((r) => r.isFirst);
-          }),
+          _DrawerItem(
+              icon: Icons.dashboard_outlined,
+              label: 'Dashboard',
+              onTap: () {
+                Navigator.of(context).popUntil((r) => r.isFirst);
+              }),
           const SizedBox(height: 4),
-          _DrawerItem(icon: Icons.settings_outlined, label: 'Settings', onTap: () {
-            Navigator.pop(context);
-            Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const HandheldSettingsScreen()));
-          }),
+          _DrawerItem(
+              icon: Icons.settings_outlined,
+              label: 'Settings',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                        builder: (_) => const HandheldSettingsScreen()));
+              }),
           const SizedBox(height: 4),
           Consumer<ThemeNotifier>(
             builder: (_, notifier, __) => _DrawerItem(
@@ -173,11 +193,16 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
             ),
           ),
           const Spacer(),
-          _DrawerItem(icon: Icons.power_settings_new, label: 'Sign Out', color: const Color(0xFFEF4444), large: true, onTap: () {
-            Navigator.of(context).popUntil((r) => r.isFirst);
-            DashboardScreen.scaffoldKey.currentState?.openDrawer();
-            // Trigger logout from dashboard level
-          }),
+          _DrawerItem(
+              icon: Icons.power_settings_new,
+              label: 'Sign Out',
+              color: const Color(0xFFEF4444),
+              large: true,
+              onTap: () {
+                Navigator.of(context).popUntil((r) => r.isFirst);
+                DashboardScreen.scaffoldKey.currentState?.openDrawer();
+                // Trigger logout from dashboard level
+              }),
           const SizedBox(height: 80),
         ],
       ),
@@ -186,14 +211,16 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark     = Theme.of(context).brightness == Brightness.dark;
-    final barBg      = isDark ? const Color(0xFF111A1A) : Colors.white;
-    final mainColor  = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
-    final wmsTeal    = isDark ? const Color(0xFF4DB6AC) : AppColors.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final barBg = isDark ? const Color(0xFF111A1A) : Colors.white;
+    final mainColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
+    final wmsTeal = isDark ? const Color(0xFF4DB6AC) : AppColors.primary;
 
     final label = widget.pageTitle.isNotEmpty
         ? widget.pageTitle.toUpperCase()
-        : (widget.title != null && widget.title!.isNotEmpty && widget.title != 'Carbon WMS')
+        : (widget.title != null &&
+                widget.title!.isNotEmpty &&
+                widget.title != 'Carbon WMS')
             ? widget.title!.toUpperCase()
             : '';
 
@@ -239,7 +266,7 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
               children: [
                 Text(
                   'Carbon',
-                  style: GoogleFonts.manrope(
+                  style: GoogleFonts.spaceGrotesk(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
@@ -263,7 +290,7 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
               ),
               Text(
                 label,
-                style: GoogleFonts.manrope(
+                style: GoogleFonts.spaceGrotesk(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.6,
@@ -310,7 +337,8 @@ class _DrawerItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Row(
           children: [
-            SizedBox(width: 26, child: Icon(icon, size: large ? 26 : 24, color: fg)),
+            SizedBox(
+                width: 26, child: Icon(icon, size: large ? 26 : 24, color: fg)),
             const SizedBox(width: 12),
             Expanded(
               child: Text(

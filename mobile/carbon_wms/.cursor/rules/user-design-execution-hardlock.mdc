@@ -1,0 +1,20 @@
+---
+description: Hard-lock user instruction execution and verification protocol
+alwaysApply: true
+---
+
+# User Instruction Hard Lock
+
+- Treat the user's wording as binding requirements. Do not reinterpret design/style asks.
+- Re-read every user requirement line-by-line at least twice before editing, especially for design/style asks.
+- For UI tasks, mirror requested fonts, sizes, colors, spacing, and layout exactly unless user asks for alternatives.
+- Never make design/style "improvements" unless explicitly requested by the user.
+- If any requirement is ambiguous, ask clarifying questions before editing code.
+- Before implementation, restate acceptance criteria in concrete terms.
+- For behavior/wiring tasks, validate root causes and verify edge cases twice before claiming done.
+- For bug-fix and wiring tasks, test root cause hypotheses and confirmation paths twice before marking complete.
+- Do not silently change font sizes/weights when user requested only container/spacing shrink.
+- Do not change button or box widths unless user explicitly asked.
+- For install/preview requests: follow `uninstall old -> install latest -> login -> capture evidence`.
+- If automation captures wrong app/screen, explicitly say so and retry with corrected flow.
+- Keep responses concise and factual; no speculative claims about verification.
