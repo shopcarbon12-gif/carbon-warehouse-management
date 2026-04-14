@@ -344,7 +344,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         .toList();
     if (!mounted) return;
     setState(() {
-      _currentBin      = code;
+      _currentBin      = _formatBinCode(code);
       _currentBinId    = binId;
       _binActive       = true;
       _awaitingBinScan = false;
@@ -1395,15 +1395,17 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (widget.isActive)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                      child: Text(
-                        widget.binCode,
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 42,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
-                          letterSpacing: 1.2,
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                        child: Text(
+                          widget.binCode,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 42,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                            letterSpacing: 1.2,
+                          ),
                         ),
                       ),
                     )
@@ -1666,70 +1668,210 @@ class _EmptyItemsPlaceholder extends StatefulWidget {
 
 class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
   late TextEditingController _controller;
+  final _focusNode = FocusNode();
+  Timer? _debounce;
+  List<Map<String, dynamic>> _results = [];
+  bool _showDropdown = false;
+  bool _searching = false;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController();
+    _controller.addListener(_onTextChanged);
+    _focusNode.addListener(_onFocusChanged);
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _controller.removeListener(_onTextChanged);
+    _focusNode.removeListener(_onFocusChanged);
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (!_focusNode.hasFocus) {
+      // Delay to allow tap on dropdown item to register
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (mounted && !_focusNode.hasFocus) {
+          setState(() => _showDropdown = false);
+        }
+      });
+    }
+  }
+
+  void _onTextChanged() {
+    _debounce?.cancel();
+    final q = _controller.text.trim();
+    if (q.length < 3) {
+      setState(() {
+        _results = [];
+        _showDropdown = false;
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 350), () => _doSearch(q));
+  }
+
+  Future<void> _doSearch(String q) async {
+    if (!mounted) return;
+    setState(() => _searching = true);
+    try {
+      final api = context.read<WmsApiClient>();
+      final rows = await api.catalogSearch(q, limit: 10);
+      if (!mounted) return;
+      setState(() {
+        _results = rows;
+        _showDropdown = true;
+        _searching = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  void _selectResult(Map<String, dynamic> row) {
+    final sku = row['custom_sku']?.toString() ??
+        row['sku']?.toString() ?? '';
+    if (sku.isEmpty) return;
+    _focusNode.unfocus();
+    setState(() {
+      _showDropdown = false;
+      _results = [];
+    });
+    _controller.clear();
+    widget.onManualInput?.call(sku);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Match the exact height of a _StoredItemRow:
-    // padding 16v + SKU(16pt ~20px) + 4px spacer + desc(14pt ~18px) + padding 16v
     const double itemRowHeight = 74;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Container(
-        width: double.infinity,
-        height: itemRowHeight,
-        decoration: BoxDecoration(
-          color: widget.bgLow,
-          borderRadius: BorderRadius.zero,
-        ),
-        child: widget.isManualMode
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: TextField(
-                  controller: _controller,
-                  decoration: InputDecoration(
-                    labelText: 'Search item SKU',
-                    hintText: 'Enter SKU...',
-                    border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
-                    enabledBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: AppColors.primary, width: 2)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    isDense: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: double.infinity,
+            height: itemRowHeight,
+            decoration: BoxDecoration(
+              color: widget.bgLow,
+              borderRadius: BorderRadius.zero,
+            ),
+            child: widget.isManualMode
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        decoration: InputDecoration(
+                          labelText: 'Search item',
+                          hintText: 'Name, UPC, SKU, or Asset ID...',
+                          border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+                          enabledBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide(color: AppColors.primary, width: 2)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          isDense: true,
+                          suffixIcon: _searching
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                )
+                              : null,
+                        ),
+                        onSubmitted: (v) {
+                          if (v.isNotEmpty) {
+                            _focusNode.unfocus();
+                            setState(() { _showDropdown = false; _results = []; });
+                            _controller.clear();
+                            widget.onManualInput?.call(v);
+                          }
+                        },
+                      ),
+                    ),
+                  )
+                : Center(
+                    child: Text(
+                      'TRIGGER OR TAP TO ADD ITEM',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.4,
+                        color: widget.mutedColor,
+                      ),
+                    ),
                   ),
-                  onSubmitted: (v) {
-                    if (v.isNotEmpty) {
-                      widget.onManualInput?.call(v);
-                      _controller.clear();
-                    }
-                  },
-                ),
-                ),
-              )
-            : Center(
-                child: Text(
-                  'TRIGGER OR TAP TO ADD ITEM',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.4,
-                    color: widget.mutedColor,
+          ),
+          // Search results dropdown
+          if (widget.isManualMode && _showDropdown && _results.isNotEmpty)
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 240),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
                   ),
-                ),
+                ],
               ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: _results.length,
+                separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
+                itemBuilder: (_, i) {
+                  final row = _results[i];
+                  final sku = row['custom_sku']?.toString() ??
+                      row['sku']?.toString() ?? '';
+                  final name = row['title']?.toString() ??
+                      row['description']?.toString() ?? '';
+                  return InkWell(
+                    onTap: () => _selectResult(row),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            sku,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (name.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              name,
+                              style: GoogleFonts.manrope(
+                                fontSize: 12,
+                                color: AppColors.textMuted,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
       ),
     );
   }

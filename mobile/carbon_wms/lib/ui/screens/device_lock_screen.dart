@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 class DeviceLockScreen extends StatelessWidget {
   const DeviceLockScreen({
@@ -16,8 +17,8 @@ class DeviceLockScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return CarbonScaffold(
+      pageTitle: 'DEVICE LOCK',
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),

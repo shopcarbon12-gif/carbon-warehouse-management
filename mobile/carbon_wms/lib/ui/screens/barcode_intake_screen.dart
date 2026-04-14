@@ -118,6 +118,7 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
+      pageTitle: 'BARCODE INTAKE',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

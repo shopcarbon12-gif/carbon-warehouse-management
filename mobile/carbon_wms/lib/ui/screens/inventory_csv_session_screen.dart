@@ -86,6 +86,7 @@ class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
     final m = context.watch<RfidManager>();
 
     return CarbonScaffold(
+      pageTitle: 'INVENTORY',
       bottomBar: TacticalBottomBar(
         children: [
           TacticalEmeraldButton(

@@ -206,6 +206,7 @@ class _TransferSlipsScreenState extends State<TransferSlipsScreen>
     final rfid = context.watch<RfidManager>();
 
     return CarbonScaffold(
+      pageTitle: 'TRANSFER SLIPS',
       bottomBar: TacticalBottomBar(
         children: [
           TacticalEmeraldButton(

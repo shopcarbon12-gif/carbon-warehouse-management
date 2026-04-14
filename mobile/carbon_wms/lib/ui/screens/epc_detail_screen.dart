@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
+import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 /// Shows all EPCs for a given SKU inside a bin.
 /// Tapping an EPC navigates to LocateTagScreen (Geiger).
@@ -20,17 +21,8 @@ class EpcDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          sku,
-          style: GoogleFonts.spaceGrotesk(
-            fontWeight: FontWeight.w700,
-            fontSize: 15,
-            letterSpacing: 0.5,
-          ),
-        ),
-      ),
+    return CarbonScaffold(
+      pageTitle: sku,
       body: epcs.isEmpty
           ? const Center(
               child: Text(

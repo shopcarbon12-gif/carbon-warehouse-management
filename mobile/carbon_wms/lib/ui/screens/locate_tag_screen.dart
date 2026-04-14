@@ -204,6 +204,7 @@ class _LocateTagScreenState extends State<LocateTagScreen> {
     final rssiLabel = _liveRssi != null ? 'RSSI: $_liveRssi' : 'RSSI: —';
 
     return CarbonScaffold(
+      pageTitle: 'LOCATE TAG',
       bottomBar: TacticalBottomBar(
         children: [
           if (holdRelease)

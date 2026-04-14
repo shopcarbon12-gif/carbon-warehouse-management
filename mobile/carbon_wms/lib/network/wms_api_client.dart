@@ -538,6 +538,29 @@ class WmsApiClient {
     return null;
   }
 
+  /// Multi-result catalog search across all fields (name, UPC, SKU, asset ID).
+  /// Returns up to [limit] rows from `/api/inventory/catalog?view=grid`.
+  Future<List<Map<String, dynamic>>> catalogSearch(String q, {int limit = 10}) async {
+    final qt = q.trim();
+    if (qt.length < 3) return [];
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/catalog').replace(
+      queryParameters: {
+        'view': 'grid',
+        'page': '1',
+        'limit': '$limit',
+        'q': qt,
+      },
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) return [];
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return [];
+    final rows = decoded['rows'];
+    if (rows is! List) return [];
+    return rows.whereType<Map<String, dynamic>>().toList();
+  }
+
   /// Bumps WMS on-hand for the resolved custom SKU (`ls_on_hand_total`) and writes `inventory_audit_logs`.
   Future<void> postBarcodeIntakeLog({
     required String barcode,

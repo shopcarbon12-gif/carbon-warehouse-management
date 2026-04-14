@@ -49,28 +49,26 @@ class _CameraBarcodePageState extends State<_CameraBarcodePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(widget.title),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop<String>(),
-        ),
-      ),
+      appBar: null,
       body: Stack(
         children: [
           MobileScanner(onDetect: _onDetect),
           Positioned(
-            left: 16,
-            right: 16,
-            bottom: 32,
-            child: Text(
-              'Point at barcode. First good read sends you back automatically.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.85),
-                fontSize: 13,
+            left: 0,
+            right: 0,
+            top: 0,
+            child: Container(
+              color: Colors.black,
+              padding: const EdgeInsets.fromLTRB(16, 40, 16, 24),
+              child: Text(
+                widget.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
           ),

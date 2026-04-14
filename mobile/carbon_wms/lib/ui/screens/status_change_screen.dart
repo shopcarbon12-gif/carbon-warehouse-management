@@ -83,6 +83,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     final items = manager.sessionEpcs;
 
     return CarbonScaffold(
+      pageTitle: 'STATUS CHANGE',
       bottomBar: TacticalBottomBar(
         children: [
           TacticalEmeraldButton(

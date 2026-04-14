@@ -278,6 +278,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: isDark ? const Color(0xFF111A1A) : Colors.white,
       appBar: _buildAppBar(context),
       drawer: _buildDrawer(context),
+      drawerEnableOpenDragGesture: false,
       body: _buildBody(context),
       bottomNavigationBar: _buildBottomNav(context),
     );
@@ -404,7 +405,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Padding(
             padding: const EdgeInsets.only(left: 14),
             child: GestureDetector(
-              onTap: () => Scaffold.of(ctx).openDrawer(),
+              onTap: () {
+                final scaffold = Scaffold.of(ctx);
+                if (scaffold.isDrawerOpen) {
+                  Navigator.of(ctx).pop();
+                } else {
+                  scaffold.openDrawer();
+                }
+              },
               child: ClipOval(
                 child: Image.asset(
                   'assets/carbon_logo.png',
