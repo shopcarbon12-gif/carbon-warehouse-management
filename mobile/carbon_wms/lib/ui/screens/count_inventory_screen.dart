@@ -12,6 +12,7 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/epc_asset_decoder.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
@@ -151,7 +152,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       row.scans += 1;
       row.lastSeen = now;
     } else {
-      final parts = _decodeAssetFromEpc(epc);
+      final parts = decodeAssetFromEpc(epc);
       _epcRows[epc] = _SessionEpcRow(
         epc: epc,
         assetId: parts.assetId,
@@ -312,6 +313,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         builder: (_) => _CountInventoryContinueScreen(
           groupedRows: groups,
           onSaveCsv: _saveSessionCsvToDevice,
+          buildBackendPreviewPayload: () => _buildBackendPreviewPayload(groups),
           settingsButton: IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: _openModuleSettings,
@@ -319,6 +321,24 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         ),
       ),
     );
+  }
+
+  Map<String, dynamic> _buildBackendPreviewPayload(List<_GroupedRow> groups) {
+    return <String, dynamic>{
+      'mode': 'count_inventory_preview',
+      'generatedAtUtc': DateTime.now().toUtc().toIso8601String(),
+      'items': groups
+          .map((g) => <String, dynamic>{
+                'assetId': g.assetId,
+                'sku': g.sku,
+                'name': g.name,
+                'color': g.color,
+                'size': g.size,
+                'qty': g.qty,
+                'epcs': g.epcs.toList()..sort(),
+              })
+          .toList(),
+    };
   }
 
   @override
@@ -573,11 +593,13 @@ class _CountInventoryContinueScreen extends StatefulWidget {
   const _CountInventoryContinueScreen({
     required this.groupedRows,
     required this.onSaveCsv,
+    required this.buildBackendPreviewPayload,
     required this.settingsButton,
   });
 
   final List<_GroupedRow> groupedRows;
   final Future<String?> Function() onSaveCsv;
+  final Map<String, dynamic> Function() buildBackendPreviewPayload;
   final Widget settingsButton;
 
   @override
@@ -598,9 +620,22 @@ class _CountInventoryContinueScreenState
     });
     try {
       final path = await widget.onSaveCsv();
+      String? previewPath;
+      if (path != null) {
+        final payload = widget.buildBackendPreviewPayload();
+        payload['overrideMode'] = _overrideExisting ? 'replace' : 'additive';
+        payload['uploadEnabled'] = false;
+        final file = File('${path.replaceAll('.csv', '')}_upload_preview.json');
+        await file
+            .writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
+        previewPath = file.path;
+      }
       if (!mounted) return;
       setState(
-          () => _status = path == null ? 'Failed to save CSV' : 'Saved: $path');
+        () => _status = path == null
+            ? 'Failed to save CSV'
+            : 'Saved CSV: $path\nSaved preview payload: ${previewPath ?? 'n/a'}',
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _status = 'Save failed: $e');
@@ -878,32 +913,6 @@ class _GroupedRow {
   String size = '';
   String vendor = '';
   bool cached = false;
-}
-
-class _DecodedEpcParts {
-  const _DecodedEpcParts({
-    required this.prefixHex,
-    required this.assetId,
-    required this.serial,
-  });
-
-  final String prefixHex;
-  final String assetId;
-  final int serial;
-}
-
-_DecodedEpcParts _decodeAssetFromEpc(String epc24) {
-  final raw = epc24.trim().toUpperCase();
-  if (raw.length != 24) {
-    return const _DecodedEpcParts(prefixHex: '', assetId: 'INVALID', serial: 0);
-  }
-  final prefixHex = raw.substring(0, 5);
-  final itemHex = raw.substring(5, 15);
-  final serialHex = raw.substring(15);
-  final assetDec = BigInt.parse(itemHex, radix: 16).toString();
-  final serial = int.tryParse(serialHex, radix: 16) ?? 0;
-  return _DecodedEpcParts(
-      prefixHex: prefixHex, assetId: assetDec, serial: serial);
 }
 
 String _csv(String v) {
