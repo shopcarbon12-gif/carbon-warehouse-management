@@ -516,103 +516,100 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                     left: 0,
                     right: 0,
                     bottom: bottomShortcutsHeight,
-                    child: Material(
-                      color: Colors.white,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: SizedBox(
-                                  width: continueButtonWidth,
-                                  height: 40,
-                                  child: FilledButton(
-                                    onPressed: _connecting ? null : _toggleScan,
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor:
-                                          _scanOn ? const Color(0xFFBF2E2E) : const Color(0xFF0A7C80),
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Text(
-                                              _scanOn ? 'STOP' : 'START',
-                                              style: GoogleFonts.spaceGrotesk(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 1.8,
-                                              ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: SizedBox(
+                                width: continueButtonWidth,
+                                height: 40,
+                                child: FilledButton(
+                                  onPressed: _connecting ? null : _toggleScan,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor:
+                                        _scanOn ? const Color(0xFFBF2E2E) : const Color(0xFF0A7C80),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            _scanOn ? 'STOP' : 'START',
+                                            style: GoogleFonts.spaceGrotesk(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 1.8,
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
-                                        SizedBox(
-                                          width: 20,
-                                          child: Icon(
-                                            _scanOn ? Icons.stop_circle_outlined : Icons.play_circle_outline,
-                                            size: 20,
-                                          ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 20,
+                                        child: Icon(
+                                          _scanOn ? Icons.stop_circle_outlined : Icons.play_circle_outline,
+                                          size: 20,
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: SizedBox(
-                                  width: continueButtonWidth,
-                                  height: 40,
-                                  child: FilledButton(
-                                    onPressed: (hasRealRows || showPreviewRow) ? _openContinue : null,
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: const Color(0xFF2BA3A3),
-                                      disabledBackgroundColor: const Color(0xFF2BA3A3),
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Text(
-                                              'CONTINUE',
-                                              style: GoogleFonts.spaceGrotesk(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 1.5,
-                                                color: Colors.white,
-                                              ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: SizedBox(
+                                width: continueButtonWidth,
+                                height: 40,
+                                child: FilledButton(
+                                  onPressed: (hasRealRows || showPreviewRow) ? _openContinue : null,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFF2BA3A3),
+                                    disabledBackgroundColor: const Color(0xFF2BA3A3),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            'CONTINUE',
+                                            style: GoogleFonts.spaceGrotesk(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 1.5,
+                                              color: Colors.white,
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
-                                        const SizedBox(
-                                          width: 20,
-                                          child: Icon(Icons.arrow_forward, size: 20, color: Colors.white),
-                                        ),
-                                      ],
-                                    ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const SizedBox(
+                                        width: 20,
+                                        child: Icon(Icons.arrow_forward, size: 20, color: Colors.white),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
