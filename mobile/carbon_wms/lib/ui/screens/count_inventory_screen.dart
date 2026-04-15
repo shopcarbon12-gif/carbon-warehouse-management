@@ -654,7 +654,7 @@ class _CountSummaryTile extends StatelessWidget {
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        value,
+                        _summaryCountDisplayString(value),
                         maxLines: 1,
                         softWrap: false,
                         overflow: TextOverflow.clip,
@@ -676,6 +676,13 @@ class _CountSummaryTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Summary numbers are never zero-padded (e.g. `00000` → `0`).
+String _summaryCountDisplayString(String raw) {
+  final n = int.tryParse(raw.trim());
+  if (n == null) return raw;
+  return n.toString();
 }
 
 double _continueButtonTightWidth() {
