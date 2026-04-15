@@ -550,11 +550,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                         child: SizedBox(
                           height: 40,
                           child: FilledButton(
-                            onPressed: hasRealRows ? _openContinue : null,
+                            onPressed: _openContinue,
                             style: FilledButton.styleFrom(
                               backgroundColor: const Color(0xFF2BA3A3),
                               disabledBackgroundColor: const Color(0xFF2BA3A3),
                               foregroundColor: Colors.white,
+                              disabledForegroundColor: Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
                               padding: const EdgeInsets.symmetric(horizontal: 12),
                               minimumSize: Size.zero,
