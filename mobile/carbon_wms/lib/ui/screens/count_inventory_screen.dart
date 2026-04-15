@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +13,7 @@ import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/epc_asset_decoder.dart';
+import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
@@ -144,13 +146,21 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     await prefs.setString(_assetCachePrefsKey, jsonEncode(_assetCache));
   }
 
+  Future<void> _saveModuleSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_countInvPrefsKey, _moduleSettings.toJsonString());
+  }
+
   Future<void> _openModuleSettings() async {
-    // Count gear: shell only (logo + drawer). App-wide settings live in the side menu.
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const _CountInventorySettingsScreen(),
+    final next = await Navigator.of(context).push<_CountInventoryModuleSettings>(
+      MaterialPageRoute<_CountInventoryModuleSettings>(
+        builder: (_) => _CountInventorySettingsScreen(initial: _moduleSettings),
       ),
     );
+    if (next == null) return;
+    setState(() => _moduleSettings = next);
+    await _saveModuleSettings();
+    await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
   }
 
   void _onTagRead(RfidTagRead read) {
@@ -1479,20 +1489,414 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
   }
 }
 
-/// Count screen gear: header only (logo opens drawer, Carbon + WMS). No page-level controls here.
-class _CountInventorySettingsScreen extends StatelessWidget {
-  const _CountInventorySettingsScreen();
+/// Count gear → RFID settings (Count-only prefs). Stitch reference: stitch_carbonwms_project_requirements (11)/code.html
+class _CountInventorySettingsScreen extends StatefulWidget {
+  const _CountInventorySettingsScreen({required this.initial});
+
+  final _CountInventoryModuleSettings initial;
+
+  @override
+  State<_CountInventorySettingsScreen> createState() => _CountInventorySettingsScreenState();
+}
+
+class _CountInventorySettingsScreenState extends State<_CountInventorySettingsScreen> {
+  static const Color _primary = Color(0xFF009496);
+  static const Color _outline = Color(0xFF6D7979);
+  static const Color _onSurface = Color(0xFF171D1D);
+  static const Color _sliderTrack = Color(0xFFEAF0EE);
+
+  late int _power;
+  late double _rssi;
+  bool _busy = false;
+  String _hardwareId = '—';
+  String _firmware = '—';
+
+  /// Maps stored 0..1 to RSSI display dB in [-90, -30] (stitch mock).
+  int get _rssiDb => (-90 + _rssi * 60).round();
+
+  @override
+  void initState() {
+    super.initState();
+    _power = widget.initial.rfidPowerDbm;
+    _rssi = widget.initial.rssiDistance;
+    _loadDeviceMeta();
+  }
+
+  Future<void> _loadDeviceMeta() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final id = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+      if (!mounted) return;
+      setState(() {
+        _firmware = 'v${info.version}+${info.buildNumber}';
+        _hardwareId = id;
+      });
+    } catch (_) {
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _restartRfidController() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final rfid = context.read<RfidManager>();
+    await rfid.autoDetectHardware();
+    await rfid.reapplyHandheldHardwareSettings();
+    await RfidVendorChannel.setAntennaPowerDbm(_power);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('RFID controller restarted')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return const CarbonScaffold(
-      pageTitle: '',
-      actions: [],
+    final sliderTheme = SliderTheme.of(context).copyWith(
+      activeTrackColor: _sliderTrack,
+      inactiveTrackColor: _sliderTrack,
+      trackHeight: 12,
+      thumbColor: _primary,
+      overlayColor: _primary.withValues(alpha: 0.12),
+      thumbShape: const _RectSliderThumbShape(width: 24, height: 48),
+      trackShape: const RoundedRectSliderTrackShape(),
+    );
+
+    return CarbonScaffold(
+      pageTitle: 'rfid settings',
+      actions: const [],
+      bottomBar: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Color(0xFFF4F4F5))),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop(
+                        _CountInventoryModuleSettings(rfidPowerDbm: _power, rssiDistance: _rssi),
+                      );
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _primary,
+                      foregroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      textStyle: GoogleFonts.manrope(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    icon: const Icon(Icons.save_outlined, size: 22),
+                    label: const Text('SAVE'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: OutlinedButton.icon(
+                    onPressed: _busy ? null : _restartRfidController,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _primary,
+                      side: const BorderSide(color: _primary, width: 2),
+                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      textStyle: GoogleFonts.manrope(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    icon: _busy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: _primary),
+                          )
+                        : const Icon(Icons.restart_alt, size: 22),
+                    label: Text(_busy ? 'RESTARTING…' : 'RESTART CONTROLLER'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
       body: ColoredBox(
         color: Colors.white,
-        child: SizedBox.expand(),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+          children: [
+            Text(
+              'Configure antenna interface and signal filtering.',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: _outline,
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 40),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'ANTENNA POWER OUTPUT',
+                    style: GoogleFonts.manrope(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                      color: _outline,
+                    ),
+                  ),
+                ),
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '$_power',
+                        style: GoogleFonts.robotoMono(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: _primary,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' dBm',
+                        style: GoogleFonts.robotoMono(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: _outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 56,
+              child: SliderTheme(
+                data: sliderTheme,
+                child: Slider(
+                  value: _power.toDouble(),
+                  min: 0,
+                  max: 30,
+                  divisions: 30,
+                  onChanged: (v) => setState(() => _power = v.round()),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '0 dBm',
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _outline,
+                  ),
+                ),
+                Text(
+                  '30 dBm',
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _outline,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 48),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'RSSI SENSITIVITY',
+                    style: GoogleFonts.manrope(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                      color: _outline,
+                    ),
+                  ),
+                ),
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: '$_rssiDb',
+                        style: GoogleFonts.robotoMono(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: _primary,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' dB',
+                        style: GoogleFonts.robotoMono(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: _outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 56,
+              child: SliderTheme(
+                data: sliderTheme,
+                child: Slider(
+                  value: _rssi,
+                  min: 0,
+                  max: 1,
+                  onChanged: (v) => setState(() => _rssi = v),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '-90 dB',
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _outline,
+                  ),
+                ),
+                Text(
+                  '-30 dB',
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: _outline,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            const Divider(height: 1, thickness: 1, color: Color(0xFFF4F4F5)),
+            const SizedBox(height: 32),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'HARDWARE ID',
+                        style: GoogleFonts.manrope(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2,
+                          color: _outline,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _hardwareId,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.robotoMono(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: _onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'FIRMWARE',
+                        style: GoogleFonts.manrope(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2,
+                          color: _outline,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _firmware,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.robotoMono(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: _onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
+  }
+}
+
+/// Rectangular slider thumb (stitch / industrial).
+class _RectSliderThumbShape extends SliderComponentShape {
+  const _RectSliderThumbShape({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) => Size(width, height);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final canvas = context.canvas;
+    final rect = Rect.fromCenter(center: center, width: width, height: height);
+    final fill = Paint()..color = sliderTheme.thumbColor ?? const Color(0xFF009496);
+    final shadow = Paint()..color = const Color(0x1A000000);
+    canvas.drawRect(rect.translate(0, 2), shadow);
+    canvas.drawRect(rect, fill);
   }
 }
 
