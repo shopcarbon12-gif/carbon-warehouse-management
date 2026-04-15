@@ -140,26 +140,18 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     });
   }
 
-  Future<void> _saveModuleSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_countInvPrefsKey, _moduleSettings.toJsonString());
-  }
-
   Future<void> _saveAssetCache() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_assetCachePrefsKey, jsonEncode(_assetCache));
   }
 
   Future<void> _openModuleSettings() async {
-    final next = await Navigator.of(context).push<_CountInventoryModuleSettings>(
-      MaterialPageRoute<_CountInventoryModuleSettings>(
-        builder: (_) => _CountInventorySettingsScreen(initial: _moduleSettings),
+    // Count gear: shell only (logo + drawer). App-wide settings live in the side menu.
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const _CountInventorySettingsScreen(),
       ),
     );
-    if (next == null) return;
-    setState(() => _moduleSettings = next);
-    await _saveModuleSettings();
-    await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
   }
 
   void _onTagRead(RfidTagRead read) {
@@ -1500,105 +1492,18 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
   }
 }
 
-class _CountInventorySettingsScreen extends StatefulWidget {
-  const _CountInventorySettingsScreen({required this.initial});
-
-  final _CountInventoryModuleSettings initial;
-
-  @override
-  State<_CountInventorySettingsScreen> createState() => _CountInventorySettingsScreenState();
-}
-
-class _CountInventorySettingsScreenState extends State<_CountInventorySettingsScreen> {
-  late int _power;
-  late double _rssi;
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _power = widget.initial.rfidPowerDbm;
-    _rssi = widget.initial.rssiDistance;
-  }
-
-  Future<void> _restartRfidController() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    final rfid = context.read<RfidManager>();
-    await rfid.autoDetectHardware();
-    await rfid.reapplyHandheldHardwareSettings();
-    await RfidVendorChannel.setAntennaPowerDbm(_power);
-    if (!mounted) return;
-    setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('RFID controller restarted')),
-    );
-  }
+/// Count screen gear: header only (logo opens drawer, Carbon + WMS). No page-level controls here.
+class _CountInventorySettingsScreen extends StatelessWidget {
+  const _CountInventorySettingsScreen();
 
   @override
   Widget build(BuildContext context) {
-    return CarbonScaffold(
-      pageTitle: 'RFID SETTINGS',
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.save_outlined),
-          onPressed: () {
-            Navigator.of(context).pop(
-              _CountInventoryModuleSettings(rfidPowerDbm: _power, rssiDistance: _rssi),
-            );
-          },
-        ),
-      ],
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
-        children: [
-          Text('RFID Power (0-30dbm)', style: GoogleFonts.manrope(fontSize: 32, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Text('0 dbm', style: TextStyle(fontSize: 20)),
-              Expanded(
-                child: Slider(
-                  value: _power.toDouble(),
-                  min: 0,
-                  max: 30,
-                  divisions: 30,
-                  onChanged: (v) => setState(() => _power = v.round()),
-                ),
-              ),
-              Text('$_power\ndbm', textAlign: TextAlign.center, style: const TextStyle(fontSize: 20)),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text('RSSI', style: GoogleFonts.manrope(fontSize: 32, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Text('Close', style: TextStyle(fontSize: 20)),
-              Expanded(
-                child: Slider(
-                  value: _rssi,
-                  min: 0,
-                  max: 1,
-                  onChanged: (v) => setState(() => _rssi = v),
-                ),
-              ),
-              const Text('Far', style: TextStyle(fontSize: 20)),
-            ],
-          ),
-          const SizedBox(height: 28),
-          FilledButton(
-            onPressed: _busy ? null : _restartRfidController,
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF0C4A7B),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            child: Text(
-              _busy ? 'RESTARTING…' : 'Restart RFID Controller',
-              style: GoogleFonts.manrope(fontSize: 30, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
+    return const CarbonScaffold(
+      pageTitle: '',
+      actions: [],
+      body: ColoredBox(
+        color: Colors.white,
+        child: SizedBox.expand(),
       ),
     );
   }
