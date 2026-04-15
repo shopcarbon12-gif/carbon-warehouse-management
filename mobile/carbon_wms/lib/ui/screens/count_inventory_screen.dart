@@ -1245,10 +1245,10 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
           labelPainter.dispose();
 
           final fixedH = padTop + padBottom + labelH + heroH + procH + fileH + overH;
-          final gap = math.max(0.0, (constraints.maxHeight - fixedH) / gapCount);
-          // Tighten under label only: removes ~4px bottom overflow while keeping inter-card gaps equal.
-          const double underLabelTighten = 4;
-          final gapUnderLabel = math.max(0.0, gap - underLabelTighten);
+          final slack = constraints.maxHeight - fixedH;
+          // Reserve a few px so label measurement / subpixels don't bottom-overflow; all gaps stay equal.
+          const double slackReserve = 4;
+          final gap = math.max(0.0, (slack - slackReserve) / gapCount);
 
           return ColoredBox(
             color: Colors.white,
@@ -1258,7 +1258,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text('Inventory Management Terminal', style: labelStyle),
-                  SizedBox(height: gapUnderLabel),
+                  SizedBox(height: gap),
                   SizedBox(
                     height: heroH,
                     child: Container(
