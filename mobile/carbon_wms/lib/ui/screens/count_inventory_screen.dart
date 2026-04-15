@@ -1243,7 +1243,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
             ),
             const SizedBox(height: 16),
             SizedBox(
-              height: 148,
+              height: 140,
               child: Container(
                 color: const Color(0xFFE7EBEB),
                 padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
