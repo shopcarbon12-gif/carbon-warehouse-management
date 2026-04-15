@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
@@ -1227,246 +1228,270 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
           ),
         ),
       ),
-      body: ColoredBox(
-        color: Colors.white,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-          children: [
-            Text(
-              'Inventory Management Terminal',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 3.0,
-                color: const Color(0xFF5A6464),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 148,
-              child: Container(
-                color: const Color(0xFFE7EBEB),
-                padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-                child: Center(
-                  child: FractionallySizedBox(
-                    widthFactor: 0.9,
-                    alignment: Alignment.center,
-                    child: RichText(
-                      textAlign: TextAlign.left,
-                      text: TextSpan(
-                        style: GoogleFonts.manrope(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
-                          height: 1.38,
-                          color: const Color(0xFF11181C),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          const double padTop = 6;
+          const double padBottom = 6;
+          const double heroH = 148;
+          const double procH = 145;
+          const double fileH = 112;
+          const double overH = 152;
+          const int gapCount = 4;
+
+          final labelStyle = GoogleFonts.spaceGrotesk(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 3.0,
+            color: const Color(0xFF5A6464),
+          );
+          final labelPainter = TextPainter(
+            text: TextSpan(text: 'Inventory Management Terminal', style: labelStyle),
+            textDirection: TextDirection.ltr,
+            maxLines: 1,
+          )..layout(maxWidth: math.max(0.0, constraints.maxWidth - 32));
+          final labelH = labelPainter.height;
+          labelPainter.dispose();
+
+          final fixedH = padTop + padBottom + labelH + heroH + procH + fileH + overH;
+          final gap = math.max(0.0, (constraints.maxHeight - fixedH) / gapCount);
+
+          return ColoredBox(
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, padTop, 16, padBottom),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Inventory Management Terminal', style: labelStyle),
+                  SizedBox(height: gap),
+                  SizedBox(
+                    height: heroH,
+                    child: Container(
+                      color: const Color(0xFFE7EBEB),
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                      child: Center(
+                        child: FractionallySizedBox(
+                          widthFactor: 0.9,
+                          alignment: Alignment.center,
+                          child: RichText(
+                            textAlign: TextAlign.left,
+                            text: TextSpan(
+                              style: GoogleFonts.manrope(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.2,
+                                height: 1.38,
+                                color: const Color(0xFF11181C),
+                              ),
+                              children: const [
+                                TextSpan(text: 'Upload to '),
+                                TextSpan(text: 'CARBON', style: TextStyle(color: Color(0xFF009496), fontWeight: FontWeight.w800)),
+                                TextSpan(text: '\nORLANDO\nWAREHOUSE '),
+                                TextSpan(text: '001', style: TextStyle(color: Color(0xFF0E8E9A), fontWeight: FontWeight.w800)),
+                              ],
+                            ),
+                          ),
                         ),
-                        children: const [
-                          TextSpan(text: 'Upload to '),
-                          TextSpan(text: 'CARBON', style: TextStyle(color: Color(0xFF009496), fontWeight: FontWeight.w800)),
-                          TextSpan(text: '\nORLANDO\nWAREHOUSE '),
-                          TextSpan(text: '001', style: TextStyle(color: Color(0xFF0E8E9A), fontWeight: FontWeight.w800)),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: gap),
+                  SizedBox(
+                    height: procH,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAFAFA),
+                        border: const Border(left: BorderSide(color: Color(0xFF009496), width: 6)),
+                        borderRadius: BorderRadius.circular(2),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x14000000),
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF009496),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'TOTAL PROCESSING LOAD',
+                                style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 4.0,
+                                  color: const Color(0xFF71717A),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'NO ITEMS SCANNED',
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2.2,
+                              color: const Color(0xFF009496),
+                              height: 1.0,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 145,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFAFAFA),
-                  border: const Border(left: BorderSide(color: Color(0xFF009496), width: 6)),
-                  borderRadius: BorderRadius.circular(2),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x14000000),
-                      blurRadius: 6,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF009496),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'TOTAL PROCESSING LOAD',
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 4.0,
-                            color: const Color(0xFF71717A),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'NO ITEMS SCANNED',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2.2,
-                        color: const Color(0xFF009496),
-                        height: 1.0,
+                  SizedBox(height: gap),
+                  SizedBox(
+                    height: fileH,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0F5F4),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 112,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0F5F4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                padding: const EdgeInsets.all(24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF009496),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                            child: const Icon(
-                              Icons.description_outlined,
-                              color: Colors.white,
-                              size: 24,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  fileNameValue,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.manrope(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF11181C),
-                                  ),
-                                ),
-                                Text(
-                                  fileStatusValue,
-                                  style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 2.2,
-                                    color: const Color(0xFF009496),
-                                    height: 1.0,
-                ),
-              ),
-            ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 152,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE7EBEB),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(2),
-                    onTap: () {
-                      setState(() => _overrideEntireCloudQuantities = !_overrideEntireCloudQuantities);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+                      padding: const EdgeInsets.all(24),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Override Entire Cloud\nQuantities',
-                                    style: GoogleFonts.manrope(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      height: 1.35,
-                                      color: const Color(0xFF11181C),
-                                    ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF009496),
+                                    borderRadius: BorderRadius.circular(2),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '- if checked: replaced existing\nquantities and zero missing items',
-                                    maxLines: 2,
-                                    style: GoogleFonts.spaceGrotesk(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      height: 1.45,
-                                      color: const Color(0xFFBF2E2E),
-                                    ),
+                                  child: const Icon(
+                                    Icons.description_outlined,
+                                    color: Colors.white,
+                                    size: 24,
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: Checkbox(
-                              value: _overrideEntireCloudQuantities,
-                              onChanged: (next) {
-                                setState(() => _overrideEntireCloudQuantities = next ?? false);
-                              },
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                              side: const BorderSide(color: Color(0xFF7C8A8A), width: 2),
-                              activeColor: const Color(0xFF009496),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        fileNameValue,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.manrope(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                          color: const Color(0xFF11181C),
+                                        ),
+                                      ),
+                                      Text(
+                                        fileStatusValue,
+                                        style: GoogleFonts.spaceGrotesk(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 2.2,
+                                          color: const Color(0xFF009496),
+                                          height: 1.0,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
+                  SizedBox(height: gap),
+                  SizedBox(
+                    height: overH,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE7EBEB),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(2),
+                          onTap: () {
+                            setState(() => _overrideEntireCloudQuantities = !_overrideEntireCloudQuantities);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 4),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Override Entire Cloud\nQuantities',
+                                          style: GoogleFonts.manrope(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w700,
+                                            height: 1.35,
+                                            color: const Color(0xFF11181C),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '- if checked: replaced existing\nquantities and zero missing items',
+                                          maxLines: 2,
+                                          style: GoogleFonts.spaceGrotesk(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                            height: 1.45,
+                                            color: const Color(0xFFBF2E2E),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: Checkbox(
+                                    value: _overrideEntireCloudQuantities,
+                                    onChanged: (next) {
+                                      setState(() => _overrideEntireCloudQuantities = next ?? false);
+                                    },
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                                    side: const BorderSide(color: Color(0xFF7C8A8A), width: 2),
+                                    activeColor: const Color(0xFF009496),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
