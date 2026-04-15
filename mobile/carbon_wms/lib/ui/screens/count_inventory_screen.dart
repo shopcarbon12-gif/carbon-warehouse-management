@@ -793,7 +793,7 @@ class _CountItemContainer extends StatefulWidget {
 }
 
 class _CountItemContainerState extends State<_CountItemContainer> {
-  static const _collapsedBodyHeight = 58.0;
+  static const _collapsedBodyHeight = 65.0;
 
   bool _expanded = false;
 
