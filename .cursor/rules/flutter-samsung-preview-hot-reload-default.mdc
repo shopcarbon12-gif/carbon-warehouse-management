@@ -1,0 +1,13 @@
+---
+description: Samsung device preview — default to hot reload (r) only; hard refresh only when user asks
+alwaysApply: true
+---
+
+# Flutter on Samsung — hot reload default
+
+When the user is iterating on **`mobile/carbon_wms`** UI (e.g. Count / Commit) and says **`r`**, **`just r`**, or similar:
+
+1. **Default:** **Hot reload only** — use the existing `flutter run` session (e.g. send **SIGUSR1** to the `flutter_tools.snapshot run` process, or the interactive **`r`** in that terminal). **Do not** force-stop the app or start a fresh `flutter run` unless they ask for that.
+2. **Hard refresh** (force-stop + fresh `flutter run`, optionally then `r`): run **only** when the user explicitly asks — e.g. *hard refresh*, *force-stop*, *fresh run*, *hard stop*, or they say updates are not showing after normal `r`.
+
+Optional script **`mobile/carbon_wms/scripts/hard-refresh-samsung.sh`** is for **explicit hard-refresh** workflows, not the default for every `r`.

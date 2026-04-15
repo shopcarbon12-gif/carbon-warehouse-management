@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Explicit hard refresh only: pkill flutter run, force-stop app, fresh flutter run, then hot reload.
+# Default Samsung iteration is hot reload (r) on an existing session — see .cursor/rules/flutter-samsung-preview-hot-reload-default.mdc
 set -euo pipefail
 export PATH="/home/carbondev/development/flutter/bin:$PATH"
 DEVICE="${1:-adb-R5CY11AYZJW-5zQ0BJ._adb-tls-connect._tcp}"

@@ -1,23 +1,21 @@
 ---
-description: After editing Carbon WMS Flutter (mobile/carbon_wms), run release APK build and report output path
+description: Carbon WMS Flutter — release APK only on explicit release request; how to build when asked
 alwaysApply: true
 ---
 
-# Flutter APK — rebuild after mobile changes
+# Flutter APK — release build when requested
 
 **After mobile work:** Per **`git-push-deploy-user-only.mdc`**, **commit and push** when the task is done if there are changes. **Do not** run Coolify **`deploy:coolify`** unless the user asks to deploy.
 
-When **this session** changes any file under **`mobile/carbon_wms/`** (including `packages/carbon_*_driver`, `android/`, `pubspec.yaml`, `lib/**/*.dart`, or `scripts/build-release.sh`), **before finishing the turn** you must:
+When **this session** changes any file under **`mobile/carbon_wms/`** (including `packages/carbon_*_driver`, `android/`, `pubspec.yaml`, `lib/**/*.dart`, or `scripts/build-release.sh`):
 
-1. **Run a release APK build** so the user always gets an up-to-date APK, unless they explicitly asked to skip the build.
-2. Build runs on **Linux only** — from the repo root:
+1. **Do not** run **`build-release.sh`** by default. Run it **only** when the user **explicitly** asks for a **release APK**, **ship**, **`build-release`**, **versioned install**, or the task is clearly **release / OTA** delivery. Skip when they want **hot reload only** (**`r` only**), **no APK**, or small UI iteration — see **`flutter-samsung-preview-hot-reload-default.mdc`**.
+2. **When you do run a release build:** use **Linux** only — from the repo root:
    ```bash
    bash mobile/carbon_wms/scripts/build-release.sh
    ```
-3. **Confirm** exit success and report the APK path:
-   - **`~/CarbonWmsRelease/CarbonWMS V{pubspec-version}.apk`** — canonical Linux path
-   - The script also SCPs the APK to **`D:\CarbonWmsRelease\`** on the Windows PC automatically.
+3. **Confirm** exit success and report **`~/CarbonWmsRelease/CarbonWMS V{pubspec-version}.apk`** (semver from `pubspec.yaml`; the script may also SCP to **`D:\CarbonWmsRelease\`** on Windows when configured).
 
-**Exceptions (no build required):** edits that touch **only** `mobile/carbon_wms/README.md` or other docs with **no** code/config change.
+**Docs-only exception:** no build for edits that touch **only** `mobile/carbon_wms/README.md` or other docs with **no** code/config change.
 
-**Do not** tell the user to run the build manually if you can run it here.
+When the user **does** ask for a release build, run it here; do not only tell them to run it manually.
