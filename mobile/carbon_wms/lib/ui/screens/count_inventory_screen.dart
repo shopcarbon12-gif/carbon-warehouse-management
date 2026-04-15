@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
@@ -1228,7 +1227,6 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
           const double procH = 145;
           const double fileH = 112;
           const double overH = 148;
-          const int gapCount = 4;
 
           final labelStyle = GoogleFonts.spaceGrotesk(
             fontSize: 14,
@@ -1236,19 +1234,6 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
             letterSpacing: 3.0,
             color: const Color(0xFF5A6464),
           );
-          final labelPainter = TextPainter(
-            text: TextSpan(text: 'Inventory Management Terminal', style: labelStyle),
-            textDirection: TextDirection.ltr,
-            maxLines: 1,
-          )..layout(maxWidth: math.max(0.0, constraints.maxWidth - 32));
-          final labelH = labelPainter.height;
-          labelPainter.dispose();
-
-          final fixedH = padTop + padBottom + labelH + heroH + procH + fileH + overH;
-          final slack = constraints.maxHeight - fixedH;
-          // Reserve a few px so label measurement / subpixels don't bottom-overflow; all gaps stay equal.
-          const double slackReserve = 4;
-          final gap = math.max(0.0, (slack - slackReserve) / gapCount);
 
           return ColoredBox(
             color: Colors.white,
@@ -1258,7 +1243,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text('Inventory Management Terminal', style: labelStyle),
-                  SizedBox(height: gap),
+                  const Expanded(flex: 1, child: SizedBox.shrink()),
                   SizedBox(
                     height: heroH,
                     child: Container(
@@ -1290,7 +1275,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                       ),
                     ),
                   ),
-                  SizedBox(height: gap),
+                  const Expanded(flex: 1, child: SizedBox.shrink()),
                   SizedBox(
                     height: procH,
                     child: Container(
@@ -1348,7 +1333,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                       ),
                     ),
                   ),
-                  SizedBox(height: gap),
+                  const Expanded(flex: 1, child: SizedBox.shrink()),
                   SizedBox(
                     height: fileH,
                     child: Container(
@@ -1412,7 +1397,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                       ),
                     ),
                   ),
-                  SizedBox(height: gap),
+                  const Expanded(flex: 1, child: SizedBox.shrink()),
                   SizedBox(
                     height: overH,
                     child: Container(
