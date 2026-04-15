@@ -1177,7 +1177,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                               const SizedBox(width: 8),
                               Text(
                                 'UPLOAD',
-                                style: GoogleFonts.manrope(
+                                style: GoogleFonts.spaceGrotesk(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: 0.5,
@@ -1211,7 +1211,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                               const SizedBox(width: 8),
                               Text(
                                 'SAVE TO FILE',
-                                style: GoogleFonts.manrope(
+                                style: GoogleFonts.spaceGrotesk(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: 0.5,
@@ -1355,8 +1355,8 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                       padding: const EdgeInsets.all(24),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
+            children: [
+              Expanded(
                             child: Row(
                               children: [
                                 Container(
@@ -1370,10 +1370,10 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                     Icons.description_outlined,
                                     color: Colors.white,
                                     size: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1396,9 +1396,9 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                           letterSpacing: 2.2,
                                           color: const Color(0xFF009496),
                                           height: 1.0,
-                                        ),
-                                      ),
-                                    ],
+                ),
+              ),
+            ],
                                   ),
                                 ),
                               ],
@@ -1581,16 +1581,16 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
                   width: double.infinity,
                   height: 56,
                   child: FilledButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop(
-                        _CountInventoryModuleSettings(rfidPowerDbm: _power, rssiDistance: _rssi),
-                      );
-                    },
+          onPressed: () {
+            Navigator.of(context).pop(
+              _CountInventoryModuleSettings(rfidPowerDbm: _power, rssiDistance: _rssi),
+            );
+          },
                     style: FilledButton.styleFrom(
                       backgroundColor: _primary,
                       foregroundColor: Colors.white,
                       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                      textStyle: GoogleFonts.manrope(
+                      textStyle: GoogleFonts.spaceGrotesk(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 2,
@@ -1610,7 +1610,7 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
                       foregroundColor: _primary,
                       side: const BorderSide(color: _primary, width: 2),
                       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                      textStyle: GoogleFonts.manrope(
+                      textStyle: GoogleFonts.spaceGrotesk(
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 2,
@@ -1635,7 +1635,7 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
         color: Colors.white,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
-          children: [
+        children: [
             Text(
               'RFID Settings',
               style: GoogleFonts.manrope(
@@ -1660,8 +1660,8 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
+            children: [
+              Expanded(
                   child: Text(
                     'ANTENNA POWER OUTPUT',
                     style: GoogleFonts.manrope(
@@ -1736,8 +1736,8 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
+            children: [
+              Expanded(
                   child: Text(
                     'RSSI SENSITIVITY',
                     style: GoogleFonts.manrope(
@@ -1835,9 +1835,9 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: _onSurface,
-                        ),
-                      ),
-                    ],
+            ),
+          ),
+        ],
                   ),
                 ),
                 const SizedBox(width: 16),
