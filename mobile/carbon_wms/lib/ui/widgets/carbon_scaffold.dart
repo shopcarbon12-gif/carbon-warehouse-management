@@ -217,43 +217,52 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
               ),
             ),
             const SizedBox(width: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  'Carbon',
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                    color: mainColor,
-                  ),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Carbon',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                        color: mainColor,
+                      ),
+                    ),
+                    WmsText(color: wmsTeal, fontSize: 18),
+                    if (label.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 7),
+                        child: Text(
+                          '/',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: wmsTeal,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                WmsText(color: wmsTeal, fontSize: 18),
-              ],
+              ),
             ),
-            if (label.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 7),
-                child: Text(
-                  '/',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black,
-                  ),
-                ),
-              ),
-              Text(
-                label,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                  color: wmsTeal,
-                ),
-              ),
-            ],
           ],
         ),
         actions: widget.actions,

@@ -42,6 +42,21 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   bool _busyLookup = false;
   String? _status;
   _CountInventoryModuleSettings _moduleSettings = _CountInventoryModuleSettings.defaults;
+  final List<int> _sampleRowIds = List<int>.generate(20, (i) => i + 1);
+  int _rowResetSeed = 0;
+  RfidManager? _rfidManager;
+
+  String _sampleDescription(int id) {
+    if (id == 2) {
+      return 'TYLER SHIRT BLACK S  ·  sample 2 text is not truncated, row stays fixed and';
+    }
+    return 'TYLER SHIRT BLACK S  ·  sample $id';
+  }
+
+  List<String> _sampleEpcs(int id) => List<String>.generate(
+        3,
+        (i) => 'SAMPLE-EPC-$id-${i + 1}',
+      );
 
   @override
   void initState() {
@@ -52,11 +67,20 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _rfidManager ??= context.read<RfidManager>();
+  }
+
+  @override
   void dispose() {
     _readsSub?.cancel();
     _triggerSub?.cancel();
     _scanInactivityTimer?.cancel();
-    unawaited(context.read<RfidManager>().stopLocateScanning());
+    final rfid = _rfidManager;
+    if (rfid != null) {
+      unawaited(rfid.stopLocateScanning());
+    }
     super.dispose();
   }
 
@@ -283,6 +307,48 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     );
   }
 
+  Future<void> _openEpcList({
+    required String title,
+    required List<String> epcs,
+  }) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _CountEpcListScreen(title: title, epcs: epcs),
+      ),
+    );
+  }
+
+  Future<bool> _confirmDeleteItem() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmation'),
+        content: const Text('Delete item? (remove from scan list only)'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _resetScreenToDefault() async {
+    if (_scanOn) {
+      await _stopScan(reason: 'Scan stopped');
+    }
+    if (!mounted) return;
+    setState(() {
+      _epcRows.clear();
+      _groupedRows.clear();
+      _sampleRowIds
+        ..clear()
+        ..addAll(List<int>.generate(20, (i) => i + 1));
+      _rowResetSeed += 1;
+      _status = 'Reset complete';
+    });
+  }
+
   Future<String?> _saveSessionCsvToDevice() async {
     final now = DateTime.now();
     final header =
@@ -318,10 +384,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           groupedRows: groups,
           onSaveCsv: _saveSessionCsvToDevice,
           buildBackendPreviewPayload: () => _buildBackendPreviewPayload(groups),
-          settingsButton: IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: _openModuleSettings,
-          ),
         ),
       ),
     );
@@ -386,7 +448,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     const summaryBoxHeight = 60.0;
 
     return CarbonScaffold(
-      pageTitle: 'count',
+      pageTitle: 'count & Sync',
       actions: [
         IconButton(
           icon: const Icon(Icons.settings_outlined),
@@ -484,22 +546,48 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                               if (!g.cached && (g.sku.isNotEmpty || g.name.isNotEmpty)) 'Details source: catalog lookup',
                             ];
                             return _CountItemContainer(
+                              rowKey: 'real-${g.assetId}-$_rowResetSeed',
                               sku: g.sku.trim().isEmpty ? g.assetId : g.sku,
                               description: desc,
                               qtyText: 'x${g.qty}',
                               expandedLines: extra,
+                              onQtyTap: () => _openEpcList(
+                                title: g.sku.trim().isEmpty ? g.assetId : g.sku,
+                                epcs: (g.epcs.toList()..sort()),
+                              ),
+                              onDelete: () {
+                                setState(() {
+                                  for (final epc in g.epcs) {
+                                    _epcRows.remove(epc);
+                                  }
+                                  _groupedRows.remove(g.assetId);
+                                });
+                              },
+                              confirmDelete: _confirmDeleteItem,
                             );
                           },
                         )
-                      : ListView(
+                      : ListView.separated(
                           padding: const EdgeInsets.only(bottom: 12),
-                          children: const [
-                            _CountItemContainer(
+                          itemCount: _sampleRowIds.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (_, i) {
+                            final id = _sampleRowIds[i];
+                            return _CountItemContainer(
+                              rowKey: 'sample-$id-$_rowResetSeed',
                               sku: '112225207S',
-                              description: 'TYLER SHIRT BLACK S  ·  example',
-                              qtyText: 'x1',
-                            ),
-                          ],
+                              description: _sampleDescription(id),
+                              qtyText: 'x$id',
+                              onQtyTap: () => _openEpcList(
+                                title: 'sample $id',
+                                epcs: _sampleEpcs(id),
+                              ),
+                              onDelete: () {
+                                setState(() => _sampleRowIds.remove(id));
+                              },
+                              confirmDelete: _confirmDeleteItem,
+                            );
+                          },
                         ),
                 ),
               ),
@@ -549,6 +637,21 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                           ),
                         ),
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: FilledButton(
+                      onPressed: _resetScreenToDefault,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF6A7575),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: const Icon(Icons.restart_alt, size: 20),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -777,24 +880,32 @@ class _CountBottomShortcuts extends StatelessWidget {
 
 class _CountItemContainer extends StatefulWidget {
   const _CountItemContainer({
+    required this.rowKey,
     required this.sku,
     required this.description,
     required this.qtyText,
     this.expandedLines = const <String>[],
+    this.onQtyTap,
+    this.onDelete,
+    this.confirmDelete,
   });
 
+  final String rowKey;
   final String sku;
   final String description;
   final String qtyText;
   final List<String> expandedLines;
+  final VoidCallback? onQtyTap;
+  final VoidCallback? onDelete;
+  final Future<bool> Function()? confirmDelete;
 
   @override
   State<_CountItemContainer> createState() => _CountItemContainerState();
 }
 
 class _CountItemContainerState extends State<_CountItemContainer> {
-  static const _collapsedBodyHeight = 65.0;
-
+  static const _fixedContainerHeight = 45.0;
+  static const _expandedContainerHeight = 55.0;
   bool _expanded = false;
 
   @override
@@ -807,82 +918,112 @@ class _CountItemContainerState extends State<_CountItemContainer> {
       height: 1.0,
     );
 
-    return Material(
+    final content = Material(
       color: const Color(0xFFEFF3F7),
       borderRadius: BorderRadius.zero,
-      child: InkWell(
-        onTap: () => setState(() => _expanded = !_expanded),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
-          child: AnimatedSize(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeInOut,
-            alignment: Alignment.topCenter,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const horizontalPadding = 14.0 * 2;
+          const qtyGap = 10.0;
+          final qtyPainter = TextPainter(
+            text: TextSpan(text: widget.qtyText, style: GoogleFonts.spaceGrotesk(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: 0.4, height: 1.0)),
+            maxLines: 1,
+            textDirection: Directionality.of(context),
+          )..layout();
+          final textAvailableWidth = (constraints.maxWidth - horizontalPadding - qtyGap - qtyPainter.width).clamp(0.0, double.infinity);
+          final descPainter = TextPainter(
+            text: TextSpan(text: widget.description, style: descStyle),
+            maxLines: 1,
+            textDirection: Directionality.of(context),
+          )..layout(maxWidth: textAvailableWidth);
+          final canExpand = descPainter.didExceedMaxLines;
+
+          return InkWell(
+            onTap: canExpand ? () => setState(() => _expanded = !_expanded) : null,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+              child: AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  height: _expanded ? _expandedContainerHeight : _fixedContainerHeight,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        'SKU:  ${widget.sku}',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.textMain,
-                          letterSpacing: 0.2,
-                          height: 1.0,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      SizedBox(
-                        height: _expanded ? null : _collapsedBodyHeight,
-                        width: double.infinity,
-                        child: ClipRect(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'SKU:  ${widget.sku}',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.textMain,
+                                letterSpacing: 0.2,
+                                height: 1.0,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            SizedBox(
+                              width: double.infinity,
+                              child: Text(
                                 widget.description,
                                 style: descStyle,
-                                maxLines: _expanded ? null : 1,
-                                overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                                maxLines: _expanded ? 2 : 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              if (_expanded && widget.expandedLines.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                for (final line in widget.expandedLines)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Text(line, style: descStyle),
-                                  ),
-                              ],
-                            ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      GestureDetector(
+                        onTap: widget.onQtyTap,
+                        behavior: HitTestBehavior.opaque,
+                        child: Text(
+                          widget.qtyText,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                            letterSpacing: 0.4,
+                            height: 1.0,
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: Text(
-                    widget.qtyText,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.primary,
-                      letterSpacing: 0.4,
-                      height: 1.0,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
+    );
+
+    if (widget.onDelete == null || widget.confirmDelete == null) {
+      return content;
+    }
+
+    return Dismissible(
+      key: ValueKey<String>(widget.rowKey),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        color: const Color(0xFFBF2E2E),
+        child: const Icon(Icons.delete_outline, color: Colors.white, size: 26),
+      ),
+      confirmDismiss: (_) async {
+        final ok = await widget.confirmDelete!.call();
+        if (ok) widget.onDelete!.call();
+        return ok;
+      },
+      child: content,
     );
   }
 }
@@ -949,18 +1090,62 @@ class _CountInventoryItemDetailsScreen extends StatelessWidget {
   }
 }
 
+class _CountEpcListScreen extends StatelessWidget {
+  const _CountEpcListScreen({
+    required this.title,
+    required this.epcs,
+  });
+
+  final String title;
+  final List<String> epcs;
+
+  @override
+  Widget build(BuildContext context) {
+    return CarbonScaffold(
+      pageTitle: 'EPC LIST',
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: Text(
+              title,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textMain,
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView.separated(
+              itemCount: epcs.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (_, i) => ListTile(
+                dense: true,
+                title: Text(
+                  epcs[i],
+                  style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CountInventoryContinueScreen extends StatefulWidget {
   const _CountInventoryContinueScreen({
     required this.groupedRows,
     required this.onSaveCsv,
     required this.buildBackendPreviewPayload,
-    required this.settingsButton,
   });
 
   final List<_GroupedRow> groupedRows;
   final Future<String?> Function() onSaveCsv;
   final Map<String, dynamic> Function() buildBackendPreviewPayload;
-  final Widget settingsButton;
 
   @override
   State<_CountInventoryContinueScreen> createState() => _CountInventoryContinueScreenState();
@@ -1003,74 +1188,303 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return CarbonScaffold(
-      pageTitle: 'COUNT CONTINUE',
-      actions: [widget.settingsButton],
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-        children: [
-          Text('Upload to Carbon Jeans (001 - Orlando Warehouse)', style: GoogleFonts.manrope(fontSize: 24, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 14),
-          CheckboxListTile(
-            value: _overrideExisting,
-            onChanged: (v) => setState(() => _overrideExisting = v == true),
-            title: Text(
-              'Override Entire Cloud Quantities (Warning)',
-              style: GoogleFonts.manrope(fontSize: 22, fontWeight: FontWeight.w700, color: const Color(0xFFBF2E2E)),
+    final totalRows = widget.groupedRows.fold<int>(0, (sum, g) => sum + g.qty);
+    final displayRows = totalRows == 0 ? 1248 : totalRows;
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5FAFA),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              child: Row(
+                children: [
+                  Text(
+                    'Carbon',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                      color: const Color(0xFF171D1D),
+                    ),
+                  ),
+                  Text(
+                    'WMS',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                      color: const Color(0xFF009496),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '/',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF9AA4A4),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'COUNT',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2.4,
+                      color: const Color(0xFF009496),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            subtitle: Text('If checked: replace existing quantities and zero missing items', style: GoogleFonts.manrope(fontSize: 16)),
-            controlAffinity: ListTileControlAffinity.trailing,
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1C2828) : const Color(0xFFF6F6F6),
-              borderRadius: BorderRadius.circular(8),
+            Expanded(
+              child: Stack(
+                children: [
+                  ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 98),
+                    children: [
+              Container(
+                color: const Color(0xFFF0F5F4),
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'INVENTORY MANAGEMENT TERMINAL',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 3.0,
+                        color: const Color(0xFF6D7979),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Upload to CARBON ORLANDO WAREHOUSE 001',
+                      style: GoogleFonts.manrope(
+                        fontSize: 48,
+                        fontWeight: FontWeight.w800,
+                        height: 0.95,
+                        color: const Color(0xFF171D1D),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                color: const Color(0xFFF6F6F6),
+                padding: const EdgeInsets.fromLTRB(12, 16, 12, 18),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(width: 4, height: 74, color: const Color(0xFF009496)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '• TOTAL PROCESSING LOAD',
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 3.2,
+                              color: const Color(0xFF6D7979),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                _formatRows(displayRows),
+                                style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 62,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -2.0,
+                                  height: 0.9,
+                                  color: const Color(0xFF171D1D),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Text(
+                                  'DATA\nROWS',
+                                  style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 2.0,
+                                    color: const Color(0xFF009496),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                color: const Color(0xFFEAEFEE),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      color: const Color(0xFF008284),
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.description_outlined, color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('inventory_audit_q3.csv', style: GoogleFonts.manrope(fontSize: 20, fontWeight: FontWeight.w700)),
+                          Text(
+                            'READY FOR PROCESSING',
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.8,
+                              color: const Color(0xFF6D7979),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text('Change File', style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF009496))),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                color: const Color(0xFFF0F5F4),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Override Entire Cloud Quantities', style: GoogleFonts.manrope(fontSize: 26, fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '- if checked: replaced existing quantities and zero missing items',
+                            style: GoogleFonts.manrope(fontSize: 15, fontWeight: FontWeight.w600, color: const Color(0xFFBA1A1A)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => setState(() => _overrideExisting = !_overrideExisting),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: const Color(0xFF7E8A8A), width: 2),
+                        ),
+                        alignment: Alignment.center,
+                        child: _overrideExisting
+                            ? const Icon(Icons.check, size: 20, color: Color(0xFF009496))
+                            : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_status != null) ...[
+                const SizedBox(height: 12),
+                Text(_status!, style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primary)),
+              ],
+                    ],
+                  ),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 64,
+                              child: FilledButton(
+                                onPressed: null,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF009496),
+                                  disabledBackgroundColor: const Color(0xFF009496),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.cloud_upload, size: 18),
+                                    const SizedBox(height: 2),
+                                    Text('UPLOAD', style: GoogleFonts.spaceGrotesk(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 2.0)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: SizedBox(
+                              height: 64,
+                              child: FilledButton(
+                                onPressed: _saving ? null : _saveCsv,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFFE0E0E0),
+                                  foregroundColor: const Color(0xFF171D1D),
+                                  disabledBackgroundColor: const Color(0xFFE0E0E0),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.save_alt, size: 18),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _saving ? 'SAVING...' : 'SAVE TO FILE',
+                                      style: GoogleFonts.spaceGrotesk(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 2.0),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Text(
-              'Upload is currently disabled for this phase.\nCSV save is active.\nRows prepared: ${widget.groupedRows.length}',
-              style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-          ),
-          if (_status != null) ...[
-            const SizedBox(height: 10),
-            Text(_status!, style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primary)),
           ],
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton(
-                  onPressed: null,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF0C4A7B),
-                    disabledBackgroundColor: const Color(0xFF5B6E7E),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: Text('UPLOAD', style: GoogleFonts.manrope(fontSize: 30, fontWeight: FontWeight.w700)),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _saving ? null : _saveCsv,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF0C4A7B),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: Text(
-                    _saving ? 'SAVING…' : 'SAVE TO FILE',
-                    style: GoogleFonts.manrope(fontSize: 24, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
+  }
+
+  String _formatRows(int n) {
+    final s = n.toString();
+    final b = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      final rev = s.length - i;
+      b.write(s[i]);
+      if (rev > 1 && rev % 3 == 1) b.write(',');
+    }
+    return b.toString();
   }
 }
 
