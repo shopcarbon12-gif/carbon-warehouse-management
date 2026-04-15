@@ -48,3 +48,6 @@ app.*.map.json
 
 # Versioned release copy at repo root (canonical Windows drop: D:\CarbonWmsRelease)
 /CarbonWMS V*.apk
+
+# Local flutter run helper (hard-refresh script)
+/.cwms_flutter.pid

@@ -466,16 +466,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                         width: tileWidth,
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: _CountSummaryTile(
-                            label: 'Total EPCs',
+                        child: _CountSummaryTile(
+                          label: 'Total EPCs',
                             value: summaryValueText,
-                            icon: Icons.inventory_2_outlined,
+                          icon: Icons.inventory_2_outlined,
                             boxWidth: summaryBoxWidth,
                             boxHeight: summaryBoxHeight,
-                            tileColor: tileColor,
-                            textColor: textColor,
+                          tileColor: tileColor,
+                          textColor: textColor,
                             labelColor: summaryLabelColor,
-                            watermarkColor: watermarkColor,
+                          watermarkColor: watermarkColor,
                           ),
                         ),
                       ),
@@ -484,16 +484,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                         width: tileWidth,
                         child: Align(
                           alignment: Alignment.centerRight,
-                          child: _CountSummaryTile(
-                            label: 'Total SKUs',
+                        child: _CountSummaryTile(
+                          label: 'Total SKUs',
                             value: summarySkuValueText,
-                            icon: Icons.precision_manufacturing_outlined,
+                          icon: Icons.precision_manufacturing_outlined,
                             boxWidth: summaryBoxWidth,
                             boxHeight: summaryBoxHeight,
-                            tileColor: tileColor,
-                            textColor: textColor,
+                          tileColor: tileColor,
+                          textColor: textColor,
                             labelColor: summaryLabelColor,
-                            watermarkColor: watermarkColor,
+                          watermarkColor: watermarkColor,
                           ),
                         ),
                       ),
@@ -509,17 +509,17 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                 child: ColoredBox(
                   color: Colors.transparent,
                   child: hasRealRows
-                      ? ListView.separated(
-                          padding: const EdgeInsets.only(bottom: 12),
+                    ? ListView.separated(
+                        padding: const EdgeInsets.only(bottom: 12),
                           itemCount: groups.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
-                          itemBuilder: (_, i) {
-                            final g = groups[i];
-                            final descParts = [g.name, g.color, g.size]
-                                .map((s) => s.trim())
-                                .where((s) => s.isNotEmpty)
-                                .toList();
-                            final desc = descParts.isEmpty ? 'ITEM DESCRIPTION' : descParts.join(' ');
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) {
+                          final g = groups[i];
+                          final descParts = [g.name, g.color, g.size]
+                              .map((s) => s.trim())
+                              .where((s) => s.isNotEmpty)
+                              .toList();
+                          final desc = descParts.isEmpty ? 'ITEM DESCRIPTION' : descParts.join(' ');
                             final extra = <String>[
                               'Asset ID: ${g.assetId}',
                               if (g.vendor.trim().isNotEmpty) 'Vendor: ${g.vendor}',
@@ -527,11 +527,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                               if (g.cached) 'Details source: offline cache',
                               if (!g.cached && (g.sku.isNotEmpty || g.name.isNotEmpty)) 'Details source: catalog lookup',
                             ];
-                            return _CountItemContainer(
+                          return _CountItemContainer(
                               rowKey: 'real-${g.assetId}',
-                              sku: g.sku.trim().isEmpty ? g.assetId : g.sku,
-                              description: desc,
-                              qtyText: 'x${g.qty}',
+                            sku: g.sku.trim().isEmpty ? g.assetId : g.sku,
+                            description: desc,
+                            qtyText: 'x${g.qty}',
                               expandedLines: extra,
                               onQtyTap: () => _openEpcList(
                                 title: g.sku.trim().isEmpty ? g.assetId : g.sku,
@@ -546,9 +546,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                                 });
                               },
                               confirmDelete: _confirmDeleteItem,
-                            );
-                          },
-                        )
+                          );
+                        },
+                      )
                       : Center(
                           child: Text(
                             'No items scanned yet',
@@ -569,30 +569,30 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: SizedBox(
+                    child: SizedBox(
                         width: continueButtonWidth,
                         height: 40,
-                        child: FilledButton(
-                          onPressed: _connecting ? null : _toggleScan,
-                          style: FilledButton.styleFrom(
+                      child: FilledButton(
+                        onPressed: _connecting ? null : _toggleScan,
+                        style: FilledButton.styleFrom(
                             backgroundColor: _scanOn ? const Color(0xFFBF2E2E) : const Color(0xFF0A7C80),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                          ),
-                          child: Row(
-                            children: [
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        child: Row(
+                          children: [
                               Expanded(
                                 child: Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text(
-                                    _scanOn ? 'STOP' : 'START',
-                                    style: GoogleFonts.spaceGrotesk(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 1.8,
-                                    ),
-                                  ),
+                              _scanOn ? 'STOP' : 'START',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.8,
+                              ),
+                            ),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -629,35 +629,35 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                     child: Align(
                       alignment: Alignment.centerRight,
                       child: IntrinsicWidth(
-                        child: SizedBox(
+                    child: SizedBox(
                           height: 40,
-                          child: FilledButton(
+                      child: FilledButton(
                             onPressed: _openContinue,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF2BA3A3),
-                              disabledBackgroundColor: const Color(0xFF2BA3A3),
-                              foregroundColor: Colors.white,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF2BA3A3),
+                          disabledBackgroundColor: const Color(0xFF2BA3A3),
+                          foregroundColor: Colors.white,
                               disabledForegroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: Row(
+                        ),
+                        child: Row(
                               mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'CONTINUE',
-                                  style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 1.5,
+                          children: [
+                            Text(
+                              'CONTINUE',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.5,
                                     color: Colors.white,
-                                  ),
-                                ),
+                              ),
+                            ),
                                 const SizedBox(width: 8),
                                 const Icon(Icons.arrow_forward, size: 20, color: Colors.white),
-                              ],
+                          ],
                             ),
                           ),
                         ),
@@ -910,30 +910,30 @@ class _CountItemContainerState extends State<_CountItemContainer> {
 
           return InkWell(
             onTap: canExpand ? () => setState(() => _expanded = !_expanded) : null,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
               child: AnimatedSize(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeInOut,
                 alignment: Alignment.topCenter,
                 child: SizedBox(
                   height: _expanded ? _expandedContainerHeight : _fixedContainerHeight,
-                  child: Row(
+        child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Column(
+          children: [
+            Expanded(
+              child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
                               'SKU:  ${widget.sku}',
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: 15.5,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 15.5,
                                 fontWeight: FontWeight.w900,
-                                color: AppColors.textMain,
-                                letterSpacing: 0.2,
+                      color: AppColors.textMain,
+                      letterSpacing: 0.2,
                                 height: 1.0,
                               ),
                             ),
@@ -944,33 +944,33 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                                 widget.description,
                                 style: descStyle,
                                 maxLines: _expanded ? 2 : 1,
-                                overflow: TextOverflow.ellipsis,
+                    overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
                       GestureDetector(
                         onTap: widget.onQtyTap,
                         behavior: HitTestBehavior.opaque,
-                        child: Text(
+              child: Text(
                           widget.qtyText,
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                            letterSpacing: 0.4,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary,
+                  letterSpacing: 0.4,
                             height: 1.0,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
-          );
+          ],
+                  ),
+                ),
+        ),
+      ),
+    );
         },
       ),
     );
@@ -1151,7 +1151,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
             child: Row(
-              children: [
+        children: [
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1342,8 +1342,8 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                 padding: const EdgeInsets.all(24),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
+            children: [
+              Expanded(
                       child: Row(
                         children: [
                           Container(
@@ -1357,10 +1357,10 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                               Icons.description_outlined,
                               color: Colors.white,
                               size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -1383,9 +1383,9 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                     letterSpacing: 2.2,
                                     color: const Color(0xFF009496),
                                     height: 1.0,
-                                  ),
-                                ),
-                              ],
+                ),
+              ),
+            ],
                             ),
                           ),
                         ],
