@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
@@ -23,7 +21,6 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 const _countInvPrefsKey = 'count_inventory_module_settings_v1';
 const _assetCachePrefsKey = 'count_inventory_asset_cache_v1';
-const _previewSingleItemContainer = true;
 
 class CountInventoryScreen extends StatefulWidget {
   const CountInventoryScreen({super.key});
@@ -376,20 +373,17 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final groups = _groupedRows.values.toList()..sort((a, b) => a.assetId.compareTo(b.assetId));
     final hasRealRows = groups.isNotEmpty;
-    final showPreviewRow = !hasRealRows && _previewSingleItemContainer;
     final assetCount = _epcRows.length;
     final skuCount = groups.where((g) => g.sku.trim().isNotEmpty).length;
-    final summaryValueText = showPreviewRow ? '0' : '$assetCount';
-    final summarySkuValueText = showPreviewRow ? '0' : '$skuCount';
-    final epcSummarySizingValue = _countSummarySizingValue(summaryValueText);
-    final skuSummarySizingValue = _countSummarySizingValue(summarySkuValueText);
-    final epcSummaryTileWidth = _countSummaryTileTightWidth(label: 'Total EPCs', value: epcSummarySizingValue);
-    final skuSummaryTileWidth = _countSummaryTileTightWidth(label: 'Total SKUs', value: skuSummarySizingValue);
+    final summaryValueText = '$assetCount';
+    final summarySkuValueText = '$skuCount';
     final continueButtonWidth = _continueButtonTightWidth();
     final tileColor = isDark ? const Color(0xFF1C2828) : const Color(0xFFEEF4F3);
     final textColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
-    final mutedColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
+    final summaryLabelColor = isDark ? const Color(0xFF5C6C6C) : const Color(0xFF3F4A4A);
     final watermarkColor = isDark ? const Color(0x66A0B3B3) : const Color(0x2995A5A7);
+    const summaryBoxWidth = 132.0;
+    const summaryBoxHeight = 60.0;
 
     return CarbonScaffold(
       pageTitle: 'count',
@@ -418,58 +412,50 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 54,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: _CountSummaryTile(
-                              label: 'Total EPCs',
-                              value: summaryValueText,
-                              icon: Icons.inventory_2_outlined,
-                              tileColor: tileColor,
-                              textColor: textColor,
-                              mutedColor: mutedColor,
-                              watermarkColor: watermarkColor,
-                              width: epcSummaryTileWidth,
-                              fitValue: false,
-                            ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final tileWidth = ((constraints.maxWidth - 8) / 2).clamp(160.0, 166.0);
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: tileWidth,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _CountSummaryTile(
+                            label: 'Total EPCs',
+                            value: summaryValueText,
+                            icon: Icons.inventory_2_outlined,
+                            boxWidth: summaryBoxWidth,
+                            boxHeight: summaryBoxHeight,
+                            tileColor: tileColor,
+                            textColor: textColor,
+                            labelColor: summaryLabelColor,
+                            watermarkColor: watermarkColor,
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SizedBox(
-                      height: 54,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: _CountSummaryTile(
-                              label: 'Total SKUs',
-                              value: summarySkuValueText,
-                              icon: Icons.precision_manufacturing_outlined,
-                              tileColor: tileColor,
-                              textColor: textColor,
-                              mutedColor: mutedColor,
-                              watermarkColor: watermarkColor,
-                              width: skuSummaryTileWidth,
-                              fitValue: false,
-                            ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: tileWidth,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: _CountSummaryTile(
+                            label: 'Total SKUs',
+                            value: summarySkuValueText,
+                            icon: Icons.precision_manufacturing_outlined,
+                            boxWidth: summaryBoxWidth,
+                            boxHeight: summaryBoxHeight,
+                            tileColor: tileColor,
+                            textColor: textColor,
+                            labelColor: summaryLabelColor,
+                            watermarkColor: watermarkColor,
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                    ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 8),
@@ -478,20 +464,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
                 child: ColoredBox(
                   color: Colors.transparent,
-                  child: hasRealRows || showPreviewRow
+                  child: hasRealRows
                       ? ListView.separated(
                           padding: const EdgeInsets.only(bottom: 12),
-                          itemCount: hasRealRows ? groups.length : 20,
+                          itemCount: groups.length,
                           separatorBuilder: (_, __) => const SizedBox(height: 8),
                           itemBuilder: (_, i) {
-                            if (!hasRealRows) {
-                              final n = i + 1;
-                              return _CountItemContainer(
-                                sku: '112225207S',
-                                description: 'TYLER SHIRT BLACK S  ·  sample $n of 20',
-                                qtyText: 'x$n',
-                              );
-                            }
                             final g = groups[i];
                             final descParts = [g.name, g.color, g.size]
                                 .map((s) => s.trim())
@@ -572,7 +550,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                         width: continueButtonWidth,
                         height: 40,
                         child: FilledButton(
-                          onPressed: (hasRealRows || showPreviewRow) ? _openContinue : null,
+                          onPressed: hasRealRows ? _openContinue : null,
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF2BA3A3),
                             disabledBackgroundColor: const Color(0xFF2BA3A3),
@@ -625,34 +603,34 @@ class _CountSummaryTile extends StatelessWidget {
     required this.label,
     required this.value,
     required this.icon,
+    required this.boxWidth,
+    required this.boxHeight,
     required this.tileColor,
     required this.textColor,
-    required this.mutedColor,
+    required this.labelColor,
     required this.watermarkColor,
-    this.width,
-    this.fitValue = true,
   });
 
   final String label;
   final String value;
   final IconData icon;
+  final double boxWidth;
+  final double boxHeight;
   final Color tileColor;
   final Color textColor;
-  final Color mutedColor;
+  final Color labelColor;
   final Color watermarkColor;
-  final double? width;
-  final bool fitValue;
 
   @override
   Widget build(BuildContext context) {
-    final tile = SizedBox(
-      height: 54,
+    return SizedBox(
+      width: boxWidth,
+      height: boxHeight,
       child: Material(
         color: tileColor,
         borderRadius: BorderRadius.circular(2),
-        clipBehavior: Clip.none,
+        clipBehavior: Clip.hardEdge,
         child: Stack(
-          clipBehavior: Clip.none,
           children: [
             Positioned(
               right: 4,
@@ -660,47 +638,35 @@ class _CountSummaryTile extends StatelessWidget {
               child: Icon(icon, size: 52, color: watermarkColor),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(9, 2, 9, 2),
+              padding: const EdgeInsets.fromLTRB(9, 3, 9, 3),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     label,
                     style: GoogleFonts.manrope(
-                      fontSize: 11,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: Color.alphaBlend(const Color(0x26000000), mutedColor),
+                      color: labelColor,
                     ),
                   ),
-                  SizedBox(
-                    width: double.infinity,
-                    child: fitValue
-                        ? FittedBox(
-                            alignment: Alignment.centerLeft,
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              value,
-                              maxLines: 1,
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: 34,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -1.0,
-                                color: textColor,
-                                height: 1.0,
-                              ),
-                            ),
-                          )
-                        : Text(
-                            value,
-                            maxLines: 1,
-                            style: GoogleFonts.spaceGrotesk(
-                              fontSize: 34,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -1.0,
-                              color: textColor,
-                              height: 1.0,
-                            ),
-                          ),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.clip,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -1.0,
+                          color: textColor,
+                          height: 1.0,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -709,46 +675,7 @@ class _CountSummaryTile extends StatelessWidget {
         ),
       ),
     );
-
-    if (width == null) return tile;
-    return SizedBox(width: width, child: tile);
   }
-}
-
-String _countSummarySizingValue(String displayValue) {
-  return displayValue.length <= 5 ? '00000' : displayValue;
-}
-
-double _countSummaryTileTightWidth({required String label, required String value}) {
-  const horizontalPadding = 9.0 * 2;
-  const minContentWidth = 1.0;
-  final labelPainter = TextPainter(
-    text: TextSpan(
-      text: label,
-      style: GoogleFonts.manrope(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        color: Colors.black,
-      ),
-    ),
-    maxLines: 1,
-    textDirection: TextDirection.ltr,
-  )..layout();
-  final valuePainter = TextPainter(
-    text: TextSpan(
-      text: value,
-      style: GoogleFonts.spaceGrotesk(
-        fontSize: 34,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -1.0,
-        height: 1.0,
-      ),
-    ),
-    maxLines: 1,
-    textDirection: TextDirection.ltr,
-  )..layout();
-  final contentW = math.max(labelPainter.size.width, valuePainter.size.width).clamp(minContentWidth, double.infinity);
-  return horizontalPadding + contentW;
 }
 
 double _continueButtonTightWidth() {
