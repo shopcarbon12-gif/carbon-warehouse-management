@@ -1637,6 +1637,17 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
           padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
           children: [
             Text(
+              'RFID Settings',
+              style: GoogleFonts.manrope(
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                height: 1.15,
+                color: _onSurface,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
               'Configure antenna interface and signal filtering.',
               style: GoogleFonts.inter(
                 fontSize: 14,
