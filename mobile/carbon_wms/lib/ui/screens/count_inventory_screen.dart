@@ -1149,7 +1149,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
         child: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
             child: Row(
         children: [
                 Expanded(
@@ -1230,7 +1230,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
       body: ColoredBox(
         color: Colors.white,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
           children: [
             Text(
               'Inventory Management Terminal',
@@ -1241,12 +1241,12 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                 color: const Color(0xFF5A6464),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             SizedBox(
               height: 148,
               child: Container(
                 color: const Color(0xFFE7EBEB),
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
                 child: Center(
                   child: FractionallySizedBox(
                     widthFactor: 0.9,
@@ -1273,7 +1273,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             SizedBox(
               height: 145,
               child: Container(
@@ -1289,7 +1289,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                     ),
                   ],
                 ),
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1316,7 +1316,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     Text(
                       'NO ITEMS SCANNED',
                       style: GoogleFonts.spaceGrotesk(
@@ -1395,7 +1395,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
             SizedBox(
               height: 152,
               child: Container(
@@ -1411,7 +1411,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                       setState(() => _overrideEntireCloudQuantities = !_overrideEntireCloudQuantities);
                     },
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 20, 20),
+                      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1430,7 +1430,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                       color: const Color(0xFF11181C),
                                     ),
                                   ),
-                                  const SizedBox(height: 8),
+                                  const SizedBox(height: 4),
                                   Text(
                                     '- if checked: replaced existing\nquantities and zero missing items',
                                     maxLines: 2,
