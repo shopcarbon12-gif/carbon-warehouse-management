@@ -42,21 +42,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   bool _busyLookup = false;
   String? _status;
   _CountInventoryModuleSettings _moduleSettings = _CountInventoryModuleSettings.defaults;
-  final List<int> _sampleRowIds = List<int>.generate(20, (i) => i + 1);
-  int _rowResetSeed = 0;
   RfidManager? _rfidManager;
-
-  String _sampleDescription(int id) {
-    if (id == 2) {
-      return 'TYLER SHIRT BLACK S  ·  sample 2 text is not truncated, row stays fixed and';
-    }
-    return 'TYLER SHIRT BLACK S  ·  sample $id';
-  }
-
-  List<String> _sampleEpcs(int id) => List<String>.generate(
-        3,
-        (i) => 'SAMPLE-EPC-$id-${i + 1}',
-      );
 
   @override
   void initState() {
@@ -341,10 +327,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     setState(() {
       _epcRows.clear();
       _groupedRows.clear();
-      _sampleRowIds
-        ..clear()
-        ..addAll(List<int>.generate(20, (i) => i + 1));
-      _rowResetSeed += 1;
       _status = 'Reset complete';
     });
   }
@@ -448,7 +430,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     const summaryBoxHeight = 60.0;
 
     return CarbonScaffold(
-      pageTitle: 'count & Sync',
+      pageTitle: 'count',
       actions: [
         IconButton(
           icon: const Icon(Icons.settings_outlined),
@@ -520,7 +502,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                 },
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
@@ -546,7 +528,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                               if (!g.cached && (g.sku.isNotEmpty || g.name.isNotEmpty)) 'Details source: catalog lookup',
                             ];
                             return _CountItemContainer(
-                              rowKey: 'real-${g.assetId}-$_rowResetSeed',
+                              rowKey: 'real-${g.assetId}',
                               sku: g.sku.trim().isEmpty ? g.assetId : g.sku,
                               description: desc,
                               qtyText: 'x${g.qty}',
@@ -567,27 +549,15 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                             );
                           },
                         )
-                      : ListView.separated(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          itemCount: _sampleRowIds.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
-                          itemBuilder: (_, i) {
-                            final id = _sampleRowIds[i];
-                            return _CountItemContainer(
-                              rowKey: 'sample-$id-$_rowResetSeed',
-                              sku: '112225207S',
-                              description: _sampleDescription(id),
-                              qtyText: 'x$id',
-                              onQtyTap: () => _openEpcList(
-                                title: 'sample $id',
-                                epcs: _sampleEpcs(id),
-                              ),
-                              onDelete: () {
-                                setState(() => _sampleRowIds.remove(id));
-                              },
-                              confirmDelete: _confirmDeleteItem,
-                            );
-                          },
+                      : Center(
+                          child: Text(
+                            'No items scanned yet',
+                            style: GoogleFonts.manrope(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF5A6464),
+                            ),
+                          ),
                         ),
                 ),
               ),
@@ -759,7 +729,7 @@ class _CountSummaryTile extends StatelessWidget {
                   ),
                   Expanded(
                     child: Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: Alignment.center,
                       child: Text(
                         _summaryCountDisplayString(value),
                         maxLines: 1,
@@ -1152,339 +1122,353 @@ class _CountInventoryContinueScreen extends StatefulWidget {
 }
 
 class _CountInventoryContinueScreenState extends State<_CountInventoryContinueScreen> {
-  bool _overrideExisting = false;
-  bool _saving = false;
-  String? _status;
-
-  Future<void> _saveCsv() async {
-    setState(() {
-      _saving = true;
-      _status = null;
-    });
-    try {
-      final path = await widget.onSaveCsv();
-      String? previewPath;
-      if (path != null) {
-        final payload = widget.buildBackendPreviewPayload();
-        payload['overrideMode'] = _overrideExisting ? 'replace' : 'additive';
-        payload['uploadEnabled'] = false;
-        final file = File('${path.replaceAll('.csv', '')}_upload_preview.json');
-        await file.writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
-        previewPath = file.path;
-      }
-      if (!mounted) return;
-      setState(
-        () => _status = path == null
-            ? 'Failed to save CSV'
-            : 'Saved CSV: $path\nSaved preview payload: ${previewPath ?? 'n/a'}',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _status = 'Save failed: $e');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
+  bool _overrideEntireCloudQuantities = false;
 
   @override
   Widget build(BuildContext context) {
-    final totalRows = widget.groupedRows.fold<int>(0, (sum, g) => sum + g.qty);
-    final displayRows = totalRows == 0 ? 1248 : totalRows;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5FAFA),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              child: Row(
-                children: [
-                  Text(
-                    'Carbon',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.2,
-                      color: const Color(0xFF171D1D),
-                    ),
-                  ),
-                  Text(
-                    'WMS',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.2,
-                      color: const Color(0xFF009496),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '/',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF9AA4A4),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'COUNT',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 2.4,
-                      color: const Color(0xFF009496),
-                    ),
-                  ),
-                ],
-              ),
+    final totalItems = widget.groupedRows.fold<int>(0, (sum, row) => sum + row.qty);
+    final canUpload = totalItems > 0;
+    const fileNameValue = '';
+    const fileStatusValue = 'N/A';
+
+    return CarbonScaffold(
+      pageTitle: 'commit',
+      actions: const [],
+      bottomBar: Container(
+        height: 80,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 24,
+              offset: Offset(0, -8),
             ),
-            Expanded(
-              child: Stack(
-                children: [
-                  ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 98),
-                    children: [
-              Container(
-                color: const Color(0xFFF0F5F4),
-                padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'INVENTORY MANAGEMENT TERMINAL',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 3.0,
-                        color: const Color(0xFF6D7979),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Upload to CARBON ORLANDO WAREHOUSE 001',
-                      style: GoogleFonts.manrope(
-                        fontSize: 48,
-                        fontWeight: FontWeight.w800,
-                        height: 0.95,
-                        color: const Color(0xFF171D1D),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                color: const Color(0xFFF6F6F6),
-                padding: const EdgeInsets.fromLTRB(12, 16, 12, 18),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(width: 4, height: 74, color: const Color(0xFF009496)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '• TOTAL PROCESSING LOAD',
-                            style: GoogleFonts.spaceGrotesk(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 3.2,
-                              color: const Color(0xFF6D7979),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: SizedBox(
+                      height: double.infinity,
+                      child: FilledButton(
+                        onPressed: canUpload ? () {} : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1B7D7D),
+                          disabledBackgroundColor: const Color(0xFF1B7D7D),
+                          foregroundColor: Colors.white,
+                          disabledForegroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                        ),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                _formatRows(displayRows),
-                                style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 62,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -2.0,
-                                  height: 0.9,
-                                  color: const Color(0xFF171D1D),
-                                ),
-                              ),
+                              const Icon(Icons.cloud_upload, size: 20),
                               const SizedBox(width: 8),
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 6),
-                                child: Text(
-                                  'DATA\nROWS',
-                                  style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 2.0,
-                                    color: const Color(0xFF009496),
-                                  ),
+                              Text(
+                                'UPLOAD',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                color: const Color(0xFFEAEFEE),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      color: const Color(0xFF008284),
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.description_outlined, color: Colors.white, size: 22),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('inventory_audit_q3.csv', style: GoogleFonts.manrope(fontSize: 20, fontWeight: FontWeight.w700)),
-                          Text(
-                            'READY FOR PROCESSING',
-                            style: GoogleFonts.spaceGrotesk(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1.8,
-                              color: const Color(0xFF6D7979),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text('Change File', style: GoogleFonts.manrope(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFF009496))),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                color: const Color(0xFFF0F5F4),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Override Entire Cloud Quantities', style: GoogleFonts.manrope(fontSize: 26, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 4),
-                          Text(
-                            '- if checked: replaced existing quantities and zero missing items',
-                            style: GoogleFonts.manrope(fontSize: 15, fontWeight: FontWeight.w600, color: const Color(0xFFBA1A1A)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => setState(() => _overrideExisting = !_overrideExisting),
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFF7E8A8A), width: 2),
                         ),
-                        alignment: Alignment.center,
-                        child: _overrideExisting
-                            ? const Icon(Icons.check, size: 20, color: Color(0xFF009496))
-                            : null,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: SizedBox(
+                      height: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {},
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF2BA3A3),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                        ),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.save, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'SAVE TO FILE',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      body: ColoredBox(
+        color: Colors.white,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          children: [
+            Text(
+              'Inventory Management Terminal',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 3.0,
+                color: const Color(0xFF5A6464),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 148,
+              child: Container(
+                color: const Color(0xFFE7EBEB),
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+                child: Center(
+                  child: FractionallySizedBox(
+                    widthFactor: 0.9,
+                    alignment: Alignment.center,
+                    child: RichText(
+                      textAlign: TextAlign.left,
+                      text: TextSpan(
+                        style: GoogleFonts.manrope(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                          height: 1.38,
+                          color: const Color(0xFF11181C),
+                        ),
+                        children: const [
+                          TextSpan(text: 'Upload to '),
+                          TextSpan(text: 'CARBON', style: TextStyle(color: Color(0xFF009496), fontWeight: FontWeight.w800)),
+                          TextSpan(text: '\nORLANDO\nWAREHOUSE '),
+                          TextSpan(text: '001', style: TextStyle(color: Color(0xFF0E8E9A), fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 148,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFAFAFA),
+                  border: const Border(left: BorderSide(color: Color(0xFF009496), width: 6)),
+                  borderRadius: BorderRadius.circular(2),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 6,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF009496),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'TOTAL PROCESSING LOAD',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 4.0,
+                            color: const Color(0xFF71717A),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'NO ITEMS SCANNED',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 2.2,
+                        color: const Color(0xFF009496),
+                        height: 1.0,
                       ),
                     ),
                   ],
                 ),
               ),
-              if (_status != null) ...[
-                const SizedBox(height: 12),
-                Text(_status!, style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primary)),
-              ],
-                    ],
-                  ),
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      color: Colors.white,
-                      padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 112,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F5F4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
                       child: Row(
                         children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF009496),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                            child: const Icon(
+                              Icons.description_outlined,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
                           Expanded(
-                            child: SizedBox(
-                              height: 64,
-                              child: FilledButton(
-                                onPressed: null,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF009496),
-                                  disabledBackgroundColor: const Color(0xFF009496),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  fileNameValue,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.manrope(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF11181C),
+                                  ),
                                 ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.cloud_upload, size: 18),
-                                    const SizedBox(height: 2),
-                                    Text('UPLOAD', style: GoogleFonts.spaceGrotesk(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 2.0)),
-                                  ],
+                                Text(
+                                  fileStatusValue,
+                                  style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 2.2,
+                                    color: const Color(0xFF009496),
+                                    height: 1.0,
+                                  ),
                                 ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 152,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE7EBEB),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(2),
+                    onTap: () {
+                      setState(() => _overrideEntireCloudQuantities = !_overrideEntireCloudQuantities);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 20, 20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Override Entire Cloud\nQuantities',
+                                    style: GoogleFonts.manrope(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.35,
+                                      color: const Color(0xFF11181C),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '- if checked: replaced existing\nquantities and zero missing items',
+                                    maxLines: 2,
+                                    style: GoogleFonts.spaceGrotesk(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.45,
+                                      color: const Color(0xFFBF2E2E),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: SizedBox(
-                              height: 64,
-                              child: FilledButton(
-                                onPressed: _saving ? null : _saveCsv,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFFE0E0E0),
-                                  foregroundColor: const Color(0xFF171D1D),
-                                  disabledBackgroundColor: const Color(0xFFE0E0E0),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.save_alt, size: 18),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _saving ? 'SAVING...' : 'SAVE TO FILE',
-                                      style: GoogleFonts.spaceGrotesk(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 2.0),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                          SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Checkbox(
+                              value: _overrideEntireCloudQuantities,
+                              onChanged: (next) {
+                                setState(() => _overrideEntireCloudQuantities = next ?? false);
+                              },
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                              side: const BorderSide(color: Color(0xFF7C8A8A), width: 2),
+                              activeColor: const Color(0xFF009496),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  String _formatRows(int n) {
-    final s = n.toString();
-    final b = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      final rev = s.length - i;
-      b.write(s[i]);
-      if (rev > 1 && rev % 3 == 1) b.write(',');
-    }
-    return b.toString();
   }
 }
 
