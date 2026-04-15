@@ -546,42 +546,36 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerRight,
-                      child: SizedBox(
-                        width: continueButtonWidth,
-                        height: 40,
-                        child: FilledButton(
-                          onPressed: hasRealRows ? _openContinue : null,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF2BA3A3),
-                            disabledBackgroundColor: const Color(0xFF2BA3A3),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    'CONTINUE',
-                                    style: GoogleFonts.spaceGrotesk(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 1.5,
-                                      color: Colors.white,
-                                    ),
+                      child: IntrinsicWidth(
+                        child: SizedBox(
+                          height: 40,
+                          child: FilledButton(
+                            onPressed: hasRealRows ? _openContinue : null,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF2BA3A3),
+                              disabledBackgroundColor: const Color(0xFF2BA3A3),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'CONTINUE',
+                                  style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.5,
+                                    color: Colors.white,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              const SizedBox(
-                                width: 20,
-                                child: Icon(Icons.arrow_forward, size: 20, color: Colors.white),
-                              ),
-                            ],
+                                const SizedBox(width: 8),
+                                const Icon(Icons.arrow_forward, size: 20, color: Colors.white),
+                              ],
+                            ),
                           ),
                         ),
                       ),
