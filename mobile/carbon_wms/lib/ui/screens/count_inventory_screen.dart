@@ -1235,7 +1235,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
           const double heroH = 148;
           const double procH = 145;
           const double fileH = 112;
-          const double overH = 152;
+          const double overH = 148;
           const int gapCount = 4;
 
           final labelStyle = GoogleFonts.spaceGrotesk(
