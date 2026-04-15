@@ -491,7 +491,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                             );
                           },
                         )
-                      : const SizedBox.shrink(),
+                      : ListView(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          children: const [
+                            _CountItemContainer(
+                              sku: '112225207S',
+                              description: 'TYLER SHIRT BLACK S  ·  example',
+                              qtyText: 'x1',
+                            ),
+                          ],
+                        ),
                 ),
               ),
             ),
