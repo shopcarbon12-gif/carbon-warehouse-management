@@ -1275,7 +1275,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
             ),
             const SizedBox(height: 16),
             SizedBox(
-              height: 148,
+              height: 145,
               child: Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFFFAFAFA),
