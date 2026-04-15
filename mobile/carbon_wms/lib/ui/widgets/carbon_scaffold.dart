@@ -3,11 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
-import 'package:carbon_wms/services/theme_notifier.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
-import 'package:carbon_wms/ui/screens/dashboard_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
+import 'package:carbon_wms/ui/widgets/carbon_app_drawer.dart';
 
 /// Renders "WMS" with a visible stroke so it looks physically thicker
 /// without increasing the font size.  Uses a [Stack] of two [Text] widgets:
@@ -69,6 +70,9 @@ class CarbonScaffold extends StatefulWidget {
     this.bottomBar,
     this.floatingActionButton,
     this.actions,
+    this.onLogout,
+    this.onRefreshFromDrawer,
+    this.resizeToAvoidBottomInset = true,
   });
 
   final Widget body;
@@ -82,6 +86,9 @@ class CarbonScaffold extends StatefulWidget {
   final Widget? bottomBar;
   final Widget? floatingActionButton;
   final List<Widget>? actions;
+  final VoidCallback? onLogout;
+  final Future<void> Function()? onRefreshFromDrawer;
+  final bool resizeToAvoidBottomInset;
 
   @override
   State<CarbonScaffold> createState() => _CarbonScaffoldState();
@@ -103,6 +110,27 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
     if (mounted) setState(() => _userEmail = email);
   }
 
+  Future<void> _refreshSettingsPermissions() async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Syncing settings...'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+    final api = context.read<WmsApiClient>();
+    final repo = context.read<MobileSettingsRepository>();
+    final id = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    await repo.syncFromServer(api, deviceId: id);
+    if (!mounted) return;
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Settings refreshed.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _toggleDrawer() {
     final state = _scaffoldKey.currentState;
     if (state != null && state.isDrawerOpen) {
@@ -113,99 +141,26 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
   }
 
   Widget _buildDrawer() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final rawName = (_userEmail?.split('@').first ?? '').replaceAll('.', ' ');
-    final displayName = rawName.isEmpty
-        ? 'Operator'
-        : rawName
-            .split(' ')
-            .map(
-                (w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
-            .join(' ');
-    final email = _userEmail ?? '—';
-
-    return Drawer(
-      backgroundColor: isDark ? const Color(0xFF1C2828) : Colors.white,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            width: double.infinity,
-            color: AppColors.primary,
-            padding: EdgeInsets.fromLTRB(
-                24, MediaQuery.of(context).padding.top + 32, 24, 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                CircleAvatar(
-                  radius: 52,
-                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  child:
-                      const Icon(Icons.person, size: 58, color: Colors.white),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  displayName,
-                  style: GoogleFonts.manrope(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white),
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  email,
-                  style: GoogleFonts.manrope(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withValues(alpha: 0.8)),
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+    return CarbonAppDrawer(
+      userEmail: _userEmail,
+      onSettings: () {
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => const HandheldSettingsScreen(),
           ),
-          const SizedBox(height: 20),
-          _DrawerItem(
-              icon: Icons.dashboard_outlined,
-              label: 'Dashboard',
-              onTap: () {
-                Navigator.of(context).popUntil((r) => r.isFirst);
-              }),
-          const SizedBox(height: 4),
-          _DrawerItem(
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                        builder: (_) => const HandheldSettingsScreen()));
-              }),
-          const SizedBox(height: 4),
-          Consumer<ThemeNotifier>(
-            builder: (_, notifier, __) => _DrawerItem(
-              icon: Icons.palette_outlined,
-              label: 'Switch Theme',
-              onTap: () => notifier.toggle(),
-            ),
-          ),
-          const Spacer(),
-          _DrawerItem(
-              icon: Icons.power_settings_new,
-              label: 'Sign Out',
-              color: const Color(0xFFEF4444),
-              large: true,
-              onTap: () {
-                Navigator.of(context).popUntil((r) => r.isFirst);
-                DashboardScreen.scaffoldKey.currentState?.openDrawer();
-                // Trigger logout from dashboard level
-              }),
-          const SizedBox(height: 80),
-        ],
-      ),
+        );
+      },
+      onRefresh: () async {
+        Navigator.pop(context);
+        if (widget.onRefreshFromDrawer != null) {
+          await widget.onRefreshFromDrawer!();
+          return;
+        }
+        await _refreshSettingsPermissions();
+      },
+      onLogout: widget.onLogout,
     );
   }
 
@@ -240,6 +195,7 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
       key: _scaffoldKey,
       drawerEnableOpenDragGesture: false,
       drawer: _buildDrawer(),
+      resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
       appBar: AppBar(
         backgroundColor: barBg,
         elevation: 0,
@@ -308,54 +264,6 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
       ),
       bottomNavigationBar: widget.bottomBar,
       floatingActionButton: widget.floatingActionButton,
-    );
-  }
-}
-
-class _DrawerItem extends StatelessWidget {
-  const _DrawerItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.color,
-    this.large = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool large;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fg = color ?? (isDark ? const Color(0xFFE0ECEC) : AppColors.textMain);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Row(
-          children: [
-            SizedBox(
-                width: 26, child: Icon(icon, size: large ? 26 : 24, color: fg)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.manrope(
-                  fontSize: large ? 17 : 14,
-                  fontWeight: large ? FontWeight.w800 : FontWeight.w700,
-                  letterSpacing: -0.1,
-                  color: fg,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
