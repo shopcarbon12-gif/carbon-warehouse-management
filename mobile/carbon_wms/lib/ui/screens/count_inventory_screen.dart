@@ -1222,7 +1222,8 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
       body: LayoutBuilder(
         builder: (context, constraints) {
           const double padTop = 6;
-          const double padBottom = 6;
+          // No bottom inset here: 5th [Expanded] is the gap down to the footer (matches other flex gaps).
+          const double padBottom = 0;
           const double heroH = 148;
           const double procH = 145;
           const double fileH = 112;
@@ -1467,6 +1468,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                       ),
                     ),
                   ),
+                  const Expanded(flex: 1, child: SizedBox.shrink()),
                 ],
               ),
             ),
