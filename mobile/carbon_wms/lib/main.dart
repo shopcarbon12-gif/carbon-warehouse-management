@@ -9,6 +9,7 @@ import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/theme_notifier.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/app_auth_gate.dart';
+import 'package:carbon_wms/ui/widgets/keyboard_wedge_bridge.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,7 +80,7 @@ class _CarbonWmsRootState extends State<CarbonWmsRoot> {
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
             themeMode: notifier.mode,
-            home: const AppAuthGate(),
+            home: const KeyboardWedgeBridge(child: AppAuthGate()),
           ),
         ),
       ),

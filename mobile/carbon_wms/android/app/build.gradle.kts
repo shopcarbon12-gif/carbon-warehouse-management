@@ -70,6 +70,8 @@ flutter {
 dependencies {
     // Zebra RFID API3 — AAR from ZebraDevs/RFID-Android-Inventory-Sample (see app/libs/THIRD_PARTY.txt).
     implementation(files("libs/API3_LIB-release-2.0.2.82.aar"))
+    // Zebra API3 transitive dependency used at runtime by some builds.
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
     // Optional: drop Chainway DeviceAPI JAR/AAR here; reflection bridge loads at runtime.
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
 }
