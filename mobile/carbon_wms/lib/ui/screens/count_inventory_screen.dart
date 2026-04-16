@@ -43,8 +43,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   List<Map<String, String>> _locations = [];
   String _currentLocationName = 'Loading...';
   String _currentLocationId = '';
-  StreamSubscription<String>? _readsSub;
+  StreamSubscription<RfidTagRead>? _readsSub;
   StreamSubscription<String>? _triggerSub;
+  Timer? _scanInactivityTimer;
   bool _scanOn = false;
   bool _connecting = false;
   bool _busyLookup = false;
@@ -75,9 +76,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   void dispose() {
     _readsSub?.cancel();
     _triggerSub?.cancel();
+    _scanInactivityTimer?.cancel();
     unawaited(_scanAudio.dispose());
     final rfid = _rfidManager;
     if (rfid != null) {
+      rfid.suppressEdgeStreaming = false;
       unawaited(rfid.stopLocateScanning());
     }
     super.dispose();
@@ -193,15 +196,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final rfid = context.read<RfidManager>();
     final settingsRepo = context.read<MobileSettingsRepository>();
     rfid.scanContext = 'COUNT_INVENTORY';
+    rfid.suppressEdgeStreaming = true; // COUNT is local-only — don't post to edge ingest
     await rfid.autoDetectHardware();
     await rfid.reapplyHandheldHardwareSettings();
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
     await _readsSub?.cancel();
-    _readsSub = rfid.visibleEpcs.listen((epc) {
-      final read = RfidTagRead.tryParse(epc);
-      if (read == null) return;
-      _onTagRead(read);
-    }, onError: (_) {});
+    _readsSub = rfid.unifiedTagReads.listen(_onTagRead, onError: (_) {});
     await _triggerSub?.cancel();
     _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((evt) {
       final holdReleaseMode = settingsRepo.config.triggerModeHoldRelease;
@@ -256,14 +256,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   void _onTagRead(RfidTagRead read) {
-    if (!_scanOn) {
-      if (mounted) {
-        setState(() => _scanOn = true);
-      } else {
-        _scanOn = true;
-      }
-    }
+    if (!_scanOn) return; // only process when actively scanning
     final now = DateTime.now();
+    _scanInactivityTimer?.cancel();
+    _scanInactivityTimer = Timer(const Duration(seconds: 15), () {
+      if (!mounted) return;
+      unawaited(_stopScan());
+    });
     final epc = read.epcHex24;
     final row = _epcRows[epc];
     if (row != null) {
@@ -353,6 +352,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _stopScan() async {
+    _scanInactivityTimer?.cancel();
     final rfid = context.read<RfidManager>();
     await rfid.stopLocateScanning();
     if (!rfid.isHardwareLinked) {
