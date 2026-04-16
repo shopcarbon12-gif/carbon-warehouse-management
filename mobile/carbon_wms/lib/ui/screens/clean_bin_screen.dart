@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
@@ -61,17 +62,17 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
     return CarbonScaffold(
       pageTitle: 'CLEAN BIN',
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(20.r),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('CLEAN BIN', style: AppTheme.headline(context)),
-            const SizedBox(height: 8),
-            const Text(
+            SizedBox(height: 8.h),
+            Text(
               'Scan the bin 2D barcode or type the bin code. All in-stock assignments are removed and audited.',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13.sp),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16.h),
             OutlinedButton.icon(
               onPressed: _busy
                   ? null
@@ -80,10 +81,10 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
                       if (!mounted || code == null || code.isEmpty) return;
                       await _submit(code);
                     },
-              icon: const Icon(Icons.photo_camera_outlined),
+              icon: Icon(Icons.photo_camera_outlined),
               label: const Text('Scan with camera'),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12.h),
             TextField(
               controller: _hidden,
               focusNode: _focus,
@@ -95,13 +96,13 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
               textCapitalization: TextCapitalization.characters,
               onSubmitted: (s) => unawaited(_submit(s)),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16.h),
             FilledButton(
               onPressed: _busy ? null : () => unawaited(_submit(_hidden.text)),
               child: Text(_busy ? 'WORKING…' : 'CLEAN BIN'),
             ),
             if (_status != null) ...[
-              const SizedBox(height: 16),
+              SizedBox(height: 16.h),
               Text(_status!, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
             ],
           ],

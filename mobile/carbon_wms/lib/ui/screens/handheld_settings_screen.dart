@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -236,12 +237,12 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
     return CarbonScaffold(
       pageTitle: 'SETTINGS',
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+        padding: EdgeInsets.fromLTRB(16.w, 20.h, 16.w, 40.h),
         children: [
 
           // ── APP VERSION + OTA ────────────────────────────────────────────
           _Label('App', mutedColor),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           _Card(
             color: cardColor,
             child: FutureBuilder<PackageInfo>(
@@ -252,26 +253,26 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0.h),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
                             p == null ? '…' : p.version,
                             style: GoogleFonts.spaceGrotesk(
-                              fontSize: 32,
+                              fontSize: 32.sp,
                               fontWeight: FontWeight.w700,
                               color: AppColors.primary,
                               letterSpacing: 0.5,
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          SizedBox(width: 10.w),
                           Padding(
-                            padding: const EdgeInsets.only(bottom: 5),
+                            padding: EdgeInsets.only(bottom: 5.h),
                             child: Text(
                               p == null ? '' : 'build ${p.buildNumber}',
                               style: GoogleFonts.spaceGrotesk(
-                                fontSize: 13,
+                                fontSize: 13.sp,
                                 fontWeight: FontWeight.w600,
                                 color: mutedColor,
                               ),
@@ -280,7 +281,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                         ],
                       ),
                     ),
-                    Divider(height: 24, color: divColor),
+                    Divider(height: 24.h, color: divColor),
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
@@ -290,25 +291,25 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                                 ? () => setState(() => _lastStatus = null)
                                 : _checkOta,
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          padding: EdgeInsets.fromLTRB(16.w, 0.h, 16.w, 16.h),
                           child: Row(
                             children: [
                               _busy
-                                  ? const SizedBox(width: 20, height: 20,
+                                  ? SizedBox(width: 20.w, height: 20.h,
                                       child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
-                                  : const Icon(Icons.system_update_alt, color: AppColors.primary, size: 20),
-                              const SizedBox(width: 12),
+                                  : Icon(Icons.system_update_alt, color: AppColors.primary, size: 20.sp),
+                              SizedBox(width: 12.w),
                               Expanded(
                                 child: Text(
                                   _busy ? 'Checking…' : _lastStatus != null ? 'Tap to clear result' : 'Check OTA / Authorization',
                                   style: GoogleFonts.manrope(
-                                    fontSize: 14,
+                                    fontSize: 14.sp,
                                     fontWeight: FontWeight.w700,
                                     color: mainColor,
                                   ),
                                 ),
                               ),
-                              Icon(Icons.chevron_right, color: mutedColor, size: 20),
+                              Icon(Icons.chevron_right, color: mutedColor, size: 20.sp),
                             ],
                           ),
                         ),
@@ -316,10 +317,10 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                     ),
                     if (_lastStatus != null)
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        padding: EdgeInsets.fromLTRB(16.w, 0.h, 16.w, 16.h),
                         child: SelectableText(
                           _lastStatus!,
-                          style: TextStyle(color: mutedColor, fontFamily: 'monospace', fontSize: 11, height: 1.5),
+                          style: TextStyle(color: mutedColor, fontFamily: 'monospace', fontSize: 11.sp, height: 1.5.h),
                         ),
                       ),
                   ],
@@ -328,11 +329,11 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          SizedBox(height: 24.h),
 
           // ── RFID ANTENNA POWER ───────────────────────────────────────────
           _Label('RFID', mutedColor),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           _Card(
             color: cardColor,
             child: Consumer2<MobileSettingsRepository, RfidManager>(
@@ -340,7 +341,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                 final power = settings.config.transferOutAntennaPower;
                 final hwLinked = rfid.isHardwareLinked;
                 return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                  padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 12.h),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -348,16 +349,16 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text('Antenna Power',
-                            style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700,
+                            style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700,
                               color: hwLinked ? mainColor : mutedColor)),
                           Text(
                             hwLinked ? '$power dBm' : 'N/A',
-                            style: GoogleFonts.spaceGrotesk(fontSize: 20, fontWeight: FontWeight.w800,
+                            style: GoogleFonts.spaceGrotesk(fontSize: 20.sp, fontWeight: FontWeight.w800,
                               color: hwLinked ? AppColors.primary : mutedColor),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4.h),
                       if (hwLinked) ...[
                         Slider(
                           value: power.toDouble(),
@@ -367,10 +368,10 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                           onChanged: (v) => settings.setGlobalAntennaPower(v.round()),
                         ),
                         Text('Applies to transfer-in and transfer-out scans.',
-                          style: TextStyle(color: mutedColor, fontSize: 12, height: 1.4)),
+                          style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.4.h)),
                       ] else
                         Text('No RFID hardware detected on this device.',
-                          style: TextStyle(color: mutedColor, fontSize: 12, height: 1.4,
+                          style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.4.h,
                             fontStyle: FontStyle.italic)),
                     ],
                   ),
@@ -379,11 +380,11 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          SizedBox(height: 24.h),
 
           // ── BARCODE / DEVICE SCANNER ────────────────────────────────────
           _Label('Barcode / Scanner', mutedColor),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           _Card(
             color: cardColor,
             child: Column(
@@ -398,7 +399,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                   mutedColor: mutedColor,
                   onChanged: _setScannerSource,
                 ),
-                Divider(height: 1, color: divColor),
+                Divider(height: 1.h, color: divColor),
                 _ScannerSourceTile(
                   icon: Icons.camera_alt_outlined,
                   title: 'Camera scanner',
@@ -409,106 +410,106 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                   mutedColor: mutedColor,
                   onChanged: _setScannerSource,
                 ),
-                Divider(height: 1, color: divColor),
+                Divider(height: 1.h, color: divColor),
                 ListTile(
-                  leading: const Icon(Icons.tune, color: AppColors.primary),
+                  leading: Icon(Icons.tune, color: AppColors.primary),
                   title: Text(
                     'Open Device Scanner Settings',
                     style: GoogleFonts.manrope(
-                      fontSize: 14,
+                      fontSize: 14.sp,
                       fontWeight: FontWeight.w700,
                       color: mainColor,
                     ),
                   ),
                   subtitle: Text(
                     'Configure scanner output mode, suffix, and trigger behavior.',
-                    style: TextStyle(color: mutedColor, fontSize: 12),
+                    style: TextStyle(color: mutedColor, fontSize: 12.sp),
                   ),
-                  trailing: Icon(Icons.open_in_new, color: mutedColor, size: 18),
+                  trailing: Icon(Icons.open_in_new, color: mutedColor, size: 18.sp),
                   onTap: _openScannerSettings,
                 ),
-                Divider(height: 1, color: divColor),
+                Divider(height: 1.h, color: divColor),
                 ListTile(
-                  leading: const Icon(Icons.refresh, color: AppColors.primary),
+                  leading: Icon(Icons.refresh, color: AppColors.primary),
                   title: Text(
                     'Refresh Settings / Permissions',
                     style: GoogleFonts.manrope(
-                      fontSize: 14,
+                      fontSize: 14.sp,
                       fontWeight: FontWeight.w700,
                       color: mainColor,
                     ),
                   ),
                   subtitle: Text(
                     'Re-check hardware bridge and reload scanner preferences.',
-                    style: TextStyle(color: mutedColor, fontSize: 12),
+                    style: TextStyle(color: mutedColor, fontSize: 12.sp),
                   ),
-                  trailing: Icon(Icons.chevron_right, color: mutedColor, size: 20),
+                  trailing: Icon(Icons.chevron_right, color: mutedColor, size: 20.sp),
                   onTap: _refreshHardwareStatus,
                 ),
-                Divider(height: 1, color: divColor),
+                Divider(height: 1.h, color: divColor),
                 ListTile(
-                  leading: const Icon(Icons.bug_report, color: AppColors.primary),
+                  leading: Icon(Icons.bug_report, color: AppColors.primary),
                   title: Text(
                     'Refresh Diagnostics',
                     style: GoogleFonts.manrope(
-                      fontSize: 14,
+                      fontSize: 14.sp,
                       fontWeight: FontWeight.w700,
                       color: mainColor,
                     ),
                   ),
                   subtitle: Text(
                     'Reload native scanner/RFID runtime status.',
-                    style: TextStyle(color: mutedColor, fontSize: 12),
+                    style: TextStyle(color: mutedColor, fontSize: 12.sp),
                   ),
-                  trailing: Icon(Icons.chevron_right, color: mutedColor, size: 20),
+                  trailing: Icon(Icons.chevron_right, color: mutedColor, size: 20.sp),
                   onTap: _refreshDiagnostics,
                 ),
-                Divider(height: 1, color: divColor),
+                Divider(height: 1.h, color: divColor),
                 ListTile(
-                  leading: const Icon(Icons.settings_applications, color: AppColors.primary),
+                  leading: Icon(Icons.settings_applications, color: AppColors.primary),
                   title: Text(
                     'Open Android App Permissions',
                     style: GoogleFonts.manrope(
-                      fontSize: 14,
+                      fontSize: 14.sp,
                       fontWeight: FontWeight.w700,
                       color: mainColor,
                     ),
                   ),
                   subtitle: Text(
                     'Open system permissions for CarbonWMS.',
-                    style: TextStyle(color: mutedColor, fontSize: 12),
+                    style: TextStyle(color: mutedColor, fontSize: 12.sp),
                   ),
-                  trailing: Icon(Icons.chevron_right, color: mutedColor, size: 20),
+                  trailing: Icon(Icons.chevron_right, color: mutedColor, size: 20.sp),
                   onTap: _openAndroidAppSettings,
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 24),
+          SizedBox(height: 24.h),
 
           // ── LIVE DIAGNOSTICS ────────────────────────────────────────────
           _Label('Live Diagnostics', mutedColor),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           _Card(
             color: cardColor,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 14.h),
               child: DefaultTextStyle(
-                style: TextStyle(color: mutedColor, fontSize: 12.5, height: 1.45),
+                style: TextStyle(color: mutedColor, fontSize: 12.5.sp, height: 1.45.h),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'scanner source: $_scannerSource',
-                      style: TextStyle(color: mainColor, fontWeight: FontWeight.w700, fontSize: 13),
+                      style: TextStyle(color: mainColor, fontWeight: FontWeight.w700, fontSize: 13.sp),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: 6.h),
                     Text('last scanner event: $_lastScannerEvent'),
                     Text(
                       'last scanner event at: ${_lastScannerEventAt?.toIso8601String() ?? 'never'}',
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10.h),
                     Text('manufacturer: ${_diag['manufacturer'] ?? '-'}'),
                     Text('model: ${_diag['model'] ?? '-'}'),
                     Text('brand: ${_diag['brand'] ?? '-'}'),
@@ -526,31 +527,31 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          SizedBox(height: 24.h),
 
           // ── SOUND ────────────────────────────────────────────────────────
           _Label('Sound', mutedColor),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           _Card(
             color: cardColor,
             child: Column(
               children: [
                 SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
                   title: Text('Sound while reading tags',
-                    style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: mainColor)),
+                    style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700, color: mainColor)),
                   value: _soundEnabled,
                   activeThumbColor: AppColors.primary,
                   onChanged: _setSoundEnabled,
                 ),
                 if (_soundEnabled) ...[
-                  Divider(height: 1, color: divColor),
+                  Divider(height: 1.h, color: divColor),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 12.h),
                     child: Row(
                       children: [
                         Text('MUTE',
-                          style: GoogleFonts.spaceGrotesk(fontSize: 11, fontWeight: FontWeight.w700,
+                          style: GoogleFonts.spaceGrotesk(fontSize: 11.sp, fontWeight: FontWeight.w700,
                             letterSpacing: 1.4, color: mutedColor)),
                         Expanded(
                           child: Slider(
@@ -561,7 +562,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                           ),
                         ),
                         Text('${(_volume * 100).round()}%',
-                          style: GoogleFonts.spaceGrotesk(fontSize: 13, fontWeight: FontWeight.w700,
+                          style: GoogleFonts.spaceGrotesk(fontSize: 13.sp, fontWeight: FontWeight.w700,
                             color: AppColors.primary)),
                       ],
                     ),
@@ -571,38 +572,38 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          SizedBox(height: 24.h),
 
           // ── BIOMETRIC ────────────────────────────────────────────────────
           _Label('Biometric Sign-in', mutedColor),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           if (_bioReloading)
-            const Center(child: Padding(
-              padding: EdgeInsets.all(16),
+            Center(child: Padding(
+              padding: EdgeInsets.all(16.r),
               child: CircularProgressIndicator(strokeWidth: 2),
             ))
           else if (!_bioEligible)
             Padding(
-              padding: const EdgeInsets.only(left: 4),
+              padding: EdgeInsets.only(left: 4.w),
               child: Text(
                 'Not available on this device.',
-                style: TextStyle(color: mutedColor, fontSize: 13, height: 1.35),
+                style: TextStyle(color: mutedColor, fontSize: 13.sp, height: 1.35.h),
               ),
             )
           else
             _Card(
               color: cardColor,
               child: SwitchListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
                 title: Text('Fingerprint or face sign-in',
-                  style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: mainColor)),
+                  style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700, color: mainColor)),
                 subtitle: Text(
                   _bioEnrolled
                       ? 'Enabled. Turn off to clear saved session token.'
                       : _offerAfterSignIn
                           ? 'You will be prompted after next password sign-in.'
                           : 'Turn on to enable setup prompt after sign-in.',
-                  style: TextStyle(color: mutedColor, fontSize: 12, height: 1.35),
+                  style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.35.h),
                 ),
                 value: _biometricSwitchValue,
                 activeThumbColor: AppColors.primary,
@@ -610,7 +611,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
               ),
             ),
 
-          const SizedBox(height: 32),
+          SizedBox(height: 32.h),
         ],
       ),
     );
@@ -631,7 +632,7 @@ class _Label extends StatelessWidget {
       style: GoogleFonts.spaceGrotesk(
         color: color,
         fontWeight: FontWeight.w700,
-        fontSize: 11,
+        fontSize: 11.sp,
         letterSpacing: 2.0,
       ),
     );
@@ -648,7 +649,7 @@ class _Card extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(4.r),
       ),
       clipBehavior: Clip.hardEdge,
       child: child,
@@ -683,36 +684,36 @@ class _ScannerSourceTile extends StatelessWidget {
     return InkWell(
       onTap: () => onChanged(value),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
         child: Row(
           children: [
-            Icon(icon, color: selected ? AppColors.primary : mutedColor, size: 22),
-            const SizedBox(width: 14),
+            Icon(icon, color: selected ? AppColors.primary : mutedColor, size: 22.sp),
+            SizedBox(width: 14.w),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title, style: TextStyle(
-                    color: mainColor, fontWeight: FontWeight.w600, fontSize: 14)),
-                  const SizedBox(height: 2),
+                    color: mainColor, fontWeight: FontWeight.w600, fontSize: 14.sp)),
+                  SizedBox(height: 2.h),
                   Text(subtitle, style: TextStyle(
-                    color: mutedColor, fontSize: 12)),
+                    color: mutedColor, fontSize: 12.sp)),
                 ],
               ),
             ),
             Container(
-              width: 22,
-              height: 22,
+              width: 22.w,
+              height: 22.h,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: selected ? AppColors.primary : Colors.grey,
-                  width: 2,
+                  width: 2.w,
                 ),
                 color: selected ? AppColors.primary : Colors.transparent,
               ),
               child: selected
-                  ? const Icon(Icons.check, size: 14, color: Colors.white)
+                  ? Icon(Icons.check, size: 14.sp, color: Colors.white)
                   : null,
             ),
           ],

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -122,66 +123,66 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
 
     return CarbonScaffold(
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+        padding: EdgeInsets.fromLTRB(16.w, 20.h, 16.w, 40.h),
         children: [
           // ── MANUAL MODE ─────────────────────────────────────────────────
           _SectionLabel('Manual Mode', mutedColor),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           _Card(
             color: cardColor,
             child: Column(
               children: [
                 SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
                   title: Text('Enable Manual Mode',
-                    style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: mainColor)),
+                    style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700, color: mainColor)),
                   subtitle: Text('Enter bin codes and SKUs manually',
-                    style: TextStyle(color: mutedColor, fontSize: 12)),
+                    style: TextStyle(color: mutedColor, fontSize: 12.sp)),
                   value: _manualMode,
                   activeThumbColor: AppColors.primary,
                   onChanged: _setManualMode,
                 ),
                 if (_manualMode) ...[
-                  Divider(height: 1, color: divColor),
+                  Divider(height: 1.h, color: divColor),
 
                   // ── Bin Location checkbox ─────────────────────────────
                   CheckboxListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 2.h),
                     title: Text('Bin Location',
-                      style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w600, color: mainColor)),
+                      style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w600, color: mainColor)),
                     subtitle: Text('Type bin code manually. A verify button will appear in the bin box.',
-                      style: TextStyle(color: mutedColor, fontSize: 12)),
+                      style: TextStyle(color: mutedColor, fontSize: 12.sp)),
                     value: _manualBin,
                     activeColor: AppColors.primary,
                     onChanged: (v) => _setManualBin(v ?? false),
                   ),
 
-                  Divider(height: 1, color: divColor),
+                  Divider(height: 1.h, color: divColor),
 
                   // ── Enable Add Item checkbox ──────────────────────────
                   CheckboxListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 2.h),
                     title: Text('Enable Add Item',
-                      style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w600, color: mainColor)),
+                      style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w600, color: mainColor)),
                     subtitle: Text(
                       'Type SKU to search. Full SKU → assign. '
                       'Base+Color → assign. Base only → pick colors. '
                       'Partial/name → catalog search.',
-                      style: TextStyle(color: mutedColor, fontSize: 12)),
+                      style: TextStyle(color: mutedColor, fontSize: 12.sp)),
                     value: _manualAddItem,
                     activeColor: AppColors.primary,
                     onChanged: (v) => _setManualAddItem(v ?? false),
                   ),
 
-                  Divider(height: 1, color: divColor),
+                  Divider(height: 1.h, color: divColor),
 
                   // ── External Scanner toggle ───────────────────────────
                   SwitchListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
                     title: Text('External Scanner',
-                      style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w600, color: mainColor)),
+                      style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w600, color: mainColor)),
                     subtitle: Text('Bluetooth 2D scanner (keyboard mode). Auto-jumps from bin → item after each scan.',
-                      style: TextStyle(color: mutedColor, fontSize: 12)),
+                      style: TextStyle(color: mutedColor, fontSize: 12.sp)),
                     value: _externalScanner,
                     activeThumbColor: AppColors.primary,
                     onChanged: _setExternalScanner,
@@ -191,28 +192,28 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          SizedBox(height: 24.h),
 
           // ── CAMERA ──────────────────────────────────────────────────────
           _SectionLabel('Camera', mutedColor),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           _Card(
             color: cardColor,
             child: SwitchListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
               title: Text('Enable Camera',
-                style: GoogleFonts.manrope(fontSize: 14, fontWeight: FontWeight.w700, color: mainColor)),
+                style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700, color: mainColor)),
               subtitle: Text(
                 'Scan 2D barcodes (bin & items) using phone camera. '
                 'Default OFF on RFID devices, ON for regular Android.',
-                style: TextStyle(color: mutedColor, fontSize: 12)),
+                style: TextStyle(color: mutedColor, fontSize: 12.sp)),
               value: _cameraEnabled,
               activeThumbColor: AppColors.primary,
               onChanged: _setCameraEnabled,
             ),
           ),
 
-          const SizedBox(height: 32),
+          SizedBox(height: 32.h),
         ],
       ),
     );
@@ -231,7 +232,7 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       text.toUpperCase(),
       style: GoogleFonts.spaceGrotesk(
-        fontSize: 11,
+        fontSize: 11.sp,
         fontWeight: FontWeight.w700,
         letterSpacing: 2.0,
         color: color,

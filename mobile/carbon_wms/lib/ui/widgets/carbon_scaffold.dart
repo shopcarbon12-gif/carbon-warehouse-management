@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -27,7 +28,7 @@ class WmsText extends StatelessWidget {
   final double strokeWidth;
 
   TextStyle _base() => GoogleFonts.manrope(
-        fontSize: fontSize,
+        fontSize: fontSize.sp,
         fontWeight: FontWeight.w900,
         letterSpacing: 0.2,
       );
@@ -201,7 +202,7 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         automaticallyImplyLeading: false,
-        titleSpacing: 12,
+        titleSpacing: 12.w,
         title: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -210,13 +211,13 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
               child: ClipOval(
                 child: Image.asset(
                   'assets/carbon_logo.png',
-                  width: 36,
-                  height: 36,
+                  width: 36.w,
+                  height: 36.w,
                   fit: BoxFit.cover,
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: 8.w),
             Expanded(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
@@ -228,7 +229,7 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
                     Text(
                       'Carbon',
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 18,
+                        fontSize: 18.sp,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.3,
                         color: mainColor,
@@ -237,11 +238,11 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
                     WmsText(color: wmsTeal, fontSize: 18),
                     if (label.isNotEmpty) ...[
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 7),
+                        padding: EdgeInsets.symmetric(horizontal: 7.w),
                         child: Text(
                           '/',
-                          style: const TextStyle(
-                            fontSize: 22,
+                          style: TextStyle(
+                            fontSize: 22.sp,
                             fontWeight: FontWeight.w700,
                             color: Colors.black,
                           ),
@@ -252,7 +253,7 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.spaceGrotesk(
-                          fontSize: 16,
+                          fontSize: 16.sp,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.6,
                           color: wmsTeal,

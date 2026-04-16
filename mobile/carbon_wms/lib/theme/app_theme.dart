@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Carbon Industrial — light surfaces matching the login screen palette.
@@ -38,7 +39,7 @@ abstract final class AppTheme {
         backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textMain,
         titleTextStyle: GoogleFonts.inter(
-          fontSize: 18,
+          fontSize: 18.sp,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.2,
           color: AppColors.textMain,
@@ -51,21 +52,21 @@ abstract final class AppTheme {
       cardTheme: CardThemeData(
         color: AppColors.surface,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(8.r),
           borderSide: const BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(8.r),
           borderSide: const BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(8.r),
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
         labelStyle: const TextStyle(color: AppColors.textMuted),
@@ -101,7 +102,7 @@ abstract final class AppTheme {
         backgroundColor: bg,
         foregroundColor: textMain,
         titleTextStyle: GoogleFonts.inter(
-          fontSize: 18,
+          fontSize: 18.sp,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.2,
           color: textMain,
@@ -115,21 +116,21 @@ abstract final class AppTheme {
       cardTheme: CardThemeData(
         color: surface,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFF243030),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(8.r),
           borderSide: const BorderSide(color: Color(0xFF3A5050)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(8.r),
           borderSide: const BorderSide(color: Color(0xFF3A5050)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(8.r),
           borderSide: const BorderSide(color: primary, width: 2),
         ),
         labelStyle: const TextStyle(color: textMuted),
@@ -141,7 +142,7 @@ abstract final class AppTheme {
   static TextStyle headline(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return GoogleFonts.inter(
-      fontSize: 13,
+      fontSize: 13.sp,
       fontWeight: FontWeight.w800,
       letterSpacing: 1.4,
       color: isDark ? const Color(0xFF7A9090) : AppColors.textMuted,

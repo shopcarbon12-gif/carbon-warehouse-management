@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 
-const double _kTacticalButtonHeight = 80;
+// Height is now resolved at runtime via .h extension
+double get _kTacticalButtonHeight => 80.h;
 
 /// Thumb-reach control strip for floor workers — high contrast, 80px targets.
 class TacticalBottomBar extends StatelessWidget {
@@ -19,12 +21,12 @@ class TacticalBottomBar extends StatelessWidget {
       elevation: 12,
       child: SafeArea(
         top: false,
-        minimum: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        minimum: EdgeInsets.fromLTRB(12.w, 8.h, 12.w, 12.h),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             for (var i = 0; i < children.length; i++) ...[
-              if (i > 0) const SizedBox(width: 10),
+              if (i > 0) SizedBox(width: 10.w),
               Expanded(child: children[i]),
             ],
           ],
@@ -130,7 +132,7 @@ class _TacticalButton extends StatelessWidget {
         style: TextStyle(
           color: foreground,
           fontWeight: FontWeight.w800,
-          fontSize: 14,
+          fontSize: 14.sp,
           letterSpacing: 1.1,
         ),
       ),
@@ -141,9 +143,9 @@ class _TacticalButton extends StatelessWidget {
         height: height,
         child: Material(
           color: background,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(10.r),
           child: InkWell(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(10.r),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onLongPressStart: (_) => onLongPressStart?.call(),
@@ -162,9 +164,9 @@ class _TacticalButton extends StatelessWidget {
         height: height,
         child: Material(
           color: background,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(10.r),
           child: InkWell(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(10.r),
             onTap: enabled ? onPressed : null,
             child: child,
           ),

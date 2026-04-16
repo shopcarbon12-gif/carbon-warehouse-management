@@ -4,6 +4,7 @@ import 'dart:io' show Platform, SocketException;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -46,6 +47,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
   static const double _iconPerson = 20;
   static const double _iconDnsLockEye = 22;
+
 
   static const Color _bg = Color(0xFFF5F5F5);
   static const Color _fieldFill = Color(0xFFECECEC);
@@ -202,53 +204,50 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }
 
   TextStyle get _fieldLabelStyle => GoogleFonts.inter(
-        fontSize: 11,
+        fontSize: 11.sp,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.9,
         color: _labelAboveField,
       );
 
   TextStyle get _inputTextStyle => GoogleFonts.inter(
-        fontSize: 15,
+        fontSize: 15.sp,
         fontWeight: FontWeight.w500,
         height: 1.2,
         color: _textBlack,
       );
 
   TextStyle get _inputTextStyleMuted => GoogleFonts.inter(
-        fontSize: 15,
+        fontSize: 15.sp,
         fontWeight: FontWeight.w500,
         height: 1.2,
         color: _labelGrey,
       );
 
-  /// Server URL row — larger text only (tray height unchanged).
   TextStyle get _serverUrlTextStyle => GoogleFonts.inter(
-        fontSize: 17,
+        fontSize: 17.sp,
         fontWeight: FontWeight.w500,
         height: 1.2,
         color: _textBlack,
       );
 
-  /// Email field typed text — larger only.
   TextStyle get _emailTrayTextStyle => GoogleFonts.inter(
-        fontSize: 17,
+        fontSize: 17.sp,
         fontWeight: FontWeight.w500,
         height: 1.2,
         color: _textBlack,
       );
 
-  /// Email hint — larger only.
   TextStyle get _emailTrayHintStyle => GoogleFonts.inter(
-        fontSize: 17,
+        fontSize: 17.sp,
         fontWeight: FontWeight.w500,
         height: 1.2,
         color: _labelGrey,
       );
 
-  TextStyle get _brandTitleStyle => const TextStyle(
+  TextStyle get _brandTitleStyle => TextStyle(
         fontFamily: _kBrandFontFamily,
-        fontSize: 28,
+        fontSize: 28.sp,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.05,
         height: 1.05,
@@ -256,7 +255,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       );
 
   TextStyle get _deviceIdLineStyle => GoogleFonts.inter(
-        fontSize: 15,
+        fontSize: 15.sp,
         fontWeight: FontWeight.w600,
         height: 1.2,
         color: Colors.black,
@@ -277,14 +276,14 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     Widget? trailing,
   }) {
     return Container(
-      height: _fieldHeight,
+      height: _fieldHeight.h,
       decoration: BoxDecoration(
         color: _fieldFill,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(10.r),
       ),
       padding: EdgeInsets.only(
-        left: horizontalPadding,
-        right: trailing != null ? 6 : horizontalPadding,
+        left: horizontalPadding.w,
+        right: trailing != null ? 6.w : horizontalPadding.w,
       ),
       alignment: Alignment.center,
       child: Row(
@@ -316,8 +315,8 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         behavior: SnackBarBehavior.floating,
         backgroundColor: const Color(0xFF2D2D2D),
         content: Text(message,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 14, height: 1.3)),
+            style: TextStyle(
+                color: Colors.white, fontSize: 14.sp, height: 1.3)),
       ),
     );
   }
@@ -519,20 +518,20 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   }) {
     return InkWell(
       onTap: () => onChanged(!value),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(8.0.r),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
+        padding: EdgeInsets.symmetric(vertical: 2.0.h),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(
-              width: 26,
-              height: 26,
+              width: 26.0.w,
+              height: 26.0.w,
               child: Checkbox(
                 value: value,
                 side: const BorderSide(color: _primaryTeal, width: 1.5),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(3)),
+                    borderRadius: BorderRadius.circular(3.0.r)),
                 fillColor: WidgetStateProperty.resolveWith((states) {
                   if (states.contains(WidgetState.selected))
                     return _primaryTeal;
@@ -544,12 +543,12 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 onChanged: (v) => onChanged(v ?? false),
               ),
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: 6.0.w),
             Expanded(
               child: Text(
                 label,
                 style: GoogleFonts.inter(
-                  fontSize: 14,
+                  fontSize: 14.0.sp,
                   fontWeight: FontWeight.w500,
                   color: _textBlack,
                 ),
@@ -613,13 +612,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   /// Scroll only when needed (keyboard / short viewport). No [FittedBox] — avoids whole-UI shrink.
   List<Widget> _loginScrollableFormChildren() {
     return [
-      const SizedBox(height: 28),
+      SizedBox(height: 28.h),
       Center(
         child: SizedBox(
-          width: _logoDisplaySize,
-          height: _logoDisplaySize,
+          width: _logoDisplaySize.w,
+          height: _logoDisplaySize.w,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(_logoCornerRadius),
+            borderRadius: BorderRadius.circular(_logoCornerRadius.r),
             child: Image.asset(
               'assets/carbon_logo.png',
               fit: BoxFit.cover,
@@ -629,7 +628,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           ),
         ),
       ),
-      const SizedBox(height: 10),
+      SizedBox(height: 10.0.h),
       Row(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -641,12 +640,12 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               strokeWidth: 0.7),
         ],
       ),
-      const SizedBox(height: 8),
+      SizedBox(height: 8.0.h),
       Text(
         'WAREHOUSE MANAGEMENT SOFTWARE',
         textAlign: TextAlign.center,
         style: GoogleFonts.inter(
-          fontSize: 14,
+          fontSize: 14.0.sp,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.45,
           height: 1.2,
@@ -654,15 +653,15 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         ),
       ),
       if (kIsWeb) ...[
-        const SizedBox(height: 12),
+        SizedBox(height: 12.0.h),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: EdgeInsets.symmetric(horizontal: 10.0.w),
           child: Text(
             'Web preview: same app code, but Chrome has no device vault. Use email and password. '
             'The large fingerprint row only shows on Android after you enroll biometrics on that phone.',
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
-              fontSize: 12,
+              fontSize: 12.0.sp,
               fontWeight: FontWeight.w500,
               height: 1.35,
               color: _subtitleGrey,
@@ -670,7 +669,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           ),
         ),
       ],
-      const SizedBox(height: 28),
+      SizedBox(height: 28.0.h),
       Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -678,7 +677,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           Text(
             'CONNECTED VIA SSL',
             style: GoogleFonts.inter(
-              fontSize: 9,
+              fontSize: 9.0.sp,
               fontWeight: FontWeight.w500,
               letterSpacing: 0.35,
               color: _labelGrey,
@@ -686,11 +685,11 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
-      const SizedBox(height: 6),
+      SizedBox(height: 6.0.h),
       _loginTray(
         leadingIcon: Icon(
           Icons.dns_outlined,
-          size: _iconDnsLockEye,
+          size: _iconDnsLockEye.sp,
           color: _labelGrey.withValues(alpha: 0.85),
         ),
         gapAfterIcon: 10,
@@ -701,9 +700,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      const SizedBox(height: 2),
+      SizedBox(height: 2.0.h),
       SizedBox(
-        height: _deviceLineReserveHeight,
+        height: _deviceLineReserveHeight.h,
         width: double.infinity,
         child: _deviceApprovalLine != null
             ? Align(
@@ -718,13 +717,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               )
             : const SizedBox.shrink(),
       ),
-      const SizedBox(height: 4),
+      SizedBox(height: 4.0.h),
       Text('USER EMAIL', style: _fieldLabelStyle),
-      const SizedBox(height: 6),
+      SizedBox(height: 6.0.h),
       _loginTray(
         leadingIcon: Icon(
           Icons.person_outline,
-          size: _iconPerson,
+          size: _iconPerson.sp,
           color: _labelGrey.withValues(alpha: 0.9),
         ),
         gapAfterIcon: 4,
@@ -744,13 +743,13 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           onChanged: (_) => unawaited(_refreshVaultUi()),
         ),
       ),
-      const SizedBox(height: 12),
+      SizedBox(height: 12.0.h),
       Text('PASSWORD', style: _fieldLabelStyle),
-      const SizedBox(height: 6),
+      SizedBox(height: 6.0.h),
       _loginTray(
         leadingIcon: Icon(
           Icons.lock_outline,
-          size: _iconDnsLockEye,
+          size: _iconDnsLockEye.sp,
           color: _labelGrey.withValues(alpha: 0.85),
         ),
         gapAfterIcon: 10,
@@ -787,14 +786,14 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
               onTap: () => setState(() => _obscurePassword = !_obscurePassword),
               customBorder: const CircleBorder(),
               child: SizedBox(
-                width: 44,
-                height: 44,
+                width: 44.0.w,
+                height: 44.0.w,
                 child: Center(
                   child: Icon(
                     _obscurePassword
                         ? Icons.visibility_outlined
                         : Icons.visibility_off_outlined,
-                    size: _iconDnsLockEye,
+                    size: _iconDnsLockEye.sp,
                     color: _labelGrey,
                   ),
                 ),
@@ -803,14 +802,14 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
           ),
         ),
       ),
-      const SizedBox(height: 6),
+      SizedBox(height: 6.0.h),
       _checkRow(
         value: _rememberEmail,
         onChanged: (v) => unawaited(_applyRememberEmail(v)),
         label: 'Remember email on this device',
       ),
       if (_bioCapableDevice) ...[
-        const SizedBox(height: 2),
+        SizedBox(height: 2.0.h),
         _checkRow(
           value: _offerBiometricSetupAfterSignIn,
           onChanged: (v) => unawaited(_applyOfferBiometric(v)),
@@ -818,19 +817,19 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         ),
       ],
       if (_err != null) ...[
-        const SizedBox(height: 8),
+        SizedBox(height: 8.0.h),
         Text(
           _err!,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.inter(
-            fontSize: 11,
+            fontSize: 11.0.sp,
             color: Colors.red.shade700,
             height: 1.3,
           ),
         ),
       ],
-      const SizedBox(height: 12),
+      SizedBox(height: 12.0.h),
     ];
   }
 
@@ -858,7 +857,7 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                   bottom: MediaQuery.viewInsetsOf(context).bottom),
               child: Padding(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 22, vertical: 6),
+                    EdgeInsets.symmetric(horizontal: 22.0.w, vertical: 6.0.h),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -895,22 +894,22 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                                   child: InkWell(
                                     onTap: _busy ? null : _biometricSignIn,
                                     customBorder: const CircleBorder(),
-                                    child: const Padding(
-                                      padding: EdgeInsets.all(4),
+                                    child: Padding(
+                                      padding: EdgeInsets.all(4.0.w),
                                       child: Icon(
                                         Icons.fingerprint,
-                                        size: 96,
+                                        size: 96.0.sp,
                                         color: _primaryTeal,
                                       ),
                                     ),
                                   ),
                                 )
                               else
-                                const SizedBox(height: 104),
+                                SizedBox(height: 104.0.h),
                               if (_vaultEmail != null &&
                                   _vaultEmail!.isNotEmpty)
                                 Padding(
-                                  padding: const EdgeInsets.only(top: 6),
+                                  padding: EdgeInsets.only(top: 6.0.h),
                                   child: Text(
                                     '(${_vaultEmail!})',
                                     textAlign: TextAlign.center,
@@ -919,18 +918,18 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                                     style: GoogleFonts.inter(
                                       fontWeight: FontWeight.w600,
                                       color: _primaryTeal,
-                                      fontSize: 13,
+                                      fontSize: 13.0.sp,
                                     ),
                                   ),
                                 ),
                               if (_biometricChallengeActive)
                                 Padding(
-                                  padding: const EdgeInsets.only(top: 8),
+                                  padding: EdgeInsets.only(top: 8.0.h),
                                   child: Text(
                                     'Confirm on this device…',
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.inter(
-                                      fontSize: 15,
+                                      fontSize: 15.0.sp,
                                       fontWeight: FontWeight.w600,
                                       height: 1.3,
                                       color: _primaryTeal,
@@ -961,22 +960,22 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                         ),
                       ),
                     SizedBox(
-                      height: _fieldHeight,
+                      height: _fieldHeight.h,
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
                           onTap: _busy ? null : _submit,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(10.0.r),
                           child: Ink(
                             decoration: BoxDecoration(
                               color: _primaryTeal,
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(10.0.r),
                             ),
                             child: Center(
                               child: Text(
                                 _busy ? 'SIGNING IN…' : 'SIGN IN',
                                 style: GoogleFonts.inter(
-                                  fontSize: 17,
+                                  fontSize: 17.0.sp,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: 1.1,
                                   color: Colors.white,

@@ -5,6 +5,8 @@ export type CatalogGridRow = {
   matrix_id: string;
   /** Matrix-level Lightspeed-style numeric id when present. */
   matrix_ls_system_id: string | null;
+  /** Variant-level Lightspeed System ID — this is what is encoded in EPC bits 20-60. */
+  sku_ls_system_id: string | null;
   sku: string;
   /** Variant UPC when set; matrix UPC always available as `matrix_upc`. */
   sku_upc: string | null;
@@ -32,16 +34,26 @@ function buildWhere(
   brand: string,
   category: string,
   vendor: string,
+  systemId: string,
 ): { sql: string; params: unknown[] } {
   const parts: string[] = ["1=1"];
   const params: unknown[] = [];
   let i = 1;
+
+  // Exact variant-level system ID match — used by handheld EPC lookup
+  const sid = systemId.trim();
+  if (sid) {
+    parts.push(`cs.ls_system_id::text = $${i}`);
+    params.push(sid);
+    i += 1;
+  }
 
   const qt = q.trim();
   if (qt) {
     parts.push(
       `(
         COALESCE(m.ls_system_id::text, '') ILIKE $${i}
+        OR COALESCE(cs.ls_system_id::text, '') ILIKE $${i}
         OR m.description ILIKE $${i}
         OR cs.sku ILIKE $${i}
         OR m.upc ILIKE $${i}
@@ -105,13 +117,14 @@ export async function listCatalogGrid(
     category: string;
     vendor: string;
     locationId: string;
+    systemId?: string;
   },
 ): Promise<CatalogGridResult> {
-  const { page, limit, q, brand, category, vendor, locationId } = options;
+  const { page, limit, q, brand, category, vendor, locationId, systemId = "" } = options;
   const safeLimit = Math.min(100, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
 
-  const { sql: whereSql, params: whereParams } = buildWhere(q, brand, category, vendor);
+  const { sql: whereSql, params: whereParams } = buildWhere(q, brand, category, vendor, systemId);
 
   const countR = await pool.query<{ c: string }>(
     `SELECT COUNT(*)::text AS c
@@ -131,6 +144,7 @@ export async function listCatalogGrid(
     custom_sku_id: string;
     matrix_id: string;
     matrix_ls_system_id: string | null;
+    sku_ls_system_id: string | null;
     sku: string;
     sku_upc: string | null;
     matrix_upc: string;
@@ -146,6 +160,7 @@ export async function listCatalogGrid(
        cs.id::text AS custom_sku_id,
        m.id::text AS matrix_id,
        m.ls_system_id::text AS matrix_ls_system_id,
+       cs.ls_system_id::text AS sku_ls_system_id,
        cs.sku,
        cs.upc AS sku_upc,
        m.upc AS matrix_upc,
@@ -177,6 +192,7 @@ export async function listCatalogGrid(
       custom_sku_id: row.custom_sku_id,
       matrix_id: row.matrix_id,
       matrix_ls_system_id: row.matrix_ls_system_id,
+      sku_ls_system_id: row.sku_ls_system_id,
       sku: row.sku,
       sku_upc: row.sku_upc,
       matrix_upc: row.matrix_upc,

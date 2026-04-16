@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
@@ -120,12 +121,12 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
     return CarbonScaffold(
       pageTitle: 'BARCODE INTAKE',
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16.r),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('BARCODE INTAKE', style: AppTheme.headline(context)),
-            const SizedBox(height: 8),
+            SizedBox(height: 8.h),
             TextField(
               controller: _barcodeCtrl,
               style: const TextStyle(
@@ -138,7 +139,7 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
               ),
               onSubmitted: (_) => unawaited(_resolvePreview()),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8.h),
             OutlinedButton.icon(
               onPressed: () async {
                 final code = await openCameraBarcodeScanner(
@@ -149,23 +150,23 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
                 _barcodeCtrl.text = code;
                 unawaited(_resolvePreview());
               },
-              icon: const Icon(Icons.photo_camera_outlined),
+              icon: Icon(Icons.photo_camera_outlined),
               label: const Text('Scan with camera'),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12.h),
             TextField(
               controller: _qtyCtrl,
               keyboardType: TextInputType.number,
               style: const TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600),
               decoration: const InputDecoration(labelText: 'Quantity'),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12.h),
             if (_lookupErr != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: EdgeInsets.only(bottom: 8.h),
                 child: Text(
                   _lookupErr!,
-                  style: const TextStyle(color: Color(0xFFf87171), fontSize: 12, fontFamily: 'monospace'),
+                  style: TextStyle(color: Color(0xFFf87171), fontSize: 12.sp, fontFamily: 'monospace'),
                 ),
               ),
             FilledButton(
@@ -173,23 +174,23 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: EdgeInsets.symmetric(vertical: 16.h),
               ),
               child: Text(
                 _busyLookup ? 'RESOLVING…' : 'RESOLVE',
                 style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
               ),
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24.h),
             if (_preview != null) ...[
               _IntakePreviewCard(row: _preview!),
-              const SizedBox(height: 16),
+              SizedBox(height: 16.h),
               FilledButton(
                 onPressed: () => unawaited(_commitIntake()),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.slateActionDark,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: EdgeInsets.symmetric(vertical: 16.h),
                 ),
                 child: const Text(
                   'COMMIT INTAKE',
@@ -229,7 +230,7 @@ class _IntakePreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16.r),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -238,15 +239,15 @@ class _IntakePreviewCard extends StatelessWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: AppColors.background,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(8.r),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: const Center(
-                  child: Icon(Icons.inventory_2_outlined, size: 56, color: AppColors.textMuted),
+                child: Center(
+                  child: Icon(Icons.inventory_2_outlined, size: 56.sp, color: AppColors.textMuted),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12.h),
             _line('BARCODE', row.code),
             _line('SKU', row.sku),
             _line('NAME', row.name),
@@ -259,25 +260,25 @@ class _IntakePreviewCard extends StatelessWidget {
 
   Widget _line(String k, String v) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: 8.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             k,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textMuted,
-              fontSize: 11,
+              fontSize: 11.sp,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.2,
             ),
           ),
           Text(
             v,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textMain,
               fontWeight: FontWeight.w700,
-              fontSize: 16,
+              fontSize: 16.sp,
             ),
           ),
         ],

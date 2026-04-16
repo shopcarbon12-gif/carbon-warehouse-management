@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -125,15 +126,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (_locations.length <= 1) return;
     showModalBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(12.r))),
       builder: (ctx) => ListView(
         shrinkWrap: true,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+          Padding(
+            padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 8.h),
             child: Text('Select Location',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15.sp)),
           ),
           ..._locations.map((loc) {
             final name = loc['name'] ?? loc['code'] ?? '';
@@ -141,7 +142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return ListTile(
               title: Text(name),
               trailing: selected
-                  ? const Icon(Icons.check, color: AppColors.primary)
+                  ? Icon(Icons.check, color: AppColors.primary)
                   : null,
               onTap: () {
                 setState(() => _currentLocationName = name);
@@ -149,7 +150,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               },
             );
           }),
-          const SizedBox(height: 16),
+          SizedBox(height: 16.h),
         ],
       ),
     );
@@ -364,7 +365,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       leading: Builder(
         builder: (ctx) => Center(
           child: Padding(
-            padding: const EdgeInsets.only(left: 14),
+            padding: EdgeInsets.only(left: 14.w),
             child: GestureDetector(
               onTap: () {
                 final scaffold = Scaffold.of(ctx);
@@ -377,8 +378,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: ClipOval(
                 child: Image.asset(
                   'assets/carbon_logo.png',
-                  width: 40,
-                  height: 40,
+                  width: 40.w,
+                  height: 40.h,
                   fit: BoxFit.cover,
                 ),
               ),
@@ -394,7 +395,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(
             'Carbon',
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 20,
+              fontSize: 20.sp,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.3,
               color: isDark ? const Color(0xFFE0ECEC) : AppColors.textMain,
@@ -402,7 +403,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           WmsText(
             color: isDark ? const Color(0xFF4DB6AC) : AppColors.primary,
-            fontSize: 20,
+            fontSize: 20.sp,
           ),
         ],
       ),
@@ -413,23 +414,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             IconButton(
               tooltip: 'Download & install update',
-              icon: const Icon(Icons.system_update_alt, size: 27),
+              icon: Icon(Icons.system_update_alt, size: 27.sp),
               color: AppColors.textMuted,
               onPressed: () => _installOta(context),
             ),
             if (_updateAvailable)
               Positioned(
-                right: 6,
-                top: 10,
+                right: 6.w,
+                top: 10.h,
                 child: Container(
-                  width: 8,
-                  height: 8,
+                  width: 8.w,
+                  height: 8.h,
                   decoration: BoxDecoration(
                     color: AppColors.success,
                     shape: BoxShape.circle,
                     border: Border.all(
                         color: isDark ? const Color(0xFF111A1A) : Colors.white,
-                        width: 1.5),
+                        width: 1.5.w),
                   ),
                 ),
               ),
@@ -438,11 +439,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (widget.onLogout != null)
           IconButton(
             tooltip: 'Sign out',
-            icon: const Icon(Icons.power_settings_new, size: 27),
+            icon: Icon(Icons.power_settings_new, size: 27.sp),
             color: AppColors.textMuted,
             onPressed: () => widget.onLogout!(),
           ),
-        const SizedBox(width: 4),
+        SizedBox(width: 4.w),
       ],
     );
   }
@@ -470,7 +471,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // ── B. Stat cards ──────────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 0.h),
                 child: Row(
                   children: [
                     _StatCard(
@@ -483,7 +484,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       mainColor: mainColor,
                       mutedColor: mutedColor,
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8.w),
                     _StatCard(
                       label: 'INVENTORY',
                       value: _statsLoading
@@ -496,7 +497,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       mainColor: mainColor,
                       mutedColor: mutedColor,
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8.w),
                     _StatCard(
                       label: 'RECEIVING',
                       value:
@@ -514,17 +515,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // ── C. Locations block ────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0.h),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        if (_locations.length > 1) const SizedBox(width: 30),
+                        if (_locations.length > 1) SizedBox(width: 30.w),
                         Text(
                           'LOCATIONS',
                           style: GoogleFonts.spaceGrotesk(
-                            fontSize: 12,
+                            fontSize: 12.sp,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 2.0,
                             color: mutedColor,
@@ -532,7 +533,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    SizedBox(height: 2.h),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -540,16 +541,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           GestureDetector(
                             onTap: _pickLocation,
                             child: Padding(
-                              padding: const EdgeInsets.only(right: 8),
+                              padding: EdgeInsets.only(right: 8.w),
                               child:
-                                  Icon(Icons.menu, size: 22, color: mutedColor),
+                                  Icon(Icons.menu, size: 22.sp, color: mutedColor),
                             ),
                           ),
                         Expanded(
                           child: Text(
                             _currentLocationName,
                             style: GoogleFonts.manrope(
-                              fontSize: 22,
+                              fontSize: 22.sp,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -1.0,
                               color: mainColor,
@@ -566,7 +567,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             // ── D. 2×2 Hero tile grid ─────────────────────────────────
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 0.h),
               sliver: SliverToBoxAdapter(
                 child: GridView.count(
                   shrinkWrap: true,
@@ -621,20 +622,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // ── E. Hardware Pulse ─────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
+                padding: EdgeInsets.fromLTRB(20.w, 28.h, 20.w, 0.h),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'HARDWARE PULSE',
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 12,
+                        fontSize: 12.sp,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 2.0,
                         color: mutedColor,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12.h),
                     GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -684,18 +685,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // ── F. Operator + Throughput ──────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 0.h),
                 child: Row(
                   children: [
                     const Expanded(
                         child: _InfoCard(label: 'Operator', value: '—')),
-                    const SizedBox(width: 12),
+                    SizedBox(width: 12.w),
                     Expanded(
                       child: _InfoCard(
                         label: 'Throughput',
                         value: '—',
                         trailing: Icon(Icons.trending_up,
-                            color: mutedColor, size: 18),
+                            color: mutedColor, size: 18.sp),
                       ),
                     ),
                   ],
@@ -706,17 +707,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // ── G. MORE TOOLS ─────────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
+                padding: EdgeInsets.fromLTRB(20.w, 28.h, 20.w, 0.h),
                 child: Text('MORE TOOLS',
                     style: GoogleFonts.spaceGrotesk(
-                        fontSize: 12,
+                        fontSize: 12.sp,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 2.0,
                         color: mutedColor)),
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 32),
+              padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 32.h),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
@@ -799,13 +800,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
 
     return Container(
-      height: 72 + MediaQuery.of(context).padding.bottom,
+      height: 72.h + MediaQuery.of(context).padding.bottom,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C2828) : Colors.white,
         border: Border(
             top: BorderSide(
                 color: isDark ? Colors.white12 : const Color(0xFFEDF2F1),
-                width: 1)),
+                width: 1.w)),
         boxShadow: isDark
             ? null
             : const [
@@ -827,28 +828,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 behavior: HitTestBehavior.opaque,
                 child: Container(
                   margin:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      EdgeInsets.symmetric(horizontal: 4.w, vertical: 8.h),
                   decoration: BoxDecoration(
                     color: active
                         ? (isDark
                             ? const Color(0xFF243030)
                             : _surfaceContainerHigh)
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(4.r),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
                         item.icon,
-                        size: 22,
+                        size: 22.sp,
                         color: active ? AppColors.primary : AppColors.textMuted,
                       ),
-                      const SizedBox(height: 3),
+                      SizedBox(height: 3.h),
                       Text(
                         item.label,
                         style: GoogleFonts.manrope(
-                          fontSize: 12,
+                          fontSize: 12.sp,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.8,
                           color:
@@ -899,9 +900,9 @@ class _StatCard extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
           decoration: BoxDecoration(
-              color: cardColor, borderRadius: BorderRadius.circular(4)),
+              color: cardColor, borderRadius: BorderRadius.circular(4.r)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -909,9 +910,9 @@ class _StatCard extends StatelessWidget {
                 children: [
                   if (dot)
                     Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.only(right: 6),
+                      width: 8.w,
+                      height: 8.h,
+                      margin: EdgeInsets.only(right: 6.w),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: dotColor ?? mutedColor,
@@ -920,17 +921,17 @@ class _StatCard extends StatelessWidget {
                   Flexible(
                     child: Text(label,
                         style: GoogleFonts.spaceGrotesk(
-                            fontSize: 12,
+                            fontSize: 12.sp,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 1.4,
                             color: mutedColor)),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: 6.h),
               Text(value,
                   style: GoogleFonts.manrope(
-                      fontSize: 28,
+                      fontSize: 28.sp,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.5,
                       color: mainColor)),
@@ -977,29 +978,29 @@ class _HeroTile extends StatelessWidget {
 
     return Material(
       color: bg,
-      borderRadius: BorderRadius.circular(2),
+      borderRadius: BorderRadius.circular(2.r),
       clipBehavior: Clip.hardEdge,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(2.r),
         child: Stack(
           children: [
             Positioned(
-              right: 8,
-              bottom: 8,
-              child: Icon(icon, size: 92, color: watermarkColor),
+              right: 8.w,
+              bottom: 8.h,
+              child: Icon(icon, size: 92.sp, color: watermarkColor),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 28.h),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(icon, size: 36, color: fg),
+                  Icon(icon, size: 36.sp, color: fg),
                   Text(
                     label.toUpperCase(),
                     style: GoogleFonts.manrope(
-                      fontSize: 16,
+                      fontSize: 16.sp,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.2,
                       color: fg,
@@ -1037,14 +1038,14 @@ class _PulseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
       decoration: BoxDecoration(
-          color: cardColor, borderRadius: BorderRadius.circular(2)),
+          color: cardColor, borderRadius: BorderRadius.circular(2.r)),
       child: Row(
         children: [
           Container(
-            width: 7,
-            height: 7,
+            width: 7.w,
+            height: 7.h,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: active
@@ -1052,20 +1053,20 @@ class _PulseCard extends StatelessWidget {
                   : mutedColor.withValues(alpha: 0.3),
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10.w),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(label.toUpperCase(),
                   style: GoogleFonts.spaceGrotesk(
-                      fontSize: 11,
+                      fontSize: 11.sp,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.0,
                       color: mutedColor)),
               Text(value,
                   style: GoogleFonts.manrope(
-                      fontSize: 15,
+                      fontSize: 15.sp,
                       fontWeight: FontWeight.w700,
                       color: noSource
                           ? mainColor.withValues(alpha: 0.6)
@@ -1092,25 +1093,25 @@ class _InfoCard extends StatelessWidget {
     final mainColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
     final mutedColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(14.r),
       decoration: BoxDecoration(
-          color: cardColor, borderRadius: BorderRadius.circular(2)),
+          color: cardColor, borderRadius: BorderRadius.circular(2.r)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label.toUpperCase(),
               style: GoogleFonts.spaceGrotesk(
-                  fontSize: 12,
+                  fontSize: 12.sp,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.5,
                   color: mutedColor)),
-          const SizedBox(height: 6),
+          SizedBox(height: 6.h),
           Row(
             children: [
               Expanded(
                 child: Text(value,
                     style: GoogleFonts.manrope(
-                        fontSize: 15,
+                        fontSize: 15.sp,
                         fontWeight: FontWeight.w700,
                         color: mainColor.withValues(alpha: 0.6))),
               ),
@@ -1139,20 +1140,20 @@ class _SmallTile extends StatelessWidget {
     final textColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
     return Material(
       color: cardColor,
-      borderRadius: BorderRadius.circular(2),
+      borderRadius: BorderRadius.circular(2.r),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(2.r),
         child: Padding(
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(10.r),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 20, color: iconColor),
+              Icon(icon, size: 20.sp, color: iconColor),
               const Spacer(),
               Text(label.toUpperCase(),
                   style: GoogleFonts.manrope(
-                      fontSize: 11,
+                      fontSize: 11.sp,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.6,
                       color: textColor)),

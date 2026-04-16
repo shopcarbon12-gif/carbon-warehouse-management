@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
@@ -231,8 +232,8 @@ class _TransferSlipsScreenState extends State<TransferSlipsScreen>
           ),
           if (_msg != null)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Text(_msg!, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+              padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 0.h),
+              child: Text(_msg!, style: TextStyle(color: AppColors.textMuted, fontSize: 12.sp)),
             ),
           Expanded(
             child: TabBarView(
@@ -250,31 +251,31 @@ class _TransferSlipsScreenState extends State<TransferSlipsScreen>
 
   Widget _buildOutTab(BuildContext context, RfidManager rfid) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16.r),
       children: [
         Text('CREATE SLIP', style: AppTheme.headline(context)),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         TextField(
           controller: _sourceCtrl,
           style: const TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600),
           decoration: const InputDecoration(labelText: 'Source location code'),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         TextField(
           controller: _destCtrl,
           style: const TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600),
           decoration: const InputDecoration(labelText: 'Destination location code'),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12.h),
         FilledButton(
           onPressed: _busy ? null : () => unawaited(_createSlipOut()),
           child: Text(_busy ? '…' : 'CREATE SLIP'),
         ),
         if (_activeSlipOut != null) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: 16.h),
           Text('ACTIVE SLIP #$_activeSlipOut', style: AppTheme.headline(context)),
           Text('Session EPCs: ${rfid.sessionCount}', style: const TextStyle(color: AppColors.textMuted)),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           FilledButton(
             onPressed: _busy ? null : () => unawaited(_appendScansToSlip()),
             style: FilledButton.styleFrom(
@@ -290,34 +291,34 @@ class _TransferSlipsScreenState extends State<TransferSlipsScreen>
 
   Widget _buildInTab(BuildContext context, RfidManager rfid) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16.r),
       children: [
         Row(
           children: [
             Text('SELECT SLIP', style: AppTheme.headline(context)),
             const Spacer(),
             IconButton(
-              icon: const Icon(Icons.refresh),
+              icon: Icon(Icons.refresh),
               onPressed: _loadingSlips ? null : () => unawaited(_reloadSlips()),
             ),
           ],
         ),
         if (_loadingSlips) const LinearProgressIndicator(),
         ..._slips.map((row) {
-          if (row is! Map) return const SizedBox.shrink();
+          if (row is! Map) return SizedBox.shrink();
           final n = row['slip_number'];
           final num = n is int ? n : int.tryParse('$n') ?? 0;
           return ListTile(
-            title: Text('#$num  ${row['source_loc']} → ${row['dest_loc']}', style: const TextStyle(fontSize: 13)),
-            subtitle: Text('${row['status']}', style: const TextStyle(fontSize: 11)),
+            title: Text('#$num  ${row['source_loc']} → ${row['dest_loc']}', style: TextStyle(fontSize: 13.sp)),
+            subtitle: Text('${row['status']}', style: TextStyle(fontSize: 11.sp)),
             onTap: num > 0 ? () => unawaited(_loadSlipIn(num)) : null,
           );
         }),
         if (_slipDetailIn != null) ...[
-          const Divider(height: 24),
+          Divider(height: 24.h),
           Text('SLIP #$_selectedSlipIn — scan only tags on this slip', style: AppTheme.headline(context)),
           Text('Session: ${rfid.sessionCount} EPC(s)', style: const TextStyle(color: AppColors.textMuted)),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           Row(
             children: [
               Expanded(
@@ -326,7 +327,7 @@ class _TransferSlipsScreenState extends State<TransferSlipsScreen>
                   child: const Text('MARK RECEIVED'),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8.w),
               Expanded(
                 child: OutlinedButton(
                   onPressed: _busy ? null : () => unawaited(_receiveOutcome('missing')),

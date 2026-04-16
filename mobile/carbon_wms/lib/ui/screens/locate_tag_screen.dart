@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/audio/geiger_beep_wav.dart';
@@ -221,12 +222,12 @@ class _LocateTagScreenState extends State<LocateTagScreen> {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16.r),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('TARGET EPC', style: AppTheme.headline(context)),
-            const SizedBox(height: 8),
+            SizedBox(height: 8.h),
             TextField(
               controller: _targetCtrl,
               enabled: !_holding && !_tapScanOn,
@@ -241,15 +242,15 @@ class _LocateTagScreenState extends State<LocateTagScreen> {
               ),
             ),
             if (kDebugMode) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: 8.h),
               TextButton(
                 onPressed: (_holding || _tapScanOn) ? null : _debugPulseCloser,
                 child: const Text('DEBUG: pulse strong RSSI (stub)'),
               ),
             ],
-            const SizedBox(height: 12),
+            SizedBox(height: 12.h),
             Text('SIMULATE OTHER TAG', style: AppTheme.headline(context)),
-            const SizedBox(height: 6),
+            SizedBox(height: 6.h),
             TextButton(
               onPressed: (_holding || _tapScanOn)
                   ? null
@@ -262,7 +263,7 @@ class _LocateTagScreenState extends State<LocateTagScreen> {
             Center(
               child: _RadarMeter(proximity01: _proximity01, percentLabel: pct),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20.h),
             SelectableText(
               target ?? 'Enter a valid 24-character hex EPC',
               textAlign: TextAlign.center,
@@ -272,7 +273,7 @@ class _LocateTagScreenState extends State<LocateTagScreen> {
                     letterSpacing: 0.8,
                   ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8.h),
             Text(
               rssiLabel,
               textAlign: TextAlign.center,
@@ -305,14 +306,14 @@ class _RadarMeter extends StatelessWidget {
     final ring = Color.lerp(AppColors.surface, AppColors.success, t)!;
 
     return SizedBox(
-      width: 240,
-      height: 240,
+      width: 240.w,
+      height: 240.h,
       child: Stack(
         alignment: Alignment.center,
         children: [
           SizedBox(
-            width: 240,
-            height: 240,
+            width: 240.w,
+            height: 240.h,
             child: CircularProgressIndicator(
               value: t,
               strokeWidth: 18,
@@ -332,7 +333,7 @@ class _RadarMeter extends StatelessWidget {
                       letterSpacing: 0.5,
                     ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: 4.h),
               Text(
                 'PROXIMITY',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(

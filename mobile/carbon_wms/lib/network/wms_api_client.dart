@@ -512,6 +512,32 @@ class WmsApiClient {
     return out;
   }
 
+  /// Exact variant-level System ID lookup — primary method for EPC resolution.
+  /// Hits `GET /api/inventory/catalog?view=grid&systemId=<id>` which does an exact
+  /// match on `custom_skus.ls_system_id`. Returns the first matching row or null.
+  Future<Map<String, dynamic>?> catalogLookupBySystemId(String systemId) async {
+    final sid = systemId.trim();
+    if (sid.isEmpty) return null;
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/catalog').replace(
+      queryParameters: {
+        'view': 'grid',
+        'page': '1',
+        'limit': '1',
+        'systemId': sid,
+      },
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return null;
+    final rows = decoded['rows'];
+    if (rows is! List || rows.isEmpty) return null;
+    final first = rows.first;
+    if (first is Map<String, dynamic>) return first;
+    return null;
+  }
+
   /// First page of catalog grid rows for search (session Bearer).
   Future<Map<String, dynamic>?> catalogGridSearchFirstRow(String q) async {
     final qt = q.trim();

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 /// Full-screen camera barcode/QR scan. Returns first non-empty [Barcode.rawValue], or null if closed.
@@ -54,18 +55,18 @@ class _CameraBarcodePageState extends State<_CameraBarcodePage> {
         children: [
           MobileScanner(onDetect: _onDetect),
           Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
+            left: 0.w,
+            right: 0.w,
+            top: 0.h,
             child: Container(
               color: Colors.black,
-              padding: const EdgeInsets.fromLTRB(16, 40, 16, 24),
+              padding: EdgeInsets.fromLTRB(16.w, 40.h, 16.w, 24.h),
               child: Text(
                 widget.title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 20,
+                  fontSize: 20.sp,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.5,
                 ),

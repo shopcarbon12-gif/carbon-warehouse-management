@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:carbon_wms/theme/app_theme.dart';
@@ -31,22 +32,22 @@ class EpcDetailScreen extends StatelessWidget {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16.r),
               itemCount: epcs.length,
               separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: AppColors.border),
+                  Divider(height: 1.h, color: AppColors.border),
               itemBuilder: (context, i) {
                 final epc = epcs[i];
                 return ListTile(
                   title: Text(
                     epc,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.8,
-                      fontSize: 13,
+                      fontSize: 13.sp,
                     ),
                   ),
-                  trailing: const Icon(
+                  trailing: Icon(
                     Icons.radar_outlined,
                     color: AppColors.primary,
                   ),

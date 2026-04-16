@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
@@ -22,7 +23,7 @@ class InventoryHubScreen extends StatelessWidget {
       body: ColoredBox(
         color: Colors.white,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+          padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 20.h),
           child: GridView.count(
             crossAxisCount: 3,
             mainAxisSpacing: 8,
@@ -104,21 +105,21 @@ class _InventoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: tileColor,
-      borderRadius: BorderRadius.circular(2),
+      borderRadius: BorderRadius.circular(2.r),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(2.r),
         child: Padding(
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(10.r),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: iconColor, size: 20),
+              Icon(icon, color: iconColor, size: 20.sp),
               const Spacer(),
               Text(
                 label.toUpperCase(),
                 style: GoogleFonts.manrope(
-                  fontSize: 11,
+                  fontSize: 11.sp,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.6,
                   color: textColor,

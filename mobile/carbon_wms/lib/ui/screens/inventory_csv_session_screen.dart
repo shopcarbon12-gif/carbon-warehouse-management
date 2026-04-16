@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
@@ -100,17 +101,17 @@ class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16.r),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('MANUAL CSV SESSION', style: AppTheme.headline(context)),
-            const SizedBox(height: 8),
-            const Text(
+            SizedBox(height: 8.h),
+            Text(
               'RFID reads stay on device until you tap Upload. Edge streaming is paused on this screen.',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13.sp),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12.h),
             TextField(
               controller: _defaultBinCtrl,
               style: const TextStyle(color: AppColors.textMain, fontWeight: FontWeight.w600),
@@ -122,19 +123,19 @@ class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
               ),
             ),
             if (_status != null) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: 12.h),
               Text(_status!, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
             ],
-            const SizedBox(height: 16),
+            SizedBox(height: 16.h),
             Text(
               'UNIQUE TAGS: ${m.manualCsvRows.length}',
-              style: AppTheme.headline(context).copyWith(fontSize: 12),
+              style: AppTheme.headline(context).copyWith(fontSize: 12.sp),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8.h),
             Expanded(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(12.r),
                   border: Border.all(color: AppColors.border),
                   color: AppColors.surface,
                 ),
@@ -160,7 +161,7 @@ class _InventoryCsvSessionScreenState extends State<InventoryCsvSessionScreen> {
                             ),
                             subtitle: Text(
                               r.at.toIso8601String(),
-                              style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                              style: TextStyle(color: AppColors.textMuted, fontSize: 11.sp),
                             ),
                           );
                         },

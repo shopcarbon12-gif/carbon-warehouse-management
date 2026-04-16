@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
@@ -67,13 +68,19 @@ class _CarbonWmsRootState extends State<CarbonWmsRoot> {
         ChangeNotifierProvider<ThemeNotifier>.value(value: _themeNotifier),
       ],
       child: Consumer<ThemeNotifier>(
-        builder: (_, notifier, __) => MaterialApp(
-          title: 'CarbonWMS',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.light,
-          darkTheme: AppTheme.dark,
-          themeMode: notifier.mode,
-          home: const AppAuthGate(),
+        builder: (_, notifier, __) => ScreenUtilInit(
+          // Design baseline: Samsung S25 Ultra logical dimensions (portrait)
+          designSize: const Size(412, 917),
+          minTextAdapt: true,
+          splitScreenMode: false,
+          builder: (_, __) => MaterialApp(
+            title: 'CarbonWMS',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light,
+            darkTheme: AppTheme.dark,
+            themeMode: notifier.mode,
+            home: const AppAuthGate(),
+          ),
         ),
       ),
     );

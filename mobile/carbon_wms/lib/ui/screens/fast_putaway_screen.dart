@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/services.dart'
     show DeviceOrientation, EventChannel, SystemChrome, SystemUiOverlayStyle;
 import 'package:google_fonts/google_fonts.dart';
@@ -424,7 +425,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('This bin does not exist. Would you like to add it?'),
-            const SizedBox(height: 12),
+            SizedBox(height: 12.h),
             TextField(
               controller: ctrl,
               decoration: const InputDecoration(labelText: 'Bin code'),
@@ -853,8 +854,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                   context.read<WmsApiClient>().fetchCatalogMatrixRows(matrixId),
               builder: (ctx2, snap) {
                 if (snap.connectionState != ConnectionState.done) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
+                  return Padding(
+                    padding: EdgeInsets.all(24.r),
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
@@ -903,10 +904,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                         }),
                         title: Text(
                           label.isNotEmpty ? label : sku,
-                          style: const TextStyle(fontSize: 13),
+                          style: TextStyle(fontSize: 13.sp),
                         ),
                         subtitle:
-                            Text(sku, style: const TextStyle(fontSize: 11)),
+                            Text(sku, style: TextStyle(fontSize: 11.sp)),
                       );
                     }).toList(),
                   ),
@@ -1218,14 +1219,14 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             ] else
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  padding: EdgeInsets.fromLTRB(16.w, 0.h, 16.w, 8.h),
                   itemCount: _storedContents.where((e) => e.qty > 0).length,
                   itemBuilder: (context, i) {
                     final visible =
                         _storedContents.where((e) => e.qty > 0).toList();
                     final item = visible[i];
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
+                      padding: EdgeInsets.only(bottom: 8.h),
                       child: Dismissible(
                         key: ValueKey(item.sku),
                         direction: DismissDirection.startToEnd,
@@ -1236,9 +1237,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                         background: Container(
                           color: Colors.red,
                           alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.only(left: 20),
-                          child: const Icon(Icons.delete_outline,
-                              color: Colors.white, size: 26),
+                          padding: EdgeInsets.only(left: 20.w),
+                          child: Icon(Icons.delete_outline,
+                              color: Colors.white, size: 26.sp),
                         ),
                         child: GestureDetector(
                           onTap: () => Navigator.push(
@@ -1318,7 +1319,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       titleSpacing: 12,
       actions: [
         IconButton(
-          icon: Icon(Icons.settings_outlined, color: Colors.black, size: 28),
+          icon: Icon(Icons.settings_outlined, color: Colors.black, size: 28.sp),
           onPressed: _openSettings,
         ),
       ],
@@ -1330,13 +1331,13 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             child: ClipOval(
               child: Image.asset(
                 'assets/carbon_logo.png',
-                width: 36,
-                height: 36,
+                width: 36.w,
+                height: 36.h,
                 fit: BoxFit.cover,
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8.w),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
@@ -1344,27 +1345,27 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               Text(
                 'Carbon',
                 style: GoogleFonts.manrope(
-                  fontSize: 18,
+                  fontSize: 18.sp,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.3,
                   color: mainColor,
                 ),
               ),
-              WmsText(color: wmsTeal, fontSize: 18),
+              WmsText(color: wmsTeal, fontSize: 18.sp),
             ],
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 7),
+            padding: EdgeInsets.symmetric(horizontal: 7.w),
             child: Text('/',
-                style: const TextStyle(
-                    fontSize: 22,
+                style: TextStyle(
+                    fontSize: 22.sp,
                     fontWeight: FontWeight.w700,
                     color: Colors.black)),
           ),
           Text(
             'BIN ASSIGN',
             style: GoogleFonts.manrope(
-              fontSize: 16,
+              fontSize: 16.sp,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.6,
               color: wmsTeal,
@@ -1521,14 +1522,14 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
         children: [
           // Label and badge OUTSIDE the box
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 12.h),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   'CURRENT BIN LOCATION',
                   style: GoogleFonts.spaceGrotesk(
-                    fontSize: 13,
+                    fontSize: 13.sp,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 2.0,
                     color: widget.mutedColor,
@@ -1542,11 +1543,11 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
           Column(
             children: [
               Container(
-                margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                margin: EdgeInsets.fromLTRB(16.w, 0.h, 16.w, 0.h),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.zero,
-                  border: Border.all(color: AppColors.primary, width: 2),
+                  border: Border.all(color: AppColors.primary, width: 2.w),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1554,11 +1555,11 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                     if (widget.isActive)
                       Center(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                          padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 0.h),
                           child: Text(
                             widget.binCode,
                             style: GoogleFonts.spaceGrotesk(
-                              fontSize: 42,
+                              fontSize: 42.sp,
                               fontWeight: FontWeight.w800,
                               color: AppColors.primary,
                               letterSpacing: 1.2,
@@ -1576,16 +1577,16 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                           controller: _binCtrl,
                           focusNode: _focusNode,
                           style: GoogleFonts.spaceGrotesk(
-                            fontSize: 28,
+                            fontSize: 28.sp,
                             fontWeight: FontWeight.w700,
                             color: AppColors.primary,
                           ),
                           decoration: InputDecoration(
                             hintText: 'Enter bin code...',
                             hintStyle: TextStyle(
-                                color: Colors.grey.shade400, fontSize: 16),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 18),
+                                color: Colors.grey.shade400, fontSize: 16.sp),
+                            contentPadding: EdgeInsets.symmetric(
+                                horizontal: 14.w, vertical: 18.h),
                             border: InputBorder.none,
                           ),
                           textCapitalization: TextCapitalization.characters,
@@ -1594,18 +1595,18 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                       )
                     else
                       // Empty placeholder — same height as text input
-                      const SizedBox(
+                      SizedBox(
                         width: double.infinity,
-                        height: 60,
+                        height: 60.h,
                       ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4.h),
                     Center(
                       child: Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
+                        padding: EdgeInsets.only(bottom: 10.h),
                         child: Text(
                           _locationLine,
                           style: GoogleFonts.spaceGrotesk(
-                            fontSize: 14,
+                            fontSize: 14.sp,
                             fontWeight: FontWeight.w600,
                             color: widget.mutedColor,
                             letterSpacing: 0.5,
@@ -1619,7 +1620,7 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
               // Dropdown search results
               if (widget.manualBin && _showDropdown)
                 Container(
-                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                  margin: EdgeInsets.fromLTRB(16.w, 0.h, 16.w, 0.h),
                   constraints: const BoxConstraints(maxHeight: 240),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -1638,7 +1639,7 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                     padding: EdgeInsets.zero,
                     itemCount: _filteredBins.length + 1,
                     separatorBuilder: (_, __) =>
-                        Divider(height: 1, color: Colors.grey.shade200),
+                        Divider(height: 1.h, color: Colors.grey.shade200),
                     itemBuilder: (_, i) {
                       // First item is always "Add new bin"
                       if (i == 0) {
@@ -1653,19 +1654,19 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                             }
                           },
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 12),
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 14.w, vertical: 12.h),
                             child: Row(
                               children: [
                                 Icon(Icons.add_circle_outline,
-                                    size: 18, color: AppColors.primary),
-                                const SizedBox(width: 10),
+                                    size: 18.sp, color: AppColors.primary),
+                                SizedBox(width: 10.w),
                                 Text(
                                   typed.isEmpty
                                       ? 'Add new bin'
                                       : 'Add new bin "$typed"',
                                   style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 15,
+                                    fontSize: 15.sp,
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.primary,
                                   ),
@@ -1681,24 +1682,24 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                       return InkWell(
                         onTap: () => _selectBin(bin),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 14.w, vertical: 12.h),
                           child: Row(
                             children: [
                               Icon(Icons.inventory_2_outlined,
-                                  size: 18, color: AppColors.primary),
-                              const SizedBox(width: 10),
+                                  size: 18.sp, color: AppColors.primary),
+                              SizedBox(width: 10.w),
                               Expanded(
                                 child: _HighlightText(
                                   text: code,
                                   query: query,
                                   style: GoogleFonts.spaceGrotesk(
-                                    fontSize: 15,
+                                    fontSize: 15.sp,
                                     fontWeight: FontWeight.w600,
                                     color: AppColors.textMain,
                                   ),
                                   highlightStyle: GoogleFonts.spaceGrotesk(
-                                    fontSize: 15,
+                                    fontSize: 15.sp,
                                     fontWeight: FontWeight.w800,
                                     color: AppColors.primary,
                                   ),
@@ -1726,7 +1727,7 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 5.h),
       decoration: BoxDecoration(
         color: active ? AppColors.primary : AppColors.textMuted,
         borderRadius: BorderRadius.zero,
@@ -1734,7 +1735,7 @@ class _StatusBadge extends StatelessWidget {
       child: Text(
         active ? 'ACTIVE' : 'INACTIVE',
         style: GoogleFonts.manrope(
-          fontSize: 11,
+          fontSize: 11.sp,
           fontWeight: FontWeight.w800,
           letterSpacing: 1.0,
           color: Colors.white,
@@ -1792,14 +1793,14 @@ class _StoredItemsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             'STORED ITEMS',
             style: GoogleFonts.manrope(
-              fontSize: 15,
+              fontSize: 15.sp,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.2,
               color: mainColor,
@@ -1808,7 +1809,7 @@ class _StoredItemsHeader extends StatelessWidget {
           Text(
             '$itemCount ITEMS TOTAL',
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 15,
+              fontSize: 15.sp,
               fontWeight: FontWeight.w600,
               color: mutedColor,
               letterSpacing: 0.5,
@@ -1920,7 +1921,7 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
     const double itemRowHeight = 74;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: EdgeInsets.fromLTRB(16.w, 0.h, 16.w, 8.h),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1934,7 +1935,7 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
             child: widget.isManualMode
                 ? Center(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: EdgeInsets.symmetric(horizontal: 12.w),
                       child: TextField(
                         controller: _controller,
                         focusNode: _focusNode,
@@ -1948,16 +1949,16 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                           focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.zero,
                               borderSide: BorderSide(
-                                  color: AppColors.primary, width: 2)),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
+                                  color: AppColors.primary, width: 2.w)),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16.w, vertical: 10.h),
                           isDense: true,
                           suffixIcon: _searching
-                              ? const Padding(
-                                  padding: EdgeInsets.all(12),
+                              ? Padding(
+                                  padding: EdgeInsets.all(12.r),
                                   child: SizedBox(
-                                      width: 16,
-                                      height: 16,
+                                      width: 16.w,
+                                      height: 16.h,
                                       child: CircularProgressIndicator(
                                           strokeWidth: 2)),
                                 )
@@ -1982,7 +1983,7 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                       'TRIGGER OR TAP TO ADD ITEM',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 12,
+                        fontSize: 12.sp,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.4,
                         color: widget.mutedColor,
@@ -2012,7 +2013,7 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                 padding: EdgeInsets.zero,
                 itemCount: _results.length,
                 separatorBuilder: (_, __) =>
-                    Divider(height: 1, color: Colors.grey.shade200),
+                    Divider(height: 1.h, color: Colors.grey.shade200),
                 itemBuilder: (_, i) {
                   final row = _results[i];
                   final sku = row['custom_sku']?.toString() ??
@@ -2024,15 +2025,15 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                   return InkWell(
                     onTap: () => _selectResult(row),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 14.w, vertical: 10.h),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             sku,
                             style: GoogleFonts.spaceGrotesk(
-                              fontSize: 14,
+                              fontSize: 14.sp,
                               fontWeight: FontWeight.w700,
                               color: AppColors.primary,
                             ),
@@ -2040,11 +2041,11 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           if (name.isNotEmpty) ...[
-                            const SizedBox(height: 2),
+                            SizedBox(height: 2.h),
                             Text(
                               name,
                               style: GoogleFonts.manrope(
-                                fontSize: 12,
+                                fontSize: 12.sp,
                                 color: AppColors.textMuted,
                               ),
                               maxLines: 1,
@@ -2086,7 +2087,7 @@ class _StoredItemRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
       decoration: BoxDecoration(
         color: bgLow,
         borderRadius: BorderRadius.zero,
@@ -2100,17 +2101,17 @@ class _StoredItemRow extends StatelessWidget {
                 Text(
                   'SKU:  $sku',
                   style: GoogleFonts.spaceGrotesk(
-                    fontSize: 16,
+                    fontSize: 16.sp,
                     fontWeight: FontWeight.w700,
                     color: mainColor,
                   ),
                 ),
                 if (description.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4.h),
                   Text(
                     description,
                     style: GoogleFonts.manrope(
-                      fontSize: 14,
+                      fontSize: 14.sp,
                       color: AppColors.textMuted,
                     ),
                   ),
@@ -2121,7 +2122,7 @@ class _StoredItemRow extends StatelessWidget {
           Text(
             'x$quantity',
             style: GoogleFonts.manrope(
-              fontSize: 24,
+              fontSize: 24.sp,
               fontWeight: FontWeight.w800,
               color: AppColors.primary,
             ),
@@ -2177,7 +2178,7 @@ class _BottomControlsBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: bg,
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      padding: EdgeInsets.fromLTRB(16.w, 6.h, 16.w, 0.h),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -2192,10 +2193,10 @@ class _BottomControlsBlock extends StatelessWidget {
                 // Broom icon — DELETE bin completely
                 _IconTapZone(
                   onTap: onDeleteBin,
-                  child: const Icon(
+                  child: Icon(
                     Icons.cleaning_services_outlined,
                     color: AppColors.textMuted,
-                    size: 22,
+                    size: 22.sp,
                   ),
                 ),
                 // Center label — main clean action
@@ -2203,12 +2204,12 @@ class _BottomControlsBlock extends StatelessWidget {
                   child: InkWell(
                     onTap: onCleanBin,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: EdgeInsets.symmetric(vertical: 14.h),
                       child: Text(
                         'CLEAN & EMPTY BIN',
                         textAlign: TextAlign.center,
                         style: GoogleFonts.manrope(
-                          fontSize: 14,
+                          fontSize: 14.sp,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.0,
                           color: mainColor,
@@ -2220,26 +2221,26 @@ class _BottomControlsBlock extends StatelessWidget {
                 // Undo icon — right tap zone (different behaviour)
                 _IconTapZone(
                   onTap: onUndoClean,
-                  child: const Icon(
+                  child: Icon(
                     Icons.undo_rounded,
                     color: AppColors.textMuted,
-                    size: 22,
+                    size: 22.sp,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           // ── Status label ──────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+            padding: EdgeInsets.only(bottom: 6.h),
             child: Align(
               alignment: Alignment.centerLeft,
               child: binActive
                   ? Text(
                       'READY FOR NEXT ENTRY',
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 14,
+                        fontSize: 14.sp,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 2.0,
                         color: mutedColor,
@@ -2248,7 +2249,7 @@ class _BottomControlsBlock extends StatelessWidget {
                   : Text(
                       'TRIGGER TO ADD BIN',
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 14,
+                        fontSize: 14.sp,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 2.0,
                         color: Colors.red,
@@ -2269,7 +2270,7 @@ class _BottomControlsBlock extends StatelessWidget {
                   showCamera: cameraEnabled,
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12.w),
               Expanded(
                 child: _DualActionButton(
                   label: 'ADD ITEM',
@@ -2282,7 +2283,7 @@ class _BottomControlsBlock extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: 10.h),
         ],
       ),
     );
@@ -2318,16 +2319,16 @@ class _DualActionButton extends StatelessWidget {
             child: InkWell(
               onTap: onMain,
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: EdgeInsets.symmetric(vertical: 16.h),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(mainIcon, color: Colors.white, size: 20),
-                    const SizedBox(width: 8),
+                    Icon(mainIcon, color: Colors.white, size: 20.sp),
+                    SizedBox(width: 8.w),
                     Text(
                       label,
                       style: GoogleFonts.manrope(
-                        fontSize: 14,
+                        fontSize: 14.sp,
                         fontWeight: FontWeight.w800,
                         color: Colors.white,
                         letterSpacing: 0.5,
@@ -2340,14 +2341,14 @@ class _DualActionButton extends StatelessWidget {
           ),
           if (showCamera) ...[
             // Vertical divider
-            Container(width: 1, height: 36, color: Colors.white24),
+            Container(width: 1.w, height: 36.h, color: Colors.white24),
             // Camera tap zone
             _IconTapZone(
               onTap: onCamera,
-              child: const Icon(
+              child: Icon(
                 Icons.photo_camera_outlined,
                 color: Colors.white,
-                size: 20,
+                size: 20.sp,
               ),
             ),
           ],
@@ -2368,7 +2369,7 @@ class _IconTapZone extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
         child: child,
       ),
     );
@@ -2393,14 +2394,14 @@ class _BottomNavBar extends StatelessWidget {
           top: BorderSide(
             color:
                 isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.06),
-            width: 1,
+            width: 1.w,
           ),
         ),
       ),
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 60,
+          height: 60.h,
           child: Row(
             children: [
               _NavItem(
@@ -2463,12 +2464,12 @@ class _NavItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 3),
+            Icon(icon, color: color, size: 22.sp),
+            SizedBox(height: 3.h),
             Text(
               label,
               style: GoogleFonts.manrope(
-                fontSize: 10,
+                fontSize: 10.sp,
                 fontWeight: active ? FontWeight.w800 : FontWeight.w600,
                 color: color,
                 letterSpacing: 0.5,

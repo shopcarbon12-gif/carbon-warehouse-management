@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
@@ -97,12 +98,12 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16.r),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('TARGET STATUS', style: AppTheme.headline(context)),
-            const SizedBox(height: 8),
+            SizedBox(height: 8.h),
             DropdownButtonFormField<String>(
               key: ValueKey(_target),
               initialValue: _target,
@@ -111,7 +112,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
                   .map(
                     (o) => DropdownMenuItem(
                       value: o.value,
-                      child: Text(o.label, style: const TextStyle(fontSize: 13)),
+                      child: Text(o.label, style: TextStyle(fontSize: 13.sp)),
                     ),
                   )
                   .toList(),
@@ -124,9 +125,9 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
               value: _override,
               onChanged: (v) => setState(() => _override = v),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8.h),
             Text('SCANNED EPCS (${items.length})', style: AppTheme.headline(context)),
-            const SizedBox(height: 8),
+            SizedBox(height: 8.h),
             Expanded(
               child: items.isEmpty
                   ? const Center(
@@ -138,7 +139,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
                     )
                   : ListView.separated(
                       itemCount: items.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.border),
+                      separatorBuilder: (_, __) => Divider(height: 1.h, color: AppColors.border),
                       itemBuilder: (context, index) {
                         return ListTile(
                           title: Text(

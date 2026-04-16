@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
@@ -53,10 +54,10 @@ class _EncodeSuiteScreenState extends State<EncodeSuiteScreen>
             child: TabBar(
               controller: _tabs,
               indicatorColor: AppColors.primary,
-              labelStyle: const TextStyle(
+              labelStyle: TextStyle(
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.6,
-                fontSize: 12,
+                fontSize: 12.sp,
               ),
               tabs: const [
                 Tab(text: 'SEARCH & ENCODE'),
@@ -154,7 +155,7 @@ class _SearchEncodeTabState extends State<_SearchEncodeTab> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16.r),
       children: [
         TextField(
           controller: _q,
@@ -165,29 +166,29 @@ class _SearchEncodeTabState extends State<_SearchEncodeTab> {
           ),
           onSubmitted: (_) => unawaited(_search()),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         TextField(
           controller: _qty,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(labelText: 'Qty to encode'),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         FilledButton(
           onPressed: _busy ? null : () => unawaited(_search()),
           child: Text(_busy ? '…' : 'SEARCH CATALOG'),
         ),
-        if (_err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_err!, style: const TextStyle(color: Colors.redAccent, fontSize: 12))),
-        const SizedBox(height: 12),
+        if (_err != null) Padding(padding: EdgeInsets.only(top: 8.h), child: Text(_err!, style: TextStyle(color: Colors.redAccent, fontSize: 12.sp))),
+        SizedBox(height: 12.h),
         ..._matches.map((row) {
-          if (row is! Map) return const SizedBox.shrink();
+          if (row is! Map) return SizedBox.shrink();
           final id = row['id']?.toString() ?? '';
           final sku = row['sku']?.toString() ?? '';
           final title = row['description']?.toString() ?? '';
           final label = title.isNotEmpty ? title : sku;
           return Card(
             child: ListTile(
-              title: Text(title.isNotEmpty ? title.toUpperCase() : sku, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-              subtitle: Text('$sku · id $id', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              title: Text(title.isNotEmpty ? title.toUpperCase() : sku, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.sp)),
+              subtitle: Text('$sku · id $id', style: TextStyle(color: AppColors.textMuted, fontSize: 11.sp)),
               trailing: FilledButton(
                 onPressed: id.isEmpty || _busy ? null : () => unawaited(_commission(id, label)),
                 style: FilledButton.styleFrom(
@@ -274,12 +275,12 @@ class _ScanPrintTabState extends State<_ScanPrintTab> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16.r),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('UPC / BARCODE', style: AppTheme.headline(context)),
-          const SizedBox(height: 8),
+          SizedBox(height: 8.h),
           TextField(
             controller: _upcCtrl,
             style: const TextStyle(
@@ -291,7 +292,7 @@ class _ScanPrintTabState extends State<_ScanPrintTab> {
               hintText: 'Scan or type UPC / SKU',
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12.h),
           OutlinedButton.icon(
             onPressed: _busy
                 ? null
@@ -301,16 +302,16 @@ class _ScanPrintTabState extends State<_ScanPrintTab> {
                       setState(() => _upcCtrl.text = code.trim());
                     }
                   },
-            icon: const Icon(Icons.photo_camera_outlined, size: 20),
+            icon: Icon(Icons.photo_camera_outlined, size: 20.sp),
             label: const Text('CAMERA SCAN'),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16.h),
           FilledButton(
             onPressed: _busy ? null : () => unawaited(_printViaCommission()),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 18),
+              padding: EdgeInsets.symmetric(vertical: 18.h),
             ),
             child: Text(
               _busy ? 'PRINTING…' : 'PRINT RFID LABEL (SERVER ZPL)',
@@ -318,7 +319,7 @@ class _ScanPrintTabState extends State<_ScanPrintTab> {
               style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.8),
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24.h),
           Text(
             'Resolves the first catalog match, then POST /api/rfid/commission (qty 1). Printer IP/port use server defaults unless you extend the API client.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
@@ -396,17 +397,17 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
           child: Text('FAILED COMMISSION RETRY', style: AppTheme.headline(context)),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(horizontal: 16.w),
           child: Text(
             'Jobs land here when Search → WRITE fails (e.g. offline). Successful commissions from Search do not use this queue.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8.h),
         Expanded(
           child: _jobs.isEmpty
               ? const Center(
@@ -416,27 +417,27 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
                   ),
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: EdgeInsets.symmetric(horizontal: 16.w),
                   itemCount: _jobs.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.border),
+                  separatorBuilder: (_, __) => Divider(height: 1.h, color: AppColors.border),
                   itemBuilder: (context, i) {
                     final j = _jobs[i];
                     return ListTile(
                       title: Text(
                         j.label,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.sp),
                       ),
                       subtitle: Text(
                         'SKU id ${j.customSkuId} · qty ${j.qty}',
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 11.sp),
                       ),
-                      trailing: const Icon(Icons.cloud_upload_outlined, color: AppColors.textMuted),
+                      trailing: Icon(Icons.cloud_upload_outlined, color: AppColors.textMuted),
                     );
                   },
                 ),
         ),
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(16.r),
           child: Row(
             children: [
               Expanded(
@@ -445,7 +446,7 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
                   child: const Text('REFRESH'),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12.w),
               Expanded(
                 flex: 2,
                 child: FilledButton(
@@ -453,7 +454,7 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.slateActionDark,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    padding: EdgeInsets.symmetric(vertical: 18.h),
                   ),
                   child: Text(
                     _syncing ? 'SYNCING…' : 'RETRY ALL',

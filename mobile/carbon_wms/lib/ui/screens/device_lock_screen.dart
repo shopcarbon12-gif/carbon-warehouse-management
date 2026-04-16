@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
@@ -21,25 +22,25 @@ class DeviceLockScreen extends StatelessWidget {
       pageTitle: 'DEVICE LOCK',
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(24.r),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('DEVICE LOCKED', style: AppTheme.headline(context)),
-              const SizedBox(height: 16),
+              SizedBox(height: 16.h),
               Text(
                 pendingApproval
                     ? 'This phone is registered but not yet authorized. Ask an admin: Settings → Device binding (pending list), or find it under Infrastructure → Devices → Hand-held readers tab after approval.'
                     : 'This Android ID is not registered. Sign in once to register, then wait for admin approval (same places as above).',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 13.sp, height: 1.4.h),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24.h),
               SelectableText(
                 androidId,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textMuted,
                   fontFamily: 'monospace',
-                  fontSize: 12,
+                  fontSize: 12.sp,
                 ),
               ),
               const Spacer(),

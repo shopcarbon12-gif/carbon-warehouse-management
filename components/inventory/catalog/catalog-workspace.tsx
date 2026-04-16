@@ -54,6 +54,7 @@ function escapeCsvCell(v: string): string {
 
 function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
   const headers = [
+    "System ID",
     "Item Name",
     "Custom SKU",
     "UPC",
@@ -67,6 +68,7 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
     headers.map(escapeCsvCell).join(","),
     ...rows.map((r) =>
       [
+        r.sku_ls_system_id ?? "",
         r.name,
         r.sku,
         displayUpc(r),
@@ -362,7 +364,7 @@ export function CatalogWorkspace({
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, SKU, UPC, vendor…"
+              placeholder="Search name, SKU, UPC, system ID, vendor…"
               className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-lg"
             />
           </div>
@@ -561,9 +563,10 @@ export function CatalogWorkspace({
       ) : tab === "lightspeed" ? (
         <>
           <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-            <table className="w-full min-w-[1000px] border-collapse text-left">
+            <table className="w-full min-w-[1100px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
+                  <th className="px-2 py-2 text-teal-400/80">System ID</th>
                   <th className="px-2 py-2">Item name</th>
                   <th className="px-2 py-2">Custom SKU</th>
                   <th className="px-2 py-2">UPC</th>
@@ -577,19 +580,22 @@ export function CatalogWorkspace({
               <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-[var(--wms-muted)]">
+                    <td colSpan={9} className="px-4 py-10 text-center text-[var(--wms-muted)]">
                       Loading catalog…
                     </td>
                   </tr>
                 ) : showNoMatches ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-14 text-center text-[var(--wms-muted)]">
+                    <td colSpan={9} className="px-4 py-14 text-center text-[var(--wms-muted)]">
                       <p className="font-mono text-sm text-[var(--wms-muted)]">No rows match your search.</p>
                     </td>
                   </tr>
                 ) : (
                   rows.map((r) => (
                     <tr key={r.custom_sku_id} className="hover:bg-[var(--wms-surface-elevated)]/50">
+                      <td className="px-2 py-1.5 tabular-nums text-teal-400/85">
+                        {r.sku_ls_system_id ?? "—"}
+                      </td>
                       <td className="max-w-[220px] truncate px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
                         {r.name}
                       </td>
@@ -622,7 +628,7 @@ export function CatalogWorkspace({
             <table className="w-full min-w-[960px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
-                  <th className="px-2 py-2">System ID (matrix)</th>
+                  <th className="px-2 py-2 text-teal-400/80">System ID (variant)</th>
                   <th className="px-2 py-2">Custom SKU</th>
                   <th className="px-2 py-2">UPC</th>
                   <th className="px-2 py-2">Description</th>
@@ -650,8 +656,8 @@ export function CatalogWorkspace({
                 ) : (
                   rows.map((r) => (
                     <tr key={r.custom_sku_id} className="hover:bg-[var(--wms-surface-elevated)]/50">
-                      <td className="px-2 py-1.5 text-teal-400/85">
-                        {r.matrix_ls_system_id ?? "—"}
+                      <td className="px-2 py-1.5 tabular-nums text-teal-400/85">
+                        {r.sku_ls_system_id ?? "—"}
                       </td>
                       <td className="px-2 py-1.5">{r.sku}</td>
                       <td className="px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>

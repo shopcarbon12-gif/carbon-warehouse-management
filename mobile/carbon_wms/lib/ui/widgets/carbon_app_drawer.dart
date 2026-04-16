@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
@@ -40,35 +41,35 @@ class CarbonAppDrawer extends StatelessWidget {
             width: double.infinity,
             color: AppColors.primary,
             padding: EdgeInsets.fromLTRB(
-              24,
-              MediaQuery.of(context).padding.top + 32,
-              24,
-              32,
+              24.w,
+              MediaQuery.of(context).padding.top + 32.h,
+              24.w,
+              32.h,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 CircleAvatar(
-                  radius: 52,
+                  radius: 52.r,
                   backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  child: const Icon(Icons.person, size: 58, color: Colors.white),
+                  child: Icon(Icons.person, size: 58.sp, color: Colors.white),
                 ),
-                const SizedBox(height: 20),
+                SizedBox(height: 20.h),
                 Text(
                   displayName,
                   style: GoogleFonts.manrope(
-                    fontSize: 22,
+                    fontSize: 22.sp,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
                   textAlign: TextAlign.center,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: 6.h),
                 Text(
                   email,
                   style: GoogleFonts.manrope(
-                    fontSize: 14,
+                    fontSize: 14.sp,
                     fontWeight: FontWeight.w500,
                     color: Colors.white.withValues(alpha: 0.8),
                   ),
@@ -78,19 +79,19 @@ class CarbonAppDrawer extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: 20.h),
           _DrawerItem(
             icon: Icons.settings_outlined,
             label: 'Settings',
             onTap: onSettings,
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4.h),
           _DrawerItem(
             icon: Icons.sync,
             label: 'Refresh Settings / Permissions',
             onTap: onRefresh,
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4.h),
           Consumer<ThemeNotifier>(
             builder: (_, notifier, __) => _DrawerItem(
               icon: Icons.palette_outlined,
@@ -107,7 +108,7 @@ class CarbonAppDrawer extends StatelessWidget {
               large: true,
               onTap: onLogout!,
             ),
-          const SizedBox(height: 80),
+          SizedBox(height: 80.h),
         ],
       ),
     );
@@ -136,21 +137,21 @@ class _DrawerItem extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
         child: Row(
           children: [
             SizedBox(
-              width: 26,
-              child: Icon(icon, size: large ? 26 : 24, color: fg),
+              width: 26.w,
+              child: Icon(icon, size: large ? 26.sp : 24.sp, color: fg),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12.w),
             Expanded(
               child: Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.manrope(
-                  fontSize: large ? 17 : 14,
+                  fontSize: large ? 17.sp : 14.sp,
                   fontWeight: large ? FontWeight.w800 : FontWeight.w700,
                   letterSpacing: -0.1,
                   color: fg,
