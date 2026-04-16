@@ -8,6 +8,7 @@ import 'package:carbon_wms/hardware/chainway_scanner.dart';
 import 'package:carbon_wms/hardware/manual_csv_row.dart';
 import 'package:carbon_wms/hardware/rfid_scanner.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
+import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/hardware/zebra_scanner.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
@@ -30,11 +31,16 @@ class RfidManager extends ChangeNotifier {
 
   RfidScanner? _active;
   StreamSubscription<RfidTagRead>? _epcSub;
+  StreamSubscription<String>? _fallbackBarcodeSub;
+  final StreamController<RfidTagRead> _unifiedReads = StreamController<RfidTagRead>.broadcast();
 
   /// Raw reads while [scanContext] is `GEIGER_FIND` (no edge ingest / ghost filter).
   final StreamController<RfidTagRead> _geigerReads = StreamController<RfidTagRead>.broadcast();
+  final StreamController<String> _visibleEpcs = StreamController<String>.broadcast();
 
   Stream<RfidTagRead> get geigerTagReads => _geigerReads.stream;
+  Stream<RfidTagRead> get unifiedTagReads => _unifiedReads.stream;
+  Stream<String> get visibleEpcs => _visibleEpcs.stream;
 
   /// EPCs not yet successfully posted to `/api/edge/ingest`.
   final Set<String> _pendingIngest = <String>{};
@@ -162,6 +168,9 @@ class RfidManager extends ChangeNotifier {
           product.contains('chainway');
       if (isChainwayHandset) {
         await useChainway();
+        if (!isHardwareLinked) {
+          await useZebra();
+        }
         return;
       }
     } catch (_) {
@@ -181,6 +190,8 @@ class RfidManager extends ChangeNotifier {
   Future<void> clearScanner() async {
     await _epcSub?.cancel();
     _epcSub = null;
+    await _fallbackBarcodeSub?.cancel();
+    _fallbackBarcodeSub = null;
     await _active?.disconnect();
     _active = null;
     notifyListeners();
@@ -189,12 +200,64 @@ class RfidManager extends ChangeNotifier {
   Future<void> _swapScanner(RfidScanner next) async {
     await _epcSub?.cancel();
     _epcSub = null;
+    await _fallbackBarcodeSub?.cancel();
+    _fallbackBarcodeSub = null;
     await _active?.disconnect();
     _active = next;
     await _active!.connect();
     _epcSub = _active!.tagReadStream.listen(_handleTagRead, onError: (_) {});
     await _active!.applyHandheldRuntimeSettings(_settings.config, scanContext: _scanContext);
+    // Always merge OEM scan broadcasts: some devices report UHF only via rscja intents while
+    // native SDK is linked to a dead path, or sled + built-in overlap.
+    _fallbackBarcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen(
+      _handleFallbackBarcodeRead,
+      onError: (_) {},
+    );
     notifyListeners();
+  }
+
+  /// Some rugged devices expose UHF EPC via scanner broadcast when native RFID SDK is absent.
+  /// Accept either pure EPC or payloads containing a 24-hex EPC substring.
+  void _handleFallbackBarcodeRead(String raw) {
+    final s = raw.trim().toUpperCase();
+    if (s.isEmpty) return;
+    final compact = s.replaceAll(RegExp(r'\s+'), '');
+    var read = RfidTagRead.tryParse(compact);
+    if (read == null) {
+      final m = RegExp(r'([0-9A-F]{24})').firstMatch(compact);
+      if (m == null) return;
+      read = RfidTagRead.tryParse(m.group(1)!);
+    }
+    if (read == null) {
+      final exactDec = RegExp(r'^\d{6,15}$').firstMatch(compact)?.group(0);
+      final decToken = exactDec ??
+          RegExp(r'(\d{6,15})')
+              .allMatches(compact)
+              .map((m) => m.group(1)!)
+              .fold<String>('', (best, next) => next.length > best.length ? next : best);
+      if (decToken.isNotEmpty) {
+        final synthetic = _decimalAssetToSyntheticEpc(decToken);
+        if (synthetic != null) {
+          read = RfidTagRead.tryParse(synthetic);
+        }
+      }
+    }
+    if (read == null) return;
+    _handleTagRead(read);
+  }
+
+  /// Converts decimal asset-id scans to a synthetic EPC96 payload:
+  /// prefix=00000, item=asset-id (40-bit), serial=0.
+  String? _decimalAssetToSyntheticEpc(String dec) {
+    try {
+      final n = BigInt.parse(dec);
+      final max40 = (BigInt.one << 40) - BigInt.one;
+      if (n < BigInt.zero || n > max40) return null;
+      final itemHex = n.toRadixString(16).toUpperCase().padLeft(10, '0');
+      return '00000${itemHex}000000000';
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Re-apply antenna power / trigger hints after mobile-sync or prefs load.
@@ -206,6 +269,7 @@ class RfidManager extends ChangeNotifier {
   }
 
   void _commitVisibleEpc(String u) {
+    if (!_visibleEpcs.isClosed) _visibleEpcs.add(u);
     if (!_suppressEdgeStreaming) {
       _pendingIngest.add(u);
     }
@@ -252,6 +316,7 @@ class RfidManager extends ChangeNotifier {
   void _handleTagRead(RfidTagRead read) {
     final u = read.epcHex24;
     if (!_epcHex24.hasMatch(u)) return;
+    if (!_unifiedReads.isClosed) _unifiedReads.add(read);
 
     if (_scanContext == 'GEIGER_FIND') {
       if (!_geigerReads.isClosed) _geigerReads.add(read);
@@ -357,8 +422,11 @@ class RfidManager extends ChangeNotifier {
     _settings.removeListener(_onSettingsChanged);
     _flushTimer?.cancel();
     _epcSub?.cancel();
+    _fallbackBarcodeSub?.cancel();
     unawaited(_active?.disconnect());
     unawaited(_geigerReads.close());
+    unawaited(_unifiedReads.close());
+    unawaited(_visibleEpcs.close());
     super.dispose();
   }
 }

@@ -67,7 +67,9 @@ class CarbonHardwareBarcodeRelay(
           val s = extractBarcode(intent) ?: return
           val t = s.trim()
           if (t.isEmpty()) return
-          stopHardwareScan()
+          // Keep OEM UHF inventory running for rapid multi-tag reads; idle timeout stops the session.
+          // Stopping after each decode breaks continuous RFID (only ever one tag per START).
+          resetScanIdleTimeout()
           sink?.success(t)
         }
       }
@@ -128,6 +130,13 @@ class CarbonHardwareBarcodeRelay(
     scheduleScanTimeout(SCAN_TIMEOUT_MS)
   }
 
+  /** Extend idle shutdown while tags keep arriving (continuous inventory). */
+  private fun resetScanIdleTimeout() {
+    if (!scanActive) return
+    cancelScanTimeout()
+    scheduleScanTimeout(SCAN_TIMEOUT_MS)
+  }
+
   fun stopHardwareScan() {
     scanActive = false
     cancelScanTimeout()
@@ -154,6 +163,10 @@ class CarbonHardwareBarcodeRelay(
       arrayOf(
         KEY_DOWN_ACTION,
         KEY_UP_ACTION,
+        "android.intent.action.SCANRESULT",
+        "android.intent.action.SCAN_RESULT_BROADCAST",
+        "android.intent.action.SCAN_RESULT_BROADCAST_RFID",
+        "com.rscja.android.DATA_RESULT",
         "android.intent.ACTION_DECODE_DATA",
         "android.intent.action.DECODE_DATA",
         "com.android.decode.action.BARCODE_DECODED",
@@ -165,6 +178,12 @@ class CarbonHardwareBarcodeRelay(
 
     val STRING_EXTRA_KEYS =
       arrayOf(
+        "EXTRA_SCAN_DATA",
+        "scanData",
+        "scan_data",
+        "SCAN_DATA",
+        "data_result",
+        "DATA_RESULT",
         "barcode_string",
         "BARCODE_STRING",
         "decode_data",
@@ -177,6 +196,8 @@ class CarbonHardwareBarcodeRelay(
 
     val BYTE_EXTRA_KEYS =
       arrayOf(
+        "EXTRA_SCAN_DATA",
+        "SCAN_DATA",
         "barcode",
         "BARCODE",
         "barcodeBytes",
@@ -187,6 +208,7 @@ class CarbonHardwareBarcodeRelay(
     const val KEY_UP_ACTION = "com.rscja.android.KEY_UP"
     const val ACTION_SCAN_START = "android.intent.action.BARCODESTARTSCAN"
     const val ACTION_SCAN_STOP = "android.intent.action.BARCODESTOPSCAN"
-    const val SCAN_TIMEOUT_MS = 15000L
+    /** Long idle window so warehouse passes don't drop UHF mid-aisle. */
+    const val SCAN_TIMEOUT_MS = 120_000L
   }
 }

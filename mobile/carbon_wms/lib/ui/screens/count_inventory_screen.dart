@@ -45,7 +45,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   String _currentLocationId = '';
   StreamSubscription<String>? _readsSub;
   StreamSubscription<String>? _triggerSub;
-  StreamSubscription<String>? _hardwareScanSub;
   bool _scanOn = false;
   bool _connecting = false;
   bool _busyLookup = false;
@@ -76,7 +75,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   void dispose() {
     _readsSub?.cancel();
     _triggerSub?.cancel();
-    _hardwareScanSub?.cancel();
     unawaited(_scanAudio.dispose());
     final rfid = _rfidManager;
     if (rfid != null) {
@@ -221,12 +219,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         unawaited(_toggleScan());
       }
     }, onError: (_) {});
-    await _hardwareScanSub?.cancel();
-    _hardwareScanSub = RfidVendorChannel.hardwareBarcodeStream().listen((raw) {
-      final read = _parseScannerPayload(raw);
-      if (read == null) return;
-      _onTagRead(read);
-    }, onError: (_) {});
     if (!mounted) return;
     setState(() {
       _connecting = false;
@@ -302,32 +294,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (mounted) setState(() {});
   }
 
-  RfidTagRead? _parseScannerPayload(String raw) {
-    final s = raw.trim().toUpperCase();
-    if (s.isEmpty) return null;
-    final compact = s.replaceAll(RegExp(r'\s+'), '');
-    final direct = RfidTagRead.tryParse(compact);
-    if (direct != null) return direct;
-    final hexMatch = RegExp(r'([0-9A-F]{24})').firstMatch(compact);
-    if (hexMatch != null) {
-      return RfidTagRead.tryParse(hexMatch.group(1)!);
-    }
-    final decToken = RegExp(r'(\d{6,15})')
-        .allMatches(compact)
-        .map((m) => m.group(1)!)
-        .fold<String>('', (best, next) => next.length > best.length ? next : best);
-    if (decToken.isEmpty) return null;
-    try {
-      final n = BigInt.parse(decToken);
-      final max40 = (BigInt.one << 40) - BigInt.one;
-      if (n < BigInt.zero || n > max40) return null;
-      final itemHex = n.toRadixString(16).toUpperCase().padLeft(10, '0');
-      return RfidTagRead.tryParse('00000${itemHex}000000000');
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _enrichGroups() async {
     final api = context.read<WmsApiClient>();
     final pendingAssetIds = _groupedRows.keys.where((k) {
@@ -376,6 +342,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final rfid = context.read<RfidManager>();
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
     await rfid.startLocateScanning();
+    // Built-in Chainway / rscja UHF often ignores Flutter inventory until BARCODESTARTSCAN is sent.
+    if (!rfid.isHardwareLinked) {
+      await RfidVendorChannel.scannerStart2d();
+    }
     if (!mounted) return;
     setState(() {
       _scanOn = true;
@@ -385,6 +355,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   Future<void> _stopScan() async {
     final rfid = context.read<RfidManager>();
     await rfid.stopLocateScanning();
+    if (!rfid.isHardwareLinked) {
+      await RfidVendorChannel.scannerStop2d();
+    }
     if (!mounted) return;
     setState(() {
       _scanOn = false;
