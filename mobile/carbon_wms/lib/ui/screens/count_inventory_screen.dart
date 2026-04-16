@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -18,6 +19,7 @@ import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/epc_asset_decoder.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
@@ -41,9 +43,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   List<Map<String, String>> _locations = [];
   String _currentLocationName = 'Loading...';
   String _currentLocationId = '';
-  StreamSubscription<RfidTagRead>? _readsSub;
+  StreamSubscription<String>? _readsSub;
   StreamSubscription<String>? _triggerSub;
-  Timer? _scanInactivityTimer;
+  StreamSubscription<String>? _hardwareScanSub;
   bool _scanOn = false;
   bool _connecting = false;
   bool _busyLookup = false;
@@ -74,7 +76,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   void dispose() {
     _readsSub?.cancel();
     _triggerSub?.cancel();
-    _scanInactivityTimer?.cancel();
+    _hardwareScanSub?.cancel();
     unawaited(_scanAudio.dispose());
     final rfid = _rfidManager;
     if (rfid != null) {
@@ -191,20 +193,39 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       _connecting = true;
     });
     final rfid = context.read<RfidManager>();
+    final settingsRepo = context.read<MobileSettingsRepository>();
     rfid.scanContext = 'COUNT_INVENTORY';
     await rfid.autoDetectHardware();
     await rfid.reapplyHandheldHardwareSettings();
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
     await _readsSub?.cancel();
-    final scanner = rfid.activeScanner;
-    if (scanner != null) {
-      _readsSub = scanner.tagReadStream.listen(_onTagRead, onError: (_) {});
-    }
+    _readsSub = rfid.visibleEpcs.listen((epc) {
+      final read = RfidTagRead.tryParse(epc);
+      if (read == null) return;
+      _onTagRead(read);
+    }, onError: (_) {});
     await _triggerSub?.cancel();
     _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((evt) {
+      final holdReleaseMode = settingsRepo.config.triggerModeHoldRelease;
+      if (holdReleaseMode) {
+        if (evt == 'down' && !_scanOn) {
+          unawaited(_startScan());
+          return;
+        }
+        if (evt == 'up' && _scanOn) {
+          unawaited(_stopScan());
+        }
+        return;
+      }
       if (evt == 'down') {
         unawaited(_toggleScan());
       }
+    }, onError: (_) {});
+    await _hardwareScanSub?.cancel();
+    _hardwareScanSub = RfidVendorChannel.hardwareBarcodeStream().listen((raw) {
+      final read = _parseScannerPayload(raw);
+      if (read == null) return;
+      _onTagRead(read);
     }, onError: (_) {});
     if (!mounted) return;
     setState(() {
@@ -243,13 +264,14 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   void _onTagRead(RfidTagRead read) {
-    if (!_scanOn) return;
+    if (!_scanOn) {
+      if (mounted) {
+        setState(() => _scanOn = true);
+      } else {
+        _scanOn = true;
+      }
+    }
     final now = DateTime.now();
-    _scanInactivityTimer?.cancel();
-    _scanInactivityTimer = Timer(const Duration(seconds: 15), () {
-      if (!mounted) return;
-      unawaited(_stopScan());
-    });
     final epc = read.epcHex24;
     final row = _epcRows[epc];
     if (row != null) {
@@ -278,6 +300,32 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       unawaited(_enrichGroups());
     }
     if (mounted) setState(() {});
+  }
+
+  RfidTagRead? _parseScannerPayload(String raw) {
+    final s = raw.trim().toUpperCase();
+    if (s.isEmpty) return null;
+    final compact = s.replaceAll(RegExp(r'\s+'), '');
+    final direct = RfidTagRead.tryParse(compact);
+    if (direct != null) return direct;
+    final hexMatch = RegExp(r'([0-9A-F]{24})').firstMatch(compact);
+    if (hexMatch != null) {
+      return RfidTagRead.tryParse(hexMatch.group(1)!);
+    }
+    final decToken = RegExp(r'(\d{6,15})')
+        .allMatches(compact)
+        .map((m) => m.group(1)!)
+        .fold<String>('', (best, next) => next.length > best.length ? next : best);
+    if (decToken.isEmpty) return null;
+    try {
+      final n = BigInt.parse(decToken);
+      final max40 = (BigInt.one << 40) - BigInt.one;
+      if (n < BigInt.zero || n > max40) return null;
+      final itemHex = n.toRadixString(16).toUpperCase().padLeft(10, '0');
+      return RfidTagRead.tryParse('00000${itemHex}000000000');
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _enrichGroups() async {
@@ -328,11 +376,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final rfid = context.read<RfidManager>();
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
     await rfid.startLocateScanning();
-    _scanInactivityTimer?.cancel();
-    _scanInactivityTimer = Timer(const Duration(seconds: 15), () {
-      if (!mounted) return;
-      unawaited(_stopScan());
-    });
     if (!mounted) return;
     setState(() {
       _scanOn = true;
@@ -342,7 +385,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   Future<void> _stopScan() async {
     final rfid = context.read<RfidManager>();
     await rfid.stopLocateScanning();
-    _scanInactivityTimer?.cancel();
     if (!mounted) return;
     setState(() {
       _scanOn = false;
@@ -1534,6 +1576,9 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
   bool _busy = false;
   String _hardwareId = '—';
   String _firmware = '—';
+  Timer? _powerApplyTimer;
+  Map<String, dynamic> _diag = const <String, dynamic>{};
+  static const MethodChannel _device = MethodChannel('carbon_wms/rfid');
 
   /// Maps stored 0..1 to RSSI display dB in [-90, -30] (stitch mock).
   int get _rssiDb => (-90 + _rssi * 60).round();
@@ -1544,6 +1589,13 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
     _power = widget.initial.rfidPowerDbm;
     _rssi = widget.initial.rssiDistance;
     _loadDeviceMeta();
+    _refreshDiagnostics();
+  }
+
+  @override
+  void dispose() {
+    _powerApplyTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadDeviceMeta() async {
@@ -1560,6 +1612,41 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
     }
   }
 
+  Future<void> _refreshDiagnostics() async {
+    final d = await RfidVendorChannel.deviceDiagnostics();
+    if (!mounted) return;
+    setState(() => _diag = d);
+  }
+
+  void _schedulePowerApply() {
+    _powerApplyTimer?.cancel();
+    _powerApplyTimer = Timer(const Duration(milliseconds: 180), () async {
+      await RfidVendorChannel.setAntennaPowerDbm(_power);
+      if (!mounted) return;
+      final rfid = context.read<RfidManager>();
+      await rfid.reapplyHandheldHardwareSettings();
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  Future<void> _openScannerSettings() async {
+    try {
+      final ok = await _device.invokeMethod<bool>('device.openScannerSettings');
+      if (!mounted) return;
+      if (ok == true) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Scanner settings app not found on this device.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open scanner settings.')),
+      );
+    }
+  }
+
   Future<void> _restartRfidController() async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -1567,6 +1654,7 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
     await rfid.autoDetectHardware();
     await rfid.reapplyHandheldHardwareSettings();
     await RfidVendorChannel.setAntennaPowerDbm(_power);
+    await _refreshDiagnostics();
     if (!mounted) return;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1730,7 +1818,10 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
                   min: 0,
                   max: 30,
                   divisions: 30,
-                  onChanged: (v) => setState(() => _power = v.round()),
+                  onChanged: (v) {
+                    setState(() => _power = v.round());
+                    _schedulePowerApply();
+                  },
                 ),
               ),
             ),
@@ -1832,6 +1923,51 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
               ],
             ),
             SizedBox(height: 32.h),
+            SizedBox(
+              width: double.infinity,
+              height: 48.h,
+              child: OutlinedButton.icon(
+                onPressed: _openScannerSettings,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _primary,
+                  side: BorderSide(color: _primary, width: 2.w),
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                ),
+                icon: Icon(Icons.tune, size: 20.sp),
+                label: Text(
+                  'OPEN DEVICE SCANNER SETTINGS',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: 24.h),
+            Text(
+              'DIAGNOSTICS',
+              style: GoogleFonts.manrope(
+                fontSize: 10.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+                color: _outline,
+              ),
+            ),
+            SizedBox(height: 6.h),
+            Text(
+              'Chainway SDK: ${_diag['chainwaySdkPresent'] == true ? 'present' : 'missing'}\n'
+              'Zebra SDK: ${_diag['zebraSdkPresent'] == true ? 'present' : 'missing'}\n'
+              'Chainway error: ${(_diag['chainwayLastError'] ?? '').toString().isEmpty ? 'none' : _diag['chainwayLastError']}\n'
+              'Zebra error: ${(_diag['zebraLastError'] ?? '').toString().isEmpty ? 'none' : _diag['zebraLastError']}',
+              style: GoogleFonts.robotoMono(
+                fontSize: 11.sp,
+                fontWeight: FontWeight.w500,
+                color: _onSurface,
+                height: 1.35.h,
+              ),
+            ),
+            SizedBox(height: 24.h),
             Divider(height: 1.h, thickness: 1, color: Color(0xFFF4F4F5)),
             SizedBox(height: 32.h),
             Row(
