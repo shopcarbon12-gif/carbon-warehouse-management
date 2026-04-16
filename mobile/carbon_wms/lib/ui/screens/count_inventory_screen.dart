@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:carbon_wms/audio/geiger_beep_wav.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
@@ -18,7 +21,6 @@ import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
-import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
@@ -36,20 +38,27 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   final Map<String, _SessionEpcRow> _epcRows = <String, _SessionEpcRow>{};
   final Map<String, _GroupedRow> _groupedRows = <String, _GroupedRow>{};
   final Map<String, Map<String, dynamic>> _assetCache = <String, Map<String, dynamic>>{};
-  String _currentLocationName = 'Orlando Warehouse';
+  List<Map<String, String>> _locations = [];
+  String _currentLocationName = 'Loading...';
+  String _currentLocationId = '';
   StreamSubscription<RfidTagRead>? _readsSub;
   StreamSubscription<String>? _triggerSub;
   Timer? _scanInactivityTimer;
   bool _scanOn = false;
   bool _connecting = false;
   bool _busyLookup = false;
-  String? _status;
   _CountInventoryModuleSettings _moduleSettings = _CountInventoryModuleSettings.defaults;
   RfidManager? _rfidManager;
+  late final AudioPlayer _scanAudio;
+  Uint8List? _scanBeepBytes;
 
   @override
   void initState() {
     super.initState();
+    _scanAudio = AudioPlayer()
+      ..setReleaseMode(ReleaseMode.stop)
+      ..setPlayerMode(PlayerMode.lowLatency);
+    _scanBeepBytes = buildGeigerBeepWav();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initModule());
     });
@@ -66,6 +75,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _readsSub?.cancel();
     _triggerSub?.cancel();
     _scanInactivityTimer?.cancel();
+    unawaited(_scanAudio.dispose());
     final rfid = _rfidManager;
     if (rfid != null) {
       unawaited(rfid.stopLocateScanning());
@@ -107,17 +117,78 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       final api = context.read<WmsApiClient>();
       final locs = await api.fetchSessionLocations();
       if (!mounted || locs.isEmpty) return;
-      final next = (locs.first['name'] ?? locs.first['code'] ?? '').trim();
-      if (next.isEmpty) return;
-      setState(() => _currentLocationName = next);
+      final name = (locs.first['name'] ?? locs.first['code'] ?? '').trim();
+      final id = (locs.first['id'] ?? '').trim();
+      setState(() {
+        _locations = locs;
+        if (name.isNotEmpty) _currentLocationName = name;
+        if (id.isNotEmpty) _currentLocationId = id;
+      });
     } catch (_) {}
+  }
+
+  Future<void> _openLocationPicker() async {
+    if (_locations.isEmpty) return;
+    final picked = await showModalBottomSheet<Map<String, String>>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(8.r)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 8.h),
+              child: Text(
+                'SELECT LOCATION',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2.4,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            ..._locations.map((loc) {
+              final name = (loc['name'] ?? loc['code'] ?? '').trim();
+              final id = (loc['id'] ?? '').trim();
+              final isActive = id == _currentLocationId || name == _currentLocationName;
+              return ListTile(
+                dense: true,
+                title: Text(
+                  name,
+                  style: GoogleFonts.manrope(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? AppColors.primary : const Color(0xFF11181C),
+                  ),
+                ),
+                trailing: isActive ? Icon(Icons.check, color: AppColors.primary, size: 20.sp) : null,
+                onTap: () => Navigator.of(ctx).pop(loc),
+              );
+            }),
+            SizedBox(height: 8.h),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final name = (picked['name'] ?? picked['code'] ?? '').trim();
+    final id = (picked['id'] ?? '').trim();
+    if (name.isEmpty) return;
+    setState(() {
+      _currentLocationName = name;
+      if (id.isNotEmpty) _currentLocationId = id;
+    });
   }
 
   Future<void> _ensureScannerReady() async {
     if (_connecting) return;
     setState(() {
       _connecting = true;
-      _status = 'Connecting RFID...';
     });
     final rfid = context.read<RfidManager>();
     rfid.scanContext = 'COUNT_INVENTORY';
@@ -138,7 +209,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!mounted) return;
     setState(() {
       _connecting = false;
-      _status = scanner == null ? 'No scanner connected' : 'RFID ready';
     });
   }
 
@@ -164,13 +234,21 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
   }
 
+  Future<void> _playBeep() async {
+    final bytes = _scanBeepBytes;
+    if (bytes == null) return;
+    try {
+      await _scanAudio.play(BytesSource(bytes));
+    } catch (_) {}
+  }
+
   void _onTagRead(RfidTagRead read) {
     if (!_scanOn) return;
     final now = DateTime.now();
     _scanInactivityTimer?.cancel();
     _scanInactivityTimer = Timer(const Duration(seconds: 15), () {
       if (!mounted) return;
-      unawaited(_stopScan(reason: 'Stopped after 15s inactivity'));
+      unawaited(_stopScan());
     });
     final epc = read.epcHex24;
     final row = _epcRows[epc];
@@ -187,6 +265,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         firstSeen: now,
         lastSeen: now,
       );
+      unawaited(_playBeep());
     }
     final group = _groupedRows.putIfAbsent(
       _epcRows[epc]!.assetId,
@@ -214,7 +293,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         continue;
       }
       try {
-        final row = await api.catalogGridSearchFirstRow(assetId);
+        final row = await api.catalogLookupBySystemId(assetId);
         if (row != null) {
           _assetCache[assetId] = row;
           _applyLookup(assetId, row, fromCache: false);
@@ -239,7 +318,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   Future<void> _toggleScan() async {
     if (_scanOn) {
-      await _stopScan(reason: 'Scan stopped');
+      await _stopScan();
     } else {
       await _startScan();
     }
@@ -252,48 +331,22 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _scanInactivityTimer?.cancel();
     _scanInactivityTimer = Timer(const Duration(seconds: 15), () {
       if (!mounted) return;
-      unawaited(_stopScan(reason: 'Stopped after 15s inactivity'));
+      unawaited(_stopScan());
     });
     if (!mounted) return;
     setState(() {
       _scanOn = true;
-      _status = 'Scanning RFID tags...';
     });
   }
 
-  Future<void> _stopScan({String? reason}) async {
+  Future<void> _stopScan() async {
     final rfid = context.read<RfidManager>();
     await rfid.stopLocateScanning();
     _scanInactivityTimer?.cancel();
     if (!mounted) return;
     setState(() {
       _scanOn = false;
-      _status = reason ?? 'Scan stopped';
     });
-  }
-
-  Future<void> _openGroupDetails(_GroupedRow group) async {
-    if (_scanOn) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Stop scan before opening item details')),
-      );
-      return;
-    }
-    final epcs = group.epcs.map((e) => _epcRows[e]).whereType<_SessionEpcRow>().toList()
-      ..sort((a, b) => a.epc.compareTo(b.epc));
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => _CountInventoryItemDetailsScreen(
-          group: group,
-          rows: epcs,
-          settingsButton: IconButton(
-            icon: Icon(Icons.settings_outlined),
-            onPressed: _openModuleSettings,
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _openEpcList({
@@ -324,13 +377,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   Future<void> _resetScreenToDefault() async {
     if (_scanOn) {
-      await _stopScan(reason: 'Scan stopped');
+      await _stopScan();
     }
     if (!mounted) return;
     setState(() {
       _epcRows.clear();
       _groupedRows.clear();
-      _status = 'Reset complete';
     });
   }
 
@@ -367,6 +419,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       MaterialPageRoute<void>(
         builder: (_) => _CountInventoryContinueScreen(
           groupedRows: groups,
+          locationName: _currentLocationName,
           onSaveCsv: _saveSessionCsvToDevice,
           buildBackendPreviewPayload: () => _buildBackendPreviewPayload(groups),
         ),
@@ -421,7 +474,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final groups = _groupedRows.values.toList()..sort((a, b) => a.assetId.compareTo(b.assetId));
     final hasRealRows = groups.isNotEmpty;
     final assetCount = _epcRows.length;
-    final skuCount = groups.where((g) => g.sku.trim().isNotEmpty).length;
+    final skuCount = groups.length;
     final summaryValueText = '$assetCount';
     final summarySkuValueText = '$skuCount';
     final continueButtonWidth = _continueButtonTightWidth();
@@ -447,13 +500,26 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           children: [
             Padding(
               padding: EdgeInsets.fromLTRB(20.w, 2.h, 20.w, 0.h),
-              child: Text(
-                _currentLocationName.toUpperCase(),
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2.4,
-                  color: AppColors.primary,
+              child: GestureDetector(
+                onTap: _locations.length > 1 ? _openLocationPicker : null,
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _currentLocationName.toUpperCase(),
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2.4,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    if (_locations.length > 1) ...[
+                      SizedBox(width: 4.w),
+                      Icon(Icons.expand_more, size: 16.sp, color: AppColors.primary),
+                    ],
+                  ],
                 ),
               ),
             ),
@@ -1001,68 +1067,6 @@ class _CountItemContainerState extends State<_CountItemContainer> {
   }
 }
 
-class _CountInventoryItemDetailsScreen extends StatelessWidget {
-  const _CountInventoryItemDetailsScreen({
-    required this.group,
-    required this.rows,
-    required this.settingsButton,
-  });
-
-  final _GroupedRow group;
-  final List<_SessionEpcRow> rows;
-  final Widget settingsButton;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return CarbonScaffold(
-      pageTitle: 'COUNT DETAILS',
-      actions: [settingsButton],
-      body: Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 10.h),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '${group.assetId}  ·  ${group.sku.isEmpty ? 'SKU pending' : group.sku}',
-                style: GoogleFonts.manrope(
-                  fontSize: 20.sp,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? const Color(0xFFE0ECEC) : AppColors.textMain,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: rows.length,
-              itemBuilder: (_, i) {
-                final r = rows[i];
-                return ListTile(
-                  title: Text(r.epc, style: GoogleFonts.manrope(fontSize: 16.sp, fontWeight: FontWeight.w700)),
-                  subtitle: Text(
-                    'serial ${r.serial} · scans ${r.scans}',
-                    style: GoogleFonts.manrope(fontSize: 13.sp, fontWeight: FontWeight.w600),
-                  ),
-                  trailing: Icon(Icons.radar),
-                  onTap: () {
-                    Navigator.of(context).push<void>(
-                      MaterialPageRoute<void>(
-                        builder: (_) => LocateTagScreen(targetEpc: r.epc),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _CountEpcListScreen extends StatelessWidget {
   const _CountEpcListScreen({
     required this.title,
@@ -1112,11 +1116,13 @@ class _CountEpcListScreen extends StatelessWidget {
 class _CountInventoryContinueScreen extends StatefulWidget {
   const _CountInventoryContinueScreen({
     required this.groupedRows,
+    required this.locationName,
     required this.onSaveCsv,
     required this.buildBackendPreviewPayload,
   });
 
   final List<_GroupedRow> groupedRows;
+  final String locationName;
   final Future<String?> Function() onSaveCsv;
   final Map<String, dynamic> Function() buildBackendPreviewPayload;
 
@@ -1126,6 +1132,7 @@ class _CountInventoryContinueScreen extends StatefulWidget {
 
 class _CountInventoryContinueScreenState extends State<_CountInventoryContinueScreen> {
   bool _overrideEntireCloudQuantities = false;
+  bool _savingCsv = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1197,7 +1204,22 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                     child: SizedBox(
                       height: double.infinity,
                       child: FilledButton(
-                        onPressed: () {},
+                        onPressed: _savingCsv ? null : () async {
+                          setState(() => _savingCsv = true);
+                          final messenger = ScaffoldMessenger.of(context);
+                          try {
+                            final path = await widget.onSaveCsv();
+                            if (!mounted) return;
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(path != null ? 'Saved: $path' : 'Save failed'),
+                                duration: const Duration(seconds: 4),
+                              ),
+                            );
+                          } finally {
+                            if (mounted) setState(() => _savingCsv = false);
+                          }
+                        },
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF2BA3A3),
                           foregroundColor: Colors.white,
@@ -1208,7 +1230,9 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.save, size: 20.sp),
+                              _savingCsv
+                                  ? SizedBox(width: 20.w, height: 20.h, child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : Icon(Icons.save, size: 20.sp),
                               SizedBox(width: 8.w),
                               Text(
                                 'SAVE TO FILE',
@@ -1274,11 +1298,12 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                 height: 1.38.h,
                                 color: const Color(0xFF11181C),
                               ),
-                              children: const [
-                                TextSpan(text: 'Upload to '),
-                                TextSpan(text: 'CARBON', style: TextStyle(color: Color(0xFF009496), fontWeight: FontWeight.w800)),
-                                TextSpan(text: '\nORLANDO\nWAREHOUSE '),
-                                TextSpan(text: '001', style: TextStyle(color: Color(0xFF0E8E9A), fontWeight: FontWeight.w800)),
+                              children: [
+                                const TextSpan(text: 'Upload to '),
+                                TextSpan(
+                                  text: widget.locationName.toUpperCase(),
+                                  style: const TextStyle(color: Color(0xFF009496), fontWeight: FontWeight.w800),
+                                ),
                               ],
                             ),
                           ),
