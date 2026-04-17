@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="flutter.wms_mobile_sync_raw_v1">{&quot;handheld_settings&quot;:{&quot;system&quot;:{&quot;triggerMode&quot;:&quot;HOLD_RELEASE&quot;,&quot;vibrateOnRead&quot;:true,&quot;beepOnRead&quot;:true},&quot;inventory&quot;:{&quot;autoSaveInventoryData&quot;:true,&quot;confirmOnQtyChange&quot;:false},&quot;transfer&quot;:{&quot;transferOutPowerLock&quot;:true,&quot;transferOutAntennaPower&quot;:27,&quot;transferInAntennaPower&quot;:24},&quot;encoding&quot;:{&quot;validateEpcChecksum&quot;:true},&quot;itemDetailsTemplate&quot;:&quot;{{item.customSku}} - {{item.name}}&quot;,&quot;tagDetailsTemplate&quot;:&quot;{{epc.id}}\n{{epc.status}} · {{epc.zone}}&quot;},&quot;epc_settings&quot;:{&quot;encodingStandard&quot;:&quot;SENITRON&quot;,&quot;companyPrefix&quot;:&quot;F0A0B&quot;,&quot;activeProfileId&quot;:null},&quot;epc_profiles&quot;:[{&quot;id&quot;:&quot;default&quot;,&quot;name&quot;:&quot;Default profile&quot;,&quot;epcPrefix&quot;:&quot;F0A0B&quot;,&quot;itemStartBit&quot;:32,&quot;itemLength&quot;:40,&quot;serialStartBit&quot;:80,&quot;serialLength&quot;:36,&quot;isActive&quot;:true}],&quot;updated_at&quot;:&quot;2026-03-30T13:23:11.329Z&quot;}</string>
+    <string name="flutter.wms_handheld_runtime_config_v1">{&quot;triggerModeHoldRelease&quot;:true,&quot;transferOutAntennaPower&quot;:27,&quot;transferInAntennaPower&quot;:24,&quot;transferOutPowerLock&quot;:true,&quot;itemDetailsTemplate&quot;:&quot;{{item.customSku}} - {{item.name}}&quot;,&quot;tagDetailsTemplate&quot;:&quot;{{epc.id}}\n{{epc.status}} · {{epc.zone}}&quot;}</string>
+    <string name="flutter.wms_server_base">https://wms.shopcarbon.com</string>
+    <string name="flutter.wms_saved_login_email">elior@carbonjeanscompany.com</string>
+    <boolean name="flutter.wms_remember_login_email_v1" value="true" />
+    <string name="flutter.wms_recent_servers_v1">[&quot;https://wms.shopcarbon.com&quot;]</string>
+    <boolean name="flutter.wms_biometric_superadmin_enabled_v1" value="false" />
+</map>
