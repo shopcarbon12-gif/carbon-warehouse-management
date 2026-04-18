@@ -28,6 +28,7 @@ class CarbonChainwayRfidController(
 
   /** Output power in dBm (0–30); applied via reflection when DeviceAPI exposes setPower. */
   private val requestedPowerDbm = AtomicInteger(30)
+  private val pollCount = AtomicInteger(0)
   @Volatile private var lastError: String? = null
 
   fun getLastError(): String? = lastError
@@ -159,21 +160,41 @@ class CarbonChainwayRfidController(
           return@execute
         }
         tryApplyChainwayPower()
-        // DeviceAPI (C72E): UHFInventory_EX_cnt(int) is the continuous inventory method
-        val mInv = runCatching { cls.getMethod("UHFInventory_EX_cnt", Int::class.javaPrimitiveType) }.getOrNull()
-          ?: runCatching { cls.getMethod("UHFInventory") }.getOrNull()
-          ?: runCatching { cls.getMethod("UHFInventory_EX") }.getOrNull()
-          ?: runCatching { cls.getMethod("startInventoryTag") }.getOrNull()
-          ?: runCatching { cls.getMethod("startInventoryTag", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType) }.getOrNull()
+        // Scan cls.methods[] directly — getMethod() fails across classloader boundaries
+        val invNames = setOf("UHFInventory_EX_cnt", "UHFInventory", "UHFInventory_EX", "startInventoryTag")
+        val mInv = cls.methods.firstOrNull { it.name in invNames }?.also { it.isAccessible = true }
+        val paramTypes = mInv?.parameterTypes?.map { it.simpleName } ?: emptyList()
+        Log.d("CarbonChainway", "startInventory method: ${mInv?.name ?: "NOT_FOUND"} params=$paramTypes")
         if (mInv == null) {
           mainHandler.post { result.error("INVENTORY_FAILED", "No start inventory method on Chainway class", null) }
           return@execute
         }
-        val ok = when (mInv.parameterCount) {
-          0 -> mInv.invoke(inst) as? Boolean ?: true
-          1 -> mInv.invoke(inst, 0) as? Boolean ?: true
-          2 -> mInv.invoke(inst, 0, 0) as? Boolean ?: true
-          else -> mInv.invoke(inst) as? Boolean ?: true
+        // Build args for inventory start
+        // UHFInventory_EX_cnt(char count, char session, char target):
+        //   count=0 means "scan 0 times" = no-op! Pass 0xFF (255) for continuous-ish scanning.
+        //   session=0 (S0), target=0 (A-flag). For UHFInventory/UHFInventory_EX pass zeros.
+        var charArgIndex = 0
+        val args = mInv.parameterTypes.map { t ->
+          when {
+            t == java.lang.Character.TYPE -> {
+              val v = when {
+                mInv.name == "UHFInventory_EX_cnt" && charArgIndex == 0 -> '\u00FF' // count=255
+                else -> '\u0000'
+              }.also { charArgIndex++ }
+              java.lang.Character(v)
+            }
+            t == java.lang.Integer.TYPE -> java.lang.Integer(0)
+            t == java.lang.Long.TYPE -> java.lang.Long(0L)
+            t == java.lang.Boolean.TYPE -> java.lang.Boolean(false)
+            t == String::class.java -> ""
+            else -> null
+          }
+        }.toTypedArray()
+        val ok = runCatching {
+          (mInv.invoke(inst, *args) as? Boolean) ?: true
+        }.getOrElse { e ->
+          Log.e("CarbonChainway", "startInventory invoke failed: ${e.message}", e)
+          false
         }
         Log.d("CarbonChainway", "${mInv.name}() -> $ok")
         if (ok == false) {
@@ -181,11 +202,40 @@ class CarbonChainwayRfidController(
           return@execute
         }
         scanning.set(true)
+        // Try both: drain UHFGetReceived_EX2 buffer AND call UHFInventorySingleEPCTIDUSER
+        // The single-shot method actively fires RF on every call, ensuring the antenna is live
+        // even when the physical trigger is not held.
+        val mSingle = cls.methods.firstOrNull { it.name == "UHFInventorySingleEPCTIDUSER" }?.also { it.isAccessible = true }
+        Log.d("CarbonChainway", "pollLoop hasSingle=${mSingle != null} invMethod=${mInv.name}")
+        // Keep reference to inventory method + args for re-triggering in poll loop
+        val reInvArgs = args
+        val reInvMethod = mInv
         pollThread =
           Thread {
+            var emptyStreak = 0
             while (scanning.get()) {
               try {
-                readBufferOnce(cls, inst)
+                // Drain the background buffer
+                val gotTag = readBufferOnce(cls, inst)
+                if (gotTag) emptyStreak = 0 else emptyStreak++
+                // Also fire single-shot to actively trigger RF emission
+                if (mSingle != null) {
+                  val raw = runCatching { mSingle.invoke(inst) }.getOrNull()
+                  if (raw is CharArray) {
+                    val hexD = raw.take(16).joinToString("") { "%04X".format(it.code) }
+                    val epc = String(raw).trimEnd('\u0000').trim()
+                    if (epc.isNotEmpty() && raw.any { it != '\u0000' && it != '\uFFFF' }) {
+                      Log.d("CarbonChainway", "single charArray hexDump='$hexD'")
+                      emitEpc(maybeConvertUiiToEpc(cls, inst, epc), null)
+                    }
+                  }
+                }
+                // Re-trigger continuous inventory every 200 empty polls (~9 seconds)
+                // UHFInventory_EX_cnt with count=255 stops after 255 reads; restart it
+                if (emptyStreak > 0 && emptyStreak % 200 == 0) {
+                  Log.d("CarbonChainway", "re-triggering ${reInvMethod.name} after $emptyStreak empty polls")
+                  runCatching { reInvMethod.invoke(inst, *reInvArgs) }
+                }
                 Thread.sleep(45)
               } catch (_: InterruptedException) {
                 break
@@ -210,9 +260,11 @@ class CarbonChainwayRfidController(
       val cls = uhfClass
       val inst = uhfInstance
       if (cls != null && inst != null) {
-        runCatching { cls.getMethod("UHFStopGet").invoke(inst) }
-        runCatching { cls.getMethod("UHFCloseAndDisconnect").invoke(inst) }
-        runCatching { cls.getMethod("stopInventory").invoke(inst) }
+        for (name in listOf("UHFStopGet", "UHFCloseAndDisconnect", "stopInventory")) {
+          cls.methods.firstOrNull { it.name == name && it.parameterCount == 0 }?.let { m ->
+            m.isAccessible = true; runCatching { m.invoke(inst) }
+          }
+        }
       }
     }
   }
@@ -228,14 +280,13 @@ class CarbonChainwayRfidController(
     val cls = uhfClass
     val inst = uhfInstance
     if (cls != null && inst != null) {
-      // DeviceAPI stop sequence (C72E confirmed methods)
-      runCatching { cls.getMethod("UHFStopGet").invoke(inst) }
-      runCatching { cls.getMethod("UHFCloseAndDisconnect").invoke(inst) }
-      runCatching { cls.getMethod("UHFFree").invoke(inst) }
-      // Generic fallbacks
-      runCatching { cls.getMethod("stopInventory").invoke(inst) }
-      runCatching { cls.getMethod("free").invoke(inst) }
-      runCatching { cls.getMethod("close").invoke(inst) }
+      // Use methods[] scan — getMethod() fails across classloader boundaries
+      for (name in listOf("UHFStopGet", "UHFCloseAndDisconnect", "UHFFree", "stopInventory", "free", "close")) {
+        cls.methods.firstOrNull { it.name == name && it.parameterCount == 0 }?.let { m ->
+          m.isAccessible = true
+          runCatching { m.invoke(inst) }
+        }
+      }
     }
     uhfClass = null
     uhfInstance = null
@@ -291,12 +342,16 @@ class CarbonChainwayRfidController(
     val inst = uhfInstance ?: return
     val p = requestedPowerDbm.get().coerceIn(0, 30)
     // C72E DeviceAPI confirmed method is UHFSetPower
-    val names = listOf("UHFSetPower", "setPower", "SetPower", "setOutputPower", "SetOutputPower")
-    for (name in names) {
-      val m = runCatching { cls.getMethod(name, Int::class.javaPrimitiveType) }.getOrNull() ?: continue
-      runCatching { m.invoke(inst, p) }
-      Log.d("CarbonChainway", "$name($p) applied")
-      return
+    val powerNames = setOf("UHFSetPower", "setPower", "SetPower", "setOutputPower", "SetOutputPower")
+    val m = cls.methods.firstOrNull { it.name in powerNames && it.parameterCount == 1 }?.also { it.isAccessible = true }
+    if (m != null) {
+      // UHFSetPower takes char on C72E — coerce int to char
+      val arg: Any = when {
+        m.parameterTypes[0] == java.lang.Character.TYPE -> java.lang.Character(p.toChar())
+        else -> java.lang.Integer(p)
+      }
+      runCatching { m.invoke(inst, arg) }
+      Log.d("CarbonChainway", "${m.name}($p) applied")
     }
   }
 
@@ -316,37 +371,61 @@ class CarbonChainwayRfidController(
     // Step 2: DeviceAPI (C72E) pattern: UHFInit() then UHFOpenAndConnect()
     // Note: getMethod/getDeclaredMethod fail when the method's declaring class is loaded by a
     // different classloader. Use cls.methods[] (which includes inherited) and match by name.
+    // Log ALL UHF-prefixed methods with their param types for diagnosis
+    rCls.methods.filter { it.name.startsWith("UHF") }.forEach { m ->
+      Log.d("CarbonChainway", "method ${m.name} params=${m.parameterTypes.map{it.simpleName}}")
+    }
     fun findMethodByName(vararg names: String): java.lang.reflect.Method? {
       for (name in names) {
-        // First try public API (works when declaring class is in same classloader hierarchy)
-        runCatching { rCls.getMethod(name) }.getOrNull()?.let { return it }
-        // Then scan all public methods including those from parent classes in other classloaders
-        rCls.methods.firstOrNull { it.name == name && it.parameterCount == 0 }?.also {
-          it.isAccessible = true
-          Log.d("CarbonChainway", "Found $name via cls.methods[] scan")
-          return it
+        // Scan all public methods including those from parent classes in other classloaders
+        val m = rCls.methods.firstOrNull { it.name == name }
+        if (m != null) {
+          m.isAccessible = true
+          Log.d("CarbonChainway", "Found $name params=${m.parameterTypes.map{it.simpleName}}")
+          return m
         }
       }
       return null
     }
     val mUhfInit = findMethodByName("UHFInit", "uhfInit")
     if (mUhfInit != null) {
-      val ok = runCatching { mUhfInit.invoke(inst) as? Boolean ?: true }.getOrElse { e ->
-        Log.w("CarbonChainway", "UHFInit invoke failed: ${e.message}")
-        true // continue anyway
+      // C72E UHFInit(String) takes the UART device path — try ttyMT1 first, fallback to ""
+      // The scanner APK references /dev/ttyMT2 but this device has ttyMT0/ttyMT1
+      val uartPaths = listOf("/dev/ttyMT1", "/dev/ttyMT0", "/dev/ttyMT2", "")
+      var initOk = false
+      for (uart in uartPaths) {
+        val initArgs = mUhfInit.parameterTypes.map { t ->
+          when {
+            t == Context::class.java -> ctx
+            t == String::class.java -> uart
+            t == Int::class.javaPrimitiveType || t == java.lang.Integer.TYPE -> 0
+            t == Boolean::class.javaPrimitiveType || t == java.lang.Boolean.TYPE -> false
+            else -> null
+          }
+        }.toTypedArray()
+        val ok = runCatching { mUhfInit.invoke(inst, *initArgs) as? Boolean ?: true }.getOrElse { false }
+        Log.d("CarbonChainway", "UHFInit('$uart') -> $ok")
+        if (ok == true) { initOk = true; break }
       }
-      Log.d("CarbonChainway", "UHFInit() -> $ok")
-      if (!ok) Log.w("CarbonChainway", "UHFInit returned false, continuing anyway")
-      // Try UHFOpenAndConnect or UHFOpenAndConnect_Ex
-      val mOpen = findMethodByName("UHFOpenAndConnect")
-        ?: rCls.methods.firstOrNull { it.name == "UHFOpenAndConnect_Ex" }?.also { it.isAccessible = true }
+      if (!initOk) Log.w("CarbonChainway", "UHFInit returned false on all paths, continuing anyway")
+      // Try UHFOpenAndConnect or UHFOpenAndConnect_Ex — also pass UART path
+      val mOpen = findMethodByName("UHFOpenAndConnect", "UHFOpenAndConnect_Ex")
       if (mOpen != null) {
-        val openOk = runCatching {
-          if (mOpen.parameterCount == 0) mOpen.invoke(inst) as? Boolean ?: true
-          else mOpen.invoke(inst, "") as? Boolean ?: true
-        }.getOrElse { e -> Log.w("CarbonChainway", "${mOpen.name} invoke failed: ${e.message}"); false }
-        Log.d("CarbonChainway", "${mOpen.name} -> $openOk")
-        if (openOk == false) error("${mOpen.name} returned false")
+        val uartForOpen = listOf("/dev/ttyMT1", "/dev/ttyMT0", "/dev/ttyMT2", "")
+        for (uart in uartForOpen) {
+          val openArgs = mOpen.parameterTypes.map { t ->
+            when {
+              t == String::class.java -> uart
+              t == Int::class.javaPrimitiveType || t == java.lang.Integer.TYPE -> 0
+              else -> null
+            }
+          }.toTypedArray()
+          val openOk = runCatching {
+            mOpen.invoke(inst, *openArgs) as? Boolean ?: true
+          }.getOrElse { e -> Log.w("CarbonChainway", "${mOpen.name}('$uart') failed: ${e.message}"); false }
+          Log.d("CarbonChainway", "${mOpen.name}('$uart') -> $openOk")
+          if (openOk == true) break
+        }
       }
       return
     }
@@ -372,52 +451,108 @@ class CarbonChainwayRfidController(
     Log.w("CarbonChainway", "No init method found on ${rCls.name}, will proceed and hope for the best")
   }
 
-  private fun readBufferOnce(cls: Class<*>, inst: Any) {
-    val m =
-      // DeviceAPI (C72E): UHFGetReceived_EX2 is confirmed present
-      runCatching { cls.getMethod("UHFGetReceived_EX2") }.getOrNull()
-        ?: runCatching { cls.getMethod("UHFGetReceived") }.getOrNull()
-        ?: runCatching { cls.getMethod("UHFInventorySingleEPCTIDUSER") }.getOrNull()
-        ?: runCatching { cls.getMethod("readTagFromBuffer") }.getOrNull()
-        ?: runCatching { cls.getMethod("ReadTagFromBuffer") }.getOrNull()
-        ?: return
-    val raw = m.invoke(inst) ?: return
-    Log.d("CarbonChainway", "readBufferOnce raw type=${raw.javaClass.simpleName} val=$raw")
-    when (raw) {
-      is Array<*> -> {
-        for (t in raw) {
-          if (t == null) continue
-          if (t is String) {
-            val s = t.trim()
-            Log.d("CarbonChainway", "  array-String raw='$s'")
-            if (s.isNotEmpty()) emitEpc(maybeConvertUiiToEpc(cls, inst, s), null)
-          } else {
-            Log.d("CarbonChainway", "  array-obj type=${t.javaClass.simpleName} val=$t")
-            emitFromTagObject(cls, inst, t)
-          }
+  /** Active single-shot: UHFInventorySingleEPCTIDUSER fires RF and returns char[] with EPC. */
+  private fun readSingleShot(cls: Class<*>, inst: Any) {
+    val n = pollCount.incrementAndGet()
+    val m = cls.methods.firstOrNull { it.name == "UHFInventorySingleEPCTIDUSER" }?.also { it.isAccessible = true } ?: return
+    val raw = runCatching { m.invoke(inst) }.getOrNull() ?: return
+    if (n % 200 == 0) Log.d("CarbonChainway", "single#$n type=${raw.javaClass.simpleName}")
+    when {
+      // C72E returns char[] — convert to String and trim nulls
+      raw is CharArray -> {
+        // Log first 30 non-null chars as hex for diagnosis
+        val hexDump = raw.take(30).filter { it != '\u0000' }.joinToString("") { "%04X".format(it.code) }
+        val epc = String(raw).trimEnd('\u0000').trim()
+        if (epc.isNotEmpty()) {
+          Log.d("CarbonChainway", "singleShot charArray len=${raw.size} hexDump='$hexDump' epc='$epc'")
+          emitEpc(maybeConvertUiiToEpc(cls, inst, epc), null)
         }
       }
-      is Iterable<*> -> {
-        for (t in raw) {
-          if (t == null) continue
-          if (t is String) {
-            val s = t.trim()
-            Log.d("CarbonChainway", "  iter-String raw='$s'")
-            if (s.isNotEmpty()) emitEpc(maybeConvertUiiToEpc(cls, inst, s), null)
-          } else {
-            Log.d("CarbonChainway", "  iter-obj type=${t?.javaClass?.simpleName} val=$t")
-            emitFromTagObject(cls, inst, t!!)
-          }
+      // Some firmwares return a char[] wrapped as Object[]
+      raw.javaClass.isArray && raw.javaClass.componentType == java.lang.Character.TYPE -> {
+        @Suppress("UNCHECKED_CAST")
+        val arr = raw as CharArray
+        val epc = String(arr).trimEnd('\u0000').trim()
+        if (epc.isNotEmpty()) {
+          Log.d("CarbonChainway", "singleShot charArr2 epc='$epc'")
+          emitEpc(maybeConvertUiiToEpc(cls, inst, epc), null)
         }
       }
-      is String -> {
-        Log.d("CarbonChainway", "  direct-String raw='$raw'")
-        if (raw.isNotBlank()) emitEpc(maybeConvertUiiToEpc(cls, inst, raw.trim()), null)
+      raw is String -> {
+        val s = raw.trim()
+        if (s.isNotEmpty()) {
+          Log.d("CarbonChainway", "singleShot string epc='$s'")
+          emitEpc(maybeConvertUiiToEpc(cls, inst, s), null)
+        }
       }
       else -> {
-        Log.d("CarbonChainway", "  else-obj type=${raw.javaClass.simpleName} val=$raw")
-        emitFromTagObject(cls, inst, raw)
+        // Tag object with getEPC() or similar
+        val hex = extractEpcStringFromTag(cls, inst, raw)
+        if (!hex.isNullOrEmpty()) {
+          Log.d("CarbonChainway", "singleShot tagObj epc='$hex'")
+          emitEpc(hex, extractRssi(raw))
+        }
       }
+    }
+  }
+
+  private fun readBufferOnce(cls: Class<*>, inst: Any): Boolean {
+    // UHFGetReceived_EX2(char[] buf): return value is count of buffered tags (-1 = empty).
+    // The char[] gets filled with raw binary bytes (each char holds one byte via low 8 bits).
+    val n = pollCount.incrementAndGet()
+    val m = cls.methods.firstOrNull { it.name == "UHFGetReceived_EX2" }?.also { it.isAccessible = true }
+    if (m != null) {
+      val buf = CharArray(256)
+      val result = runCatching { m.invoke(inst, buf) }.getOrNull()
+      val hexDump = buf.take(32).joinToString("") { "%02X".format(it.code and 0xFF) }
+      if (n % 100 == 0) Log.d("CarbonChainway", "poll#$n UHFGetReceived_EX2 returnVal=$result hexDump=$hexDump")
+      // returnVal=-1 means no tag in buffer; skip
+      val count = (result as? Int) ?: (result as? Number)?.toInt() ?: -1
+      if (count < 0) return false
+      // Log a full dump whenever we get actual data
+      Log.d("CarbonChainway", "poll#$n UHFGetReceived_EX2 count=$count hexDump=$hexDump")
+      // Binary EPC: mask each char to 0xFF and hex-encode, skip leading zeros
+      val bytes = buf.map { it.code and 0xFF }
+      val nonZeroStart = bytes.indexOfFirst { it != 0 }.takeIf { it >= 0 } ?: return false
+      val binaryHex = bytes.drop(nonZeroStart).take(12).joinToString("") { "%02X".format(it) }
+      if (binaryHex.length == 24) {
+        Log.d("CarbonChainway", "readBufferOnce binaryEpc='$binaryHex'")
+        emitEpc(binaryHex, null)
+        return true
+      }
+      // ASCII fallback: some firmwares write hex-string into buf
+      val asciiHex = buf.takeWhile { it.code in 0x30..0x46 || it.code in 0x61..0x66 }
+        .joinToString("") { it.toString() }.trim()
+      if (asciiHex.matches(Regex("[0-9A-Fa-f]{24}"))) {
+        Log.d("CarbonChainway", "readBufferOnce asciiEpc='$asciiHex'")
+        emitEpc(asciiHex, null)
+        return true
+      }
+      return false
+    }
+    // Fallback: generic read methods
+    val readNames = setOf("UHFGetReceived", "readTagFromBuffer", "ReadTagFromBuffer")
+    val mGen = cls.methods.firstOrNull { it.name in readNames }?.also { it.isAccessible = true } ?: return false
+    val readArgs = mGen.parameterTypes.map { t ->
+      when {
+        t.isArray && t.componentType == java.lang.Character.TYPE -> CharArray(256)
+        t == java.lang.Character.TYPE -> java.lang.Character('\u0000')
+        t == java.lang.Integer.TYPE -> java.lang.Integer(0)
+        else -> null
+      }
+    }.toTypedArray()
+    val raw = runCatching { mGen.invoke(inst, *readArgs) }.getOrNull() ?: return false
+    Log.d("CarbonChainway", "readBufferOnce generic raw type=${raw.javaClass.simpleName} val=$raw")
+    return when (raw) {
+      is String -> { if (raw.isNotBlank()) { emitEpc(maybeConvertUiiToEpc(cls, inst, raw.trim()), null); true } else false }
+      is Array<*> -> {
+        raw.filterNotNull().forEach { t ->
+          if (t is String) { if (t.isNotBlank()) emitEpc(maybeConvertUiiToEpc(cls, inst, t.trim()), null) }
+          else emitFromTagObject(cls, inst, t)
+        }
+        raw.isNotEmpty()
+      }
+      else -> { emitFromTagObject(cls, inst, raw); true }
     }
   }
 
@@ -457,13 +592,11 @@ class CarbonChainwayRfidController(
     // Log all available methods the first time we see this tag type
     val tagMethods = c.methods.map { it.name }.distinct().sorted()
     Log.d("CarbonChainway", "tag type=${c.simpleName} methods=$tagMethods")
-    for (name in listOf("getEPC", "getEpc", "getUid", "getUII")) {
-      val s =
-        runCatching {
-          val m = c.getMethod(name)
-          (m.invoke(tag) as? String)?.trim()
-        }.getOrNull()
-      Log.d("CarbonChainway", "  $name -> '$s'")
+    val epcGetterNames = setOf("getEPC", "getEpc", "getUid", "getUII")
+    for (m in c.methods.filter { it.name in epcGetterNames && it.parameterCount == 0 }) {
+      m.isAccessible = true
+      val s = runCatching { (m.invoke(tag) as? String)?.trim() }.getOrNull()
+      Log.d("CarbonChainway", "  ${m.name} -> '$s'")
       if (!s.isNullOrEmpty()) return maybeConvertUiiToEpc(cls, inst, s)
     }
     val raw = tag.toString().trim()
@@ -478,14 +611,13 @@ class CarbonChainwayRfidController(
   }
 
   private fun maybeConvertUiiToEpc(cls: Class<*>, inst: Any, uii: String): String {
-    val m = runCatching { cls.getMethod("convertUiiToEPC", String::class.java) }.getOrNull()
-      ?: runCatching { cls.getMethod("ConvertUiiToEPC", String::class.java) }.getOrNull()
+    if (uii.isBlank()) return uii
+    val convertNames = setOf("convertUiiToEPC", "ConvertUiiToEPC")
+    val m = cls.methods.firstOrNull { it.name in convertNames && it.parameterCount == 1 }?.also { it.isAccessible = true }
     if (m != null) {
       val epc = runCatching { m.invoke(inst, uii) as? String }.getOrNull()
       Log.d("CarbonChainway", "convertUiiToEPC('$uii') -> '$epc'")
       if (!epc.isNullOrBlank()) return epc.trim().uppercase()
-    } else {
-      Log.d("CarbonChainway", "convertUiiToEPC not found, returning uii='$uii' as-is")
     }
     return uii.trim().uppercase()
   }
@@ -493,8 +625,18 @@ class CarbonChainwayRfidController(
   private fun emitEpc(hex: String, rssi: Int?) {
     val sink = tagSink ?: return
     val r = rssi ?: -55
-    val up = hex.uppercase()
-    Log.d("CarbonChainway", "emitEpc len=${up.length} hex='$up'")
+    // Normalize to exactly 24 uppercase hex chars
+    val stripped = hex.uppercase().replace(Regex("[^0-9A-F]"), "")
+    val up = when {
+      stripped.length == 24 -> stripped
+      stripped.length < 24 -> stripped.padEnd(24, '0')  // pad short EPCs
+      else -> stripped.take(24)                          // truncate overlong
+    }
+    if (stripped.isEmpty()) {
+      Log.w("CarbonChainway", "emitEpc: empty after strip, raw='$hex'")
+      return
+    }
+    Log.d("CarbonChainway", "emitEpc len=${stripped.length}->24 hex='$up'")
     val payload = mapOf("epc" to up, "rssi" to r)
     mainHandler.post { sink.success(payload) }
   }

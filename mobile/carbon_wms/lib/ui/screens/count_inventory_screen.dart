@@ -118,7 +118,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!mounted) return;
     try {
       final api = context.read<WmsApiClient>();
-      final locs = await api.fetchSessionLocations();
+      final locs = await api.fetchSessionLocations()
+          .timeout(const Duration(seconds: 6), onTimeout: () => []);
       if (!mounted || locs.isEmpty) return;
       final name = (locs.first['name'] ?? locs.first['code'] ?? '').trim();
       final id = (locs.first['id'] ?? '').trim();
@@ -190,39 +191,30 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   Future<void> _ensureScannerReady() async {
     if (_connecting) return;
-    setState(() {
-      _connecting = true;
-    });
-    final rfid = context.read<RfidManager>();
-    final settingsRepo = context.read<MobileSettingsRepository>();
-    rfid.scanContext = 'COUNT_INVENTORY';
-    rfid.suppressEdgeStreaming = true; // COUNT is local-only — don't post to edge ingest
-    await rfid.autoDetectHardware();
-    await rfid.reapplyHandheldHardwareSettings();
-    await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
-    await _readsSub?.cancel();
-    _readsSub = rfid.unifiedTagReads.listen(_onTagRead, onError: (_) {});
-    await _triggerSub?.cancel();
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((evt) {
-      final holdReleaseMode = settingsRepo.config.triggerModeHoldRelease;
-      if (holdReleaseMode) {
-        if (evt == 'down' && !_scanOn) {
-          unawaited(_startScan());
+    setState(() { _connecting = true; });
+    try {
+      final rfid = context.read<RfidManager>();
+      final settingsRepo = context.read<MobileSettingsRepository>();
+      rfid.scanContext = 'COUNT_INVENTORY';
+      rfid.suppressEdgeStreaming = true;
+      await rfid.autoDetectHardware().timeout(const Duration(seconds: 8), onTimeout: () {});
+      await rfid.reapplyHandheldHardwareSettings();
+      await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
+      await _readsSub?.cancel();
+      _readsSub = rfid.unifiedTagReads.listen(_onTagRead, onError: (_) {});
+      await _triggerSub?.cancel();
+      _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((evt) {
+        final holdReleaseMode = settingsRepo.config.triggerModeHoldRelease;
+        if (holdReleaseMode) {
+          if (evt == 'down' && !_scanOn) { unawaited(_startScan()); return; }
+          if (evt == 'up' && _scanOn) { unawaited(_stopScan()); }
           return;
         }
-        if (evt == 'up' && _scanOn) {
-          unawaited(_stopScan());
-        }
-        return;
-      }
-      if (evt == 'down') {
-        unawaited(_toggleScan());
-      }
-    }, onError: (_) {});
+        if (evt == 'down') unawaited(_toggleScan());
+      }, onError: (_) {});
+    } catch (_) {}
     if (!mounted) return;
-    setState(() {
-      _connecting = false;
-    });
+    setState(() { _connecting = false; });
   }
 
   Future<void> _saveAssetCache() async {
@@ -256,7 +248,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   void _onTagRead(RfidTagRead read) {
-    if (!_scanOn) return; // only process when actively scanning
     final now = DateTime.now();
     _scanInactivityTimer?.cancel();
     _scanInactivityTimer = Timer(const Duration(seconds: 15), () {
@@ -269,26 +260,27 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       row.scans += 1;
       row.lastSeen = now;
     } else {
-      final parts = decodeAssetFromEpc(epc);
       _epcRows[epc] = _SessionEpcRow(
         epc: epc,
-        assetId: parts.assetId,
-        prefixHex: parts.prefixHex,
-        serial: parts.serial,
+        assetId: epc, // use raw EPC as ID — no formula
+        prefixHex: '',
+        serial: 0,
         firstSeen: now,
         lastSeen: now,
       );
       unawaited(_playBeep());
     }
+    // Group by raw EPC — one row per unique tag
     final group = _groupedRows.putIfAbsent(
-      _epcRows[epc]!.assetId,
-      () => _GroupedRow(assetId: _epcRows[epc]!.assetId),
+      epc,
+      () => _GroupedRow(assetId: epc),
     );
     group.epcs.add(epc);
     group.qty = group.epcs.length;
-    if (!_busyLookup) {
-      _busyLookup = true;
-      unawaited(_enrichGroups());
+    // No SKU lookup — show raw EPC directly
+    if (group.sku.isEmpty) {
+      group.sku = epc;
+      group.name = '';
     }
     if (mounted) setState(() {});
   }
@@ -504,7 +496,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       pageTitle: 'count',
       actions: [
         IconButton(
-          icon: Icon(Icons.settings_outlined),
+          icon: const Icon(Icons.settings_outlined),
           onPressed: _openModuleSettings,
         ),
       ],
@@ -1332,7 +1324,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                     child: Container(
                       decoration: BoxDecoration(
                         color: const Color(0xFFFAFAFA),
-                        border: Border(left: BorderSide(color: Color(0xFF009496), width: 6.w)),
+                        border: Border(left: BorderSide(color: const Color(0xFF009496), width: 6.w)),
                         borderRadius: BorderRadius.circular(2.r),
                         boxShadow: const [
                           BoxShadow(
@@ -1507,7 +1499,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                       setState(() => _overrideEntireCloudQuantities = next ?? false);
                                     },
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2.r)),
-                                    side: BorderSide(color: Color(0xFF7C8A8A), width: 2.w),
+                                    side: BorderSide(color: const Color(0xFF7C8A8A), width: 2.w),
                                     activeColor: const Color(0xFF009496),
                                   ),
                                 ),
@@ -1705,7 +1697,7 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
                         ? SizedBox(
                             width: 22.w,
                             height: 22.h,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: _primary),
+                            child: const CircularProgressIndicator(strokeWidth: 2, color: _primary),
                           )
                         : Icon(Icons.restart_alt, size: 22.sp),
                     label: Text(_busy ? 'RESTARTING…' : 'RESTART CONTROLLER'),
@@ -1941,7 +1933,7 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
               ),
             ),
             SizedBox(height: 24.h),
-            Divider(height: 1.h, thickness: 1, color: Color(0xFFF4F4F5)),
+            Divider(height: 1.h, thickness: 1, color: const Color(0xFFF4F4F5)),
             SizedBox(height: 32.h),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,

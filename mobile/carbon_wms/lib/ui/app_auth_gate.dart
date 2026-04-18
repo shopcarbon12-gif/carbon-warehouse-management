@@ -107,7 +107,8 @@ class _AppAuthGateState extends State<AppAuthGate> with WidgetsBindingObserver {
 
     Map<String, dynamic> status;
     try {
-      status = await api.fetchMobileStatus(version: version, androidId: _androidId.isEmpty ? null : _androidId);
+      status = await api.fetchMobileStatus(version: version, androidId: _androidId.isEmpty ? null : _androidId)
+          .timeout(const Duration(seconds: 8));
     } catch (_) {
       if (mounted) {
         setState(() {
