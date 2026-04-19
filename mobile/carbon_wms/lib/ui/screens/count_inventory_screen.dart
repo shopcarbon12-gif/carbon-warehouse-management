@@ -48,11 +48,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   Timer? _scanInactivityTimer;
   bool _scanOn = false;
   bool _connecting = false;
-  bool _busyLookup = false;
   _CountInventoryModuleSettings _moduleSettings = _CountInventoryModuleSettings.defaults;
   RfidManager? _rfidManager;
   late final AudioPlayer _scanAudio;
   Uint8List? _scanBeepBytes;
+  // Live RSSI of most-recently-read tag
+  int _lastRssi = 0;
 
   @override
   void initState() {
@@ -254,30 +255,40 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       if (!mounted) return;
       unawaited(_stopScan());
     });
+
+    final rssi = read.rssi ?? -99;
+    // RSSI filter: rssiDistance 0=close (strong signal only), 1=far (accept all).
+    // Map slider 0..1 → threshold -90..-30 dBm. Accept tag if rssi >= threshold.
+    final threshold = (-90 + _moduleSettings.rssiDistance * 60).round();
+    if (rssi < threshold) return;
+
+    _lastRssi = rssi;
     final epc = read.epcHex24;
     final row = _epcRows[epc];
     if (row != null) {
       row.scans += 1;
       row.lastSeen = now;
+      row.rssi = rssi;
     } else {
       _epcRows[epc] = _SessionEpcRow(
         epc: epc,
-        assetId: epc, // use raw EPC as ID — no formula
+        assetId: epc,
         prefixHex: '',
         serial: 0,
         firstSeen: now,
         lastSeen: now,
+        rssi: rssi,
       );
       unawaited(_playBeep());
     }
-    // Group by raw EPC — one row per unique tag
+    // One group per unique EPC — like Senitron's Assets List
     final group = _groupedRows.putIfAbsent(
       epc,
       () => _GroupedRow(assetId: epc),
     );
     group.epcs.add(epc);
     group.qty = group.epcs.length;
-    // No SKU lookup — show raw EPC directly
+    group.lastRssi = rssi;
     if (group.sku.isEmpty) {
       group.sku = epc;
       group.name = '';
@@ -306,7 +317,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         }
       } catch (_) {}
     }
-    _busyLookup = false;
     if (mounted) setState(() {});
   }
 
@@ -477,20 +487,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final groups = _groupedRows.values.toList()..sort((a, b) => a.assetId.compareTo(b.assetId));
-    final hasRealRows = groups.isNotEmpty;
+    final rows = _epcRows.values.toList()
+      ..sort((a, b) => a.epc.compareTo(b.epc));
+    final hasRows = rows.isNotEmpty;
     final assetCount = _epcRows.length;
-    final skuCount = groups.length;
-    final summaryValueText = '$assetCount';
-    final summarySkuValueText = '$skuCount';
-    final continueButtonWidth = _continueButtonTightWidth();
-    final tileColor = isDark ? const Color(0xFF1C2828) : const Color(0xFFEEF4F3);
-    final textColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
-    final summaryLabelColor = isDark ? const Color(0xFF5C6C6C) : const Color(0xFF3F4A4A);
-    final watermarkColor = isDark ? const Color(0x66A0B3B3) : const Color(0x2995A5A7);
-    const summaryBoxWidth = 132.0;
-    const summaryBoxHeight = 60.0;
+    // SKU count = unique non-empty SKU labels (exclude raw-EPC placeholders)
+    final skuCount = _groupedRows.values
+        .where((g) => g.name.isNotEmpty || (g.sku.isNotEmpty && g.sku != g.assetId))
+        .map((g) => g.sku)
+        .toSet()
+        .length;
 
     return CarbonScaffold(
       pageTitle: 'count',
@@ -505,8 +511,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Location header
             Padding(
-              padding: EdgeInsets.fromLTRB(20.w, 2.h, 20.w, 0.h),
+              padding: EdgeInsets.fromLTRB(12.w, 4.h, 12.w, 0),
               child: GestureDetector(
                 onTap: _locations.length > 1 ? _openLocationPicker : null,
                 behavior: HitTestBehavior.opaque,
@@ -516,9 +523,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                     Text(
                       _currentLocationName.toUpperCase(),
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 14.sp,
+                        fontSize: 13.sp,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 2.4,
+                        letterSpacing: 2.0,
                         color: AppColors.primary,
                       ),
                     ),
@@ -530,213 +537,182 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                 ),
               ),
             ),
+            // Summary tiles — yellow like Senitron
             Padding(
-              padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0.h),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final tileWidth = ((constraints.maxWidth - 8) / 2).clamp(160.0, 166.0);
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: tileWidth,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                        child: _CountSummaryTile(
-                          label: 'Total EPCs',
-                            value: summaryValueText,
-                          icon: Icons.inventory_2_outlined,
-                            boxWidth: summaryBoxWidth,
-                            boxHeight: summaryBoxHeight,
-                          tileColor: tileColor,
-                          textColor: textColor,
-                            labelColor: summaryLabelColor,
-                          watermarkColor: watermarkColor,
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 8.w),
-                      SizedBox(
-                        width: tileWidth,
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                        child: _CountSummaryTile(
-                          label: 'Total SKUs',
-                            value: summarySkuValueText,
-                          icon: Icons.precision_manufacturing_outlined,
-                            boxWidth: summaryBoxWidth,
-                            boxHeight: summaryBoxHeight,
-                          tileColor: tileColor,
-                          textColor: textColor,
-                            labelColor: summaryLabelColor,
-                          watermarkColor: watermarkColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            SizedBox(height: 12.h),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 0.h, 20.w, 0.h),
-                child: ColoredBox(
-                  color: Colors.transparent,
-                  child: hasRealRows
-                    ? ListView.separated(
-                        padding: EdgeInsets.only(bottom: 12.h),
-                          itemCount: groups.length,
-                        separatorBuilder: (_, __) => SizedBox(height: 8.h),
-                        itemBuilder: (_, i) {
-                          final g = groups[i];
-                          final descParts = [g.name, g.color, g.size]
-                              .map((s) => s.trim())
-                              .where((s) => s.isNotEmpty)
-                              .toList();
-                          final desc = descParts.isEmpty ? 'ITEM DESCRIPTION' : descParts.join(' ');
-                            final extra = <String>[
-                              'Asset ID: ${g.assetId}',
-                              if (g.vendor.trim().isNotEmpty) 'Vendor: ${g.vendor}',
-                              'Unique EPCs in session: ${g.epcs.length}',
-                              if (g.cached) 'Details source: offline cache',
-                              if (!g.cached && (g.sku.isNotEmpty || g.name.isNotEmpty)) 'Details source: catalog lookup',
-                            ];
-                          return _CountItemContainer(
-                              rowKey: 'real-${g.assetId}',
-                            sku: g.sku.trim().isEmpty ? g.assetId : g.sku,
-                            description: desc,
-                            qtyText: 'x${g.qty}',
-                              expandedLines: extra,
-                              onQtyTap: () => _openEpcList(
-                                title: g.sku.trim().isEmpty ? g.assetId : g.sku,
-                                epcs: (g.epcs.toList()..sort()),
-                              ),
-                              onDelete: () {
-                                setState(() {
-                                  for (final epc in g.epcs) {
-                                    _epcRows.remove(epc);
-                                  }
-                                  _groupedRows.remove(g.assetId);
-                                });
-                              },
-                              confirmDelete: _confirmDeleteItem,
-                          );
-                        },
-                      )
-                      : Center(
-                          child: Text(
-                            'No items scanned yet',
-                            style: GoogleFonts.manrope(
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF5A6464),
-                            ),
-                          ),
-                        ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 10.h),
+              padding: EdgeInsets.fromLTRB(12.w, 8.h, 12.w, 0),
               child: Row(
                 children: [
                   Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                        width: continueButtonWidth,
-                        height: 40.h,
-                      child: FilledButton(
-                        onPressed: _connecting ? null : _toggleScan,
-                        style: FilledButton.styleFrom(
-                            backgroundColor: _scanOn ? const Color(0xFFBF2E2E) : const Color(0xFF0A7C80),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2.r)),
-                          padding: EdgeInsets.symmetric(horizontal: 12.w),
+                    child: _SenitronCounterTile(
+                      value: '$assetCount',
+                      label: 'ASSET(s) READ',
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: _SenitronCounterTile(
+                      value: '$skuCount',
+                      label: 'SKU(s) READ',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 6.h),
+            // EPC list — one row per unique tag
+            Expanded(
+              child: hasRows
+                  ? ListView.separated(
+                      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+                      itemCount: rows.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1, thickness: 1, color: Color(0xFFE8ECEC)),
+                      itemBuilder: (_, i) {
+                        final row = rows[i];
+                        final g = _groupedRows[row.epc];
+                        final descParts = [
+                          if (g != null && g.name.isNotEmpty) g.name,
+                          if (g != null && g.color.isNotEmpty) g.color,
+                          if (g != null && g.size.isNotEmpty) g.size,
+                        ];
+                        final desc = descParts.isEmpty ? '' : descParts.join(' ');
+                        return _SenitronEpcRow(
+                          epc: row.epc,
+                          description: desc,
+                          qty: row.scans,
+                          rssi: row.rssi,
+                          onTap: () => _openEpcList(title: row.epc, epcs: [row.epc]),
+                          onDelete: () {
+                            setState(() {
+                              _epcRows.remove(row.epc);
+                              _groupedRows.remove(row.epc);
+                            });
+                          },
+                          confirmDelete: _confirmDeleteItem,
+                        );
+                      },
+                    )
+                  : Center(
+                      child: Text(
+                        'No items scanned yet',
+                        style: GoogleFonts.manrope(
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF8A9A9A),
                         ),
-                        child: Row(
-                          children: [
-                              Expanded(
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                              _scanOn ? 'STOP' : 'START',
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: 16.sp,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.8,
-                              ),
-                            ),
-                                ),
-                              ),
-                              SizedBox(width: 8.w),
-                              SizedBox(
-                                width: 20.w,
-                                child: Icon(
-                                  _scanOn ? Icons.stop_circle_outlined : Icons.play_circle_outline,
-                                  size: 20.sp,
-                                ),
-                              ),
-                            ],
+                      ),
+                    ),
+            ),
+            // RSSI filter slider — like Senitron
+            Container(
+              color: Colors.white,
+              padding: EdgeInsets.fromLTRB(16.w, 6.h, 16.w, 2.h),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('Filter', style: GoogleFonts.manrope(fontSize: 13.sp, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                      SizedBox(width: 8.w),
+                      Text('Close', style: GoogleFonts.manrope(fontSize: 12.sp, color: const Color(0xFF5A6464))),
+                      Expanded(
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: AppColors.primary,
+                            inactiveTrackColor: const Color(0xFFCCDDDD),
+                            thumbColor: AppColors.primary,
+                            overlayColor: AppColors.primary.withValues(alpha: 0.12),
+                            trackHeight: 4,
+                          ),
+                          child: Slider(
+                            value: _moduleSettings.rssiDistance,
+                            min: 0,
+                            max: 1,
+                            onChanged: (v) async {
+                              setState(() {
+                                _moduleSettings = _CountInventoryModuleSettings(
+                                  rfidPowerDbm: _moduleSettings.rfidPowerDbm,
+                                  rssiDistance: v,
+                                );
+                              });
+                              await _saveModuleSettings();
+                            },
                           ),
                         ),
+                      ),
+                      Text('Far', style: GoogleFonts.manrope(fontSize: 12.sp, color: const Color(0xFF5A6464))),
+                    ],
+                  ),
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 4.h),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Power  ${_moduleSettings.rfidPowerDbm} dBm',
+                          style: GoogleFonts.robotoMono(fontSize: 12.sp, color: const Color(0xFF5A6464)),
+                        ),
+                        Text(
+                          'RSSI  $_lastRssi',
+                          style: GoogleFonts.robotoMono(fontSize: 12.sp, color: const Color(0xFF5A6464)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Start / Reset / Continue buttons
+            Padding(
+              padding: EdgeInsets.fromLTRB(12.w, 4.h, 12.w, 8.h),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 110.w,
+                    height: 44.h,
+                    child: FilledButton(
+                      onPressed: _connecting ? null : _toggleScan,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _scanOn ? const Color(0xFFBF2E2E) : const Color(0xFF1A4F8A),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4.r)),
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: Text(
+                        _scanOn ? 'Stop' : 'Start',
+                        style: GoogleFonts.manrope(fontSize: 16.sp, fontWeight: FontWeight.w800),
                       ),
                     ),
                   ),
                   SizedBox(width: 8.w),
                   SizedBox(
-                    width: 40.w,
-                    height: 40.h,
+                    width: 44.w,
+                    height: 44.h,
                     child: FilledButton(
                       onPressed: _resetScreenToDefault,
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF6A7575),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2.r)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4.r)),
                         padding: EdgeInsets.zero,
                       ),
                       child: Icon(Icons.restart_alt, size: 20.sp),
                     ),
                   ),
-                  SizedBox(width: 8.w),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: IntrinsicWidth(
-                    child: SizedBox(
-                          height: 40.h,
-                      child: FilledButton(
-                            onPressed: _openContinue,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF2BA3A3),
-                          disabledBackgroundColor: const Color(0xFF2BA3A3),
-                          foregroundColor: Colors.white,
-                              disabledForegroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2.r)),
-                          padding: EdgeInsets.symmetric(horizontal: 12.w),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'CONTINUE',
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: 16.sp,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.5,
-                                    color: Colors.white,
-                              ),
-                            ),
-                                SizedBox(width: 8.w),
-                                Icon(Icons.arrow_forward, size: 20.sp, color: Colors.white),
-                          ],
-                            ),
-                          ),
-                        ),
+                  const Spacer(),
+                  SizedBox(
+                    width: 130.w,
+                    height: 44.h,
+                    child: FilledButton(
+                      onPressed: _openContinue,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF1A4F8A),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4.r)),
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: Text(
+                        'Continue',
+                        style: GoogleFonts.manrope(fontSize: 16.sp, fontWeight: FontWeight.w800),
                       ),
                     ),
                   ),
@@ -750,6 +726,192 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     );
   }
 }
+
+// ── Senitron-style yellow counter tile ──────────────────────────────────────
+
+class _SenitronCounterTile extends StatelessWidget {
+  const _SenitronCounterTile({required this.value, required this.label});
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 12.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF9C4),
+        borderRadius: BorderRadius.circular(4.r),
+        border: Border.all(color: const Color(0xFFE8D800), width: 1),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 32.sp,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF11181C),
+              height: 1.0,
+            ),
+          ),
+          SizedBox(height: 2.h),
+          Text(
+            label,
+            style: GoogleFonts.manrope(
+              fontSize: 11.sp,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF5A6464),
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Senitron-style EPC row ───────────────────────────────────────────────────
+
+class _SenitronEpcRow extends StatelessWidget {
+  const _SenitronEpcRow({
+    required this.epc,
+    required this.description,
+    required this.qty,
+    required this.rssi,
+    required this.onTap,
+    required this.onDelete,
+    required this.confirmDelete,
+  });
+
+  final String epc;
+  final String description;
+  final int qty;
+  final int rssi;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+  final Future<bool> Function() confirmDelete;
+
+  // Map RSSI → 0-4 bars (Senitron style)
+  int get _bars {
+    if (rssi >= -50) return 4;
+    if (rssi >= -65) return 3;
+    if (rssi >= -75) return 2;
+    if (rssi >= -85) return 1;
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dismissible(
+      key: ValueKey<String>(epc),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: EdgeInsets.symmetric(horizontal: 14.w),
+        color: const Color(0xFFBF2E2E),
+        child: Icon(Icons.delete_outline, color: Colors.white, size: 24.sp),
+      ),
+      confirmDismiss: (_) async {
+        final ok = await confirmDelete();
+        if (ok) onDelete();
+        return ok;
+      },
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 4.w),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      epc,
+                      style: GoogleFonts.robotoMono(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF11181C),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    if (description.isNotEmpty) ...[
+                      SizedBox(height: 2.h),
+                      Text(
+                        description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.manrope(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF5A6464),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              SizedBox(width: 8.w),
+              // RSSI signal bars
+              _RssiBars(bars: _bars),
+              SizedBox(width: 8.w),
+              // QTY
+              Container(
+                constraints: BoxConstraints(minWidth: 28.w),
+                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF9C4),
+                  borderRadius: BorderRadius.circular(2.r),
+                  border: Border.all(color: const Color(0xFFE8D800)),
+                ),
+                child: Text(
+                  '$qty',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF11181C),
+                  ),
+                ),
+              ),
+              SizedBox(width: 4.w),
+              Icon(Icons.chevron_right, size: 20.sp, color: const Color(0xFF8A9A9A)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RssiBars extends StatelessWidget {
+  const _RssiBars({required this.bars});
+  final int bars; // 0-4
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: List.generate(4, (i) {
+        final active = i < bars;
+        final h = 6.0 + i * 3.0;
+        return Container(
+          width: 4.w,
+          height: h.h,
+          margin: EdgeInsets.only(left: i == 0 ? 0 : 2.w),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFF2E7D32) : const Color(0xFFCCDDDD),
+            borderRadius: BorderRadius.circular(1.r),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+// ── Legacy summary tile (kept for settings screen usage) ────────────────────
 
 class _CountSummaryTile extends StatelessWidget {
   const _CountSummaryTile({
@@ -2079,6 +2241,7 @@ class _SessionEpcRow {
     required this.serial,
     required this.firstSeen,
     required this.lastSeen,
+    this.rssi = -99,
   });
 
   final String epc;
@@ -2088,6 +2251,7 @@ class _SessionEpcRow {
   final DateTime firstSeen;
   DateTime lastSeen;
   int scans = 1;
+  int rssi;
 }
 
 class _GroupedRow {
@@ -2102,6 +2266,7 @@ class _GroupedRow {
   String size = '';
   String vendor = '';
   bool cached = false;
+  int lastRssi = -99;
 }
 
 String _csv(String v) {

@@ -215,24 +215,34 @@ class CarbonChainwayRfidController(
             var emptyStreak = 0
             while (scanning.get()) {
               try {
-                // Drain the background buffer
+                // Drain the background buffer (decodes ALL tags in one call now)
                 val gotTag = readBufferOnce(cls, inst)
                 if (gotTag) emptyStreak = 0 else emptyStreak++
                 // Also fire single-shot to actively trigger RF emission
                 if (mSingle != null) {
                   val raw = runCatching { mSingle.invoke(inst) }.getOrNull()
                   if (raw is CharArray) {
-                    val hexD = raw.take(16).joinToString("") { "%04X".format(it.code) }
-                    val epc = String(raw).trimEnd('\u0000').trim()
-                    if (epc.isNotEmpty() && raw.any { it != '\u0000' && it != '\uFFFF' }) {
-                      Log.d("CarbonChainway", "single charArray hexDump='$hexD'")
-                      emitEpc(maybeConvertUiiToEpc(cls, inst, epc), null)
+                    val bytes = raw.map { it.code and 0xFF }
+                    // Reject if all non-first bytes are zero (no tag present, returning param noise)
+                    val nonZeroCount = bytes.count { it != 0 }
+                    if (nonZeroCount >= 3) {
+                      val hex = bytes.take(12).joinToString("") { "%02X".format(it) }
+                      if (hex.matches(Regex("[0-9A-F]{24}"))) {
+                        Log.d("CarbonChainway", "single binaryEpc='$hex'")
+                        emitEpc(hex, null)
+                      } else {
+                        // ASCII fallback
+                        val epc = String(raw).trimEnd('\u0000').trim()
+                        if (epc.length >= 24 && epc.matches(Regex("[0-9A-Fa-f]{24,}"))) {
+                          emitEpc(maybeConvertUiiToEpc(cls, inst, epc.take(24)), null)
+                        }
+                      }
                     }
                   }
                 }
-                // Re-trigger continuous inventory every 200 empty polls (~9 seconds)
-                // UHFInventory_EX_cnt with count=255 stops after 255 reads; restart it
-                if (emptyStreak > 0 && emptyStreak % 200 == 0) {
+                // Re-trigger inventory every 50 empty polls (~2.25s) — 255-count batch can
+                // complete quickly when many tags are in range and we need to restart it
+                if (emptyStreak > 0 && emptyStreak % 50 == 0) {
                   Log.d("CarbonChainway", "re-triggering ${reInvMethod.name} after $emptyStreak empty polls")
                   runCatching { reInvMethod.invoke(inst, *reInvArgs) }
                 }
@@ -499,6 +509,8 @@ class CarbonChainwayRfidController(
   private fun readBufferOnce(cls: Class<*>, inst: Any): Boolean {
     // UHFGetReceived_EX2(char[] buf): return value is count of buffered tags (-1 = empty).
     // The char[] gets filled with raw binary bytes (each char holds one byte via low 8 bits).
+    // The buffer layout for multiple tags: each EPC96 tag = 12 bytes. With count=N tags,
+    // the buffer contains N*12 bytes packed sequentially from offset 0.
     val n = pollCount.incrementAndGet()
     val m = cls.methods.firstOrNull { it.name == "UHFGetReceived_EX2" }?.also { it.isAccessible = true }
     if (m != null) {
@@ -511,15 +523,42 @@ class CarbonChainwayRfidController(
       if (count < 0) return false
       // Log a full dump whenever we get actual data
       Log.d("CarbonChainway", "poll#$n UHFGetReceived_EX2 count=$count hexDump=$hexDump")
-      // Binary EPC: mask each char to 0xFF and hex-encode, skip leading zeros
       val bytes = buf.map { it.code and 0xFF }
-      val nonZeroStart = bytes.indexOfFirst { it != 0 }.takeIf { it >= 0 } ?: return false
-      val binaryHex = bytes.drop(nonZeroStart).take(12).joinToString("") { "%02X".format(it) }
-      if (binaryHex.length == 24) {
-        Log.d("CarbonChainway", "readBufferOnce binaryEpc='$binaryHex'")
-        emitEpc(binaryHex, null)
-        return true
+      var emitted = false
+
+      // Try to decode `count` sequential 12-byte EPC records from the buffer
+      if (count > 0) {
+        for (i in 0 until count) {
+          val offset = i * 12
+          if (offset + 12 > bytes.size) break
+          val chunk = bytes.subList(offset, offset + 12)
+          if (chunk.all { it == 0 }) continue
+          val hex = chunk.joinToString("") { "%02X".format(it) }
+          if (hex.matches(Regex("[0-9A-F]{24}"))) {
+            Log.d("CarbonChainway", "readBufferOnce tag[$i] binaryEpc='$hex'")
+            emitEpc(hex, null)
+            emitted = true
+          }
+        }
+        if (emitted) return true
       }
+
+      // Fallback: scan the whole buffer for all non-zero 12-byte aligned runs
+      var i = 0
+      while (i + 12 <= bytes.size) {
+        val chunk = bytes.subList(i, i + 12)
+        if (chunk.any { it != 0 }) {
+          val hex = chunk.joinToString("") { "%02X".format(it) }
+          if (hex.matches(Regex("[0-9A-F]{24}"))) {
+            Log.d("CarbonChainway", "readBufferOnce scan[$i] binaryEpc='$hex'")
+            emitEpc(hex, null)
+            emitted = true
+          }
+        }
+        i += 12
+      }
+      if (emitted) return true
+
       // ASCII fallback: some firmwares write hex-string into buf
       val asciiHex = buf.takeWhile { it.code in 0x30..0x46 || it.code in 0x61..0x66 }
         .joinToString("") { it.toString() }.trim()
@@ -634,6 +673,12 @@ class CarbonChainwayRfidController(
     }
     if (stripped.isEmpty()) {
       Log.w("CarbonChainway", "emitEpc: empty after strip, raw='$hex'")
+      return
+    }
+    // Reject obviously invalid EPCs: all zeros, or only one non-zero byte (param noise)
+    val nonZeroNibbles = up.count { it != '0' }
+    if (nonZeroNibbles <= 2) {
+      Log.w("CarbonChainway", "emitEpc: rejected low-entropy epc='$up'")
       return
     }
     Log.d("CarbonChainway", "emitEpc len=${stripped.length}->24 hex='$up'")
