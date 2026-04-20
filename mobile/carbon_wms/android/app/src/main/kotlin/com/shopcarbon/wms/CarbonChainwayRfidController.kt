@@ -188,29 +188,33 @@ class CarbonChainwayRfidController(
   }
 
   fun resolveUhfClass(): Class<*>? {
-    val names = listOf(
-      "com.rscja.team.mtk.deviceapi.DeviceAPI",
+    val target = "com.rscja.team.mtk.deviceapi.DeviceAPI"
+    // 1. Try DexClassLoader from bundled chainway_uhf.dex asset + libDeviceAPIM.so
+    try {
+      val appCtx = context.applicationContext
+      val dexFile = java.io.File(appCtx.cacheDir, "chainway_uhf.dex")
+      if (!dexFile.exists()) {
+        appCtx.assets.open("chainway_uhf.dex").use { input ->
+          dexFile.outputStream().use { output -> input.copyTo(output) }
+        }
+      }
+      val optDir = appCtx.getDir("dex_opt", android.content.Context.MODE_PRIVATE)
+      val cl = dalvik.system.DexClassLoader(
+        dexFile.absolutePath, optDir.absolutePath, null, appCtx.classLoader)
+      val cls = cl.loadClass(target)
+      Log.d("CarbonChainway", "DexClassLoader loaded '$target' from bundled DEX")
+      return cls
+    } catch (e: Throwable) {
+      Log.w("CarbonChainway", "DexClassLoader failed: ${e.message}")
+    }
+    // 2. Fallback: standard class resolution
+    val fallbacks = listOf(
       "com.rscja.deviceapi.DeviceAPI",
       "com.rscja.deviceapi.RFIDWithUHFUART",
-      "com.rscja.deviceapi.module.RFIDWithUHFUART",
       "com.rscja.deviceapi.RFIDWithUHF",
     )
-    for (n in names) {
+    for (n in fallbacks) {
       try { return Class.forName(n) } catch (_: Throwable) {}
-    }
-    for (pkg in listOf("com.rscja.scanner", "com.rscja.secapp", "com.rscja.deviceapi")) {
-      try {
-        val pkgCtx = context.createPackageContext(pkg,
-          Context.CONTEXT_INCLUDE_CODE or Context.CONTEXT_IGNORE_SECURITY)
-        val cl = pkgCtx.classLoader
-        for (className in names) {
-          try {
-            val cls = cl.loadClass(className)
-            Log.d("CarbonChainway", "createPackageContext classloader loaded '$className' from pkg=$pkg")
-            return cls
-          } catch (_: Throwable) {}
-        }
-      } catch (_: Throwable) {}
     }
     return null
   }
