@@ -130,6 +130,14 @@ class MainActivity : FlutterFragmentActivity() {
           hardwareBarcodeRelay?.deactivateTriggerRelay()
           result.success(true)
         }
+        "scanner.enableNativeTrigger" -> {
+          chainway.enableNativeTrigger()
+          result.success(true)
+        }
+        "scanner.disableNativeTrigger" -> {
+          chainway.disableNativeTrigger()
+          result.success(true)
+        }
         "scanner.enableRfidFunctionMode" -> {
           // Block the physical trigger from firing the 2D laser (RSCJA_SCAN_KEY_START=1)
           runCatching { android.provider.Settings.System.putInt(contentResolver, "RSCJA_SCAN_KEY_START", 1) }

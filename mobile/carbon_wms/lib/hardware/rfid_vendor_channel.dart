@@ -93,6 +93,18 @@ class RfidVendorChannel {
     } catch (_) {}
   }
 
+  /// Registers a native KEY_DOWN receiver in Kotlin that toggles RFID inventory directly.
+  static Future<void> enableNativeTrigger() async {
+    if (!_isAndroid) return;
+    try { await _method.invokeMethod<void>('scanner.enableNativeTrigger'); } catch (_) {}
+  }
+
+  /// Unregisters the native KEY_DOWN trigger receiver.
+  static Future<void> disableNativeTrigger() async {
+    if (!_isAndroid) return;
+    try { await _method.invokeMethod<void>('scanner.disableNativeTrigger'); } catch (_) {}
+  }
+
   /// Tells com.rscja.scanner to switch to RFID-only mode (no 2D laser on KEY_DOWN).
   static Future<void> enableRfidFunctionMode() async {
     if (!_isAndroid) return;

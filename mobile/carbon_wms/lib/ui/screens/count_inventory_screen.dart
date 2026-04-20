@@ -43,6 +43,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   String _currentLocationName = 'Loading...';
   String _currentLocationId = '';
   StreamSubscription<RfidTagRead>? _readsSub;
+  StreamSubscription<RfidTagRead>? _directTagSub;
   StreamSubscription<String>? _triggerSub;
   StreamSubscription<String>? _barcodeSub;
   Timer? _scanInactivityTimer;
@@ -83,6 +84,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   @override
   void dispose() {
     _readsSub?.cancel();
+    _directTagSub?.cancel();
     _triggerSub?.cancel();
     _barcodeSub?.cancel();
     _scanInactivityTimer?.cancel();
@@ -92,8 +94,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       rfid.suppressEdgeStreaming = false;
       unawaited(rfid.stopLocateScanning());
     }
+    unawaited(RfidVendorChannel.stopChainwayInventory());
     unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
     unawaited(RfidVendorChannel.disableRfidFunctionMode());
+    unawaited(RfidVendorChannel.disableNativeTrigger());
     super.dispose();
   }
 
@@ -204,13 +208,18 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (_connecting) return;
     final rfid = context.read<RfidManager>();
 
-    // Subscribe streams immediately so trigger/beep work without waiting for hardware init.
+    // Subscribe streams immediately — trigger/beep work before hardware init completes.
     rfid.suppressEdgeStreaming = true;
-    await RfidVendorChannel.scannerDisableTriggerRelay();
-    await RfidVendorChannel.enableRfidFunctionMode();
+    unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+    unawaited(RfidVendorChannel.enableRfidFunctionMode());
+    unawaited(RfidVendorChannel.enableNativeTrigger());
 
     await _readsSub?.cancel();
     _readsSub = rfid.unifiedTagReads.listen(_onTagRead, onError: (_) {});
+    // Also subscribe directly to the native tag stream so reads arrive even when
+    // ChainwayScanner._nativeLinked is false (e.g. connectChainway returned useStub).
+    await _directTagSub?.cancel();
+    _directTagSub = RfidVendorChannel.tagReadStream().listen(_onTagRead, onError: (_) {});
     await _barcodeSub?.cancel();
     _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((_) {
       unawaited(_playBeep());
@@ -220,20 +229,17 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       if (evt == 'down') unawaited(_toggleScan());
     }, onError: (_) {});
 
-    // Hardware init runs in background — UI is already usable.
-    if (_connecting) return;
     setState(() { _connecting = true; });
     try {
-      if (rfid.activeScanner == null) {
-        rfid.scanContext = 'COUNT_INVENTORY';
-        await rfid.autoDetectHardware().timeout(const Duration(seconds: 8), onTimeout: () {});
-      } else {
-        rfid.scanContext = 'COUNT_INVENTORY';
-      }
+      rfid.scanContext = 'COUNT_INVENTORY';
+      // Always re-detect to ensure UHFOpenAndConnect runs and UART is claimed.
+      await rfid.autoDetectHardware().timeout(const Duration(seconds: 8), onTimeout: () {});
       await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
     } catch (_) {}
     if (!mounted) return;
     setState(() { _connecting = false; });
+    // Auto-start scanning as soon as hardware is ready.
+    await _startScan();
   }
 
   Future<void> _saveAssetCache() async {
@@ -358,23 +364,25 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _startScan() async {
-    final rfid = context.read<RfidManager>();
+    if (_scanOn) return;
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
-    await rfid.startLocateScanning();
+    // Drive Chainway inventory directly — bypasses RfidManager/ChainwayScanner so it
+    // works even when autoDetectHardware returned useStub due to a transient PlatformException.
+    try {
+      await RfidVendorChannel.startChainwayInventory();
+    } catch (_) {}
     if (!mounted) return;
-    setState(() {
-      _scanOn = true;
-    });
+    setState(() { _scanOn = true; });
   }
 
   Future<void> _stopScan() async {
+    if (!_scanOn) return;
     _scanInactivityTimer?.cancel();
-    final rfid = context.read<RfidManager>();
-    await rfid.stopLocateScanning();
+    try {
+      await RfidVendorChannel.stopChainwayInventory();
+    } catch (_) {}
     if (!mounted) return;
-    setState(() {
-      _scanOn = false;
-    });
+    setState(() { _scanOn = false; });
   }
 
   Future<void> _openEpcList({

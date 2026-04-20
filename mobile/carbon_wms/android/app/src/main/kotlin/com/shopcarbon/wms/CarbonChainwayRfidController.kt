@@ -32,6 +32,10 @@ class CarbonChainwayRfidController(
   @Volatile private var lastError: String? = null
   @Volatile private var keepAliveThread: Thread? = null
 
+  // When true, KEY_DOWN broadcasts toggle RFID inventory directly in Kotlin (no Flutter round-trip).
+  @Volatile private var nativeTriggerActive = false
+  private var triggerReceiver: BroadcastReceiver? = null
+
   private val ACTION_RFID_ENABLE  = "android.intent.action.ENABLE_FUNCTION_BARCODE_RFID"
   private val ACTION_RFID_DISABLE = "android.intent.action.DISABLE_FUNCTION_BARCODE_RFID"
   private val ACTION_RFID_START   = "android.intent.action.START_BARCODE_RFID"
@@ -43,6 +47,125 @@ class CarbonChainwayRfidController(
   @Volatile private var pollThread: Thread? = null
 
   fun getLastError(): String? = lastError
+
+  /** Register a KEY_DOWN broadcast receiver that toggles RFID inventory natively. */
+  fun enableNativeTrigger() {
+    if (triggerReceiver != null) return
+    nativeTriggerActive = true
+    val r = object : BroadcastReceiver() {
+      override fun onReceive(ctx: Context?, intent: Intent?) {
+        if (intent?.action != "com.rscja.android.KEY_DOWN") return
+        if (!nativeTriggerActive) return
+        executor.execute {
+          if (scanning.get()) {
+            stopInventoryAsync()
+          } else {
+            startInventoryDirect()
+          }
+        }
+      }
+    }
+    val filter = IntentFilter("com.rscja.android.KEY_DOWN")
+    try {
+      if (android.os.Build.VERSION.SDK_INT >= 33) {
+        context.registerReceiver(r, filter, Context.RECEIVER_EXPORTED)
+      } else {
+        @Suppress("DEPRECATION")
+        context.registerReceiver(r, filter)
+      }
+      triggerReceiver = r
+      Log.d("CarbonChainway", "native trigger receiver registered")
+    } catch (e: Exception) {
+      Log.w("CarbonChainway", "native trigger register failed: ${e.message}")
+    }
+  }
+
+  fun disableNativeTrigger() {
+    nativeTriggerActive = false
+    val r = triggerReceiver ?: return
+    triggerReceiver = null
+    try { context.unregisterReceiver(r) } catch (_: Exception) {}
+    Log.d("CarbonChainway", "native trigger receiver unregistered")
+  }
+
+  private fun startInventoryDirect() {
+    if (scanning.getAndSet(true)) return
+    try {
+      tryApplyChainwayPower()
+      if (uhfClass == null || uhfInstance == null) {
+        val cls = resolveUhfClass() ?: run { scanning.set(false); return }
+        val inst = getStaticInstance(cls, context.applicationContext) ?: run { scanning.set(false); return }
+        uhfClass = cls; uhfInstance = inst; invokeInit(cls, inst)
+      }
+      val cls = uhfClass ?: run { scanning.set(false); return }
+      val inst = uhfInstance ?: run { scanning.set(false); return }
+      val mInv = cls.methods.firstOrNull { it.name == "UHFInventory_EX_cnt" }
+        ?: cls.methods.firstOrNull { it.name == "UHFInventory_EX" }
+        ?: cls.methods.firstOrNull { it.name == "UHFInventory" }
+      mInv?.isAccessible = true
+      val mGet = cls.methods.firstOrNull { it.name == "UHFGetReceived_EX2" }
+      mGet?.isAccessible = true
+      val invArgs: Array<Any?> = if (mInv != null) {
+        var ci = 0
+        mInv.parameterTypes.map { t -> when {
+          t == java.lang.Character.TYPE -> java.lang.Character(if (ci++ == 0) '\u00FF' else '\u0000')
+          t == java.lang.Integer.TYPE -> java.lang.Integer(0)
+          else -> null
+        }}.toTypedArray()
+      } else arrayOf()
+      mainHandler.post { registerScanReceiver() }
+      sendScannerBroadcast(ACTION_RFID_ENABLE)
+      Thread.sleep(200)
+      sendScannerBroadcast(ACTION_RFID_START)
+      Log.d("CarbonChainway", "startInventoryDirect: sent ENABLE+START")
+      val ka = Thread {
+        try {
+          Thread.sleep(1500)
+          while (scanning.get()) { sendScannerBroadcast(ACTION_RFID_START); Thread.sleep(2000) }
+        } catch (_: InterruptedException) {}
+        Log.d("CarbonChainway", "keepAlive thread exited")
+      }
+      ka.isDaemon = true; ka.name = "chainway-ka"; ka.start(); keepAliveThread = ka
+      if (mInv != null) {
+        val ok = runCatching { mInv.invoke(inst, *invArgs) as? Boolean ?: true }.getOrElse { false }
+        Log.d("CarbonChainway", "${mInv.name}() direct -> $ok")
+      }
+      val drain = Thread {
+        var empty = 0; var total = 0
+        while (scanning.get()) {
+          try {
+            var got = false
+            if (mGet != null) {
+              var dc = 0
+              while (dc < 500 && scanning.get()) {
+                val buf = CharArray(256)
+                val cnt = runCatching { (mGet.invoke(inst, buf) as? Int) ?: -1 }.getOrElse { -1 }
+                if (cnt < 0) break
+                dc++; empty = 0; got = true
+                val hex24 = buf.map { it.code and 0xFF }.take(12).joinToString("") { "%02X".format(it) }
+                if (hex24.matches(Regex("[0-9A-F]{24}")) && hex24.count { it != '0' } > 2) {
+                  emitEpc(hex24, null); total++
+                  if (total % 10 == 0) Log.d("CarbonChainway", "direct poll: emitted $total tags")
+                }
+              }
+              if (!got) empty++
+            } else { Thread.sleep(100); continue }
+            if (mInv != null && (empty == 1 || empty % 10 == 0)) {
+              runCatching { mInv.invoke(inst, *invArgs) }
+              if (empty == 1) Log.d("CarbonChainway", "direct poll: re-triggered")
+            }
+            Thread.sleep(if (got) 10 else 30)
+          } catch (_: InterruptedException) { break }
+          catch (e: Exception) { Log.w("CarbonChainway", "direct poll err: ${e.message}") }
+        }
+        Log.d("CarbonChainway", "direct poll exited, total=$total")
+      }
+      drain.isDaemon = true; drain.name = "chainway-drain-direct"; drain.start(); pollThread = drain
+    } catch (e: Exception) {
+      scanning.set(false)
+      Log.e("CarbonChainway", "startInventoryDirect failed: ${e.message}", e)
+    }
+  }
 
   fun setTagSink(sink: EventChannel.EventSink?) {
     tagSink = sink
@@ -120,6 +243,20 @@ class CarbonChainwayRfidController(
     executor.execute {
       try {
         tryApplyChainwayPower()
+        // Lazy-init: if UHF was never connected (e.g. connectAsync not yet called),
+        // attempt initialization inline before starting inventory.
+        if (uhfClass == null || uhfInstance == null) {
+          val lazyCls = resolveUhfClass()
+          if (lazyCls != null) {
+            val lazyInst = getStaticInstance(lazyCls, context.applicationContext)
+            if (lazyInst != null) {
+              uhfClass = lazyCls
+              uhfInstance = lazyInst
+              invokeInit(lazyCls, lazyInst)
+              Log.d("CarbonChainway", "startInventory: lazy-init succeeded")
+            }
+          }
+        }
         val cls = uhfClass
         val inst = uhfInstance
         if (cls == null || inst == null) {
@@ -347,6 +484,7 @@ class CarbonChainwayRfidController(
   }
 
   private fun disconnectSync() {
+    disableNativeTrigger()
     scanning.set(false)
     keepAliveThread?.interrupt()
     keepAliveThread = null
