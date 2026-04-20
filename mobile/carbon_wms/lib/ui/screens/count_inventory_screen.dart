@@ -44,6 +44,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   String _currentLocationId = '';
   StreamSubscription<RfidTagRead>? _readsSub;
   StreamSubscription<String>? _triggerSub;
+  StreamSubscription<String>? _barcodeSub;
   Timer? _scanInactivityTimer;
   bool _scanOn = false;
   bool _connecting = false;
@@ -51,7 +52,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   RfidManager? _rfidManager;
   late final AudioPlayer _scanAudio;
   Uint8List? _scanBeepBytes;
-  // Live RSSI of most-recently-read tag
   int _lastRssi = 0;
 
   @override
@@ -59,8 +59,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     super.initState();
     _scanAudio = AudioPlayer()
       ..setReleaseMode(ReleaseMode.stop)
-      ..setPlayerMode(PlayerMode.lowLatency);
+      ..setPlayerMode(PlayerMode.lowLatency)
+      ..setVolume(1.0);
     _scanBeepBytes = buildGeigerBeepWav();
+    // Warm up audio engine so first beep has no latency.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final b = _scanBeepBytes;
+      if (b != null) {
+        try { await _scanAudio.setSourceBytes(b); } catch (_) {}
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initModule());
     });
@@ -76,6 +84,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   void dispose() {
     _readsSub?.cancel();
     _triggerSub?.cancel();
+    _barcodeSub?.cancel();
     _scanInactivityTimer?.cancel();
     unawaited(_scanAudio.dispose());
     final rfid = _rfidManager;
@@ -193,29 +202,35 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   Future<void> _ensureScannerReady() async {
     if (_connecting) return;
+    final rfid = context.read<RfidManager>();
+
+    // Subscribe streams immediately so trigger/beep work without waiting for hardware init.
+    rfid.suppressEdgeStreaming = true;
+    await RfidVendorChannel.scannerDisableTriggerRelay();
+    await RfidVendorChannel.enableRfidFunctionMode();
+
+    await _readsSub?.cancel();
+    _readsSub = rfid.unifiedTagReads.listen(_onTagRead, onError: (_) {});
+    await _barcodeSub?.cancel();
+    _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((_) {
+      unawaited(_playBeep());
+    }, onError: (_) {});
+    await _triggerSub?.cancel();
+    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((evt) {
+      if (evt == 'down') unawaited(_toggleScan());
+    }, onError: (_) {});
+
+    // Hardware init runs in background — UI is already usable.
+    if (_connecting) return;
     setState(() { _connecting = true; });
     try {
-      final rfid = context.read<RfidManager>();
-      rfid.scanContext = 'COUNT_INVENTORY';
-      rfid.suppressEdgeStreaming = true;
-      // Disable 2D trigger relay so KEY_DOWN doesn't fire BARCODESTARTSCAN (laser).
-      await RfidVendorChannel.scannerDisableTriggerRelay();
-      // Switch system scanner to RFID-only mode immediately on screen entry
-      // so that any KEY_DOWN goes to UHF, not the 2D camera.
-      await RfidVendorChannel.enableRfidFunctionMode();
-      // Only detect hardware once — re-running tears down the active UART connection.
       if (rfid.activeScanner == null) {
+        rfid.scanContext = 'COUNT_INVENTORY';
         await rfid.autoDetectHardware().timeout(const Duration(seconds: 8), onTimeout: () {});
+      } else {
+        rfid.scanContext = 'COUNT_INVENTORY';
       }
-      await rfid.reapplyHandheldHardwareSettings();
       await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
-      await _readsSub?.cancel();
-      _readsSub = rfid.unifiedTagReads.listen(_onTagRead, onError: (_) {});
-      await _triggerSub?.cancel();
-      _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((evt) {
-        // Count screen always uses toggle: one press starts, next press stops.
-        if (evt == 'down') unawaited(_toggleScan());
-      }, onError: (_) {});
     } catch (_) {}
     if (!mounted) return;
     setState(() { _connecting = false; });
@@ -247,7 +262,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final bytes = _scanBeepBytes;
     if (bytes == null) return;
     try {
-      await _scanAudio.play(BytesSource(bytes));
+      await _scanAudio.stop();
+      await _scanAudio.play(BytesSource(bytes), volume: 1.0);
     } catch (_) {}
   }
 
@@ -584,53 +600,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
               ),
             ),
             SizedBox(height: 12.h),
-            // RSSI filter + power/rssi readout (Senitron behaviour: visible on main screen)
-            Padding(
-              padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 4.h),
-              child: Row(
-                children: [
-                  Text('Filter', style: GoogleFonts.manrope(fontSize: 12.sp, fontWeight: FontWeight.w800, color: AppColors.primary)),
-                  SizedBox(width: 6.w),
-                  Text('Close', style: GoogleFonts.manrope(fontSize: 11.sp, color: const Color(0xFF5A6464))),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: AppColors.primary,
-                        inactiveTrackColor: const Color(0xFFCCDDDD),
-                        thumbColor: AppColors.primary,
-                        overlayColor: AppColors.primary.withValues(alpha: 0.12),
-                        trackHeight: 3,
-                      ),
-                      child: Slider(
-                        value: _moduleSettings.rssiDistance,
-                        min: 0,
-                        max: 1,
-                        onChanged: (v) async {
-                          setState(() {
-                            _moduleSettings = _CountInventoryModuleSettings(
-                              rfidPowerDbm: _moduleSettings.rfidPowerDbm,
-                              rssiDistance: v,
-                            );
-                          });
-                          await _saveModuleSettings();
-                        },
-                      ),
-                    ),
-                  ),
-                  Text('Far', style: GoogleFonts.manrope(fontSize: 11.sp, color: const Color(0xFF5A6464))),
-                  SizedBox(width: 12.w),
-                  Text(
-                    'Power ${_moduleSettings.rfidPowerDbm} dBm',
-                    style: GoogleFonts.robotoMono(fontSize: 11.sp, color: const Color(0xFF5A6464)),
-                  ),
-                  SizedBox(width: 8.w),
-                  Text(
-                    'RSSI $_lastRssi',
-                    style: GoogleFonts.robotoMono(fontSize: 11.sp, color: const Color(0xFF5A6464)),
-                  ),
-                ],
-              ),
-            ),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(20.w, 0.h, 20.w, 0.h),
@@ -688,7 +657,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                         width: continueButtonWidth,
                         height: 40.h,
                         child: FilledButton(
-                          onPressed: _connecting ? null : _toggleScan,
+                          onPressed: _toggleScan,
                           style: FilledButton.styleFrom(
                             backgroundColor: _scanOn ? const Color(0xFFBF2E2E) : const Color(0xFF0A7C80),
                             foregroundColor: Colors.white,
@@ -779,7 +748,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                 ],
               ),
             ),
-            _CountBottomShortcuts(onTap: _onBottomShortcutTap),
           ],
         ),
       ),
@@ -1015,8 +983,8 @@ class _CountItemContainer extends StatefulWidget {
 }
 
 class _CountItemContainerState extends State<_CountItemContainer> {
-  static const _fixedContainerHeight = 58.0;
-  static const _expandedContainerHeight = 70.0;
+  static const _fixedContainerHeight = 68.0;
+  static const _expandedContainerHeight = 82.0;
   bool _expanded = false;
 
   @override
@@ -1047,12 +1015,12 @@ class _CountItemContainerState extends State<_CountItemContainer> {
             maxLines: 1,
             textDirection: Directionality.of(context),
           )..layout(maxWidth: textAvailableWidth);
-          final canExpand = descPainter.didExceedMaxLines;
+          final canExpand = widget.description != 'ITEM DESCRIPTION' && descPainter.didExceedMaxLines;
 
           return InkWell(
             onTap: canExpand ? () => setState(() => _expanded = !_expanded) : null,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(14.w, 4.h, 14.w, 4.h),
+        padding: EdgeInsets.fromLTRB(10.w, 4.h, 10.w, 4.h),
               child: AnimatedSize(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeInOut,
@@ -1069,16 +1037,19 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                              'SKU:  ${widget.sku}',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 15.5.sp,
-                                fontWeight: FontWeight.w900,
+                    widget.sku,
+                    maxLines: 1,
+                    overflow: TextOverflow.visible,
+                    softWrap: false,
+                    style: GoogleFonts.robotoMono(
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.textMain,
-                      letterSpacing: 0.2,
-                                height: 1.0.h,
-                              ),
-                            ),
-                            SizedBox(height: 10.h),
+                      letterSpacing: 0.0,
+                      height: 1.0.h,
+                    ),
+                  ),
+                            SizedBox(height: 16.h),
                             SizedBox(
                               width: double.infinity,
                               child: Text(
