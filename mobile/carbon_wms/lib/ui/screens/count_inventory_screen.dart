@@ -207,17 +207,14 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   Future<void> _ensureScannerReady() async {
     if (_connecting) return;
     final rfid = context.read<RfidManager>();
-
-    // Subscribe streams immediately — trigger/beep work before hardware init completes.
     rfid.suppressEdgeStreaming = true;
+
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
     unawaited(RfidVendorChannel.enableNativeTrigger());
 
     await _readsSub?.cancel();
     _readsSub = rfid.unifiedTagReads.listen(_onTagRead, onError: (_) {});
-    // Also subscribe directly to the native tag stream so reads arrive even when
-    // ChainwayScanner._nativeLinked is false (e.g. connectChainway returned useStub).
     await _directTagSub?.cancel();
     _directTagSub = RfidVendorChannel.tagReadStream().listen(_onTagRead, onError: (_) {});
     await _barcodeSub?.cancel();
@@ -229,16 +226,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       if (evt == 'down') unawaited(_toggleScan());
     }, onError: (_) {});
 
-    setState(() { _connecting = true; });
-    try {
-      rfid.scanContext = 'COUNT_INVENTORY';
-      // Always re-detect to ensure UHFOpenAndConnect runs and UART is claimed.
-      await rfid.autoDetectHardware().timeout(const Duration(seconds: 8), onTimeout: () {});
-      await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
-    } catch (_) {}
-    if (!mounted) return;
-    setState(() { _connecting = false; });
-    // Auto-start scanning as soon as hardware is ready.
+    // Do NOT call autoDetectHardware — it runs disconnectSync which kills any active session.
+    // The hardware is already initialized from app boot. Just start scanning directly.
     await _startScan();
   }
 

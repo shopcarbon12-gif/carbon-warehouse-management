@@ -274,6 +274,10 @@ class CarbonChainwayRfidController(
         // Find read method
         val mGet = cls.methods.firstOrNull { it.name == "UHFGetReceived_EX2" }
         mGet?.isAccessible = true
+        // Single-tag alternative (simpler API, returns Boolean+populates buf or returns String)
+        val mSingle = cls.methods.firstOrNull { it.name == "UHFInventorySingleEPCTIDUSER" }
+        mSingle?.isAccessible = true
+        Log.d("CarbonChainway", "inventory methods: mInv=${mInv?.name} mGet=${mGet?.name} mSingle=${mSingle?.name}")
 
         // Build inventory args: UHFInventory_EX_cnt(char, char, char) = ('\xFF', '\x00', '\x00')
         val invArgs: Array<Any?> = if (mInv != null) {
@@ -326,6 +330,7 @@ class CarbonChainwayRfidController(
         val drainThread = Thread {
           var emptyStreak = 0
           var totalEmitted = 0
+          var diagCount = 0
           while (scanning.get()) {
             try {
               var gotAny = false
@@ -334,8 +339,19 @@ class CarbonChainwayRfidController(
                 var drainCount = 0
                 while (drainCount < 500 && scanning.get()) {
                   val buf = CharArray(256)
-                  val cnt = runCatching { (mGet.invoke(inst, buf) as? Int) ?: -1 }.getOrElse { -1 }
-                  if (cnt < 0) break // queue empty
+                  val rawResult = runCatching { mGet.invoke(inst, buf) }.getOrElse { null }
+                  val cnt = when (rawResult) {
+                    is Int -> rawResult
+                    is Boolean -> if (rawResult) 1 else -1
+                    null -> -1
+                    else -> -1
+                  }
+                  // Diagnostic: log first few raw results to see what the API returns
+                  if (diagCount < 5) {
+                    Log.d("CarbonChainway", "UHFGetReceived_EX2 -> type=${rawResult?.javaClass?.simpleName} val=$rawResult cnt=$cnt buf[0..3]=${buf[0].code},${buf[1].code},${buf[2].code},${buf[3].code}")
+                    diagCount++
+                  }
+                  if (cnt <= 0) break // queue empty
                   drainCount++
                   emptyStreak = 0
                   gotAny = true
@@ -361,6 +377,38 @@ class CarbonChainwayRfidController(
                 // No drain method — rely solely on broadcast receiver
                 Thread.sleep(100)
                 continue
+              }
+
+              // UHFInventorySingleEPCTIDUSER returns char[] with EPC bytes
+              if (mSingle != null) {
+                val singleResult = runCatching { mSingle.invoke(inst) }.getOrNull()
+                when (singleResult) {
+                  is CharArray -> if (singleResult.isNotEmpty()) {
+                    val bytes = singleResult.map { it.code and 0xFF }
+                    if (totalEmitted == 0 && diagCount < 10) {
+                      Log.d("CarbonChainway", "single raw bytes[0..11]=${bytes.take(12)}")
+                      diagCount++
+                    }
+                    // First try: read as raw bytes → hex
+                    val hex24raw = bytes.take(12).joinToString("") { "%02X".format(it) }
+                    if (hex24raw.matches(Regex("[0-9A-F]{24}")) && hex24raw.count { it != '0' } > 2) {
+                      emitEpc(hex24raw, null)
+                      gotAny = true; emptyStreak = 0; totalEmitted++
+                      if (totalEmitted % 10 == 0) Log.d("CarbonChainway", "single poll: emitted $totalEmitted tags")
+                    } else {
+                      // Second try: read as ASCII hex string
+                      val ascii = String(singleResult).trim().uppercase().replace(Regex("[^0-9A-F]"), "")
+                      if (ascii.length >= 24 && ascii.count { it != '0' } > 2) {
+                        emitEpc(ascii.take(24), null)
+                        gotAny = true; emptyStreak = 0; totalEmitted++
+                      }
+                    }
+                  }
+                  is String -> if (singleResult.isNotBlank()) {
+                    processRawEpc(singleResult)
+                    gotAny = true; emptyStreak = 0; totalEmitted++
+                  }
+                }
               }
 
               // Re-trigger inventory when queue drains
