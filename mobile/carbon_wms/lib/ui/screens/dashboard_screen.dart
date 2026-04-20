@@ -379,7 +379,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Image.asset(
                   'assets/carbon_logo.png',
                   width: 40.w,
-                  height: 40.h,
+                  height: 40.w,
                   fit: BoxFit.cover,
                 ),
               ),

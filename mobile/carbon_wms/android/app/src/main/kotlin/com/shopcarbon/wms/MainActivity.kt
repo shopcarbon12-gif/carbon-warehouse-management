@@ -127,7 +127,21 @@ class MainActivity : FlutterFragmentActivity() {
           result.success(true)
         }
         "scanner.disableTriggerRelay" -> {
-          hardwareBarcodeRelay?.dispose()
+          hardwareBarcodeRelay?.deactivateTriggerRelay()
+          result.success(true)
+        }
+        "scanner.enableRfidFunctionMode" -> {
+          // Block the physical trigger from firing the 2D laser (RSCJA_SCAN_KEY_START=1)
+          runCatching { android.provider.Settings.System.putInt(contentResolver, "RSCJA_SCAN_KEY_START", 1) }
+          runCatching { sendBroadcast(android.content.Intent("com.rscja.android.ScannerWrite").apply { addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES) }) }
+          runCatching { sendBroadcast(android.content.Intent("android.intent.action.ENABLE_FUNCTION_BARCODE_RFID").apply { addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES) }) }
+          result.success(true)
+        }
+        "scanner.disableRfidFunctionMode" -> {
+          // Restore trigger to 2D mode
+          runCatching { android.provider.Settings.System.putInt(contentResolver, "RSCJA_SCAN_KEY_START", 0) }
+          runCatching { sendBroadcast(android.content.Intent("com.rscja.android.ScannerWrite").apply { addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES) }) }
+          runCatching { sendBroadcast(android.content.Intent("android.intent.action.DISABLE_FUNCTION_BARCODE_RFID").apply { addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES) }) }
           result.success(true)
         }
         "zebra.connect" -> {

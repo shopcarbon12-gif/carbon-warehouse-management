@@ -38,6 +38,12 @@ class CarbonHardwareBarcodeRelay(
     register()
   }
 
+  /** Unregisters the KEY_DOWN/KEY_UP receiver without touching the EventChannel sink. */
+  fun deactivateTriggerRelay() {
+    stopHardwareScan()
+    unregister()
+  }
+
   fun dispose() {
     unregister()
     stopHardwareScan()

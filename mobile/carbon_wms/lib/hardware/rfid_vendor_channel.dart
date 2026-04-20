@@ -93,6 +93,22 @@ class RfidVendorChannel {
     } catch (_) {}
   }
 
+  /// Tells com.rscja.scanner to switch to RFID-only mode (no 2D laser on KEY_DOWN).
+  static Future<void> enableRfidFunctionMode() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('scanner.enableRfidFunctionMode');
+    } catch (_) {}
+  }
+
+  /// Restores com.rscja.scanner to normal 2D barcode mode.
+  static Future<void> disableRfidFunctionMode() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('scanner.disableRfidFunctionMode');
+    } catch (_) {}
+  }
+
   static Future<void> scannerEnableTriggerRelay() async {
     if (!_isAndroid) return;
     try {
