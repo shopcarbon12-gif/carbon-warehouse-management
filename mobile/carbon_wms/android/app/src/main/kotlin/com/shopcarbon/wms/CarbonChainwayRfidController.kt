@@ -36,12 +36,14 @@ class CarbonChainwayRfidController(
   @Volatile private var nativeTriggerActive = false
   private var triggerReceiver: BroadcastReceiver? = null
 
-  private val ACTION_RFID_ENABLE  = "android.intent.action.ENABLE_FUNCTION_BARCODE_RFID"
-  private val ACTION_RFID_DISABLE = "android.intent.action.DISABLE_FUNCTION_BARCODE_RFID"
-  private val ACTION_RFID_START   = "android.intent.action.START_BARCODE_RFID"
-  private val ACTION_RFID_STOP    = "android.intent.action.STOP_BARCODE_RFID"
-  private val ACTION_RESULT       = "android.intent.action.OUTPUT_BARCODE_RFID"
-  private val ACTION_RESULT2      = "android.intent.action.SCAN_RESULT_BROADCAST"
+  // Correct Chainway C72E broadcast actions (from Senitron APK decompile)
+  private val ACTION_RFID_ENABLE  = "com.rscja.scanner.action.ENABLE_FUNCTION_BARCODE_RFID"
+  private val ACTION_RFID_DISABLE = "com.rscja.scanner.action.DISABLE_FUNCTION_BARCODE_RFID"
+  private val ACTION_RFID_OPEN    = "com.rscja.scanner.action.OPEN_BARCODE_RFID"
+  private val ACTION_RFID_START   = "com.rscja.scanner.action.START_BARCODE_RFID"
+  private val ACTION_RFID_STOP    = "com.rscja.scanner.action.STOP_BARCODE_RFID"
+  private val ACTION_RESULT       = "com.rscja.scanner.action.OUTPUT_BARCODE_RFID"
+  private val ACTION_RESULT2      = "com.rscja.scanner.action.SCAN_RESULT_BROADCAST"
 
   private var scanReceiver: BroadcastReceiver? = null
   @Volatile private var pollThread: Thread? = null
@@ -115,9 +117,11 @@ class CarbonChainwayRfidController(
       } else arrayOf()
       mainHandler.post { registerScanReceiver() }
       sendScannerBroadcast(ACTION_RFID_ENABLE)
+      Thread.sleep(100)
+      sendScannerBroadcast(ACTION_RFID_OPEN)
       Thread.sleep(200)
       sendScannerBroadcast(ACTION_RFID_START)
-      Log.d("CarbonChainway", "startInventoryDirect: sent ENABLE+START")
+      Log.d("CarbonChainway", "startInventoryDirect: sent ENABLE+OPEN+START")
       val ka = Thread {
         try {
           Thread.sleep(1500)
@@ -142,9 +146,14 @@ class CarbonChainwayRfidController(
                 val cnt = runCatching { (mGet.invoke(inst, buf) as? Int) ?: -1 }.getOrElse { -1 }
                 if (cnt < 0) break
                 dc++; empty = 0; got = true
-                val hex24 = buf.map { it.code and 0xFF }.take(12).joinToString("") { "%02X".format(it) }
-                if (hex24.matches(Regex("[0-9A-F]{24}")) && hex24.count { it != '0' } > 2) {
-                  emitEpc(hex24, null); total++
+                // cnt = 1 means "one tag available"; EPC bytes are always in buf[0..N].
+                // Read up to 32 bytes, trim trailing zero-bytes to find actual EPC length.
+                val allBytes = buf.map { it.code and 0xFF }
+                val lastNonZero = allBytes.take(32).indexOfLast { it != 0 }
+                val byteCount = if (lastNonZero >= 11) lastNonZero + 1 else 12
+                val hexStr = allBytes.take(byteCount).joinToString("") { "%02X".format(it) }
+                if (hexStr.length >= 8 && hexStr.count { it != '0' } > 2) {
+                  emitEpc(hexStr, null); total++
                   if (total % 10 == 0) Log.d("CarbonChainway", "direct poll: emitted $total tags")
                 }
               }
@@ -180,6 +189,7 @@ class CarbonChainwayRfidController(
 
   fun resolveUhfClass(): Class<*>? {
     val names = listOf(
+      "com.rscja.team.mtk.deviceapi.DeviceAPI",
       "com.rscja.deviceapi.DeviceAPI",
       "com.rscja.deviceapi.RFIDWithUHFUART",
       "com.rscja.deviceapi.module.RFIDWithUHFUART",
@@ -300,9 +310,11 @@ class CarbonChainwayRfidController(
 
         // Enable RFID function then start — avoids triggering 2D laser
         sendScannerBroadcast(ACTION_RFID_ENABLE)
+        Thread.sleep(100)
+        sendScannerBroadcast(ACTION_RFID_OPEN)
         Thread.sleep(200)
         sendScannerBroadcast(ACTION_RFID_START)
-        Log.d("CarbonChainway", "sent ENABLE_FUNCTION_BARCODE_RFID + START_BARCODE_RFID")
+        Log.d("CarbonChainway", "sent ENABLE+OPEN+START (com.rscja.scanner.action.*)")
 
         // Keep-alive: re-send START_BARCODE_RFID every 400ms so inventory keeps running
         val ka = Thread {
@@ -355,19 +367,20 @@ class CarbonChainwayRfidController(
                   drainCount++
                   emptyStreak = 0
                   gotAny = true
-                  // Decode: buf contains raw bytes as chars. Each call = one tag.
-                  // EPC is 12 bytes starting at offset 0 (for standard 96-bit EPC).
+                  // cnt = 1 means one tag available; EPC raw bytes are in buf[].
                   val bytes = buf.map { it.code and 0xFF }
-                  val hex24 = bytes.take(12).joinToString("") { "%02X".format(it) }
-                  if (hex24.matches(Regex("[0-9A-F]{24}")) && hex24.count { it != '0' } > 2) {
-                    emitEpc(hex24, null)
+                  val lastNz = bytes.take(32).indexOfLast { it != 0 }
+                  val byteCount2 = if (lastNz >= 11) lastNz + 1 else 12
+                  val hexStr2 = bytes.take(byteCount2).joinToString("") { "%02X".format(it) }
+                  if (hexStr2.length >= 8 && hexStr2.count { it != '0' } > 2) {
+                    emitEpc(hexStr2, null)
                     totalEmitted++
                     if (totalEmitted % 10 == 0) Log.d("CarbonChainway", "poll: emitted $totalEmitted tags so far")
                   } else {
                     // Try ASCII interpretation (some firmware returns hex string in ASCII)
                     val ascii = buf.takeWhile { it.code in 0x30..0x46 }.joinToString("") { it.toString() }
-                    if (ascii.length >= 24 && ascii.matches(Regex("[0-9A-F]{24,}"))) {
-                      emitEpc(ascii.take(24), null)
+                    if (ascii.length >= 8 && ascii.matches(Regex("[0-9A-F]+"))) {
+                      emitEpc(ascii, null)
                       totalEmitted++
                     }
                   }
@@ -389,17 +402,19 @@ class CarbonChainwayRfidController(
                       Log.d("CarbonChainway", "single raw bytes[0..11]=${bytes.take(12)}")
                       diagCount++
                     }
-                    // First try: read as raw bytes → hex
-                    val hex24raw = bytes.take(12).joinToString("") { "%02X".format(it) }
-                    if (hex24raw.matches(Regex("[0-9A-F]{24}")) && hex24raw.count { it != '0' } > 2) {
-                      emitEpc(hex24raw, null)
+                    // First try: read as raw bytes → hex. Use last-non-zero to find EPC length.
+                    val lastNzS = bytes.take(32).indexOfLast { it != 0 }
+                    val byteCntS = if (lastNzS >= 11) lastNzS + 1 else 12
+                    val rawHex = bytes.take(byteCntS).joinToString("") { "%02X".format(it) }
+                    if (rawHex.length >= 8 && rawHex.count { it != '0' } > 2) {
+                      emitEpc(rawHex, null)
                       gotAny = true; emptyStreak = 0; totalEmitted++
                       if (totalEmitted % 10 == 0) Log.d("CarbonChainway", "single poll: emitted $totalEmitted tags")
                     } else {
                       // Second try: read as ASCII hex string
                       val ascii = String(singleResult).trim().uppercase().replace(Regex("[^0-9A-F]"), "")
-                      if (ascii.length >= 24 && ascii.count { it != '0' } > 2) {
-                        emitEpc(ascii.take(24), null)
+                      if (ascii.length >= 8 && ascii.count { it != '0' } > 2) {
+                        emitEpc(ascii, null)
                         gotAny = true; emptyStreak = 0; totalEmitted++
                       }
                     }
@@ -472,13 +487,23 @@ class CarbonChainwayRfidController(
       }
     }
     val filter = IntentFilter().apply {
-      addAction(ACTION_RESULT)   // OUTPUT_BARCODE_RFID
-      addAction(ACTION_RESULT2)  // SCAN_RESULT_BROADCAST
-      addAction("com.rscja.scanner.action.OUTPUT_BARCODE_RFID")
+      addAction(ACTION_RESULT)   // com.rscja.scanner.action.OUTPUT_BARCODE_RFID
+      addAction(ACTION_RESULT2)  // com.rscja.scanner.action.SCAN_RESULT_BROADCAST
+      addAction("com.rscja.scanner.action.SCAN_FAILURE_BROADCAST")
       addAction("android.intent.action.SCAN_RFID_RESULT")
       addAction("android.intent.action.BARCODEOUTPUT")
+      addAction("android.intent.action.OUTPUT_BARCODE_RFID")
     }
-    context.registerReceiver(receiver, filter)
+    try {
+      if (android.os.Build.VERSION.SDK_INT >= 33) {
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+      } else {
+        @Suppress("DEPRECATION")
+        context.registerReceiver(receiver, filter)
+      }
+    } catch (e: Exception) {
+      Log.w("CarbonChainway", "registerScanReceiver failed: ${e.message}")
+    }
     scanReceiver = receiver
   }
 
@@ -517,10 +542,9 @@ class CarbonChainwayRfidController(
 
   private fun processRawEpc(raw: String) {
     val upper = raw.uppercase().replace(Regex("[^0-9A-F]"), "")
-    if (upper.length < 24) return
-    val epc = upper.take(24)
-    if (epc.count { it != '0' } <= 2) return
-    emitEpc(epc, null)
+    if (upper.length < 8) return
+    if (upper.count { it != '0' } <= 2) return
+    emitEpc(upper, null)
   }
 
   private fun sendScannerBroadcast(action: String) {
@@ -630,17 +654,12 @@ class CarbonChainwayRfidController(
 
   private fun emitEpc(hex: String, rssi: Int?) {
     val sink = tagSink ?: return
-    val stripped = hex.uppercase().replace(Regex("[^0-9A-F]"), "")
-    val up = when {
-      stripped.length == 24 -> stripped
-      stripped.length < 24 -> stripped.padEnd(24, '0')
-      else -> stripped.take(24)
-    }
-    if (stripped.isEmpty() || up.count { it != '0' } <= 2) {
-      Log.w("CarbonChainway", "emitEpc: rejected low-entropy epc='$up'")
+    val up = hex.uppercase().replace(Regex("[^0-9A-F]"), "")
+    if (up.length < 8 || up.all { it == '0' }) {
+      Log.w("CarbonChainway", "emitEpc: rejected epc='$up'")
       return
     }
-    Log.d("CarbonChainway", "emitEpc len=${stripped.length}->${up.length} hex='$up'")
+    Log.d("CarbonChainway", "emitEpc len=${up.length} hex='$up'")
     val payload = mapOf("epc" to up, "rssi" to (rssi ?: -55))
     mainHandler.post { sink.success(payload) }
   }

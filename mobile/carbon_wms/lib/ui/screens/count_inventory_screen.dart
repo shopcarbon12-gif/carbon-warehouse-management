@@ -1035,18 +1035,18 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                 children: [
                   Text(
                     widget.sku,
-                    maxLines: 1,
-                    overflow: TextOverflow.visible,
-                    softWrap: false,
+                    maxLines: 2,
+                    overflow: TextOverflow.clip,
+                    softWrap: true,
                     style: GoogleFonts.robotoMono(
-                      fontSize: 13.sp,
+                      fontSize: 11.5.sp,
                       fontWeight: FontWeight.w700,
                       color: AppColors.textMain,
                       letterSpacing: 0.0,
-                      height: 1.0.h,
+                      height: 1.15.h,
                     ),
                   ),
-                            SizedBox(height: 16.h),
+                            SizedBox(height: 10.h),
                             SizedBox(
                               width: double.infinity,
                               child: Text(

@@ -12,9 +12,10 @@ class RfidTagRead {
   final int? rssi;
 
   static RfidTagRead? tryParse(String raw, {int? rssi}) {
-    final u = raw.trim().toUpperCase();
-    if (u.length != 24) return null;
-    if (!RegExp(r'^[0-9A-F]{24}$').hasMatch(u)) return null;
+    final u = raw.trim().toUpperCase().replaceAll(RegExp(r'[^0-9A-F]'), '');
+    // Accept any even-length hex string between 8 and 64 chars (4–32 bytes).
+    if (u.length < 8 || u.length > 64 || u.length.isOdd) return null;
+    if (u.split('').every((c) => c == '0')) return null;
     return RfidTagRead(epcHex24: u, rssi: rssi);
   }
 }

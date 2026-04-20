@@ -40,7 +40,9 @@ class CarbonHardwareBarcodeRelay(
 
   /** Unregisters the KEY_DOWN/KEY_UP receiver without touching the EventChannel sink. */
   fun deactivateTriggerRelay() {
-    stopHardwareScan()
+    // Do NOT send BARCODESTOPSCAN — it deadlocks com.rscja.scanner when in RFID mode.
+    scanActive = false
+    cancelScanTimeout()
     unregister()
   }
 
