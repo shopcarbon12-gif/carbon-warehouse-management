@@ -27,6 +27,7 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 const _countInvPrefsKey = 'count_inventory_module_settings_v1';
 const _assetCachePrefsKey = 'count_inventory_asset_cache_v1';
+const _countEpcPrefixFilter = 'F0A0B';
 
 class CountInventoryScreen extends StatefulWidget {
   const CountInventoryScreen({super.key});
@@ -38,7 +39,8 @@ class CountInventoryScreen extends StatefulWidget {
 class _CountInventoryScreenState extends State<CountInventoryScreen> {
   final Map<String, _SessionEpcRow> _epcRows = <String, _SessionEpcRow>{};
   final Map<String, _GroupedRow> _groupedRows = <String, _GroupedRow>{};
-  final Map<String, Map<String, dynamic>> _assetCache = <String, Map<String, dynamic>>{};
+  final Map<String, Map<String, dynamic>> _assetCache =
+      <String, Map<String, dynamic>>{};
   List<Map<String, String>> _locations = [];
   String _currentLocationName = 'Loading...';
   String _currentLocationId = '';
@@ -47,13 +49,22 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   StreamSubscription<String>? _triggerSub;
   StreamSubscription<String>? _barcodeSub;
   Timer? _scanInactivityTimer;
+  Timer? _rfidKeepAliveTimer;
+  Timer? _countAnimateTimer;
   bool _scanOn = false;
   bool _connecting = false;
-  _CountInventoryModuleSettings _moduleSettings = _CountInventoryModuleSettings.defaults;
+  DateTime? _lastTriggerDownAt;
+  DateTime? _ignoreTriggerUntil;
+  _CountInventoryModuleSettings _moduleSettings =
+      _CountInventoryModuleSettings.defaults;
   RfidManager? _rfidManager;
   late final AudioPlayer _scanAudio;
   Uint8List? _scanBeepBytes;
+  DateTime? _lastBeepAt;
   int _lastRssi = 0;
+  int _displayEpcCount = 0;
+  int _displaySkuCount = 0;
+  String? _previousScanContext;
 
   @override
   void initState() {
@@ -67,7 +78,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final b = _scanBeepBytes;
       if (b != null) {
-        try { await _scanAudio.setSourceBytes(b); } catch (_) {}
+        try {
+          await _scanAudio.setSourceBytes(b);
+        } catch (_) {}
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -88,11 +101,15 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _triggerSub?.cancel();
     _barcodeSub?.cancel();
     _scanInactivityTimer?.cancel();
+    _rfidKeepAliveTimer?.cancel();
+    _countAnimateTimer?.cancel();
     unawaited(_scanAudio.dispose());
     final rfid = _rfidManager;
     if (rfid != null) {
       rfid.suppressEdgeStreaming = false;
+      rfid.scanContext = _previousScanContext ?? 'TRANSFER';
       unawaited(rfid.stopLocateScanning());
+      unawaited(rfid.reapplyHandheldHardwareSettings());
     }
     unawaited(RfidVendorChannel.stopChainwayInventory());
     unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
@@ -133,7 +150,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!mounted) return;
     try {
       final api = context.read<WmsApiClient>();
-      final locs = await api.fetchSessionLocations()
+      final locs = await api
+          .fetchSessionLocations()
           .timeout(const Duration(seconds: 6), onTimeout: () => []);
       if (!mounted || locs.isEmpty) return;
       final name = (locs.first['name'] ?? locs.first['code'] ?? '').trim();
@@ -174,7 +192,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
             ..._locations.map((loc) {
               final name = (loc['name'] ?? loc['code'] ?? '').trim();
               final id = (loc['id'] ?? '').trim();
-              final isActive = id == _currentLocationId || name == _currentLocationName;
+              final isActive =
+                  id == _currentLocationId || name == _currentLocationName;
               return ListTile(
                 dense: true,
                 title: Text(
@@ -182,10 +201,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                   style: GoogleFonts.manrope(
                     fontSize: 15.sp,
                     fontWeight: FontWeight.w700,
-                    color: isActive ? AppColors.primary : const Color(0xFF11181C),
+                    color:
+                        isActive ? AppColors.primary : const Color(0xFF11181C),
                   ),
                 ),
-                trailing: isActive ? Icon(Icons.check, color: AppColors.primary, size: 20.sp) : null,
+                trailing: isActive
+                    ? Icon(Icons.check, color: AppColors.primary, size: 20.sp)
+                    : null,
                 onTap: () => Navigator.of(ctx).pop(loc),
               );
             }),
@@ -206,29 +228,44 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   Future<void> _ensureScannerReady() async {
     if (_connecting) return;
-    final rfid = context.read<RfidManager>();
-    rfid.suppressEdgeStreaming = true;
+    _connecting = true;
+    try {
+      final rfid = context.read<RfidManager>();
+      _previousScanContext ??= rfid.scanContext;
+      rfid.suppressEdgeStreaming = true;
+      rfid.scanContext = 'COUNT';
+      // Keep the existing active hardware session; avoid reconnect churn that can
+      // momentarily disable RFID function mode before Count starts.
 
-    unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
-    unawaited(RfidVendorChannel.enableRfidFunctionMode());
-    unawaited(RfidVendorChannel.enableNativeTrigger());
+      unawaited(RfidVendorChannel.scannerStop2d());
+      // Count is RFID-only: disable 2D trigger relay/native trigger path on entry.
+      unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+      unawaited(RfidVendorChannel.disableNativeTrigger());
+      unawaited(RfidVendorChannel.enableRfidFunctionMode());
+      // Count gear settings override global settings while inside Count.
+      await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
 
-    await _readsSub?.cancel();
-    _readsSub = rfid.unifiedTagReads.listen(_onTagRead, onError: (_) {});
-    await _directTagSub?.cancel();
-    _directTagSub = RfidVendorChannel.tagReadStream().listen(_onTagRead, onError: (_) {});
-    await _barcodeSub?.cancel();
-    _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((_) {
-      unawaited(_playBeep());
-    }, onError: (_) {});
-    await _triggerSub?.cancel();
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((evt) {
-      if (evt == 'down') unawaited(_toggleScan());
-    }, onError: (_) {});
-
-    // Do NOT call autoDetectHardware — it runs disconnectSync which kills any active session.
-    // The hardware is already initialized from app boot. Just start scanning directly.
-    await _startScan();
+      await _readsSub?.cancel();
+      _readsSub = rfid.unifiedTagReads.listen(_onTagRead, onError: (_) {});
+      await _directTagSub?.cancel();
+      _directTagSub =
+          RfidVendorChannel.tagReadStream().listen(_onTagRead, onError: (_) {});
+      await _barcodeSub?.cancel();
+      _barcodeSub = RfidVendorChannel.hardwareBarcodeStream()
+          .listen(_onFallbackBarcodeRead, onError: (_) {});
+      await _triggerSub?.cancel();
+      _ignoreTriggerUntil =
+          DateTime.now().add(const Duration(milliseconds: 1500));
+      _triggerSub = null;
+      // Keep scanner transport warm on entry; do not tear down native RFID mode here.
+      if (mounted) {
+        setState(() {
+          _scanOn = false;
+        });
+      }
+    } finally {
+      _connecting = false;
+    }
   }
 
   Future<void> _saveAssetCache() async {
@@ -242,7 +279,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _openModuleSettings() async {
-    final next = await Navigator.of(context).push<_CountInventoryModuleSettings>(
+    final next =
+        await Navigator.of(context).push<_CountInventoryModuleSettings>(
       MaterialPageRoute<_CountInventoryModuleSettings>(
         builder: (_) => _CountInventorySettingsScreen(initial: _moduleSettings),
       ),
@@ -250,36 +288,56 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (next == null) return;
     setState(() => _moduleSettings = next);
     await _saveModuleSettings();
-    await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
+    // Force max power on Count to match aggressive handheld inventory behavior.
+    await RfidVendorChannel.setAntennaPowerDbm(30);
   }
 
   Future<void> _playBeep() async {
     final bytes = _scanBeepBytes;
     if (bytes == null) return;
+    final now = DateTime.now();
+    final last = _lastBeepAt;
+    if (last != null && now.difference(last).inMilliseconds < 65) {
+      return;
+    }
+    _lastBeepAt = now;
     try {
       await _scanAudio.stop();
       await _scanAudio.play(BytesSource(bytes), volume: 1.0);
     } catch (_) {}
   }
 
+  Future<void> _playStartTone() async {
+    await _playBeep();
+  }
+
+  Future<void> _playStopTone() async {
+    await _playBeep();
+    await Future<void>.delayed(const Duration(milliseconds: 110));
+    await _playBeep();
+  }
+
   void _onTagRead(RfidTagRead read) {
-    final now = DateTime.now();
-    _scanInactivityTimer?.cancel();
-    _scanInactivityTimer = Timer(const Duration(seconds: 15), () {
-      if (!mounted) return;
-      unawaited(_stopScan());
-    });
-
     final rssi = read.rssi ?? -55;
-    // rssiDistance 0=close only (threshold -30 dBm), 1=accept all (threshold -90 dBm).
-    final threshold = (-30 - _moduleSettings.rssiDistance * 60).round();
-    if (rssi < threshold) return;
+    final minRssi = (-90 + (_moduleSettings.rssiDistance * 60)).round();
+    if (rssi < minRssi) return;
+    final epc = read.epcHex24.toUpperCase();
+    _ingestEpc(epc: epc, rssi: rssi);
+  }
 
+  void _ingestEpc({required String epc, required int rssi}) {
+    final now = DateTime.now();
+    if (epc.isEmpty) return;
     _lastRssi = rssi;
-    final epc = read.epcHex24;
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('[CountInventory] onTagRead epc=$epc rssi=$rssi');
+    }
     final row = _epcRows[epc];
     if (row != null) {
-      row.scans += 1;
+      // Count hard-lock: each EPC is a unique unit (qty must remain 1).
+      // Any extra sightings for the same EPC are tracked as suspected defective duplicates.
+      row.duplicateSightings += 1;
       row.lastSeen = now;
       row.rssi = rssi;
     } else {
@@ -292,8 +350,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         lastSeen: now,
         rssi: rssi,
       );
-      unawaited(_playBeep());
     }
+    // Count default: audible feedback for each EPC scan event.
+    unawaited(_playBeep());
     // One group per unique EPC — like Senitron's Assets List
     final group = _groupedRows.putIfAbsent(
       epc,
@@ -307,6 +366,58 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       group.name = '';
     }
     if (mounted) setState(() {});
+    _syncDisplayedCounters();
+  }
+
+  void _onFallbackBarcodeRead(String raw) {
+    final s = raw.trim().toUpperCase();
+    if (s.isEmpty) return;
+    final compact = s.replaceAll(RegExp(r'[^0-9A-Z]'), '');
+    // Accept any useful payload from scanner broadcasts; do not filter out non-hex IDs.
+    if (compact.isNotEmpty) {
+      _ingestEpc(epc: compact, rssi: -55);
+      return;
+    }
+    _ingestEpc(epc: s, rssi: -55);
+  }
+
+  void _syncDisplayedCounters() {
+    if (!mounted) return;
+    final targetEpc = _epcRows.length;
+    final targetSku = _groupedRows.length;
+    if (_displayEpcCount == targetEpc && _displaySkuCount == targetSku) {
+      _countAnimateTimer?.cancel();
+      _countAnimateTimer = null;
+      return;
+    }
+    if (_countAnimateTimer != null) return;
+
+    // Hard-lock visible progression to one-step increments only.
+    _countAnimateTimer = Timer.periodic(const Duration(milliseconds: 35), (t) {
+      if (!mounted) {
+        t.cancel();
+        _countAnimateTimer = null;
+        return;
+      }
+      final epcTarget = _epcRows.length;
+      final skuTarget = _groupedRows.length;
+      setState(() {
+        if (_displayEpcCount < epcTarget) {
+          _displayEpcCount += 1;
+        } else if (_displayEpcCount > epcTarget) {
+          _displayEpcCount -= 1;
+        }
+        if (_displaySkuCount < skuTarget) {
+          _displaySkuCount += 1;
+        } else if (_displaySkuCount > skuTarget) {
+          _displaySkuCount -= 1;
+        }
+      });
+      if (_displayEpcCount == epcTarget && _displaySkuCount == skuTarget) {
+        t.cancel();
+        _countAnimateTimer = null;
+      }
+    });
   }
 
   Future<void> _enrichGroups() async {
@@ -333,7 +444,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (mounted) setState(() {});
   }
 
-  void _applyLookup(String assetId, Map<String, dynamic> row, {required bool fromCache}) {
+  void _applyLookup(String assetId, Map<String, dynamic> row,
+      {required bool fromCache}) {
     final g = _groupedRows[assetId];
     if (g == null) return;
     g.sku = (row['sku'] ?? '').toString();
@@ -344,34 +456,99 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     g.cached = fromCache;
   }
 
-  Future<void> _toggleScan() async {
-    if (_scanOn) {
-      await _stopScan();
-    } else {
-      await _startScan();
-    }
-  }
-
   Future<void> _startScan() async {
     if (_scanOn) return;
+    // Count hard lock: never allow 2D scanner mode here.
+    unawaited(RfidVendorChannel.scannerStop2d());
+    unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+    unawaited(RfidVendorChannel.disableNativeTrigger());
+    unawaited(RfidVendorChannel.enableRfidFunctionMode());
+    // Count gear settings are authoritative while in Count.
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
-    // Drive Chainway inventory directly — bypasses RfidManager/ChainwayScanner so it
-    // works even when autoDetectHardware returned useStub due to a transient PlatformException.
+    // Start via active scanner manager first; fallback to direct Chainway bridge.
+    var started = false;
     try {
-      await RfidVendorChannel.startChainwayInventory();
-    } catch (_) {}
+      final rfid = _rfidManager;
+      if (rfid != null) {
+        await rfid.startLocateScanning();
+        started = true;
+      }
+    } catch (_) {
+      started = false;
+    }
+    if (!started) {
+      try {
+        await RfidVendorChannel.startChainwayInventory();
+        started = true;
+      } catch (_) {
+        started = false;
+      }
+    }
+    if (!started) {
+      // Last retry through manager path in case hardware init lagged.
+      final rfid = _rfidManager;
+      if (rfid != null) {
+        try {
+          await rfid.startLocateScanning();
+          started = true;
+        } catch (_) {}
+      }
+    }
     if (!mounted) return;
-    setState(() { _scanOn = true; });
+    setState(() {
+      _scanOn = started;
+    });
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('[CountInventory] startScan started=$started');
+    }
+    _rfidKeepAliveTimer?.cancel();
+    if (started) {
+      unawaited(_playStartTone());
+      _rfidKeepAliveTimer =
+          Timer.periodic(const Duration(milliseconds: 900), (_) {
+        if (!_scanOn) return;
+        // Re-assert RFID-only mode to suppress device-side 2D auto-reactivation.
+        unawaited(RfidVendorChannel.scannerStop2d());
+        unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+        unawaited(RfidVendorChannel.disableNativeTrigger());
+        unawaited(RfidVendorChannel.enableRfidFunctionMode());
+        unawaited(RfidVendorChannel.startChainwayInventory());
+      });
+    }
+    if (!started) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Scanner failed to start. Please retry.')),
+      );
+    }
   }
 
   Future<void> _stopScan() async {
     if (!_scanOn) return;
     _scanInactivityTimer?.cancel();
+    _rfidKeepAliveTimer?.cancel();
+    try {
+      final rfid = _rfidManager;
+      if (rfid != null) {
+        await rfid.stopLocateScanning();
+      }
+    } catch (_) {}
     try {
       await RfidVendorChannel.stopChainwayInventory();
     } catch (_) {}
+    // Keep 2D disabled even when Count scan is idle.
+    unawaited(RfidVendorChannel.scannerStop2d());
+    unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+    unawaited(RfidVendorChannel.disableNativeTrigger());
     if (!mounted) return;
-    setState(() { _scanOn = false; });
+    setState(() {
+      _scanOn = false;
+    });
+    unawaited(_playStopTone());
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('[CountInventory] stopScan done');
+    }
   }
 
   Future<void> _openEpcList({
@@ -392,8 +569,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         title: const Text('Confirmation'),
         content: const Text('Delete item? (remove from scan list only)'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Delete')),
         ],
       ),
     );
@@ -409,6 +590,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       _epcRows.clear();
       _groupedRows.clear();
     });
+    _syncDisplayedCounters();
   }
 
   Future<String?> _saveSessionCsvToDevice() async {
@@ -416,9 +598,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final header =
         'asset_id,sku,name,color,size,qty,epc,prefix_hex,serial,first_seen_utc,last_seen_utc,lookup_source\n';
     final b = StringBuffer(header);
-    final groups = _groupedRows.values.toList()..sort((a, c) => a.assetId.compareTo(c.assetId));
+    final groups = _groupedRows.values.toList()
+      ..sort((a, c) => a.assetId.compareTo(c.assetId));
     for (final g in groups) {
-      final source = g.cached ? 'cache' : (g.sku.isEmpty && g.name.isEmpty ? 'unresolved' : 'lookup');
+      final source = g.cached
+          ? 'cache'
+          : (g.sku.isEmpty && g.name.isEmpty ? 'unresolved' : 'lookup');
       for (final epc in g.epcs) {
         final row = _epcRows[epc];
         if (row == null) continue;
@@ -427,7 +612,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         );
       }
     }
-    final baseDir = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+    final baseDir = await getExternalStorageDirectory() ??
+        await getApplicationDocumentsDirectory();
     final dir = Directory('${baseDir.path}/reports');
     if (!await dir.exists()) {
       await dir.create(recursive: true);
@@ -439,7 +625,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _openContinue() async {
-    final groups = _groupedRows.values.toList()..sort((a, b) => a.assetId.compareTo(b.assetId));
+    final groups = _groupedRows.values.toList()
+      ..sort((a, b) => a.assetId.compareTo(b.assetId));
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => _CountInventoryContinueScreen(
@@ -470,7 +657,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         );
       case 3:
         Navigator.of(context).push<void>(
-          MaterialPageRoute<void>(builder: (_) => const EncodeSuiteScreen(initialTab: 0)),
+          MaterialPageRoute<void>(
+              builder: (_) => const EncodeSuiteScreen(initialTab: 0)),
         );
     }
   }
@@ -496,17 +684,21 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final rows = _epcRows.values.toList()..sort((a, b) => a.epc.compareTo(b.epc));
+    final rows = _epcRows.values.toList()
+      ..sort((a, b) => a.epc.compareTo(b.epc));
     final hasRealRows = rows.isNotEmpty;
-    final assetCount = _epcRows.length;
-    final skuCount = _groupedRows.length;
+    final assetCount = _displayEpcCount;
+    final skuCount = _displaySkuCount;
     final summaryValueText = '$assetCount';
     final summarySkuValueText = '$skuCount';
     final continueButtonWidth = _continueButtonTightWidth();
-    final tileColor = isDark ? const Color(0xFF1C2828) : const Color(0xFFEEF4F3);
+    final tileColor =
+        isDark ? const Color(0xFF1C2828) : const Color(0xFFEEF4F3);
     final textColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
-    final summaryLabelColor = isDark ? const Color(0xFF5C6C6C) : const Color(0xFF3F4A4A);
-    final watermarkColor = isDark ? const Color(0x66A0B3B3) : const Color(0x2995A5A7);
+    final summaryLabelColor =
+        isDark ? const Color(0xFF5C6C6C) : const Color(0xFF3F4A4A);
+    final watermarkColor =
+        isDark ? const Color(0x66A0B3B3) : const Color(0x2995A5A7);
     const summaryBoxWidth = 132.0;
     const summaryBoxHeight = 60.0;
 
@@ -542,7 +734,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                     ),
                     if (_locations.length > 1) ...[
                       SizedBox(width: 4.w),
-                      Icon(Icons.expand_more, size: 16.sp, color: AppColors.primary),
+                      Icon(Icons.expand_more,
+                          size: 16.sp, color: AppColors.primary),
                     ],
                   ],
                 ),
@@ -552,7 +745,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
               padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0.h),
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final tileWidth = ((constraints.maxWidth - 8) / 2).clamp(160.0, 166.0);
+                  final tileWidth =
+                      ((constraints.maxWidth - 8) / 2).clamp(160.0, 166.0);
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -608,24 +802,39 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                         itemBuilder: (_, i) {
                           final row = rows[i];
                           final g = _groupedRows[row.epc];
+                          final isPreferredPrefix = row.epc.startsWith(
+                            _countEpcPrefixFilter,
+                          );
                           final descParts = [
                             if (g != null && g.name.isNotEmpty) g.name,
                             if (g != null && g.color.isNotEmpty) g.color,
                             if (g != null && g.size.isNotEmpty) g.size,
                           ];
-                          final desc = descParts.isEmpty ? 'ITEM DESCRIPTION' : descParts.join(' ');
+                          final desc = descParts.isEmpty
+                              ? (isPreferredPrefix
+                                  ? 'ITEM DESCRIPTION'
+                                  : 'NON-F0A0B EPC')
+                              : descParts.join(' ');
+                          final defectText = row.duplicateSightings > 0
+                              ? 'DEFECTIVE DUPLICATE x${row.duplicateSightings + 1}'
+                              : '';
+                          final descWithDefect = defectText.isEmpty
+                              ? desc
+                              : '$desc • $defectText';
                           return _CountItemContainer(
                             rowKey: 'real-${row.epc}',
                             sku: row.epc,
-                            description: desc,
-                            qtyText: 'x${row.scans}',
+                            description: descWithDefect,
+                            qtyText: 'x1',
                             expandedLines: const [],
-                            onQtyTap: () => _openEpcList(title: row.epc, epcs: [row.epc]),
+                            onQtyTap: () =>
+                                _openEpcList(title: row.epc, epcs: [row.epc]),
                             onDelete: () {
                               setState(() {
                                 _epcRows.remove(row.epc);
                                 _groupedRows.remove(row.epc);
                               });
+                              _syncDisplayedCounters();
                             },
                             confirmDelete: _confirmDeleteItem,
                           );
@@ -654,11 +863,20 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                         width: continueButtonWidth,
                         height: 40.h,
                         child: FilledButton(
-                          onPressed: _toggleScan,
+                          onPressed: () {
+                            if (_scanOn) {
+                              unawaited(_stopScan());
+                            } else {
+                              unawaited(_startScan());
+                            }
+                          },
                           style: FilledButton.styleFrom(
-                            backgroundColor: _scanOn ? const Color(0xFFBF2E2E) : const Color(0xFF0A7C80),
+                            backgroundColor: _scanOn
+                                ? const Color(0xFFBF2E2E)
+                                : const Color(0xFF0A7C80),
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2.r)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(2.r)),
                             padding: EdgeInsets.symmetric(horizontal: 12.w),
                           ),
                           child: Row(
@@ -678,7 +896,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                               ),
                               SizedBox(width: 8.w),
                               Icon(
-                                _scanOn ? Icons.stop_circle_outlined : Icons.play_circle_outline,
+                                _scanOn
+                                    ? Icons.stop_circle_outlined
+                                    : Icons.play_circle_outline,
                                 size: 20.sp,
                               ),
                             ],
@@ -696,7 +916,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF6A7575),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2.r)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(2.r)),
                         padding: EdgeInsets.zero,
                       ),
                       child: Icon(Icons.restart_alt, size: 20.sp),
@@ -716,7 +937,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                               disabledBackgroundColor: const Color(0xFF2BA3A3),
                               foregroundColor: Colors.white,
                               disabledForegroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2.r)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(2.r)),
                               padding: EdgeInsets.symmetric(horizontal: 12.w),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -734,7 +956,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                                   ),
                                 ),
                                 SizedBox(width: 8.w),
-                                Icon(Icons.arrow_forward, size: 20.sp, color: Colors.white),
+                                Icon(Icons.arrow_forward,
+                                    size: 20.sp, color: Colors.white),
                               ],
                             ),
                           ),
@@ -751,7 +974,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     );
   }
 }
-
 
 class _RssiBars extends StatelessWidget {
   const _RssiBars({required this.bars});
@@ -901,7 +1123,11 @@ class _CountBottomShortcuts extends StatelessWidget {
     const items = [
       (icon: Icons.dashboard, label: 'Dash', active: false),
       (icon: Icons.inventory_2_outlined, label: 'Stock', active: true),
-      (icon: Icons.precision_manufacturing_outlined, label: 'Ops', active: false),
+      (
+        icon: Icons.precision_manufacturing_outlined,
+        label: 'Ops',
+        active: false
+      ),
       (icon: Icons.qr_code_scanner, label: 'Tags', active: false),
     ];
 
@@ -909,7 +1135,9 @@ class _CountBottomShortcuts extends StatelessWidget {
       height: 78.h,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C2828) : Colors.white,
-        border: Border(top: BorderSide(color: isDark ? Colors.white12 : const Color(0xFFEDF2F1))),
+        border: Border(
+            top: BorderSide(
+                color: isDark ? Colors.white12 : const Color(0xFFEDF2F1))),
       ),
       child: Row(
         children: items.asMap().entries.map((entry) {
@@ -1002,50 +1230,64 @@ class _CountItemContainerState extends State<_CountItemContainer> {
           const horizontalPadding = 14.0 * 2;
           const qtyGap = 10.0;
           final qtyPainter = TextPainter(
-            text: TextSpan(text: widget.qtyText, style: GoogleFonts.spaceGrotesk(fontSize: 28.sp, fontWeight: FontWeight.w800, letterSpacing: 0.4, height: 1.0.h)),
+            text: TextSpan(
+                text: widget.qtyText,
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 28.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                    height: 1.0.h)),
             maxLines: 1,
             textDirection: Directionality.of(context),
           )..layout();
-          final textAvailableWidth = (constraints.maxWidth - horizontalPadding - qtyGap - qtyPainter.width).clamp(0.0, double.infinity);
+          final textAvailableWidth = (constraints.maxWidth -
+                  horizontalPadding -
+                  qtyGap -
+                  qtyPainter.width)
+              .clamp(0.0, double.infinity);
           final descPainter = TextPainter(
             text: TextSpan(text: widget.description, style: descStyle),
             maxLines: 1,
             textDirection: Directionality.of(context),
           )..layout(maxWidth: textAvailableWidth);
-          final canExpand = widget.description != 'ITEM DESCRIPTION' && descPainter.didExceedMaxLines;
+          final canExpand = widget.description != 'ITEM DESCRIPTION' &&
+              descPainter.didExceedMaxLines;
 
           return InkWell(
-            onTap: canExpand ? () => setState(() => _expanded = !_expanded) : null,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(10.w, 4.h, 10.w, 4.h),
+            onTap:
+                canExpand ? () => setState(() => _expanded = !_expanded) : null,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(10.w, 4.h, 10.w, 4.h),
               child: AnimatedSize(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeInOut,
                 alignment: Alignment.topCenter,
                 child: SizedBox(
-                  height: _expanded ? _expandedContainerHeight : _fixedContainerHeight,
-        child: Row(
+                  height: _expanded
+                      ? _expandedContainerHeight
+                      : _fixedContainerHeight,
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
+                    children: [
+                      Expanded(
+                        child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.sku,
-                    maxLines: 2,
-                    overflow: TextOverflow.clip,
-                    softWrap: true,
-                    style: GoogleFonts.robotoMono(
-                      fontSize: 11.5.sp,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textMain,
-                      letterSpacing: 0.0,
-                      height: 1.15.h,
-                    ),
-                  ),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.sku,
+                              maxLines: 2,
+                              overflow: TextOverflow.clip,
+                              softWrap: true,
+                              style: GoogleFonts.robotoMono(
+                                fontSize: 11.5.sp,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textMain,
+                                letterSpacing: 0.0,
+                                height: 1.15.h,
+                              ),
+                            ),
                             SizedBox(height: 10.h),
                             SizedBox(
                               width: double.infinity,
@@ -1053,33 +1295,33 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                                 widget.description,
                                 style: descStyle,
                                 maxLines: _expanded ? 2 : 1,
-                    overflow: TextOverflow.ellipsis,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(width: 10.w),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: 10.w),
                       GestureDetector(
                         onTap: widget.onQtyTap,
                         behavior: HitTestBehavior.opaque,
-              child: Text(
+                        child: Text(
                           widget.qtyText,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 28.sp,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
-                  letterSpacing: 0.4,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 28.sp,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                            letterSpacing: 0.4,
                             height: 1.0.h,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ],
-                  ),
-                ),
-        ),
-      ),
-    );
+          );
         },
       ),
     );
@@ -1142,7 +1384,8 @@ class _CountEpcListScreen extends StatelessWidget {
                 dense: true,
                 title: Text(
                   epcs[i],
-                  style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700),
+                  style: GoogleFonts.manrope(
+                      fontSize: 14.sp, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -1167,16 +1410,19 @@ class _CountInventoryContinueScreen extends StatefulWidget {
   final Map<String, dynamic> Function() buildBackendPreviewPayload;
 
   @override
-  State<_CountInventoryContinueScreen> createState() => _CountInventoryContinueScreenState();
+  State<_CountInventoryContinueScreen> createState() =>
+      _CountInventoryContinueScreenState();
 }
 
-class _CountInventoryContinueScreenState extends State<_CountInventoryContinueScreen> {
+class _CountInventoryContinueScreenState
+    extends State<_CountInventoryContinueScreen> {
   bool _overrideEntireCloudQuantities = false;
   bool _savingCsv = false;
 
   @override
   Widget build(BuildContext context) {
-    final totalItems = widget.groupedRows.fold<int>(0, (sum, row) => sum + row.qty);
+    final totalItems =
+        widget.groupedRows.fold<int>(0, (sum, row) => sum + row.qty);
     final canUpload = totalItems > 0;
     const fileNameValue = '';
     const fileStatusValue = 'N/A';
@@ -1201,7 +1447,7 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
           child: Padding(
             padding: EdgeInsets.fromLTRB(16.w, 0.h, 16.w, 0.h),
             child: Row(
-        children: [
+              children: [
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 4.w),
@@ -1214,7 +1460,8 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                           disabledBackgroundColor: const Color(0xFF1B7D7D),
                           foregroundColor: Colors.white,
                           disabledForegroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2.r)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(2.r)),
                         ),
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
@@ -1244,26 +1491,32 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                     child: SizedBox(
                       height: double.infinity,
                       child: FilledButton(
-                        onPressed: _savingCsv ? null : () async {
-                          setState(() => _savingCsv = true);
-                          final messenger = ScaffoldMessenger.of(context);
-                          try {
-                            final path = await widget.onSaveCsv();
-                            if (!mounted) return;
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(path != null ? 'Saved: $path' : 'Save failed'),
-                                duration: const Duration(seconds: 4),
-                              ),
-                            );
-                          } finally {
-                            if (mounted) setState(() => _savingCsv = false);
-                          }
-                        },
+                        onPressed: _savingCsv
+                            ? null
+                            : () async {
+                                setState(() => _savingCsv = true);
+                                final messenger = ScaffoldMessenger.of(context);
+                                try {
+                                  final path = await widget.onSaveCsv();
+                                  if (!mounted) return;
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(path != null
+                                          ? 'Saved: $path'
+                                          : 'Save failed'),
+                                      duration: const Duration(seconds: 4),
+                                    ),
+                                  );
+                                } finally {
+                                  if (mounted)
+                                    setState(() => _savingCsv = false);
+                                }
+                              },
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF2BA3A3),
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2.r)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(2.r)),
                         ),
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
@@ -1271,7 +1524,11 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _savingCsv
-                                  ? SizedBox(width: 20.w, height: 20.h, child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  ? SizedBox(
+                                      width: 20.w,
+                                      height: 20.h,
+                                      child: const CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white))
                                   : Icon(Icons.save, size: 20.sp),
                               SizedBox(width: 8.w),
                               Text(
@@ -1342,7 +1599,9 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                 const TextSpan(text: 'Upload to '),
                                 TextSpan(
                                   text: widget.locationName.toUpperCase(),
-                                  style: const TextStyle(color: Color(0xFF009496), fontWeight: FontWeight.w800),
+                                  style: const TextStyle(
+                                      color: Color(0xFF009496),
+                                      fontWeight: FontWeight.w800),
                                 ),
                               ],
                             ),
@@ -1357,7 +1616,9 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                     child: Container(
                       decoration: BoxDecoration(
                         color: const Color(0xFFFAFAFA),
-                        border: Border(left: BorderSide(color: const Color(0xFF009496), width: 6.w)),
+                        border: Border(
+                            left: BorderSide(
+                                color: const Color(0xFF009496), width: 6.w)),
                         borderRadius: BorderRadius.circular(2.r),
                         boxShadow: const [
                           BoxShadow(
@@ -1420,8 +1681,8 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                       padding: EdgeInsets.all(24.r),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
+                        children: [
+                          Expanded(
                             child: Row(
                               children: [
                                 Container(
@@ -1435,12 +1696,13 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                     Icons.description_outlined,
                                     color: Colors.white,
                                     size: 24.sp,
-                ),
-              ),
-              SizedBox(width: 16.w),
-              Expanded(
+                                  ),
+                                ),
+                                SizedBox(width: 16.w),
+                                Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
@@ -1461,9 +1723,9 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                           letterSpacing: 2.2,
                                           color: const Color(0xFF009496),
                                           height: 1.0.h,
-                ),
-              ),
-            ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -1486,10 +1748,12 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                         child: InkWell(
                           borderRadius: BorderRadius.circular(2.r),
                           onTap: () {
-                            setState(() => _overrideEntireCloudQuantities = !_overrideEntireCloudQuantities);
+                            setState(() => _overrideEntireCloudQuantities =
+                                !_overrideEntireCloudQuantities);
                           },
                           child: Padding(
-                            padding: EdgeInsets.fromLTRB(14.w, 12.h, 12.w, 12.h),
+                            padding:
+                                EdgeInsets.fromLTRB(14.w, 12.h, 12.w, 12.h),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -1497,7 +1761,8 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                   child: Padding(
                                     padding: EdgeInsets.only(right: 4.w),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'Override Entire Cloud\nQuantities',
@@ -1529,10 +1794,16 @@ class _CountInventoryContinueScreenState extends State<_CountInventoryContinueSc
                                   child: Checkbox(
                                     value: _overrideEntireCloudQuantities,
                                     onChanged: (next) {
-                                      setState(() => _overrideEntireCloudQuantities = next ?? false);
+                                      setState(() =>
+                                          _overrideEntireCloudQuantities =
+                                              next ?? false);
                                     },
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2.r)),
-                                    side: BorderSide(color: const Color(0xFF7C8A8A), width: 2.w),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(2.r)),
+                                    side: BorderSide(
+                                        color: const Color(0xFF7C8A8A),
+                                        width: 2.w),
                                     activeColor: const Color(0xFF009496),
                                   ),
                                 ),
@@ -1560,10 +1831,12 @@ class _CountInventorySettingsScreen extends StatefulWidget {
   final _CountInventoryModuleSettings initial;
 
   @override
-  State<_CountInventorySettingsScreen> createState() => _CountInventorySettingsScreenState();
+  State<_CountInventorySettingsScreen> createState() =>
+      _CountInventorySettingsScreenState();
 }
 
-class _CountInventorySettingsScreenState extends State<_CountInventorySettingsScreen> {
+class _CountInventorySettingsScreenState
+    extends State<_CountInventorySettingsScreen> {
   static const Color _primary = Color(0xFF009496);
   static const Color _outline = Color(0xFF6D7979);
   static const Color _onSurface = Color(0xFF171D1D);
@@ -1635,7 +1908,8 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
       if (!mounted) return;
       if (ok == true) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Scanner settings app not found on this device.')),
+        const SnackBar(
+            content: Text('Scanner settings app not found on this device.')),
       );
     } catch (_) {
       if (!mounted) return;
@@ -1691,15 +1965,17 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
                   width: double.infinity,
                   height: 56.h,
                   child: FilledButton.icon(
-          onPressed: () {
-            Navigator.of(context).pop(
-              _CountInventoryModuleSettings(rfidPowerDbm: _power, rssiDistance: _rssi),
-            );
-          },
+                    onPressed: () {
+                      Navigator.of(context).pop(
+                        _CountInventoryModuleSettings(
+                            rfidPowerDbm: _power, rssiDistance: _rssi),
+                      );
+                    },
                     style: FilledButton.styleFrom(
                       backgroundColor: _primary,
                       foregroundColor: Colors.white,
-                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero),
                       textStyle: GoogleFonts.spaceGrotesk(
                         fontSize: 14.sp,
                         fontWeight: FontWeight.w800,
@@ -1719,7 +1995,8 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _primary,
                       side: BorderSide(color: _primary, width: 2.w),
-                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                      shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero),
                       textStyle: GoogleFonts.spaceGrotesk(
                         fontSize: 14.sp,
                         fontWeight: FontWeight.w800,
@@ -1730,7 +2007,8 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
                         ? SizedBox(
                             width: 22.w,
                             height: 22.h,
-                            child: const CircularProgressIndicator(strokeWidth: 2, color: _primary),
+                            child: const CircularProgressIndicator(
+                                strokeWidth: 2, color: _primary),
                           )
                         : Icon(Icons.restart_alt, size: 22.sp),
                     label: Text(_busy ? 'RESTARTING…' : 'RESTART CONTROLLER'),
@@ -1745,7 +2023,7 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
         color: Colors.white,
         child: ListView(
           padding: EdgeInsets.fromLTRB(24.w, 48.h, 24.w, 24.h),
-        children: [
+          children: [
             Text(
               'RFID Settings',
               style: GoogleFonts.manrope(
@@ -1770,8 +2048,8 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
+              children: [
+                Expanded(
                   child: Text(
                     'ANTENNA POWER OUTPUT',
                     style: GoogleFonts.manrope(
@@ -1849,8 +2127,8 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
+              children: [
+                Expanded(
                   child: Text(
                     'RSSI SENSITIVITY',
                     style: GoogleFonts.manrope(
@@ -1929,7 +2207,8 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _primary,
                   side: BorderSide(color: _primary, width: 2.w),
-                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                  shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero),
                 ),
                 icon: Icon(Icons.tune, size: 20.sp),
                 label: Text(
@@ -1993,9 +2272,9 @@ class _CountInventorySettingsScreenState extends State<_CountInventorySettingsSc
                           fontSize: 14.sp,
                           fontWeight: FontWeight.w700,
                           color: _onSurface,
-            ),
-          ),
-        ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 SizedBox(width: 16.w),
@@ -2062,7 +2341,8 @@ class _RectSliderThumbShape extends SliderComponentShape {
   }) {
     final canvas = context.canvas;
     final rect = Rect.fromCenter(center: center, width: width, height: height);
-    final fill = Paint()..color = sliderTheme.thumbColor ?? const Color(0xFF009496);
+    final fill = Paint()
+      ..color = sliderTheme.thumbColor ?? const Color(0xFF009496);
     final shadow = Paint()..color = const Color(0x1A000000);
     canvas.drawRect(rect.translate(0, 2), shadow);
     canvas.drawRect(rect, fill);
@@ -2096,7 +2376,8 @@ class _CountInventoryModuleSettings {
       if (m is! Map<String, dynamic>) return null;
       return _CountInventoryModuleSettings(
         rfidPowerDbm: ((m['rfidPowerDbm'] as num?)?.round() ?? 30).clamp(0, 30),
-        rssiDistance: ((m['rssiDistance'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0),
+        rssiDistance:
+            ((m['rssiDistance'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0),
       );
     } catch (_) {
       return null;
@@ -2122,6 +2403,7 @@ class _SessionEpcRow {
   final DateTime firstSeen;
   DateTime lastSeen;
   int scans = 1;
+  int duplicateSightings = 0;
   int rssi;
 }
 

@@ -139,11 +139,37 @@ class MainActivity : FlutterFragmentActivity() {
           result.success(true)
         }
         "scanner.enableRfidFunctionMode" -> {
-          runCatching { sendBroadcast(android.content.Intent("com.rscja.scanner.action.ENABLE_FUNCTION_BARCODE_RFID").apply { addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES) }) }
+          runCatching {
+            sendBroadcast(
+              android.content.Intent("android.intent.action.ENABLE_FUNCTION_BARCODE_RFID").apply {
+                addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+              },
+            )
+          }
+          runCatching {
+            sendBroadcast(
+              android.content.Intent("com.rscja.scanner.action.ENABLE_FUNCTION_BARCODE_RFID").apply {
+                addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+              },
+            )
+          }
           result.success(true)
         }
         "scanner.disableRfidFunctionMode" -> {
-          runCatching { sendBroadcast(android.content.Intent("com.rscja.scanner.action.DISABLE_FUNCTION_BARCODE_RFID").apply { addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES) }) }
+          runCatching {
+            sendBroadcast(
+              android.content.Intent("android.intent.action.DISABLE_FUNCTION_BARCODE_RFID").apply {
+                addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+              },
+            )
+          }
+          runCatching {
+            sendBroadcast(
+              android.content.Intent("com.rscja.scanner.action.DISABLE_FUNCTION_BARCODE_RFID").apply {
+                addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+              },
+            )
+          }
           result.success(true)
         }
         "zebra.connect" -> {

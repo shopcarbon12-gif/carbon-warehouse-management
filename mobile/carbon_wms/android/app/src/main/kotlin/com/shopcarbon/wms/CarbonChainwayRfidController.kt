@@ -121,7 +121,9 @@ class CarbonChainwayRfidController(
       sendScannerBroadcast(ACTION_RFID_OPEN)
       Thread.sleep(200)
       sendScannerBroadcast(ACTION_RFID_START)
+      sendScannerBroadcast("android.intent.action.BARCODESTOPSCAN")
       Log.d("CarbonChainway", "startInventoryDirect: sent ENABLE+OPEN+START")
+      runNativeStartInventory(cls, inst)
       val ka = Thread {
         try {
           Thread.sleep(1500)
@@ -318,7 +320,9 @@ class CarbonChainwayRfidController(
         sendScannerBroadcast(ACTION_RFID_OPEN)
         Thread.sleep(200)
         sendScannerBroadcast(ACTION_RFID_START)
+        sendScannerBroadcast("android.intent.action.BARCODESTOPSCAN")
         Log.d("CarbonChainway", "sent ENABLE+OPEN+START (com.rscja.scanner.action.*)")
+        runNativeStartInventory(cls, inst)
 
         // Keep-alive: re-send START_BARCODE_RFID every 400ms so inventory keeps running
         val ka = Thread {
@@ -469,6 +473,7 @@ class CarbonChainwayRfidController(
     val cls = uhfClass
     val inst = uhfInstance
     if (cls != null && inst != null) {
+      runNativeStopInventory(cls, inst)
       cls.methods.firstOrNull { it.name == "UHFStopGet" && it.parameterCount == 0 }?.let { m ->
         m.isAccessible = true; runCatching { m.invoke(inst) }
       }
@@ -553,10 +558,51 @@ class CarbonChainwayRfidController(
 
   private fun sendScannerBroadcast(action: String) {
     try {
-      val i = Intent(action).apply { addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES) }
-      context.sendBroadcast(i)
-      Log.d("CarbonChainway", "sent broadcast: $action")
+      val actions = linkedSetOf(action)
+      val pfx = "com.rscja.scanner.action."
+      if (action.startsWith(pfx)) {
+        actions.add("android.intent.action.${action.removePrefix(pfx)}")
+      }
+      for (a in actions) {
+        val i = Intent(a).apply { addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES) }
+        context.sendBroadcast(i)
+        Log.d("CarbonChainway", "sent broadcast: $a")
+      }
     } catch (e: Exception) { Log.w("CarbonChainway", "sendBroadcast $action failed: ${e.message}") }
+  }
+
+  private fun runNativeStartInventory(cls: Class<*>, inst: Any) {
+    val direct = cls.methods.firstOrNull {
+      it.name == "startInventory" &&
+        it.parameterCount == 3 &&
+        it.parameterTypes.all { t -> t == java.lang.Integer.TYPE }
+    }?.also { it.isAccessible = true }
+    if (direct != null) {
+      val ok = runCatching {
+        val r = direct.invoke(inst, 0, 0, 6)
+        when (r) {
+          is Int -> r == 0
+          is Boolean -> r
+          else -> true
+        }
+      }.getOrElse { false }
+      Log.d("CarbonChainway", "startInventory(0,0,6) -> $ok")
+    }
+    val tagStart = cls.methods.firstOrNull { it.name == "startInventoryTag" && it.parameterCount == 0 }
+      ?.also { it.isAccessible = true }
+    if (tagStart != null) {
+      val ok = runCatching { tagStart.invoke(inst); true }.getOrElse { false }
+      Log.d("CarbonChainway", "startInventoryTag() -> $ok")
+    }
+  }
+
+  private fun runNativeStopInventory(cls: Class<*>, inst: Any) {
+    for (name in listOf("UHFStopGet", "UHF_StopGet", "stopInventoryTag", "stopInventory")) {
+      val m = cls.methods.firstOrNull { it.name == name && it.parameterCount == 0 } ?: continue
+      m.isAccessible = true
+      runCatching { m.invoke(inst) }
+      Log.d("CarbonChainway", "$name() invoked")
+    }
   }
 
   private fun disconnectSync() {

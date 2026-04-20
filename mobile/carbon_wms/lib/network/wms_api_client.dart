@@ -159,33 +159,64 @@ class WmsApiClient {
     required String email,
     required String password,
   }) async {
-    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
-    final uri = Uri.parse('$base/api/auth/login');
-    final res = await _http.post(
-      uri,
-      headers: const {
-        'Content-Type': 'application/json',
-        'X-Carbon-Mobile': '1',
-      },
-      body: jsonEncode({'email': email, 'password': password}),
-    );
-    final decoded = jsonDecode(res.body);
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      final err = decoded is Map ? decoded['error']?.toString() : null;
-      return (ok: false, bypass: false, error: err ?? 'Login failed');
+    final primary = normalizeBaseUrl(await resolveBaseUrl());
+    final fallback = lockedServerUrl;
+    final tried = <String>{};
+    final bases = <String>[
+      if (primary.isNotEmpty) primary,
+      if (!tried.contains(fallback)) fallback,
+    ];
+    Object? lastError;
+    String? lastFailureMessage;
+
+    for (final rawBase in bases) {
+      final base = normalizeBaseUrl(rawBase).replaceAll(RegExp(r'/+$'), '');
+      if (base.isEmpty || tried.contains(base)) continue;
+      tried.add(base);
+      try {
+        final uri = Uri.parse('$base/api/auth/login');
+        final res = await _http.post(
+          uri,
+          headers: const {
+            'Content-Type': 'application/json',
+            'X-Carbon-Mobile': '1',
+          },
+          body: jsonEncode({'email': email, 'password': password}),
+        );
+        final decoded = jsonDecode(res.body);
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          final err = decoded is Map ? decoded['error']?.toString() : null;
+          lastFailureMessage = err ?? 'Login failed';
+          continue;
+        }
+        if (decoded is! Map<String, dynamic>) {
+          lastFailureMessage = 'Bad response';
+          continue;
+        }
+        final token = decoded['token'] as String?;
+        if (token != null && token.isNotEmpty) {
+          await setSessionToken(token);
+        }
+        if (base != primary) {
+          await setBaseUrl(base);
+        }
+        return (
+          ok: true,
+          bypass: decoded['bypassDeviceLock'] == true,
+          error: null,
+        );
+      } catch (e) {
+        lastError = e;
+      }
     }
-    if (decoded is! Map<String, dynamic>) {
-      return (ok: false, bypass: false, error: 'Bad response');
+
+    if (lastFailureMessage != null) {
+      return (ok: false, bypass: false, error: lastFailureMessage);
     }
-    final token = decoded['token'] as String?;
-    if (token != null && token.isNotEmpty) {
-      await setSessionToken(token);
+    if (lastError != null) {
+      throw lastError;
     }
-    return (
-      ok: true,
-      bypass: decoded['bypassDeviceLock'] == true,
-      error: null,
-    );
+    return (ok: false, bypass: false, error: 'Login failed');
   }
 
   /// Device gate + OTA hints. Sends Bearer when a mobile session token exists.

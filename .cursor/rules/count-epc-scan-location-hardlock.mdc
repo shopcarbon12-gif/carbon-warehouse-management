@@ -1,0 +1,66 @@
+---
+description: Hard-lock Count EPC scan location and navigation path for all agents
+alwaysApply: true
+---
+
+# Count EPC Scan Location (Hard Lock)
+
+- The EPC scanning page is `CountInventoryScreen` at `mobile/carbon_wms/lib/ui/screens/count_inventory_screen.dart`.
+- Navigation entry point is `InventoryHubScreen` at `mobile/carbon_wms/lib/ui/screens/inventory_hub_screen.dart`.
+- The `COUNT` tile in `InventoryHubScreen` pushes `CountInventoryScreen`.
+
+## Required agent behavior
+
+- Any request about "Count EPC scanning" must target `CountInventoryScreen` first.
+- Do not move or rename the Count EPC screen without explicit user approval.
+- Keep the user navigation path stable: `Login -> Inventory Hub -> COUNT -> CountInventoryScreen`.
+- If EPCs are not appearing, verify both:
+  - Native RFID pipeline (Chainway/Zebra/native broadcasts)
+  - Flutter ingestion on Count (`RfidManager`, vendor channels, Count listeners)
+
+## Count-only trigger hard lock
+
+- Scope: this behavior applies only on `CountInventoryScreen`.
+- Handheld trigger must be toggle mode:
+  - One press = start scanning.
+  - Next press = stop scanning.
+- Trigger must not require press-and-hold on Count.
+- No scan session timeout or auto-stop timer is allowed on Count trigger flow.
+
+## EPC duplicate policy hard lock (Count)
+
+- Default Count behavior must treat each EPC as unique (one unit per EPC).
+- Do not treat repeated reads of the same EPC as normal additional quantity.
+- If the same EPC is observed multiple times, keep it visible and mark it as defective duplicate behavior.
+- Repeated-sighting count should remain visible (for example, `xN`) to show how many times that same EPC repeated.
+- Defective duplicate EPC repeats are not considered valid SKU/asset quantity growth.
+
+## Audio feedback hard lock (Count default)
+
+- Count scanning must provide audible feedback by default.
+- Play a scan sound for each EPC scan event on Count.
+- Play a distinct audible signal when scan mode starts and when scan mode stops from trigger/button toggle flow.
+- Keep this behavior wired in-app so Count works reliably with device settings variations.
+
+## Counter progression hard lock (Count)
+
+- Count totals must progress one-by-one in visible sequence:
+  - `1 -> 2 -> 3 -> 4 -> ...`
+- Do not allow visible jump-style counter progression such as:
+  - `2 -> 5 -> 6 -> 8 -> ...`
+- This rule applies to displayed Count totals during active EPC scanning.
+- If needed, animate displayed totals in single-step increments so the user always sees sequential progression.
+
+## RFID-only hard lock (Count)
+
+- Count screen is RFID-only.
+- 2D laser scanner must stay OFF at all times on Count.
+- Never enable 2D scanning mode while on `CountInventoryScreen`.
+- On entering Count and during active scan sessions, force-disable 2D scanner paths if the device tries to re-enable them.
+
+## Count settings override hard lock
+
+- On Count screen, the gear settings for `Antenna` and `RSSI` are authoritative.
+- While inside Count, `Antenna`/`RSSI` values must override side-menu/global handheld settings.
+- These Count-specific overrides must apply only to Count behavior.
+- On leaving Count, revert control to side-menu/global settings automatically.

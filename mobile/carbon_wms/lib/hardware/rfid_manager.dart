@@ -82,7 +82,6 @@ class RfidManager extends ChangeNotifier {
 
   Timer? _flushTimer;
 
-  static final RegExp _epcHex24 = RegExp(r'^[0-9A-F]{24}$');
 
   void _onSettingsChanged() {
     unawaited(reapplyHandheldHardwareSettings());
@@ -315,7 +314,7 @@ class RfidManager extends ChangeNotifier {
 
   void _handleTagRead(RfidTagRead read) {
     final u = read.epcHex24;
-    if (!_epcHex24.hasMatch(u)) return;
+    if (u.isEmpty) return;
     if (!_unifiedReads.isClosed) _unifiedReads.add(read);
 
     if (_scanContext == 'GEIGER_FIND') {
@@ -323,13 +322,8 @@ class RfidManager extends ChangeNotifier {
       return;
     }
 
-    if (_ghostDropCache[u] == true) return;
-    if (_ghostPassCache[u] == true) {
-      _commitVisibleEpc(u);
-      return;
-    }
-    _visibilityPending.add(u);
-    notifyListeners();
+    // Do not block reads behind visibility/ghost filters; always surface live EPCs.
+    _commitVisibleEpc(u);
   }
 
   /// Start continuous inventory on the sled (hold-to-locate).
@@ -352,9 +346,7 @@ class RfidManager extends ChangeNotifier {
 
   /// Demo / hardware-off — same path as a live tag read.
   void addSimulatedEpc(String hex24) {
-    final read = RfidTagRead.tryParse(hex24);
-    if (read == null) return;
-    _handleTagRead(read);
+    _handleFallbackBarcodeRead(hex24);
   }
 
   void clearSessionScans() {

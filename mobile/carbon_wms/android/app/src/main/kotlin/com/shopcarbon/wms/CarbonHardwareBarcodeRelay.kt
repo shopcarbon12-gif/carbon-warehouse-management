@@ -24,6 +24,7 @@ class CarbonHardwareBarcodeRelay(
   private val mainHandler = Handler(Looper.getMainLooper())
   private var scanTimeoutRunnable: Runnable? = null
   @Volatile private var scanActive = false
+  @Volatile private var triggerRelayEnabled = true
 
   override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
     sink = events
@@ -35,15 +36,16 @@ class CarbonHardwareBarcodeRelay(
   }
 
   fun activateTriggerRelay() {
+    triggerRelayEnabled = true
     register()
   }
 
   /** Unregisters the KEY_DOWN/KEY_UP receiver without touching the EventChannel sink. */
   fun deactivateTriggerRelay() {
     // Do NOT send BARCODESTOPSCAN — it deadlocks com.rscja.scanner when in RFID mode.
+    triggerRelayEnabled = false
     scanActive = false
     cancelScanTimeout()
-    unregister()
   }
 
   fun dispose() {
@@ -60,6 +62,7 @@ class CarbonHardwareBarcodeRelay(
           if (intent == null) return
           when (intent.action) {
             KEY_DOWN_ACTION -> {
+              if (!triggerRelayEnabled) return
               if (scanActive) {
                 stopHardwareScan()
               } else {
@@ -68,6 +71,7 @@ class CarbonHardwareBarcodeRelay(
               return
             }
             KEY_UP_ACTION -> {
+              if (!triggerRelayEnabled) return
               // Keep scan on until decode or timeout; do not hard-stop on key-up.
               return
             }
@@ -171,6 +175,8 @@ class CarbonHardwareBarcodeRelay(
       arrayOf(
         KEY_DOWN_ACTION,
         KEY_UP_ACTION,
+        "com.rscja.scanner.action.OUTPUT_BARCODE_RFID",
+        "com.rscja.scanner.action.SCAN_RESULT_BROADCAST",
         "android.intent.action.SCANRESULT",
         "android.intent.action.SCAN_RESULT_BROADCAST",
         "android.intent.action.SCAN_RESULT_BROADCAST_RFID",
@@ -190,6 +196,9 @@ class CarbonHardwareBarcodeRelay(
         "scanData",
         "scan_data",
         "SCAN_DATA",
+        "barcodeCode",
+        "epc",
+        "EPC",
         "data_result",
         "DATA_RESULT",
         "barcode_string",
