@@ -106,6 +106,9 @@ class ChainwayScanner implements RfidScanner {
     }
   }
 
+  @override
+  Future<void> pauseScanning() => stopScanning();
+
   /// Test hook: simulate a tag read (remove when channel is live).
   void debugEmitEpc(String hex24, {int? rssi}) {
     if (!(_connected && _scanning)) return;

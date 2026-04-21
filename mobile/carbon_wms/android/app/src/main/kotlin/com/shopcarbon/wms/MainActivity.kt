@@ -52,7 +52,18 @@ class MainActivity : FlutterFragmentActivity() {
     hardwareTriggerRelay = triggerRelay
 
     EventChannel(messenger, "carbon_wms/hardware_barcode").setStreamHandler(barcodeRelay)
-    EventChannel(messenger, "carbon_wms/hardware_trigger").setStreamHandler(triggerRelay)
+    EventChannel(messenger, "carbon_wms/hardware_trigger").setStreamHandler(
+      object : EventChannel.StreamHandler {
+        override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+          triggerRelay.onListen(arguments, events)
+          zebra.setTriggerSink(events)
+        }
+        override fun onCancel(arguments: Any?) {
+          triggerRelay.onCancel(arguments)
+          zebra.setTriggerSink(null)
+        }
+      }
+    )
 
     val bridge = SenitronPluginBridge(this)
     senitronBridge = bridge

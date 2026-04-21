@@ -118,7 +118,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (rfid != null) {
       rfid.suppressEdgeStreaming = false;
       rfid.scanContext = _previousScanContext ?? 'TRANSFER';
-      unawaited(rfid.stopLocateScanning());
+      unawaited(rfid.pauseScanning());
       unawaited(rfid.reapplyHandheldHardwareSettings());
     }
     unawaited(() async {

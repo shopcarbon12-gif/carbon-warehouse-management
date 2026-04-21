@@ -110,6 +110,9 @@ class ZebraScanner implements RfidScanner {
     }
   }
 
+  @override
+  Future<void> pauseScanning() => stopScanning();
+
   void debugEmitEpc(String hex24, {int? rssi}) {
     if (!(_connected && _scanning)) return;
     final read = RfidTagRead.tryParse(

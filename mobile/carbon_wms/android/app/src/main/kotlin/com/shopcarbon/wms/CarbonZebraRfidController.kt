@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import com.zebra.rfid.api3.ENUM_TRANSPORT
 import com.zebra.rfid.api3.ENUM_TRIGGER_MODE
+import com.zebra.rfid.api3.HANDHELD_TRIGGER_EVENT_TYPE
 import com.zebra.rfid.api3.INVENTORY_STATE
 import com.zebra.rfid.api3.InvalidUsageException
 import com.zebra.rfid.api3.OperationFailureException
@@ -17,6 +18,7 @@ import com.zebra.rfid.api3.RfidStatusEvents
 import com.zebra.rfid.api3.SESSION
 import com.zebra.rfid.api3.SL_FLAG
 import com.zebra.rfid.api3.START_TRIGGER_TYPE
+import com.zebra.rfid.api3.STATUS_EVENT_TYPE
 import com.zebra.rfid.api3.STOP_TRIGGER_TYPE
 import com.zebra.rfid.api3.TagData
 import com.zebra.rfid.api3.TriggerInfo
@@ -37,6 +39,7 @@ class CarbonZebraRfidController(
   private val mainHandler = Handler(Looper.getMainLooper())
 
   @Volatile private var tagSink: EventChannel.EventSink? = null
+  @Volatile private var triggerSink: EventChannel.EventSink? = null
   @Volatile private var readerNameHint: String? = null
 
   /** Requested output power in dBm (0–30), forwarded to the reader’s transmit power table. */
@@ -52,6 +55,10 @@ class CarbonZebraRfidController(
 
   fun setTagSink(sink: EventChannel.EventSink?) {
     tagSink = sink
+  }
+
+  fun setTriggerSink(sink: EventChannel.EventSink?) {
+    triggerSink = sink
   }
 
   fun setReaderNameHint(name: String?) {
@@ -327,7 +334,16 @@ class CarbonZebraRfidController(
     }
 
     override fun eventStatusNotify(rfidStatusEvents: RfidStatusEvents?) {
-      /* optional: handheld trigger */
+      val data = rfidStatusEvents?.StatusEventData ?: return
+      if (data.getStatusEventType() != STATUS_EVENT_TYPE.HANDHELD_TRIGGER_EVENT) return
+      val triggerEvent = data.HandheldTriggerEventData?.getHandheldEvent() ?: return
+      val payload = when (triggerEvent) {
+        HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_PRESSED -> "down"
+        HANDHELD_TRIGGER_EVENT_TYPE.HANDHELD_TRIGGER_RELEASED -> "up"
+        else -> return
+      }
+      val sink = triggerSink ?: return
+      mainHandler.post { sink.success(payload) }
     }
   }
 }

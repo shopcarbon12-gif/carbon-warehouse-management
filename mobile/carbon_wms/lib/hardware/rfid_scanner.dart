@@ -29,4 +29,9 @@ abstract class RfidScanner {
     HandheldRuntimeConfig config, {
     String scanContext = 'TRANSFER',
   });
+
+  /// Stop active inventory but keep the reader initialized.
+  /// Full teardown (BT disconnect / free()) only happens in [disconnect].
+  /// Default delegates to [stopScanning]; concrete scanners may override for efficiency.
+  Future<void> pauseScanning() => stopScanning();
 }

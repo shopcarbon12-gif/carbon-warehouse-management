@@ -337,6 +337,12 @@ class RfidManager extends ChangeNotifier {
     await _active?.stopScanning();
   }
 
+  /// Stop active inventory but keep the reader initialized (no BT disconnect / free).
+  /// Use this on screen dispose instead of full disconnect to avoid re-init delay on next screen.
+  Future<void> pauseScanning() async {
+    await _active?.pauseScanning();
+  }
+
   /// Demo pulse for locate UI (stub hardware / QA).
   void debugPulseLocateRead(String hex24, {required int rssi}) {
     final read = RfidTagRead.tryParse(hex24, rssi: rssi);
