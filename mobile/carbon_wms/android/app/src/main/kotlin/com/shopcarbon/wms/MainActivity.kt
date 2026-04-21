@@ -1,12 +1,12 @@
 package com.shopcarbon.wms
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -23,8 +23,6 @@ class MainActivity : FlutterFragmentActivity() {
   private var hardwareBarcodeRelay: CarbonHardwareBarcodeRelay? = null
   private var hardwareTriggerRelay: CarbonHardwareTriggerRelay? = null
   private var senitronBridge: SenitronPluginBridge? = null
-  private val mainHandler = Handler(Looper.getMainLooper())
-  private var laserLockRunnable: Runnable? = null
 
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -155,43 +153,20 @@ class MainActivity : FlutterFragmentActivity() {
           result.success(true)
         }
         "scanner.enableRfidFunctionMode" -> {
-          runCatching {
-            sendBroadcast(
-              android.content.Intent("android.intent.action.ENABLE_FUNCTION_BARCODE_RFID").apply {
-                addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-              },
-            )
-          }
-          runCatching {
-            sendBroadcast(
-              android.content.Intent("com.rscja.scanner.action.ENABLE_FUNCTION_BARCODE_RFID").apply {
-                addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-              },
-            )
-          }
+          enableScannerRfidMode(this, "MainActivity")
           result.success(true)
         }
         "scanner.disableRfidFunctionMode" -> {
-          runCatching {
-            sendBroadcast(
-              android.content.Intent("android.intent.action.DISABLE_FUNCTION_BARCODE_RFID").apply {
-                addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-              },
-            )
-          }
-          runCatching {
-            sendBroadcast(
-              android.content.Intent("com.rscja.scanner.action.DISABLE_FUNCTION_BARCODE_RFID").apply {
-                addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-              },
-            )
-          }
+          stopSystemScannerInventory(this, "MainActivity")
+          disableScannerRfidMode(this, "MainActivity")
           result.success(true)
         }
         "scanner.close2dBarcode" -> {
+          closeScanner2dEngine(this, "MainActivity")
           result.success(true)
         }
         "scanner.open2dBarcode" -> {
+          openScanner2dEngine(this, "MainActivity")
           result.success(true)
         }
         "zebra.connect" -> {
@@ -242,6 +217,7 @@ class MainActivity : FlutterFragmentActivity() {
         }
         "chainway.clearSeenEpcs" -> {
           chainway.clearSeenEpcs()
+          senitronBridge?.clearSeenEpcs()
           result.success(null)
         }
         "chainway.startInventory" -> {
@@ -268,7 +244,6 @@ class MainActivity : FlutterFragmentActivity() {
     if (!isChangingConfigurations && isFinishing) {
       SessionPrefsBridge.clearWmsSessionToken(this)
     }
-    stopLaserLockTimer()
     zebraController?.dispose()
     chainwayController?.dispose()
     hardwareBarcodeRelay?.dispose()
@@ -284,40 +259,6 @@ class MainActivity : FlutterFragmentActivity() {
     super.onDestroy()
   }
 
-  private fun sendLaserLock() {
-    val lockActions = listOf(
-      "android.intent.action.BARCODELOCKSCANKEY",
-      "android.intent.action.BARCODESTOPSCAN",
-    )
-    for (action in lockActions) {
-      runCatching {
-        sendBroadcast(
-          android.content.Intent(action).apply {
-            addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-          },
-        )
-      }
-    }
-  }
-
-  private fun startLaserLockTimer() {
-    stopLaserLockTimer()
-    val r = object : Runnable {
-      override fun run() {
-        sendLaserLock()
-        mainHandler.postDelayed(this, 1500)
-      }
-    }
-    laserLockRunnable = r
-    mainHandler.post(r)
-  }
-
-  private fun stopLaserLockTimer() {
-    val r = laserLockRunnable ?: return
-    laserLockRunnable = null
-    mainHandler.removeCallbacks(r)
-  }
-
   private fun classPresent(name: String): Boolean =
     try {
       Class.forName(name)
@@ -327,8 +268,98 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
   companion object {
+    private const val TAG = "MainActivity"
     const val ZEBRA_RFID_READER = "com.zebra.rfid.api3.RFIDReader"
+    private const val SCANNER_PACKAGE = "com.rscja.scanner"
     @Volatile var chainwayController: CarbonChainwayRfidController? = null
     @Volatile var senitronBridge: SenitronPluginBridge? = null
+
+    fun enableScannerRfidMode(context: Context, logTag: String = TAG) {
+      closeScanner2dEngine(context, logTag)
+      RFID_MODE_ENABLE_ACTIONS.forEach { action ->
+        broadcastScannerAction(context, action, logTag)
+      }
+      android.os.SystemClock.sleep(80)
+    }
+
+    fun disableScannerRfidMode(context: Context, logTag: String = TAG) {
+      RFID_MODE_DISABLE_ACTIONS.forEach { action ->
+        broadcastScannerAction(context, action, logTag)
+      }
+      android.os.SystemClock.sleep(80)
+    }
+
+    fun startSystemScannerInventory(context: Context, logTag: String = TAG) {
+      enableScannerRfidMode(context, logTag)
+      RFID_START_ACTIONS.forEach { action ->
+        broadcastScannerAction(context, action, logTag)
+      }
+    }
+
+    fun stopSystemScannerInventory(context: Context, logTag: String = TAG) {
+      RFID_STOP_ACTIONS.forEach { action ->
+        broadcastScannerAction(context, action, logTag)
+      }
+    }
+
+    fun closeScanner2dEngine(context: Context, logTag: String = TAG) {
+      SCANNER_2D_DISABLE_ACTIONS.forEach { action ->
+        broadcastScannerAction(context, action, logTag)
+      }
+    }
+
+    fun openScanner2dEngine(context: Context, logTag: String = TAG) {
+      SCANNER_2D_ENABLE_ACTIONS.forEach { action ->
+        broadcastScannerAction(context, action, logTag)
+      }
+    }
+
+    private fun broadcastScannerAction(context: Context, action: String, logTag: String) {
+      listOf(
+        Intent(action),
+        Intent(action).setPackage(SCANNER_PACKAGE),
+      ).forEach { intent ->
+        runCatching {
+          context.sendBroadcast(
+            intent.apply {
+              addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+            },
+          )
+          Log.d(logTag, "scanner broadcast -> action=$action pkg=${intent.`package` ?: "*"}")
+        }.onFailure { e ->
+          Log.w(logTag, "scanner broadcast failed for $action", e)
+        }
+      }
+    }
+
+    private val RFID_MODE_ENABLE_ACTIONS = listOf(
+      "android.intent.action.ENABLE_FUNCTION_BARCODE_RFID",
+      "com.rscja.scanner.action.ENABLE_FUNCTION_BARCODE_RFID",
+    )
+
+    private val RFID_MODE_DISABLE_ACTIONS = listOf(
+      "android.intent.action.DISABLE_FUNCTION_BARCODE_RFID",
+      "com.rscja.scanner.action.DISABLE_FUNCTION_BARCODE_RFID",
+    )
+
+    private val RFID_START_ACTIONS = listOf(
+      "android.intent.action.OPEN_BARCODE_RFID",
+      "android.intent.action.START_BARCODE_RFID",
+    )
+
+    private val RFID_STOP_ACTIONS = listOf(
+      "android.intent.action.STOP_BARCODE_RFID",
+      "android.intent.action.CLOSE_BARCODE_RFID",
+    )
+
+    private val SCANNER_2D_DISABLE_ACTIONS = listOf(
+      "ACTION_2DS_DISABLE",
+      "android.intent.action.BARCODELOCKSCANKEY",
+    )
+
+    private val SCANNER_2D_ENABLE_ACTIONS = listOf(
+      "ACTION_2DS_ENABLE",
+      "android.intent.action.BARCODEUNLOCKSCANKEY",
+    )
   }
 }

@@ -89,16 +89,23 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           );
         } catch (_) {
           // fallback: warm up toneAudio
-          try { await _toneAudio.setSourceBytes(b); } catch (_) {}
+          try {
+            await _toneAudio.setSourceBytes(b);
+          } catch (_) {}
         }
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initModule());
-      _wedgeFocus.requestFocus();
-      SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+      _refocusWedgeCapture();
     });
     _wedgeController.addListener(_onWedgeText);
+  }
+
+  void _refocusWedgeCapture() {
+    if (!mounted) return;
+    _wedgeFocus.requestFocus();
+    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
   }
 
   void _onWedgeText() {
@@ -107,9 +114,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // Debounce: scanner sends chars fast; wait 80ms after last char before parsing.
     _wedgeDebounce?.cancel();
     _wedgeDebounce = Timer(const Duration(milliseconds: 80), () {
-      final raw = _wedgeController.text.trim().toUpperCase().replaceAll(RegExp(r'[^0-9A-F]'), '');
+      final raw = _wedgeController.text
+          .trim()
+          .toUpperCase()
+          .replaceAll(RegExp(r'[^0-9A-F]'), '');
       _wedgeController.clear();
       if (raw.isNotEmpty) {
+        if (kDebugMode) print('[CountInventory] wedge epc=$raw');
         _ingestEpc(epc: raw, rssi: 0);
       }
     });
@@ -280,6 +291,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       // Disable 2D barcode trigger relay — prevent red laser in RFID count mode.
       // Trigger events are handled by our _triggerSub below (starts RFID, not 2D scan).
       await RfidVendorChannel.scannerDisableTriggerRelay();
+      await RfidVendorChannel.close2dBarcode();
+      await RfidVendorChannel.enableRfidFunctionMode();
+      _refocusWedgeCapture();
 
       // Count gear settings override global settings while inside Count.
       await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
@@ -294,10 +308,14 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       // which arrives here. _ingestEpc deduplicates, so double-reads are safe.
       await _barcodeSub?.cancel();
       _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((raw) {
-        _ingestEpc(epc: raw.trim().toUpperCase(), rssi: 0);
+        if (kDebugMode) print('[CountInventory] hardware_barcode raw=$raw');
+        final epc = _extractHardwareEpc(raw);
+        if (epc == null) return;
+        _ingestEpc(epc: epc, rssi: 0);
       }, onError: (_) {});
       await _triggerSub?.cancel();
       _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+        if (kDebugMode) print('[CountInventory] hardware_trigger event=$event');
         if (event == 'down') {
           if (_scanOn) {
             unawaited(_stopScan());
@@ -313,6 +331,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           _scanOn = false;
         });
       }
+      _refocusWedgeCapture();
     } finally {
       _connecting = false;
     }
@@ -340,7 +359,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   Future<void> _playBeep() async {
     final pool = _beepPool;
     if (pool != null) {
-      try { await pool.start(volume: 1.0); } catch (_) {}
+      try {
+        await pool.start(volume: 1.0);
+      } catch (_) {}
       return;
     }
     // Fallback: toneAudio when pool not yet ready.
@@ -456,6 +477,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   Future<void> _startScan() async {
     if (_scanOn) return;
+    _refocusWedgeCapture();
+    await RfidVendorChannel.close2dBarcode();
+    await RfidVendorChannel.enableRfidFunctionMode();
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
     // Use direct Chainway inventory — do NOT go through RfidManager which adds churn.
     var started = false;
@@ -464,9 +488,24 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       started = true;
     } catch (_) {}
     if (!mounted) return;
-    setState(() { _scanOn = started; });
+    setState(() {
+      _scanOn = started;
+    });
+    _refocusWedgeCapture();
     if (started) unawaited(_playStartTone());
     if (kDebugMode) print('[CountInventory] startScan started=$started');
+  }
+
+  String? _extractHardwareEpc(String raw) {
+    final compact = raw.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
+    if (compact.isEmpty) return null;
+    final exact = RegExp(r'^[0-9A-F]{8,}$').firstMatch(compact)?.group(0);
+    if (exact != null) return exact;
+    final matches = RegExp(r'([0-9A-F]{8,})').allMatches(compact).toList();
+    if (matches.isEmpty) return null;
+    matches.sort(
+        (a, b) => (b.group(1)?.length ?? 0).compareTo(a.group(1)?.length ?? 0));
+    return matches.first.group(1);
   }
 
   Future<void> _stopScan() async {
@@ -477,7 +516,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       await RfidVendorChannel.stopChainwayInventory();
     } catch (_) {}
     if (!mounted) return;
-    setState(() { _scanOn = false; });
+    setState(() {
+      _scanOn = false;
+    });
     unawaited(_playStopTone());
     if (kDebugMode) print('[CountInventory] stopScan done');
   }
@@ -630,9 +671,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                 focusNode: _wedgeFocus,
                 controller: _wedgeController,
                 autofocus: true,
+                autocorrect: false,
+                enableSuggestions: false,
                 enableInteractiveSelection: false,
                 showCursor: false,
-                keyboardType: TextInputType.none,
+                keyboardType: TextInputType.visiblePassword,
                 decoration: const InputDecoration.collapsed(hintText: ''),
               ),
             ),
@@ -640,239 +683,239 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           ColoredBox(
             color: Colors.white,
             child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(20.w, 2.h, 20.w, 0.h),
-              child: GestureDetector(
-                onTap: _locations.length > 1 ? _openLocationPicker : null,
-                behavior: HitTestBehavior.opaque,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _currentLocationName.toUpperCase(),
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2.4,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    if (_locations.length > 1) ...[
-                      SizedBox(width: 4.w),
-                      Icon(Icons.expand_more,
-                          size: 16.sp, color: AppColors.primary),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0.h),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final tileWidth = (constraints.maxWidth - 8) / 2;
-                  return Row(
-                    children: [
-                      _CountSummaryTile(
-                        label: 'Total EPCs',
-                        value: summaryValueText,
-                        icon: Icons.inventory_2_outlined,
-                        boxWidth: tileWidth,
-                        boxHeight: summaryBoxHeight,
-                        tileColor: tileColor,
-                        textColor: textColor,
-                        labelColor: summaryLabelColor,
-                        watermarkColor: watermarkColor,
-                      ),
-                      SizedBox(width: 8.w),
-                      _CountSummaryTile(
-                        label: 'Total SKUs',
-                        value: summarySkuValueText,
-                        icon: Icons.precision_manufacturing_outlined,
-                        boxWidth: tileWidth,
-                        boxHeight: summaryBoxHeight,
-                        tileColor: tileColor,
-                        textColor: textColor,
-                        labelColor: summaryLabelColor,
-                        watermarkColor: watermarkColor,
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            SizedBox(height: 12.h),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 0.h, 20.w, 0.h),
-                child: hasRealRows
-                    ? ListView.separated(
-                        padding: EdgeInsets.only(bottom: 12.h),
-                        itemCount: rows.length,
-                        separatorBuilder: (_, __) => SizedBox(height: 12.h),
-                        itemBuilder: (_, i) {
-                          final row = rows[i];
-                          final g = _groupedRows[row.epc];
-                          final isPreferredPrefix = row.epc.startsWith(
-                            _countEpcPrefixFilter,
-                          );
-                          final descParts = [
-                            if (g != null && g.name.isNotEmpty) g.name,
-                            if (g != null && g.color.isNotEmpty) g.color,
-                            if (g != null && g.size.isNotEmpty) g.size,
-                          ];
-                          final desc = descParts.isEmpty
-                              ? (isPreferredPrefix
-                                  ? 'ITEM DESCRIPTION'
-                                  : 'NON-F0A0B EPC')
-                              : descParts.join(' ');
-                          final defectText = row.duplicateSightings > 0
-                              ? 'DEFECTIVE DUPLICATE x${row.duplicateSightings + 1}'
-                              : '';
-                          final descWithDefect = defectText.isEmpty
-                              ? desc
-                              : '$desc • $defectText';
-                          return _CountItemContainer(
-                            rowKey: 'real-${row.epc}',
-                            sku: row.epc,
-                            description: descWithDefect,
-                            qtyText: 'x1',
-                            expandedLines: const [],
-                            onQtyTap: () =>
-                                _openEpcList(title: row.epc, epcs: [row.epc]),
-                            onDelete: () {
-                              setState(() {
-                                _epcRows.remove(row.epc);
-                                _groupedRows.remove(row.epc);
-                              });
-                              _syncDisplayedCounters();
-                            },
-                            confirmDelete: _confirmDeleteItem,
-                          );
-                        },
-                      )
-                    : Center(
-                        child: Text(
-                          'No items scanned yet',
-                          style: GoogleFonts.manrope(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(20.w, 2.h, 20.w, 0.h),
+                  child: GestureDetector(
+                    onTap: _locations.length > 1 ? _openLocationPicker : null,
+                    behavior: HitTestBehavior.opaque,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _currentLocationName.toUpperCase(),
+                          style: GoogleFonts.spaceGrotesk(
                             fontSize: 14.sp,
                             fontWeight: FontWeight.w700,
-                            color: const Color(0xFF5A6464),
+                            letterSpacing: 2.4,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        if (_locations.length > 1) ...[
+                          SizedBox(width: 4.w),
+                          Icon(Icons.expand_more,
+                              size: 16.sp, color: AppColors.primary),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0.h),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final tileWidth = (constraints.maxWidth - 8) / 2;
+                      return Row(
+                        children: [
+                          _CountSummaryTile(
+                            label: 'Total EPCs',
+                            value: summaryValueText,
+                            icon: Icons.inventory_2_outlined,
+                            boxWidth: tileWidth,
+                            boxHeight: summaryBoxHeight,
+                            tileColor: tileColor,
+                            textColor: textColor,
+                            labelColor: summaryLabelColor,
+                            watermarkColor: watermarkColor,
+                          ),
+                          SizedBox(width: 8.w),
+                          _CountSummaryTile(
+                            label: 'Total SKUs',
+                            value: summarySkuValueText,
+                            icon: Icons.precision_manufacturing_outlined,
+                            boxWidth: tileWidth,
+                            boxHeight: summaryBoxHeight,
+                            tileColor: tileColor,
+                            textColor: textColor,
+                            labelColor: summaryLabelColor,
+                            watermarkColor: watermarkColor,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                SizedBox(height: 12.h),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(20.w, 0.h, 20.w, 0.h),
+                    child: hasRealRows
+                        ? ListView.separated(
+                            padding: EdgeInsets.only(bottom: 12.h),
+                            itemCount: rows.length,
+                            separatorBuilder: (_, __) => SizedBox(height: 12.h),
+                            itemBuilder: (_, i) {
+                              final row = rows[i];
+                              final g = _groupedRows[row.epc];
+                              final isPreferredPrefix = row.epc.startsWith(
+                                _countEpcPrefixFilter,
+                              );
+                              final descParts = [
+                                if (g != null && g.name.isNotEmpty) g.name,
+                                if (g != null && g.color.isNotEmpty) g.color,
+                                if (g != null && g.size.isNotEmpty) g.size,
+                              ];
+                              final desc = descParts.isEmpty
+                                  ? (isPreferredPrefix
+                                      ? 'ITEM DESCRIPTION'
+                                      : 'NON-F0A0B EPC')
+                                  : descParts.join(' ');
+                              final defectText = row.duplicateSightings > 0
+                                  ? 'DEFECTIVE DUPLICATE x${row.duplicateSightings + 1}'
+                                  : '';
+                              final descWithDefect = defectText.isEmpty
+                                  ? desc
+                                  : '$desc • $defectText';
+                              return _CountItemContainer(
+                                rowKey: 'real-${row.epc}',
+                                sku: row.epc,
+                                description: descWithDefect,
+                                qtyText: 'x1',
+                                expandedLines: const [],
+                                onQtyTap: () => _openEpcList(
+                                    title: row.epc, epcs: [row.epc]),
+                                onDelete: () {
+                                  setState(() {
+                                    _epcRows.remove(row.epc);
+                                    _groupedRows.remove(row.epc);
+                                  });
+                                  _syncDisplayedCounters();
+                                },
+                                confirmDelete: _confirmDeleteItem,
+                              );
+                            },
+                          )
+                        : Center(
+                            child: Text(
+                              'No items scanned yet',
+                              style: GoogleFonts.manrope(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF5A6464),
+                              ),
+                            ),
+                          ),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 10.h),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 48,
+                          child: FilledButton(
+                            onPressed: () {
+                              if (_scanOn) {
+                                unawaited(_stopScan());
+                              } else {
+                                unawaited(_startScan());
+                              }
+                            },
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _scanOn
+                                  ? const Color(0xFFBF2E2E)
+                                  : const Color(0xFF0A7C80),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(2.r)),
+                              padding: EdgeInsets.symmetric(horizontal: 12.w),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      _scanOn ? 'STOP' : 'START',
+                                      style: GoogleFonts.spaceGrotesk(
+                                        fontSize: 16.sp,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.8,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 8.w),
+                                Icon(
+                                  _scanOn
+                                      ? Icons.stop_circle_outlined
+                                      : Icons.play_circle_outline,
+                                  size: 20.sp,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 10.h),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: () {
-                          if (_scanOn) {
-                            unawaited(_stopScan());
-                          } else {
-                            unawaited(_startScan());
-                          }
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _scanOn
-                              ? const Color(0xFFBF2E2E)
-                              : const Color(0xFF0A7C80),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(2.r)),
-                          padding: EdgeInsets.symmetric(horizontal: 12.w),
+                      SizedBox(width: 8.w),
+                      SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: FilledButton(
+                          onPressed: _resetScreenToDefault,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF6A7575),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(2.r)),
+                            padding: EdgeInsets.zero,
+                          ),
+                          child: Icon(Icons.restart_alt, size: 20.sp),
                         ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  _scanOn ? 'STOP' : 'START',
+                      ),
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: SizedBox(
+                          height: 48,
+                          child: FilledButton(
+                            onPressed: _openContinue,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF2BA3A3),
+                              disabledBackgroundColor: const Color(0xFF2BA3A3),
+                              foregroundColor: Colors.white,
+                              disabledForegroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(2.r)),
+                              padding: EdgeInsets.symmetric(horizontal: 12.w),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'CONTINUE',
                                   style: GoogleFonts.spaceGrotesk(
                                     fontSize: 16.sp,
                                     fontWeight: FontWeight.w800,
-                                    letterSpacing: 1.8,
+                                    letterSpacing: 1.5,
+                                    color: Colors.white,
                                   ),
                                 ),
-                              ),
+                                SizedBox(width: 8.w),
+                                Icon(Icons.arrow_forward,
+                                    size: 20.sp, color: Colors.white),
+                              ],
                             ),
-                            SizedBox(width: 8.w),
-                            Icon(
-                              _scanOn
-                                  ? Icons.stop_circle_outlined
-                                  : Icons.play_circle_outline,
-                              size: 20.sp,
-                            ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                  SizedBox(width: 8.w),
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: FilledButton(
-                      onPressed: _resetScreenToDefault,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF6A7575),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(2.r)),
-                        padding: EdgeInsets.zero,
-                      ),
-                      child: Icon(Icons.restart_alt, size: 20.sp),
-                    ),
-                  ),
-                  SizedBox(width: 8.w),
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: _openContinue,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF2BA3A3),
-                          disabledBackgroundColor: const Color(0xFF2BA3A3),
-                          foregroundColor: Colors.white,
-                          disabledForegroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(2.r)),
-                          padding: EdgeInsets.symmetric(horizontal: 12.w),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'CONTINUE',
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: 16.sp,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.5,
-                                color: Colors.white,
-                              ),
-                            ),
-                            SizedBox(width: 8.w),
-                            Icon(Icons.arrow_forward,
-                                size: 20.sp, color: Colors.white),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
         ],
       ),
     );
@@ -1074,36 +1117,35 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                     children: [
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 10, horizontal: 12),
                           child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.sku,
-                              maxLines: 2,
-                              overflow: TextOverflow.clip,
-                              softWrap: true,
-                              textAlign: TextAlign.left,
-                              style: GoogleFonts.robotoMono(
-                                fontSize: 16.sp,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textMain,
-                                letterSpacing: 0.0,
-                                height: 1.2,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.sku,
+                                softWrap: true,
+                                textAlign: TextAlign.left,
+                                style: GoogleFonts.robotoMono(
+                                  fontSize: 16.sp,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textMain,
+                                  letterSpacing: 0.0,
+                                  height: 1.2,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              widget.description,
-                              style: descStyle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.left,
-                            ),
-                          ],
-                        ),
+                              const SizedBox(height: 5),
+                              Text(
+                                widget.description,
+                                style: descStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.left,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       SizedBox(width: 10.w),
@@ -2182,8 +2224,8 @@ class _CountInventoryModuleSettings {
       if (m is! Map<String, dynamic>) return null;
       return _CountInventoryModuleSettings(
         rfidPowerDbm: ((m['rfidPowerDbm'] as num?)?.round() ?? 30).clamp(0, 30),
-        rssiDistance:
-            ((m['rssiDistance'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0), // 1.0 = -30 dB
+        rssiDistance: ((m['rssiDistance'] as num?)?.toDouble() ?? 1.0)
+            .clamp(0.0, 1.0), // 1.0 = -30 dB
       );
     } catch (_) {
       return null;

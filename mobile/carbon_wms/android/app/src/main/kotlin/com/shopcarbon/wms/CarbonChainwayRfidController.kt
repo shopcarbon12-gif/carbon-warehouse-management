@@ -81,11 +81,15 @@ class CarbonChainwayRfidController(private val context: Context) {
         val inst = getStaticInstance(cls)
         if (inst == null) {
           Log.w(TAG, "DeviceAPI getInstance returned null after eviction — using SenitronBridge logcat path")
+          MainActivity.enableScannerRfidMode(context, TAG)
         } else {
           uhfInstance = inst
           val ok = initUart(cls, inst)
           uartOwned = ok
-          if (!ok) Log.w(TAG, "UHFOpenAndConnect failed — using SenitronBridge logcat path")
+          if (!ok) {
+            Log.w(TAG, "UHFOpenAndConnect failed — using SenitronBridge logcat path")
+            MainActivity.enableScannerRfidMode(context, TAG)
+          }
           else Log.d(TAG, "UART owned — direct scan path active")
         }
 
@@ -120,10 +124,12 @@ class CarbonChainwayRfidController(private val context: Context) {
             startDrainLoop(cls, inst)
             Log.d(TAG, "startInventory: direct UART drain active")
           } else {
-            Log.w(TAG, "startInventory: UART not owned — SenitronBridge logcat path handles EPCs")
+            Log.w(TAG, "startInventory: UART not owned — starting system scanner RFID fallback")
+            startSystemScannerInventory("startInventory:fallback-uart")
           }
         } else {
-          Log.w(TAG, "startInventory: no DeviceAPI instance — SenitronBridge logcat path handles EPCs")
+          Log.w(TAG, "startInventory: no DeviceAPI instance — starting system scanner RFID fallback")
+          startSystemScannerInventory("startInventory:no-instance")
         }
         mainHandler.post { result.success(null) }
       } catch (e: Exception) {
@@ -139,6 +145,7 @@ class CarbonChainwayRfidController(private val context: Context) {
     drainThread?.interrupt(); drainThread = null
     val cls = uhfClass; val inst = uhfInstance
     if (cls != null && inst != null) invokeNoArgs(cls, inst, "UHFStopGet", "stopInventory", "stopInventoryTag")
+    if (!uartOwned || cls == null || inst == null) stopSystemScannerInventory("stopInventory")
     // No broadcasts to com.rscja.scanner — those crash it (SIGABRT observed in logcat).
     Log.d(TAG, "stopInventory")
   }
@@ -153,7 +160,21 @@ class CarbonChainwayRfidController(private val context: Context) {
     val r = object : BroadcastReceiver() {
       override fun onReceive(ctx: Context?, intent: Intent?) {
         if (intent?.action != "com.rscja.android.KEY_DOWN" || !nativeTriggerActive) return
-        executor.execute { if (scanning.get()) stopInventoryAsync() else startDrainLoop(uhfClass ?: return@execute, uhfInstance ?: return@execute) }
+        executor.execute {
+          if (scanning.get()) {
+            stopInventoryAsync()
+            return@execute
+          }
+          val cls = uhfClass
+          val inst = uhfInstance
+          if (cls != null && inst != null && uartOwned) {
+            scanning.set(true)
+            startDrainLoop(cls, inst)
+          } else {
+            scanning.set(true)
+            startSystemScannerInventory("native-trigger")
+          }
+        }
       }
     }
     registerReceiver(r, IntentFilter("com.rscja.android.KEY_DOWN"))?.let { triggerReceiver = it }
@@ -240,6 +261,16 @@ class CarbonChainwayRfidController(private val context: Context) {
     }
 
     Log.d(TAG, "UHFOpenAndConnect not found — UHFInit-only path OK"); return true
+  }
+
+  private fun startSystemScannerInventory(reason: String) {
+    Log.d(TAG, "system-scanner start: $reason")
+    MainActivity.startSystemScannerInventory(context, TAG)
+  }
+
+  private fun stopSystemScannerInventory(reason: String) {
+    Log.d(TAG, "system-scanner stop: $reason")
+    MainActivity.stopSystemScannerInventory(context, TAG)
   }
 
   // ── Drain loop (Senitron p3/b.java inner class `a`) ─────────────────────────
@@ -440,6 +471,7 @@ class CarbonChainwayRfidController(private val context: Context) {
       // Only stop/free the native SDK — no broadcasts to com.rscja.scanner.
       invokeNoArgs(cls, inst, "UHFStopGet", "UHFCloseAndDisconnect", "UHFFree", "stopInventory")
     }
+    stopSystemScannerInventory("disconnect")
     uartOwned = false
     uhfClass = null; uhfInstance = null
   }
@@ -447,7 +479,7 @@ class CarbonChainwayRfidController(private val context: Context) {
   private fun emitEpc(hex: String, rssi: Int?) {
     val up = hex.uppercase().replace(Regex("[^0-9A-F]"), "")
     if (up.isEmpty()) return
-    seenEpcs.add(up)
+    if (!seenEpcs.add(up)) return  // deduplicate within session
     Log.d(TAG, "EPC: $up")
     val sink = tagSink ?: return
     mainHandler.post { sink.success(mapOf("epc" to up, "rssi" to (rssi ?: 0))) }

@@ -79,6 +79,7 @@ class CarbonHardwareBarcodeRelay(
           val s = extractBarcode(intent) ?: return
           val t = s.trim()
           if (t.isEmpty()) return
+          Log.d(TAG, "barcode event action=${intent.action} data=$t")
           // Keep OEM UHF inventory running for rapid multi-tag reads; idle timeout stops the session.
           // Stopping after each decode breaks continuous RFID (only ever one tag per START).
           resetScanIdleTimeout()
@@ -176,7 +177,10 @@ class CarbonHardwareBarcodeRelay(
         KEY_DOWN_ACTION,
         KEY_UP_ACTION,
         "android.intent.action.BARCODEOUTPUT",          // primary C72E UHF output action
+        "android.intent.action.OUTPUT_BARCODE_RFID",
         "com.rscja.scanner.action.OUTPUT_BARCODE_RFID",
+        "com.rscja.android.OVER_RESULT",
+        "com.rscja.android.OVERDATA_RESULT",
         "com.rscja.scanner.action.SCAN_RESULT_BROADCAST",
         "android.intent.action.SCANRESULT",
         "android.intent.action.SCAN_RESULT_BROADCAST",

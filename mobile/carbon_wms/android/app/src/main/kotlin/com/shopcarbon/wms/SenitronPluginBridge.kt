@@ -7,6 +7,7 @@ import android.util.Log
 import io.flutter.plugin.common.EventChannel
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.util.concurrent.TimeUnit
 
 /**
  * Reads DeviceAPI_UHF logcat output in a background thread to extract EPC strings.
@@ -24,6 +25,12 @@ class SenitronPluginBridge(
   private val TAG = "SenitronBridge"
 
   var tagSink: EventChannel.EventSink? = null
+
+  private val seenEpcs = java.util.Collections.newSetFromMap(
+    java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+  )
+
+  fun clearSeenEpcs() { seenEpcs.clear() }
 
   @Volatile private var running = false
   private var logcatThread: Thread? = null
@@ -47,9 +54,10 @@ class SenitronPluginBridge(
   }
 
   private fun runLogcat() {
+    var proc: Process? = null
     try {
       // -T 1: start from last line (no backlog), -s hqs:V to only get hqs verbose lines.
-      val proc = Runtime.getRuntime().exec(arrayOf("logcat", "-T", "1", "-s", "hqs:V"))
+      proc = Runtime.getRuntime().exec(arrayOf("logcat", "-T", "1", "-s", "hqs:V"))
       val reader = BufferedReader(InputStreamReader(proc.inputStream))
       while (running) {
         val line = reader.readLine() ?: break
@@ -60,16 +68,31 @@ class SenitronPluginBridge(
         val payload = line.substring(colonIdx + 1).trim()
         val epc = payload.substringBefore("------epc").trim()
         val clean = epc.uppercase().replace(Regex("[^0-9A-F]"), "")
+        if (clean.isEmpty()) continue
+        if (!seenEpcs.add(clean)) continue  // deduplicate within session
         Log.d(TAG, "logcat EPC: $clean")
         val sink = tagSink ?: continue
         val payload2 = mapOf("epc" to clean, "rssi" to 0)
         mainHandler.post { sink.success(payload2) }
       }
-      proc.destroy()
     } catch (e: InterruptedException) {
       Log.d(TAG, "logcat thread interrupted")
     } catch (e: Exception) {
       Log.e(TAG, "logcat bridge error: ${e.message}", e)
+    } finally {
+      val p = proc
+      if (p != null) {
+        runCatching {
+          if (!p.waitFor(250, TimeUnit.MILLISECONDS)) {
+            p.destroy()
+          }
+          val exit = runCatching { p.exitValue() }.getOrDefault(Int.MIN_VALUE)
+          val stderr = p.errorStream.bufferedReader().use { it.readText().trim() }
+          if (exit != Int.MIN_VALUE || stderr.isNotEmpty()) {
+            Log.w(TAG, "logcat process ended exit=$exit stderr=${stderr.ifEmpty { "<empty>" }}")
+          }
+        }
+      }
     }
     Log.d(TAG, "logcat bridge thread exited")
   }
