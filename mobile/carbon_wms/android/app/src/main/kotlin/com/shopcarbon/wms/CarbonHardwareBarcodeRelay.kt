@@ -62,10 +62,9 @@ class CarbonHardwareBarcodeRelay(
       object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
           if (intent == null) return
-          if (intent.action == "com.rscja.android.ScannerWrite") {
-            Log.d(TAG, "ScannerWrite extras=${extrasSummary(intent)}")
-          }
-          when (intent.action) {
+          val rxAction = intent.action ?: return
+          Log.d(TAG, "RX action=$rxAction extras=${extrasSummary(intent)}")
+          when (rxAction) {
             KEY_DOWN_ACTION -> {
               if (!triggerRelayEnabled) return
               if (scanActive) {
@@ -81,7 +80,7 @@ class CarbonHardwareBarcodeRelay(
               return
             }
           }
-          val s = if (intent.action == "com.rscja.android.ScannerWrite") {
+          val s = if (rxAction == "com.rscja.android.ScannerWrite") {
             extractScannerWriteEpc(intent) ?: return
           } else {
             extractBarcode(intent) ?: return
@@ -271,7 +270,7 @@ class CarbonHardwareBarcodeRelay(
         "com.rscja.scanner.action.SCAN_RESULT_BROADCAST",
         "android.intent.action.SCANRESULT",
         "android.intent.action.SCAN_RESULT_BROADCAST",
-        "android.intent.action.SCAN_RESULT_BROADCAST_RFID",
+        // "android.intent.action.SCAN_RESULT_BROADCAST_RFID" excluded — routing metadata only
         "com.rscja.android.DATA_RESULT",
         "com.rscja.android.ScannerWrite",
         "android.intent.ACTION_DECODE_DATA",

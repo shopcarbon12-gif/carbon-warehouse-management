@@ -56,7 +56,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   late final AudioPlayer _toneAudio;
   Uint8List? _scanBeepBytes;
   DateTime? _lastBeepAt;
-  bool _chainwayConnected = false;
   int _displayEpcCount = 0;
   int _displaySkuCount = 0;
   String? _previousScanContext;
@@ -328,20 +327,20 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _playBeep() async {
+    final now = DateTime.now();
+    final last = _lastBeepAt;
+    if (last != null && now.difference(last).inMilliseconds < 80) return;
+    _lastBeepAt = now;
     final pool = _beepPool;
     if (pool != null) {
       try {
         await pool.start(volume: 1.0);
+        return;
       } catch (_) {}
-      return;
     }
     // Fallback: toneAudio when pool not yet ready.
     final bytes = _scanBeepBytes;
     if (bytes == null) return;
-    final now = DateTime.now();
-    final last = _lastBeepAt;
-    if (last != null && now.difference(last).inMilliseconds < 65) return;
-    _lastBeepAt = now;
     try {
       await _toneAudio.stop();
       await _toneAudio.play(BytesSource(bytes), volume: 1.0);
@@ -447,25 +446,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   Future<void> _startScan() async {
     if (_scanOn) return;
     await RfidVendorChannel.clearChainwaySeenEpcs();
-    await RfidVendorChannel.close2dBarcode();
-    await RfidVendorChannel.enableRfidFunctionMode();
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
-    // Connect once to register the EPC broadcast receiver in native.
-    // Do NOT call startChainwayInventory — on MTK the firmware owns the scan
-    // cycle via the physical trigger; calling startInventory fights it and
-    // causes the scan session to lock up. We just listen passively.
-    try {
-      if (!_chainwayConnected) {
-        await RfidVendorChannel.connectChainway();
-        _chainwayConnected = true;
-      }
-    } catch (_) {
-      _chainwayConnected = false;
-    }
+    // connectChainway owns UART and auto-starts drain loop; idempotent if already owned.
+    try { await RfidVendorChannel.connectChainway(); } catch (_) {}
+    try { await RfidVendorChannel.startChainwayInventory(); } catch (_) {}
     if (!mounted) return;
     setState(() { _scanOn = true; });
     unawaited(_playStartTone());
-    if (kDebugMode) print('[CountInventory] startScan: receiver armed, firmware owns trigger');
   }
 
   String? _extractHardwareEpc(String raw) {
@@ -484,12 +471,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!_scanOn) return;
     _scanInactivityTimer?.cancel();
     _rfidKeepAliveTimer?.cancel();
-    // Do NOT call stopChainwayInventory — firmware owns the scan cycle on MTK.
-    // Stopping via broadcast kills the scanner service state and breaks the trigger.
+    // Stop drain loop only — no STOP_BARCODE_RFID / DISABLE broadcasts.
+    // UART stays owned so next _startScan restarts the drain loop instantly.
+    try { await RfidVendorChannel.stopChainwayInventory(); } catch (_) {}
     if (!mounted) return;
     setState(() { _scanOn = false; });
     unawaited(_playStopTone());
-    if (kDebugMode) print('[CountInventory] stopScan done');
   }
 
   Future<void> _openEpcList({
@@ -706,19 +693,14 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                             itemBuilder: (_, i) {
                               final row = rows[i];
                               final g = _groupedRows[row.epc];
-                              final isPreferredPrefix = row.epc.startsWith(
-                                _countEpcPrefixFilter,
-                              );
                               final descParts = [
                                 if (g != null && g.name.isNotEmpty) g.name,
                                 if (g != null && g.color.isNotEmpty) g.color,
                                 if (g != null && g.size.isNotEmpty) g.size,
                               ];
-                              final desc = descParts.isEmpty
-                                  ? (isPreferredPrefix
-                                      ? 'ITEM DESCRIPTION'
-                                      : 'NON-F0A0B EPC')
-                                  : descParts.join(' ');
+                              final desc = descParts.isNotEmpty
+                                  ? descParts.join(' ')
+                                  : 'ITEM DESCRIPTION';
                               final defectText = '';
                               final descWithDefect = defectText.isEmpty
                                   ? desc
@@ -2196,6 +2178,30 @@ class _GroupedRow {
   String vendor = '';
   bool cached = false;
   int lastRssi = -99;
+}
+
+class _DecodedEpc {
+  const _DecodedEpc({
+    required this.prefix,
+    required this.systemId,
+    required this.serial,
+  });
+
+  final String prefix;
+  final int systemId;
+  final int serial;
+}
+
+_DecodedEpc? _decodeEpc(String epc) {
+  final s = epc.toUpperCase().replaceAll(RegExp(r'[^0-9A-F]'), '');
+  if (s.length != 24) return null;
+  final prefix = s.substring(0, 5);
+  final systemIdHex = s.substring(5, 15);
+  final serialHex = s.substring(15, 24);
+  final systemId = int.tryParse(systemIdHex, radix: 16);
+  final serial = int.tryParse(serialHex, radix: 16);
+  if (systemId == null || serial == null) return null;
+  return _DecodedEpc(prefix: prefix, systemId: systemId, serial: serial);
 }
 
 String _csv(String v) {

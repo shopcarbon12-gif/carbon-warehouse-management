@@ -130,6 +130,8 @@ class CarbonChainwayRfidController(private val context: Context) {
     }
     val filter = IntentFilter().apply {
       EPC_BROADCAST_ACTIONS.forEach { addAction(it) }
+      // com.rscja.android.ScannerWrite is a file-copy notification, never carries EPC data.
+      // Intentionally excluded from filter to avoid noise.
     }
     registerReceiver(r, filter)?.let {
       scannerWriteReceiver = it
@@ -151,10 +153,19 @@ class CarbonChainwayRfidController(private val context: Context) {
   // ── Connect ─────────────────────────────────────────────────────────────────
 
   fun connectAsync(onDone: (Throwable?) -> Unit) {
-    Log.d(TAG, "connectAsync ENTERED")
+    Log.d(TAG, "connectAsync ENTERED uartOwned=$uartOwned")
     executor.execute {
       try {
-        disconnectSync()
+        // If UART already owned, nothing to do.
+        if (uartOwned) {
+          Log.d(TAG, "connectAsync: UART already owned — skipping reconnect")
+          mainHandler.post { onDone(null) }
+          return@execute
+        }
+
+        // Do NOT teardown on reconnect — UHFCloseAndDisconnect releases /dev/ttyMT1
+        // back to the scanner service, after which UHFInit always returns -1.
+        // Only dispose() tears down; here we just attempt to (re)acquire.
 
         // Pre-flight: only attempt direct UART if ScannerUtility can FUNCTIONALLY release it
         // AND this SoC is not MTK. MTK-based Chainway devices (C72E etc.) have ScannerUtility_mtk
@@ -181,26 +192,28 @@ class CarbonChainwayRfidController(private val context: Context) {
           return@execute
         }
 
-        // ScannerUtility present — attempt cooperative UART takeover
+        // ScannerUtility present — attempt direct UART takeover without eviction.
+        // On MTK C72E, disableFunction() is a no-op stub that doesn't release /dev/ttyMT1.
+        // Calling it wakes the scanner service. Instead, configure broadcast routing first
+        // (non-destructive), then attempt UART open directly — if the scanner service is
+        // idle the port is available; if not, we fall back to broadcast.
         scannerUtilityConfigureBroadcast()
-        val released = scannerUtilityReleaseUhf()
-        if (!released) {
-          Log.w(TAG, "ScannerUtility eviction failed — broadcast-only path")
-          connectBroadcastOnly(onDone)
-          return@execute
-        }
 
         uhfInstance = inst
         uartOwned = initUart(cls, inst)
         if (!uartOwned) {
-          Log.w(TAG, "initUart failed — recovering scanner and using broadcast path")
-          recoverScannerService()
+          Log.w(TAG, "initUart failed — broadcast-only path (scanner service holds UART)")
           connectBroadcastOnly(onDone)
           return@execute
         }
 
         Log.d(TAG, "UART owned — direct scan path active")
         lastError = null
+        // Auto-start drain loop immediately — don't wait for Flutter startInventory call.
+        scanning.set(true)
+        applyPower()
+        startDrainLoop(cls, inst)
+        Log.d(TAG, "drain loop auto-started after UART acquire")
         mainHandler.post { onDone(null) }
       } catch (e: Throwable) {
         lastError = e.message ?: e.javaClass.simpleName
@@ -239,25 +252,24 @@ class CarbonChainwayRfidController(private val context: Context) {
   // ── Inventory ────────────────────────────────────────────────────────────────
 
   fun startInventoryFlutterResult(result: MethodChannel.Result) {
-    Log.w(TAG, "startInventoryFlutterResult ENTERED uartOwned=$uartOwned uhfClass=${uhfClass?.simpleName}")
-    if (scanning.getAndSet(true)) { mainHandler.post { result.success(null) }; return }
+    Log.d(TAG, "startInventoryFlutterResult uartOwned=$uartOwned scanning=${scanning.get()}")
     executor.execute {
       try {
         val cls = uhfClass
         val inst = uhfInstance
         if (cls != null && inst != null && uartOwned) {
-          applyPower()
-          startDrainLoop(cls, inst)
-          Log.d(TAG, "startInventory: direct UART drain active")
-        } else {
-          // UART not owned — keep native UHF alive via ScannerUtility start only.
-          // Avoid repeated START/ENABLE action storms from system fallback broadcasts.
-          Log.w(TAG, "startInventory: UART not owned — startScan via ScannerUtility")
-          scannerUtilityStartUhfScan()
+          if (!scanning.getAndSet(true)) {
+            // Drain loop was stopped — restart it.
+            applyPower()
+            startDrainLoop(cls, inst)
+            Log.d(TAG, "startInventory: drain loop restarted")
+          } else {
+            Log.d(TAG, "startInventory: drain loop already running")
+          }
         }
+        // No broadcast fallback — STOP/START broadcasts cause ScannerWrite churn.
         mainHandler.post { result.success(null) }
       } catch (e: Exception) {
-        scanning.set(false)
         lastError = e.message
         mainHandler.post { result.error("INVENTORY_FAILED", e.message, null) }
       }
@@ -266,25 +278,16 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   fun stopInventoryAsync() {
     if (!scanning.getAndSet(false)) return
+    // Interrupt drain thread immediately — do NOT queue through executor to avoid backlog delay.
     drainThread?.interrupt(); drainThread = null
+    // UHFStopGet may block briefly on UART; run off main thread so UI responds instantly.
     val cls = uhfClass; val inst = uhfInstance
     if (cls != null && inst != null && uartOwned) {
-      invokeNoArgs(cls, inst, "UHFStopGet", "stopInventoryTag", "stopInventory")
-    } else {
-      // Broadcast-only path — send stop broadcasts to firmware scanner service.
-      for (action in UHF_STOP_ACTIONS) {
-        runCatching {
-          context.sendBroadcast(Intent(action).apply {
-            setPackage("com.rscja.scanner")
-            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-          })
-          context.sendBroadcast(Intent(action).apply {
-            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-          })
-          Log.d(TAG, "UHF stop broadcast -> $action")
-        }
-      }
+      executor.execute { invokeNoArgs(cls, inst, "UHFStopGet", "stopInventoryTag", "stopInventory") }
     }
+    // Never send STOP_BARCODE_RFID / CLOSE_BARCODE_RFID / DISABLE broadcasts —
+    // they trigger the scanner service to reconfigure itself and churn ScannerWrite
+    // config file copies, which pollute the broadcast stream and can reset UART state.
     Log.d(TAG, "stopInventory uartOwned=$uartOwned")
   }
 
@@ -297,16 +300,17 @@ class CarbonChainwayRfidController(private val context: Context) {
     nativeTriggerActive = true
     val r = object : BroadcastReceiver() {
       override fun onReceive(ctx: Context?, intent: Intent?) {
-        if (intent?.action != "com.rscja.android.KEY_DOWN" || !nativeTriggerActive) return
-        executor.execute {
-          if (scanning.get()) {
-            stopInventoryAsync()
-            return@execute
-          }
-          val cls = uhfClass; val inst = uhfInstance
-          if (cls != null && inst != null && uartOwned) {
-            scanning.set(true)
+        if (!nativeTriggerActive) return
+        val action = intent?.action ?: return
+        if (action != "com.rscja.android.KEY_DOWN") return
+        // When UART is owned, ensure drain loop is running on every trigger press.
+        // Never stop on KEY_DOWN — let Flutter UI control stop/start state.
+        val cls = uhfClass; val inst = uhfInstance
+        if (cls != null && inst != null && uartOwned && !scanning.getAndSet(true)) {
+          executor.execute {
+            applyPower()
             startDrainLoop(cls, inst)
+            Log.d(TAG, "native trigger: drain loop restarted")
           }
         }
       }
@@ -337,17 +341,12 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   // ── ScannerUtility cooperative eviction ──────────────────────────────────────
 
-  // MTK SoC gate + ScannerUtility functional check combined.
-  // MTK-based Chainway firmware (C72E, HC720*) has ScannerUtility_mtk that binds correctly
-  // but disableFunction(FUNCTION_UHF) doesn't actually release /dev/ttyMT1. Force broadcast-only
-  // on MTK until we have an empirical probe (UartCapabilityProbe) to verify per firmware build.
   private fun canOwnUart(): Boolean {
     val hw = android.os.Build.HARDWARE ?: ""
     val board = android.os.Build.BOARD ?: ""
     val isMtk = hw.startsWith("mt", ignoreCase = true) || board.startsWith("mt", ignoreCase = true)
     if (isMtk) {
-      Log.i(TAG, "MTK SoC detected (HARDWARE=$hw BOARD=$board) — forcing broadcast-only RFID mode")
-      return false
+      Log.i(TAG, "MTK SoC detected (HARDWARE=$hw BOARD=$board) — attempting direct UART probe")
     }
     return scannerUtilityFunctional()
   }
@@ -452,6 +451,21 @@ class CarbonChainwayRfidController(private val context: Context) {
         }
       }
 
+      // setUHFMode(ctx, 1) — put scanner service into UHF continuous inventory mode
+      // Mode 0 = single scan, 1 = continuous. Must be called before trigger press.
+      runCatching {
+        cls.getMethod("setUHFMode", Context::class.java, Int::class.javaPrimitiveType)
+          .invoke(inst, context, 1)
+        Log.d(TAG, "ScannerUtility.setUHFMode(ctx, 1)")
+      }.onFailure { Log.w(TAG, "setUHFMode failed: ${it.message}") }
+
+      // setRFIDEncodingFormat(ctx, 0) — raw EPC hex output (format 5 = unknown/broken)
+      runCatching {
+        cls.getMethod("setRFIDEncodingFormat", Context::class.java, Int::class.javaPrimitiveType)
+          .invoke(inst, context, 0)
+        Log.d(TAG, "ScannerUtility.setRFIDEncodingFormat(ctx, 0)")
+      }.onFailure { Log.w(TAG, "setRFIDEncodingFormat failed: ${it.message}") }
+
       // setContinuousScanRFID — multi-tag continuous mode
       runCatching {
         cls.getMethod("setContinuousScanRFID", Context::class.java, Boolean::class.javaPrimitiveType)
@@ -465,6 +479,10 @@ class CarbonChainwayRfidController(private val context: Context) {
           .invoke(inst, context, 0)
         Log.d(TAG, "ScannerUtility.setContinuousScanIntervalTimeRFID(0)")
       }.onFailure { Log.w(TAG, "setContinuousScanIntervalTimeRFID failed: ${it.message}") }
+
+      // NOTE: do NOT call enableFunction(ctx, FUNCTION_UHF) here.
+      // It wakes the scanner service which immediately re-acquires /dev/ttyMT1,
+      // causing all subsequent UHFOpenAndConnect calls to time out (-98).
 
     } catch (e: Throwable) {
       Log.w(TAG, "scannerUtilityConfigureBroadcast error: ${e.message}", e)
@@ -556,6 +574,19 @@ class CarbonChainwayRfidController(private val context: Context) {
   // ── UART init ───────────────────────────────────────────────────────────────
 
   private fun initUart(cls: Class<*>, inst: Any): Boolean {
+    // Retry up to 3 times with 300ms gaps — scanner service can reacquire the port
+    // within milliseconds after another app releases it, so immediate retry often wins.
+    for (attempt in 1..3) {
+      if (attempt > 1) {
+        Log.d(TAG, "initUart retry $attempt after 300ms")
+        Thread.sleep(300)
+      }
+      if (initUartOnce(cls, inst)) return true
+    }
+    return false
+  }
+
+  private fun initUartOnce(cls: Class<*>, inst: Any): Boolean {
     val appCtx = context.applicationContext
     val uartPaths = listOf("", "/dev/ttyMT1", "/dev/ttyMT0", "/dev/ttyMT2")
 
@@ -582,7 +613,7 @@ class CarbonChainwayRfidController(private val context: Context) {
       mOpen.isAccessible = true
       for (uart in uartPaths) {
         val args = mOpen.parameterTypes.map { t -> if (t == String::class.java) uart else null }.toTypedArray()
-        val r = timedInvoke(5000) { (mOpen.invoke(inst, *args) as? Number)?.toInt() ?: -1 }
+        val r = timedInvoke(1500) { (mOpen.invoke(inst, *args) as? Number)?.toInt() ?: -1 }
         Log.d(TAG, "UHFOpenAndConnect('$uart') -> $r")
         if (r >= 0) { Log.d(TAG, "UART takeover complete via UHFOpenAndConnect"); return true }
       }
@@ -626,9 +657,10 @@ class CarbonChainwayRfidController(private val context: Context) {
       Log.d(TAG, "${mInv.name}() -> $r")
     }
 
+    // UHFGetReceived_EX2 signature: int UHFGetReceived_EX2(byte[]) — must pass ByteArray not CharArray
     val mGet = cls.methods.firstOrNull { it.name == "UHFGetReceived_EX2" }
     mGet?.isAccessible = true
-    val buf = CharArray(256)
+    val buf = ByteArray(256)
 
     val t = Thread {
       Log.d(TAG, "drain loop started, mGet=${mGet?.name}")
@@ -637,12 +669,12 @@ class CarbonChainwayRfidController(private val context: Context) {
       while (scanning.get()) {
         try {
           if (mGet != null) {
-            buf.fill('\u0000')
+            buf.fill(0)
             val cnt = runCatching { (mGet.invoke(inst, buf) as? Number)?.toInt() ?: -1 }.getOrElse { -1 }
             if (cnt > 0) {
               empty = 0
-              val epc = parseEpcFromBuf(buf)
-              if (epc != null) {
+              val epc = parseEpcFromBytes(buf)
+              if (epc != null && seenEpcs.add(epc)) {
                 emitEpc(epc, null)
                 if (++total % 10 == 0) Log.d(TAG, "drain: $total EPCs emitted")
               }
@@ -663,19 +695,36 @@ class CarbonChainwayRfidController(private val context: Context) {
     drainThread = t
   }
 
-  private fun parseEpcFromBuf(buf: CharArray): String? {
-    val bytes = buf.map { it.code and 0xFF }
-    val lastNz = bytes.take(64).indexOfLast { it != 0 }
-    if (lastNz < 0) return null
-    val hex = bytes.take(lastNz + 1).joinToString("") { "%02X".format(it) }
-    val clean = hex.replace(Regex("[^0-9A-F]"), "")
-    return if (clean.isNotEmpty()) clean else null
+  private fun parseEpcFromBytes(buf: ByteArray): String? {
+    // UHFGetReceived_EX2 buffer layout (Chainway MTK UART protocol):
+    //   byte 0    : total data length in bytes (e.g. 0x0E = 14)
+    //   bytes 1-2 : PC word (EPC header, e.g. 0x3000 = 96-bit, 0x3400 = 96-bit + extended)
+    //   bytes 3.. : EPC bytes — length = (PC[0] >> 3) * 2 bytes, typically 12 bytes for EPC-96
+    //   trailing  : RSSI / antenna / CRC bytes
+    if (buf.isEmpty() || buf[0] == 0.toByte()) return null
+    val totalLen = buf[0].toInt() and 0xFF
+    if (totalLen < 3 || totalLen + 1 > buf.size) return null
+    val pc = ((buf[1].toInt() and 0xFF) shl 8) or (buf[2].toInt() and 0xFF)
+    // PC word bits [15:11] = EPC length in words (2 bytes each)
+    val epcWords = (pc shr 11) and 0x1F
+    val epcBytes = if (epcWords > 0) epcWords * 2 else 12  // default 12 bytes (EPC-96)
+    val epcStart = 3
+    val epcEnd = epcStart + epcBytes
+    if (epcEnd > totalLen + 1 || epcEnd > buf.size) return null
+    val epc = buf.slice(epcStart until epcEnd).joinToString("") { "%02X".format(it.toInt() and 0xFF) }
+    return if (epc.length >= 16) epc else null
   }
 
   // ── Class resolution ─────────────────────────────────────────────────────────
 
   fun resolveUhfClass(): Class<*>? {
     Log.d(TAG, "resolveUhfClass ENTERED")
+    // Delete any cached DEX from previous installs — the old bundled chainway_uhf.dex
+    // had an internal 400ms broadcast loop that spams START_BARCODE_RFID indefinitely.
+    runCatching {
+      val cached = java.io.File(context.applicationContext.cacheDir, "chainway_uhf.dex")
+      if (cached.exists()) { cached.delete(); Log.d(TAG, "deleted stale chainway_uhf.dex from cache") }
+    }
     val classNames = listOf(
       "com.rscja.deviceapi.DeviceAPI",
       "com.rscja.team.mtk.deviceapi.DeviceAPI",
@@ -716,17 +765,7 @@ class CarbonChainwayRfidController(private val context: Context) {
       } catch (e: Throwable) { Log.w(TAG, "PathClassLoader($apkPath) failed: ${e.message}") }
     }
 
-    try {
-      val appCtx = context.applicationContext
-      val dexFile = java.io.File(appCtx.cacheDir, "chainway_uhf.dex")
-      if (!dexFile.exists()) {
-        appCtx.assets.open("chainway_uhf.dex").use { i -> dexFile.outputStream().use { o -> i.copyTo(o) } }
-      }
-      val cl = dalvik.system.DexClassLoader(dexFile.absolutePath, optDir.absolutePath, nativeLibPath, appCtx.classLoader)
-      for (n in classNames) {
-        try { return cl.loadClass(n).also { Log.d(TAG, "DexClassLoader(bundled): $n") } } catch (_: Throwable) {}
-      }
-    } catch (e: Throwable) { Log.w(TAG, "DexClassLoader(bundled) failed: ${e.message}") }
+    // Bundled DEX fallback removed — it contained a broken internal broadcast loop.
 
     return null
   }
@@ -858,13 +897,14 @@ class CarbonChainwayRfidController(private val context: Context) {
     // scanner_etBroadcastRFID field — confirmed on C72E MTK after trigger press).
     private val EPC_BROADCAST_ACTIONS = setOf(
       SCANNER_WRITE_EPC_ACTION,
-      "com.rscja.android.ScannerWrite",
-      "android.intent.action.scanner.RFID",   // C72E MTK firmware default
-      "android.intent.action.SCAN_RESULT_BROADCAST_RFID",
+      // Excluded: "com.rscja.android.ScannerWrite" — file-copy notification only
+      // Excluded: "android.intent.action.SCAN_RESULT_BROADCAST_RFID" — routing metadata
+      //           (carries resultAction/data fields pointing to the real action, not EPC)
+      "android.intent.action.scanner.RFID",       // C72E MTK firmware default EPC output
       "android.intent.action.SCAN_RESULT_BROADCAST",
       "com.rscja.scanner.action.OUTPUT_BARCODE_RFID",
       "android.intent.action.BARCODEOUTPUT",
-      "com.rscja.android.OVER_RESULT",         // seen on some C72E builds alongside BARCODEOUTPUT
+      "com.rscja.android.OVER_RESULT",
       "com.rscja.android.OVERDATA_RESULT",
     )
 
