@@ -280,28 +280,19 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       await _triggerSub?.cancel();
       _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
         if (kDebugMode) print('[CountInventory] hardware_trigger event=$event');
-        if (event == 'down') {
-          final now = DateTime.now();
-          final last = _lastTriggerToggleAt;
-          if (last != null && now.difference(last).inMilliseconds < 300) return;
-          _lastTriggerToggleAt = now;
-          if (_scanOn) {
-            unawaited(_stopScan());
-          } else {
-            unawaited(_startScan());
-          }
+        if (event == 'down' && !_scanOn) {
+          unawaited(_startScan());
+        } else if (event == 'up' && _scanOn) {
+          unawaited(_stopScan());
         }
       }, onError: (_) {});
 
-      // Keep scanner transport warm on entry; do not tear down native RFID mode here.
+      // Keep scanner transport warm on entry; scan starts only via START button or trigger.
       if (mounted) {
         setState(() {
           _scanOn = false;
         });
       }
-      // Enter Count in active scan state to avoid zero-read sessions when trigger
-      // events are noisy or delayed on rugged hardware.
-      unawaited(_startScan());
     } finally {
       _connecting = false;
     }

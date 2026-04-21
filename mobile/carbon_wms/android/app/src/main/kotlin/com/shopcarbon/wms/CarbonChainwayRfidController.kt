@@ -7,6 +7,9 @@ import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.rscja.deviceapi.RFIDWithUHFUART
+import com.rscja.deviceapi.entity.UHFTAGInfo
+import com.rscja.deviceapi.interfaces.IUHFInventoryCallback
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
@@ -39,6 +42,10 @@ class CarbonChainwayRfidController(private val context: Context) {
   private val requestedPowerDbm = AtomicInteger(30)
   @Volatile private var drainThread: Thread? = null
   @Volatile private var uartOwned = false
+  @Volatile private var uhfReader: RFIDWithUHFUART? = null
+  @Volatile private var uhfInitialized: Boolean = false
+  @Volatile private var uhfInventoryActive: Boolean = false
+  private val uhfLock = Any()
 
   // Cached PathClassLoader on keyboard.apk — shared by DeviceAPI and ScannerUtility
   @Volatile private var keyboardApkLoader: ClassLoader? = null
@@ -150,6 +157,48 @@ class CarbonChainwayRfidController(private val context: Context) {
     }
   }
 
+  // ── Direct UHF SDK ───────────────────────────────────────────────────────────
+
+  private fun initUhfReaderDirect(): Boolean {
+    synchronized(uhfLock) {
+      if (uhfInitialized && uhfReader != null) {
+        Log.d(TAG, "UHF reader already initialized")
+        return true
+      }
+      return try {
+        val instance = RFIDWithUHFUART.getInstance()
+        if (instance == null) {
+          Log.w(TAG, "RFIDWithUHFUART.getInstance() returned null")
+          return false
+        }
+        val initOk = instance.init(context)
+        Log.d(TAG, "RFIDWithUHFUART.init(context) -> $initOk")
+        if (!initOk) {
+          Log.w(TAG, "RFIDWithUHFUART init failed")
+          return false
+        }
+        val powerOk = instance.setPower(27)
+        Log.d(TAG, "RFIDWithUHFUART.setPower(27) -> $powerOk")
+        instance.setInventoryCallback(object : IUHFInventoryCallback {
+          override fun callback(tagInfo: UHFTAGInfo) {
+            val epc = tagInfo.getEPC()
+            if (epc.isNullOrBlank()) return
+            val normalized = epc.trim().uppercase()
+            Log.d(TAG, "UHF callback EPC=$normalized rssi=${tagInfo.getRssi()} ant=${tagInfo.getAnt()}")
+            emitEpc(normalized, tagInfo.getRssi()?.toIntOrNull())
+          }
+        })
+        uhfReader = instance
+        uhfInitialized = true
+        Log.d(TAG, "UHF reader initialized successfully")
+        true
+      } catch (t: Throwable) {
+        Log.e(TAG, "initUhfReaderDirect exception: ${t.message}", t)
+        false
+      }
+    }
+  }
+
   // ── Connect ─────────────────────────────────────────────────────────────────
 
   fun connectAsync(onDone: (Throwable?) -> Unit) {
@@ -255,6 +304,22 @@ class CarbonChainwayRfidController(private val context: Context) {
     Log.d(TAG, "startInventoryFlutterResult uartOwned=$uartOwned scanning=${scanning.get()}")
     executor.execute {
       try {
+        // Direct SDK path — try RFIDWithUHFUART first (works on C72E when canOwnUart=false)
+        if (!uartOwned) {
+          if (initUhfReaderDirect()) {
+            val reader = uhfReader
+            if (reader != null) {
+              val startOk = reader.startInventoryTag()
+              Log.d(TAG, "RFIDWithUHFUART.startInventoryTag() -> $startOk")
+              uhfInventoryActive = startOk
+              if (startOk) {
+                scanning.set(true)
+                mainHandler.post { result.success(null) }
+                return@execute
+              }
+            }
+          }
+        }
         if (uartOwned) {
           // legacy UART path — unreachable after canOwnUart=false, kept for safety
           val cls = uhfClass; val inst = uhfInstance
@@ -278,6 +343,19 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   fun stopInventoryAsync() {
     if (!scanning.getAndSet(false)) return
+    // Direct SDK stop — mirrors the direct start path
+    if (uhfInventoryActive) {
+      uhfInventoryActive = false
+      val reader = uhfReader
+      if (reader != null) {
+        executor.execute {
+          val stopOk = reader.stopInventory()
+          Log.d(TAG, "RFIDWithUHFUART.stopInventory() -> $stopOk")
+        }
+        Log.d(TAG, "stopInventory uartOwned=$uartOwned")
+        return
+      }
+    }
     // Interrupt drain thread immediately — do NOT queue through executor to avoid backlog delay.
     drainThread?.interrupt(); drainThread = null
     // UHFStopGet may block briefly on UART; run off main thread so UI responds instantly.
@@ -834,6 +912,18 @@ class CarbonChainwayRfidController(private val context: Context) {
     }
     uartOwned = false
     uhfClass = null; uhfInstance = null
+    // Clean up direct SDK reader
+    synchronized(uhfLock) {
+      val reader = uhfReader
+      if (reader != null) {
+        runCatching { reader.stopInventory() }
+        runCatching { reader.free() }
+        Log.d(TAG, "RFIDWithUHFUART freed")
+      }
+      uhfReader = null
+      uhfInitialized = false
+      uhfInventoryActive = false
+    }
     // seenEpcs intentionally NOT cleared — dedup persists across start/stop cycles
   }
 

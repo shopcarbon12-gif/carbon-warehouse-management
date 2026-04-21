@@ -66,17 +66,12 @@ class CarbonHardwareBarcodeRelay(
           Log.d(TAG, "RX action=$rxAction extras=${extrasSummary(intent)}")
           when (rxAction) {
             KEY_DOWN_ACTION -> {
-              if (!triggerRelayEnabled) return
-              if (scanActive) {
-                stopHardwareScan()
-              } else {
-                startHardwareScan()
-              }
+              // In UHF continuous inventory mode, the firmware owns the physical trigger.
+              // Do NOT call startHardwareScan/stopHardwareScan here — those send
+              // BARCODESTARTSCAN/BARCODESTOPSCAN which will kill the active UHF inventory.
               return
             }
             KEY_UP_ACTION -> {
-              if (!triggerRelayEnabled) return
-              // Keep scan on until decode or timeout; do not hard-stop on key-up.
               return
             }
           }
