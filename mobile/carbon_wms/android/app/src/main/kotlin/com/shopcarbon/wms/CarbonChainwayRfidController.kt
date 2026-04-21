@@ -255,19 +255,19 @@ class CarbonChainwayRfidController(private val context: Context) {
     Log.d(TAG, "startInventoryFlutterResult uartOwned=$uartOwned scanning=${scanning.get()}")
     executor.execute {
       try {
-        val cls = uhfClass
-        val inst = uhfInstance
-        if (cls != null && inst != null && uartOwned) {
-          if (!scanning.getAndSet(true)) {
-            // Drain loop was stopped — restart it.
+        if (uartOwned) {
+          // legacy UART path — unreachable after canOwnUart=false, kept for safety
+          val cls = uhfClass; val inst = uhfInstance
+          if (cls != null && inst != null && !scanning.getAndSet(true)) {
             applyPower()
             startDrainLoop(cls, inst)
-            Log.d(TAG, "startInventory: drain loop restarted")
-          } else {
-            Log.d(TAG, "startInventory: drain loop already running")
           }
+        } else {
+          // Broadcast-only: arm the firmware's continuous UHF inventory.
+          scannerUtilityStartUhfScan()
+          scanning.set(true)
+          Log.d(TAG, "startInventory: broadcast-only arm sent")
         }
-        // No broadcast fallback — STOP/START broadcasts cause ScannerWrite churn.
         mainHandler.post { result.success(null) }
       } catch (e: Exception) {
         lastError = e.message
@@ -303,14 +303,17 @@ class CarbonChainwayRfidController(private val context: Context) {
         if (!nativeTriggerActive) return
         val action = intent?.action ?: return
         if (action != "com.rscja.android.KEY_DOWN") return
-        // When UART is owned, ensure drain loop is running on every trigger press.
-        // Never stop on KEY_DOWN — let Flutter UI control stop/start state.
         val cls = uhfClass; val inst = uhfInstance
         if (cls != null && inst != null && uartOwned && !scanning.getAndSet(true)) {
           executor.execute {
             applyPower()
             startDrainLoop(cls, inst)
             Log.d(TAG, "native trigger: drain loop restarted")
+          }
+        } else if (!uartOwned) {
+          executor.execute {
+            scannerUtilityStartUhfScan()
+            Log.d(TAG, "native trigger: broadcast-only re-arm")
           }
         }
       }
@@ -341,15 +344,7 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   // ── ScannerUtility cooperative eviction ──────────────────────────────────────
 
-  private fun canOwnUart(): Boolean {
-    val hw = android.os.Build.HARDWARE ?: ""
-    val board = android.os.Build.BOARD ?: ""
-    val isMtk = hw.startsWith("mt", ignoreCase = true) || board.startsWith("mt", ignoreCase = true)
-    if (isMtk) {
-      Log.i(TAG, "MTK SoC detected (HARDWARE=$hw BOARD=$board) — attempting direct UART probe")
-    }
-    return scannerUtilityFunctional()
-  }
+  private fun canOwnUart(): Boolean = false
 
   // Cached per process lifetime — probe is expensive and deterministic.
   @Volatile private var scannerUtilityFunctionalCache: Boolean? = null
@@ -443,12 +438,10 @@ class CarbonChainwayRfidController(private val context: Context) {
       }.onFailure { Log.w(TAG, "setScanResultBroadcastRFID method not found: ${it.message}") }
         .getOrNull()
       if (setRoute != null) {
-        for ((action, key) in RFID_BROADCAST_ROUTES) {
-          runCatching {
-            setRoute.invoke(inst, context, action, key)
-            Log.d(TAG, "ScannerUtility.setScanResultBroadcastRFID → $action / $key")
-          }.onFailure { Log.w(TAG, "setScanResultBroadcastRFID($action,$key) failed: ${it.message}") }
-        }
+        runCatching {
+          setRoute.invoke(inst, context, "com.scanner.broadcast", "data")
+          Log.d(TAG, "ScannerUtility.setScanResultBroadcastRFID -> com.scanner.broadcast / data")
+        }.onFailure { Log.w(TAG, "setScanResultBroadcastRFID failed: ${it.message}") }
       }
 
       // setUHFMode(ctx, 1) — put scanner service into UHF continuous inventory mode
@@ -858,10 +851,14 @@ class CarbonChainwayRfidController(private val context: Context) {
     val s = raw.trim().uppercase()
     if (s.isEmpty()) return ""
     if (s == "BARCODECODE" || s == "SCANNERDATA" || s == "SCAN_DATA") return ""
-    // Ignore scanner config paths/filenames that are occasionally broadcast as metadata.
     if (s.contains("/") || s.contains(".XML")) return ""
-    if (Regex("^[0-9A-F]{8,}$").matches(s)) return s
-    return Regex("([0-9A-F]{8,})").find(s)?.groupValues?.get(1) ?: ""
+    // Return the longest hex run of at least 16 chars.
+    // Format 5 wraps the EPC with RSSI/antenna bytes — pick the EPC out of the middle.
+    // EPC-96 = 24 chars. 16-char floor avoids matching random short hex inside noise.
+    return Regex("[0-9A-F]{16,}").findAll(s)
+      .map { it.value }
+      .maxByOrNull { it.length }
+      ?: ""
   }
 
   private fun extractHexCandidateFromBytes(bytes: ByteArray): String {
@@ -892,20 +889,12 @@ class CarbonChainwayRfidController(private val context: Context) {
       SCANNER_WRITE_EPC_ACTION to SCANNER_WRITE_EPC_KEY,
     )
 
-    // All broadcast actions that may carry an EPC from the scanner service.
-    // android.intent.action.scanner.RFID is the firmware's own default (from KeyboardHelperParam.xml
-    // scanner_etBroadcastRFID field — confirmed on C72E MTK after trigger press).
     private val EPC_BROADCAST_ACTIONS = setOf(
-      SCANNER_WRITE_EPC_ACTION,
-      // Excluded: "com.rscja.android.ScannerWrite" — file-copy notification only
-      // Excluded: "android.intent.action.SCAN_RESULT_BROADCAST_RFID" — routing metadata
-      //           (carries resultAction/data fields pointing to the real action, not EPC)
-      "android.intent.action.scanner.RFID",       // C72E MTK firmware default EPC output
-      "android.intent.action.SCAN_RESULT_BROADCAST",
+      "com.scanner.broadcast",
+      "com.shopcarbon.wms.RFID_EPC",
+      "android.intent.action.scanner.RFID",
       "com.rscja.scanner.action.OUTPUT_BARCODE_RFID",
       "android.intent.action.BARCODEOUTPUT",
-      "com.rscja.android.OVER_RESULT",
-      "com.rscja.android.OVERDATA_RESULT",
     )
 
     // Broadcast actions that start continuous UHF inventory on C72E MTK firmware.
