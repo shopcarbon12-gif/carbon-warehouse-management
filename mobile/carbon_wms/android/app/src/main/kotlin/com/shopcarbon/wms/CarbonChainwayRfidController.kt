@@ -464,7 +464,8 @@ class CarbonChainwayRfidController(private val context: Context) {
     disableNativeTrigger()
     scanning.set(false)
     drainThread?.interrupt(); drainThread = null
-    seenEpcs.clear()
+    // Do NOT clear seenEpcs here — dedup must persist across start/stop cycles
+    // within a single scan session. Only clearSeenEpcs() called from Flutter resets it.
     uhfPowerOffReceiver?.let { safeUnregister(it); uhfPowerOffReceiver = null }
     val cls = uhfClass; val inst = uhfInstance
     if (cls != null && inst != null) {

@@ -344,12 +344,14 @@ class MainActivity : FlutterFragmentActivity() {
 
     private val RFID_START_ACTIONS = listOf(
       "android.intent.action.OPEN_BARCODE_RFID",
-      "android.intent.action.START_BARCODE_RFID",
+      "android.intent.action.CONTINUOUS_SCAN_RFID",   // continuous multi-tag inventory
+      "com.rscja.scanner.action.START_BARCODE_RFID",
     )
 
     private val RFID_STOP_ACTIONS = listOf(
       "android.intent.action.STOP_BARCODE_RFID",
       "android.intent.action.CLOSE_BARCODE_RFID",
+      "com.rscja.scanner.action.STOP_BARCODE_RFID",
     )
 
     private val SCANNER_2D_DISABLE_ACTIONS = listOf(
