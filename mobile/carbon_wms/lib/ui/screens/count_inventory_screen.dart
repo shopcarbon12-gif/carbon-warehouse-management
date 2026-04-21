@@ -482,8 +482,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     await RfidVendorChannel.enableRfidFunctionMode();
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
     // Use direct Chainway inventory — do NOT go through RfidManager which adds churn.
+    // Connect first so the broadcast receiver is registered before inventory starts.
     var started = false;
     try {
+      await RfidVendorChannel.connectChainway();
       await RfidVendorChannel.startChainwayInventory();
       started = true;
     } catch (_) {}

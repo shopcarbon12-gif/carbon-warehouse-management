@@ -186,7 +186,7 @@ class CarbonHardwareBarcodeRelay(
         "android.intent.action.SCAN_RESULT_BROADCAST",
         "android.intent.action.SCAN_RESULT_BROADCAST_RFID",
         "com.rscja.android.DATA_RESULT",
-        // com.rscja.android.ScannerWrite excluded — only carries file path info, not EPC data
+        // com.rscja.android.ScannerWrite — handled by CarbonChainwayRfidController as RFID stream
         "android.intent.ACTION_DECODE_DATA",
         "android.intent.action.DECODE_DATA",
         "com.android.decode.action.BARCODE_DECODED",

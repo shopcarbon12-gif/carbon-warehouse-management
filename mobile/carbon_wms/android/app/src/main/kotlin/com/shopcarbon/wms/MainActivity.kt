@@ -28,6 +28,13 @@ class MainActivity : FlutterFragmentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     startService(Intent(this, TaskRemovedSessionService::class.java))
+    // Request WRITE_EXTERNAL_STORAGE on API <= 28 for KeyboardHelperParam.xml UHF patch
+    if (Build.VERSION.SDK_INT <= 28) {
+      requestPermissions(
+        arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
+        REQ_WRITE_STORAGE,
+      )
+    }
   }
 
   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -73,8 +80,13 @@ class MainActivity : FlutterFragmentActivity() {
         "device.manufacturer" -> result.success(Build.MANUFACTURER ?: "")
         "zebra.sdkPresent" -> result.success(classPresent(ZEBRA_RFID_READER))
         "chainway.sdkPresent" -> {
-          val c = chainway.resolveUhfClass()
-          result.success(c != null)
+          // Never call resolveUhfClass() on MTK — it loads DeviceAPIM.so via PathClassLoader
+          // which can open /dev/ttyMT1 as a JNI_OnLoad side-effect on some firmware builds.
+          // On MTK we run broadcast-only so the SDK presence is irrelevant.
+          val isMtk = android.os.Build.HARDWARE.startsWith("mt", ignoreCase = true) ||
+                      android.os.Build.BOARD.startsWith("mt", ignoreCase = true)
+          val present = if (isMtk) false else (chainway.resolveUhfClass() != null)
+          result.success(present)
         }
         "device.openScannerSettings" -> {
           val ok =
@@ -110,7 +122,9 @@ class MainActivity : FlutterFragmentActivity() {
           result.success(true)
         }
         "device.diagnostics" -> {
-          val chainwaySdk = chainway.resolveUhfClass() != null
+          val isMtk = Build.HARDWARE.startsWith("mt", ignoreCase = true) ||
+                      Build.BOARD.startsWith("mt", ignoreCase = true)
+          val chainwaySdk = if (isMtk) false else (chainway.resolveUhfClass() != null)
           val zebraSdk = classPresent(ZEBRA_RFID_READER)
           result.success(
             mapOf(
@@ -217,7 +231,11 @@ class MainActivity : FlutterFragmentActivity() {
           result.success(null)
         }
         "chainway.startInventory" -> {
-          if (chainway.resolveUhfClass() == null) {
+          val isMtk = Build.HARDWARE.startsWith("mt", ignoreCase = true) ||
+                      Build.BOARD.startsWith("mt", ignoreCase = true)
+          // On MTK we run broadcast-only — skip the SDK check entirely to avoid
+          // loading DeviceAPIM.so (which can open /dev/ttyMT1 as a JNI_OnLoad side-effect).
+          if (!isMtk && chainway.resolveUhfClass() == null) {
             result.error("NO_SDK", "Chainway DeviceAPI not present.", null)
             return@setMethodCallHandler
           }
@@ -264,6 +282,7 @@ class MainActivity : FlutterFragmentActivity() {
 
   companion object {
     private const val TAG = "MainActivity"
+    private const val REQ_WRITE_STORAGE = 1001
     const val ZEBRA_RFID_READER = "com.zebra.rfid.api3.RFIDReader"
     private const val SCANNER_PACKAGE = "com.rscja.scanner"
     @Volatile var senitronBridge: SenitronPluginBridge? = null
@@ -350,7 +369,8 @@ class MainActivity : FlutterFragmentActivity() {
 
     private val SCANNER_2D_DISABLE_ACTIONS = listOf(
       "ACTION_2DS_DISABLE",
-      "android.intent.action.BARCODELOCKSCANKEY",
+      // BARCODELOCKSCANKEY locks the physical trigger entirely — this blocks UHF scanning too.
+      // Do NOT send it when switching to RFID mode.
     )
 
     private val SCANNER_2D_ENABLE_ACTIONS = listOf(

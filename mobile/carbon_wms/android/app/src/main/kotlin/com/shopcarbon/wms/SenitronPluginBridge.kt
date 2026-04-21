@@ -1,22 +1,21 @@
 package com.shopcarbon.wms
 
 import android.content.Context
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import io.flutter.plugin.common.EventChannel
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.util.concurrent.TimeUnit
 
 /**
- * Reads DeviceAPI_UHF logcat output in a background thread to extract EPC strings.
+ * Tails logcat filtered to the hqs tag (V hqs: <epc>------epc) and forwards
+ * every new EPC to Flutter via rfid_tag_stream and OUTPUT_BARCODE_RFID broadcast.
  *
- * The system com.rscja.scanner service (PID ~2359) logs every UHF read as:
- *   V hqs: F0A0B30E4F9BCB80000022AE------epc
- *
- * Since the system scanner does not broadcast EPCs to external apps (it only delivers
- * to its own internal components), we read from logcat as the bridge.
+ * Uses a single persistent subprocess (`logcat -v time -s hqs:V`) instead of
+ * repeated -d dumps, so no lines are lost between polls during a tag burst and
+ * the fork overhead is paid once per session.
  */
 class SenitronPluginBridge(
   private val context: Context,
@@ -39,19 +38,13 @@ class SenitronPluginBridge(
     if (running) return
     running = true
     val t = Thread {
-      while (running) {
-        runLogcat()
-        if (running) {
-          Log.w(TAG, "logcat exited unexpectedly, restarting in 500ms")
-          Thread.sleep(500)
-        }
-      }
+      tailLogcat()
     }
     t.isDaemon = true
     t.name = "senitron-logcat"
     t.start()
     logcatThread = t
-    Log.d(TAG, "logcat bridge started")
+    Log.d(TAG, "logcat tail bridge started (hqs:V filter)")
   }
 
   fun stop() {
@@ -61,51 +54,77 @@ class SenitronPluginBridge(
     Log.d(TAG, "logcat bridge stopped")
   }
 
-  private fun runLogcat() {
-    var proc: Process? = null
-    try {
-      // "*:S hqs:V" = silence all tags, show only hqs verbose.
-      // Using ProcessBuilder to redirect stderr so the process doesn't exit early.
-      proc = ProcessBuilder("logcat", "*:S", "hqs:V")
-        .redirectErrorStream(false)
-        .start()
-      val reader = BufferedReader(InputStreamReader(proc.inputStream))
-      while (running) {
-        val line = reader.readLine() ?: break
-        // Line format: "MM-DD HH:MM:SS.mmm  PID  TID V hqs     : F0A0B...------epc"
-        if (!line.contains("------epc")) continue
-        val colonIdx = line.lastIndexOf(':')
-        if (colonIdx < 0) continue
-        val payload = line.substring(colonIdx + 1).trim()
-        val epc = payload.substringBefore("------epc").trim()
-        val clean = epc.uppercase().replace(Regex("[^0-9A-F]"), "")
-        if (clean.isEmpty()) continue
-        if (!seenEpcs.add(clean)) continue  // deduplicate within session
-        Log.d(TAG, "logcat EPC: $clean")
-        val sink = tagSink ?: continue
-        val payload2 = mapOf("epc" to clean, "rssi" to 0)
-        mainHandler.post { sink.success(payload2) }
-      }
-    } catch (e: InterruptedException) {
-      Log.d(TAG, "logcat thread interrupted")
-    } catch (e: Exception) {
-      Log.e(TAG, "logcat bridge error: ${e.message}", e)
-    } finally {
-      val p = proc
-      if (p != null) {
-        runCatching {
-          if (!p.waitFor(250, TimeUnit.MILLISECONDS)) {
-            p.destroy()
-          }
-          val exit = runCatching { p.exitValue() }.getOrDefault(Int.MIN_VALUE)
-          val stderr = p.errorStream.bufferedReader().use { it.readText().trim() }
-          if (exit != Int.MIN_VALUE || stderr.isNotEmpty()) {
-            Log.w(TAG, "logcat process ended exit=$exit stderr=${stderr.ifEmpty { "<empty>" }}")
-          }
+  private fun tailLogcat() {
+    while (running) {
+      var proc: Process? = null
+      try {
+        // -v time gives timestamp prefix; -s hqs:V limits to exactly the EPC tag.
+        // Persistent process — we drain lines as they arrive, no polling gap.
+        // Tail all logcat — filter inside for EPC patterns from any scanner tag.
+        proc = ProcessBuilder("logcat", "-v", "time")
+          .redirectErrorStream(false)
+          .start()
+        val reader = BufferedReader(InputStreamReader(proc.inputStream))
+        while (running) {
+          val line = reader.readLine() ?: break  // process exited
+          if (!matchesEpcLine(line)) continue
+          val epc = extractEpc(line) ?: continue
+          val clean = epc.uppercase().replace(Regex("[^0-9A-F]"), "")
+          if (clean.length < 8) continue  // too short to be a real EPC
+          if (!seenEpcs.add(clean)) continue
+          Log.d(TAG, "EPC from logcat: $clean (line: $line)")
+          emitAndBroadcast(clean)
         }
+      } catch (e: InterruptedException) {
+        break
+      } catch (e: Exception) {
+        if (!running) break
+        Log.e(TAG, "logcat error: ${e.message} — restarting in 500ms")
+        try { Thread.sleep(500) } catch (_: InterruptedException) { break }
+      } finally {
+        proc?.destroy()
       }
     }
-    Log.d(TAG, "logcat bridge thread exited")
+  }
+
+  private fun matchesEpcLine(line: String): Boolean {
+    // hqs firmware pattern: "V hqs: <epc>------epc"
+    if (line.contains("------epc", ignoreCase = true)) return true
+    // Chainway scanner service may log tag reads under various tags
+    if (line.contains("rfid", ignoreCase = true) && line.contains("epc", ignoreCase = true)) return true
+    return false
+  }
+
+  private fun extractEpc(line: String): String? {
+    // Pattern 1: <epc>------epc
+    if (line.contains("------epc")) {
+      val colonIdx = line.lastIndexOf(':')
+      if (colonIdx >= 0) {
+        val payload = line.substring(colonIdx + 1).trim()
+        return payload.substringBefore("------epc").trim()
+      }
+    }
+    // Pattern 2: epc=<value> or EPC:<value> style
+    val epcEq = Regex("(?i)epc[=:]\\s*([0-9A-Fa-f]{8,})", RegexOption.IGNORE_CASE).find(line)
+    if (epcEq != null) return epcEq.groupValues[1]
+    return null
+  }
+
+  private fun emitAndBroadcast(clean: String) {
+    runCatching {
+      context.sendBroadcast(Intent("com.rscja.scanner.action.OUTPUT_BARCODE_RFID").apply {
+        putExtra("scannerdata", clean)
+        putExtra("epc", clean)
+      })
+    }
+    runCatching {
+      context.sendBroadcast(Intent("android.intent.action.BARCODEOUTPUT").apply {
+        putExtra("scannerdata", clean)
+        putExtra("epc", clean)
+      })
+    }
+    val sink = tagSink ?: return
+    mainHandler.post { sink.success(mapOf("epc" to clean, "rssi" to 0)) }
   }
 
   fun dispose() {
