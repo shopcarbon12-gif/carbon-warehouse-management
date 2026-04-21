@@ -270,9 +270,21 @@ class CarbonChainwayRfidController(private val context: Context) {
     val cls = uhfClass; val inst = uhfInstance
     if (cls != null && inst != null && uartOwned) {
       invokeNoArgs(cls, inst, "UHFStopGet", "stopInventoryTag", "stopInventory")
+    } else {
+      // Broadcast-only path — send stop broadcasts to firmware scanner service.
+      for (action in UHF_STOP_ACTIONS) {
+        runCatching {
+          context.sendBroadcast(Intent(action).apply {
+            setPackage("com.rscja.scanner")
+            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+          })
+          context.sendBroadcast(Intent(action).apply {
+            addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+          })
+          Log.d(TAG, "UHF stop broadcast -> $action")
+        }
+      }
     }
-    // When UART not owned: do NOT stop system scanner — keep hqs EPC stream alive
-    // so SenitronBridge continues forwarding EPCs to Flutter even after trigger release.
     Log.d(TAG, "stopInventory uartOwned=$uartOwned")
   }
 
@@ -863,6 +875,12 @@ class CarbonChainwayRfidController(private val context: Context) {
       "android.intent.action.OPEN_BARCODE_RFID",
       "android.intent.action.CONTINUOUS_SCAN_RFID",
       "com.rscja.scanner.action.START_BARCODE_RFID",
+    )
+
+    private val UHF_STOP_ACTIONS = listOf(
+      "android.intent.action.STOP_BARCODE_RFID",
+      "android.intent.action.CLOSE_BARCODE_RFID",
+      "com.rscja.scanner.action.STOP_BARCODE_RFID",
     )
 
     private val EPC_EXTRA_KEYS = arrayOf(
