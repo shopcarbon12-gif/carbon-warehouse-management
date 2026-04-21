@@ -56,6 +56,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   late final AudioPlayer _toneAudio;
   Uint8List? _scanBeepBytes;
   DateTime? _lastBeepAt;
+  bool _chainwayConnected = false;
   int _displayEpcCount = 0;
   int _displaySkuCount = 0;
   String? _previousScanContext;
@@ -290,9 +291,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
             return;
           }
           _lastTriggerToggleAt = now;
-          if (_scanOn) {
-            unawaited(_stopScan());
-          } else {
+          if (!_scanOn) {
             unawaited(_startScan());
           }
         }
@@ -304,6 +303,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           _scanOn = false;
         });
       }
+      // Enter Count in active scan state to avoid zero-read sessions when trigger
+      // events are noisy or delayed on rugged hardware.
+      unawaited(_startScan());
     } finally {
       _connecting = false;
     }
@@ -457,10 +459,15 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // Connect first so the broadcast receiver is registered before inventory starts.
     var started = false;
     try {
-      await RfidVendorChannel.connectChainway();
+      if (!_chainwayConnected) {
+        await RfidVendorChannel.connectChainway();
+        _chainwayConnected = true;
+      }
       await RfidVendorChannel.startChainwayInventory();
       started = true;
-    } catch (_) {}
+    } catch (_) {
+      _chainwayConnected = false;
+    }
     if (!mounted) return;
     setState(() {
       _scanOn = started;
@@ -767,9 +774,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                           height: 48,
                           child: FilledButton(
                             onPressed: () {
-                              if (_scanOn) {
-                                unawaited(_stopScan());
-                              } else {
+                              if (!_scanOn) {
                                 unawaited(_startScan());
                               }
                             },

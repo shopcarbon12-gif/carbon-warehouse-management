@@ -62,6 +62,9 @@ class CarbonHardwareBarcodeRelay(
       object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
           if (intent == null) return
+          if (intent.action == "com.rscja.android.ScannerWrite") {
+            Log.d(TAG, "ScannerWrite extras=${extrasSummary(intent)}")
+          }
           when (intent.action) {
             KEY_DOWN_ACTION -> {
               if (!triggerRelayEnabled) return
@@ -78,9 +81,18 @@ class CarbonHardwareBarcodeRelay(
               return
             }
           }
-          val s = extractBarcode(intent) ?: return
+          val s = if (intent.action == "com.rscja.android.ScannerWrite") {
+            extractScannerWriteEpc(intent) ?: return
+          } else {
+            extractBarcode(intent) ?: return
+          }
           val t = s.trim()
           if (t.isEmpty()) return
+          if (t.equals("barcodeCode", ignoreCase = true) ||
+              t.equals("scannerdata", ignoreCase = true) ||
+              t.equals("scan_data", ignoreCase = true)) {
+            return
+          }
           Log.d(TAG, "barcode event action=${intent.action} data=$t")
           // Keep OEM UHF inventory running for rapid multi-tag reads; idle timeout stops the session.
           // Stopping after each decode breaks continuous RFID (only ever one tag per START).
@@ -117,14 +129,87 @@ class CarbonHardwareBarcodeRelay(
 
   private fun extractBarcode(intent: Intent): String? {
     for (key in STRING_EXTRA_KEYS) {
-      intent.getStringExtra(key)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+      val v = intent.getStringExtra(key)?.trim()?.takeIf { it.isNotEmpty() } ?: continue
+      normalizeEpcCandidate(v)?.let { return it }
     }
     for (key in BYTE_EXTRA_KEYS) {
       val bytes = intent.getByteArrayExtra(key) ?: continue
-      utf8String(bytes)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+      utf8String(bytes)?.trim()?.takeIf { it.isNotEmpty() }?.let { s ->
+        normalizeEpcCandidate(s)?.let { return it }
+      }
+      val hex = bytes.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
+      normalizeEpcCandidate(hex)?.let { return it }
     }
-    intent.dataString?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+    intent.dataString?.trim()?.takeIf { it.isNotEmpty() }?.let { s ->
+      normalizeEpcCandidate(s)?.let { return it }
+    }
+    extractEpcFromAnyExtras(intent)?.let { return it }
     return null
+  }
+
+  private fun extractScannerWriteEpc(intent: Intent): String? {
+    fun pick(raw: String?): String? = normalizeEpcCandidate(raw)
+    for (key in STRING_EXTRA_KEYS) {
+      pick(intent.getStringExtra(key))?.let { return it }
+    }
+    for (key in BYTE_EXTRA_KEYS) {
+      val bytes = intent.getByteArrayExtra(key) ?: continue
+      pick(runCatching { String(bytes, StandardCharsets.UTF_8) }.getOrNull())?.let { return it }
+      val hex = bytes.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
+      pick(hex)?.let { return it }
+    }
+    val extras = intent.extras ?: return null
+    for (key in extras.keySet()) {
+      val v = extras.get(key) ?: continue
+      when (v) {
+        is String -> pick(v)?.let { return it }
+        is ByteArray -> {
+          pick(runCatching { String(v, StandardCharsets.UTF_8) }.getOrNull())?.let { return it }
+          val hex = v.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
+          pick(hex)?.let { return it }
+        }
+      }
+    }
+    return null
+  }
+
+  private fun extractEpcFromAnyExtras(intent: Intent): String? {
+    val extras = intent.extras ?: return null
+    for (key in extras.keySet()) {
+      when (val value = extras.get(key)) {
+        is String -> normalizeEpcCandidate(value)?.let { return it }
+        is ByteArray -> {
+          utf8String(value)?.let { normalizeEpcCandidate(it)?.let { return it } }
+          val hex = value.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
+          normalizeEpcCandidate(hex)?.let { return it }
+        }
+      }
+    }
+    return null
+  }
+
+  private fun normalizeEpcCandidate(raw: String?): String? {
+    val s = raw?.trim()?.uppercase() ?: return null
+    if (s.isEmpty()) return null
+    if (s.contains("/") || s.contains(".XML")) return null
+    if (s == "BARCODECODE" || s == "SCANNERDATA" || s == "SCAN_DATA") return null
+    return Regex("([0-9A-F]{8,})").find(s)?.groupValues?.get(1)
+  }
+
+  private fun extrasSummary(intent: Intent): String {
+    val extras = intent.extras ?: return "<none>"
+    return buildString {
+      for (key in extras.keySet()) {
+        val value = extras.get(key)
+        append(key).append("=")
+        append(
+          when (value) {
+            is ByteArray -> "byte[${value.size}]"
+            else -> value?.toString() ?: "null"
+          }
+        ).append("; ")
+      }
+    }
   }
 
   private fun utf8String(bytes: ByteArray): String? =
@@ -188,7 +273,7 @@ class CarbonHardwareBarcodeRelay(
         "android.intent.action.SCAN_RESULT_BROADCAST",
         "android.intent.action.SCAN_RESULT_BROADCAST_RFID",
         "com.rscja.android.DATA_RESULT",
-        // com.rscja.android.ScannerWrite — handled by CarbonChainwayRfidController as RFID stream
+        "com.rscja.android.ScannerWrite",
         "android.intent.ACTION_DECODE_DATA",
         "android.intent.action.DECODE_DATA",
         "com.android.decode.action.BARCODE_DECODED",

@@ -92,6 +92,9 @@ class SenitronPluginBridge(
     if (line.contains("------epc", ignoreCase = true)) return true
     // Chainway scanner service may log tag reads under various tags
     if (line.contains("rfid", ignoreCase = true) && line.contains("epc", ignoreCase = true)) return true
+    // Fallback: scanner stack logs long hex payloads without explicit "epc" markers.
+    if (line.contains("rscja", ignoreCase = true) &&
+        Regex("([0-9A-Fa-f]{16,})").containsMatchIn(line)) return true
     return false
   }
 
@@ -107,6 +110,8 @@ class SenitronPluginBridge(
     // Pattern 2: epc=<value> or EPC:<value> style
     val epcEq = Regex("(?i)epc[=:]\\s*([0-9A-Fa-f]{8,})", RegexOption.IGNORE_CASE).find(line)
     if (epcEq != null) return epcEq.groupValues[1]
+    val longHex = Regex("([0-9A-Fa-f]{16,})").find(line)
+    if (longHex != null) return longHex.groupValues[1]
     return null
   }
 

@@ -74,7 +74,7 @@ class CarbonChainwayRfidController(private val context: Context) {
         var epc = EPC_EXTRA_KEYS.firstNotNullOfOrNull { key ->
           intent.getStringExtra(key)?.let { extractHexCandidate(it) }
         } ?: EPC_BYTE_KEYS.firstNotNullOfOrNull { key ->
-          intent.getByteArrayExtra(key)?.let { extractHexCandidate(String(it)) }
+          intent.getByteArrayExtra(key)?.let { extractHexCandidateFromBytes(it) }
         }
         // Some scanner firmware/builds use unknown extra keys. Fallback: inspect all extras.
         if (epc.isNullOrBlank()) {
@@ -91,7 +91,7 @@ class CarbonChainwayRfidController(private val context: Context) {
                   }
                 }
                 is ByteArray -> {
-                  val s = runCatching { extractHexCandidate(String(v)) }.getOrDefault("")
+                  val s = runCatching { extractHexCandidateFromBytes(v) }.getOrDefault("")
                   if (s.isNotEmpty()) {
                     epc = s
                     break
@@ -101,7 +101,28 @@ class CarbonChainwayRfidController(private val context: Context) {
             }
           }
         }
-        val epcValue = epc ?: return
+        val epcValue = epc
+        if (epcValue.isNullOrBlank()) {
+          val extrasDump = buildString {
+            val extras = intent.extras
+            if (extras == null) {
+              append("<none>")
+            } else {
+              for (key in extras.keySet()) {
+                val value = extras.get(key)
+                append(key).append("=")
+                append(
+                  when (value) {
+                    is ByteArray -> "byte[${value.size}]"
+                    else -> value?.toString() ?: "null"
+                  }
+                ).append("; ")
+              }
+            }
+          }
+          Log.w(TAG, "broadcast EPC parse miss action=$action extras=$extrasDump")
+          return
+        }
         Log.d(TAG, "broadcast EPC action=$action epc=$epcValue")
         emitEpc(epcValue, null)
       }
@@ -193,7 +214,6 @@ class CarbonChainwayRfidController(private val context: Context) {
     // SenitronBridge polls logcat for hqs EPC lines; hardware_barcode relay picks up
     // OUTPUT_BARCODE_RFID broadcasts. Neither touches /dev/ttyMT1.
     scannerUtilityConfigureBroadcast()
-    MainActivity.startSystemScannerInventory(context, TAG)
     lastError = null
     mainHandler.post { onDone(null) }
   }
@@ -229,12 +249,10 @@ class CarbonChainwayRfidController(private val context: Context) {
           startDrainLoop(cls, inst)
           Log.d(TAG, "startInventory: direct UART drain active")
         } else {
-          // UART not owned — use ScannerUtility.startScan to kick off UHF inventory,
-          // then fall back to system scanner broadcast sequence.
-          // SenitronBridge tails hqs:V logcat lines continuously.
-          Log.w(TAG, "startInventory: UART not owned — startScan via ScannerUtility + startSystemScannerInventory")
+          // UART not owned — keep native UHF alive via ScannerUtility start only.
+          // Avoid repeated START/ENABLE action storms from system fallback broadcasts.
+          Log.w(TAG, "startInventory: UART not owned — startScan via ScannerUtility")
           scannerUtilityStartUhfScan()
-          MainActivity.startSystemScannerInventory(context, TAG)
         }
         mainHandler.post { result.success(null) }
       } catch (e: Exception) {
@@ -399,12 +417,19 @@ class CarbonChainwayRfidController(private val context: Context) {
         Log.d(TAG, "ScannerUtility.setOutputMode(ctx, 1) — broadcast mode")
       }.onFailure { Log.w(TAG, "setOutputMode failed: ${it.message}") }
 
-      // setScanResultBroadcastRFID — route RFID EPCs to our registered receiver
-      runCatching {
-        cls.getMethod("setScanResultBroadcastRFID", Context::class.java, String::class.java, String::class.java)
-          .invoke(inst, context, SCANNER_OUTPUT_RFID_ACTION, SCANNER_OUTPUT_RFID_KEY)
-        Log.d(TAG, "ScannerUtility.setScanResultBroadcastRFID → $SCANNER_OUTPUT_RFID_ACTION / $SCANNER_OUTPUT_RFID_KEY")
-      }.onFailure { Log.w(TAG, "setScanResultBroadcastRFID failed: ${it.message}") }
+      // setScanResultBroadcastRFID — firmware differs by build; try multiple known routes.
+      val setRoute = cls.getMethod(
+        "setScanResultBroadcastRFID",
+        Context::class.java,
+        String::class.java,
+        String::class.java,
+      )
+      for ((action, key) in RFID_BROADCAST_ROUTES) {
+        runCatching {
+          setRoute.invoke(inst, context, action, key)
+          Log.d(TAG, "ScannerUtility.setScanResultBroadcastRFID → $action / $key")
+        }.onFailure { Log.w(TAG, "setScanResultBroadcastRFID($action,$key) failed: ${it.message}") }
+      }
 
       // setContinuousScanRFID — multi-tag continuous mode
       runCatching {
@@ -436,6 +461,14 @@ class CarbonChainwayRfidController(private val context: Context) {
           .invoke(inst, context, functionId)
         Log.d(TAG, "ScannerUtility.startScan(ctx, $functionId) — UHF scan started")
       }.onFailure { Log.w(TAG, "startScan($functionId) failed: ${it.message}") }
+      // MTK firmware often requires explicit scanner service kick after route setup.
+      // This keeps UHF inventory alive even when KEY_DOWN relay is flaky.
+      runCatching {
+        context.sendBroadcast(Intent("android.intent.action.BARCODESTARTSCAN").apply {
+          addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        })
+        Log.d(TAG, "scanner broadcast -> action=android.intent.action.BARCODESTARTSCAN")
+      }
     } catch (e: Throwable) {
       Log.w(TAG, "scannerUtilityStartUhfScan error: ${e.message}")
     }
@@ -756,10 +789,21 @@ class CarbonChainwayRfidController(private val context: Context) {
   private fun extractHexCandidate(raw: String): String {
     val s = raw.trim().uppercase()
     if (s.isEmpty()) return ""
+    if (s == "BARCODECODE" || s == "SCANNERDATA" || s == "SCAN_DATA") return ""
     // Ignore scanner config paths/filenames that are occasionally broadcast as metadata.
     if (s.contains("/") || s.contains(".XML")) return ""
     if (Regex("^[0-9A-F]{8,}$").matches(s)) return s
     return Regex("([0-9A-F]{8,})").find(s)?.groupValues?.get(1) ?: ""
+  }
+
+  private fun extractHexCandidateFromBytes(bytes: ByteArray): String {
+    if (bytes.isEmpty()) return ""
+    // 1) Try UTF payload first.
+    val utf = runCatching { String(bytes, Charsets.UTF_8) }.getOrDefault("")
+    extractHexCandidate(utf).takeIf { it.isNotEmpty() }?.let { return it }
+    // 2) Treat payload as raw EPC bytes.
+    val rawHex = bytes.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
+    return extractHexCandidate(rawHex)
   }
 
   companion object {
@@ -769,7 +813,16 @@ class CarbonChainwayRfidController(private val context: Context) {
     const val SCANNER_WRITE_EPC_ACTION = "com.shopcarbon.wms.RFID_EPC"
     const val SCANNER_WRITE_EPC_KEY = "epc"
     const val SCANNER_OUTPUT_RFID_ACTION = "com.rscja.scanner.action.OUTPUT_BARCODE_RFID"
-    const val SCANNER_OUTPUT_RFID_KEY = "barcodeCode"
+    // On C72E MTK, "barcodeCode" can be emitted literally as a placeholder string.
+    // "scannerdata" carries the actual EPC payload.
+    const val SCANNER_OUTPUT_RFID_KEY = "scannerdata"
+    private val RFID_BROADCAST_ROUTES = listOf(
+      SCANNER_OUTPUT_RFID_ACTION to SCANNER_OUTPUT_RFID_KEY,
+      SCANNER_OUTPUT_RFID_ACTION to "barcodeCode",
+      "android.intent.action.scanner.RFID" to "scannerdata",
+      "android.intent.action.scanner.RFID" to "epc",
+      SCANNER_WRITE_EPC_ACTION to SCANNER_WRITE_EPC_KEY,
+    )
 
     // All broadcast actions that may carry an EPC from the scanner service.
     // android.intent.action.scanner.RFID is the firmware's own default (from KeyboardHelperParam.xml
@@ -778,6 +831,8 @@ class CarbonChainwayRfidController(private val context: Context) {
       SCANNER_WRITE_EPC_ACTION,
       "com.rscja.android.ScannerWrite",
       "android.intent.action.scanner.RFID",   // C72E MTK firmware default
+      "android.intent.action.SCAN_RESULT_BROADCAST_RFID",
+      "android.intent.action.SCAN_RESULT_BROADCAST",
       "com.rscja.scanner.action.OUTPUT_BARCODE_RFID",
       "android.intent.action.BARCODEOUTPUT",
     )
