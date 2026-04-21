@@ -277,6 +277,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       // Keep the existing active hardware session; avoid reconnect churn that can
       // momentarily disable RFID function mode before Count starts.
 
+      // Disable 2D barcode trigger relay — prevent red laser in RFID count mode.
+      // Trigger events are handled by our _triggerSub below (starts RFID, not 2D scan).
+      await RfidVendorChannel.scannerDisableTriggerRelay();
+
       // Count gear settings override global settings while inside Count.
       await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
 
@@ -286,10 +290,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       await _directTagSub?.cancel();
       _directTagSub =
           RfidVendorChannel.tagReadStream().listen(_onTagRead, onError: (_) {});
-      // hardware_barcode stream also receives the same EPC broadcast — skip it in Count mode
-      // to avoid double-ingesting every tag.
+      // Also listen to hardware_barcode — com.rscja.scanner broadcasts EPCs on OUTPUT_BARCODE_RFID
+      // which arrives here. _ingestEpc deduplicates, so double-reads are safe.
       await _barcodeSub?.cancel();
-      _barcodeSub = null;
+      _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((raw) {
+        _ingestEpc(epc: raw.trim().toUpperCase(), rssi: 0);
+      }, onError: (_) {});
       await _triggerSub?.cancel();
       _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
         if (event == 'down') {
@@ -367,7 +373,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   void _ingestEpc({required String epc, required int rssi}) {
     final now = DateTime.now();
-    if (epc.isEmpty) return;
     // Normalize to even-length hex so odd-padded and unpadded forms map to the same key.
     final normalized = epc.length.isOdd ? '0$epc' : epc;
     if (kDebugMode) {
@@ -2161,7 +2166,7 @@ class _CountInventoryModuleSettings {
 
   static const defaults = _CountInventoryModuleSettings(
     rfidPowerDbm: 30,
-    rssiDistance: 0.0,
+    rssiDistance: 1.0,
   );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -2178,7 +2183,7 @@ class _CountInventoryModuleSettings {
       return _CountInventoryModuleSettings(
         rfidPowerDbm: ((m['rfidPowerDbm'] as num?)?.round() ?? 30).clamp(0, 30),
         rssiDistance:
-            ((m['rssiDistance'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0),
+            ((m['rssiDistance'] as num?)?.toDouble() ?? 1.0).clamp(0.0, 1.0), // 1.0 = -30 dB
       );
     } catch (_) {
       return null;

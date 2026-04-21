@@ -60,7 +60,6 @@ class SenitronPluginBridge(
         val payload = line.substring(colonIdx + 1).trim()
         val epc = payload.substringBefore("------epc").trim()
         val clean = epc.uppercase().replace(Regex("[^0-9A-F]"), "")
-        if (clean.isEmpty()) continue
         Log.d(TAG, "logcat EPC: $clean")
         val sink = tagSink ?: continue
         val payload2 = mapOf("epc" to clean, "rssi" to 0)

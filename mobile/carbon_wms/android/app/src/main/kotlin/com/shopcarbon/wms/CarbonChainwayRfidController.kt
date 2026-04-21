@@ -28,7 +28,7 @@ class CarbonChainwayRfidController(private val context: Context) {
   private val executor = Executors.newSingleThreadExecutor()
   private val mainHandler = Handler(Looper.getMainLooper())
 
-  @Volatile var tagSink: EventChannel.EventSink? = null
+  @Volatile private var tagSink: EventChannel.EventSink? = null
   @Volatile private var lastError: String? = null
 
   private var uhfClass: Class<*>? = null
@@ -74,14 +74,20 @@ class CarbonChainwayRfidController(private val context: Context) {
         uhfClass = cls
         Log.d(TAG, "UHF class: ${cls.name}")
         Log.d(TAG, "UHF methods: ${cls.methods.map { it.name }.distinct().sorted()}")
-        val inst = getStaticInstance(cls) ?: throw RuntimeException("DeviceAPI getInstance failed")
-        uhfInstance = inst
 
-        // Evict com.rscja.scanner from UART then take over
-        val ok = evictAndInit(cls, inst)
-        uartOwned = ok
-        if (!ok) Log.w(TAG, "UART takeover failed — no EPCs will be scanned")
-        else Log.d(TAG, "UART owned — direct scan path active")
+        // Evict com.rscja.scanner from UART FIRST — getInstance may return null while scanner holds UART.
+        evictUart()
+
+        val inst = getStaticInstance(cls)
+        if (inst == null) {
+          Log.w(TAG, "DeviceAPI getInstance returned null after eviction — using SenitronBridge logcat path")
+        } else {
+          uhfInstance = inst
+          val ok = initUart(cls, inst)
+          uartOwned = ok
+          if (!ok) Log.w(TAG, "UHFOpenAndConnect failed — using SenitronBridge logcat path")
+          else Log.d(TAG, "UART owned — direct scan path active")
+        }
 
         lastError = null
         mainHandler.post { onDone(null) }
@@ -101,17 +107,24 @@ class CarbonChainwayRfidController(private val context: Context) {
     if (scanning.getAndSet(true)) { mainHandler.post { result.success(null) }; return }
     executor.execute {
       try {
-        val cls = uhfClass ?: throw RuntimeException("not connected")
-        val inst = uhfInstance ?: throw RuntimeException("not connected")
+        val cls = uhfClass
+        val inst = uhfInstance
 
-        if (!uartOwned) {
-          // Last-chance: retry UART takeover
-          uartOwned = evictAndInit(cls, inst)
-          if (!uartOwned) throw RuntimeException("UART takeover failed")
+        if (cls != null && inst != null) {
+          if (!uartOwned) {
+            evictUart()
+            uartOwned = initUart(cls, inst)
+          }
+          applyPower()
+          if (uartOwned) {
+            startDrainLoop(cls, inst)
+            Log.d(TAG, "startInventory: direct UART drain active")
+          } else {
+            Log.w(TAG, "startInventory: UART not owned — SenitronBridge logcat path handles EPCs")
+          }
+        } else {
+          Log.w(TAG, "startInventory: no DeviceAPI instance — SenitronBridge logcat path handles EPCs")
         }
-
-        applyPower()
-        startDrainLoop(cls, inst)
         mainHandler.post { result.success(null) }
       } catch (e: Exception) {
         scanning.set(false)
@@ -153,25 +166,32 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   // ── UART eviction (Senitron h3/c.java T()+S()+n0()+h0()) ───────────────────
 
-  private fun evictAndInit(cls: Class<*>, inst: Any): Boolean {
-    val myApiId = android.os.SystemClock.elapsedRealtime()
+  private val myApiId = android.os.SystemClock.elapsedRealtime()
 
-    // Step 1: broadcast UHF_POWER_OFF — com.rscja.scanner's BroadcastReceiver calls UHFFree()
+  private fun evictUart() {
     Log.d(TAG, "evict: broadcasting UHF_POWER_OFF apiId=$myApiId")
-    try {
-      context.sendBroadcast(Intent("com.rscja.deviceapi.action.UHF_POWER_OFF").apply {
-        putExtra("apiId", myApiId)
-        addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-      })
-    } catch (e: Exception) { Log.w(TAG, "UHF_POWER_OFF broadcast failed: ${e.message}") }
-    Thread.sleep(400) // wait for com.rscja.scanner to release UART
+    // Both action variants — different firmware versions respond to different ones
+    for (action in listOf(
+      "com.rscja.deviceapi.action.UHF_POWER_OFF",
+      "com.rscja.action.UHF_POWER_OFF",
+    )) {
+      runCatching {
+        context.sendBroadcast(Intent(action).apply {
+          putExtra("apiId", myApiId)
+          addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        })
+      }
+    }
+    Thread.sleep(600) // wait for com.rscja.scanner to release UART
+  }
 
-    // Step 2: register our own UHF_POWER_OFF receiver so we yield gracefully when asked
+  private fun initUart(cls: Class<*>, inst: Any): Boolean {
+    // Register UHF_POWER_OFF receiver so we yield gracefully when asked
     if (uhfPowerOffReceiver == null) {
       val r = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
           val incoming = intent?.getLongExtra("apiId", -1L) ?: -1L
-          if (incoming == myApiId) return // our own, ignore
+          if (incoming == myApiId) return
           Log.d(TAG, "UHF_POWER_OFF from other app — releasing UART")
           executor.execute {
             uartOwned = false
@@ -179,17 +199,19 @@ class CarbonChainwayRfidController(private val context: Context) {
           }
         }
       }
-      registerReceiver(r, IntentFilter("com.rscja.deviceapi.action.UHF_POWER_OFF"))
-        ?.let { uhfPowerOffReceiver = it }
+      for (action in listOf("com.rscja.deviceapi.action.UHF_POWER_OFF", "com.rscja.action.UHF_POWER_OFF")) {
+        registerReceiver(r, IntentFilter(action))?.let { uhfPowerOffReceiver = it; break }
+      }
     }
 
-    // Step 3: UHFInit
+    val appCtx = context.applicationContext
+    val uartPaths = listOf("", "/dev/ttyMT1", "/dev/ttyMT0", "/dev/ttyMT2")
+
+    // UHFInit
     val mInit = cls.methods.firstOrNull { it.name == "UHFInit" } ?: run {
       Log.w(TAG, "UHFInit method not found"); return false
     }
     mInit.isAccessible = true
-    val appCtx = context.applicationContext
-    val uartPaths = listOf("", "/dev/ttyMT1", "/dev/ttyMT0")
     var initOk = false
     for (uart in uartPaths) {
       val args = mInit.parameterTypes.map { t -> when {
@@ -198,27 +220,26 @@ class CarbonChainwayRfidController(private val context: Context) {
         t == Int::class.javaPrimitiveType || t == java.lang.Integer.TYPE -> 0
         else -> null
       }}.toTypedArray()
-      val r = timedInvoke(5000) { (mInit.invoke(inst, *args) as? Number)?.toInt() ?: 0 }
+      val r = timedInvoke(5000) { (mInit.invoke(inst, *args) as? Number)?.toInt() ?: -1 }
       Log.d(TAG, "UHFInit('$uart') -> $r")
       if (r == 0) { initOk = true; break }
     }
     if (!initOk) { Log.w(TAG, "UHFInit failed all paths"); return false }
 
-    // Step 4: UHFOpenAndConnect
+    // UHFOpenAndConnect
     val mOpen = cls.methods.firstOrNull { it.name == "UHFOpenAndConnect" }
     if (mOpen != null) {
       mOpen.isAccessible = true
       for (uart in uartPaths) {
         val args = mOpen.parameterTypes.map { t -> if (t == String::class.java) uart else null }.toTypedArray()
-        val r = timedInvoke(5000) { (mOpen.invoke(inst, *args) as? Number)?.toInt() ?: 0 }
+        val r = timedInvoke(5000) { (mOpen.invoke(inst, *args) as? Number)?.toInt() ?: -1 }
         Log.d(TAG, "UHFOpenAndConnect('$uart') -> $r")
-        if (r >= 0) { Log.d(TAG, "UART takeover complete"); return true }
+        if (r >= 0) { Log.d(TAG, "UART takeover complete via UHFOpenAndConnect"); return true }
       }
       Log.w(TAG, "UHFOpenAndConnect failed all paths"); return false
     }
 
-    // No UHFOpenAndConnect — UHFInit alone may be sufficient on some firmware
-    Log.d(TAG, "UHFOpenAndConnect not found — UHFInit-only path"); return true
+    Log.d(TAG, "UHFOpenAndConnect not found — UHFInit-only path OK"); return true
   }
 
   // ── Drain loop (Senitron p3/b.java inner class `a`) ─────────────────────────
@@ -296,52 +317,73 @@ class CarbonChainwayRfidController(private val context: Context) {
   }
 
   private fun parseEpcFromBuf(buf: CharArray): String? {
-    // buf[] from UHFGetReceived_EX2:
-    // Senitron reads: buf[0] = tag count field, buf[1..N] = raw EPC bytes
-    // Try raw bytes → hex. Find last non-zero byte to determine EPC length.
     val bytes = buf.map { it.code and 0xFF }
     val lastNz = bytes.take(64).indexOfLast { it != 0 }
-    if (lastNz < 1) return null
+    if (lastNz < 0) return null
     val hex = bytes.take(lastNz + 1).joinToString("") { "%02X".format(it) }
     val clean = hex.replace(Regex("[^0-9A-F]"), "")
-    return if (clean.length >= 4) clean else null
+    return if (clean.isNotEmpty()) clean else null
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   fun resolveUhfClass(): Class<*>? {
-    val primary = "com.rscja.team.mtk.deviceapi.DeviceAPI"
-    val fallbacks = listOf(
+    val classNames = listOf(
       "com.rscja.deviceapi.DeviceAPI",
+      "com.rscja.team.mtk.deviceapi.DeviceAPI",
       "com.rscja.deviceapi.RFIDWithUHFUART",
       "com.rscja.deviceapi.RFIDWithUHF",
     )
-    // 1. Bundled DEX
+    val nativeLibPath = "/vendor/lib:/vendor/lib64:/system/lib:/system/lib64"
+    val optDir = context.applicationContext.getDir("dex_opt", android.content.Context.MODE_PRIVATE)
+
+    // 1. System class loader (com.rscja.scanner is a system app — its classes may be in boot classpath)
+    for (n in classNames) {
+      try { return Class.forName(n).also { Log.d(TAG, "Class.forName(system): $n") } } catch (_: Throwable) {}
+    }
+
+    // 2. PathClassLoader on the scanner APK (same class loader type Android uses for installed apps)
+    val scannerApkPaths = listOf(
+      "/system/app/keyboard/keyboard.apk",
+      "/system/app/Scanner/Scanner.apk",
+      "/system/priv-app/Scanner/Scanner.apk",
+    )
+    for (apkPath in scannerApkPaths) {
+      if (!java.io.File(apkPath).exists()) continue
+      try {
+        val cl = dalvik.system.PathClassLoader(apkPath, nativeLibPath, ClassLoader.getSystemClassLoader())
+        for (n in classNames) {
+          try { return cl.loadClass(n).also { Log.d(TAG, "PathClassLoader($apkPath): $n") } } catch (_: Throwable) {}
+        }
+      } catch (e: Throwable) { Log.w(TAG, "PathClassLoader($apkPath) failed: ${e.message}") }
+    }
+
+    // 3. DexClassLoader on bundled DEX
     try {
       val appCtx = context.applicationContext
       val dexFile = java.io.File(appCtx.cacheDir, "chainway_uhf.dex")
       if (!dexFile.exists()) {
         appCtx.assets.open("chainway_uhf.dex").use { i -> dexFile.outputStream().use { o -> i.copyTo(o) } }
       }
-      val optDir = appCtx.getDir("dex_opt", android.content.Context.MODE_PRIVATE)
-      val cl = dalvik.system.DexClassLoader(dexFile.absolutePath, optDir.absolutePath, null, appCtx.classLoader)
-      val cls = cl.loadClass(primary)
-      Log.d(TAG, "DexClassLoader: loaded $primary")
-      return cls
-    } catch (e: Throwable) { Log.w(TAG, "DexClassLoader failed: ${e.message}") }
-    // 2. System class loader
-    for (n in listOf(primary) + fallbacks) {
-      try { return Class.forName(n).also { Log.d(TAG, "Class.forName: $n") } } catch (_: Throwable) {}
-    }
+      val cl = dalvik.system.DexClassLoader(dexFile.absolutePath, optDir.absolutePath, nativeLibPath, appCtx.classLoader)
+      for (n in classNames) {
+        try { return cl.loadClass(n).also { Log.d(TAG, "DexClassLoader(bundled): $n") } } catch (_: Throwable) {}
+      }
+    } catch (e: Throwable) { Log.w(TAG, "DexClassLoader(bundled) failed: ${e.message}") }
+
     return null
   }
 
   private fun getStaticInstance(cls: Class<*>): Any? {
     val appCtx = context.applicationContext
-    runCatching { cls.getMethod("getInstance", Context::class.java).invoke(null, appCtx)?.let { return it } }
-    runCatching { cls.getMethod("getInstance").invoke(null)?.let { return it } }
+    // Pre-load native lib so getInstance() JNI binding resolves
+    for (libPath in listOf("/vendor/lib/libDeviceAPI.so", "/vendor/lib64/libDeviceAPI.so", "/system/lib/libDeviceAPI.so")) {
+      runCatching { System.load(libPath); Log.d(TAG, "loaded $libPath") }
+    }
     for (lib in listOf("DeviceAPI", "rscja_deviceapi", "uhfapi")) runCatching { System.loadLibrary(lib) }
-    runCatching { cls.getDeclaredConstructor().apply { isAccessible = true }.newInstance()?.let { return it } }
+    runCatching { cls.getMethod("getInstance", Context::class.java).invoke(null, appCtx)?.let { Log.d(TAG, "getInstance(ctx) ok"); return it } }
+    runCatching { cls.getMethod("getInstance").invoke(null)?.let { Log.d(TAG, "getInstance() ok"); return it } }
+    runCatching { cls.getDeclaredConstructor().apply { isAccessible = true }.newInstance()?.let { Log.d(TAG, "constructor() ok"); return it } }
     return null
   }
 
@@ -404,8 +446,8 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   private fun emitEpc(hex: String, rssi: Int?) {
     val up = hex.uppercase().replace(Regex("[^0-9A-F]"), "")
-    if (up.length < 4) return
-    if (!seenEpcs.add(up)) return
+    if (up.isEmpty()) return
+    seenEpcs.add(up)
     Log.d(TAG, "EPC: $up")
     val sink = tagSink ?: return
     mainHandler.post { sink.success(mapOf("epc" to up, "rssi" to (rssi ?: 0))) }
