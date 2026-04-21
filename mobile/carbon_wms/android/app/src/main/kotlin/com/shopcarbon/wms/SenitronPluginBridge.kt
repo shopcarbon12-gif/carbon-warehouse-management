@@ -38,7 +38,15 @@ class SenitronPluginBridge(
   fun start() {
     if (running) return
     running = true
-    val t = Thread { runLogcat() }
+    val t = Thread {
+      while (running) {
+        runLogcat()
+        if (running) {
+          Log.w(TAG, "logcat exited unexpectedly, restarting in 500ms")
+          Thread.sleep(500)
+        }
+      }
+    }
     t.isDaemon = true
     t.name = "senitron-logcat"
     t.start()
@@ -56,8 +64,9 @@ class SenitronPluginBridge(
   private fun runLogcat() {
     var proc: Process? = null
     try {
-      // -T 1: start from last line (no backlog), -s hqs:V to only get hqs verbose lines.
-      proc = Runtime.getRuntime().exec(arrayOf("logcat", "-T", "1", "-s", "hqs:V"))
+      // No -T flag: stay open and follow from current position. -T 1 causes immediate
+      // EOF exit=1 on some MediaTek builds when there is no buffered output yet.
+      proc = Runtime.getRuntime().exec(arrayOf("logcat", "-s", "hqs:V"))
       val reader = BufferedReader(InputStreamReader(proc.inputStream))
       while (running) {
         val line = reader.readLine() ?: break
