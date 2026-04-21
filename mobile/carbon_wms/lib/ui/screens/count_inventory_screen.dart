@@ -123,8 +123,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       unawaited(rfid.reapplyHandheldHardwareSettings());
     }
     unawaited(() async {
-      await RfidVendorChannel.stopChainwayInventory();
-      await RfidVendorChannel.disableRfidFunctionMode();
       await RfidVendorChannel.open2dBarcode();
       await RfidVendorChannel.scannerEnableTriggerRelay();
     }());
@@ -286,12 +284,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         if (event == 'down') {
           final now = DateTime.now();
           final last = _lastTriggerToggleAt;
-          if (last != null &&
-              now.difference(last).inMilliseconds < 300) {
-            return;
-          }
+          if (last != null && now.difference(last).inMilliseconds < 300) return;
           _lastTriggerToggleAt = now;
-          if (!_scanOn) {
+          if (_scanOn) {
+            unawaited(_stopScan());
+          } else {
             unawaited(_startScan());
           }
         }
@@ -449,31 +446,26 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   Future<void> _startScan() async {
     if (_scanOn) return;
-    // Native dedup persists across process/session; clear at each Count start so
-    // physically present EPCs are emitted again for the active count session.
     await RfidVendorChannel.clearChainwaySeenEpcs();
     await RfidVendorChannel.close2dBarcode();
     await RfidVendorChannel.enableRfidFunctionMode();
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
-    // Use direct Chainway inventory — do NOT go through RfidManager which adds churn.
-    // Connect first so the broadcast receiver is registered before inventory starts.
-    var started = false;
+    // Connect once to register the EPC broadcast receiver in native.
+    // Do NOT call startChainwayInventory — on MTK the firmware owns the scan
+    // cycle via the physical trigger; calling startInventory fights it and
+    // causes the scan session to lock up. We just listen passively.
     try {
       if (!_chainwayConnected) {
         await RfidVendorChannel.connectChainway();
         _chainwayConnected = true;
       }
-      await RfidVendorChannel.startChainwayInventory();
-      started = true;
     } catch (_) {
       _chainwayConnected = false;
     }
     if (!mounted) return;
-    setState(() {
-      _scanOn = started;
-    });
-    if (started) unawaited(_playStartTone());
-    if (kDebugMode) print('[CountInventory] startScan started=$started');
+    setState(() { _scanOn = true; });
+    unawaited(_playStartTone());
+    if (kDebugMode) print('[CountInventory] startScan: receiver armed, firmware owns trigger');
   }
 
   String? _extractHardwareEpc(String raw) {
@@ -492,13 +484,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!_scanOn) return;
     _scanInactivityTimer?.cancel();
     _rfidKeepAliveTimer?.cancel();
-    try {
-      await RfidVendorChannel.stopChainwayInventory();
-    } catch (_) {}
+    // Do NOT call stopChainwayInventory — firmware owns the scan cycle on MTK.
+    // Stopping via broadcast kills the scanner service state and breaks the trigger.
     if (!mounted) return;
-    setState(() {
-      _scanOn = false;
-    });
+    setState(() { _scanOn = false; });
     unawaited(_playStopTone());
     if (kDebugMode) print('[CountInventory] stopScan done');
   }
@@ -774,7 +763,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                           height: 48,
                           child: FilledButton(
                             onPressed: () {
-                              if (!_scanOn) {
+                              if (_scanOn) {
+                                unawaited(_stopScan());
+                              } else {
                                 unawaited(_startScan());
                               }
                             },
