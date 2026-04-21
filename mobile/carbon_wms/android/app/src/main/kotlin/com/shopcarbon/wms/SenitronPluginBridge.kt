@@ -64,9 +64,11 @@ class SenitronPluginBridge(
   private fun runLogcat() {
     var proc: Process? = null
     try {
-      // No -T flag: stay open and follow from current position. -T 1 causes immediate
-      // EOF exit=1 on some MediaTek builds when there is no buffered output yet.
-      proc = Runtime.getRuntime().exec(arrayOf("logcat", "-s", "hqs:V"))
+      // "*:S hqs:V" = silence all tags, show only hqs verbose.
+      // Using ProcessBuilder to redirect stderr so the process doesn't exit early.
+      proc = ProcessBuilder("logcat", "*:S", "hqs:V")
+        .redirectErrorStream(false)
+        .start()
       val reader = BufferedReader(InputStreamReader(proc.inputStream))
       while (running) {
         val line = reader.readLine() ?: break

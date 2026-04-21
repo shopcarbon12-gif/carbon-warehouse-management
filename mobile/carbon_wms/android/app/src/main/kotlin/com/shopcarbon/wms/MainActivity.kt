@@ -22,7 +22,6 @@ class MainActivity : FlutterFragmentActivity() {
   private var chainwayController: CarbonChainwayRfidController? = null
   private var hardwareBarcodeRelay: CarbonHardwareBarcodeRelay? = null
   private var hardwareTriggerRelay: CarbonHardwareTriggerRelay? = null
-  private var senitronBridge: SenitronPluginBridge? = null
 
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,33 +39,22 @@ class MainActivity : FlutterFragmentActivity() {
     val barcodeRelay = CarbonHardwareBarcodeRelay(this)
     val triggerRelay = CarbonHardwareTriggerRelay(this)
     zebraController = zebra
-    chainwayController = chainway
-    MainActivity.chainwayController = chainway
     hardwareBarcodeRelay = barcodeRelay
     hardwareTriggerRelay = triggerRelay
 
     EventChannel(messenger, "carbon_wms/hardware_barcode").setStreamHandler(barcodeRelay)
     EventChannel(messenger, "carbon_wms/hardware_trigger").setStreamHandler(triggerRelay)
 
-    val bridge = SenitronPluginBridge(this)
-    senitronBridge = bridge
-    MainActivity.senitronBridge = bridge
-
     EventChannel(messenger, "carbon_wms/rfid_tag_stream").setStreamHandler(
       object : EventChannel.StreamHandler {
         override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
           zebra.setTagSink(events)
           chainway.setTagSink(events)
-          bridge.tagSink = events
-          bridge.start()
         }
 
         override fun onCancel(arguments: Any?) {
           zebra.setTagSink(null)
           chainway.setTagSink(null)
-          bridge.tagSink = null
-          // Do NOT stop the logcat bridge on cancel — it must keep reading hqs:V lines
-          // so EPCs are available when the stream is re-subscribed (e.g. screen re-enters).
         }
       },
     )
@@ -217,7 +205,6 @@ class MainActivity : FlutterFragmentActivity() {
         }
         "chainway.clearSeenEpcs" -> {
           chainway.clearSeenEpcs()
-          senitronBridge?.clearSeenEpcs()
           result.success(null)
         }
         "chainway.startInventory" -> {
@@ -248,14 +235,10 @@ class MainActivity : FlutterFragmentActivity() {
     chainwayController?.dispose()
     hardwareBarcodeRelay?.dispose()
     hardwareTriggerRelay?.dispose()
-    senitronBridge?.dispose()
     hardwareBarcodeRelay = null
     hardwareTriggerRelay = null
     zebraController = null
     chainwayController = null
-    senitronBridge = null
-    MainActivity.chainwayController = null
-    MainActivity.senitronBridge = null
     super.onDestroy()
   }
 
@@ -271,9 +254,6 @@ class MainActivity : FlutterFragmentActivity() {
     private const val TAG = "MainActivity"
     const val ZEBRA_RFID_READER = "com.zebra.rfid.api3.RFIDReader"
     private const val SCANNER_PACKAGE = "com.rscja.scanner"
-    @Volatile var chainwayController: CarbonChainwayRfidController? = null
-    @Volatile var senitronBridge: SenitronPluginBridge? = null
-
     fun enableScannerRfidMode(context: Context, logTag: String = TAG) {
       closeScanner2dEngine(context, logTag)
       RFID_MODE_ENABLE_ACTIONS.forEach { action ->
