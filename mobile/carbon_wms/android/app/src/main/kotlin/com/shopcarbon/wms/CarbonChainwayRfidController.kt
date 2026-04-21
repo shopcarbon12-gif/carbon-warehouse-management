@@ -462,24 +462,32 @@ class CarbonChainwayRfidController(private val context: Context) {
   private fun scannerUtilityStartUhfScan() {
     try {
       val cls = resolveScannerUtilityClass() ?: return
-      val inst = cls.getMethod("getScannerInerface").invoke(null) ?: return
+      val inst = runCatching { cls.getMethod("getScannerInerface").invoke(null) }.getOrNull() ?: return
       val functionId = runCatching { cls.getField("FUNCTION_UHF").getInt(null) }.getOrElse { FUNCTION_UHF }
-      // startScan(ctx, functionId) — directly triggers a UHF scan cycle via the scanner service
+      // startScan(ctx, functionId) — triggers a UHF scan cycle via ScannerUtility
       runCatching {
         cls.getMethod("startScan", Context::class.java, Int::class.javaPrimitiveType)
           .invoke(inst, context, functionId)
         Log.d(TAG, "ScannerUtility.startScan(ctx, $functionId) — UHF scan started")
       }.onFailure { Log.w(TAG, "startScan($functionId) failed: ${it.message}") }
-      // MTK firmware often requires explicit scanner service kick after route setup.
-      // This keeps UHF inventory alive even when KEY_DOWN relay is flaky.
-      runCatching {
-        context.sendBroadcast(Intent("android.intent.action.BARCODESTARTSCAN").apply {
-          addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-        })
-        Log.d(TAG, "scanner broadcast -> action=android.intent.action.BARCODESTARTSCAN")
-      }
     } catch (e: Throwable) {
       Log.w(TAG, "scannerUtilityStartUhfScan error: ${e.message}")
+    }
+    // Firmware broadcasts that start continuous UHF inventory on C72E MTK.
+    // OPEN_BARCODE_RFID + CONTINUOUS_SCAN_RFID puts the scanner into the same
+    // keep-scanning mode the vendor app uses — unlike startScan() which is one-shot
+    // when scanner_Continuous=false in KeyboardHelperParam.xml.
+    for (action in UHF_START_ACTIONS) {
+      runCatching {
+        context.sendBroadcast(Intent(action).apply {
+          setPackage("com.rscja.scanner")
+          addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        })
+        context.sendBroadcast(Intent(action).apply {
+          addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        })
+        Log.d(TAG, "UHF start broadcast -> $action")
+      }
     }
   }
 
@@ -846,6 +854,15 @@ class CarbonChainwayRfidController(private val context: Context) {
       "android.intent.action.BARCODEOUTPUT",
       "com.rscja.android.OVER_RESULT",         // seen on some C72E builds alongside BARCODEOUTPUT
       "com.rscja.android.OVERDATA_RESULT",
+    )
+
+    // Broadcast actions that start continuous UHF inventory on C72E MTK firmware.
+    // Sent to both com.rscja.scanner package and system-wide so the scanner service
+    // receives them regardless of which receiver is active.
+    private val UHF_START_ACTIONS = listOf(
+      "android.intent.action.OPEN_BARCODE_RFID",
+      "android.intent.action.CONTINUOUS_SCAN_RFID",
+      "com.rscja.scanner.action.START_BARCODE_RFID",
     )
 
     private val EPC_EXTRA_KEYS = arrayOf(
