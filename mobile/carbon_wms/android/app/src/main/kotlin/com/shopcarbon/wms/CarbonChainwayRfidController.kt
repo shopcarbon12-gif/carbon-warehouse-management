@@ -14,443 +14,104 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Chainway C72E UHF scanning.
- * Primary path: reflection on DeviceAPI (UHFInventory_EX_cnt + UHFGetReceived_EX2 drain loop).
- * Supplementary path: SCAN_RESULT_BROADCAST from com.rscja.scanner to catch any extra tags.
+ * Chainway C72E UHF — direct UART path (Senitron-equivalent).
+ *
+ * On connect:
+ *  1. Broadcast UHF_POWER_OFF → com.rscja.scanner releases /dev/ttyMT1 (cooperative Chainway SDK protocol)
+ *  2. UHFInit("") → UHFOpenAndConnect("") — we now own the UART directly
+ *  3. UHFInventory_EX_cnt(0,0,6) + tight UHFGetReceived_EX2 drain loop at 10ms
+ *
+ * Zero broadcasts to com.rscja.scanner — those were crashing it (SIGABRT observed in logcat).
  */
-class CarbonChainwayRfidController(
-  private val context: Context,
-) {
+class CarbonChainwayRfidController(private val context: Context) {
+
   private val executor = Executors.newSingleThreadExecutor()
   private val mainHandler = Handler(Looper.getMainLooper())
 
-  @Volatile private var tagSink: EventChannel.EventSink? = null
+  @Volatile var tagSink: EventChannel.EventSink? = null
+  @Volatile private var lastError: String? = null
+
   private var uhfClass: Class<*>? = null
   private var uhfInstance: Any? = null
   private val scanning = AtomicBoolean(false)
   private val requestedPowerDbm = AtomicInteger(30)
-  @Volatile private var lastError: String? = null
-  @Volatile private var keepAliveThread: Thread? = null
+  @Volatile private var drainThread: Thread? = null
+  @Volatile private var uartOwned = false
 
-  // When true, KEY_DOWN broadcasts toggle RFID inventory directly in Kotlin (no Flutter round-trip).
+  // Session-level EPC dedup — cleared on disconnect / screen reset.
+  private val seenEpcs = java.util.Collections.newSetFromMap(
+    java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+  )
+
+  // Native trigger (KEY_DOWN → toggle inventory)
   @Volatile private var nativeTriggerActive = false
   private var triggerReceiver: BroadcastReceiver? = null
-
-  // Correct Chainway C72E broadcast actions (from Senitron APK decompile)
-  private val ACTION_RFID_ENABLE  = "com.rscja.scanner.action.ENABLE_FUNCTION_BARCODE_RFID"
-  private val ACTION_RFID_DISABLE = "com.rscja.scanner.action.DISABLE_FUNCTION_BARCODE_RFID"
-  private val ACTION_RFID_OPEN    = "com.rscja.scanner.action.OPEN_BARCODE_RFID"
-  private val ACTION_RFID_START   = "com.rscja.scanner.action.START_BARCODE_RFID"
-  private val ACTION_RFID_STOP    = "com.rscja.scanner.action.STOP_BARCODE_RFID"
-  private val ACTION_RESULT       = "com.rscja.scanner.action.OUTPUT_BARCODE_RFID"
-  private val ACTION_RESULT2      = "com.rscja.scanner.action.SCAN_RESULT_BROADCAST"
-
-  private var scanReceiver: BroadcastReceiver? = null
-  @Volatile private var pollThread: Thread? = null
+  private var uhfPowerOffReceiver: BroadcastReceiver? = null
 
   fun getLastError(): String? = lastError
 
-  /** Register a KEY_DOWN broadcast receiver that toggles RFID inventory natively. */
-  fun enableNativeTrigger() {
-    if (triggerReceiver != null) return
-    nativeTriggerActive = true
-    val r = object : BroadcastReceiver() {
-      override fun onReceive(ctx: Context?, intent: Intent?) {
-        if (intent?.action != "com.rscja.android.KEY_DOWN") return
-        if (!nativeTriggerActive) return
-        executor.execute {
-          if (scanning.get()) {
-            stopInventoryAsync()
-          } else {
-            startInventoryDirect()
-          }
-        }
-      }
-    }
-    val filter = IntentFilter("com.rscja.android.KEY_DOWN")
-    try {
-      if (android.os.Build.VERSION.SDK_INT >= 33) {
-        context.registerReceiver(r, filter, Context.RECEIVER_EXPORTED)
-      } else {
-        @Suppress("DEPRECATION")
-        context.registerReceiver(r, filter)
-      }
-      triggerReceiver = r
-      Log.d("CarbonChainway", "native trigger receiver registered")
-    } catch (e: Exception) {
-      Log.w("CarbonChainway", "native trigger register failed: ${e.message}")
-    }
+  fun clearSeenEpcs() {
+    seenEpcs.clear()
+    Log.d(TAG, "seenEpcs cleared")
   }
 
-  fun disableNativeTrigger() {
-    nativeTriggerActive = false
-    val r = triggerReceiver ?: return
-    triggerReceiver = null
-    try { context.unregisterReceiver(r) } catch (_: Exception) {}
-    Log.d("CarbonChainway", "native trigger receiver unregistered")
-  }
-
-  private fun startInventoryDirect() {
-    if (scanning.getAndSet(true)) return
-    try {
-      tryApplyChainwayPower()
-      if (uhfClass == null || uhfInstance == null) {
-        val cls = resolveUhfClass() ?: run { scanning.set(false); return }
-        val inst = getStaticInstance(cls, context.applicationContext) ?: run { scanning.set(false); return }
-        uhfClass = cls; uhfInstance = inst; invokeInit(cls, inst)
-      }
-      val cls = uhfClass ?: run { scanning.set(false); return }
-      val inst = uhfInstance ?: run { scanning.set(false); return }
-      val mInv = cls.methods.firstOrNull { it.name == "UHFInventory_EX_cnt" }
-        ?: cls.methods.firstOrNull { it.name == "UHFInventory_EX" }
-        ?: cls.methods.firstOrNull { it.name == "UHFInventory" }
-      mInv?.isAccessible = true
-      val mGet = cls.methods.firstOrNull { it.name == "UHFGetReceived_EX2" }
-      mGet?.isAccessible = true
-      val invArgs: Array<Any?> = if (mInv != null) {
-        var ci = 0
-        mInv.parameterTypes.map { t -> when {
-          t == java.lang.Character.TYPE -> java.lang.Character(if (ci++ == 0) '\u00FF' else '\u0000')
-          t == java.lang.Integer.TYPE -> java.lang.Integer(0)
-          else -> null
-        }}.toTypedArray()
-      } else arrayOf()
-      mainHandler.post { registerScanReceiver() }
-      sendScannerBroadcast(ACTION_RFID_ENABLE)
-      Thread.sleep(100)
-      sendScannerBroadcast(ACTION_RFID_OPEN)
-      Thread.sleep(200)
-      sendScannerBroadcast(ACTION_RFID_START)
-      sendScannerBroadcast("android.intent.action.BARCODESTOPSCAN")
-      Log.d("CarbonChainway", "startInventoryDirect: sent ENABLE+OPEN+START")
-      runNativeStartInventory(cls, inst)
-      val ka = Thread {
-        try {
-          Thread.sleep(1500)
-          while (scanning.get()) { sendScannerBroadcast(ACTION_RFID_START); Thread.sleep(2000) }
-        } catch (_: InterruptedException) {}
-        Log.d("CarbonChainway", "keepAlive thread exited")
-      }
-      ka.isDaemon = true; ka.name = "chainway-ka"; ka.start(); keepAliveThread = ka
-      if (mInv != null) {
-        val ok = runCatching { mInv.invoke(inst, *invArgs) as? Boolean ?: true }.getOrElse { false }
-        Log.d("CarbonChainway", "${mInv.name}() direct -> $ok")
-      }
-      val drain = Thread {
-        var empty = 0; var total = 0
-        while (scanning.get()) {
-          try {
-            var got = false
-            if (mGet != null) {
-              var dc = 0
-              while (dc < 500 && scanning.get()) {
-                val buf = CharArray(256)
-                val cnt = runCatching { (mGet.invoke(inst, buf) as? Int) ?: -1 }.getOrElse { -1 }
-                if (cnt < 0) break
-                dc++; empty = 0; got = true
-                // cnt = 1 means "one tag available"; EPC bytes are always in buf[0..N].
-                // Read up to 32 bytes, trim trailing zero-bytes to find actual EPC length.
-                val allBytes = buf.map { it.code and 0xFF }
-                val lastNonZero = allBytes.take(32).indexOfLast { it != 0 }
-                val byteCount = if (lastNonZero >= 11) lastNonZero + 1 else 12
-                val hexStr = allBytes.take(byteCount).joinToString("") { "%02X".format(it) }
-                if (hexStr.length >= 8 && hexStr.count { it != '0' } > 2) {
-                  emitEpc(hexStr, null); total++
-                  if (total % 10 == 0) Log.d("CarbonChainway", "direct poll: emitted $total tags")
-                }
-              }
-              if (!got) empty++
-            } else { Thread.sleep(100); continue }
-            if (mInv != null && (empty == 1 || empty % 10 == 0)) {
-              runCatching { mInv.invoke(inst, *invArgs) }
-              if (empty == 1) Log.d("CarbonChainway", "direct poll: re-triggered")
-            }
-            Thread.sleep(if (got) 10 else 30)
-          } catch (_: InterruptedException) { break }
-          catch (e: Exception) { Log.w("CarbonChainway", "direct poll err: ${e.message}") }
-        }
-        Log.d("CarbonChainway", "direct poll exited, total=$total")
-      }
-      drain.isDaemon = true; drain.name = "chainway-drain-direct"; drain.start(); pollThread = drain
-    } catch (e: Exception) {
-      scanning.set(false)
-      Log.e("CarbonChainway", "startInventoryDirect failed: ${e.message}", e)
-    }
-  }
-
-  fun setTagSink(sink: EventChannel.EventSink?) {
-    tagSink = sink
-  }
+  fun setTagSink(sink: EventChannel.EventSink?) { tagSink = sink }
 
   fun setAntennaPowerDbm(dbm: Int) {
     executor.execute {
       requestedPowerDbm.set(dbm.coerceIn(0, 30))
-      tryApplyChainwayPower()
+      applyPower()
     }
   }
 
-  fun resolveUhfClass(): Class<*>? {
-    val target = "com.rscja.team.mtk.deviceapi.DeviceAPI"
-    // 1. Try DexClassLoader from bundled chainway_uhf.dex asset + libDeviceAPIM.so
-    try {
-      val appCtx = context.applicationContext
-      val dexFile = java.io.File(appCtx.cacheDir, "chainway_uhf.dex")
-      if (!dexFile.exists()) {
-        appCtx.assets.open("chainway_uhf.dex").use { input ->
-          dexFile.outputStream().use { output -> input.copyTo(output) }
-        }
-      }
-      val optDir = appCtx.getDir("dex_opt", android.content.Context.MODE_PRIVATE)
-      val cl = dalvik.system.DexClassLoader(
-        dexFile.absolutePath, optDir.absolutePath, null, appCtx.classLoader)
-      val cls = cl.loadClass(target)
-      Log.d("CarbonChainway", "DexClassLoader loaded '$target' from bundled DEX")
-      return cls
-    } catch (e: Throwable) {
-      Log.w("CarbonChainway", "DexClassLoader failed: ${e.message}")
-    }
-    // 2. Fallback: standard class resolution
-    val fallbacks = listOf(
-      "com.rscja.deviceapi.DeviceAPI",
-      "com.rscja.deviceapi.RFIDWithUHFUART",
-      "com.rscja.deviceapi.RFIDWithUHF",
-    )
-    for (n in fallbacks) {
-      try { return Class.forName(n) } catch (_: Throwable) {}
-    }
-    return null
-  }
+  // ── Connect ─────────────────────────────────────────────────────────────────
 
   fun connectAsync(onDone: (Throwable?) -> Unit) {
     executor.execute {
       try {
         disconnectSync()
-        val cls = resolveUhfClass()
-        Log.d("CarbonChainway", "resolveUhfClass -> ${cls?.name ?: "null"}")
-        if (cls != null) {
-          uhfClass = cls
-          Log.d("CarbonChainway", "UHF class methods: ${cls.methods.map { it.name }.distinct().sorted()}")
-          val inst = getStaticInstance(cls, context.applicationContext)
-          if (inst != null) {
-            uhfInstance = inst
-            invokeInit(cls, inst)
-            Log.d("CarbonChainway", "UHF init succeeded")
-          }
-        }
+        val cls = resolveUhfClass() ?: throw RuntimeException("DeviceAPI class not found")
+        uhfClass = cls
+        Log.d(TAG, "UHF class: ${cls.name}")
+        Log.d(TAG, "UHF methods: ${cls.methods.map { it.name }.distinct().sorted()}")
+        val inst = getStaticInstance(cls) ?: throw RuntimeException("DeviceAPI getInstance failed")
+        uhfInstance = inst
+
+        // Evict com.rscja.scanner from UART then take over
+        val ok = evictAndInit(cls, inst)
+        uartOwned = ok
+        if (!ok) Log.w(TAG, "UART takeover failed — no EPCs will be scanned")
+        else Log.d(TAG, "UART owned — direct scan path active")
+
         lastError = null
         mainHandler.post { onDone(null) }
       } catch (e: Throwable) {
-        Log.e("CarbonChainway", "connect failed: ${e.message}", e)
         lastError = e.message ?: e.javaClass.simpleName
+        Log.e(TAG, "connect failed: ${e.message}", e)
         mainHandler.post { onDone(e) }
       }
     }
   }
 
-  fun disconnectAsync() {
-    executor.execute { disconnectSync() }
-  }
+  fun disconnectAsync() { executor.execute { disconnectSync() } }
+
+  // ── Inventory ────────────────────────────────────────────────────────────────
 
   fun startInventoryFlutterResult(result: MethodChannel.Result) {
-    if (scanning.getAndSet(true)) {
-      mainHandler.post { result.success(null) }
-      return
-    }
+    if (scanning.getAndSet(true)) { mainHandler.post { result.success(null) }; return }
     executor.execute {
       try {
-        tryApplyChainwayPower()
-        // Lazy-init: if UHF was never connected (e.g. connectAsync not yet called),
-        // attempt initialization inline before starting inventory.
-        if (uhfClass == null || uhfInstance == null) {
-          val lazyCls = resolveUhfClass()
-          if (lazyCls != null) {
-            val lazyInst = getStaticInstance(lazyCls, context.applicationContext)
-            if (lazyInst != null) {
-              uhfClass = lazyCls
-              uhfInstance = lazyInst
-              invokeInit(lazyCls, lazyInst)
-              Log.d("CarbonChainway", "startInventory: lazy-init succeeded")
-            }
-          }
-        }
-        val cls = uhfClass
-        val inst = uhfInstance
-        if (cls == null || inst == null) {
-          scanning.set(false)
-          mainHandler.post { result.error("NOT_CONNECTED", "UHF not initialized", null) }
-          return@execute
+        val cls = uhfClass ?: throw RuntimeException("not connected")
+        val inst = uhfInstance ?: throw RuntimeException("not connected")
+
+        if (!uartOwned) {
+          // Last-chance: retry UART takeover
+          uartOwned = evictAndInit(cls, inst)
+          if (!uartOwned) throw RuntimeException("UART takeover failed")
         }
 
-        // Find inventory method
-        val mInv = cls.methods.firstOrNull { it.name == "UHFInventory_EX_cnt" }
-          ?: cls.methods.firstOrNull { it.name == "UHFInventory_EX" }
-          ?: cls.methods.firstOrNull { it.name == "UHFInventory" }
-        mInv?.isAccessible = true
-
-        // Find read method
-        val mGet = cls.methods.firstOrNull { it.name == "UHFGetReceived_EX2" }
-        mGet?.isAccessible = true
-        // Single-tag alternative (simpler API, returns Boolean+populates buf or returns String)
-        val mSingle = cls.methods.firstOrNull { it.name == "UHFInventorySingleEPCTIDUSER" }
-        mSingle?.isAccessible = true
-        Log.d("CarbonChainway", "inventory methods: mInv=${mInv?.name} mGet=${mGet?.name} mSingle=${mSingle?.name}")
-
-        // Build inventory args: UHFInventory_EX_cnt(char, char, char) = ('\xFF', '\x00', '\x00')
-        val invArgs: Array<Any?> = if (mInv != null) {
-          var charIdx = 0
-          mInv.parameterTypes.map { t ->
-            when {
-              t == java.lang.Character.TYPE -> {
-                val v = if (charIdx == 0) '\u00FF' else '\u0000'
-                charIdx++
-                java.lang.Character(v)
-              }
-              t == java.lang.Integer.TYPE -> java.lang.Integer(0)
-              else -> null
-            }
-          }.toTypedArray()
-        } else arrayOf()
-
-        // Register broadcast receiver FIRST so we don't miss early results
-        mainHandler.post { registerScanReceiver() }
-
-        // Enable RFID function then start — avoids triggering 2D laser
-        sendScannerBroadcast(ACTION_RFID_ENABLE)
-        Thread.sleep(100)
-        sendScannerBroadcast(ACTION_RFID_OPEN)
-        Thread.sleep(200)
-        sendScannerBroadcast(ACTION_RFID_START)
-        sendScannerBroadcast("android.intent.action.BARCODESTOPSCAN")
-        Log.d("CarbonChainway", "sent ENABLE+OPEN+START (com.rscja.scanner.action.*)")
-        runNativeStartInventory(cls, inst)
-
-        // Keep-alive: re-send START_BARCODE_RFID every 400ms so inventory keeps running
-        val ka = Thread {
-          try {
-            Thread.sleep(1500)
-            while (scanning.get()) {
-              sendScannerBroadcast(ACTION_RFID_START)
-              Thread.sleep(2000)
-            }
-          } catch (_: InterruptedException) {}
-          Log.d("CarbonChainway", "keepAlive thread exited")
-        }
-        ka.isDaemon = true
-        ka.name = "chainway-ka"
-        ka.start()
-        keepAliveThread = ka
-
-        // Also kick off reflection inventory as fallback
-        if (mInv != null) {
-          val ok = runCatching { mInv.invoke(inst, *invArgs) as? Boolean ?: true }.getOrElse { false }
-          Log.d("CarbonChainway", "${mInv.name}() -> $ok (reflection fallback)")
-        }
-
-        // Start fast drain poll thread
-        val drainThread = Thread {
-          var emptyStreak = 0
-          var totalEmitted = 0
-          var diagCount = 0
-          while (scanning.get()) {
-            try {
-              var gotAny = false
-              if (mGet != null) {
-                // Drain all available tags in tight loop
-                var drainCount = 0
-                while (drainCount < 500 && scanning.get()) {
-                  val buf = CharArray(256)
-                  val rawResult = runCatching { mGet.invoke(inst, buf) }.getOrElse { null }
-                  val cnt = when (rawResult) {
-                    is Int -> rawResult
-                    is Boolean -> if (rawResult) 1 else -1
-                    null -> -1
-                    else -> -1
-                  }
-                  // Diagnostic: log first few raw results to see what the API returns
-                  if (diagCount < 5) {
-                    Log.d("CarbonChainway", "UHFGetReceived_EX2 -> type=${rawResult?.javaClass?.simpleName} val=$rawResult cnt=$cnt buf[0..3]=${buf[0].code},${buf[1].code},${buf[2].code},${buf[3].code}")
-                    diagCount++
-                  }
-                  if (cnt <= 0) break // queue empty
-                  drainCount++
-                  emptyStreak = 0
-                  gotAny = true
-                  // cnt = 1 means one tag available; EPC raw bytes are in buf[].
-                  val bytes = buf.map { it.code and 0xFF }
-                  val lastNz = bytes.take(32).indexOfLast { it != 0 }
-                  val byteCount2 = if (lastNz >= 11) lastNz + 1 else 12
-                  val hexStr2 = bytes.take(byteCount2).joinToString("") { "%02X".format(it) }
-                  if (hexStr2.length >= 8 && hexStr2.count { it != '0' } > 2) {
-                    emitEpc(hexStr2, null)
-                    totalEmitted++
-                    if (totalEmitted % 10 == 0) Log.d("CarbonChainway", "poll: emitted $totalEmitted tags so far")
-                  } else {
-                    // Try ASCII interpretation (some firmware returns hex string in ASCII)
-                    val ascii = buf.takeWhile { it.code in 0x30..0x46 }.joinToString("") { it.toString() }
-                    if (ascii.length >= 8 && ascii.matches(Regex("[0-9A-F]+"))) {
-                      emitEpc(ascii, null)
-                      totalEmitted++
-                    }
-                  }
-                }
-                if (!gotAny) emptyStreak++
-              } else {
-                // No drain method — rely solely on broadcast receiver
-                Thread.sleep(100)
-                continue
-              }
-
-              // UHFInventorySingleEPCTIDUSER returns char[] with EPC bytes
-              if (mSingle != null) {
-                val singleResult = runCatching { mSingle.invoke(inst) }.getOrNull()
-                when (singleResult) {
-                  is CharArray -> if (singleResult.isNotEmpty()) {
-                    val bytes = singleResult.map { it.code and 0xFF }
-                    if (totalEmitted == 0 && diagCount < 10) {
-                      Log.d("CarbonChainway", "single raw bytes[0..11]=${bytes.take(12)}")
-                      diagCount++
-                    }
-                    // First try: read as raw bytes → hex. Use last-non-zero to find EPC length.
-                    val lastNzS = bytes.take(32).indexOfLast { it != 0 }
-                    val byteCntS = if (lastNzS >= 11) lastNzS + 1 else 12
-                    val rawHex = bytes.take(byteCntS).joinToString("") { "%02X".format(it) }
-                    if (rawHex.length >= 8 && rawHex.count { it != '0' } > 2) {
-                      emitEpc(rawHex, null)
-                      gotAny = true; emptyStreak = 0; totalEmitted++
-                      if (totalEmitted % 10 == 0) Log.d("CarbonChainway", "single poll: emitted $totalEmitted tags")
-                    } else {
-                      // Second try: read as ASCII hex string
-                      val ascii = String(singleResult).trim().uppercase().replace(Regex("[^0-9A-F]"), "")
-                      if (ascii.length >= 8 && ascii.count { it != '0' } > 2) {
-                        emitEpc(ascii, null)
-                        gotAny = true; emptyStreak = 0; totalEmitted++
-                      }
-                    }
-                  }
-                  is String -> if (singleResult.isNotBlank()) {
-                    processRawEpc(singleResult)
-                    gotAny = true; emptyStreak = 0; totalEmitted++
-                  }
-                }
-              }
-
-              // Re-trigger inventory when queue drains
-              if (mInv != null && (emptyStreak == 1 || emptyStreak % 10 == 0)) {
-                runCatching { mInv.invoke(inst, *invArgs) }
-                if (emptyStreak == 1) Log.d("CarbonChainway", "poll: queue empty, re-triggered inventory")
-              }
-
-              Thread.sleep(if (gotAny) 10 else 30)
-            } catch (_: InterruptedException) { break }
-            catch (e: Exception) { Log.w("CarbonChainway", "poll error: ${e.message}") }
-          }
-          Log.d("CarbonChainway", "poll thread exited, total emitted=$totalEmitted")
-        }
-        drainThread.isDaemon = true
-        drainThread.name = "chainway-drain"
-        drainThread.start()
-        pollThread = drainThread
-
+        applyPower()
+        startDrainLoop(cls, inst)
         mainHandler.post { result.success(null) }
       } catch (e: Exception) {
         scanning.set(false)
@@ -462,255 +123,295 @@ class CarbonChainwayRfidController(
 
   fun stopInventoryAsync() {
     if (!scanning.getAndSet(false)) return
-    keepAliveThread?.interrupt()
-    keepAliveThread = null
-    sendScannerBroadcast(ACTION_RFID_STOP)
-    sendScannerBroadcast(ACTION_RFID_DISABLE)
-    unregisterScanReceiver()
-    pollThread?.interrupt()
-    pollThread = null
-    // Call UHFStopGet to stop hardware inventory
-    val cls = uhfClass
-    val inst = uhfInstance
-    if (cls != null && inst != null) {
-      runNativeStopInventory(cls, inst)
-      cls.methods.firstOrNull { it.name == "UHFStopGet" && it.parameterCount == 0 }?.let { m ->
-        m.isAccessible = true; runCatching { m.invoke(inst) }
-      }
-    }
-    Log.d("CarbonChainway", "stopInventory")
+    drainThread?.interrupt(); drainThread = null
+    val cls = uhfClass; val inst = uhfInstance
+    if (cls != null && inst != null) invokeNoArgs(cls, inst, "UHFStopGet", "stopInventory", "stopInventoryTag")
+    // No broadcasts to com.rscja.scanner — those crash it (SIGABRT observed in logcat).
+    Log.d(TAG, "stopInventory")
   }
 
-  fun dispose() {
-    executor.execute { disconnectSync() }
-  }
+  fun dispose() { executor.execute { disconnectSync() } }
 
-  private fun registerScanReceiver() {
-    unregisterScanReceiver()
-    val receiver = object : BroadcastReceiver() {
+  // ── Native trigger ──────────────────────────────────────────────────────────
+
+  fun enableNativeTrigger() {
+    if (triggerReceiver != null) return
+    nativeTriggerActive = true
+    val r = object : BroadcastReceiver() {
       override fun onReceive(ctx: Context?, intent: Intent?) {
-        if (intent == null || !scanning.get()) return
-        val action = intent.action ?: return
-        Log.d("CarbonChainway", "broadcast: action=$action")
-        handleScanBroadcast(intent)
+        if (intent?.action != "com.rscja.android.KEY_DOWN" || !nativeTriggerActive) return
+        executor.execute { if (scanning.get()) stopInventoryAsync() else startDrainLoop(uhfClass ?: return@execute, uhfInstance ?: return@execute) }
       }
     }
-    val filter = IntentFilter().apply {
-      addAction(ACTION_RESULT)   // com.rscja.scanner.action.OUTPUT_BARCODE_RFID
-      addAction(ACTION_RESULT2)  // com.rscja.scanner.action.SCAN_RESULT_BROADCAST
-      addAction("com.rscja.scanner.action.SCAN_FAILURE_BROADCAST")
-      addAction("android.intent.action.SCAN_RFID_RESULT")
-      addAction("android.intent.action.BARCODEOUTPUT")
-      addAction("android.intent.action.OUTPUT_BARCODE_RFID")
-    }
+    registerReceiver(r, IntentFilter("com.rscja.android.KEY_DOWN"))?.let { triggerReceiver = it }
+  }
+
+  fun disableNativeTrigger() {
+    nativeTriggerActive = false
+    triggerReceiver?.let { safeUnregister(it); triggerReceiver = null }
+  }
+
+  // ── UART eviction (Senitron h3/c.java T()+S()+n0()+h0()) ───────────────────
+
+  private fun evictAndInit(cls: Class<*>, inst: Any): Boolean {
+    val myApiId = android.os.SystemClock.elapsedRealtime()
+
+    // Step 1: broadcast UHF_POWER_OFF — com.rscja.scanner's BroadcastReceiver calls UHFFree()
+    Log.d(TAG, "evict: broadcasting UHF_POWER_OFF apiId=$myApiId")
     try {
-      if (android.os.Build.VERSION.SDK_INT >= 33) {
-        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
-      } else {
-        @Suppress("DEPRECATION")
-        context.registerReceiver(receiver, filter)
-      }
-    } catch (e: Exception) {
-      Log.w("CarbonChainway", "registerScanReceiver failed: ${e.message}")
-    }
-    scanReceiver = receiver
-  }
+      context.sendBroadcast(Intent("com.rscja.deviceapi.action.UHF_POWER_OFF").apply {
+        putExtra("apiId", myApiId)
+        addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+      })
+    } catch (e: Exception) { Log.w(TAG, "UHF_POWER_OFF broadcast failed: ${e.message}") }
+    Thread.sleep(400) // wait for com.rscja.scanner to release UART
 
-  private fun unregisterScanReceiver() {
-    val r = scanReceiver ?: return
-    try { context.unregisterReceiver(r) } catch (_: Exception) {}
-    scanReceiver = null
-  }
-
-  private fun handleScanBroadcast(intent: Intent) {
-    val extras = intent.extras
-    if (extras == null) {
-      Log.d("CarbonChainway", "  bcast: no extras on ${intent.action}")
-      return
-    }
-    for (key in extras.keySet()) {
-      Log.d("CarbonChainway", "  bcast extra '$key'='${extras.get(key)}'")
-    }
-    val candidates = listOf(
-      "barcodeCode", "barcodeData", "barcodeStringData", "scan_result",
-      "SCAN_BARCODE_RESULT", "barcode_string", "value", "data",
-      "barcode", "CODE", "code", "epc", "EPC", "result", "RESULT",
-    )
-    for (key in candidates) {
-      val v = extras.getString(key)
-      if (!v.isNullOrBlank()) { processRawEpc(v.trim()); return }
-    }
-    // Fallback: longest string extra
-    var best = ""
-    for (key in extras.keySet()) {
-      val v = extras.getString(key)
-      if (!v.isNullOrBlank() && v.length > best.length) best = v
-    }
-    if (best.isNotBlank()) processRawEpc(best.trim())
-  }
-
-  private fun processRawEpc(raw: String) {
-    val upper = raw.uppercase().replace(Regex("[^0-9A-F]"), "")
-    if (upper.length < 8) return
-    if (upper.count { it != '0' } <= 2) return
-    emitEpc(upper, null)
-  }
-
-  private fun sendScannerBroadcast(action: String) {
-    try {
-      val actions = linkedSetOf(action)
-      val pfx = "com.rscja.scanner.action."
-      if (action.startsWith(pfx)) {
-        actions.add("android.intent.action.${action.removePrefix(pfx)}")
-      }
-      for (a in actions) {
-        val i = Intent(a).apply { addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES) }
-        context.sendBroadcast(i)
-        Log.d("CarbonChainway", "sent broadcast: $a")
-      }
-    } catch (e: Exception) { Log.w("CarbonChainway", "sendBroadcast $action failed: ${e.message}") }
-  }
-
-  private fun runNativeStartInventory(cls: Class<*>, inst: Any) {
-    val direct = cls.methods.firstOrNull {
-      it.name == "startInventory" &&
-        it.parameterCount == 3 &&
-        it.parameterTypes.all { t -> t == java.lang.Integer.TYPE }
-    }?.also { it.isAccessible = true }
-    if (direct != null) {
-      val ok = runCatching {
-        val r = direct.invoke(inst, 0, 0, 6)
-        when (r) {
-          is Int -> r == 0
-          is Boolean -> r
-          else -> true
+    // Step 2: register our own UHF_POWER_OFF receiver so we yield gracefully when asked
+    if (uhfPowerOffReceiver == null) {
+      val r = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+          val incoming = intent?.getLongExtra("apiId", -1L) ?: -1L
+          if (incoming == myApiId) return // our own, ignore
+          Log.d(TAG, "UHF_POWER_OFF from other app — releasing UART")
+          executor.execute {
+            uartOwned = false
+            invokeNoArgs(cls, inst, "UHFFree", "UHFCloseAndDisconnect")
+          }
         }
-      }.getOrElse { false }
-      Log.d("CarbonChainway", "startInventory(0,0,6) -> $ok")
+      }
+      registerReceiver(r, IntentFilter("com.rscja.deviceapi.action.UHF_POWER_OFF"))
+        ?.let { uhfPowerOffReceiver = it }
     }
-    val tagStart = cls.methods.firstOrNull { it.name == "startInventoryTag" && it.parameterCount == 0 }
-      ?.also { it.isAccessible = true }
-    if (tagStart != null) {
-      val ok = runCatching { tagStart.invoke(inst); true }.getOrElse { false }
-      Log.d("CarbonChainway", "startInventoryTag() -> $ok")
+
+    // Step 3: UHFInit
+    val mInit = cls.methods.firstOrNull { it.name == "UHFInit" } ?: run {
+      Log.w(TAG, "UHFInit method not found"); return false
     }
+    mInit.isAccessible = true
+    val appCtx = context.applicationContext
+    val uartPaths = listOf("", "/dev/ttyMT1", "/dev/ttyMT0")
+    var initOk = false
+    for (uart in uartPaths) {
+      val args = mInit.parameterTypes.map { t -> when {
+        t == Context::class.java -> appCtx
+        t == String::class.java -> uart
+        t == Int::class.javaPrimitiveType || t == java.lang.Integer.TYPE -> 0
+        else -> null
+      }}.toTypedArray()
+      val r = timedInvoke(5000) { (mInit.invoke(inst, *args) as? Number)?.toInt() ?: 0 }
+      Log.d(TAG, "UHFInit('$uart') -> $r")
+      if (r == 0) { initOk = true; break }
+    }
+    if (!initOk) { Log.w(TAG, "UHFInit failed all paths"); return false }
+
+    // Step 4: UHFOpenAndConnect
+    val mOpen = cls.methods.firstOrNull { it.name == "UHFOpenAndConnect" }
+    if (mOpen != null) {
+      mOpen.isAccessible = true
+      for (uart in uartPaths) {
+        val args = mOpen.parameterTypes.map { t -> if (t == String::class.java) uart else null }.toTypedArray()
+        val r = timedInvoke(5000) { (mOpen.invoke(inst, *args) as? Number)?.toInt() ?: 0 }
+        Log.d(TAG, "UHFOpenAndConnect('$uart') -> $r")
+        if (r >= 0) { Log.d(TAG, "UART takeover complete"); return true }
+      }
+      Log.w(TAG, "UHFOpenAndConnect failed all paths"); return false
+    }
+
+    // No UHFOpenAndConnect — UHFInit alone may be sufficient on some firmware
+    Log.d(TAG, "UHFOpenAndConnect not found — UHFInit-only path"); return true
   }
 
-  private fun runNativeStopInventory(cls: Class<*>, inst: Any) {
-    for (name in listOf("UHFStopGet", "UHF_StopGet", "stopInventoryTag", "stopInventory")) {
-      val m = cls.methods.firstOrNull { it.name == name && it.parameterCount == 0 } ?: continue
+  // ── Drain loop (Senitron p3/b.java inner class `a`) ─────────────────────────
+
+  private fun startDrainLoop(cls: Class<*>, inst: Any) {
+    // UHFInventory_EX_cnt(0, 0, 6) — start continuous inventory
+    val mInv = cls.methods.firstOrNull { it.name == "UHFInventory_EX_cnt" }
+      ?: cls.methods.firstOrNull { it.name == "UHFInventory_EX" }
+      ?: cls.methods.firstOrNull { it.name == "UHFInventory" }
+    mInv?.isAccessible = true
+
+    val invArgs: Array<Any?> = if (mInv != null) {
+      var ci = 0
+      mInv.parameterTypes.map { t -> when {
+        t == java.lang.Character.TYPE -> java.lang.Character(if (ci++ == 0) '\u0000' else '\u0000')
+        t == java.lang.Integer.TYPE -> java.lang.Integer(0)
+        else -> null
+      }}.toTypedArray()
+    } else arrayOf()
+
+    // Try startInventory(0,0,6) as high-level wrapper
+    cls.methods.firstOrNull { it.name == "startInventory" && it.parameterCount == 3 }?.let { m ->
       m.isAccessible = true
-      runCatching { m.invoke(inst) }
-      Log.d("CarbonChainway", "$name() invoked")
+      runCatching { m.invoke(inst, 0, 0, 6) }
+      Log.d(TAG, "startInventory(0,0,6) called")
     }
-  }
 
-  private fun disconnectSync() {
-    disableNativeTrigger()
-    scanning.set(false)
-    keepAliveThread?.interrupt()
-    keepAliveThread = null
-    pollThread?.interrupt()
-    pollThread = null
-    sendScannerBroadcast(ACTION_RFID_STOP)
-    sendScannerBroadcast(ACTION_RFID_DISABLE)
-    unregisterScanReceiver()
-    val cls = uhfClass
-    val inst = uhfInstance
-    if (cls != null && inst != null) {
-      for (name in listOf("UHFStopGet", "UHFCloseAndDisconnect", "UHFFree")) {
-        cls.methods.firstOrNull { it.name == name && it.parameterCount == 0 }?.let { m ->
-          m.isAccessible = true; runCatching { m.invoke(inst) }
-        }
+    if (mInv != null) {
+      val r = runCatching { mInv.invoke(inst, *invArgs) }.getOrNull()
+      Log.d(TAG, "${mInv.name}() -> $r")
+    }
+
+    // UHFGetReceived_EX2 drain
+    val mGet = cls.methods.firstOrNull { it.name == "UHFGetReceived_EX2" }
+    mGet?.isAccessible = true
+
+    val buf = CharArray(256)
+
+    val t = Thread {
+      Log.d(TAG, "drain loop started, mGet=${mGet?.name}")
+      var total = 0
+      var empty = 0
+      while (scanning.get()) {
+        try {
+          if (mGet != null) {
+            // Clear buffer
+            buf.fill('\u0000')
+            val cnt = runCatching { (mGet.invoke(inst, buf) as? Number)?.toInt() ?: -1 }.getOrElse { -1 }
+            if (cnt > 0) {
+              empty = 0
+              val epc = parseEpcFromBuf(buf)
+              if (epc != null) {
+                emitEpc(epc, null)
+                if (++total % 10 == 0) Log.d(TAG, "drain: $total EPCs emitted")
+              }
+              // No sleep — drain as fast as possible like Senitron (10ms only when empty)
+            } else {
+              empty++
+              // Re-trigger inventory every ~20 empty polls (~200ms)
+              if (empty % 20 == 0 && mInv != null) {
+                runCatching { mInv.invoke(inst, *invArgs) }
+              }
+              android.os.SystemClock.sleep(10)
+            }
+          } else {
+            android.os.SystemClock.sleep(50)
+          }
+        } catch (_: InterruptedException) { break }
+        catch (e: Exception) { Log.w(TAG, "drain err: ${e.message}") }
       }
+      Log.d(TAG, "drain loop exited, total=$total")
     }
-    uhfClass = null
-    uhfInstance = null
+    t.isDaemon = true; t.name = "chainway-drain"; t.start()
+    drainThread = t
   }
 
-  private fun getStaticInstance(cls: Class<*>, appCtx: Context): Any? {
-    runCatching {
-      val m = cls.getMethod("getInstance", Context::class.java)
-      val inst = m.invoke(null, appCtx)
-      if (inst != null) { Log.d("CarbonChainway", "getInstance -> ${inst.javaClass.simpleName}"); return inst }
-    }
-    runCatching {
-      val m = cls.getMethod("getInstance")
-      val inst = m.invoke(null)
-      if (inst != null) { Log.d("CarbonChainway", "getInstance -> ${inst.javaClass.simpleName}"); return inst }
-    }
-    for (libName in listOf("DeviceAPI", "rscja_deviceapi", "uhfapi")) {
-      runCatching { System.loadLibrary(libName) }
-    }
-    runCatching {
-      val ctor = cls.getDeclaredConstructor().apply { isAccessible = true }
-      val inst = ctor.newInstance()
-      if (inst != null) { Log.d("CarbonChainway", "newInstance() succeeded: ${inst.javaClass.simpleName}"); return inst }
+  private fun parseEpcFromBuf(buf: CharArray): String? {
+    // buf[] from UHFGetReceived_EX2:
+    // Senitron reads: buf[0] = tag count field, buf[1..N] = raw EPC bytes
+    // Try raw bytes → hex. Find last non-zero byte to determine EPC length.
+    val bytes = buf.map { it.code and 0xFF }
+    val lastNz = bytes.take(64).indexOfLast { it != 0 }
+    if (lastNz < 1) return null
+    val hex = bytes.take(lastNz + 1).joinToString("") { "%02X".format(it) }
+    val clean = hex.replace(Regex("[^0-9A-F]"), "")
+    return if (clean.length >= 4) clean else null
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  fun resolveUhfClass(): Class<*>? {
+    val primary = "com.rscja.team.mtk.deviceapi.DeviceAPI"
+    val fallbacks = listOf(
+      "com.rscja.deviceapi.DeviceAPI",
+      "com.rscja.deviceapi.RFIDWithUHFUART",
+      "com.rscja.deviceapi.RFIDWithUHF",
+    )
+    // 1. Bundled DEX
+    try {
+      val appCtx = context.applicationContext
+      val dexFile = java.io.File(appCtx.cacheDir, "chainway_uhf.dex")
+      if (!dexFile.exists()) {
+        appCtx.assets.open("chainway_uhf.dex").use { i -> dexFile.outputStream().use { o -> i.copyTo(o) } }
+      }
+      val optDir = appCtx.getDir("dex_opt", android.content.Context.MODE_PRIVATE)
+      val cl = dalvik.system.DexClassLoader(dexFile.absolutePath, optDir.absolutePath, null, appCtx.classLoader)
+      val cls = cl.loadClass(primary)
+      Log.d(TAG, "DexClassLoader: loaded $primary")
+      return cls
+    } catch (e: Throwable) { Log.w(TAG, "DexClassLoader failed: ${e.message}") }
+    // 2. System class loader
+    for (n in listOf(primary) + fallbacks) {
+      try { return Class.forName(n).also { Log.d(TAG, "Class.forName: $n") } } catch (_: Throwable) {}
     }
     return null
   }
 
-  private fun tryApplyChainwayPower() {
-    val cls = uhfClass ?: return
-    val inst = uhfInstance ?: return
+  private fun getStaticInstance(cls: Class<*>): Any? {
+    val appCtx = context.applicationContext
+    runCatching { cls.getMethod("getInstance", Context::class.java).invoke(null, appCtx)?.let { return it } }
+    runCatching { cls.getMethod("getInstance").invoke(null)?.let { return it } }
+    for (lib in listOf("DeviceAPI", "rscja_deviceapi", "uhfapi")) runCatching { System.loadLibrary(lib) }
+    runCatching { cls.getDeclaredConstructor().apply { isAccessible = true }.newInstance()?.let { return it } }
+    return null
+  }
+
+  private fun applyPower() {
+    val cls = uhfClass ?: return; val inst = uhfInstance ?: return
     val p = requestedPowerDbm.get().coerceIn(0, 30)
     val m = cls.methods.firstOrNull { it.name in setOf("UHFSetPower", "setPower", "SetPower", "setOutputPower") && it.parameterCount == 1 }
       ?.also { it.isAccessible = true } ?: return
     val arg: Any = if (m.parameterTypes[0] == java.lang.Character.TYPE) java.lang.Character(p.toChar()) else java.lang.Integer(p)
     runCatching { m.invoke(inst, arg) }
-    Log.d("CarbonChainway", "${m.name}($p) applied")
+    Log.d(TAG, "${m.name}($p) applied")
   }
 
-  private fun invokeInit(cls: Class<*>, inst: Any) {
-    val ctx = context.applicationContext
-    val rCls = inst.javaClass
-    rCls.methods.filter { it.name.startsWith("UHF") }.forEach { m ->
-      Log.d("CarbonChainway", "method ${m.name} params=${m.parameterTypes.map { it.simpleName }}")
+  private fun invokeNoArgs(cls: Class<*>, inst: Any, vararg names: String) {
+    for (name in names) {
+      cls.methods.firstOrNull { it.name == name && it.parameterCount == 0 }?.let { m ->
+        m.isAccessible = true; runCatching { m.invoke(inst) }; Log.d(TAG, "$name() invoked")
+      }
     }
-    fun find(vararg names: String): java.lang.reflect.Method? {
-      for (name in names) rCls.methods.firstOrNull { it.name == name }?.let { it.isAccessible = true; return it }
-      return null
-    }
+  }
 
-    val mInit = find("UHFInit") ?: run {
-      find("init")?.let { it.isAccessible = true; runCatching { it.invoke(inst, ctx) } }
-      return
-    }
+  private fun timedInvoke(timeoutMs: Long, block: () -> Int): Int {
+    val exec = Executors.newSingleThreadExecutor()
+    val f = exec.submit<Int> { runCatching(block).getOrElse { -99 } }
+    return try { f.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) }
+    catch (e: java.util.concurrent.TimeoutException) { f.cancel(true); -98 }
+    catch (_: Exception) { -97 }
+    finally { exec.shutdownNow() }
+  }
 
-    Log.d("CarbonChainway", "Found UHFInit params=${mInit.parameterTypes.map { it.simpleName }}")
-    for (uart in listOf("/dev/ttyMT1", "/dev/ttyMT0", "/dev/ttyMT2", "")) {
-      val args = mInit.parameterTypes.map { t ->
-        when {
-          t == Context::class.java -> ctx
-          t == String::class.java -> uart
-          t == Int::class.javaPrimitiveType || t == java.lang.Integer.TYPE -> 0
-          else -> null
-        }
-      }.toTypedArray()
-      val ok = runCatching { mInit.invoke(inst, *args) as? Boolean ?: true }.getOrElse { false }
-      Log.d("CarbonChainway", "UHFInit(${if (uart.isEmpty()) "\"\"" else "'$uart'"}) -> $ok")
-      if (ok) break
-    }
+  private fun registerReceiver(r: BroadcastReceiver, filter: IntentFilter): BroadcastReceiver? {
+    return try {
+      if (android.os.Build.VERSION.SDK_INT >= 33) {
+        context.registerReceiver(r, filter, Context.RECEIVER_EXPORTED)
+      } else {
+        @Suppress("DEPRECATION") context.registerReceiver(r, filter)
+      }
+      r
+    } catch (e: Exception) { Log.w(TAG, "registerReceiver failed: ${e.message}"); null }
+  }
 
-    val mOpen = find("UHFOpenAndConnect") ?: return
-    Log.d("CarbonChainway", "Found UHFOpenAndConnect params=${mOpen.parameterTypes.map { it.simpleName }}")
-    for (uart in listOf("/dev/ttyMT1", "/dev/ttyMT0", "")) {
-      val args = mOpen.parameterTypes.map { t -> if (t == String::class.java) uart else null }.toTypedArray()
-      val ok = runCatching { mOpen.invoke(inst, *args) as? Boolean ?: true }.getOrElse { false }
-      Log.d("CarbonChainway", "UHFOpenAndConnect -> $ok")
-      if (ok) { Log.d("CarbonChainway", "init() succeeded"); break }
+  private fun safeUnregister(r: BroadcastReceiver) {
+    try { context.unregisterReceiver(r) } catch (_: Exception) {}
+  }
+
+  private fun disconnectSync() {
+    disableNativeTrigger()
+    scanning.set(false)
+    drainThread?.interrupt(); drainThread = null
+    seenEpcs.clear()
+    uhfPowerOffReceiver?.let { safeUnregister(it); uhfPowerOffReceiver = null }
+    val cls = uhfClass; val inst = uhfInstance
+    if (cls != null && inst != null) {
+      // Only stop/free the native SDK — no broadcasts to com.rscja.scanner.
+      invokeNoArgs(cls, inst, "UHFStopGet", "UHFCloseAndDisconnect", "UHFFree", "stopInventory")
     }
+    uartOwned = false
+    uhfClass = null; uhfInstance = null
   }
 
   private fun emitEpc(hex: String, rssi: Int?) {
-    val sink = tagSink ?: return
     val up = hex.uppercase().replace(Regex("[^0-9A-F]"), "")
-    if (up.length < 8 || up.all { it == '0' }) {
-      Log.w("CarbonChainway", "emitEpc: rejected epc='$up'")
-      return
-    }
-    Log.d("CarbonChainway", "emitEpc len=${up.length} hex='$up'")
-    val payload = mapOf("epc" to up, "rssi" to (rssi ?: -55))
-    mainHandler.post { sink.success(payload) }
+    if (up.length < 4) return
+    if (!seenEpcs.add(up)) return
+    Log.d(TAG, "EPC: $up")
+    val sink = tagSink ?: return
+    mainHandler.post { sink.success(mapOf("epc" to up, "rssi" to (rssi ?: 0))) }
+  }
+
+  companion object {
+    private const val TAG = "CarbonChainway"
   }
 }

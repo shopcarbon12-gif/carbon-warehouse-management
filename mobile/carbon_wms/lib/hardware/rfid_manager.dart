@@ -223,7 +223,8 @@ class RfidManager extends ChangeNotifier {
     final compact = s.replaceAll(RegExp(r'\s+'), '');
     var read = RfidTagRead.tryParse(compact);
     if (read == null) {
-      final m = RegExp(r'([0-9A-F]{24})').firstMatch(compact);
+      // Try any contiguous hex run of 8+ chars — not locked to exactly 24.
+      final m = RegExp(r'([0-9A-F]{8,})').firstMatch(compact);
       if (m == null) return;
       read = RfidTagRead.tryParse(m.group(1)!);
     }

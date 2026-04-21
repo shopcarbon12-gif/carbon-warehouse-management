@@ -121,6 +121,23 @@ class RfidVendorChannel {
     } catch (_) {}
   }
 
+  /// Physically closes (powers off) the 2D barcode engine on Chainway C72E.
+  /// Use in RFID-only screens so the laser never fires regardless of trigger state.
+  static Future<void> close2dBarcode() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('scanner.close2dBarcode');
+    } catch (_) {}
+  }
+
+  /// Re-opens the 2D barcode engine after [close2dBarcode].
+  static Future<void> open2dBarcode() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('scanner.open2dBarcode');
+    } catch (_) {}
+  }
+
   static Future<void> scannerEnableTriggerRelay() async {
     if (!_isAndroid) return;
     try {
@@ -209,6 +226,13 @@ class RfidVendorChannel {
     if (!_isAndroid) return;
     try {
       await _method.invokeMethod<void>('chainway.stopInventory');
+    } catch (_) {}
+  }
+
+  static Future<void> clearChainwaySeenEpcs() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('chainway.clearSeenEpcs');
     } catch (_) {}
   }
 

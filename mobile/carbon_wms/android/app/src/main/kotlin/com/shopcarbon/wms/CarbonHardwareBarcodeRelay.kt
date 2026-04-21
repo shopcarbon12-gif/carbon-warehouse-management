@@ -37,15 +37,15 @@ class CarbonHardwareBarcodeRelay(
 
   fun activateTriggerRelay() {
     triggerRelayEnabled = true
-    register()
+    register() // re-registers if unregistered by deactivateTriggerRelay
   }
 
-  /** Unregisters the KEY_DOWN/KEY_UP receiver without touching the EventChannel sink. */
+  /** Unregisters the broadcast receiver entirely so KEY_DOWN never reaches com.rscja.scanner. */
   fun deactivateTriggerRelay() {
-    // Do NOT send BARCODESTOPSCAN — it deadlocks com.rscja.scanner when in RFID mode.
     triggerRelayEnabled = false
     scanActive = false
     cancelScanTimeout()
+    unregister()
   }
 
   fun dispose() {
@@ -175,12 +175,14 @@ class CarbonHardwareBarcodeRelay(
       arrayOf(
         KEY_DOWN_ACTION,
         KEY_UP_ACTION,
+        "android.intent.action.BARCODEOUTPUT",          // primary C72E UHF output action
         "com.rscja.scanner.action.OUTPUT_BARCODE_RFID",
         "com.rscja.scanner.action.SCAN_RESULT_BROADCAST",
         "android.intent.action.SCANRESULT",
         "android.intent.action.SCAN_RESULT_BROADCAST",
         "android.intent.action.SCAN_RESULT_BROADCAST_RFID",
         "com.rscja.android.DATA_RESULT",
+        // com.rscja.android.ScannerWrite excluded — only carries file path info, not EPC data
         "android.intent.ACTION_DECODE_DATA",
         "android.intent.action.DECODE_DATA",
         "com.android.decode.action.BARCODE_DECODED",

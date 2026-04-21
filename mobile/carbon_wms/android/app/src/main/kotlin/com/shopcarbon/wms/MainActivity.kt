@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -20,6 +22,10 @@ class MainActivity : FlutterFragmentActivity() {
   private var chainwayController: CarbonChainwayRfidController? = null
   private var hardwareBarcodeRelay: CarbonHardwareBarcodeRelay? = null
   private var hardwareTriggerRelay: CarbonHardwareTriggerRelay? = null
+  private var senitronBridge: SenitronPluginBridge? = null
+  private val mainHandler = Handler(Looper.getMainLooper())
+  private var laserLockRunnable: Runnable? = null
+
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -37,22 +43,32 @@ class MainActivity : FlutterFragmentActivity() {
     val triggerRelay = CarbonHardwareTriggerRelay(this)
     zebraController = zebra
     chainwayController = chainway
+    MainActivity.chainwayController = chainway
     hardwareBarcodeRelay = barcodeRelay
     hardwareTriggerRelay = triggerRelay
 
     EventChannel(messenger, "carbon_wms/hardware_barcode").setStreamHandler(barcodeRelay)
     EventChannel(messenger, "carbon_wms/hardware_trigger").setStreamHandler(triggerRelay)
 
+    val bridge = SenitronPluginBridge(this)
+    senitronBridge = bridge
+    MainActivity.senitronBridge = bridge
+
     EventChannel(messenger, "carbon_wms/rfid_tag_stream").setStreamHandler(
       object : EventChannel.StreamHandler {
         override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
           zebra.setTagSink(events)
           chainway.setTagSink(events)
+          bridge.tagSink = events
+          bridge.start()
         }
 
         override fun onCancel(arguments: Any?) {
           zebra.setTagSink(null)
           chainway.setTagSink(null)
+          bridge.tagSink = null
+          // Do NOT stop the logcat bridge on cancel — it must keep reading hqs:V lines
+          // so EPCs are available when the stream is re-subscribed (e.g. screen re-enters).
         }
       },
     )
@@ -172,6 +188,12 @@ class MainActivity : FlutterFragmentActivity() {
           }
           result.success(true)
         }
+        "scanner.close2dBarcode" -> {
+          result.success(true)
+        }
+        "scanner.open2dBarcode" -> {
+          result.success(true)
+        }
         "zebra.connect" -> {
           val args = call.arguments as? Map<*, *>
           val name = args?.get("readerName") as? String
@@ -218,6 +240,10 @@ class MainActivity : FlutterFragmentActivity() {
           chainway.stopInventoryAsync()
           result.success(null)
         }
+        "chainway.clearSeenEpcs" -> {
+          chainway.clearSeenEpcs()
+          result.success(null)
+        }
         "chainway.startInventory" -> {
           if (chainway.resolveUhfClass() == null) {
             result.error("NO_SDK", "Chainway DeviceAPI not present.", null)
@@ -242,15 +268,54 @@ class MainActivity : FlutterFragmentActivity() {
     if (!isChangingConfigurations && isFinishing) {
       SessionPrefsBridge.clearWmsSessionToken(this)
     }
+    stopLaserLockTimer()
     zebraController?.dispose()
     chainwayController?.dispose()
     hardwareBarcodeRelay?.dispose()
     hardwareTriggerRelay?.dispose()
+    senitronBridge?.dispose()
     hardwareBarcodeRelay = null
     hardwareTriggerRelay = null
     zebraController = null
     chainwayController = null
+    senitronBridge = null
+    MainActivity.chainwayController = null
+    MainActivity.senitronBridge = null
     super.onDestroy()
+  }
+
+  private fun sendLaserLock() {
+    val lockActions = listOf(
+      "android.intent.action.BARCODELOCKSCANKEY",
+      "android.intent.action.BARCODESTOPSCAN",
+    )
+    for (action in lockActions) {
+      runCatching {
+        sendBroadcast(
+          android.content.Intent(action).apply {
+            addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+          },
+        )
+      }
+    }
+  }
+
+  private fun startLaserLockTimer() {
+    stopLaserLockTimer()
+    val r = object : Runnable {
+      override fun run() {
+        sendLaserLock()
+        mainHandler.postDelayed(this, 1500)
+      }
+    }
+    laserLockRunnable = r
+    mainHandler.post(r)
+  }
+
+  private fun stopLaserLockTimer() {
+    val r = laserLockRunnable ?: return
+    laserLockRunnable = null
+    mainHandler.removeCallbacks(r)
   }
 
   private fun classPresent(name: String): Boolean =
@@ -261,7 +326,9 @@ class MainActivity : FlutterFragmentActivity() {
       false
     }
 
-  private companion object {
+  companion object {
     const val ZEBRA_RFID_READER = "com.zebra.rfid.api3.RFIDReader"
+    @Volatile var chainwayController: CarbonChainwayRfidController? = null
+    @Volatile var senitronBridge: SenitronPluginBridge? = null
   }
 }
