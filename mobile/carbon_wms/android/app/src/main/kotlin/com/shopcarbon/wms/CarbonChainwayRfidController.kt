@@ -71,13 +71,39 @@ class CarbonChainwayRfidController(private val context: Context) {
     val r = object : BroadcastReceiver() {
       override fun onReceive(ctx: Context?, intent: Intent?) {
         val action = intent?.action ?: return
-        val epc = EPC_EXTRA_KEYS.firstNotNullOfOrNull { key ->
-          intent.getStringExtra(key)?.trim()?.takeIf { it.isNotEmpty() }
+        var epc = EPC_EXTRA_KEYS.firstNotNullOfOrNull { key ->
+          intent.getStringExtra(key)?.let { extractHexCandidate(it) }
         } ?: EPC_BYTE_KEYS.firstNotNullOfOrNull { key ->
-          intent.getByteArrayExtra(key)?.let { String(it).trim().takeIf { s -> s.isNotEmpty() } }
-        } ?: return
-        Log.d(TAG, "broadcast EPC action=$action epc=$epc")
-        emitEpc(epc, null)
+          intent.getByteArrayExtra(key)?.let { extractHexCandidate(String(it)) }
+        }
+        // Some scanner firmware/builds use unknown extra keys. Fallback: inspect all extras.
+        if (epc.isNullOrBlank()) {
+          val extras = intent.extras
+          if (extras != null) {
+            for (key in extras.keySet()) {
+              val v = extras.get(key) ?: continue
+              when (v) {
+                is String -> {
+                  val s = extractHexCandidate(v)
+                  if (s.isNotEmpty()) {
+                    epc = s
+                    break
+                  }
+                }
+                is ByteArray -> {
+                  val s = runCatching { extractHexCandidate(String(v)) }.getOrDefault("")
+                  if (s.isNotEmpty()) {
+                    epc = s
+                    break
+                  }
+                }
+              }
+            }
+          }
+        }
+        val epcValue = epc ?: return
+        Log.d(TAG, "broadcast EPC action=$action epc=$epcValue")
+        emitEpc(epcValue, null)
       }
     }
     val filter = IntentFilter().apply {
@@ -376,8 +402,8 @@ class CarbonChainwayRfidController(private val context: Context) {
       // setScanResultBroadcastRFID — route RFID EPCs to our registered receiver
       runCatching {
         cls.getMethod("setScanResultBroadcastRFID", Context::class.java, String::class.java, String::class.java)
-          .invoke(inst, context, SCANNER_WRITE_EPC_ACTION, SCANNER_WRITE_EPC_KEY)
-        Log.d(TAG, "ScannerUtility.setScanResultBroadcastRFID → $SCANNER_WRITE_EPC_ACTION / $SCANNER_WRITE_EPC_KEY")
+          .invoke(inst, context, SCANNER_OUTPUT_RFID_ACTION, SCANNER_OUTPUT_RFID_KEY)
+        Log.d(TAG, "ScannerUtility.setScanResultBroadcastRFID → $SCANNER_OUTPUT_RFID_ACTION / $SCANNER_OUTPUT_RFID_KEY")
       }.onFailure { Log.w(TAG, "setScanResultBroadcastRFID failed: ${it.message}") }
 
       // setContinuousScanRFID — multi-tag continuous mode
@@ -720,10 +746,20 @@ class CarbonChainwayRfidController(private val context: Context) {
   private fun emitEpc(hex: String, rssi: Int?) {
     val up = hex.uppercase().replace(Regex("[^0-9A-F]"), "")
     if (up.isEmpty()) return
-    if (!seenEpcs.add(up)) return
+    // Do not hard-drop duplicate sightings here; Count screen uses repeated sightings
+    // to mark defective duplicate behavior (xN). Higher layers still own quantity logic.
     Log.d(TAG, "EPC: $up")
     val sink = tagSink ?: return
     mainHandler.post { sink.success(mapOf("epc" to up, "rssi" to (rssi ?: 0))) }
+  }
+
+  private fun extractHexCandidate(raw: String): String {
+    val s = raw.trim().uppercase()
+    if (s.isEmpty()) return ""
+    // Ignore scanner config paths/filenames that are occasionally broadcast as metadata.
+    if (s.contains("/") || s.contains(".XML")) return ""
+    if (Regex("^[0-9A-F]{8,}$").matches(s)) return s
+    return Regex("([0-9A-F]{8,})").find(s)?.groupValues?.get(1) ?: ""
   }
 
   companion object {
@@ -732,6 +768,8 @@ class CarbonChainwayRfidController(private val context: Context) {
 
     const val SCANNER_WRITE_EPC_ACTION = "com.shopcarbon.wms.RFID_EPC"
     const val SCANNER_WRITE_EPC_KEY = "epc"
+    const val SCANNER_OUTPUT_RFID_ACTION = "com.rscja.scanner.action.OUTPUT_BARCODE_RFID"
+    const val SCANNER_OUTPUT_RFID_KEY = "barcodeCode"
 
     // All broadcast actions that may carry an EPC from the scanner service.
     // android.intent.action.scanner.RFID is the firmware's own default (from KeyboardHelperParam.xml

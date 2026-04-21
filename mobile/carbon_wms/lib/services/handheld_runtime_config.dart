@@ -49,8 +49,8 @@ class HandheldRuntimeConfig {
 
   static const HandheldRuntimeConfig fallback = HandheldRuntimeConfig(
     triggerModeHoldRelease: true,
-    transferOutAntennaPower: 27,
-    transferInAntennaPower: 24,
+    transferOutAntennaPower: 30,
+    transferInAntennaPower: 30,
     transferOutPowerLock: true,
     itemDetailsTemplate: '{{item.customSku}} - {{item.name}}',
     tagDetailsTemplate: '{{epc.id}}\n{{epc.status}} · {{epc.zone}}',
@@ -68,8 +68,8 @@ class HandheldRuntimeConfig {
       holdRelease = false;
     }
 
-    var outPower = 270;
-    var inPower = 240;
+    var outPower = 300;
+    var inPower = 300;
     var powerLock = true;
     if (transfer is Map) {
       final o = transfer['transferOutAntennaPower'];

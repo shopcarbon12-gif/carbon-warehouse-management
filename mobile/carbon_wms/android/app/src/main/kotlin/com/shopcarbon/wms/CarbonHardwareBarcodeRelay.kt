@@ -45,7 +45,9 @@ class CarbonHardwareBarcodeRelay(
     triggerRelayEnabled = false
     scanActive = false
     cancelScanTimeout()
-    unregister()
+    // Keep receiver registered so EPC broadcasts still reach Flutter while
+    // trigger-driven 2D scan toggling is disabled.
+    register()
   }
 
   fun dispose() {

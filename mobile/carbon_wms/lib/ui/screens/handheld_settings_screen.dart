@@ -41,8 +41,8 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
   // ── Sound ─────────────────────────────────────────────────────────────────
   static const _keySoundEnabled = 'wms_sound_tag_read_v1';
   static const _keyVolume       = 'wms_tag_read_volume_v1';
-  bool   _soundEnabled = false;
-  double _volume       = 0.8; // 0.0 – 1.0
+  bool   _soundEnabled = true;
+  double _volume       = 1.0; // 0.0 – 1.0
 
   // ── Scanner source ────────────────────────────────────────────────────────
   static const _keyScannerSource = 'wms_scanner_source_v1';
@@ -74,10 +74,16 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
     final p = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _soundEnabled  = p.getBool(_keySoundEnabled)  ?? false;
-      _volume        = p.getDouble(_keyVolume)       ?? 0.8;
+      _soundEnabled  = p.getBool(_keySoundEnabled)  ?? true;
+      _volume        = p.getDouble(_keyVolume)       ?? 1.0;
       _scannerSource = p.getString(_keyScannerSource) ?? 'hardware';
     });
+    if (!p.containsKey(_keySoundEnabled)) {
+      await p.setBool(_keySoundEnabled, true);
+    }
+    if (!p.containsKey(_keyVolume)) {
+      await p.setDouble(_keyVolume, 1.0);
+    }
   }
 
   Future<void> _setSoundEnabled(bool v) async {

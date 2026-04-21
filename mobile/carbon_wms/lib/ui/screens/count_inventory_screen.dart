@@ -60,10 +60,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   int _displaySkuCount = 0;
   String? _previousScanContext;
 
-  // Keyboard wedge capture — C72E KeyboardHelperService injects EPC as text input.
-  final _wedgeFocus = FocusNode();
-  final _wedgeController = TextEditingController();
-  Timer? _wedgeDebounce;
+  DateTime? _lastTriggerToggleAt;
 
   @override
   void initState() {
@@ -97,32 +94,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initModule());
-      _refocusWedgeCapture();
-    });
-    _wedgeController.addListener(_onWedgeText);
-  }
-
-  void _refocusWedgeCapture() {
-    if (!mounted) return;
-    _wedgeFocus.requestFocus();
-    SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-  }
-
-  void _onWedgeText() {
-    final text = _wedgeController.text;
-    if (text.isEmpty) return;
-    // Debounce: scanner sends chars fast; wait 80ms after last char before parsing.
-    _wedgeDebounce?.cancel();
-    _wedgeDebounce = Timer(const Duration(milliseconds: 80), () {
-      final raw = _wedgeController.text
-          .trim()
-          .toUpperCase()
-          .replaceAll(RegExp(r'[^0-9A-F]'), '');
-      _wedgeController.clear();
-      if (raw.isNotEmpty) {
-        if (kDebugMode) print('[CountInventory] wedge epc=$raw');
-        _ingestEpc(epc: raw, rssi: 0);
-      }
     });
   }
 
@@ -156,10 +127,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       await RfidVendorChannel.open2dBarcode();
       await RfidVendorChannel.scannerEnableTriggerRelay();
     }());
-    _wedgeDebounce?.cancel();
-    _wedgeController.removeListener(_onWedgeText);
-    _wedgeController.dispose();
-    _wedgeFocus.dispose();
     super.dispose();
   }
 
@@ -293,7 +260,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       await RfidVendorChannel.scannerDisableTriggerRelay();
       await RfidVendorChannel.close2dBarcode();
       await RfidVendorChannel.enableRfidFunctionMode();
-      _refocusWedgeCapture();
 
       // Count gear settings override global settings while inside Count.
       await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
@@ -317,6 +283,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
         if (kDebugMode) print('[CountInventory] hardware_trigger event=$event');
         if (event == 'down') {
+          final now = DateTime.now();
+          final last = _lastTriggerToggleAt;
+          if (last != null &&
+              now.difference(last).inMilliseconds < 300) {
+            return;
+          }
+          _lastTriggerToggleAt = now;
           if (_scanOn) {
             unawaited(_stopScan());
           } else {
@@ -331,7 +304,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           _scanOn = false;
         });
       }
-      _refocusWedgeCapture();
     } finally {
       _connecting = false;
     }
@@ -352,8 +324,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (next == null) return;
     setState(() => _moduleSettings = next);
     await _saveModuleSettings();
-    // Force max power on Count to match aggressive handheld inventory behavior.
-    await RfidVendorChannel.setAntennaPowerDbm(30);
+    // Count gear settings are authoritative while inside Count.
+    await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
   }
 
   Future<void> _playBeep() async {
@@ -402,10 +374,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     }
     final row = _epcRows[normalized];
     if (row != null) {
-      row.lastSeen = now;
-      row.rssi = rssi;
-      row.duplicateSightings += 1;
-      // Duplicate — no beep, no UI rebuild.
+      // Hard lock: once an EPC is scanned in Count, repeat sightings are ignored.
+      if (mounted) setState(() {});
       return;
     } else {
       _epcRows[normalized] = _SessionEpcRow(
@@ -417,7 +387,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         lastSeen: now,
         rssi: rssi,
       );
-      // Audible feedback only on first sight of this EPC.
+      // Audible feedback on accepted EPC only.
       unawaited(_playBeep());
     }
     // One group per unique EPC — like Senitron's Assets List
@@ -477,7 +447,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   Future<void> _startScan() async {
     if (_scanOn) return;
-    _refocusWedgeCapture();
+    // Native dedup persists across process/session; clear at each Count start so
+    // physically present EPCs are emitted again for the active count session.
+    await RfidVendorChannel.clearChainwaySeenEpcs();
     await RfidVendorChannel.close2dBarcode();
     await RfidVendorChannel.enableRfidFunctionMode();
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
@@ -493,7 +465,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     setState(() {
       _scanOn = started;
     });
-    _refocusWedgeCapture();
     if (started) unawaited(_playStartTone());
     if (kDebugMode) print('[CountInventory] startScan started=$started');
   }
@@ -642,7 +613,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final skuCount = _displaySkuCount;
     final summaryValueText = '$assetCount';
     final summarySkuValueText = '$skuCount';
-    final continueButtonWidth = _continueButtonTightWidth();
     final tileColor =
         isDark ? const Color(0xFF1C2828) : const Color(0xFFEEF4F3);
     final textColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
@@ -662,26 +632,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       ],
       body: Stack(
         children: [
-          // Off-screen TextField captures keyboard wedge input from C72E KeyboardHelperService.
-          Positioned(
-            left: -9999,
-            top: 0,
-            child: SizedBox(
-              width: 1,
-              height: 1,
-              child: TextField(
-                focusNode: _wedgeFocus,
-                controller: _wedgeController,
-                autofocus: true,
-                autocorrect: false,
-                enableSuggestions: false,
-                enableInteractiveSelection: false,
-                showCursor: false,
-                keyboardType: TextInputType.visiblePassword,
-                decoration: const InputDecoration.collapsed(hintText: ''),
-              ),
-            ),
-          ),
           ColoredBox(
             color: Colors.white,
             child: Column(
@@ -773,9 +723,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                                       ? 'ITEM DESCRIPTION'
                                       : 'NON-F0A0B EPC')
                                   : descParts.join(' ');
-                              final defectText = row.duplicateSightings > 0
-                                  ? 'DEFECTIVE DUPLICATE x${row.duplicateSightings + 1}'
-                                  : '';
+                              final defectText = '';
                               final descWithDefect = defectText.isEmpty
                                   ? desc
                                   : '$desc • $defectText';
@@ -1013,26 +961,6 @@ String _summaryCountDisplayString(String raw) {
   return n.toString();
 }
 
-double _continueButtonTightWidth() {
-  const horizontalPadding = 12.0 * 2;
-  const gap = 8.0;
-  const iconSlot = 20.0;
-  final painter = TextPainter(
-    text: TextSpan(
-      text: 'CONTINUE',
-      style: GoogleFonts.spaceGrotesk(
-        fontSize: 16.sp,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 1.5,
-        color: Colors.white,
-      ),
-    ),
-    maxLines: 1,
-    textDirection: TextDirection.ltr,
-  )..layout();
-  return horizontalPadding + painter.size.width + gap + iconSlot;
-}
-
 class _CountItemContainer extends StatefulWidget {
   const _CountItemContainer({
     required this.rowKey,
@@ -1059,14 +987,13 @@ class _CountItemContainer extends StatefulWidget {
 }
 
 class _CountItemContainerState extends State<_CountItemContainer> {
-  static const _fixedContainerHeight = 80.0;
-  static const _expandedContainerHeight = 96.0;
+  static const _fixedContainerHeight = 68.0;
   bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final descStyle = GoogleFonts.manrope(
-      fontSize: 15.sp,
+      fontSize: 17.sp,
       fontWeight: FontWeight.w700,
       color: AppColors.textMain,
       letterSpacing: 0.0,
@@ -1074,19 +1001,19 @@ class _CountItemContainerState extends State<_CountItemContainer> {
     );
 
     final content = Material(
-      color: const Color(0xFFEFF3F7),
+      color: const Color(0xFFECECEC),
       borderRadius: BorderRadius.zero,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          const horizontalPadding = 14.0 * 2;
-          const qtyGap = 10.0;
+          const horizontalPadding = 12.0 + 12.0;
+          const qtyGap = 6.0 + 12.0;
           final qtyPainter = TextPainter(
             text: TextSpan(
                 text: widget.qtyText,
                 style: GoogleFonts.spaceGrotesk(
-                    fontSize: 28.sp,
+                    fontSize: 26.sp,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 0.4,
+                    letterSpacing: 0.0,
                     height: 1.2)),
             maxLines: 1,
             textDirection: Directionality.of(context),
@@ -1101,12 +1028,11 @@ class _CountItemContainerState extends State<_CountItemContainer> {
             maxLines: 1,
             textDirection: Directionality.of(context),
           )..layout(maxWidth: textAvailableWidth);
-          final canExpand = widget.description != 'ITEM DESCRIPTION' &&
-              descPainter.didExceedMaxLines;
+          final canExpand = widget.description != 'ITEM DESCRIPTION' && descPainter.didExceedMaxLines;
+          final showExpanded = canExpand && _expanded;
 
           return InkWell(
-            onTap:
-                canExpand ? () => setState(() => _expanded = !_expanded) : null,
+            onTap: canExpand ? () => setState(() => _expanded = !_expanded) : null,
             child: Padding(
               padding: EdgeInsets.zero,
               child: AnimatedSize(
@@ -1114,6 +1040,7 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                 curve: Curves.easeInOut,
                 alignment: Alignment.topCenter,
                 child: SizedBox(
+                  height: showExpanded ? null : _fixedContainerHeight,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -1131,7 +1058,7 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                                 softWrap: true,
                                 textAlign: TextAlign.left,
                                 style: GoogleFonts.robotoMono(
-                                  fontSize: 16.sp,
+                                  fontSize: 19.sp,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.textMain,
                                   letterSpacing: 0.0,
@@ -1142,8 +1069,8 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                               Text(
                                 widget.description,
                                 style: descStyle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                maxLines: showExpanded ? null : 1,
+                                overflow: showExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
                                 textAlign: TextAlign.left,
                               ),
                             ],
@@ -1154,14 +1081,17 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                       GestureDetector(
                         onTap: widget.onQtyTap,
                         behavior: HitTestBehavior.opaque,
-                        child: Text(
-                          widget.qtyText,
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 28.sp,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                            letterSpacing: 0.4,
-                            height: 1.2,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 6, right: 12),
+                          child: Text(
+                            widget.qtyText,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 26.sp,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                              letterSpacing: 0.0,
+                              height: 1.2,
+                            ),
                           ),
                         ),
                       ),
