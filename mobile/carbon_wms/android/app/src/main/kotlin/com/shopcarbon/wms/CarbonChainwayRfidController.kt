@@ -418,17 +418,23 @@ class CarbonChainwayRfidController(private val context: Context) {
       }.onFailure { Log.w(TAG, "setOutputMode failed: ${it.message}") }
 
       // setScanResultBroadcastRFID — firmware differs by build; try multiple known routes.
-      val setRoute = cls.getMethod(
-        "setScanResultBroadcastRFID",
-        Context::class.java,
-        String::class.java,
-        String::class.java,
-      )
-      for ((action, key) in RFID_BROADCAST_ROUTES) {
-        runCatching {
-          setRoute.invoke(inst, context, action, key)
-          Log.d(TAG, "ScannerUtility.setScanResultBroadcastRFID → $action / $key")
-        }.onFailure { Log.w(TAG, "setScanResultBroadcastRFID($action,$key) failed: ${it.message}") }
+      // getMethod() itself throws NoSuchMethodException on some MTK builds — wrap it.
+      val setRoute = runCatching {
+        cls.getMethod(
+          "setScanResultBroadcastRFID",
+          Context::class.java,
+          String::class.java,
+          String::class.java,
+        )
+      }.onFailure { Log.w(TAG, "setScanResultBroadcastRFID method not found: ${it.message}") }
+        .getOrNull()
+      if (setRoute != null) {
+        for ((action, key) in RFID_BROADCAST_ROUTES) {
+          runCatching {
+            setRoute.invoke(inst, context, action, key)
+            Log.d(TAG, "ScannerUtility.setScanResultBroadcastRFID → $action / $key")
+          }.onFailure { Log.w(TAG, "setScanResultBroadcastRFID($action,$key) failed: ${it.message}") }
+        }
       }
 
       // setContinuousScanRFID — multi-tag continuous mode
@@ -835,6 +841,8 @@ class CarbonChainwayRfidController(private val context: Context) {
       "android.intent.action.SCAN_RESULT_BROADCAST",
       "com.rscja.scanner.action.OUTPUT_BARCODE_RFID",
       "android.intent.action.BARCODEOUTPUT",
+      "com.rscja.android.OVER_RESULT",         // seen on some C72E builds alongside BARCODEOUTPUT
+      "com.rscja.android.OVERDATA_RESULT",
     )
 
     private val EPC_EXTRA_KEYS = arrayOf(

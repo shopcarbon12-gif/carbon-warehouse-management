@@ -47,6 +47,7 @@ class MainActivity : FlutterFragmentActivity() {
     val barcodeRelay = CarbonHardwareBarcodeRelay(this)
     val triggerRelay = CarbonHardwareTriggerRelay(this)
     zebraController = zebra
+    chainwayController = chainway
     hardwareBarcodeRelay = barcodeRelay
     hardwareTriggerRelay = triggerRelay
 
