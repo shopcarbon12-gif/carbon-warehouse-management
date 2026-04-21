@@ -71,6 +71,7 @@ class CarbonChainwayRfidController(private val context: Context) {
     val r = object : BroadcastReceiver() {
       override fun onReceive(ctx: Context?, intent: Intent?) {
         val action = intent?.action ?: return
+        Log.d(TAG, "RX action=$action extras=${intent.extras?.keySet()?.joinToString() ?: "<none>"}")
         var epc = EPC_EXTRA_KEYS.firstNotNullOfOrNull { key ->
           intent.getStringExtra(key)?.let { extractHexCandidate(it) }
         } ?: EPC_BYTE_KEYS.firstNotNullOfOrNull { key ->
@@ -408,7 +409,9 @@ class CarbonChainwayRfidController(private val context: Context) {
     // Only configure what demonstrably sticks: output mode + broadcast routing.
     try {
       val cls = resolveScannerUtilityClass() ?: return
-      val inst = cls.getMethod("getScannerInerface").invoke(null) ?: return
+      val inst = runCatching { cls.getMethod("getScannerInerface").invoke(null) }
+        .onFailure { Log.w(TAG, "getScannerInerface failed: ${it.message}") }
+        .getOrNull() ?: return
 
       // setOutputMode(ctx, 1) = broadcast mode (0 = keyboard wedge)
       runCatching {
