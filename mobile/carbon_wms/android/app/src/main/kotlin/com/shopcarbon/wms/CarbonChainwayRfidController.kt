@@ -77,28 +77,28 @@ class CarbonChainwayRfidController(private val context: Context) {
         uhfClass = cls
         Log.d(TAG, "UHF class: ${cls.name}")
 
-        // Cooperative UART eviction via ScannerUtility before UHFInit
+        // Cooperative UART eviction — try ScannerUtility first, fall back to broadcast eviction
         val released = scannerUtilityReleaseUhf()
-        if (!released) Log.w(TAG, "ScannerUtility did not confirm UHF release within timeout — attempting UHFInit anyway")
+        if (!released) {
+          Log.w(TAG, "ScannerUtility unavailable — falling back to broadcast eviction")
+          evictUartBroadcast()
+        }
 
         val inst = getStaticInstance(cls)
         if (inst == null) {
-          lastError = "DeviceAPI getInstance returned null"
-          Log.e(TAG, lastError!!)
-          mainHandler.post { onDone(RuntimeException(lastError)) }
+          Log.w(TAG, "DeviceAPI getInstance returned null — will use SenitronBridge logcat path")
+          lastError = null
+          mainHandler.post { onDone(null) }
           return@execute
         }
 
         uhfInstance = inst
         uartOwned = initUart(cls, inst)
         if (!uartOwned) {
-          lastError = "UHFInit/UHFOpenAndConnect failed — UART not acquired"
-          Log.e(TAG, lastError!!)
-          mainHandler.post { onDone(RuntimeException(lastError)) }
-          return@execute
+          Log.w(TAG, "UHFInit failed — will use SenitronBridge logcat path")
+        } else {
+          Log.d(TAG, "UART owned — direct scan path active")
         }
-
-        Log.d(TAG, "UART owned — direct scan path active")
         lastError = null
         mainHandler.post { onDone(null) }
       } catch (e: Throwable) {
@@ -119,14 +119,14 @@ class CarbonChainwayRfidController(private val context: Context) {
       try {
         val cls = uhfClass
         val inst = uhfInstance
-        if (cls == null || inst == null || !uartOwned) {
-          scanning.set(false)
-          mainHandler.post { result.error("NOT_CONNECTED", "UHF UART not owned — call chainway.connect first", null) }
-          return@execute
+        if (cls != null && inst != null && uartOwned) {
+          applyPower()
+          startDrainLoop(cls, inst)
+          Log.d(TAG, "startInventory: direct UART drain active")
+        } else {
+          Log.w(TAG, "startInventory: UART not owned — system scanner RFID mode")
+          MainActivity.startSystemScannerInventory(context, TAG)
         }
-        applyPower()
-        startDrainLoop(cls, inst)
-        Log.d(TAG, "startInventory: direct UART drain active")
         mainHandler.post { result.success(null) }
       } catch (e: Exception) {
         scanning.set(false)
@@ -140,7 +140,11 @@ class CarbonChainwayRfidController(private val context: Context) {
     if (!scanning.getAndSet(false)) return
     drainThread?.interrupt(); drainThread = null
     val cls = uhfClass; val inst = uhfInstance
-    if (cls != null && inst != null) invokeNoArgs(cls, inst, "UHFStopGet", "stopInventoryTag", "stopInventory")
+    if (cls != null && inst != null && uartOwned) {
+      invokeNoArgs(cls, inst, "UHFStopGet", "stopInventoryTag", "stopInventory")
+    } else {
+      MainActivity.stopSystemScannerInventory(context, TAG)
+    }
     Log.d(TAG, "stopInventory")
   }
 
@@ -175,16 +179,47 @@ class CarbonChainwayRfidController(private val context: Context) {
     triggerReceiver?.let { safeUnregister(it); triggerReceiver = null }
   }
 
+  // ── Broadcast eviction fallback (when ScannerUtility not on firmware) ────────
+
+  private val myApiId = android.os.SystemClock.elapsedRealtime()
+
+  private fun evictUartBroadcast() {
+    for (action in listOf("com.rscja.deviceapi.action.UHF_POWER_OFF", "com.rscja.action.UHF_POWER_OFF")) {
+      runCatching {
+        context.sendBroadcast(Intent(action).apply {
+          putExtra("apiId", myApiId)
+          addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+        })
+      }
+    }
+    Thread.sleep(600)
+  }
+
   // ── ScannerUtility cooperative eviction ──────────────────────────────────────
+
+  private fun resolveScannerUtilityClass(): Class<*>? {
+    // 1. Bundled AAR (preferred — always present regardless of firmware)
+    runCatching {
+      val cls = Class.forName("com.rscja.scanner.utility.ScannerUtility")
+      Log.d(TAG, "ScannerUtility loaded from bundled AAR")
+      return cls
+    }
+    // 2. PathClassLoader on keyboard.apk (firmware that ships it)
+    keyboardApkLoader?.let { loader ->
+      runCatching {
+        val cls = loader.loadClass("com.rscja.scanner.utility.ScannerUtility")
+        Log.d(TAG, "ScannerUtility loaded from keyboard.apk")
+        return cls
+      }
+    }
+    Log.w(TAG, "ScannerUtility not found in bundled AAR or keyboard.apk")
+    return null
+  }
 
   private fun scannerUtilityReleaseUhf(): Boolean {
     return try {
-      val loader = keyboardApkLoader ?: run {
-        Log.w(TAG, "scannerUtilityReleaseUhf: no keyboard APK loader yet"); return false
-      }
-      val cls = loader.loadClass("com.rscja.scanner.utility.ScannerUtility")
+      val cls = resolveScannerUtilityClass() ?: return false
 
-      // Sanity-check the constant
       val declaredFunctionUhf = runCatching { cls.getField("FUNCTION_UHF").getInt(null) }.getOrElse { -1 }
       if (declaredFunctionUhf != FUNCTION_UHF) {
         Log.w(TAG, "FUNCTION_UHF mismatch: expected $FUNCTION_UHF got $declaredFunctionUhf — using declared value")
@@ -212,9 +247,6 @@ class CarbonChainwayRfidController(private val context: Context) {
       }
       Log.w(TAG, "ScannerUtility: isUhfWorking still true after 2s")
       false
-    } catch (e: ClassNotFoundException) {
-      Log.w(TAG, "ScannerUtility not in keyboard.apk on this firmware: ${e.message}")
-      false
     } catch (e: Throwable) {
       Log.w(TAG, "scannerUtilityReleaseUhf error: ${e.message}", e)
       false
@@ -223,13 +255,12 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   private fun scannerUtilityRestoreUhf() {
     try {
-      val loader = keyboardApkLoader ?: return
-      val cls = runCatching { loader.loadClass("com.rscja.scanner.utility.ScannerUtility") }.getOrNull() ?: return
+      val cls = resolveScannerUtilityClass() ?: return
       val inst = runCatching { cls.getMethod("getScannerInerface").invoke(null) }.getOrNull() ?: return
       val enableFn = runCatching { cls.getMethod("enableFunction", Context::class.java, Int::class.javaPrimitiveType) }.getOrNull() ?: return
-      val declaredFunctionUhf = runCatching { cls.getField("FUNCTION_UHF").getInt(null) }.getOrElse { FUNCTION_UHF }
-      enableFn.invoke(inst, context, declaredFunctionUhf)
-      Log.d(TAG, "ScannerUtility.enableFunction(ctx, $declaredFunctionUhf) — UHF restored")
+      val functionId = runCatching { cls.getField("FUNCTION_UHF").getInt(null) }.getOrElse { FUNCTION_UHF }
+      enableFn.invoke(inst, context, functionId)
+      Log.d(TAG, "ScannerUtility.enableFunction(ctx, $functionId) — UHF restored")
     } catch (e: Throwable) {
       Log.w(TAG, "scannerUtilityRestoreUhf error: ${e.message}")
     }

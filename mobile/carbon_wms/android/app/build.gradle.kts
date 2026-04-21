@@ -72,6 +72,8 @@ dependencies {
     implementation(files("libs/API3_LIB-release-2.0.2.82.aar"))
     // Zebra API3 transitive dependency used at runtime by some builds.
     implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
-    // Optional: drop Chainway DeviceAPI JAR/AAR here; reflection bridge loads at runtime.
+    // Chainway DeviceAPI v20251103 — contains ScannerUtility for cooperative UHF eviction.
+    implementation(files("libs/DeviceAPI_ver20251103_release.aar"))
+    // Optional: drop additional Chainway JARs here.
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
 }
