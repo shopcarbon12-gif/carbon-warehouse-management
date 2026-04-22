@@ -12,6 +12,7 @@ export type LocationWithBinsRow = {
     capacity: number | null;
     in_stock_count: number;
     status: string;
+    bin_items: string | null;
   }[];
 };
 
@@ -39,6 +40,7 @@ export async function listTenantLocationsWithBins(
         capacity: b.capacity,
         in_stock_count: b.in_stock_count,
         status: b.status,
+        bin_items: b.bin_items,
       })),
     });
   }

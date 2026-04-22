@@ -8,6 +8,8 @@ export type BinWithCountRow = {
   capacity: number | null;
   in_stock_count: number;
   status: string;
+  /** Newline-separated list of distinct parent items in this bin (in-stock only). */
+  bin_items: string | null;
 };
 
 /** Line items grouped by custom SKU for a bin drawer (in-stock EPCs only). */
@@ -73,13 +75,29 @@ export async function listBinsWithCounts(
     capacity: string | null;
     in_stock_count: string;
     status: string;
+    bin_items: string | null;
   }>(
     `SELECT
        b.id::text AS id,
        b.code,
        b.capacity::text AS capacity,
        b.status,
-       COUNT(i.id) FILTER (WHERE i.status = 'in-stock')::text AS in_stock_count
+       COUNT(i.id) FILTER (WHERE i.status = 'in-stock')::text AS in_stock_count,
+       (
+         SELECT string_agg(DISTINCT
+           m.upc
+           || CASE WHEN cs.color_code IS NOT NULL AND trim(cs.color_code) <> '' THEN '+' || cs.color_code ELSE '' END
+           || ' · ' || m.description
+           || CASE WHEN cs.color_code IS NOT NULL AND trim(cs.color_code) <> '' THEN ' · ' || cs.color_code ELSE '' END,
+           E'\n' ORDER BY m.description ASC, cs.color_code ASC
+         )
+         FROM items ii
+         INNER JOIN custom_skus cs ON cs.id = ii.custom_sku_id
+         INNER JOIN matrices m ON m.id = cs.matrix_id
+         WHERE ii.bin_id = b.id
+           AND ii.location_id = $1::uuid
+           AND ii.status = 'in-stock'
+       ) AS bin_items
      FROM bins b
      LEFT JOIN items i
        ON i.bin_id = b.id
@@ -96,6 +114,7 @@ export async function listBinsWithCounts(
     capacity: row.capacity != null ? Number(row.capacity) : null,
     in_stock_count: Number(row.in_stock_count),
     status: row.status,
+    bin_items: row.bin_items ?? null,
   }));
 }
 

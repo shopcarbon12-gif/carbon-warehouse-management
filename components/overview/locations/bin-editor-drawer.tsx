@@ -9,6 +9,7 @@ export type BinRow = {
   capacity: number | null;
   in_stock_count: number;
   status: string;
+  bin_items: string | null;
 };
 
 type DrawerMode = "add" | "edit";

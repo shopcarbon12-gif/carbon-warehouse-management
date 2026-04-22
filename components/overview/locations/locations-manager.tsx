@@ -205,7 +205,7 @@ export function LocationsManager({
                   <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
                     <th className="px-3 py-2">Identifier</th>
                     <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2 text-right tabular-nums">Capacity</th>
+                    <th className="px-3 py-2">Items</th>
                     <th className="px-3 py-2 text-right tabular-nums">In-stock EPCs</th>
                     <th className="px-3 py-2 w-36"> </th>
                   </tr>
@@ -223,8 +223,16 @@ export function LocationsManager({
                           {b.status === "inactive" ? "inactive" : "active"}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-[var(--wms-muted)]">
-                        {b.capacity != null ? b.capacity : "—"}
+                      <td className="px-3 py-2 text-[var(--wms-muted)]">
+                        {b.bin_items ? (
+                          <ul className="space-y-0.5">
+                            {b.bin_items.split("\n").map((line, i) => (
+                              <li key={i} className="text-xs leading-snug">{line}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span className="text-xs text-[var(--wms-muted)]">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-[var(--wms-muted)]">
                         {b.in_stock_count}
