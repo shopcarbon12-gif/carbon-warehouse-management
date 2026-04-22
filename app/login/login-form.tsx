@@ -29,7 +29,6 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
         return;
       }
       router.push(next.startsWith("/") ? next : "/dashboard");
-      router.refresh();
     } catch {
       setError("Network error");
       setPending(false);
