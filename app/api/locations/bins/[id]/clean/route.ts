@@ -9,13 +9,25 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function POST(_req: Request, ctx: Ctx) {
-  const session = await getSessionFromRequest(_req);
+export async function POST(req: Request, ctx: Ctx) {
+  const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await ctx.params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) {
     return NextResponse.json({ error: "Invalid bin id" }, { status: 400 });
+  }
+
+  let skuPrefix: string | undefined;
+  try {
+    const body = (await req.json().catch(() => ({}))) as { skuPrefix?: unknown };
+    if (typeof body.skuPrefix === "string") {
+      const p = body.skuPrefix.trim();
+      // Accept 7–32 alphanumeric chars (matrix/color prefix range).
+      if (p && /^[A-Za-z0-9]{7,32}$/.test(p)) skuPrefix = p;
+    }
+  } catch {
+    /* no body — clean all (legacy behaviour) */
   }
 
   const pool = getPool();
@@ -27,7 +39,7 @@ export async function POST(_req: Request, ctx: Ctx) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const result = await cleanBinContents(client, session.tid, id);
+    const result = await cleanBinContents(client, session.tid, id, skuPrefix);
     await client.query("COMMIT");
     return NextResponse.json({ ok: true, cleared: result.cleared });
   } catch (e) {

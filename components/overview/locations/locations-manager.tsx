@@ -13,6 +13,37 @@ type BinEpcRow = {
   description: string;
 };
 
+type BinContentLine = {
+  custom_sku_id: string;
+  sku: string;
+  description: string;
+  color_code: string | null;
+  size: string | null;
+  qty: number;
+};
+
+type CleanGroup = { skuPrefix: string; label: string; qty: number };
+
+/** Collapse a bin's contents into clean-groups using the same rule as the Items column. */
+function collapseForClean(rows: BinContentLine[]): CleanGroup[] {
+  const map = new Map<string, CleanGroup>();
+  for (const r of rows) {
+    const sku = r.sku.toUpperCase();
+    const prefixLen = sku.startsWith("C") ? 11 : 9;
+    const skuPrefix = sku.slice(0, prefixLen);
+    // Strip trailing size token from description (same regex as server Items column).
+    const label = (r.description ?? "").replace(/\s+\S+$/, "").trim() || r.description;
+    const key = skuPrefix;
+    const existing = map.get(key);
+    if (existing) {
+      existing.qty += r.qty;
+    } else {
+      map.set(key, { skuPrefix, label, qty: r.qty });
+    }
+  }
+  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
 const fetcher = async (url: string) => {
   const res = await fetch(url, { credentials: "same-origin" });
   if (!res.ok) {
@@ -100,21 +131,63 @@ export function LocationsManager({
 
   const [cleanBusy, setCleanBusy] = useState<string | null>(null);
   const [cleanNotice, setCleanNotice] = useState<string | null>(null);
+  // Two-step clean flow state. Step 1: pick item (or "all") if bin has 2+ groups,
+  // otherwise jump straight to step 2. Step 2: confirm the action.
+  const [cleanBin, setCleanBin] = useState<BinRow | null>(null);
+  const [cleanStep, setCleanStep] = useState<"pick" | "confirm">("pick");
+  // null = "All items" (no prefix filter). Otherwise a specific group.
+  const [cleanTarget, setCleanTarget] = useState<CleanGroup | null>(null);
 
-  const cleanBin = async (binId: string) => {
+  const { data: cleanContents } = useSWR<BinContentLine[]>(
+    cleanBin ? `/api/locations/bins/contents?binId=${cleanBin.id}` : null,
+    fetcher,
+    { revalidateOnFocus: false },
+  );
+  const cleanGroups = useMemo(
+    () => (cleanContents ? collapseForClean(cleanContents) : []),
+    [cleanContents],
+  );
+
+  const closeCleanFlow = () => {
+    setCleanBin(null);
+    setCleanStep("pick");
+    setCleanTarget(null);
+  };
+
+  // Clean button click → open the pick step; if single group, skip to confirm with that group.
+  const onCleanClick = (b: BinRow) => {
     if (!canCleanBins) return;
-    if (!window.confirm("Unassign all in-stock EPCs from this bin? This is logged as clean_bin.")) return;
-    setCleanBusy(binId);
+    setCleanBin(b);
+    setCleanStep("pick");
+    setCleanTarget(null);
+  };
+
+  // Once contents load, if there's exactly one group jump to the confirm step.
+  useEffect(() => {
+    if (!cleanBin || cleanStep !== "pick" || cleanGroups.length === 0) return;
+    if (cleanGroups.length === 1) {
+      setCleanTarget(cleanGroups[0]!);
+      setCleanStep("confirm");
+    }
+  }, [cleanBin, cleanStep, cleanGroups]);
+
+  const runClean = async () => {
+    if (!cleanBin) return;
+    setCleanBusy(cleanBin.id);
     setCleanNotice(null);
     try {
-      const res = await fetch(`/api/locations/bins/${binId}/clean`, {
+      const body = cleanTarget ? { skuPrefix: cleanTarget.skuPrefix } : {};
+      const res = await fetch(`/api/locations/bins/${cleanBin.id}/clean`, {
         method: "POST",
         credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; cleared?: number };
       if (!res.ok) throw new Error(j.error ?? "Clean failed");
       await mutate();
       setCleanNotice(`Cleared ${j.cleared ?? 0} EPC(s) from bin.`);
+      closeCleanFlow();
     } catch (e) {
       setCleanNotice(e instanceof Error ? e.message : "Clean failed");
     } finally {
@@ -275,9 +348,9 @@ export function LocationsManager({
                           {canCleanBins ? (
                             <button
                               type="button"
-                              title="Clean bin — unassign all items"
+                              title="Clean bin — unassign items"
                               disabled={cleanBusy === b.id || (b.in_stock_count ?? 0) === 0}
-                              onClick={() => void cleanBin(b.id)}
+                              onClick={() => onCleanClick(b)}
                               className="wms-table-btn-clean inline-flex items-center gap-1 rounded px-2 py-1 text-xs disabled:opacity-40"
                             >
                               <Trash2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
@@ -312,6 +385,122 @@ export function LocationsManager({
         onClose={closeDrawer}
         onSaved={() => void mutate()}
       />
+
+      {cleanBin && cleanStep === "pick" && cleanGroups.length > 1 ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-black/70"
+            onClick={closeCleanFlow}
+          />
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <div className="w-full max-w-md overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
+                <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
+                  Which item to remove from bin {cleanBin.code}?
+                </h3>
+                <button
+                  type="button"
+                  onClick={closeCleanFlow}
+                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <ol className="px-4 py-3 font-mono text-sm text-[var(--wms-fg)]">
+                {cleanGroups.map((g, i) => (
+                  <li key={g.skuPrefix} className="py-1">
+                    {i + 1}. {g.label}{" "}
+                    <span className="text-xs text-[var(--wms-muted)]">({g.qty} EPC{g.qty === 1 ? "" : "s"})</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3">
+                {cleanGroups.map((g, i) => (
+                  <button
+                    key={g.skuPrefix}
+                    type="button"
+                    onClick={() => { setCleanTarget(g); setCleanStep("confirm"); }}
+                    className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-border)]"
+                  >
+                    Item {i + 1}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => { setCleanTarget(null); setCleanStep("confirm"); }}
+                  className="rounded-md border border-red-500/50 bg-red-500/20 px-3 py-2 font-mono text-xs font-semibold text-red-400 hover:bg-red-500/30"
+                >
+                  All
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {cleanBin && cleanStep === "confirm" ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-black/70"
+            onClick={closeCleanFlow}
+          />
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <div className="w-full max-w-md overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
+                <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
+                  Confirm clean
+                </h3>
+                <button
+                  type="button"
+                  onClick={closeCleanFlow}
+                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="px-4 py-4 font-mono text-sm text-[var(--wms-fg)]">
+                {cleanTarget
+                  ? `Remove ${cleanTarget.label} from bin ${cleanBin.code}?`
+                  : `Remove ALL items from bin ${cleanBin.code}?`}
+                <p className="mt-2 text-xs text-[var(--wms-muted)]">This is logged as clean_bin.</p>
+              </div>
+              <div className="flex justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3">
+                <button
+                  type="button"
+                  disabled={cleanBusy === cleanBin.id}
+                  onClick={() => {
+                    // Cancel acts as back — return to pick step only if we have 2+ groups,
+                    // otherwise close the whole flow (single-group bins have no pick step).
+                    if (cleanGroups.length > 1) {
+                      setCleanStep("pick");
+                      setCleanTarget(null);
+                    } else {
+                      closeCleanFlow();
+                    }
+                  }}
+                  className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={cleanBusy === cleanBin.id}
+                  onClick={() => void runClean()}
+                  className="rounded-md border border-red-500/50 bg-red-500 px-4 py-2 font-mono text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-40"
+                >
+                  {cleanBusy === cleanBin.id ? "Removing…" : "Confirm"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {epcModalBin ? (
         <>
