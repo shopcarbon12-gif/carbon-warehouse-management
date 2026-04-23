@@ -2,8 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { MapPin, PackagePlus, Pencil, Trash2 } from "lucide-react";
+import { MapPin, PackagePlus, Pencil, Trash2, X } from "lucide-react";
 import { BinEditorDrawer, type BinRow } from "./bin-editor-drawer";
+
+type BinEpcRow = {
+  epc: string;
+  serial_number: string;
+  sku: string;
+  upc: string | null;
+  description: string;
+};
 
 const fetcher = async (url: string) => {
   const res = await fetch(url, { credentials: "same-origin" });
@@ -50,6 +58,13 @@ export function LocationsManager({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<DrawerMode | null>(null);
   const [drawerBin, setDrawerBin] = useState<BinRow | null>(null);
+  const [epcModalBin, setEpcModalBin] = useState<BinRow | null>(null);
+
+  const { data: epcData, isLoading: epcLoading } = useSWR<BinEpcRow[]>(
+    epcModalBin ? `/api/locations/bins/${epcModalBin.id}/epcs` : null,
+    fetcher,
+    { revalidateOnFocus: false },
+  );
 
   useEffect(() => {
     if (locations.length === 0) return;
@@ -242,7 +257,18 @@ export function LocationsManager({
                         )}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-[var(--wms-muted)]">
-                        {b.in_stock_count}
+                        {(b.in_stock_count ?? 0) > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setEpcModalBin(b)}
+                            className="text-[var(--wms-accent)] hover:underline"
+                            title="View EPCs"
+                          >
+                            {b.in_stock_count}
+                          </button>
+                        ) : (
+                          b.in_stock_count
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap items-center justify-end gap-1">
@@ -286,6 +312,73 @@ export function LocationsManager({
         onClose={closeDrawer}
         onSaved={() => void mutate()}
       />
+
+      {epcModalBin ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            className="fixed inset-0 z-[60] bg-black/70"
+            onClick={() => setEpcModalBin(null)}
+          />
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <div className="flex max-h-[min(90vh,720px)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
+                    Bin {epcModalBin.code} — EPCs
+                  </h3>
+                  <p className="mt-0.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                    {epcModalBin.in_stock_count} in-stock EPC{epcModalBin.in_stock_count === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEpcModalBin(null)}
+                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto">
+                {epcLoading ? (
+                  <p className="px-4 py-8 font-mono text-xs text-[var(--wms-muted)]">Loading EPCs…</p>
+                ) : !epcData || epcData.length === 0 ? (
+                  <p className="px-4 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
+                    No EPCs in this bin.
+                  </p>
+                ) : (
+                  <table className="w-full min-w-[720px] border-collapse text-left">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
+                        <th className="px-3 py-2 text-xs">Custom SKU</th>
+                        <th className="px-3 py-2 text-xs">UPC</th>
+                        <th className="px-3 py-2 text-xs">Description</th>
+                        <th className="px-3 py-2 text-xs">Serial #</th>
+                        <th className="px-3 py-2 text-xs">EPC ID</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
+                      {epcData.map((r) => (
+                        <tr key={r.epc} className="hover:bg-[var(--wms-surface-elevated)]/50">
+                          <td className="px-3 py-1.5">{r.sku}</td>
+                          <td className="px-3 py-1.5 text-[var(--wms-muted)]">{r.upc ?? "—"}</td>
+                          <td className="px-3 py-1.5 text-[var(--wms-muted)]" title={r.description}>
+                            {r.description}
+                          </td>
+                          <td className="px-3 py-1.5 tabular-nums">{r.serial_number}</td>
+                          <td className="px-3 py-1.5 tabular-nums text-teal-400/85">{r.epc}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

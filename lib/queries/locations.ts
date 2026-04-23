@@ -22,6 +22,15 @@ export type BinContentLineRow = {
   qty: number;
 };
 
+/** One in-stock EPC in a bin, with catalog context for the EPC-list modal. */
+export type BinEpcRow = {
+  epc: string;
+  serial_number: string;
+  sku: string;
+  upc: string | null;
+  description: string;
+};
+
 export async function listLocationsForTenant(
   pool: Pool,
   tenantId: string,
@@ -160,5 +169,43 @@ export async function listBinContentsGrouped(
     color_code: row.color_code,
     size: row.size,
     qty: Number(row.qty),
+  }));
+}
+
+/** All in-stock EPCs in a bin at the location, with catalog context. */
+export async function listBinEpcs(
+  pool: Pool,
+  locationId: string,
+  binId: string,
+): Promise<BinEpcRow[]> {
+  const r = await pool.query<{
+    epc: string;
+    serial_number: string;
+    sku: string;
+    upc: string | null;
+    description: string;
+  }>(
+    `SELECT
+       i.epc,
+       i.serial_number::text AS serial_number,
+       cs.sku,
+       COALESCE(cs.upc, m.upc) AS upc,
+       m.description
+     FROM items i
+     INNER JOIN bins b ON b.id = i.bin_id AND b.location_id = $2::uuid AND b.archived_at IS NULL
+     INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
+     INNER JOIN matrices m ON m.id = cs.matrix_id
+     WHERE i.bin_id = $1::uuid
+       AND i.location_id = $2::uuid
+       AND i.status = 'in-stock'
+     ORDER BY cs.sku ASC, i.serial_number ASC`,
+    [binId, locationId],
+  );
+  return r.rows.map((row) => ({
+    epc: row.epc,
+    serial_number: row.serial_number,
+    sku: row.sku,
+    upc: row.upc,
+    description: row.description,
   }));
 }
