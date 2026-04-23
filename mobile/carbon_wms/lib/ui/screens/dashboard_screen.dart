@@ -21,6 +21,7 @@ import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_csv_session_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
+import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
@@ -751,6 +752,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       label: 'Print',
                       onTap: () =>
                           _push(const EncodeSuiteScreen(initialTab: 1))),
+                  _SmallTile(
+                      icon: LucideIcons.refreshCw,
+                      label: 'Re-Encode',
+                      onTap: () => _push(const SearchAndEncodeScreen())),
                   _SmallTile(
                       icon: LucideIcons.upload,
                       label: 'Upload',

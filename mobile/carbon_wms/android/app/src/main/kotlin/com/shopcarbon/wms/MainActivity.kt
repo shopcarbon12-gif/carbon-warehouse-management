@@ -261,6 +261,23 @@ class MainActivity : FlutterFragmentActivity() {
           chainway.setAntennaPowerDbm(p)
           result.success(null)
         }
+        "rfid.writeEpc" -> {
+          val args = call.arguments as? Map<*, *>
+          val target = (args?.get("targetEpc") as? String).orEmpty()
+          val newEpc = (args?.get("newEpc") as? String).orEmpty()
+          if (target.isBlank() || newEpc.isBlank()) {
+            result.success(false)
+            return@setMethodCallHandler
+          }
+          // Prefer whichever stack is actively linked. Chainway owns the radio on built-in
+          // C72E; Zebra is active on RFD8500 BT sleds. Only one at a time because the
+          // connect handlers disconnect the other.
+          when {
+            zebra.isReady() -> zebra.writeEpcOnce(target, newEpc, result)
+            chainway.isReady() -> chainway.writeEpcOnce(target, newEpc, result)
+            else -> result.success(false)
+          }
+        }
         else -> result.notImplemented()
       }
     }

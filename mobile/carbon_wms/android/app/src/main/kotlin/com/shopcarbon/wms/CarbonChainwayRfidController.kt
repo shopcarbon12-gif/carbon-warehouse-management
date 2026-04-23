@@ -371,6 +371,124 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   fun dispose() { executor.execute { disconnectSync() } }
 
+  // ── Tag EPC write ───────────────────────────────────────────────────────────
+
+  /**
+   * Writes [newEpc] (24 hex chars, 96 bits) onto the EPC bank of the tag whose current EPC
+   * equals [targetEpc]. Runs synchronously on the controller executor. Pauses inventory
+   * for the duration of the write and resumes it on exit if it was running. Returns `true`
+   * only when the underlying SDK confirms success.
+   */
+  fun writeEpcOnce(targetEpc: String, newEpc: String, result: MethodChannel.Result) {
+    val tgt = targetEpc.trim().uppercase().replace(Regex("[^0-9A-F]"), "")
+    val new = newEpc.trim().uppercase().replace(Regex("[^0-9A-F]"), "")
+    if (tgt.length != 24 || new.length != 24) {
+      mainHandler.post { result.success(false) }
+      return
+    }
+    executor.execute {
+      val ok = runCatching { performWriteEpc(tgt, new) }.getOrElse {
+        Log.w(TAG, "writeEpc error: ${it.message}", it)
+        false
+      }
+      Log.d(TAG, "writeEpc($tgt -> $new) = $ok")
+      mainHandler.post { result.success(ok) }
+    }
+  }
+
+  private fun performWriteEpc(targetEpc: String, newEpc: String): Boolean {
+    // Pause inventory: write + inventory share the UART/radio and collide.
+    val wasScanning = scanning.get()
+    if (wasScanning) {
+      runCatching { uhfReader?.stopInventory() }
+      // Reflective stop path used by UART-owned branch
+      val cls = uhfClass; val inst = uhfInstance
+      if (cls != null && inst != null && uartOwned) {
+        invokeNoArgs(cls, inst, "UHFStopGet", "stopInventoryTag", "stopInventory")
+      }
+      scanning.set(false)
+      // Let the radio settle before switching to access mode.
+      android.os.SystemClock.sleep(120)
+    }
+    try {
+      // Fast path: direct RFIDWithUHFUART.writeDataToEpc(pwd, bank, ptr, cnt, filter, newEpc)
+      // bank=1 (EPC), ptr=32 (skip CRC+PC = 32 bits), cnt=96 (full EPC-96 match), filter=targetEpc
+      val reader = uhfReader
+      if (reader != null) {
+        runCatching {
+          val ok = reader.writeDataToEpc(ACCESS_PWD, 1, 32, 96, targetEpc, newEpc)
+          Log.d(TAG, "writeDataToEpc(filter) -> $ok")
+          if (ok) return true
+        }.onFailure { Log.w(TAG, "writeDataToEpc(filter) threw: ${it.message}") }
+
+        // Some SDK builds only accept the two-arg variant (write to selected tag).
+        // Pre-select the target via a single-shot read, then write.
+        runCatching {
+          val ok = reader.writeDataToEpc(ACCESS_PWD, newEpc)
+          Log.d(TAG, "writeDataToEpc(2-arg) -> $ok")
+          if (ok) return true
+        }.onFailure { Log.w(TAG, "writeDataToEpc(2-arg) threw: ${it.message}") }
+
+        // Final fallback: writeData on EPC bank directly (bank=1, ptr=2 words, cnt=6 words).
+        runCatching {
+          val ok = reader.writeData(ACCESS_PWD, 1, 2, 6, newEpc)
+          Log.d(TAG, "writeData(EPC,2,6) -> $ok")
+          if (ok) return true
+        }.onFailure { Log.w(TAG, "writeData(EPC,2,6) threw: ${it.message}") }
+      }
+
+      // Reflective path — only if UART is owned and we never built uhfReader.
+      val cls = uhfClass; val inst = uhfInstance
+      if (cls != null && inst != null) {
+        val mFilter = cls.methods.firstOrNull {
+          it.name == "writeDataToEpc" && it.parameterCount == 6
+        }
+        if (mFilter != null) {
+          mFilter.isAccessible = true
+          val r = runCatching { mFilter.invoke(inst, ACCESS_PWD, 1, 32, 96, targetEpc, newEpc) as? Boolean }
+            .onFailure { Log.w(TAG, "reflect writeDataToEpc(filter) threw: ${it.message}") }
+            .getOrNull()
+          if (r == true) return true
+        }
+        val mTwo = cls.methods.firstOrNull {
+          it.name == "writeDataToEpc" && it.parameterCount == 2
+        }
+        if (mTwo != null) {
+          mTwo.isAccessible = true
+          val r = runCatching { mTwo.invoke(inst, ACCESS_PWD, newEpc) as? Boolean }
+            .onFailure { Log.w(TAG, "reflect writeDataToEpc(2) threw: ${it.message}") }
+            .getOrNull()
+          if (r == true) return true
+        }
+        val mWrite = cls.methods.firstOrNull {
+          it.name == "writeData" && it.parameterCount == 5
+        }
+        if (mWrite != null) {
+          mWrite.isAccessible = true
+          val r = runCatching { mWrite.invoke(inst, ACCESS_PWD, 1, 2, 6, newEpc) as? Boolean }
+            .onFailure { Log.w(TAG, "reflect writeData(EPC) threw: ${it.message}") }
+            .getOrNull()
+          if (r == true) return true
+        }
+      }
+      return false
+    } finally {
+      // Resume inventory if we paused it.
+      if (wasScanning) {
+        scanning.set(true)
+        val reader = uhfReader
+        if (reader != null) {
+          runCatching { reader.startInventoryTag() }
+        } else {
+          val cls = uhfClass; val inst = uhfInstance
+          if (cls != null && inst != null && uartOwned) {
+            startDrainLoop(cls, inst)
+          }
+        }
+      }
+    }
+  }
+
   // ── Native trigger ──────────────────────────────────────────────────────────
 
   fun enableNativeTrigger() {
@@ -961,9 +1079,12 @@ class CarbonChainwayRfidController(private val context: Context) {
     return extractHexCandidate(rawHex)
   }
 
+  fun isReady(): Boolean = uhfReader != null || (uhfInstance != null && uartOwned)
+
   companion object {
     private const val TAG = "CarbonChainway"
     private const val FUNCTION_UHF = 11
+    private const val ACCESS_PWD = "00000000"
 
     const val SCANNER_WRITE_EPC_ACTION = "com.shopcarbon.wms.RFID_EPC"
     const val SCANNER_WRITE_EPC_KEY = "epc"

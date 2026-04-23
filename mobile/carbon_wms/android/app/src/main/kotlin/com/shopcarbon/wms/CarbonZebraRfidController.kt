@@ -130,6 +130,63 @@ class CarbonZebraRfidController(
   }
 
   /**
+   * Overwrites the EPC bank on the tag whose current ID matches [targetEpc] with [newEpc].
+   * [targetEpc] acts as the SELECT filter; [newEpc] is 24 hex chars (96 bits). Pauses any
+   * running inventory for the duration of the operation and resumes it on exit.
+   */
+  fun writeEpcOnce(targetEpc: String, newEpc: String, result: MethodChannel.Result) {
+    val tgt = targetEpc.trim().uppercase().replace(Regex("[^0-9A-F]"), "")
+    val new = newEpc.trim().uppercase().replace(Regex("[^0-9A-F]"), "")
+    if (tgt.length != 24 || new.length != 24) {
+      mainHandler.post { result.success(false) }
+      return
+    }
+    executor.execute {
+      val ok = runCatching { performWriteEpc(tgt, new) }.getOrElse {
+        lastError = it.message ?: it.javaClass.simpleName
+        false
+      }
+      mainHandler.post { result.success(ok) }
+    }
+  }
+
+  fun isReady(): Boolean = reader?.isConnected == true
+
+  private fun performWriteEpc(targetEpc: String, newEpc: String): Boolean {
+    val r = reader ?: return false
+    if (!r.isConnected) return false
+
+    // Pause inventory for the access sequence; resume on exit.
+    val wasRunning = try {
+      r.Actions.Inventory.stop(); true
+    } catch (_: Exception) {
+      false
+    }
+    try {
+      val params = r.Actions.TagAccess.WriteAccessParams()
+      params.accessPassword = 0L
+      params.memoryBank = com.zebra.rfid.api3.MEMORY_BANK.MEMORY_BANK_EPC
+      params.offset = 2                       // skip CRC (word 0) + PC (word 1)
+      params.writeDataLength = 6              // 6 words × 16 bits = 96 bits
+      params.writeRetries = 1
+      params.setWriteData(newEpc)             // hex string — SDK converts to bytes
+
+      r.Actions.TagAccess.writeWait(targetEpc, params, null, null)
+      return true
+    } catch (e: InvalidUsageException) {
+      lastError = e.message ?: e.javaClass.simpleName
+      return false
+    } catch (e: OperationFailureException) {
+      lastError = e.message ?: e.javaClass.simpleName
+      return false
+    } finally {
+      if (wasRunning) {
+        try { r.Actions.Inventory.perform() } catch (_: Exception) { /* ignore */ }
+      }
+    }
+  }
+
+  /**
    * Map requested dBm (0–30) to [RFIDReader.Config.Antennas] transmit power index.
    * Zebra tables are often centi-dBm (value/100); otherwise treat entries as dBm.
    */

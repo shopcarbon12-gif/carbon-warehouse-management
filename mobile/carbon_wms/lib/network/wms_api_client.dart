@@ -968,6 +968,96 @@ class WmsApiClient {
     }
   }
 
+  // ── Re-encode module (Search and Encode) ────────────────────────────────
+  // Spec: /api/v1/catalog/items, /api/v1/rfid/serial/next, /api/v1/rfid/encode-events.
+
+  /// Exact lookup by Custom SKU. Returns `null` on 404 / empty result.
+  /// Response shape: { id, system_id, name, custom_sku, sku }
+  Future<Map<String, dynamic>?> catalogItemByCustomSku(String customSku) async {
+    final q = customSku.trim();
+    if (q.isEmpty) return null;
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/v1/catalog/items').replace(
+      queryParameters: {'custom_sku': q},
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode == 404) return null;
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return null;
+    if (decoded.isEmpty) return null;
+    if (decoded['error'] != null) return null;
+    return decoded;
+  }
+
+  /// Next per-warehouse serial counter for re-encoded tags.
+  Future<int> nextRfidSerial({required String warehouseId}) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/v1/rfid/serial/next');
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'warehouse_id': warehouseId}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw WmsApiException(500, 'serial/next: bad response');
+    }
+    final v = decoded['serial'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) {
+      final parsed = int.tryParse(v);
+      if (parsed != null) return parsed;
+    }
+    throw WmsApiException(500, 'serial/next: missing serial');
+  }
+
+  /// Record an encoding event (success, not_found, or tag write failure).
+  Future<void> postRfidEncodeEvent({
+    required String oldEpc,
+    String? newEpc,
+    int? systemId,
+    int? serial,
+    required String customSku,
+    required String warehouseId,
+    required String deviceId,
+    String? status,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/v1/rfid/encode-events');
+    final body = <String, dynamic>{
+      'old_epc': oldEpc,
+      if (newEpc != null) 'new_epc': newEpc,
+      if (systemId != null) 'system_id': systemId,
+      if (serial != null) 'serial': serial,
+      'custom_sku': customSku,
+      'warehouse_id': warehouseId,
+      'device_id': deviceId,
+      'encoded_at': DateTime.now().toUtc().toIso8601String(),
+      if (status != null && status.isNotEmpty) 'status': status,
+    };
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+  }
+
   void close() => _http.close();
 }
 

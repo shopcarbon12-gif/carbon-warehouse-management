@@ -9,6 +9,7 @@ import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/theme_notifier.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/app_auth_gate.dart';
+import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
 import 'package:carbon_wms/ui/widgets/keyboard_wedge_bridge.dart';
 
 void main() {
@@ -81,6 +82,9 @@ class _CarbonWmsRootState extends State<CarbonWmsRoot> {
             darkTheme: AppTheme.dark,
             themeMode: notifier.mode,
             home: const KeyboardWedgeBridge(child: AppAuthGate()),
+            routes: <String, WidgetBuilder>{
+              SearchAndEncodeScreen.routeName: (_) => const SearchAndEncodeScreen(),
+            },
           ),
         ),
       ),

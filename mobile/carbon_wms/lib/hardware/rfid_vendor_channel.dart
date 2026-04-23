@@ -236,6 +236,33 @@ class RfidVendorChannel {
     } catch (_) {}
   }
 
+  /// Write a new 24-hex EPC to a physical UHF tag.
+  /// [targetEpc] is the EPC currently on the tag (used by the native SDK to single-target the write
+  /// via an EPC-match select; some SDKs require it, some fall back to "nearest tag").
+  /// Returns `false` on any native / vendor failure (tag missing, write failure, no SDK, etc.).
+  static Future<bool> writeEpcTag({
+    required String targetEpc,
+    required String newEpc,
+  }) async {
+    if (!_isAndroid) return false;
+    try {
+      final ok = await _method.invokeMethod<bool>(
+        'rfid.writeEpc',
+        <String, dynamic>{
+          'targetEpc': targetEpc,
+          'newEpc': newEpc,
+        },
+      );
+      return ok == true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Forward **0–30 dBm** to native Zebra/Chainway controllers (no scaling).
   static Future<void> setAntennaPowerDbm(int dbm) async {
     if (!_isAndroid) return;
