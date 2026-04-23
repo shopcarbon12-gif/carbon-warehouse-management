@@ -57,6 +57,8 @@ export async function GET(req: Request) {
     const category = searchParams.get("category")?.trim() ?? "";
     const vendor = searchParams.get("vendor")?.trim() ?? "";
     const systemId = searchParams.get("systemId")?.trim() ?? "";
+    const sortBy = searchParams.get("sortBy")?.trim() ?? "";
+    const sortDir = searchParams.get("sortDir")?.trim() ?? "";
 
     try {
       const result = await listCatalogGrid(pool, {
@@ -68,6 +70,8 @@ export async function GET(req: Request) {
         vendor,
         locationId: session.lid,
         systemId,
+        sortBy,
+        sortDir,
       });
       return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
     } catch (e) {

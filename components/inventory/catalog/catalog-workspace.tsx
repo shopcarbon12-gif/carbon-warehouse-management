@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { ChevronDown, Radio, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Radio, X } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import type { CatalogItemRow } from "@/lib/queries/catalog";
 
@@ -18,13 +18,16 @@ const fetcher = async (url: string) => {
   return res.json();
 };
 
-function buildGridUrl(page: number, q: string): string {
+type SortDir = "asc" | "desc";
+
+function buildGridUrl(page: number, q: string, sortBy: string, sortDir: SortDir): string {
   const p = new URLSearchParams({
     view: "grid",
     page: String(page),
     limit: String(PAGE_SIZE),
   });
   if (q.trim()) p.set("q", q.trim());
+  if (sortBy) { p.set("sortBy", sortBy); p.set("sortDir", sortDir); }
   return `/api/inventory/catalog?${p}`;
 }
 
@@ -95,6 +98,10 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
   URL.revokeObjectURL(url);
 }
 
+type SortKey =
+  | "system_id" | "name" | "sku" | "upc" | "vendor"
+  | "color" | "size" | "retail_price" | "qty_ls" | "bin";
+
 type TabId = "lightspeed" | "rfid";
 
 export function CatalogWorkspace({
@@ -108,6 +115,8 @@ export function CatalogWorkspace({
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
+  const [sortBy, setSortBy] = useState("");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [modalSku, setModalSku] = useState<CatalogGridRow | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
@@ -139,7 +148,11 @@ export function CatalogWorkspace({
     setPage(1);
   }, [debounced]);
 
-  const url = useMemo(() => buildGridUrl(page, debounced), [page, debounced]);
+  useEffect(() => {
+    setPage(1);
+  }, [sortBy, sortDir]);
+
+  const url = useMemo(() => buildGridUrl(page, debounced, sortBy, sortDir), [page, debounced, sortBy, sortDir]);
 
   const { data, error, isLoading, mutate } = useSWR<{
     rows: CatalogGridRow[];
@@ -566,16 +579,39 @@ export function CatalogWorkspace({
             <table className="w-full min-w-[1100px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
-                  <th className="px-2 py-2 text-teal-400/80">System ID</th>
-                  <th className="px-2 py-2">Item name</th>
-                  <th className="px-2 py-2">Custom SKU</th>
-                  <th className="px-2 py-2">UPC</th>
-                  <th className="px-2 py-2">Vendor</th>
-                  <th className="px-2 py-2">Color</th>
-                  <th className="px-2 py-2">Size</th>
-                  <th className="px-2 py-2 text-right">Retail price</th>
-                  <th className="px-2 py-2 text-right tabular-nums">Qty (LS)</th>
-                  <th className="px-2 py-2">Bin</th>
+                  {(
+                    [
+                      { key: "system_id", label: "System ID", cls: "text-teal-400/80" },
+                      { key: "name", label: "Item name" },
+                      { key: "sku", label: "Custom SKU" },
+                      { key: "upc", label: "UPC" },
+                      { key: "vendor", label: "Vendor" },
+                      { key: "color", label: "Color" },
+                      { key: "size", label: "Size" },
+                      { key: "retail_price", label: "Retail price", align: "right" },
+                      { key: "qty_ls", label: "Qty (LS)", align: "right" },
+                      { key: "bin", label: "Bin" },
+                    ] as { key: SortKey; label: string; cls?: string; align?: string }[]
+                  ).map(({ key, label, cls, align }) => {
+                    const active = sortBy === key;
+                    const next = active && sortDir === "asc" ? "desc" : "asc";
+                    const Icon = active ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
+                    return (
+                      <th
+                        key={key}
+                        className={`px-2 py-2 ${align === "right" ? "text-right" : ""} ${cls ?? ""}`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => { setSortBy(key); setSortDir(active ? next : "asc"); }}
+                          className={`inline-flex items-center gap-1 hover:text-[var(--wms-fg)] ${active ? "text-[var(--wms-accent)]" : "text-[var(--wms-muted)]"}`}
+                        >
+                          {label}
+                          <Icon className="h-3 w-3 shrink-0 opacity-70" />
+                        </button>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">

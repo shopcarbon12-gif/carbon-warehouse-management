@@ -126,6 +126,19 @@ export async function listCatalogFilterOptions(pool: Pool): Promise<{
   };
 }
 
+const SORT_COLUMNS: Record<string, string> = {
+  system_id: "cs.ls_system_id",
+  name: "m.description",
+  sku: "cs.sku",
+  upc: "m.upc",
+  vendor: "m.vendor",
+  color: "cs.color_code",
+  size: "cs.size",
+  retail_price: "cs.retail_price",
+  qty_ls: "cs.ls_on_hand_total",
+  bin: "bin_location",
+};
+
 export async function listCatalogGrid(
   pool: Pool,
   options: {
@@ -137,9 +150,11 @@ export async function listCatalogGrid(
     vendor: string;
     locationId: string;
     systemId?: string;
+    sortBy?: string;
+    sortDir?: string;
   },
 ): Promise<CatalogGridResult> {
-  const { page, limit, q, brand, category, vendor, locationId, systemId = "" } = options;
+  const { page, limit, q, brand, category, vendor, locationId, systemId = "", sortBy = "", sortDir = "" } = options;
   const safeLimit = Math.min(100, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
 
@@ -210,7 +225,13 @@ export async function listCatalogGrid(
      FROM custom_skus cs
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE ${whereSql}
-     ORDER BY m.upc ASC, cs.sku ASC
+     ORDER BY ${(() => {
+       const col = SORT_COLUMNS[sortBy] ?? null;
+       const dir = sortDir === "desc" ? "DESC NULLS LAST" : "ASC NULLS LAST";
+       if (col === "bin_location") return `bin_location ${dir}, cs.sku ASC`;
+       if (col) return `${col} ${dir}, cs.sku ASC`;
+       return "m.upc ASC, cs.sku ASC";
+     })()}
      LIMIT $${limIdx} OFFSET $${offIdx}`,
     dataParams,
   );
