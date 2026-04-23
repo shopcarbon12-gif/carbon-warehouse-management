@@ -104,6 +104,58 @@ type SortKey =
 
 type TabId = "lightspeed" | "rfid";
 
+const COL_COUNT = 10;
+const COL_MIN_PX = 40;
+
+function useColResize(tableRef: React.RefObject<HTMLTableElement | null>) {
+  const [colWidths, setColWidths] = useState<(number | null)[]>(() => Array(COL_COUNT).fill(null));
+
+  const autoFit = useCallback((colIdx: number) => {
+    const tbl = tableRef.current;
+    if (!tbl) return;
+    // Temporarily remove width constraint so browser lays out natural widths
+    const ths = tbl.querySelectorAll<HTMLElement>("thead th");
+    const prevWidth = (ths[colIdx] as HTMLElement | undefined)?.style.width ?? "";
+    if (ths[colIdx]) (ths[colIdx] as HTMLElement).style.width = "";
+    // Measure header cell
+    const th = ths[colIdx] as HTMLElement | undefined;
+    let maxW = th ? th.scrollWidth : COL_MIN_PX;
+    // Measure all body cells in this column
+    const rows = tbl.querySelectorAll<HTMLTableRowElement>("tbody tr");
+    rows.forEach((row) => {
+      const cell = row.cells[colIdx];
+      if (!cell) return;
+      // scrollWidth gives the unconstrained content width
+      const prev = cell.style.whiteSpace;
+      cell.style.whiteSpace = "nowrap";
+      maxW = Math.max(maxW, cell.scrollWidth);
+      cell.style.whiteSpace = prev;
+    });
+    if (ths[colIdx]) (ths[colIdx] as HTMLElement).style.width = prevWidth;
+    setColWidths((w) => { const n = [...w]; n[colIdx] = Math.max(COL_MIN_PX, maxW + 8); return n; });
+  }, [tableRef]);
+
+  const startDrag = useCallback((colIdx: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const tbl = tableRef.current;
+    const th = tbl?.querySelectorAll<HTMLElement>("thead th")[colIdx];
+    const startW = th ? th.offsetWidth : 100;
+    const onMove = (ev: MouseEvent) => {
+      const newW = Math.max(COL_MIN_PX, startW + (ev.clientX - startX));
+      setColWidths((w) => { const n = [...w]; n[colIdx] = newW; return n; });
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [tableRef]);
+
+  return { colWidths, autoFit, startDrag };
+}
+
 export function CatalogWorkspace({
   canTriggerLightspeedSync = false,
   canManageCatalog = false,
@@ -138,6 +190,8 @@ export function CatalogWorkspace({
   const [importErr, setImportErr] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const catalogToolbarRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, autoFit, startDrag } = useColResize(tableRef);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebounced(search.trim()), 320);
@@ -575,9 +629,13 @@ export function CatalogWorkspace({
         </div>
       ) : tab === "lightspeed" ? (
         <>
-          <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-            <table className="w-full min-w-[1100px] border-collapse text-left">
-              <thead>
+          <div className="overflow-auto rounded-lg border border-[var(--wms-border)]" style={{ maxHeight: "calc(100vh - 200px)" }}>
+            <table
+              ref={tableRef}
+              className="w-full min-w-[1100px] border-collapse text-left"
+              style={{ tableLayout: colWidths.some((w) => w !== null) ? "fixed" : "auto" }}
+            >
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
                   {(
                     [
@@ -592,14 +650,16 @@ export function CatalogWorkspace({
                       { key: "qty_ls", label: "Qty (LS)", align: "right" },
                       { key: "bin", label: "Bin" },
                     ] as { key: SortKey; label: string; cls?: string; align?: string }[]
-                  ).map(({ key, label, cls, align }) => {
+                  ).map(({ key, label, cls, align }, colIdx) => {
                     const active = sortBy === key;
                     const next = active && sortDir === "asc" ? "desc" : "asc";
                     const Icon = active ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
+                    const w = colWidths[colIdx];
                     return (
                       <th
                         key={key}
-                        className={`px-2 py-2 ${align === "right" ? "text-right" : ""} ${cls ?? ""}`}
+                        style={w !== null ? { width: w, minWidth: w } : undefined}
+                        className={`relative overflow-hidden px-2 py-2 ${align === "right" ? "text-right" : ""} ${cls ?? ""}`}
                       >
                         <button
                           type="button"
@@ -609,6 +669,13 @@ export function CatalogWorkspace({
                           {label}
                           <Icon className="h-3 w-3 shrink-0 opacity-70" />
                         </button>
+                        {/* Resize handle — invisible, right edge of th */}
+                        <span
+                          onMouseDown={(e) => startDrag(colIdx, e)}
+                          onDoubleClick={() => autoFit(colIdx)}
+                          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-[var(--wms-accent)]/30 active:bg-[var(--wms-accent)]/50"
+                          title="Drag to resize · double-click to fit"
+                        />
                       </th>
                     );
                   })}
@@ -630,28 +697,28 @@ export function CatalogWorkspace({
                 ) : (
                   rows.map((r) => (
                     <tr key={r.custom_sku_id} className="hover:bg-[var(--wms-surface-elevated)]/50">
-                      <td className="px-2 py-1.5 tabular-nums text-teal-400/85">
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-teal-400/85">
                         {r.sku_ls_system_id ?? "—"}
                       </td>
-                      <td className="max-w-[220px] truncate px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
                         {r.name}
                       </td>
-                      <td className="px-2 py-1.5">{r.sku}</td>
-                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
-                      <td className="max-w-[140px] truncate px-2 py-1.5 text-[var(--wms-muted)]" title={r.vendor ?? ""}>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5">{r.sku}</td>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]" title={r.vendor ?? ""}>
                         {r.vendor?.trim() || "—"}
                       </td>
-                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>
-                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">{r.size?.trim() || "—"}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.size?.trim() || "—"}</td>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
                         {formatPrice(r.retail_price)}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums font-medium text-[var(--wms-table-accent-num)]">
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-right tabular-nums font-medium text-[var(--wms-table-accent-num)]">
                         {r.ls_on_hand_total != null && Number.isFinite(r.ls_on_hand_total)
                           ? r.ls_on_hand_total
                           : "—"}
                       </td>
-                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">
                         {r.bin_location ?? "—"}
                       </td>
                     </tr>
