@@ -106,6 +106,92 @@ type TabId = "lightspeed" | "rfid";
 
 const COL_COUNT = 10;
 const COL_MIN_PX = 40;
+const SCROLLBAR_THICKNESS = 14;
+
+function ThickScrollbars({ scrollRef }: { scrollRef: React.RefObject<HTMLDivElement | null> }) {
+  const [state, setState] = useState({ vTop: 0, vH: 0, hLeft: 0, hW: 0, showV: false, showH: false });
+
+  const recompute = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const showV = el.scrollHeight > el.clientHeight + 1;
+    const showH = el.scrollWidth > el.clientWidth + 1;
+    const vH = showV ? Math.max(24, (el.clientHeight / el.scrollHeight) * el.clientHeight) : 0;
+    const vTop = showV ? (el.scrollTop / (el.scrollHeight - el.clientHeight)) * (el.clientHeight - vH) : 0;
+    const hW = showH ? Math.max(24, (el.clientWidth / el.scrollWidth) * el.clientWidth) : 0;
+    const hLeft = showH ? (el.scrollLeft / (el.scrollWidth - el.clientWidth)) * (el.clientWidth - hW) : 0;
+    setState({ vTop, vH, hLeft, hW, showV, showH });
+  }, [scrollRef]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    recompute();
+    el.addEventListener("scroll", recompute, { passive: true });
+    const ro = new ResizeObserver(recompute);
+    ro.observe(el);
+    const mo = new MutationObserver(recompute);
+    mo.observe(el, { childList: true, subtree: true });
+    return () => { el.removeEventListener("scroll", recompute); ro.disconnect(); mo.disconnect(); };
+  }, [recompute, scrollRef]);
+
+  const startDragV = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = scrollRef.current;
+    if (!el) return;
+    const startY = e.clientY;
+    const startTop = el.scrollTop;
+    const trackH = el.clientHeight - state.vH;
+    const scrollRange = el.scrollHeight - el.clientHeight;
+    const onMove = (ev: MouseEvent) => { el.scrollTop = startTop + ((ev.clientY - startY) / trackH) * scrollRange; };
+    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [scrollRef, state.vH]);
+
+  const startDragH = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = scrollRef.current;
+    if (!el) return;
+    const startX = e.clientX;
+    const startLeft = el.scrollLeft;
+    const trackW = el.clientWidth - state.hW;
+    const scrollRange = el.scrollWidth - el.clientWidth;
+    const onMove = (ev: MouseEvent) => { el.scrollLeft = startLeft + ((ev.clientX - startX) / trackW) * scrollRange; };
+    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [scrollRef, state.hW]);
+
+  return (
+    <>
+      {state.showV ? (
+        <div
+          className="pointer-events-none absolute top-0 z-20"
+          style={{ right: 0, width: SCROLLBAR_THICKNESS, height: "100%", background: "color-mix(in srgb, var(--wms-surface-elevated) 70%, #000)" }}
+        >
+          <div
+            onMouseDown={startDragV}
+            className="pointer-events-auto absolute left-[2px] right-[2px] cursor-pointer rounded"
+            style={{ top: state.vTop, height: state.vH, background: "color-mix(in srgb, var(--wms-muted) 60%, transparent)" }}
+          />
+        </div>
+      ) : null}
+      {state.showH ? (
+        <div
+          className="pointer-events-none absolute left-0 z-20"
+          style={{ bottom: 0, height: SCROLLBAR_THICKNESS, width: state.showV ? `calc(100% - ${SCROLLBAR_THICKNESS}px)` : "100%", background: "color-mix(in srgb, var(--wms-surface-elevated) 70%, #000)" }}
+        >
+          <div
+            onMouseDown={startDragH}
+            className="pointer-events-auto absolute top-[2px] bottom-[2px] cursor-pointer rounded"
+            style={{ left: state.hLeft, width: state.hW, background: "color-mix(in srgb, var(--wms-muted) 60%, transparent)" }}
+          />
+        </div>
+      ) : null}
+    </>
+  );
+}
 
 function useColResize(tableRef: React.RefObject<HTMLTableElement | null>) {
   const [colWidths, setColWidths] = useState<(number | null)[]>(() => Array(COL_COUNT).fill(null));
@@ -191,6 +277,7 @@ export function CatalogWorkspace({
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const catalogToolbarRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { colWidths, autoFit, startDrag } = useColResize(tableRef);
 
   useEffect(() => {
@@ -629,11 +716,12 @@ export function CatalogWorkspace({
         </div>
       ) : tab === "lightspeed" ? (
         <>
-          <div className="wms-catalog-scroll overflow-auto rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]" style={{ maxHeight: "calc(100vh - 200px)" }}>
+          <div className="relative">
             <style>{`
-              .wms-catalog-scroll { scrollbar-width: auto; }
-              .wms-catalog-scroll::-webkit-scrollbar { width: 14px; height: 14px; }
+              .wms-catalog-scroll { scrollbar-width: none; }
+              .wms-catalog-scroll::-webkit-scrollbar { display: none; }
             `}</style>
+            <div ref={scrollRef} className="wms-catalog-scroll overflow-auto rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]" style={{ maxHeight: "calc(100vh - 200px)" }}>
             <table
               ref={tableRef}
               className="w-full min-w-[1100px] border-collapse text-left"
@@ -730,6 +818,8 @@ export function CatalogWorkspace({
                 )}
               </tbody>
             </table>
+            </div>
+            <ThickScrollbars scrollRef={scrollRef} />
           </div>
           {pagination}
         </>
