@@ -629,7 +629,28 @@ export function CatalogWorkspace({
         </div>
       ) : tab === "lightspeed" ? (
         <>
-          <div className="overflow-auto rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]" style={{ maxHeight: "calc(100vh - 200px)" }}>
+          <div className="wms-catalog-scroll overflow-auto rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]" style={{ maxHeight: "calc(100vh - 200px)" }}>
+            <style>{`
+              .wms-catalog-scroll {
+                scrollbar-width: auto;
+                scrollbar-color: color-mix(in srgb, var(--wms-muted) 55%, transparent) color-mix(in srgb, var(--wms-surface-elevated) 70%, #000);
+              }
+              .wms-catalog-scroll::-webkit-scrollbar {
+                width: 14px;
+                height: 14px;
+              }
+              .wms-catalog-scroll::-webkit-scrollbar-track {
+                background: color-mix(in srgb, var(--wms-surface-elevated) 70%, #000);
+              }
+              .wms-catalog-scroll::-webkit-scrollbar-thumb {
+                background: color-mix(in srgb, var(--wms-muted) 55%, transparent);
+                border-radius: 8px;
+                border: 3px solid color-mix(in srgb, var(--wms-surface-elevated) 70%, #000);
+              }
+              .wms-catalog-scroll::-webkit-scrollbar-thumb:hover {
+                background: color-mix(in srgb, var(--wms-muted) 80%, transparent);
+              }
+            `}</style>
             <table
               ref={tableRef}
               className="w-full min-w-[1100px] border-collapse text-left"
