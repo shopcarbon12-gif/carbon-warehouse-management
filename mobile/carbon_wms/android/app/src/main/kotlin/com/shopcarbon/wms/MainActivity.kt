@@ -23,6 +23,7 @@ class MainActivity : FlutterFragmentActivity() {
   private var hardwareBarcodeRelay: CarbonHardwareBarcodeRelay? = null
   private var hardwareTriggerRelay: CarbonHardwareTriggerRelay? = null
   private var senitronBridge: SenitronPluginBridge? = null
+  private var scanSoundPool: ScanSoundPool? = null
 
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,6 +35,19 @@ class MainActivity : FlutterFragmentActivity() {
         arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE),
         REQ_WRITE_STORAGE,
       )
+    }
+    // Android 12+ requires runtime grant for BT operations used by Zebra SDK
+    // (BluetoothAdapter.getBondedDevices throws SecurityException otherwise).
+    if (Build.VERSION.SDK_INT >= 31) {
+      val needed = arrayOf(
+        android.Manifest.permission.BLUETOOTH_CONNECT,
+        android.Manifest.permission.BLUETOOTH_SCAN,
+      ).filter {
+        checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+      }.toTypedArray()
+      if (needed.isNotEmpty()) {
+        requestPermissions(needed, REQ_BLUETOOTH)
+      }
     }
   }
 
@@ -68,6 +82,11 @@ class MainActivity : FlutterFragmentActivity() {
     val bridge = SenitronPluginBridge(this)
     senitronBridge = bridge
     MainActivity.senitronBridge = bridge
+
+    // Native android.media.SoundPool bridge for per-tag beep (Senitron-class latency).
+    val soundPool = ScanSoundPool(this)
+    soundPool.register(messenger)
+    scanSoundPool = soundPool
 
     EventChannel(messenger, "carbon_wms/rfid_tag_stream").setStreamHandler(
       object : EventChannel.StreamHandler {
@@ -312,6 +331,7 @@ class MainActivity : FlutterFragmentActivity() {
   companion object {
     private const val TAG = "MainActivity"
     private const val REQ_WRITE_STORAGE = 1001
+    private const val REQ_BLUETOOTH = 1002
     const val ZEBRA_RFID_READER = "com.zebra.rfid.api3.RFIDReader"
     private const val SCANNER_PACKAGE = "com.rscja.scanner"
     @Volatile var senitronBridge: SenitronPluginBridge? = null

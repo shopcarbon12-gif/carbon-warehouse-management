@@ -3,6 +3,7 @@ package com.shopcarbon.wms
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.zebra.rfid.api3.ENUM_TRANSPORT
 import com.zebra.rfid.api3.ENUM_TRIGGER_MODE
 import com.zebra.rfid.api3.HANDHELD_TRIGGER_EVENT_TYPE
@@ -68,14 +69,18 @@ class CarbonZebraRfidController(
   fun connectAsync(onDone: (Throwable?) -> Unit) {
     executor.execute {
       try {
+        Log.d(TAG, "connectAsync: begin")
         disconnectSync()
         openReaders()
         val r = pickReader() ?: error("No Zebra RFID reader found. Pair an RFD8500 (Bluetooth) or connect USB.")
         reader = r
+        Log.d(TAG, "connectAsync: picked reader, connecting")
         connectAndConfigureReader()
         lastError = null
+        Log.d(TAG, "connectAsync: connected and configured")
         mainHandler.post { onDone(null) }
       } catch (e: Throwable) {
+        Log.e(TAG, "connectAsync: failed", e)
         lastError = e.message ?: e.javaClass.simpleName
         disconnectSync()
         mainHandler.post { onDone(e) }
@@ -225,16 +230,20 @@ class CarbonZebraRfidController(
   }
 
   private fun openReaders() {
+    Log.d(TAG, "openReaders: trying BLUETOOTH transport")
     var r = Readers(ZebraContextWrapper(context.applicationContext), ENUM_TRANSPORT.BLUETOOTH)
     var list = safeList(r)
+    Log.d(TAG, "openReaders: BLUETOOTH -> ${list?.size ?: "null"} readers; names=${list?.map { it.name }}")
     if (list.isNullOrEmpty()) {
       try {
         r.Dispose()
       } catch (_: Exception) {
         /* ignore */
       }
+      Log.d(TAG, "openReaders: falling back to SERVICE_USB transport")
       r = Readers(ZebraContextWrapper(context.applicationContext), ENUM_TRANSPORT.SERVICE_USB)
       list = safeList(r)
+      Log.d(TAG, "openReaders: SERVICE_USB -> ${list?.size ?: "null"} readers; names=${list?.map { it.name }}")
     }
     if (list.isNullOrEmpty()) {
       try {
@@ -247,6 +256,7 @@ class CarbonZebraRfidController(
     readers = r
     Readers.attach(this)
     readersAttached = true
+    Log.d(TAG, "openReaders: attached handler, ready")
   }
 
   private fun safeList(r: Readers): ArrayList<ReaderDevice>? =
@@ -273,7 +283,9 @@ class CarbonZebraRfidController(
   private fun connectAndConfigureReader() {
     val r = reader ?: return
     if (!r.isConnected) {
+      Log.d(TAG, "connectAndConfigureReader: r.connect()")
       r.connect()
+      Log.d(TAG, "connectAndConfigureReader: connected=${r.isConnected} host=${r.hostName}")
     }
     val triggerInfo = TriggerInfo()
     triggerInfo.StartTrigger.setTriggerType(START_TRIGGER_TYPE.START_TRIGGER_TYPE_IMMEDIATE)
@@ -357,14 +369,19 @@ class CarbonZebraRfidController(
   }
 
   override fun RFIDReaderAppeared(readerDevice: ReaderDevice) {
-    /* optional auto-reconnect left to device layer */
+    Log.d(TAG, "RFIDReaderAppeared: name=${readerDevice.name}")
   }
 
   override fun RFIDReaderDisappeared(readerDevice: ReaderDevice) {
+    Log.d(TAG, "RFIDReaderDisappeared: name=${readerDevice.name}")
     val host = reader?.hostName
     if (host != null && readerDevice.name == host) {
       disconnectAsync()
     }
+  }
+
+  companion object {
+    private const val TAG = "CarbonZebra"
   }
 
   private inner class ZebraEventHandler : RfidEventsListener {

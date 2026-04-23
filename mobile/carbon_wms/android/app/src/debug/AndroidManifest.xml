@@ -1,8 +1,15 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- The INTERNET permission is required for development. Specifically,
          the Flutter tool needs it to communicate with the running application
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.READ_LOGS"/>
+    <!-- Distinct launcher label so debug + release apps (both "CarbonWMS") are
+         distinguishable in the launcher. release's tools:replace already wins on
+         the main manifest; this overrides it in the debug variant merge. -->
+    <application
+        android:label="CarbonWMS DEBUG"
+        tools:replace="android:label"/>
 </manifest>

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,12 +11,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:carbon_wms/audio/geiger_beep_wav.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
@@ -52,10 +51,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   _CountInventoryModuleSettings _moduleSettings =
       _CountInventoryModuleSettings.defaults;
   RfidManager? _rfidManager;
-  AudioPool? _beepPool;
-  late final AudioPlayer _toneAudio;
-  Uint8List? _scanBeepBytes;
-  DateTime? _lastBeepAt;
   int _displayEpcCount = 0;
   int _displaySkuCount = 0;
   String? _previousScanContext;
@@ -65,33 +60,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   @override
   void initState() {
     super.initState();
-    _toneAudio = AudioPlayer()
-      ..setReleaseMode(ReleaseMode.stop)
-      ..setPlayerMode(PlayerMode.lowLatency)
-      ..setVolume(1.0);
-    _scanBeepBytes = buildGeigerBeepWav();
-    // Write beep wav to temp file and load AudioPool for rapid fire-and-forget beeps.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final b = _scanBeepBytes;
-      if (b != null) {
-        try {
-          final dir = await getTemporaryDirectory();
-          final f = File('${dir.path}/count_beep.wav');
-          await f.writeAsBytes(b);
-          _beepPool = await AudioPool.create(
-            source: DeviceFileSource(f.path),
-            maxPlayers: 4,
-            minPlayers: 2,
-            playerMode: PlayerMode.lowLatency,
-          );
-        } catch (_) {
-          // fallback: warm up toneAudio
-          try {
-            await _toneAudio.setSourceBytes(b);
-          } catch (_) {}
-        }
-      }
-    });
+    // Warm the shared Senitron-sourced scan sounds (pool-backed for low-latency read clicks).
+    unawaited(ScanSounds.instance.init());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initModule());
     });
@@ -112,8 +82,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _scanInactivityTimer?.cancel();
     _rfidKeepAliveTimer?.cancel();
     _countAnimateTimer?.cancel();
-    unawaited(_toneAudio.dispose());
-    unawaited(_beepPool?.dispose());
     final rfid = _rfidManager;
     if (rfid != null) {
       rfid.suppressEdgeStreaming = false;
@@ -320,32 +288,15 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _playBeep() async {
-    final now = DateTime.now();
-    final last = _lastBeepAt;
-    if (last != null && now.difference(last).inMilliseconds < 80) return;
-    _lastBeepAt = now;
-    final pool = _beepPool;
-    if (pool != null) {
-      try {
-        await pool.start(volume: 1.0);
-        return;
-      } catch (_) {}
-    }
-    // Fallback: toneAudio when pool not yet ready.
-    final bytes = _scanBeepBytes;
-    if (bytes == null) return;
-    try {
-      await _toneAudio.stop();
-      await _toneAudio.play(BytesSource(bytes), volume: 1.0);
-    } catch (_) {}
+    ScanSounds.instance.play(ScanCue.read);
   }
 
   Future<void> _playStartTone() async {
-    await _playBeep();
+    ScanSounds.instance.play(ScanCue.start);
   }
 
   Future<void> _playStopTone() async {
-    await _playBeep();
+    ScanSounds.instance.play(ScanCue.stop);
   }
 
   void _onTagRead(RfidTagRead read) {
@@ -463,6 +414,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!_scanOn) return;
     _scanInactivityTimer?.cancel();
     _rfidKeepAliveTimer?.cancel();
+    // Kill any in-flight read beeps so they don't trail past the stop event.
+    ScanSounds.instance.stopAll();
     try { await _rfidManager?.stopLocateScanning(); } catch (_) {}
     if (!mounted) return;
     setState(() { _scanOn = false; });
