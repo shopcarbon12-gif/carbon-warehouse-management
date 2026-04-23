@@ -87,10 +87,11 @@ export async function listBinsWithCounts(
          SELECT string_agg(label, E'\n' ORDER BY label)
          FROM (
            SELECT DISTINCT
-             m.upc
-             || CASE WHEN cs.color_code IS NOT NULL AND trim(cs.color_code) <> '' THEN '+' || cs.color_code ELSE '' END
-             || ' · ' || m.description
-             || CASE WHEN cs.color_code IS NOT NULL AND trim(cs.color_code) <> '' THEN ' · ' || cs.color_code ELSE '' END
+             CASE
+               WHEN cs.sku LIKE 'C%' THEN left(cs.sku, 11)
+               ELSE left(cs.sku, 9)
+             END
+             || ' · ' || regexp_replace(m.description, '\\s+\\S+$', '')
              AS label
            FROM items ii
            INNER JOIN custom_skus cs ON cs.id = ii.custom_sku_id

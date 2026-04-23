@@ -19,6 +19,7 @@ export type CatalogGridRow = {
   /** Last total on-hand from Lightspeed catalog sync (not RFID). */
   ls_on_hand_total: number | null;
   active_epc_count: number;
+  bin_location: string | null;
 };
 
 export type CatalogGridResult = {
@@ -35,6 +36,7 @@ function buildWhere(
   category: string,
   vendor: string,
   systemId: string,
+  locationId: string,
 ): { sql: string; params: unknown[] } {
   const parts: string[] = ["1=1"];
   const params: unknown[] = [];
@@ -50,6 +52,23 @@ function buildWhere(
 
   const qt = q.trim();
   if (qt) {
+    const hasLoc = locationId.trim().length > 0;
+    params.push(`%${qt}%`);
+    const binExistsClause = hasLoc
+      ? `OR EXISTS (
+          SELECT 1 FROM items ix
+          INNER JOIN bins bx ON bx.id = ix.bin_id
+          WHERE ix.custom_sku_id = cs.id
+            AND ix.location_id = $${i + 1}::uuid
+            AND ix.status = 'in-stock'
+            AND ix.bin_id IS NOT NULL
+            AND bx.archived_at IS NULL
+            AND bx.code ILIKE $${i}
+        )`
+      : "";
+    if (hasLoc) {
+      params.push(locationId.trim());
+    }
     parts.push(
       `(
         COALESCE(m.ls_system_id::text, '') ILIKE $${i}
@@ -59,10 +78,10 @@ function buildWhere(
         OR m.upc ILIKE $${i}
         OR COALESCE(cs.upc, '') ILIKE $${i}
         OR COALESCE(m.vendor, '') ILIKE $${i}
+        ${binExistsClause}
       )`,
     );
-    params.push(`%${qt}%`);
-    i += 1;
+    i += hasLoc ? 2 : 1;
   }
 
   if (brand.trim()) {
@@ -124,7 +143,7 @@ export async function listCatalogGrid(
   const safeLimit = Math.min(100, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
 
-  const { sql: whereSql, params: whereParams } = buildWhere(q, brand, category, vendor, systemId);
+  const { sql: whereSql, params: whereParams } = buildWhere(q, brand, category, vendor, systemId, locationId);
 
   const countR = await pool.query<{ c: string }>(
     `SELECT COUNT(*)::text AS c
@@ -155,6 +174,7 @@ export async function listCatalogGrid(
     retail_price: string | null;
     ls_on_hand_total: string | null;
     active_epc_count: string;
+    bin_location: string | null;
   }>(
     `SELECT
        cs.id::text AS custom_sku_id,
@@ -176,7 +196,17 @@ export async function listCatalogGrid(
          WHERE i.custom_sku_id = cs.id
            AND i.location_id = $${locIdx}::uuid
            AND i.status = 'in-stock'
-       ) AS active_epc_count
+       ) AS active_epc_count,
+       (
+         SELECT string_agg(DISTINCT b.code, ', ' ORDER BY b.code)
+         FROM items i
+         INNER JOIN bins b ON b.id = i.bin_id
+         WHERE i.custom_sku_id = cs.id
+           AND i.location_id = $${locIdx}::uuid
+           AND i.status = 'in-stock'
+           AND i.bin_id IS NOT NULL
+           AND b.archived_at IS NULL
+       ) AS bin_location
      FROM custom_skus cs
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE ${whereSql}
@@ -207,6 +237,7 @@ export async function listCatalogGrid(
         return Number.isFinite(n) ? n : null;
       })(),
       active_epc_count: Number(row.active_epc_count ?? 0),
+      bin_location: row.bin_location ?? null,
     })),
     total,
     brands: filters.brands,

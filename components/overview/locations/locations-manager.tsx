@@ -39,6 +39,7 @@ export function LocationsManager({
     fetcher,
     {
       revalidateOnFocus: false,
+      revalidateOnMount: true,
       fallbackData:
         initialLocations !== undefined ? { locations: initialLocations } : undefined,
     },
@@ -224,13 +225,19 @@ export function LocationsManager({
                         </span>
                       </td>
                       <td className="px-3 py-2 text-[var(--wms-muted)]">
-                        {b.bin_items ? (
-                          <ul className="space-y-0.5">
-                            {b.bin_items.split("\n").map((line, i) => (
-                              <li key={i} className="text-xs leading-snug">{line}</li>
-                            ))}
-                          </ul>
-                        ) : (
+                        {b.bin_items ? (() => {
+                          const lines = b.bin_items.split("\n");
+                          const numbered = lines.length > 1;
+                          return (
+                            <ul className="space-y-0.5">
+                              {lines.map((line, i) => (
+                                <li key={i} className="text-xs leading-snug">
+                                  {numbered ? `${i + 1}. ${line}` : line}
+                                </li>
+                              ))}
+                            </ul>
+                          );
+                        })() : (
                           <span className="text-xs text-[var(--wms-muted)]">—</span>
                         )}
                       </td>
