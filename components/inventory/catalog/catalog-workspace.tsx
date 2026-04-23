@@ -629,7 +629,7 @@ export function CatalogWorkspace({
         </div>
       ) : tab === "lightspeed" ? (
         <>
-          <div className="overflow-auto rounded-lg border border-[var(--wms-border)]" style={{ maxHeight: "calc(100vh - 200px)" }}>
+          <div className="overflow-auto rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]" style={{ maxHeight: "calc(100vh - 200px)" }}>
             <table
               ref={tableRef}
               className="w-full min-w-[1100px] border-collapse text-left"
