@@ -639,7 +639,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           deviceId: deviceId,
           binCode: binCode,
           skuScanned: item.sku,
-          scope: 'single_color',
+          scope: 'single_color_all_sizes',
         );
       }
       if (!mounted) return;
@@ -666,7 +666,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           deviceId: deviceId,
           binCode: _currentBin,
           skuScanned: item.sku,
-          scope: 'single_color',
+          scope: 'single_color_all_sizes',
         );
       }
       await _refreshContents();
@@ -779,7 +779,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                 try {
                   await _doAssign(
                       skuScanned: skuParts.searchKeySpecific,
-                      scope: 'single_color');
+                      scope: 'single_color_all_sizes');
                   await _refreshContents();
                 } catch (e) {
                   if (mounted) {
@@ -944,7 +944,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                     final parts = _SkuParts.parse(sku);
                     await _doAssign(
                       skuScanned: parts.searchKeySpecific,
-                      scope: 'single_color',
+                      scope: 'single_color_all_sizes',
                     );
                   }
                   await _refreshContents();

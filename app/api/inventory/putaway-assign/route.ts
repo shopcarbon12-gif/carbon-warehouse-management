@@ -11,7 +11,7 @@ const bodySchema = z.object({
   deviceId: z.string().min(1).max(256),
   binCode: z.string().min(1).max(64),
   skuScanned: z.string().min(1).max(256),
-  scope: z.enum(["all_colors", "single_color"]),
+  scope: z.enum(["all_colors", "single_color_all_sizes"]),
 });
 
 export async function POST(req: Request) {
