@@ -168,7 +168,7 @@ class CarbonZebraRfidController(
   }
 
   private fun openReaders() {
-    var r = Readers(context.applicationContext, ENUM_TRANSPORT.BLUETOOTH)
+    var r = Readers(ZebraContextWrapper(context.applicationContext), ENUM_TRANSPORT.BLUETOOTH)
     var list = safeList(r)
     if (list.isNullOrEmpty()) {
       try {
@@ -176,7 +176,7 @@ class CarbonZebraRfidController(
       } catch (_: Exception) {
         /* ignore */
       }
-      r = Readers(context.applicationContext, ENUM_TRANSPORT.SERVICE_USB)
+      r = Readers(ZebraContextWrapper(context.applicationContext), ENUM_TRANSPORT.SERVICE_USB)
       list = safeList(r)
     }
     if (list.isNullOrEmpty()) {

@@ -280,10 +280,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       await _triggerSub?.cancel();
       _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
         if (kDebugMode) print('[CountInventory] hardware_trigger event=$event');
-        if (event == 'down' && !_scanOn) {
-          unawaited(_startScan());
-        } else if (event == 'up' && _scanOn) {
-          unawaited(_stopScan());
+        if (event == 'down') {
+          if (_scanOn) {
+            unawaited(_stopScan());
+          } else {
+            unawaited(_startScan());
+          }
         }
       }, onError: (_) {});
 
@@ -347,6 +349,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   void _onTagRead(RfidTagRead read) {
+    if (!_scanOn) return;
     final rssi = read.rssi ?? 0;
     // Count is inventory mode — accept all signal levels (rssiDistance filter is for locate/proximity, not count).
     final epc = read.epcHex24.toUpperCase();
@@ -438,9 +441,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (_scanOn) return;
     await RfidVendorChannel.clearChainwaySeenEpcs();
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
-    // connectChainway owns UART and auto-starts drain loop; idempotent if already owned.
-    try { await RfidVendorChannel.connectChainway(); } catch (_) {}
-    try { await RfidVendorChannel.startChainwayInventory(); } catch (_) {}
+    try { await _rfidManager?.startLocateScanning(); } catch (_) {}
     if (!mounted) return;
     setState(() { _scanOn = true; });
     unawaited(_playStartTone());
@@ -462,9 +463,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!_scanOn) return;
     _scanInactivityTimer?.cancel();
     _rfidKeepAliveTimer?.cancel();
-    // Stop drain loop only — no STOP_BARCODE_RFID / DISABLE broadcasts.
-    // UART stays owned so next _startScan restarts the drain loop instantly.
-    try { await RfidVendorChannel.stopChainwayInventory(); } catch (_) {}
+    try { await _rfidManager?.stopLocateScanning(); } catch (_) {}
     if (!mounted) return;
     setState(() { _scanOn = false; });
     unawaited(_playStopTone());
