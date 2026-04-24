@@ -15,9 +15,11 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/epc/epc_codec.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 const _countInvPrefsKey = 'count_inventory_module_settings_v1';
@@ -46,6 +48,15 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   Timer? _scanInactivityTimer;
   Timer? _rfidKeepAliveTimer;
   Timer? _countAnimateTimer;
+  // Throttles UI rebuilds during high-rate EPC ingest: tags ingest into in-memory maps
+  // without setState; this timer flushes a single setState every 150ms while scanning is
+  // live. Without it, Chainway's 300-700 tags/sec burst-rebuilds the list and starves the
+  // main thread, causing audio focus churn and delayed start/stop beeps.
+  Timer? _uiFlushTimer;
+  static const Duration _uiFlushInterval = Duration(milliseconds: 150);
+  Timer? _assetCachePersistTimer;
+  DateTime? _assetCacheLastPersistAt;
+  static const Duration _assetCachePersistDebounce = Duration(seconds: 2);
   bool _scanOn = false;
   bool _connecting = false;
   _CountInventoryModuleSettings _moduleSettings =
@@ -60,7 +71,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   @override
   void initState() {
     super.initState();
-    // Warm the shared Senitron-sourced scan sounds (pool-backed for low-latency read clicks).
+    // Warm the shared scan sounds (pool-backed for low-latency per-tag read clicks).
     unawaited(ScanSounds.instance.init());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initModule());
@@ -82,6 +93,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _scanInactivityTimer?.cancel();
     _rfidKeepAliveTimer?.cancel();
     _countAnimateTimer?.cancel();
+    _uiFlushTimer?.cancel();
+    _assetCachePersistTimer?.cancel();
     final rfid = _rfidManager;
     if (rfid != null) {
       rfid.suppressEdgeStreaming = false;
@@ -311,42 +324,184 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final now = DateTime.now();
     // Normalize to even-length hex so odd-padded and unpadded forms map to the same key.
     final normalized = epc.length.isOdd ? '0$epc' : epc;
+    final row = _epcRows[normalized];
+    if (row != null) {
+      // Hard lock: once an EPC is scanned in Count, repeat sightings are ignored.
+      // Do NOT setState here — the flush timer repaints at 150ms intervals.
+      return;
+    }
     if (kDebugMode) {
       // ignore: avoid_print
       print('[CountInventory] onTagRead epc=$normalized rssi=$rssi');
     }
-    final row = _epcRows[normalized];
-    if (row != null) {
-      // Hard lock: once an EPC is scanned in Count, repeat sightings are ignored.
-      if (mounted) setState(() {});
-      return;
-    } else {
-      _epcRows[normalized] = _SessionEpcRow(
-        epc: normalized,
-        assetId: normalized,
-        prefixHex: '',
-        serial: 0,
-        firstSeen: now,
-        lastSeen: now,
-        rssi: rssi,
-      );
-      // Audible feedback on accepted EPC only.
-      unawaited(_playBeep());
-    }
-    // One group per unique EPC — like Senitron's Assets List
+    _epcRows[normalized] = _SessionEpcRow(
+      epc: normalized,
+      assetId: normalized,
+      prefixHex: '',
+      serial: 0,
+      firstSeen: now,
+      lastSeen: now,
+      rssi: rssi,
+    );
+    // Audible feedback on accepted EPC only — native SoundPool; does not block ingest.
+    unawaited(_playBeep());
+    // Group by system_id so repeated scans of the same SKU accumulate into one row.
+    // Fall back to the raw EPC for tags we can't decode (legacy/foreign).
+    final systemId = decodeSystemId(normalized);
+    final groupKey = systemId?.toString() ?? normalized;
+    final isNewGroup = !_groupedRows.containsKey(groupKey);
     final group = _groupedRows.putIfAbsent(
-      normalized,
-      () => _GroupedRow(assetId: normalized),
+      groupKey,
+      () => _GroupedRow(assetId: groupKey),
     );
     group.epcs.add(normalized);
     group.qty = group.epcs.length;
     group.lastRssi = rssi;
-    if (group.sku.isEmpty) {
-      group.sku = normalized;
-      group.name = '';
+    if (isNewGroup) {
+      if (systemId == null) {
+        group.epcInvalid = true;
+        group.sku = normalized;
+      } else {
+        final sysIdStr = systemId.toString();
+        final cached = _assetCache[sysIdStr];
+        if (cached != null) {
+          _applyCatalogToGroup(group, cached);
+        } else {
+          unawaited(_resolveCatalog(sysIdStr, group));
+        }
+      }
     }
-    if (mounted) setState(() {});
-    _syncDisplayedCounters();
+    // UI update happens via _uiFlushTimer at 150ms cadence; no per-tag setState.
+  }
+
+  Future<void> _resolveCatalog(String sysIdStr, _GroupedRow group) async {
+    if (!mounted) return;
+    final api = context.read<WmsApiClient>();
+    try {
+      final row = await api.catalogLookupBySystemId(sysIdStr);
+      if (!mounted) return;
+      if (row == null) {
+        group.catalogMissing = true;
+        group.catalogResolved = true;
+      } else {
+        final mapped = <String, dynamic>{
+          'sku': (row['sku'] as String?) ?? '',
+          'name': (row['name'] as String?) ?? '',
+          'size': row['size'] as String?,
+          'color': row['color'] as String?,
+          'retail_price': row['retail_price'] as String?,
+          'bin_location': row['bin_location'] as String?,
+        };
+        _applyCatalogToGroup(group, mapped);
+        _assetCache[sysIdStr] = mapped;
+        unawaited(_persistAssetCache());
+      }
+    } catch (_) {
+      // Network error: leave unresolved so a future scan retries.
+      // Do NOT set catalogMissing — that's reserved for confirmed 404.
+    }
+  }
+
+  void _applyCatalogToGroup(_GroupedRow g, Map<String, dynamic> m) {
+    g.customSku = (m['sku'] as String?) ?? '';
+    g.itemName = (m['name'] as String?) ?? '';
+    g.size = (m['size'] as String?) ?? '';
+    g.color = (m['color'] as String?) ?? '';
+    g.retailPriceStr = m['retail_price'] as String?;
+    g.binLocation = m['bin_location'] as String?;
+    g.catalogResolved = true;
+    g.catalogMissing = false;
+  }
+
+  String _skuLine(_GroupedRow g) {
+    if (g.epcInvalid) return 'Unknown EPC';
+    if (g.catalogMissing) {
+      return 'Unknown Item · system_id ${g.assetId}';
+    }
+    if (!g.catalogResolved) return 'SKU: …';
+    if (g.customSku.isEmpty) return 'SKU: —';
+    return 'SKU: ${g.customSku}';
+  }
+
+  String _priceText(_GroupedRow g) {
+    if (!g.catalogResolved || g.catalogMissing || g.epcInvalid) return '';
+    final price = double.tryParse(g.retailPriceStr ?? '');
+    if (price == null || price <= 0) return '';
+    return '\$${price.toStringAsFixed(2)}';
+  }
+
+  String _binText(_GroupedRow g) {
+    if (!g.catalogResolved || g.catalogMissing || g.epcInvalid) return '';
+    final bin = g.binLocation;
+    if (bin == null || bin.trim().isEmpty) return '';
+    return 'BIN ${bin.trim()}';
+  }
+
+  // Fallback row-2 text when the group is still pending, missing, or invalid —
+  // at least show the first scanned EPC so the user sees something meaningful.
+  String _fallbackRow2(_GroupedRow g) {
+    if (g.catalogResolved && !g.catalogMissing && !g.epcInvalid) return '';
+    if (g.epcs.isEmpty) return '';
+    return g.epcs.first;
+  }
+
+  Future<void> _openGroupEpcList(_GroupedRow g) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _CountEpcListScreen(
+          skuLine: _skuLine(g),
+          itemName: g.itemName,
+          color: g.color,
+          size: g.size,
+          priceText: _priceText(g),
+          binText: _binText(g),
+          epcs: g.epcs.toList()..sort(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _persistAssetCache() async {
+    final now = DateTime.now();
+    final last = _assetCacheLastPersistAt;
+    if (last != null &&
+        now.difference(last) < _assetCachePersistDebounce &&
+        _assetCachePersistTimer == null) {
+      final wait = _assetCachePersistDebounce - now.difference(last);
+      _assetCachePersistTimer = Timer(wait, () {
+        _assetCachePersistTimer = null;
+        unawaited(_persistAssetCache());
+      });
+      return;
+    }
+    if (_assetCachePersistTimer != null) {
+      // A pending write is already scheduled; it will pick up the latest state.
+      return;
+    }
+    _assetCacheLastPersistAt = now;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_assetCachePrefsKey, jsonEncode(_assetCache));
+    } catch (_) {}
+  }
+
+  void _startUiFlushTimer() {
+    _uiFlushTimer?.cancel();
+    _uiFlushTimer = Timer.periodic(_uiFlushInterval, (_) {
+      if (!mounted) return;
+      setState(() {});
+      _syncDisplayedCounters();
+    });
+  }
+
+  void _stopUiFlushTimer() {
+    _uiFlushTimer?.cancel();
+    _uiFlushTimer = null;
+    // Final flush so the last few tags aren't missing from the UI.
+    if (mounted) {
+      setState(() {});
+      _syncDisplayedCounters();
+    }
   }
 
   void _syncDisplayedCounters() {
@@ -395,6 +550,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     try { await _rfidManager?.startLocateScanning(); } catch (_) {}
     if (!mounted) return;
     setState(() { _scanOn = true; });
+    _startUiFlushTimer();
     unawaited(_playStartTone());
   }
 
@@ -414,23 +570,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!_scanOn) return;
     _scanInactivityTimer?.cancel();
     _rfidKeepAliveTimer?.cancel();
+    _stopUiFlushTimer();
     // Kill any in-flight read beeps so they don't trail past the stop event.
     ScanSounds.instance.stopAll();
     try { await _rfidManager?.stopLocateScanning(); } catch (_) {}
     if (!mounted) return;
     setState(() { _scanOn = false; });
     unawaited(_playStopTone());
-  }
-
-  Future<void> _openEpcList({
-    required String title,
-    required List<String> epcs,
-  }) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => _CountEpcListScreen(title: title, epcs: epcs),
-      ),
-    );
   }
 
   Future<bool> _confirmDeleteItem() async {
@@ -532,9 +678,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final rows = _epcRows.values.toList()
-      ..sort((a, b) => a.epc.compareTo(b.epc));
-    final hasRealRows = rows.isNotEmpty;
+    final groups = _groupedRows.values.toList()
+      ..sort((a, b) => a.assetId.compareTo(b.assetId));
+    final hasRealRows = groups.isNotEmpty;
     final assetCount = _displayEpcCount;
     final skuCount = _displaySkuCount;
     final summaryValueText = '$assetCount';
@@ -631,35 +777,27 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                     child: hasRealRows
                         ? ListView.separated(
                             padding: EdgeInsets.only(bottom: 12.h),
-                            itemCount: rows.length,
+                            itemCount: groups.length,
                             separatorBuilder: (_, __) => SizedBox(height: 12.h),
                             itemBuilder: (_, i) {
-                              final row = rows[i];
-                              final g = _groupedRows[row.epc];
-                              final descParts = [
-                                if (g != null && g.name.isNotEmpty) g.name,
-                                if (g != null && g.color.isNotEmpty) g.color,
-                                if (g != null && g.size.isNotEmpty) g.size,
-                              ];
-                              final desc = descParts.isNotEmpty
-                                  ? descParts.join(' ')
-                                  : 'ITEM DESCRIPTION';
-                              final defectText = '';
-                              final descWithDefect = defectText.isEmpty
-                                  ? desc
-                                  : '$desc • $defectText';
+                              final g = groups[i];
                               return _CountItemContainer(
-                                rowKey: 'real-${row.epc}',
-                                sku: row.epc,
-                                description: descWithDefect,
-                                qtyText: 'x1',
-                                expandedLines: const [],
-                                onQtyTap: () => _openEpcList(
-                                    title: row.epc, epcs: [row.epc]),
+                                rowKey: 'real-${g.assetId}',
+                                skuLine: _skuLine(g),
+                                itemName: g.itemName,
+                                color: g.color,
+                                size: g.size,
+                                priceText: _priceText(g),
+                                binText: _binText(g),
+                                descriptionFallback: _fallbackRow2(g),
+                                qtyText: 'x${g.qty}',
+                                onQtyTap: () => _openGroupEpcList(g),
                                 onDelete: () {
                                   setState(() {
-                                    _epcRows.remove(row.epc);
-                                    _groupedRows.remove(row.epc);
+                                    for (final e in g.epcs) {
+                                      _epcRows.remove(e);
+                                    }
+                                    _groupedRows.remove(g.assetId);
                                   });
                                   _syncDisplayedCounters();
                                 },
@@ -885,20 +1023,30 @@ String _summaryCountDisplayString(String raw) {
 class _CountItemContainer extends StatefulWidget {
   const _CountItemContainer({
     required this.rowKey,
-    required this.sku,
-    required this.description,
+    required this.skuLine,
+    required this.itemName,
+    required this.color,
+    required this.size,
+    required this.priceText,
+    required this.binText,
+    required this.descriptionFallback,
     required this.qtyText,
-    this.expandedLines = const <String>[],
     this.onQtyTap,
     this.onDelete,
     this.confirmDelete,
   });
 
   final String rowKey;
-  final String sku;
-  final String description;
+  final String skuLine;
+  final String itemName;
+  final String color;
+  final String size;
+  final String priceText;
+  final String binText;
+  // Used when the group is still resolving / unknown / invalid — shown on row 2
+  // in place of the item-name/color/size.
+  final String descriptionFallback;
   final String qtyText;
-  final List<String> expandedLines;
   final VoidCallback? onQtyTap;
   final VoidCallback? onDelete;
   final Future<bool> Function()? confirmDelete;
@@ -908,121 +1056,142 @@ class _CountItemContainer extends StatefulWidget {
 }
 
 class _CountItemContainerState extends State<_CountItemContainer> {
-  static const _fixedContainerHeight = 68.0;
   bool _expanded = false;
+
+  // Cache styles per State instance — GoogleFonts.xxx() is a map lookup each
+  // call, and we rebuild every 150ms during a scan burst. Building them once
+  // per row instead of once per build saves a lot of work.
+  late final TextStyle _skuStyle = GoogleFonts.robotoMono(
+    fontSize: 19.sp,
+    fontWeight: FontWeight.w700,
+    color: AppColors.textMain,
+    letterSpacing: 0.0,
+    height: 1.2,
+  );
+  late final TextStyle _descStyle = GoogleFonts.manrope(
+    fontSize: 14.sp,
+    fontWeight: FontWeight.w700,
+    color: AppColors.textMain,
+    letterSpacing: 0.0,
+    height: 1.2,
+  );
+  late final TextStyle _priceStyle = GoogleFonts.manrope(
+    fontSize: 14.sp,
+    fontWeight: FontWeight.w800,
+    color: AppColors.textMain,
+    letterSpacing: 0.0,
+    height: 1.2,
+  );
+  late final TextStyle _binStyle = GoogleFonts.manrope(
+    fontSize: 13.sp,
+    fontWeight: FontWeight.w700,
+    color: const Color(0xFF3F4A4A),
+    letterSpacing: 0.2,
+    height: 1.2,
+  );
+  late final TextStyle _qtyStyle = GoogleFonts.spaceGrotesk(
+    fontSize: 26.sp,
+    fontWeight: FontWeight.w800,
+    color: AppColors.primary,
+    letterSpacing: 0.0,
+    height: 1.2,
+  );
 
   @override
   Widget build(BuildContext context) {
-    final descStyle = GoogleFonts.manrope(
-      fontSize: 17.sp,
-      fontWeight: FontWeight.w700,
-      color: AppColors.textMain,
-      letterSpacing: 0.0,
-      height: 1.2,
-    );
+    final skuStyle = _skuStyle;
+    final descStyle = _descStyle;
+    final priceStyle = _priceStyle;
+    final binStyle = _binStyle;
 
+    final descLeft = widget.descriptionFallback.isNotEmpty
+        ? widget.descriptionFallback
+        : [
+            if (widget.itemName.isNotEmpty) widget.itemName,
+            if (widget.color.isNotEmpty) widget.color,
+            if (widget.size.isNotEmpty) widget.size,
+          ].join(' ');
+
+    final hasPrice = widget.priceText.isNotEmpty;
+    final hasBin = widget.binText.isNotEmpty;
+
+    final expanded = _expanded;
     final content = Material(
       color: const Color(0xFFECECEC),
       borderRadius: BorderRadius.zero,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          const horizontalPadding = 12.0 + 12.0;
-          const qtyGap = 6.0 + 12.0;
-          final qtyPainter = TextPainter(
-            text: TextSpan(
-                text: widget.qtyText,
-                style: GoogleFonts.spaceGrotesk(
-                    fontSize: 26.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.0,
-                    height: 1.2)),
-            maxLines: 1,
-            textDirection: Directionality.of(context),
-          )..layout();
-          final textAvailableWidth = (constraints.maxWidth -
-                  horizontalPadding -
-                  qtyGap -
-                  qtyPainter.width)
-              .clamp(0.0, double.infinity);
-          final descPainter = TextPainter(
-            text: TextSpan(text: widget.description, style: descStyle),
-            maxLines: 1,
-            textDirection: Directionality.of(context),
-          )..layout(maxWidth: textAvailableWidth);
-          final canExpand = widget.description != 'ITEM DESCRIPTION' && descPainter.didExceedMaxLines;
-          final showExpanded = canExpand && _expanded;
-
-          return InkWell(
-            onTap: canExpand ? () => setState(() => _expanded = !_expanded) : null,
-            child: Padding(
-              padding: EdgeInsets.zero,
-              child: AnimatedSize(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeInOut,
-                alignment: Alignment.topCenter,
-                child: SizedBox(
-                  height: showExpanded ? null : _fixedContainerHeight,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 10, horizontal: 12),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.sku,
-                                softWrap: true,
-                                textAlign: TextAlign.left,
-                                style: GoogleFonts.robotoMono(
-                                  fontSize: 19.sp,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textMain,
-                                  letterSpacing: 0.0,
-                                  height: 1.2,
-                                ),
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                widget.description,
-                                style: descStyle,
-                                maxLines: showExpanded ? null : 1,
-                                overflow: showExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-                                textAlign: TextAlign.left,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 10.w),
-                      GestureDetector(
-                        onTap: widget.onQtyTap,
-                        behavior: HitTestBehavior.opaque,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 6, right: 12),
+      child: InkWell(
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Row 1 — SKU (left) + price (right)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Expanded(
                           child: Text(
-                            widget.qtyText,
-                            style: GoogleFonts.spaceGrotesk(
-                              fontSize: 26.sp,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primary,
-                              letterSpacing: 0.0,
-                              height: 1.2,
-                            ),
+                            widget.skuLine,
+                            style: skuStyle,
+                            maxLines: expanded ? null : 1,
+                            overflow: expanded
+                                ? TextOverflow.visible
+                                : TextOverflow.ellipsis,
+                            textAlign: TextAlign.left,
                           ),
                         ),
+                        if (hasPrice) ...[
+                          SizedBox(width: 8.w),
+                          Text(widget.priceText, style: priceStyle),
+                        ],
+                      ],
+                    ),
+                    if (descLeft.isNotEmpty) ...[
+                      SizedBox(height: 3.h),
+                      Text(
+                        descLeft,
+                        style: descStyle,
+                        maxLines: expanded ? null : 1,
+                        overflow: expanded
+                            ? TextOverflow.visible
+                            : TextOverflow.ellipsis,
+                        textAlign: TextAlign.left,
                       ),
                     ],
-                  ),
+                    if (hasBin) ...[
+                      SizedBox(height: 2.h),
+                      Text(
+                        widget.binText,
+                        style: binStyle,
+                        maxLines: expanded ? null : 1,
+                        overflow: expanded
+                            ? TextOverflow.visible
+                            : TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
-          );
-        },
+            SizedBox(width: 4.w),
+            GestureDetector(
+              onTap: widget.onQtyTap,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 6, right: 12),
+                child: Text(widget.qtyText, style: _qtyStyle),
+              ),
+            ),
+          ],
+        ),
       ),
     );
 
@@ -1051,43 +1220,198 @@ class _CountItemContainerState extends State<_CountItemContainer> {
 
 class _CountEpcListScreen extends StatelessWidget {
   const _CountEpcListScreen({
-    required this.title,
+    required this.skuLine,
+    required this.itemName,
+    required this.color,
+    required this.size,
+    required this.priceText,
+    required this.binText,
     required this.epcs,
   });
 
-  final String title;
+  final String skuLine;
+  final String itemName;
+  final String color;
+  final String size;
+  final String priceText;
+  final String binText;
   final List<String> epcs;
 
   @override
   Widget build(BuildContext context) {
+    // Strip the "SKU: " prefix the caller already added so we can show our own
+    // labelled rows consistently (and avoid "SKU: SKU: …").
+    final skuValue = skuLine.startsWith('SKU: ')
+        ? skuLine.substring(5).trim()
+        : skuLine;
+    // Same idea for the bin — caller passes "BIN xxxxx".
+    final binValue = binText.startsWith('BIN ')
+        ? binText.substring(4).trim()
+        : binText;
+
+    final headerBg = const Color(0xFFECECEC);
+
+    final labelStyle = GoogleFonts.spaceGrotesk(
+      fontSize: 12.sp,
+      fontWeight: FontWeight.w800,
+      color: const Color(0xFF5A6464),
+      letterSpacing: 1.6,
+      height: 1.2,
+    );
+    final valueStyle = GoogleFonts.manrope(
+      fontSize: 16.sp,
+      fontWeight: FontWeight.w700,
+      color: AppColors.textMain,
+      height: 1.25,
+    );
+    final skuValueStyle = GoogleFonts.robotoMono(
+      fontSize: 19.sp,
+      fontWeight: FontWeight.w700,
+      color: AppColors.textMain,
+      height: 1.25,
+    );
+    final priceStyle = GoogleFonts.manrope(
+      fontSize: 16.sp,
+      fontWeight: FontWeight.w800,
+      color: AppColors.textMain,
+      height: 1.25,
+    );
+
+    Widget labeledRow({
+      required String label,
+      required String value,
+      TextStyle? overrideValueStyle,
+      Widget? trailing,
+    }) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: 4.h),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(label, style: labelStyle),
+            SizedBox(width: 6.w),
+            Expanded(
+              child: Text(
+                value,
+                style: overrideValueStyle ?? valueStyle,
+              ),
+            ),
+            if (trailing != null) ...[
+              SizedBox(width: 8.w),
+              trailing,
+            ],
+          ],
+        ),
+      );
+    }
+
+    final nameColorValue = [
+      if (itemName.isNotEmpty) itemName,
+      if (color.isNotEmpty) color,
+    ].join(': ');
+
     return CarbonScaffold(
       pageTitle: 'EPC LIST',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            width: double.infinity,
+            color: headerBg,
+            padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 10.h),
+            margin: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 8.h),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Row 1 — SKU value (left) + price (right)
+                labeledRow(
+                  label: 'SKU:',
+                  value: skuValue,
+                  overrideValueStyle: skuValueStyle,
+                  trailing:
+                      priceText.isNotEmpty ? Text(priceText, style: priceStyle) : null,
+                ),
+                if (nameColorValue.isNotEmpty)
+                  labeledRow(label: 'NAME:COLOR:', value: nameColorValue),
+                if (size.isNotEmpty) labeledRow(label: 'SIZE:', value: size),
+                if (binValue.isNotEmpty) labeledRow(label: 'BIN:', value: binValue),
+              ],
+            ),
+          ),
           Padding(
-            padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 6.h),
+            padding: EdgeInsets.fromLTRB(20.w, 4.h, 20.w, 4.h),
             child: Text(
-              title,
+              'EPCs (${epcs.length})',
               style: GoogleFonts.spaceGrotesk(
-                fontSize: 16.sp,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textMain,
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF5A6464),
+                letterSpacing: 2.0,
               ),
             ),
           ),
           Expanded(
             child: ListView.separated(
+              padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 12.h),
               itemCount: epcs.length,
               separatorBuilder: (_, __) => Divider(height: 1.h),
-              itemBuilder: (_, i) => ListTile(
-                dense: true,
-                title: Text(
-                  epcs[i],
-                  style: GoogleFonts.manrope(
-                      fontSize: 14.sp, fontWeight: FontWeight.w700),
-                ),
-              ),
+              itemBuilder: (_, i) {
+                final epc = epcs[i];
+                final serial = decodeSerial(epc);
+                final serialText = serial == null ? '—' : serial.toString();
+                return Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.h),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              epc,
+                              style: GoogleFonts.robotoMono(
+                                fontSize: 17.sp,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textMain,
+                                height: 1.2,
+                              ),
+                            ),
+                            SizedBox(height: 3.h),
+                            Text(
+                              'serial: $serialText',
+                              style: GoogleFonts.manrope(
+                                fontSize: 15.sp,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF3F4A4A),
+                                height: 1.2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(width: 8.w),
+                      Tooltip(
+                        message: 'Locate this tag (Geiger)',
+                        child: IconButton(
+                          icon: Icon(Icons.sensors,
+                              size: 26.sp, color: AppColors.primary),
+                          onPressed: () {
+                            Navigator.of(context).push<void>(
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    LocateTagScreen(targetEpc: epc),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -2121,6 +2445,15 @@ class _GroupedRow {
   String vendor = '';
   bool cached = false;
   int lastRssi = -99;
+
+  // Catalog-resolved fields.
+  String customSku = '';
+  String itemName = '';
+  String? retailPriceStr; // raw "52.00" string from API
+  String? binLocation;
+  bool catalogResolved = false; // true once lookup completes (success OR 404)
+  bool catalogMissing = false; // true only if lookup returned null
+  bool epcInvalid = false; // true if decodeSystemId returned null
 }
 
 class _DecodedEpc {
