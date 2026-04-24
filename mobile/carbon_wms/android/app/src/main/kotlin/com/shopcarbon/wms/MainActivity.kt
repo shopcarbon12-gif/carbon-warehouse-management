@@ -22,7 +22,7 @@ class MainActivity : FlutterFragmentActivity() {
   private var chainwayController: CarbonChainwayRfidController? = null
   private var hardwareBarcodeRelay: CarbonHardwareBarcodeRelay? = null
   private var hardwareTriggerRelay: CarbonHardwareTriggerRelay? = null
-  private var senitronBridge: SenitronPluginBridge? = null
+  private var scannerLogcatBridge: ScannerLogcatBridge? = null
   private var scanSoundPool: ScanSoundPool? = null
 
 
@@ -79,11 +79,11 @@ class MainActivity : FlutterFragmentActivity() {
       }
     )
 
-    val bridge = SenitronPluginBridge(this)
-    senitronBridge = bridge
-    MainActivity.senitronBridge = bridge
+    val bridge = ScannerLogcatBridge(this)
+    scannerLogcatBridge = bridge
+    MainActivity.scannerLogcatBridge = bridge
 
-    // Native android.media.SoundPool bridge for per-tag beep (Senitron-class latency).
+    // Native android.media.SoundPool bridge for per-tag beep (low-latency fallback).
     val soundPool = ScanSoundPool(this)
     soundPool.register(messenger)
     scanSoundPool = soundPool
@@ -258,7 +258,7 @@ class MainActivity : FlutterFragmentActivity() {
         }
         "chainway.clearSeenEpcs" -> {
           chainway.clearSeenEpcs()
-          senitronBridge?.clearSeenEpcs()
+          scannerLogcatBridge?.clearSeenEpcs()
           result.success(null)
         }
         "chainway.startInventory" -> {
@@ -310,13 +310,13 @@ class MainActivity : FlutterFragmentActivity() {
     chainwayController?.dispose()
     hardwareBarcodeRelay?.dispose()
     hardwareTriggerRelay?.dispose()
-    senitronBridge?.dispose()
+    scannerLogcatBridge?.dispose()
     hardwareBarcodeRelay = null
     hardwareTriggerRelay = null
     zebraController = null
     chainwayController = null
-    senitronBridge = null
-    MainActivity.senitronBridge = null
+    scannerLogcatBridge = null
+    MainActivity.scannerLogcatBridge = null
     super.onDestroy()
   }
 
@@ -334,7 +334,7 @@ class MainActivity : FlutterFragmentActivity() {
     private const val REQ_BLUETOOTH = 1002
     const val ZEBRA_RFID_READER = "com.zebra.rfid.api3.RFIDReader"
     private const val SCANNER_PACKAGE = "com.rscja.scanner"
-    @Volatile var senitronBridge: SenitronPluginBridge? = null
+    @Volatile var scannerLogcatBridge: ScannerLogcatBridge? = null
 
     fun enableScannerRfidMode(context: Context, logTag: String = TAG) {
       closeScanner2dEngine(context, logTag)

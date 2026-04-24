@@ -291,8 +291,12 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
   }
 
   Future<void> _stopScan() async {
-    // Kill any in-flight read beeps before they trail past the stop event.
-    _sounds.stopAll();
+    // Re-Encode doesn't play per-tag read beeps — there's nothing to silence, so we
+    // skip the stopAll() the Count screen uses. stopAll() resets every non-read
+    // audioplayers instance to Idle; on some Android builds (Samsung S25) that
+    // makes the immediately-following play(ScanCue.stop) a silent no-op because
+    // the player needs setSource() again to leave Idle. Skipping stopAll here lets
+    // start/stop/success/error all fire cleanly.
     await _rfid?.stopLocateScanning();
     if (!mounted) return;
     setState(() => _running = false);
@@ -326,7 +330,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     if (epc.isEmpty) return;
     if (read.rssi != null) _liveRssi = read.rssi;
     if (!_seen.add(epc)) {
-      if (mounted) setState(() {});
+      // Duplicate sighting — no UI change needed, skip the rebuild entirely.
       return;
     }
     setState(() => _readCount += 1);

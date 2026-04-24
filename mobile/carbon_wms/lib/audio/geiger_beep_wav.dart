@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'dart:typed_data';
 
-/// Senitron-style scan beep: high-pitched, sharp, short (in-memory WAV).
+/// Synthesized Geiger-style scan beep: high-pitched, sharp, short (in-memory WAV).
 Uint8List buildGeigerBeepWav() => _buildBeep(frequency: 1950.0, durationMs: 22);
 Uint8List buildStartBeepWav() => _buildBeep(frequency: 1950.0, durationMs: 55);
 Uint8List buildStopBeepWav()  => _buildBeep(frequency: 1950.0, durationMs: 55);
@@ -25,7 +25,7 @@ Uint8List _buildBeep({required double frequency, required int durationMs}) {
   le32(sampleRate); le32(sampleRate * 2); le16(2); le16(16);
   w4('data'); le32(dataSize);
 
-  // Hard attack (2ms), fast exponential decay — matches Senitron click character.
+  // Hard attack (2ms), fast exponential decay — sharp Geiger click character.
   final attackSamples = max(1, (sampleRate * 0.002).round());
   for (var i = 0; i < nSamples; i++) {
     final t = i / sampleRate;

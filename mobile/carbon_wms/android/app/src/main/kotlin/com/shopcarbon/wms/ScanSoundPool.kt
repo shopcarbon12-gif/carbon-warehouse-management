@@ -10,39 +10,49 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Native per-tag beep played through [android.media.SoundPool].
+ * Native scan-event audio played through [android.media.SoundPool].
  *
- * Senitron's APK ships exactly the same `uhf-read-tag.mp3` we do, but plays it through
- * a custom Kotlin `SoundPoolPlayer` wrapping native SoundPool — which pre-decodes the MP3
- * to PCM at load time and then plays each subsequent [play] call with <1 ms latency via
- * the kernel mixer. The Dart `audioplayers` plugin's `AudioPool` cannot match that; each
- * playback still touches MediaPlayer's prepare/start pipeline, so rapid-fire tags trail
- * and occasionally queue.
+ * All five cues (start, stop, read, success, error) share one SoundPool so every
+ * cue goes through the same low-latency kernel mixer path. MP3s are pre-decoded
+ * at init time so each [playCue] call fires with sub-millisecond latency and
+ * overlapping cues mix rather than cut each other off.
+ *
+ * This is the ONLY audio path for scan UI — the Dart side no longer touches
+ * audioplayers for these cues. That eliminates the AudioFocus callback storm
+ * and the MediaPlayer state-machine "first-play vs resume" traps.
  *
  * Flutter contract (MethodChannel `carbon_wms/scan_sound`):
- *   - `init`  → loads the asset, returns `true` on success, `false` if pool construction
- *              or asset decode fails. Dart falls back to the `audioplayers` path on false.
- *   - `play`  → fires a one-shot, fire-and-forget. Always succeeds once [init] has returned
- *              true; multiple overlapping calls are mixed by the stream engine, not queued.
- *   - `stopAll` → kills every in-flight stream immediately. Used by the pause / popup
- *              logic in [SearchAndEncodeScreen] so read clicks don't bleed over the error
- *              cue during the 10-second foreign-tag dialog.
- *   - `dispose` → releases the pool (tear-down on logout / activity finish).
+ *   - `init`        → loads all cue assets, returns `true` once all succeed.
+ *   - `play`        → legacy per-tag read (same as `playCue` with cue="read").
+ *   - `playCue`     → args {cue: "start"|"stop"|"read"|"success"|"error", volume: 0..1}.
+ *                     Fire-and-forget; overlapping calls are mixed by the pool.
+ *   - `stopAll`     → kills every in-flight stream immediately.
+ *   - `dispose`     → releases the pool.
  */
 class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHandler {
   private var pool: SoundPool? = null
-  private var soundId: Int = 0
-  private var loaded: Boolean = false
+  /** Cue key → SoundPool soundId (populated asynchronously by the load callback). */
+  private val soundIds: MutableMap<String, Int> = mutableMapOf()
+  /** soundIds whose async load has completed successfully. */
+  private val loadedIds: MutableSet<Int> = mutableSetOf()
   private val activeStreams: MutableList<Int> = mutableListOf()
   private val lock = Any()
 
   companion object {
     private const val TAG = "ScanSoundPool"
     private const val CHANNEL = "carbon_wms/scan_sound"
-    // SoundPool internals: mixer concurrency. 6 matches Senitron's observed ceiling.
-    private const val MAX_STREAMS = 6
-    // Flutter asset path relative to the app's flutter_assets bundle.
-    private const val READ_TAG_ASSET_KEY = "assets/sounds/uhf-read-tag.mp3"
+    // SoundPool mixer concurrency — enough headroom for overlapping tag reads at
+    // burst rates without dropping cues.
+    private const val MAX_STREAMS = 8
+
+    // Cue key → flutter asset path. Must match the keys used from Dart.
+    private val ASSETS: Map<String, String> = mapOf(
+      "read"    to "assets/sounds/uhf-read-tag.mp3",
+      "start"   to "assets/sounds/uhf-start.mp3",
+      "stop"    to "assets/sounds/uhf-stop.mp3",
+      "success" to "assets/sounds/success.mp3",
+      "error"   to "assets/sounds/uhf-error.mp3",
+    )
   }
 
   fun register(messenger: BinaryMessenger) {
@@ -52,7 +62,15 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
   override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
     when (call.method) {
       "init"    -> result.success(initPool())
-      "play"    -> { playOne(); result.success(null) }
+      "play"    -> { playCue("read", 1.0f); result.success(null) }
+      "playCue" -> {
+        val args = call.arguments as? Map<*, *>
+        val cue = (args?.get("cue") as? String) ?: "read"
+        val volRaw = (args?.get("volume") as? Number)?.toFloat() ?: 1.0f
+        val vol = volRaw.coerceIn(0f, 1f)
+        playCue(cue, vol)
+        result.success(null)
+      }
       "stopAll" -> { stopAll(); result.success(null) }
       "dispose" -> { disposePool(); result.success(null) }
       else      -> result.notImplemented()
@@ -60,7 +78,8 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
   }
 
   private fun initPool(): Boolean = synchronized(lock) {
-    if (loaded) return true
+    if (pool != null && soundIds.size == ASSETS.size) return true
+
     return try {
       val attrs = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
@@ -70,45 +89,69 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
         .setMaxStreams(MAX_STREAMS)
         .setAudioAttributes(attrs)
         .build()
-      // Flutter assets live in assets/flutter_assets/<key> inside the APK.
-      val lookupKey = io.flutter.FlutterInjector.instance()
-        .flutterLoader()
-        .getLookupKeyForAsset(READ_TAG_ASSET_KEY)
-      val afd: AssetFileDescriptor = context.assets.openFd(lookupKey)
-      // Load is async; flip [loaded] on the completion listener so callers know when
-      // it's safe to play. Firing play before load is cheap (returns streamId=0 = noop).
+
       p.setOnLoadCompleteListener { _, sid, status ->
-        if (status == 0 && sid == soundId) {
-          loaded = true
-          Log.d(TAG, "native SoundPool ready: soundId=$sid")
-        } else {
-          Log.w(TAG, "native SoundPool load failed: status=$status")
+        synchronized(lock) {
+          if (status == 0) {
+            loadedIds += sid
+            Log.d(TAG, "SoundPool loaded sid=$sid (${loadedIds.size}/${ASSETS.size})")
+          } else {
+            Log.w(TAG, "SoundPool load failed sid=$sid status=$status")
+          }
         }
       }
-      soundId = p.load(afd, 1)
-      afd.close()
+
+      // Load each cue asset. IDs start returning immediately; playback before
+      // a specific cue's load completes is a quiet no-op (streamId == 0).
+      val flutterLoader = io.flutter.FlutterInjector.instance().flutterLoader()
+      for ((cue, assetPath) in ASSETS) {
+        try {
+          val lookupKey = flutterLoader.getLookupKeyForAsset(assetPath)
+          val afd: AssetFileDescriptor = context.assets.openFd(lookupKey)
+          val sid = p.load(afd, 1)
+          afd.close()
+          soundIds[cue] = sid
+          Log.d(TAG, "queued cue=$cue sid=$sid asset=$assetPath")
+        } catch (e: Throwable) {
+          Log.e(TAG, "failed to queue cue=$cue: ${e.message}", e)
+        }
+      }
       pool = p
-      Log.d(TAG, "native SoundPool initialized, streams=$MAX_STREAMS asset=$READ_TAG_ASSET_KEY")
+      Log.d(TAG, "SoundPool initialized, streams=$MAX_STREAMS, cues=${soundIds.size}")
       true
     } catch (t: Throwable) {
-      Log.e(TAG, "init failed, Dart will fall back to audioplayers: ${t.message}", t)
+      Log.e(TAG, "initPool failed: ${t.message}", t)
       disposePool()
       false
     }
   }
 
-  private fun playOne() {
-    val p = pool ?: return
-    if (!loaded) return
-    // rate=1.0 neutral pitch, priority=1, loop=0 (one-shot), leftVol=rightVol=1.0 full.
-    val streamId = p.play(soundId, 1.0f, 1.0f, 1, 0, 1.0f)
-    if (streamId != 0) {
-      synchronized(lock) {
-        activeStreams += streamId
-        // Keep the active list from growing unbounded on long sessions.
-        if (activeStreams.size > MAX_STREAMS * 2) {
-          activeStreams.removeAt(0)
-        }
+  private fun playCue(cue: String, volume: Float) {
+    val p = pool
+    if (p == null) { Log.w(TAG, "playCue($cue): pool is null"); return }
+    val sid: Int
+    val ready: Boolean
+    synchronized(lock) {
+      sid = soundIds[cue] ?: run {
+        Log.w(TAG, "playCue($cue): no sid registered")
+        return
+      }
+      ready = loadedIds.contains(sid)
+    }
+    if (!ready) {
+      Log.w(TAG, "playCue($cue): sid=$sid not loaded yet")
+      return
+    }
+    // priority=1, loop=0 (one-shot), rate=1.0 neutral pitch.
+    val streamId = p.play(sid, volume, volume, 1, 0, 1.0f)
+    if (streamId == 0) {
+      Log.w(TAG, "playCue($cue): SoundPool.play returned 0 (sid=$sid, pool busy?)")
+      return
+    }
+    synchronized(lock) {
+      activeStreams += streamId
+      if (activeStreams.size > MAX_STREAMS * 2) {
+        activeStreams.removeAt(0)
       }
     }
   }
@@ -127,9 +170,9 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
 
   private fun disposePool() = synchronized(lock) {
     activeStreams.clear()
+    loadedIds.clear()
+    soundIds.clear()
     try { pool?.release() } catch (_: Throwable) { /* ignore */ }
     pool = null
-    loaded = false
-    soundId = 0
   }
 }

@@ -10,18 +10,19 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 
 /**
- * Tails logcat filtered to the hqs tag (V hqs: <epc>------epc) and forwards
- * every new EPC to Flutter via rfid_tag_stream and OUTPUT_BARCODE_RFID broadcast.
+ * Tails logcat for scanner-firmware tag-read lines (various tags across firmware builds)
+ * and forwards every new EPC to Flutter via rfid_tag_stream and OUTPUT_BARCODE_RFID
+ * broadcast.
  *
- * Uses a single persistent subprocess (`logcat -v time -s hqs:V`) instead of
- * repeated -d dumps, so no lines are lost between polls during a tag burst and
- * the fork overhead is paid once per session.
+ * Uses a single persistent `logcat -v time` subprocess instead of repeated -d dumps,
+ * so no lines are lost between polls during a tag burst and the fork overhead is paid
+ * once per session.
  */
-class SenitronPluginBridge(
+class ScannerLogcatBridge(
   private val context: Context,
   private val mainHandler: Handler = Handler(Looper.getMainLooper()),
 ) {
-  private val TAG = "SenitronBridge"
+  private val TAG = "ScannerLogcatBridge"
 
   var tagSink: EventChannel.EventSink? = null
 
@@ -41,7 +42,7 @@ class SenitronPluginBridge(
       tailLogcat()
     }
     t.isDaemon = true
-    t.name = "senitron-logcat"
+    t.name = "scanner-logcat-tail"
     t.start()
     logcatThread = t
     Log.d(TAG, "logcat tail bridge started (hqs:V filter)")
@@ -58,7 +59,6 @@ class SenitronPluginBridge(
     while (running) {
       var proc: Process? = null
       try {
-        // -v time gives timestamp prefix; -s hqs:V limits to exactly the EPC tag.
         // Persistent process — we drain lines as they arrive, no polling gap.
         // Tail all logcat — filter inside for EPC patterns from any scanner tag.
         proc = ProcessBuilder("logcat", "-v", "time")
@@ -88,7 +88,7 @@ class SenitronPluginBridge(
   }
 
   private fun matchesEpcLine(line: String): Boolean {
-    // hqs firmware pattern: "V hqs: <epc>------epc"
+    // Firmware variants that log "<epc>------epc" as a trailing marker.
     if (line.contains("------epc", ignoreCase = true)) return true
     // Chainway scanner service may log tag reads under various tags
     if (line.contains("rfid", ignoreCase = true) && line.contains("epc", ignoreCase = true)) return true
