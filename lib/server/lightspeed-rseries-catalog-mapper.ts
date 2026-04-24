@@ -5,6 +5,50 @@ function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+const SIZE_LETTER_SUFFIX = /\s+(XXL|XXS|XL|XS|S|M|L)\s*$/i;
+
+/**
+ * Strip a trailing `<color> <size>`, `<size>`, or `<color>` tail from a product
+ * description. Only used when ItemMatrix.description is unavailable (fallback
+ * path via the bare Item endpoint) so we don't bake a variant's color+size
+ * into the shared matrix row.
+ *
+ * Iterates so e.g. "RYAN POLO SHIRT BLUE S" with color=BLUE, size=S peels
+ * `" S"` first, then `" BLUE"`, leaving `"RYAN POLO SHIRT"`.
+ */
+function stripVariantSuffix(description: string, color: string | null, size: string | null): string {
+  let out = description.replace(/\s+$/u, "");
+  const sz = (size ?? "").trim();
+  const cl = (color ?? "").trim();
+
+  const stripTail = (tail: string): boolean => {
+    if (!tail) return false;
+    const lower = out.toLowerCase();
+    const t = tail.toLowerCase();
+    if (lower.endsWith(` ${t}`)) {
+      out = out.slice(0, out.length - (t.length + 1)).replace(/\s+$/u, "");
+      return true;
+    }
+    return false;
+  };
+
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < 4) {
+    changed = false;
+    guard++;
+    if (sz && cl && stripTail(`${cl} ${sz}`)) { changed = true; continue; }
+    if (sz && stripTail(sz)) { changed = true; continue; }
+    if (cl && stripTail(cl)) { changed = true; continue; }
+    if (SIZE_LETTER_SUFFIX.test(out)) {
+      out = out.replace(SIZE_LETTER_SUFFIX, "").replace(/\s+$/u, "");
+      changed = true;
+      continue;
+    }
+  }
+  return out || description;  // never return empty — caller expects non-empty
+}
+
 function toArray<T>(value: T | T[] | null | undefined): T[] {
   if (Array.isArray(value)) return value;
   if (value === undefined || value === null) return [];
@@ -66,6 +110,11 @@ type NormalizedRow = {
   systemSku: string;
   customSku: string;
   description: string;
+  /** Parent ItemMatrix description when the item was fetched via the V3
+   * ItemMatrix endpoint; null when fetched via the bare V3/legacy Item
+   * endpoint. Preferred over [description] for the matrix-level name because
+   * per-variant [description] typically bakes in color+size. */
+  matrixDescription: string | null;
   upc: string;
   color: string | null;
   size: string | null;
@@ -124,6 +173,8 @@ function normalizeRawItem(
     systemSku,
     customSku: customSku || systemSku || itemId,
     description: normalizeText(item.description) || customSku || systemSku || "Item",
+    // Annotated by the fetcher when the item came from an ItemMatrix page.
+    matrixDescription: normalizeText(item.__matrixDescription) || null,
     upc: normalizeText(item.upc) || normalizeText(item.ean) || "",
     color,
     size,
@@ -164,7 +215,16 @@ export function mapRseriesRawItemsToCatalogSync(
     if (variants.length === 0) continue;
     const head = variants[0]!;
     const matrixId = matrixLsSystemId(head.groupKey, hash);
-    const description = head.description;
+    // Matrix-level description selection:
+    //   1. Prefer the parent ItemMatrix.description annotated by the fetcher.
+    //      This is the clean, variant-free product name.
+    //   2. Otherwise, fall back to [head.description] but with the variant's
+    //      own color/size stripped from the tail — the per-Item description
+    //      typically reads "RYAN POLO SHIRT BLUE S"; without this strip we'd
+    //      bake one specific variant's color+size into the shared matrix row.
+    const description =
+      (variants.map((v) => v.matrixDescription).find((d): d is string => !!d && d.length > 0)) ??
+      stripVariantSuffix(head.description, head.color, head.size);
     const brand = head.brand;
     const category = head.category;
     const vendor = head.brand;

@@ -344,9 +344,18 @@ async function fetchRawCatalogFromItemMatrix(
       const items = Array.isArray(itemsRaw)
         ? itemsRaw
         : toArray((itemsRaw as { Item?: unknown })?.Item) as Record<string, unknown>[];
+      // Parent matrix carries the clean, variant-free product name. R-Series
+      // stores it as ItemMatrix.description. Preserve it onto each child Item
+      // under a reserved key so the downstream mapper can prefer it over the
+      // per-variant description (which typically has color+size baked in).
+      const matrixDescription = normalizeText(matrix?.description);
       for (const it of items) {
         if (it && typeof it === "object" && (it.itemID || it.systemSku || it.customSku)) {
-          rawItems.push(it as Record<string, unknown>);
+          const annotated = it as Record<string, unknown>;
+          if (matrixDescription) {
+            annotated.__matrixDescription = matrixDescription;
+          }
+          rawItems.push(annotated);
         }
       }
     }
