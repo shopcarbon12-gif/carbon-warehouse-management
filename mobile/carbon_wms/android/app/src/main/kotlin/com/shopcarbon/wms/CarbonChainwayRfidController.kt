@@ -274,8 +274,8 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   private fun connectBroadcastOnly(onDone: (Throwable?) -> Unit) {
     Log.d(TAG, "connectBroadcastOnly ENTERED")
-    // SenitronBridge polls logcat for hqs EPC lines; hardware_barcode relay picks up
-    // OUTPUT_BARCODE_RFID broadcasts. Neither touches /dev/ttyMT1.
+    // ScannerLogcatBridge polls logcat for firmware-emitted EPC lines; hardware_barcode
+    // relay picks up OUTPUT_BARCODE_RFID broadcasts. Neither touches /dev/ttyMT1.
     scannerUtilityConfigureBroadcast()
     lastError = null
     mainHandler.post { onDone(null) }
@@ -411,67 +411,96 @@ class CarbonChainwayRfidController(private val context: Context) {
       android.os.SystemClock.sleep(120)
     }
     try {
-      // Fast path: direct RFIDWithUHFUART.writeDataToEpc(pwd, bank, ptr, cnt, filter, newEpc)
-      // bank=1 (EPC), ptr=32 (skip CRC+PC = 32 bits), cnt=96 (full EPC-96 match), filter=targetEpc
-      val reader = uhfReader
-      if (reader != null) {
-        runCatching {
-          val ok = reader.writeDataToEpc(ACCESS_PWD, 1, 32, 96, targetEpc, newEpc)
-          Log.d(TAG, "writeDataToEpc(filter) -> $ok")
-          if (ok) return true
-        }.onFailure { Log.w(TAG, "writeDataToEpc(filter) threw: ${it.message}") }
+      // Primary path: writeData on EPC bank (bank=1, ptr=2 words = skip CRC+PC, cnt=6 words = 96-bit EPC).
+      // The previous implementation tried writeDataToEpc(ptr=32, cnt=96) as the first path; on the
+      // C72E SDK those args are interpreted as words, putting the pointer far past the EPC bank.
+      // That call silently returned true on success-looking firmware without actually writing the
+      // tag silicon — producing the "encoded=true but tag still has old EPC" bug.
+      val reader = uhfReader ?: run {
+        Log.w(TAG, "performWriteEpc: uhfReader is null — canOwnUart()=${canOwnUart()}; no write path available")
+        return false
+      }
 
-        // Some SDK builds only accept the two-arg variant (write to selected tag).
-        // Pre-select the target via a single-shot read, then write.
+      // Re-assert user-configured power before write. initUhfReaderDirect hard-codes 27 dBm
+      // for scanning; writes need more link budget than reads, and the user-configured value
+      // (typically 30) must actually be in effect on the radio at write time.
+      val reqPower = requestedPowerDbm.get().coerceIn(5, 30)
+      val curPower = runCatching { reader.getPower() }.getOrDefault(-1)
+      val pwrSetOk = runCatching { reader.setPower(reqPower) }.getOrDefault(false)
+      Log.d(TAG, "pre-write power: getPower()=$curPower requested=$reqPower setPower($reqPower)=$pwrSetOk")
+
+      var writeOk = false
+      var writeBranch = "none"
+      runCatching {
+        writeOk = reader.writeData(ACCESS_PWD, 1, 2, 6, newEpc)
+        writeBranch = "writeData(EPC bank, ptr=2, cnt=6)"
+        Log.d(TAG, "$writeBranch -> $writeOk")
+      }.onFailure { Log.w(TAG, "writeData threw: ${it.message}") }
+
+      // Fallback: 2-arg writeDataToEpc if the filter-less write above didn't take.
+      // Only try this if we truly failed (to avoid writing the same data twice).
+      if (!writeOk) {
         runCatching {
-          val ok = reader.writeDataToEpc(ACCESS_PWD, newEpc)
-          Log.d(TAG, "writeDataToEpc(2-arg) -> $ok")
-          if (ok) return true
+          writeOk = reader.writeDataToEpc(ACCESS_PWD, newEpc)
+          writeBranch = "writeDataToEpc(2-arg)"
+          Log.d(TAG, "$writeBranch -> $writeOk")
         }.onFailure { Log.w(TAG, "writeDataToEpc(2-arg) threw: ${it.message}") }
+      }
 
-        // Final fallback: writeData on EPC bank directly (bank=1, ptr=2 words, cnt=6 words).
+      if (!writeOk) {
+        Log.d(TAG, "performWriteEpc: all write branches failed; returning false")
+        return false
+      }
+
+      // Settle before the power cycle: the tag's charge pump needs a moment to finish its
+      // (attempted) EEPROM write before we kill RF.
+      android.os.SystemClock.sleep(150)
+
+      // Power-cycle the tag. A successful writeData updates the tag's RAM response register
+      // regardless of whether the EEPROM commit actually succeeded — so the tag will keep
+      // broadcasting the new EPC for as long as RF keeps it awake, producing a false-positive
+      // verify. Cutting RF for ~600 ms drops the tag below operating voltage; when we re-energize
+      // it, the tag boots from EEPROM. If the EEPROM actually committed, it broadcasts newEpc.
+      // If the write didn't commit (locked bank / insufficient write power / access-password
+      // mismatch), it broadcasts the legacy oldEpc and the verifier correctly fails.
+      //
+      // This is the fix for the bug where Chainway reported ENCODED on a tag that Samsung
+      // immediately re-scanned as the legacy C1... EPC — the write never landed on silicon,
+      // but the tag's RAM kept replying with the new EPC as long as it was in Chainway's field.
+      runCatching { reader.stopInventory() }
+      val cwOffOk = runCatching { reader.setCW(0) }.getOrDefault(false)
+      val lowPwrOk = runCatching { reader.setPower(5) }.getOrDefault(false)
+      Log.d(TAG, "power-cycle: stopInventory()+setCW(0)=$cwOffOk setPower(5)=$lowPwrOk; sleeping 600ms")
+      android.os.SystemClock.sleep(600)
+      val cwOnOk = runCatching { reader.setCW(1) }.getOrDefault(false)
+      val restoreOk = runCatching { reader.setPower(reqPower) }.getOrDefault(false)
+      Log.d(TAG, "power-cycle: setCW(1)=$cwOnOk setPower($reqPower)=$restoreOk; tag should have rebooted from EEPROM")
+
+      // Verify: multi-sighting scan AFTER power cycle. A tag that genuinely committed newEpc
+      // to EEPROM will broadcast newEpc repeatedly. A tag that didn't commit will broadcast
+      // oldEpc — we reject in that case too (not just on zero sightings of newEpc).
+      Log.d(TAG, "performWriteEpc: write branch=$writeBranch; entering verify after power cycle")
+      val verified = verifyEpcWrite(reader, targetEpc, newEpc)
+      if (!verified) {
+        // Diagnostic: the write returned true at the SDK layer but the tag didn't end up
+        // with newEpc in EEPROM. Read the EPC and RESERVED banks directly so the log tells
+        // us whether the tag is lock-protected / has a non-default access password /
+        // silently refused the write. Filter by targetEpc (oldEpc) — that's what the tag
+        // should still be broadcasting if the write didn't commit.
         runCatching {
-          val ok = reader.writeData(ACCESS_PWD, 1, 2, 6, newEpc)
-          Log.d(TAG, "writeData(EPC,2,6) -> $ok")
-          if (ok) return true
-        }.onFailure { Log.w(TAG, "writeData(EPC,2,6) threw: ${it.message}") }
+          val pc = reader.readData(ACCESS_PWD, 1, 0, 1)  // bank=EPC, ptr=0 words, cnt=1 word = CRC
+          Log.d(TAG, "post-fail diag: readData(EPC bank, ptr=0, cnt=1 CRC) -> $pc")
+        }.onFailure { Log.w(TAG, "post-fail diag: EPC CRC read threw: ${it.message}") }
+        runCatching {
+          val epcReadBack = reader.readData(ACCESS_PWD, 1, 2, 6)  // bank=EPC, ptr=2, cnt=6 = 96-bit EPC
+          Log.d(TAG, "post-fail diag: readData(EPC bank, ptr=2, cnt=6 EPC) -> '$epcReadBack' (expected new=$newEpc, else old=$targetEpc)")
+        }.onFailure { Log.w(TAG, "post-fail diag: EPC read threw: ${it.message}") }
+        runCatching {
+          val reserved = reader.readData(ACCESS_PWD, 0, 0, 4)  // bank=RESERVED, ptr=0, cnt=4 = kill+access pw
+          Log.d(TAG, "post-fail diag: readData(RESERVED bank, kill+access pw) -> '$reserved' (if read-locked, write likely write-locked too)")
+        }.onFailure { Log.w(TAG, "post-fail diag: RESERVED read threw (likely read-locked): ${it.message}") }
       }
-
-      // Reflective path — only if UART is owned and we never built uhfReader.
-      val cls = uhfClass; val inst = uhfInstance
-      if (cls != null && inst != null) {
-        val mFilter = cls.methods.firstOrNull {
-          it.name == "writeDataToEpc" && it.parameterCount == 6
-        }
-        if (mFilter != null) {
-          mFilter.isAccessible = true
-          val r = runCatching { mFilter.invoke(inst, ACCESS_PWD, 1, 32, 96, targetEpc, newEpc) as? Boolean }
-            .onFailure { Log.w(TAG, "reflect writeDataToEpc(filter) threw: ${it.message}") }
-            .getOrNull()
-          if (r == true) return true
-        }
-        val mTwo = cls.methods.firstOrNull {
-          it.name == "writeDataToEpc" && it.parameterCount == 2
-        }
-        if (mTwo != null) {
-          mTwo.isAccessible = true
-          val r = runCatching { mTwo.invoke(inst, ACCESS_PWD, newEpc) as? Boolean }
-            .onFailure { Log.w(TAG, "reflect writeDataToEpc(2) threw: ${it.message}") }
-            .getOrNull()
-          if (r == true) return true
-        }
-        val mWrite = cls.methods.firstOrNull {
-          it.name == "writeData" && it.parameterCount == 5
-        }
-        if (mWrite != null) {
-          mWrite.isAccessible = true
-          val r = runCatching { mWrite.invoke(inst, ACCESS_PWD, 1, 2, 6, newEpc) as? Boolean }
-            .onFailure { Log.w(TAG, "reflect writeData(EPC) threw: ${it.message}") }
-            .getOrNull()
-          if (r == true) return true
-        }
-      }
-      return false
+      return verified
     } finally {
       // Resume inventory if we paused it.
       if (wasScanning) {
@@ -487,6 +516,87 @@ class CarbonChainwayRfidController(private val context: Context) {
         }
       }
     }
+  }
+
+  // ── Write verification ──────────────────────────────────────────────────────
+
+  /**
+   * After a write that returned `true`, briefly scan and confirm the tag silicon actually
+   * committed the new EPC. Requires [minNewSightings] separate sightings of [newEpc] within
+   * [timeoutMs] — not a single sighting, which is vulnerable to the UHF Gen2 ghost-response
+   * failure mode (tag's write-buffer echoes the new EPC briefly before the silicon reverts to
+   * the old value when the charge pump fails to commit).
+   *
+   * A genuinely committed tag in the antenna field will produce dozens to hundreds of matching
+   * reads per second; a ghost response produces at most one or two. Threshold 3 discriminates
+   * cleanly between the two while tolerating tags on the edge of the read range.
+   *
+   * This is the fix for the "encoded=true but tag still has legacy C1... EPC on Samsung
+   * re-scan" bug — the single-sighting latch was flipping on the ghost echo.
+   */
+  private fun verifyEpcWrite(
+    reader: RFIDWithUHFUART,
+    oldEpc: String,
+    newEpc: String,
+    timeoutMs: Long = 3000,
+    minNewSightings: Int = 3,
+  ): Boolean {
+    val oldSightings = java.util.concurrent.atomic.AtomicInteger(0)
+    val newSightings = java.util.concurrent.atomic.AtomicInteger(0)
+    val otherSightings = java.util.concurrent.atomic.AtomicInteger(0)
+    val verifyCallback = object : IUHFInventoryCallback {
+      override fun callback(tagInfo: UHFTAGInfo) {
+        val epc = tagInfo.getEPC()?.trim()?.uppercase() ?: return
+        when (epc) {
+          oldEpc -> {
+            val n = oldSightings.incrementAndGet()
+            if (n <= 3 || n % 10 == 0) Log.d(TAG, "verify sighted OLD $epc (count=$n)")
+          }
+          newEpc -> {
+            val n = newSightings.incrementAndGet()
+            if (n <= 5 || n % 10 == 0) Log.d(TAG, "verify sighted NEW $epc (count=$n)")
+          }
+          else -> {
+            val n = otherSightings.incrementAndGet()
+            if (n <= 3) Log.d(TAG, "verify sighted OTHER $epc (count=$n)")
+          }
+        }
+      }
+    }
+    runCatching { reader.setInventoryCallback(verifyCallback) }
+    val deadline = android.os.SystemClock.elapsedRealtime() + timeoutMs
+    try {
+      val startOk = runCatching { reader.startInventoryTag() }.getOrDefault(false)
+      Log.d(TAG, "verifyEpcWrite: startInventoryTag()=$startOk timeout=${timeoutMs}ms threshold=$minNewSightings")
+      while (android.os.SystemClock.elapsedRealtime() < deadline &&
+             newSightings.get() < minNewSightings) {
+        Thread.sleep(50)
+      }
+    } finally {
+      runCatching { reader.stopInventory() }
+      // Restore the app's normal inventory callback so regular scanning resumes.
+      // We don't have a reference to the original callback, so rebuild the standard one.
+      runCatching {
+        reader.setInventoryCallback(object : IUHFInventoryCallback {
+          override fun callback(tagInfo: UHFTAGInfo) {
+            val epc = tagInfo.getEPC()
+            if (epc.isNullOrBlank()) return
+            val normalized = epc.trim().uppercase()
+            emitEpc(normalized, tagInfo.getRssi()?.toIntOrNull())
+          }
+        })
+      }
+    }
+    val nNew = newSightings.get()
+    val nOld = oldSightings.get()
+    val nOther = otherSightings.get()
+    // Post-power-cycle, a single sighting of oldEpc means the tag booted from EEPROM and
+    // is still broadcasting the legacy value — the write did not commit to silicon, regardless
+    // of how many times we sighted newEpc (those sightings would be stale RAM from before the
+    // cycle, or buffered SDK queue). Fail hard in that case.
+    val verified = nNew >= minNewSightings && nOld == 0
+    Log.d(TAG, "verifyEpcWrite: old=$oldEpc new=$newEpc newSightings=$nNew oldSightings=$nOld otherSightings=$nOther threshold=$minNewSightings requireOldZero=true -> $verified")
+    return verified
   }
 
   // ── Native trigger ──────────────────────────────────────────────────────────
