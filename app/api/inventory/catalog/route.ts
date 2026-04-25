@@ -59,6 +59,8 @@ export async function GET(req: Request) {
     const systemId = searchParams.get("systemId")?.trim() ?? "";
     const sortBy = searchParams.get("sortBy")?.trim() ?? "";
     const sortDir = searchParams.get("sortDir")?.trim() ?? "";
+    const showArchivedRaw = searchParams.get("showArchived")?.trim().toLowerCase() ?? "";
+    const showArchived = showArchivedRaw === "1" || showArchivedRaw === "true";
 
     try {
       const result = await listCatalogGrid(pool, {
@@ -72,6 +74,7 @@ export async function GET(req: Request) {
         systemId,
         sortBy,
         sortDir,
+        showArchived,
       });
       return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
     } catch (e) {

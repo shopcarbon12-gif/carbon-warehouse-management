@@ -20,8 +20,20 @@ function colIdx(headers: string[], ...names: string[]): number {
 }
 
 /**
- * Apply CSV rows to `items` for the given location: expects headers including
- * `epc` (or `tag`) and `bin` / `bin_code` / `destination_bin`.
+ * Apply CSV rows to `items` for the given location.
+ *
+ * Headers:
+ *   - one of `epc` / `tag` / `epc_hex`, OR `sku` / `custom_sku`
+ *   - optional `bin` / `bin_code` / `destination_bin` / `bincode`
+ *
+ * Effects per matched row:
+ *   - sets `status = 'in-stock'`
+ *   - stamps `last_seen_at = now()`
+ *   - sets `bin_id` only if a bin was provided (and resolved); otherwise
+ *     leaves the existing bin in place (count flow doesn't always carry a bin).
+ *
+ * Unknown EPCs are NOT auto-created — commissioning is the only path that
+ * inserts into `items`. Unknown EPCs / unknown bins are reported in `errors`.
  */
 export async function applyInventoryCsvToItems(
   pool: Pool,
@@ -42,9 +54,6 @@ export async function applyInventoryCsvToItems(
   if (iEpc < 0 && iSku < 0) {
     return { rowsProcessed: 0, rowsUpdated: 0, errors: ["CSV must include epc or sku column"] };
   }
-  if (iBin < 0) {
-    return { rowsProcessed: 0, rowsUpdated: 0, errors: ["CSV must include bin column"] };
-  }
 
   const locOk = await pool.query(
     `SELECT 1 FROM locations WHERE id = $1::uuid AND tenant_id = $2::uuid LIMIT 1`,
@@ -59,20 +68,22 @@ export async function applyInventoryCsvToItems(
 
   for (const row of rows) {
     rowsProcessed++;
-    const binCode = row[iBin]?.trim();
-    if (!binCode) {
-      errors.push(`Row ${rowsProcessed}: missing bin`);
-      continue;
-    }
 
-    const br = await pool.query<{ id: string }>(
-      `SELECT id::text FROM bins WHERE location_id = $1::uuid AND code = $2 LIMIT 1`,
-      [locationId, binCode],
-    );
-    const binId = br.rows[0]?.id;
-    if (!binId) {
-      errors.push(`Row ${rowsProcessed}: unknown bin ${binCode}`);
-      continue;
+    let binId: string | null = null;
+    if (iBin >= 0) {
+      const binCode = row[iBin]?.trim();
+      if (binCode) {
+        const br = await pool.query<{ id: string }>(
+          `SELECT id::text FROM bins WHERE location_id = $1::uuid AND code = $2 LIMIT 1`,
+          [locationId, binCode],
+        );
+        const found = br.rows[0]?.id;
+        if (!found) {
+          errors.push(`Row ${rowsProcessed}: unknown bin ${binCode}`);
+          continue;
+        }
+        binId = found;
+      }
     }
 
     if (iEpc >= 0) {
@@ -83,7 +94,9 @@ export async function applyInventoryCsvToItems(
       }
       const ur = await pool.query(
         `UPDATE items i
-         SET bin_id = $1::uuid
+         SET bin_id = COALESCE($1::uuid, i.bin_id),
+             status = 'in-stock',
+             last_seen_at = now()
          FROM locations l
          WHERE i.epc = $2
            AND i.location_id = l.id
@@ -91,7 +104,11 @@ export async function applyInventoryCsvToItems(
            AND i.location_id = $4::uuid`,
         [binId, epc, tenantId, locationId],
       );
-      rowsUpdated += ur.rowCount ?? 0;
+      const updated = ur.rowCount ?? 0;
+      rowsUpdated += updated;
+      if (updated === 0) {
+        errors.push(`Row ${rowsProcessed}: epc ${epc} not found at this location`);
+      }
     } else if (iSku >= 0) {
       const sku = row[iSku]?.trim();
       if (!sku) {
@@ -100,7 +117,9 @@ export async function applyInventoryCsvToItems(
       }
       const ur = await pool.query(
         `UPDATE items i
-         SET bin_id = $1::uuid
+         SET bin_id = COALESCE($1::uuid, i.bin_id),
+             status = 'in-stock',
+             last_seen_at = now()
          FROM custom_skus cs
          WHERE i.custom_sku_id = cs.id
            AND cs.sku = $2

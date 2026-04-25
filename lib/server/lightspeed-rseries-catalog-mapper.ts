@@ -122,6 +122,7 @@ type NormalizedRow = {
   category: string | null;
   brand: string | null;
   onHandTotal: number | null;
+  archived: boolean;
 };
 
 function extractRseriesOnHandTotal(item: Record<string, unknown>): number | null {
@@ -182,7 +183,18 @@ function normalizeRawItem(
     category,
     brand,
     onHandTotal: extractRseriesOnHandTotal(item),
+    archived: parseBooleanLike(item.archived),
   };
+}
+
+function parseBooleanLike(v: unknown): boolean {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes";
+  }
+  return false;
 }
 
 /**
@@ -241,6 +253,7 @@ export function mapRseriesRawItemsToCatalogSync(
       size: v.size,
       retailPrice: v.retailPrice,
       onHandTotal: v.onHandTotal,
+      archived: v.archived,
     }));
 
     out.push({

@@ -53,26 +53,12 @@ export function flattenCatalogMatricesToInventoryLines(
 }
 
 /**
- * Mock POS on-hand quantities for a Lightspeed store/location id.
- * Deterministic per `lsLocationId` so comparisons are reproducible in dev.
+ * Sample/demo data was removed: this fallback now returns an empty result so the
+ * compare workspace surfaces a credentials warning instead of fake SKUs.
+ * Signature preserved for callers; argument is intentionally unused.
  */
-export async function getSimulatedLightspeedInventory(lsLocationId: string): Promise<LightspeedInventoryLine[]> {
-  await new Promise((r) => setTimeout(r, 45));
-
-  const key = (lsLocationId || "default").trim() || "default";
-
-  const catalog: LightspeedInventoryLine[] = [
-    { sku: "DEMO-SKU-001", quantity: 4 },
-    { sku: "DEMO-SKU-002", quantity: 10 },
-    { sku: "DEMO-SKU-003", quantity: 0 },
-    { sku: "LS-ONLY-404", quantity: 6 },
-  ];
-
-  const bump = key.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 3;
-  return catalog.map((row, i) => ({
-    sku: row.sku,
-    quantity: Math.max(0, row.quantity + (i === 0 ? bump - 1 : 0)),
-  }));
+export async function getSimulatedLightspeedInventory(_lsLocationId: string): Promise<LightspeedInventoryLine[]> {
+  return [];
 }
 
 /**
@@ -120,6 +106,6 @@ export async function resolveLightspeedInventoryForCompare(
     lines,
     source: "simulated",
     detail:
-      "Demo SKUs — set R-Series OAuth (LS_ACCOUNT_ID + LS_CLIENT_* + LS_REFRESH_TOKEN) or X-Series fallback; ensure catalog API returns stock fields.",
+      "No simulated data available; configure Lightspeed credentials (R-Series OAuth: LS_ACCOUNT_ID + LS_CLIENT_* + LS_REFRESH_TOKEN, or X-Series fallback) and ensure the catalog API returns stock fields.",
   };
 }

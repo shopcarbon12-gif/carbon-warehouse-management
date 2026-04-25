@@ -1,7 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { randomUUID } from "node:crypto";
 import type { CatalogSyncMatrixPayload } from "@/lib/types/catalog-sync";
-import { simulateSyncPayload } from "@/lib/server/lightspeed-catalog-mapper";
 import {
   credentialsLookUsableForLiveFetch,
   getLightspeedCredentialsForSync,
@@ -202,9 +201,9 @@ async function upsertCustomSkuRow(
   await client.query(
     `INSERT INTO custom_skus (
        matrix_id, sku, ls_system_id, ls_item_id, color_code, size, retail_price, upc,
-       ls_on_hand_total, ls_qty_synced_at
+       ls_on_hand_total, ls_qty_synced_at, archived
      )
-     VALUES ($1::uuid, $2, $3, $4::bigint, $5, $6, $7::numeric, $8, $9::integer, now())
+     VALUES ($1::uuid, $2, $3, $4::bigint, $5, $6, $7::numeric, $8, $9::integer, now(), $10::boolean)
      ON CONFLICT (ls_system_id) DO UPDATE SET
        matrix_id = EXCLUDED.matrix_id,
        sku = EXCLUDED.sku,
@@ -214,7 +213,8 @@ async function upsertCustomSkuRow(
        retail_price = COALESCE(EXCLUDED.retail_price, custom_skus.retail_price),
        upc = COALESCE(EXCLUDED.upc, custom_skus.upc),
        ls_on_hand_total = COALESCE(EXCLUDED.ls_on_hand_total, custom_skus.ls_on_hand_total),
-       ls_qty_synced_at = now()`,
+       ls_qty_synced_at = now(),
+       archived = EXCLUDED.archived`,
     [
       matrixId,
       v.sku.trim(),
@@ -225,6 +225,7 @@ async function upsertCustomSkuRow(
       priceParam,
       v.upc?.trim() || null,
       qtyParam,
+      v.archived === true,
     ],
   );
 }
@@ -265,7 +266,7 @@ export async function performLightspeedCatalogSync(
     const creds = await getLightspeedCredentialsForSync(pool, tenantId);
 
     let source: "live" | "simulated" = "simulated";
-    let matrices: CatalogSyncMatrixPayload[] = simulateSyncPayload();
+    let matrices: CatalogSyncMatrixPayload[] = [];
     const lsStrict = String(process.env.WMS_LS_STRICT ?? "").trim() === "1";
 
     if (!credentialsLookUsableForLiveFetch(creds)) {

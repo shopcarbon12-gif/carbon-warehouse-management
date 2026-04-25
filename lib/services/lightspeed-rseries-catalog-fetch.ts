@@ -303,7 +303,6 @@ async function fetchRawCatalogFromItemMatrix(
   const endpoint = getRSeriesV3ResourceEndpoint("ItemMatrix", accountId);
   const url = new URL(endpoint);
   url.searchParams.set("limit", String(LS_V3_PAGE_LIMIT));
-  url.searchParams.set("archived", "false");
   url.searchParams.set("load_relations", '["Items","Items.ItemShops","Items.ItemAttributes"]');
   url.searchParams.set("sort", "itemMatrixID");
 
@@ -376,7 +375,6 @@ async function fetchRawCatalogItemsV3(
   const endpoint = getRSeriesV3ResourceEndpoint("Item", accountId);
   const url = new URL(endpoint);
   url.searchParams.set("limit", String(LS_V3_PAGE_LIMIT));
-  url.searchParams.set("archived", "false");
   url.searchParams.set("load_relations", '["ItemShops","ItemAttributes"]');
   url.searchParams.set("sort", "itemID");
 

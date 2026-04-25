@@ -9,6 +9,8 @@ export type CatalogSyncVariantPayload = {
   retailPrice: string | null;
   /** Total on-hand from Lightspeed when the API exposes it (R-Series qoh / shops, X-Series inventory fields). */
   onHandTotal: number | null;
+  /** R-Series `Item.archived` boolean. Synced through so the catalog grid can hide / highlight archived rows. */
+  archived?: boolean;
 };
 
 export type CatalogSyncMatrixPayload = {

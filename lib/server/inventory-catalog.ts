@@ -20,6 +20,10 @@ export type CatalogGridRow = {
   ls_on_hand_total: number | null;
   active_epc_count: number;
   bin_location: string | null;
+  /** Variant archive flag synced from Lightspeed. */
+  archived: boolean;
+  /** True only when every variant under the same matrix is archived. */
+  matrix_archived: boolean;
 };
 
 export type CatalogGridResult = {
@@ -37,10 +41,15 @@ function buildWhere(
   vendor: string,
   systemId: string,
   locationId: string,
+  showArchived: boolean,
 ): { sql: string; params: unknown[] } {
   const parts: string[] = ["1=1"];
   const params: unknown[] = [];
   let i = 1;
+
+  if (!showArchived) {
+    parts.push(`cs.archived = FALSE`);
+  }
 
   // Exact variant-level system ID match — used by handheld EPC lookup
   const sid = systemId.trim();
@@ -135,8 +144,8 @@ const SORT_COLUMNS: Record<string, string> = {
   color: "cs.color_code",
   size: "cs.size",
   retail_price: "cs.retail_price",
-  qty_ls: "cs.ls_on_hand_total",
   bin: "bin_location",
+  qty_epc: "active_epc_count",
 };
 
 export async function listCatalogGrid(
@@ -152,13 +161,19 @@ export async function listCatalogGrid(
     systemId?: string;
     sortBy?: string;
     sortDir?: string;
+    showArchived?: boolean;
   },
 ): Promise<CatalogGridResult> {
-  const { page, limit, q, brand, category, vendor, locationId, systemId = "", sortBy = "", sortDir = "" } = options;
+  const {
+    page, limit, q, brand, category, vendor, locationId,
+    systemId = "", sortBy = "", sortDir = "", showArchived = false,
+  } = options;
   const safeLimit = Math.min(100, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
 
-  const { sql: whereSql, params: whereParams } = buildWhere(q, brand, category, vendor, systemId, locationId);
+  const { sql: whereSql, params: whereParams } = buildWhere(
+    q, brand, category, vendor, systemId, locationId, showArchived,
+  );
 
   const countR = await pool.query<{ c: string }>(
     `SELECT COUNT(*)::text AS c
@@ -188,8 +203,10 @@ export async function listCatalogGrid(
     size: string | null;
     retail_price: string | null;
     ls_on_hand_total: string | null;
-    active_epc_count: string;
+    active_epc_count: number;
     bin_location: string | null;
+    archived: boolean;
+    matrix_archived: boolean;
   }>(
     `SELECT
        cs.id::text AS custom_sku_id,
@@ -205,8 +222,10 @@ export async function listCatalogGrid(
        cs.size,
        cs.retail_price::text AS retail_price,
        cs.ls_on_hand_total::text AS ls_on_hand_total,
+       cs.archived AS archived,
+       bool_and(cs.archived) OVER (PARTITION BY cs.matrix_id) AS matrix_archived,
        (
-         SELECT COUNT(*)::text
+         SELECT COUNT(*)::int
          FROM items i
          WHERE i.custom_sku_id = cs.id
            AND i.location_id = $${locIdx}::uuid
@@ -228,7 +247,7 @@ export async function listCatalogGrid(
      ORDER BY ${(() => {
        const col = SORT_COLUMNS[sortBy] ?? null;
        const dir = sortDir === "desc" ? "DESC NULLS LAST" : "ASC NULLS LAST";
-       if (col === "bin_location") return `bin_location ${dir}, cs.sku ASC`;
+       if (col === "bin_location" || col === "active_epc_count") return `${col} ${dir}, cs.sku ASC`;
        if (col) return `${col} ${dir}, cs.sku ASC`;
        return "m.upc ASC, cs.sku ASC";
      })()}
@@ -259,6 +278,8 @@ export async function listCatalogGrid(
       })(),
       active_epc_count: Number(row.active_epc_count ?? 0),
       bin_location: row.bin_location ?? null,
+      archived: row.archived === true,
+      matrix_archived: row.matrix_archived === true,
     })),
     total,
     brands: filters.brands,

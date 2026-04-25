@@ -20,7 +20,13 @@ const fetcher = async (url: string) => {
 
 type SortDir = "asc" | "desc";
 
-function buildGridUrl(page: number, q: string, sortBy: string, sortDir: SortDir): string {
+function buildGridUrl(
+  page: number,
+  q: string,
+  sortBy: string,
+  sortDir: SortDir,
+  showArchived: boolean,
+): string {
   const p = new URLSearchParams({
     view: "grid",
     page: String(page),
@@ -28,6 +34,7 @@ function buildGridUrl(page: number, q: string, sortBy: string, sortDir: SortDir)
   });
   if (q.trim()) p.set("q", q.trim());
   if (sortBy) { p.set("sortBy", sortBy); p.set("sortDir", sortDir); }
+  if (showArchived) p.set("showArchived", "1");
   return `/api/inventory/catalog?${p}`;
 }
 
@@ -35,12 +42,6 @@ function displayUpc(r: CatalogGridRow): string {
   const v = r.sku_upc?.trim();
   if (v) return v;
   return r.matrix_upc?.trim() || "—";
-}
-
-function formatAttributes(r: CatalogGridRow): string {
-  const c = r.color?.trim() || "—";
-  const s = r.size?.trim() || "—";
-  return `${c} · ${s}`;
 }
 
 function formatPrice(raw: string | null): string {
@@ -65,7 +66,8 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
     "Color",
     "Size",
     "Retail Price",
-    "Quantity (LS)",
+    "Bin",
+    "Qty (EPC)",
   ];
   const lines = [
     headers.map(escapeCsvCell).join(","),
@@ -79,9 +81,8 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
         r.color?.trim() ?? "",
         r.size?.trim() ?? "",
         r.retail_price?.trim() ?? "",
-        r.ls_on_hand_total != null && Number.isFinite(r.ls_on_hand_total)
-          ? String(r.ls_on_hand_total)
-          : "",
+        r.bin_location ?? "",
+        String(r.active_epc_count ?? 0),
       ]
         .map((c) => escapeCsvCell(String(c)))
         .join(","),
@@ -100,11 +101,10 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
 
 type SortKey =
   | "system_id" | "name" | "sku" | "upc" | "vendor"
-  | "color" | "size" | "retail_price" | "qty_ls" | "bin";
+  | "color" | "size" | "retail_price" | "bin"
+  | "qty_epc";
 
-type TabId = "lightspeed" | "rfid";
-
-const COL_COUNT = 10;
+const COL_COUNT = 11;
 const COL_MIN_PX = 40;
 const SCROLLBAR_THICKNESS = 14;
 
@@ -249,7 +249,6 @@ export function CatalogWorkspace({
   canTriggerLightspeedSync?: boolean;
   canManageCatalog?: boolean;
 }) {
-  const [tab, setTab] = useState<TabId>("lightspeed");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -275,6 +274,7 @@ export function CatalogWorkspace({
   const [importBusy, setImportBusy] = useState(false);
   const [importErr, setImportErr] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const catalogToolbarRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -293,7 +293,14 @@ export function CatalogWorkspace({
     setPage(1);
   }, [sortBy, sortDir]);
 
-  const url = useMemo(() => buildGridUrl(page, debounced, sortBy, sortDir), [page, debounced, sortBy, sortDir]);
+  const url = useMemo(
+    () => buildGridUrl(page, debounced, sortBy, sortDir, showArchived),
+    [page, debounced, sortBy, sortDir, showArchived],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [showArchived]);
 
   const { data, error, isLoading, mutate } = useSWR<{
     rows: CatalogGridRow[];
@@ -478,41 +485,7 @@ export function CatalogWorkspace({
 
   return (
     <div className="space-y-4">
-      <div
-        role="tablist"
-        aria-label="Catalog view"
-        className="flex flex-wrap gap-2 border-b border-[var(--wms-border)] pb-2"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "lightspeed"}
-          onClick={() => setTab("lightspeed")}
-          className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
-            tab === "lightspeed"
-              ? "border border-b-0 border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] font-semibold text-[var(--wms-accent)] dark:bg-[var(--wms-surface-elevated)] dark:text-[var(--wms-accent)]"
-              : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
-          }`}
-        >
-          Lightspeed catalog
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "rfid"}
-          onClick={() => setTab("rfid")}
-          className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
-            tab === "rfid"
-              ? "border border-b-0 border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] font-semibold text-[var(--wms-accent)] dark:bg-[var(--wms-surface-elevated)] dark:text-[var(--wms-accent)]"
-              : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
-          }`}
-        >
-          RFID &amp; EPCs
-        </button>
-      </div>
-
-      {tab === "lightspeed" ? (
-        <>
+      <div>
           <div className="flex flex-wrap items-center gap-3">
             <input
               type="search"
@@ -556,6 +529,19 @@ export function CatalogWorkspace({
                 New / Import · admin only
               </span>
             )}
+            <button
+              type="button"
+              aria-pressed={showArchived}
+              onClick={() => setShowArchived((v) => !v)}
+              className={`rounded-md border px-3 py-2 font-mono text-xs font-semibold shadow-sm ${
+                showArchived
+                  ? "border-[var(--wms-accent)]/50 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] text-[var(--wms-accent)] hover:opacity-90"
+                  : "border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))]"
+              }`}
+              title={showArchived ? "Archived rows visible" : "Archived rows hidden"}
+            >
+              {showArchived ? "Hide archived" : "Show archived"}
+            </button>
             <button
               type="button"
               onClick={() => exportLightspeedCatalogCsv(rows)}
@@ -664,18 +650,7 @@ export function CatalogWorkspace({
               </Link>
             </p>
           ) : null}
-        </>
-      ) : (
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search system ID, description, SKU, UPC…"
-            className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-lg"
-          />
-        </div>
-      )}
+      </div>
 
       {error ? (
         <p className="font-mono text-xs text-red-400/90">
@@ -686,15 +661,13 @@ export function CatalogWorkspace({
       {showCatalogEmpty ? (
         <div className="rounded-xl border border-[var(--wms-border)]/90 bg-gradient-to-b from-[var(--wms-surface)] to-[var(--wms-surface-elevated)] px-8 py-16 text-center">
           <p className="font-mono text-[0.65rem] uppercase tracking-[0.25em] text-teal-500/80">
-            {tab === "lightspeed" ? "Lightspeed catalog" : "RFID matrix"}
+            Lightspeed catalog
           </p>
           <h2 className="mt-3 text-lg font-semibold tracking-tight text-[var(--wms-fg)]">
             No synchronized catalog yet
           </h2>
           <p className="mx-auto mt-2 max-w-md font-mono text-xs leading-relaxed text-[var(--wms-muted)]">
-            {tab === "lightspeed"
-              ? "Run Sync Lightspeed (admins) or open the sync dashboard to pull item matrices from Lightspeed. Quantities show total on-hand when the POS API returns stock data (R-Series qoh / shops; X-Series when inventory fields are present)."
-              : "Pull matrices and custom SKUs from Lightspeed first. RFID tag counts reflect in-stock EPCs at your active location."}
+            Run Sync Lightspeed (admins) or open the sync dashboard to pull item matrices from Lightspeed. Quantities show total on-hand when the POS API returns stock data (R-Series qoh / shops; X-Series when inventory fields are present). Active EPC counts reflect in-stock RFID tags at your active location.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             {canTriggerLightspeedSync ? (
@@ -714,7 +687,7 @@ export function CatalogWorkspace({
             </Link>
           </div>
         </div>
-      ) : tab === "lightspeed" ? (
+      ) : (
         <>
           <div className="relative">
             <style>{`
@@ -724,7 +697,7 @@ export function CatalogWorkspace({
             <div ref={scrollRef} className="wms-catalog-scroll overflow-auto rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]" style={{ maxHeight: "calc(100vh - 200px)" }}>
             <table
               ref={tableRef}
-              className="w-full min-w-[1100px] border-collapse text-left"
+              className="w-full min-w-[1200px] border-collapse text-left"
               style={{ tableLayout: colWidths.some((w) => w !== null) ? "fixed" : "auto" }}
             >
               <thead className="sticky top-0 z-10">
@@ -739,11 +712,13 @@ export function CatalogWorkspace({
                       { key: "color", label: "Color" },
                       { key: "size", label: "Size" },
                       { key: "retail_price", label: "Retail price", align: "right" },
-                      { key: "qty_ls", label: "Qty (LS)", align: "right" },
                       { key: "bin", label: "Bin" },
-                    ] as { key: SortKey; label: string; cls?: string; align?: string }[]
-                  ).map(({ key, label, cls, align }, colIdx) => {
-                    const active = sortBy === key;
+                      { key: "qty_epc", label: "Qty (EPC)", align: "right" },
+                      { key: "rfid", label: "RFID", sortable: false },
+                    ] as { key: SortKey | "rfid"; label: string; cls?: string; align?: string; sortable?: boolean }[]
+                  ).map(({ key, label, cls, align, sortable }, colIdx) => {
+                    const isSortable = sortable !== false;
+                    const active = isSortable && sortBy === key;
                     const next = active && sortDir === "asc" ? "desc" : "asc";
                     const Icon = active ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
                     const w = colWidths[colIdx];
@@ -753,14 +728,18 @@ export function CatalogWorkspace({
                         style={w !== null ? { width: w, minWidth: w } : undefined}
                         className={`relative overflow-hidden px-2 py-2 ${align === "right" ? "text-right" : ""} ${cls ?? ""}`}
                       >
-                        <button
-                          type="button"
-                          onClick={() => { setSortBy(key); setSortDir(active ? next : "asc"); }}
-                          className={`inline-flex items-center gap-1 hover:text-[var(--wms-fg)] ${active ? "text-[var(--wms-accent)]" : "text-[var(--wms-muted)]"}`}
-                        >
-                          {label}
-                          <Icon className="h-3 w-3 shrink-0 opacity-70" />
-                        </button>
+                        {isSortable ? (
+                          <button
+                            type="button"
+                            onClick={() => { setSortBy(key as SortKey); setSortDir(active ? next : "asc"); }}
+                            className={`inline-flex items-center gap-1 hover:text-[var(--wms-fg)] ${active ? "text-[var(--wms-accent)]" : "text-[var(--wms-muted)]"}`}
+                          >
+                            {label}
+                            <Icon className="h-3 w-3 shrink-0 opacity-70" />
+                          </button>
+                        ) : (
+                          <span className="text-[var(--wms-muted)]">{label}</span>
+                        )}
                         {/* Resize handle — invisible, right edge of th */}
                         <span
                           onMouseDown={(e) => startDrag(colIdx, e)}
@@ -776,19 +755,28 @@ export function CatalogWorkspace({
               <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-10 text-center text-[var(--wms-muted)]">
+                    <td colSpan={11} className="px-4 py-10 text-center text-[var(--wms-muted)]">
                       Loading catalog…
                     </td>
                   </tr>
                 ) : showNoMatches ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-14 text-center text-[var(--wms-muted)]">
+                    <td colSpan={11} className="px-4 py-14 text-center text-[var(--wms-muted)]">
                       <p className="font-mono text-sm text-[var(--wms-muted)]">No rows match your search.</p>
                     </td>
                   </tr>
                 ) : (
-                  rows.map((r) => (
-                    <tr key={r.custom_sku_id} className="hover:bg-[var(--wms-surface-elevated)]/50">
+                  rows.map((r) => {
+                    const isArchived = r.archived || r.matrix_archived;
+                    const archivedRowCls = isArchived
+                      ? "bg-[var(--wms-surface-elevated)]/40 italic text-[var(--wms-muted)]"
+                      : "";
+                    return (
+                    <tr
+                      key={r.custom_sku_id}
+                      className={`hover:bg-[var(--wms-surface-elevated)]/50 ${archivedRowCls}`}
+                      title={isArchived ? "Archived in Lightspeed" : undefined}
+                    >
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-teal-400/85">
                         {r.sku_ls_system_id ?? "—"}
                       </td>
@@ -805,71 +793,13 @@ export function CatalogWorkspace({
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
                         {formatPrice(r.retail_price)}
                       </td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-right tabular-nums font-medium text-[var(--wms-table-accent-num)]">
-                        {r.ls_on_hand_total != null && Number.isFinite(r.ls_on_hand_total)
-                          ? r.ls_on_hand_total
-                          : "—"}
-                      </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">
                         {r.bin_location ?? "—"}
                       </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-            </div>
-            <ThickScrollbars scrollRef={scrollRef} />
-          </div>
-          {pagination}
-        </>
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-            <table className="w-full min-w-[960px] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
-                  <th className="px-2 py-2 text-teal-400/80">System ID (variant)</th>
-                  <th className="px-2 py-2">Custom SKU</th>
-                  <th className="px-2 py-2">UPC</th>
-                  <th className="px-2 py-2">Description</th>
-                  <th className="px-2 py-2">Attributes</th>
-                  <th className="px-2 py-2 text-right tabular-nums">Active EPCs</th>
-                  <th className="w-24 px-2 py-2">RFID</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-[var(--wms-muted)]">
-                      Loading catalog…
-                    </td>
-                  </tr>
-                ) : showNoMatches ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-14 text-center text-[var(--wms-muted)]">
-                      <p className="font-mono text-sm text-[var(--wms-muted)]">No rows match your search.</p>
-                      <p className="mt-2 text-xs text-[var(--wms-muted)]">
-                        Try another query or clear the search box.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((r) => (
-                    <tr key={r.custom_sku_id} className="hover:bg-[var(--wms-surface-elevated)]/50">
-                      <td className="px-2 py-1.5 tabular-nums text-teal-400/85">
-                        {r.sku_ls_system_id ?? "—"}
-                      </td>
-                      <td className="px-2 py-1.5">{r.sku}</td>
-                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
-                      <td className="max-w-[240px] truncate px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
-                        {r.name}
-                      </td>
-                      <td className="px-2 py-1.5 text-[var(--wms-muted)]">{formatAttributes(r)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
                         {r.active_epc_count}
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5">
                         <button
                           type="button"
                           onClick={() => setModalSku(r)}
@@ -880,10 +810,13 @@ export function CatalogWorkspace({
                         </button>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
+            </div>
+            <ThickScrollbars scrollRef={scrollRef} />
           </div>
           {pagination}
         </>
