@@ -26,6 +26,10 @@ const bodySchema = z.object({
   targetStatus: z.string().min(1).max(32),
   /** When true, allow risky transitions (e.g. sold → in-stock). Super Admin only. */
   override: z.boolean().optional(),
+  /** Optional device id stamped on the audit row when the change originates from a handheld. */
+  deviceId: z.string().min(1).max(256).optional(),
+  /** Optional free-form reason; defaults to 'bulk_status'. */
+  reason: z.string().min(1).max(128).optional(),
 });
 
 /**
@@ -123,10 +127,19 @@ export async function POST(req: Request) {
       if ((u.rowCount ?? 0) > 0) {
         await client.query(
           `INSERT INTO inventory_audit_logs (
-             tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id
+             tenant_id, log_type, entity_type, entity_reference, old_value, new_value,
+             reason, user_id, user_uuid, device_id
            )
-           VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, $3, $4, 'bulk_status', NULL)`,
-          [session.tid, e, from, to],
+           VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, $3, $4, $5, NULL, $6::uuid, $7)`,
+          [
+            session.tid,
+            e,
+            from,
+            to,
+            parsed.data.reason?.trim() || "bulk_status",
+            session.sub,
+            parsed.data.deviceId?.trim() || null,
+          ],
         );
       }
     }

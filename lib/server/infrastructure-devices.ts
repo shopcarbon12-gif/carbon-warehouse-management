@@ -125,6 +125,17 @@ export async function listDevicesForTenant(pool: Pool, tenantId: string): Promis
   }));
 }
 
+/** Authorized handheld readers for the tenant, used by the catalog "Send to handheld" drawer. */
+export async function listAuthorizedHandheldsForTenant(
+  pool: Pool,
+  tenantId: string,
+): Promise<DeviceGridRow[]> {
+  const all = await listDevicesForTenant(pool, tenantId);
+  return all.filter(
+    (d) => d.device_type === "handheld_reader" && d.is_authorized,
+  );
+}
+
 async function assertLocationTenant(
   client: PoolClient,
   locationId: string,
