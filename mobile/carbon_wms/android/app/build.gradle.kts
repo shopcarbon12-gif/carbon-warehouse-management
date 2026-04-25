@@ -1,5 +1,47 @@
 import java.util.Properties
 
+/**
+ * Derive Android `versionCode` (monotonic integer Android compares for
+ * upgrades) from the dotted Flutter `versionName` ("X.Y.Z" or "X.Y").
+ *
+ *   code = MAJOR * 1_000_000 + MINOR * 1_000 + PATCH
+ *
+ * Examples:
+ *   "1.1.15" -> 1_001_015
+ *   "1.1.16" -> 1_001_016
+ *   "1.2.0"  -> 1_002_000
+ *   "2.0.0"  -> 2_000_000
+ *
+ * Bumping any component (and never decreasing the others) keeps the code
+ * strictly increasing. MINOR and PATCH each have room up to 999.
+ *
+ * Falls back to 1 if the version name doesn't parse as numeric — emits a
+ * warning so a malformed pubspec is loud, not silent.
+ */
+fun computeVersionCode(versionName: String?): Int {
+    val name = versionName?.trim().orEmpty()
+    if (name.isEmpty()) {
+        logger.warn("computeVersionCode: empty versionName, defaulting to 1")
+        return 1
+    }
+    val parts = name.split('.')
+    val major = parts.getOrNull(0)?.toIntOrNull()
+    val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+    if (major == null) {
+        logger.warn("computeVersionCode: cannot parse '$name' as X.Y.Z, defaulting to 1")
+        return 1
+    }
+    if (minor < 0 || minor > 999 || patch < 0 || patch > 999) {
+        logger.warn("computeVersionCode: minor/patch out of [0,999] in '$name', clamping")
+    }
+    val m = minor.coerceIn(0, 999)
+    val p = patch.coerceIn(0, 999)
+    val code = major * 1_000_000 + m * 1_000 + p
+    logger.lifecycle("computeVersionCode: '$name' -> $code")
+    return code
+}
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -33,7 +75,14 @@ android {
         // c72e (Chainway) ships API 27; Zebra API3 AAR minSdk is 24.
         minSdk = maxOf(flutter.minSdkVersion, 27)
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
+        // versionCode is derived from the dotted versionName (X.Y.Z) using
+        //   code = X * 1_000_000 + Y * 1_000 + Z
+        // so pubspec.yaml only needs `version: X.Y.Z` (no `+N` build counter).
+        // Patch bumps push code up by 1, minor bumps cross a 1_000 boundary,
+        // major bumps cross a 1_000_000 boundary — Android's monotonic-increase
+        // requirement is satisfied as long as you only ever bump components,
+        // never decrease them. Caps: minor < 1000, patch < 1000 (room to spare).
+        versionCode = computeVersionCode(flutter.versionName)
         versionName = flutter.versionName
     }
 

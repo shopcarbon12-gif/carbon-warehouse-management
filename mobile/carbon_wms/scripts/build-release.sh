@@ -48,3 +48,19 @@ fi
 
 echo "Built: $APK"
 ls -la "$APK" "$RELEASE_ROOT/app-release.apk"
+
+# Sanity-print the computed Android versionCode (extracted from the AndroidManifest
+# inside the APK). Helps catch regressions in app/build.gradle.kts:computeVersionCode
+# before sideloading on a handheld that already has an older build.
+if command -v "$ANDROID_HOME/build-tools"/*/aapt2 >/dev/null 2>&1; then
+  AAPT2=$(ls "$ANDROID_HOME/build-tools"/*/aapt2 2>/dev/null | sort -V | tail -1)
+elif command -v aapt2 >/dev/null 2>&1; then
+  AAPT2=$(command -v aapt2)
+fi
+if [[ -n "${AAPT2:-}" ]]; then
+  CODE=$("$AAPT2" dump badging "$APK" 2>/dev/null | sed -nE "s/^package: name='[^']+' versionCode='([0-9]+)' versionName='[^']+'.*/\\1/p" | head -1)
+  NAME=$("$AAPT2" dump badging "$APK" 2>/dev/null | sed -nE "s/^package: name='[^']+' versionCode='[0-9]+' versionName='([^']+)'.*/\\1/p" | head -1)
+  if [[ -n "$CODE" && -n "$NAME" ]]; then
+    echo "Android: versionName=$NAME versionCode=$CODE"
+  fi
+fi
