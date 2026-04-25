@@ -8,9 +8,9 @@ export type CatalogGridRow = {
   /** Variant-level Lightspeed System ID — this is what is encoded in EPC bits 20-60. */
   sku_ls_system_id: string | null;
   sku: string;
-  /** Variant UPC when set; matrix UPC always available as `matrix_upc`. */
+  /** Variant UPC when set; matrix UPC available as `matrix_upc` (also nullable). */
   sku_upc: string | null;
-  matrix_upc: string;
+  matrix_upc: string | null;
   name: string;
   vendor: string | null;
   color: string | null;
@@ -196,7 +196,7 @@ export async function listCatalogGrid(
     sku_ls_system_id: string | null;
     sku: string;
     sku_upc: string | null;
-    matrix_upc: string;
+    matrix_upc: string | null;
     name: string;
     vendor: string | null;
     color: string | null;

@@ -2,7 +2,7 @@ import type { Pool } from "pg";
 
 export type CatalogMatrixRow = {
   id: string;
-  upc: string;
+  upc: string | null;
   description: string;
   custom_sku_count: number;
   epc_count: number;
@@ -43,7 +43,7 @@ export async function listCatalogMatrices(
 ): Promise<CatalogMatrixRow[]> {
   const r = await pool.query<{
     id: string;
-    upc: string;
+    upc: string | null;
     description: string;
     custom_sku_count: string;
     epc_count: string;

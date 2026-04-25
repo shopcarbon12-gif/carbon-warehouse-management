@@ -157,24 +157,55 @@ async function upsertMatrixRow(
   client: PoolClient,
   row: CatalogSyncMatrixPayload,
 ): Promise<string> {
+  const upc = row.upc?.trim() || null;
+  const description = row.description.trim();
+  const brand = row.brand?.trim() || null;
+  const category = row.category?.trim() || null;
+  const vendor = row.vendor?.trim() || null;
+  const lsSystemId = row.matrixLsSystemId;
+
+  /* When UPC is present, the (upc) UNIQUE constraint dedupes for us.
+   * When UPC is null (loyalty/coupon/service-credit Lightspeed lines), Postgres
+   * treats nulls as distinct in unique indexes — so ON CONFLICT (upc) won't
+   * fire. Resolve manually via ls_system_id (partial unique idx) instead. */
+  if (upc !== null) {
+    const ins = await client.query<{ id: string }>(
+      `INSERT INTO matrices (upc, description, brand, category, vendor, ls_system_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (upc) DO UPDATE SET
+         description = EXCLUDED.description,
+         brand = COALESCE(EXCLUDED.brand, matrices.brand),
+         category = COALESCE(EXCLUDED.category, matrices.category),
+         vendor = COALESCE(EXCLUDED.vendor, matrices.vendor),
+         ls_system_id = COALESCE(EXCLUDED.ls_system_id, matrices.ls_system_id)
+       RETURNING id::text`,
+      [upc, description, brand, category, vendor, lsSystemId],
+    );
+    const id = ins.rows[0]?.id;
+    if (!id) throw new Error("matrix upsert returned no id");
+    return id;
+  }
+
+  /* upc IS NULL: try update-by-ls_system_id first; insert if no match. */
+  if (lsSystemId != null) {
+    const upd = await client.query<{ id: string }>(
+      `UPDATE matrices SET
+         description = $1,
+         brand = COALESCE($2, brand),
+         category = COALESCE($3, category),
+         vendor = COALESCE($4, vendor)
+       WHERE ls_system_id = $5
+       RETURNING id::text`,
+      [description, brand, category, vendor, lsSystemId],
+    );
+    if (upd.rows[0]?.id) return upd.rows[0].id;
+  }
+
   const ins = await client.query<{ id: string }>(
     `INSERT INTO matrices (upc, description, brand, category, vendor, ls_system_id)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (upc) DO UPDATE SET
-       description = EXCLUDED.description,
-       brand = COALESCE(EXCLUDED.brand, matrices.brand),
-       category = COALESCE(EXCLUDED.category, matrices.category),
-       vendor = COALESCE(EXCLUDED.vendor, matrices.vendor),
-       ls_system_id = COALESCE(EXCLUDED.ls_system_id, matrices.ls_system_id)
+     VALUES (NULL, $1, $2, $3, $4, $5)
      RETURNING id::text`,
-    [
-      row.upc.trim(),
-      row.description.trim(),
-      row.brand?.trim() || null,
-      row.category?.trim() || null,
-      row.vendor?.trim() || null,
-      row.matrixLsSystemId,
-    ],
+    [description, brand, category, vendor, lsSystemId],
   );
   const id = ins.rows[0]?.id;
   if (!id) throw new Error("matrix upsert returned no id");

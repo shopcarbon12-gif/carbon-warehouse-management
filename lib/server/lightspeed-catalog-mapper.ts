@@ -102,10 +102,15 @@ export function mapLightspeedProductJsonToCatalog(
 
   const out: CatalogSyncMatrixPayload[] = [];
 
-  const buildVariant = (p: LsProduct): CatalogSyncVariantPayload => {
+  /**
+   * Returns null when the X-Series product has no real SKU/handle/id signal —
+   * caller skips the row instead of minting a placeholder.
+   */
+  const buildVariant = (p: LsProduct): CatalogSyncVariantPayload | null => {
     const extId = String(p.id ?? "");
     const { color, size } = optionColorSize(p.variant_options);
-    const sku = (p.sku ?? p.handle ?? extId).trim() || `SKU-${hash(extId + ":sku")}`;
+    const sku = (p.sku ?? p.handle ?? extId).trim();
+    if (!sku) return null;
     const upc = (p.barcode ?? p.product_code ?? "").trim() || null;
     return {
       lsSystemId: hash(`${extId}:variant`),
@@ -126,13 +131,17 @@ export function mapLightspeedProductJsonToCatalog(
     const isChild = Boolean(p.variant_parent_id);
     if (isChild) continue;
 
-    const name = (p.name ?? "Untitled").trim() || "Untitled";
-    const parentUpc = (p.barcode ?? p.product_code ?? `UPC-${hash(`${extId}:upc`)}`).trim();
+    /* No synthetic strings: only display what Lightspeed actually returned.
+     * `description` falls back to "Untitled" since something must show in the
+     * UI for an item with no name; this is a display string, not an identifier. */
+    const name = (p.name ?? "").trim() || "Untitled";
+    const parentUpc = (p.barcode ?? p.product_code ?? "").trim() || null;
 
     if (p.has_variants) {
       const children = products.filter((c) => c.variant_parent_id && String(c.variant_parent_id) === extId);
       if (children.length === 0) continue;
-      const variants = children.map((c) => buildVariant(c));
+      const variants = children.map(buildVariant).filter((v): v is CatalogSyncVariantPayload => v != null);
+      if (variants.length === 0) continue;
       out.push({
         matrixLsSystemId: hash(`${extId}:matrix`),
         description: name,
@@ -144,6 +153,7 @@ export function mapLightspeedProductJsonToCatalog(
       });
     } else {
       const v = buildVariant(p);
+      if (!v) continue;
       out.push({
         matrixLsSystemId: hash(`${extId}:matrix`),
         description: name,

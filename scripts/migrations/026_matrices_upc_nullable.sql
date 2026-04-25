@@ -1,0 +1,11 @@
+-- Allow NULL UPC on `matrices`. Lightspeed catalog can legitimately return
+-- products without a barcode (loyalty / coupon / service-credit line items),
+-- and prior code masked this by minting `SYN-<hash>` placeholder UPCs. Those
+-- synthetic values are now removed at the mapper level; the column needs to
+-- accept NULL so empty data stays empty.
+--
+-- The existing UNIQUE constraint stays in place: Postgres treats NULL values
+-- as distinct in unique indexes, so multiple matrices can have NULL UPC.
+-- Upsert code in `inventory-sync.ts` and `catalog-manual.ts` is updated to
+-- dedupe by `ls_system_id` (existing partial unique index) when UPC is NULL.
+ALTER TABLE matrices ALTER COLUMN upc DROP NOT NULL;

@@ -236,7 +236,7 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
                                           type="button"
                                           title="Item group detail (EPCs)"
                                           className="rounded p-1 text-teal-500 hover:bg-[var(--wms-surface-elevated)] hover:text-teal-300"
-                                          onClick={(e) => openDrawer(e, cs, m.upc)}
+                                          onClick={(e) => openDrawer(e, cs, m.upc ?? "")}
                                         >
                                           <Tag className="h-3.5 w-3.5" strokeWidth={2} />
                                         </button>

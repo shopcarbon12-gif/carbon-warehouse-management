@@ -240,9 +240,11 @@ export function mapRseriesRawItemsToCatalogSync(
     const brand = head.brand;
     const category = head.category;
     const vendor = head.brand;
+    /* No synthetic UPCs: when no variant has a real UPC, leave it null and
+     * let the UI render `—`. Lightspeed legitimately returns blank UPCs for
+     * non-physical items (loyalty / coupons / service credits). */
     const upc =
-      variants.map((v) => v.upc).find((u) => u.length > 0) ||
-      `SYN-${hash(`${head.groupKey}:upc`)}`;
+      variants.map((v) => v.upc).find((u) => u.length > 0) || null;
 
     const vPayloads: CatalogSyncVariantPayload[] = variants.map((v) => ({
       lsSystemId: lsSystemIdForVariant(v.itemId, v.systemSku, hash),

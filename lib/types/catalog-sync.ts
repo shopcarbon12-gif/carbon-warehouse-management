@@ -20,6 +20,7 @@ export type CatalogSyncMatrixPayload = {
   brand: string | null;
   category: string | null;
   vendor: string | null;
-  upc: string;
+  /** Null when Lightspeed returns no UPC (e.g. loyalty / coupons / service credits). */
+  upc: string | null;
   variants: CatalogSyncVariantPayload[];
 };
