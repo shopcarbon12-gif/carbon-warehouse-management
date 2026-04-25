@@ -180,6 +180,15 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       unawaited(rfid.reapplyHandheldHardwareSettings());
     }
     unawaited(() async {
+      /* Count's initState broadcast `enableRfidFunctionMode` to com.rscja.scanner
+       * so the trigger fires UHF inventory instead of the 2D laser. We MUST
+       * cancel that with `disableRfidFunctionMode` here, otherwise the next
+       * screen (Bin Assign, etc.) inherits a stuck state where com.rscja
+       * thinks the trigger should fire UHF but our app no longer routes UHF
+       * reads — net result: trigger does nothing. Order matters: disable RFID
+       * mode first, then re-open the 2D engine, then re-enable our trigger
+       * relay. Mirrors the dispose contract in search_and_encode_screen. */
+      await RfidVendorChannel.disableRfidFunctionMode();
       await RfidVendorChannel.open2dBarcode();
       await RfidVendorChannel.scannerEnableTriggerRelay();
     }());

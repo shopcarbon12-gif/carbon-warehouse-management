@@ -141,7 +141,11 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     unawaited(_rfid?.stopLocateScanning());
     _sounds.stopAll();
     // Restore 2D trigger for other screens that rely on it.
+    // Must cancel the RFID-function-mode broadcast we sent in _ensureScannerReady
+    // before re-opening the 2D engine — otherwise com.rscja.scanner is stuck
+    // in RFID mode and the trigger fires nothing on subsequent screens.
     unawaited(() async {
+      await RfidVendorChannel.disableRfidFunctionMode();
       await RfidVendorChannel.open2dBarcode();
       await RfidVendorChannel.scannerEnableTriggerRelay();
     }());

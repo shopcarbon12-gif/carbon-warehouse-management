@@ -121,6 +121,27 @@ class RfidVendorChannel {
     } catch (_) {}
   }
 
+  /// Switch the native KEY_DOWN/KEY_UP handler to 2D-barcode mode: trigger
+  /// down fires BARCODESTARTSCAN, trigger up fires BARCODESTOPSCAN. Use on
+  /// barcode-only screens (e.g. Bin Assign) where the firmware-owned UHF
+  /// trigger path doesn't apply.
+  static Future<void> setTriggerMode2d() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('scanner.setTriggerMode2d');
+    } catch (_) {}
+  }
+
+  /// Restore the default UHF-trigger handler: KEY_DOWN/KEY_UP are no-ops and
+  /// the firmware drives continuous UHF inventory directly. Call on dispose
+  /// of any screen that previously called [setTriggerMode2d].
+  static Future<void> setTriggerModeUhf() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('scanner.setTriggerModeUhf');
+    } catch (_) {}
+  }
+
   /// Physically closes (powers off) the 2D barcode engine on Chainway C72E.
   /// Use in RFID-only screens so the laser never fires regardless of trigger state.
   static Future<void> close2dBarcode() async {
@@ -260,6 +281,36 @@ class RfidVendorChannel {
       return false;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// Tell native which EPC the Locate / Geiger screen is hunting for. Native
+  /// uses this to gate the per-tag beep so only matching reads beep while
+  /// geiger mode is on. Pass `null` to clear.
+  static Future<void> setGeigerTarget(String? epc) async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>(
+          'geiger.setTarget', <String, dynamic>{'epc': epc ?? ''});
+    } on MissingPluginException {
+      /* iOS / unit tests */
+    } catch (_) {
+      /* optional vendor bridge */
+    }
+  }
+
+  /// Enable / disable native-side geiger gating of the per-tag beep. While
+  /// disabled (default) every read beeps as before; while enabled only reads
+  /// matching the EPC set by [setGeigerTarget] beep.
+  static Future<void> setGeigerEnabled(bool enabled) async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>(
+          'geiger.setEnabled', <String, dynamic>{'enabled': enabled});
+    } on MissingPluginException {
+      /* iOS / unit tests */
+    } catch (_) {
+      /* optional vendor bridge */
     }
   }
 

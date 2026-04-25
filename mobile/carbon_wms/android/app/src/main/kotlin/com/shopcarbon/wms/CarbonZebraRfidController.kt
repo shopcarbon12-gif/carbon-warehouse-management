@@ -555,8 +555,11 @@ class CarbonZebraRfidController(
     Log.d("LAT", "NATIVE_EPC ts=${System.currentTimeMillis()} epc=$clean")
     val rssiInt = rssi?.toInt() ?: -56
     // Native-originated per-tag beep — fire before sink post so audio feedback
-    // does not wait for Dart scheduling.
-    ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssiInt))
+    // does not wait for Dart scheduling. Suppressed by GeigerGate when the Locate
+    // screen is active and the read EPC doesn't match the geiger target.
+    if (GeigerGate.shouldBeep(clean)) {
+      ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssiInt))
+    }
     val payload = mapOf("epc" to clean, "rssi" to rssiInt)
     mainHandler.post { sink.success(payload) }
   }

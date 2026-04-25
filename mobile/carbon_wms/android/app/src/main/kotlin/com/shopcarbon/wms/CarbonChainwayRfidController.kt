@@ -1168,7 +1168,10 @@ class CarbonChainwayRfidController(private val context: Context) {
     // does not wait for Dart scheduling. RSSI comes from [UHFTAGInfo.getRssi] via
     // the SDK callback (see [parseRssiDbm]); the reflective drain-loop fallback
     // still passes null so the beep stays audible but won't vary with distance.
-    ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssi))
+    // GeigerGate suppresses non-matching reads when the Locate screen is active.
+    if (GeigerGate.shouldBeep(up)) {
+      ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssi))
+    }
     val sink = tagSink ?: return
     mainHandler.post { sink.success(mapOf("epc" to up, "rssi" to (rssi ?: 0))) }
   }
@@ -1276,5 +1279,105 @@ class CarbonChainwayRfidController(private val context: Context) {
       "barcode_string", "BARCODE_STRING", "scan_data", "barcodeCode", "data_result",
     )
     private val EPC_BYTE_KEYS = arrayOf("scannerdata", "SCAN_DATA", "data", "barcode")
+
+    /**
+     * Force `com.rscja.scanner` into broadcast output mode (1) at app start.
+     * Without this the scanner service may be left in clipboard mode (0 = HID
+     * keyboard wedge, 1 = broadcast intent, 2 = clipboard) by an OEM keyboard
+     * settings app or a previous app session — every barcode scan then toasts
+     * "copied to clipboard" instead of reaching our BroadcastReceiver.
+     *
+     * Invoked from `MainActivity.onCreate` so EVERY screen (Bin Assign, Count,
+     * Search & Encode, …) inherits a deterministic output route. Reflective
+     * call so the build still works on devices where ScannerUtility isn't
+     * present (Samsung S25U, dev emulators) — failures are logged and ignored.
+     *
+     * Tries the bundled AAR class path first; falls back to a PathClassLoader
+     * on `/system/app/keyboard/keyboard.apk` (where MTK c72e firmware ships
+     * ScannerUtility), since at MainActivity.onCreate time the system class
+     * loader hasn't yet seen the keyboard.apk classes — the regular
+     * `Class.forName` lookup returns null for the same reason `resolveUhfClass`
+     * has to walk the keyboard.apk path.
+     */
+    fun forceBroadcastOutputMode(context: Context) {
+      Log.d(TAG, "forceBroadcastOutputMode: ENTER")
+      val cls = resolveScannerUtilityClassStatic()
+      if (cls == null) {
+        Log.e(TAG, "forceBroadcastOutputMode: ScannerUtility not on classpath — abort")
+        return
+      }
+      Log.d(TAG, "forceBroadcastOutputMode: class=${cls.name}")
+
+      val inst: Any?
+      try {
+        val getInst = cls.getMethod("getScannerInerface")
+        Log.d(TAG, "forceBroadcastOutputMode: getScannerInerface method resolved")
+        inst = getInst.invoke(null)
+      } catch (e: Throwable) {
+        Log.e(TAG, "forceBroadcastOutputMode: getScannerInerface failed: ${e.message}", e)
+        return
+      }
+      if (inst == null) {
+        Log.e(TAG, "forceBroadcastOutputMode: getScannerInerface returned null — abort")
+        return
+      }
+      Log.d(TAG, "forceBroadcastOutputMode: instance=${inst.javaClass.name}")
+
+      val setOutputMode: java.lang.reflect.Method
+      try {
+        setOutputMode = cls.getMethod(
+          "setOutputMode", Context::class.java, Int::class.javaPrimitiveType,
+        )
+        Log.d(TAG, "forceBroadcastOutputMode: setOutputMode method resolved")
+      } catch (e: Throwable) {
+        Log.e(TAG, "forceBroadcastOutputMode: setOutputMode method missing: ${e.message}", e)
+        return
+      }
+
+      try {
+        setOutputMode.invoke(inst, context, 1)
+        Log.d(TAG, "forceBroadcastOutputMode: setOutputMode(ctx, 1) INVOKE OK — broadcast mode")
+      } catch (e: Throwable) {
+        Log.e(TAG, "forceBroadcastOutputMode: setOutputMode invoke failed: ${e.message}", e)
+      }
+    }
+
+    /** Standalone version of `resolveScannerUtilityClass` callable before any
+     * controller has been instantiated. Tries system classpath, then walks
+     * the same keyboard.apk paths the controller falls back to. */
+    private fun resolveScannerUtilityClassStatic(): Class<*>? {
+      try {
+        val cls = Class.forName("com.rscja.scanner.utility.ScannerUtility")
+        Log.d(TAG, "resolveScannerUtilityClassStatic: loaded from system classpath")
+        return cls
+      } catch (e: Throwable) {
+        Log.w(TAG, "resolveScannerUtilityClassStatic: system classpath miss: ${e.message}")
+      }
+
+      val scannerApkPaths = listOf(
+        "/system/app/keyboard/keyboard.apk",
+        "/system/app/Scanner/Scanner.apk",
+        "/system/priv-app/Scanner/Scanner.apk",
+      )
+      for (apkPath in scannerApkPaths) {
+        val exists = java.io.File(apkPath).exists()
+        Log.d(TAG, "resolveScannerUtilityClassStatic: try $apkPath exists=$exists")
+        if (!exists) continue
+        try {
+          val cl = dalvik.system.PathClassLoader(
+            apkPath,
+            "/vendor/lib:/vendor/lib64:/system/lib:/system/lib64",
+            ClassLoader.getSystemClassLoader(),
+          )
+          val cls = cl.loadClass("com.rscja.scanner.utility.ScannerUtility")
+          Log.d(TAG, "resolveScannerUtilityClassStatic: loaded from $apkPath via PathClassLoader")
+          return cls
+        } catch (e: Throwable) {
+          Log.e(TAG, "resolveScannerUtilityClassStatic: load from $apkPath failed: ${e.message}", e)
+        }
+      }
+      Log.e(TAG, "resolveScannerUtilityClassStatic: ALL paths exhausted — null")
+      return null
+    }
   }
 }

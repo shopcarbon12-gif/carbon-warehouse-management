@@ -226,6 +226,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     try {
       await RfidVendorChannel.open2dBarcode();
     } catch (_) {}
+    /* Native KEY_DOWN/KEY_UP handler now fires BARCODESTARTSCAN/STOPSCAN so the
+     * physical trigger drives the laser. Default mode is UHF (firmware-owned
+     * trigger); we restore that on dispose. */
+    try {
+      await RfidVendorChannel.setTriggerMode2d();
+    } catch (_) {}
   }
 
   @override
@@ -243,6 +249,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     _hardwareBarcodeSub?.cancel();
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(_stopHardware2dScan());
+    /* Restore default UHF-trigger mode so RFID screens (Count, Search & Encode)
+     * inherit a clean state. Without this they'd see KEY_DOWN routed to
+     * BARCODESTARTSCAN, which kills any active UHF inventory. */
+    unawaited(RfidVendorChannel.setTriggerModeUhf());
     _hardwareBarcodeSub = null;
     /* Restore the scan context + edge-streaming flag so other screens (Count,
      * Locate, etc.) resume with their pre-existing state. We don't auto-start
@@ -1373,12 +1383,16 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         children: [
           GestureDetector(
             onTap: _toggleDrawer,
-            child: ClipOval(
-              child: Image.asset(
-                'assets/carbon_logo.png',
-                width: 36.w,
-                height: 36.h,
-                fit: BoxFit.cover,
+            // Use SizedBox.square so the AppBar Row's flexible siblings
+            // can't compress the image; both axes derived from the SAME
+            // scale unit (`.w`) so the box stays square on every display.
+            child: SizedBox.square(
+              dimension: 36.w,
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/carbon_logo.png',
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           ),

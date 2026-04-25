@@ -16,6 +16,21 @@ import java.nio.charset.StandardCharsets
  * Forwards OEM 2D scan broadcasts (Chainway / MTK / generic) into Flutter via [EventChannel].
  * Many rugged devices send decode data as a broadcast instead of (or in addition to) keyboard wedge.
  */
+/**
+ * What KEY_DOWN should do when received from the physical trigger.
+ *
+ * - [UHF]: no-op. The C72E firmware (com.rscja.scanner) owns the trigger and
+ *   drives continuous UHF inventory directly via /dev/ttyMT1. Calling
+ *   BARCODESTARTSCAN here would kill that inventory.
+ * - [BARCODE_2D]: explicitly fire BARCODESTARTSCAN on KEY_DOWN and
+ *   BARCODESTOPSCAN on KEY_UP so the 2D laser engine pulses for one decode.
+ *
+ * Default is [UHF] because that's the historical behavior — RFID screens
+ * (Count, Search & Encode) don't toggle this. Bin Assign explicitly switches
+ * to BARCODE_2D on entry and back to UHF on dispose.
+ */
+enum class TriggerMode { UHF, BARCODE_2D }
+
 class CarbonHardwareBarcodeRelay(
   private val context: Context,
 ) : EventChannel.StreamHandler {
@@ -25,6 +40,12 @@ class CarbonHardwareBarcodeRelay(
   private var scanTimeoutRunnable: Runnable? = null
   @Volatile private var scanActive = false
   @Volatile private var triggerRelayEnabled = true
+  @Volatile private var triggerMode: TriggerMode = TriggerMode.UHF
+
+  fun setTriggerMode(mode: TriggerMode) {
+    Log.d("CarbonChainway", "Relay.setTriggerMode: $triggerMode -> $mode (this=$this)")
+    triggerMode = mode
+  }
 
   override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
     sink = events
@@ -66,12 +87,32 @@ class CarbonHardwareBarcodeRelay(
           Log.d(TAG, "RX action=$rxAction extras=${extrasSummary(intent)}")
           when (rxAction) {
             KEY_DOWN_ACTION -> {
-              // In UHF continuous inventory mode, the firmware owns the physical trigger.
-              // Do NOT call startHardwareScan/stopHardwareScan here — those send
-              // BARCODESTARTSCAN/BARCODESTOPSCAN which will kill the active UHF inventory.
+              Log.d("CarbonChainway", "KEY_DOWN: mode=$triggerMode (this=${this@CarbonHardwareBarcodeRelay})")
+              when (triggerMode) {
+                TriggerMode.UHF -> {
+                  // C72E firmware owns the trigger in UHF mode. Calling
+                  // startHardwareScan would broadcast BARCODESTARTSCAN and kill
+                  // the active continuous inventory.
+                }
+                TriggerMode.BARCODE_2D -> {
+                  // 2D barcode workflow (Bin Assign): explicitly drive the
+                  // laser. Without this, com.rscja.scanner stays idle and the
+                  // trigger fires nothing.
+                  Log.d(TAG, "KEY_DOWN → startHardwareScan (2D mode)")
+                  startHardwareScan()
+                }
+              }
               return
             }
             KEY_UP_ACTION -> {
+              Log.d("CarbonChainway", "KEY_UP: mode=$triggerMode (this=${this@CarbonHardwareBarcodeRelay})")
+              when (triggerMode) {
+                TriggerMode.UHF -> { /* firmware-owned, see KEY_DOWN */ }
+                TriggerMode.BARCODE_2D -> {
+                  Log.d(TAG, "KEY_UP → stopHardwareScan (2D mode)")
+                  stopHardwareScan()
+                }
+              }
               return
             }
           }
@@ -220,7 +261,15 @@ class CarbonHardwareBarcodeRelay(
   fun startHardwareScan() {
     scanActive = true
     cancelScanTimeout()
-    runCatching { context.sendBroadcast(Intent(ACTION_SCAN_START)) }
+    /* setPackage("com.rscja.scanner") is required on Android 8.1+ — implicit
+     * broadcasts to manifest receivers for non-whitelisted actions are
+     * silently dropped. Without this, BARCODESTARTSCAN never reached the
+     * scanner service and the laser stayed dark. */
+    runCatching {
+      context.sendBroadcast(
+        Intent(ACTION_SCAN_START).setPackage("com.rscja.scanner"),
+      )
+    }
     scheduleScanTimeout(SCAN_TIMEOUT_MS)
   }
 
@@ -234,7 +283,11 @@ class CarbonHardwareBarcodeRelay(
   fun stopHardwareScan() {
     scanActive = false
     cancelScanTimeout()
-    runCatching { context.sendBroadcast(Intent(ACTION_SCAN_STOP)) }
+    runCatching {
+      context.sendBroadcast(
+        Intent(ACTION_SCAN_STOP).setPackage("com.rscja.scanner"),
+      )
+    }
   }
 
   private fun scheduleScanTimeout(ms: Long) {

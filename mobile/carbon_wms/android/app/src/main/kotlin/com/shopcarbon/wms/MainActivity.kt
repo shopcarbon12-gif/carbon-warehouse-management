@@ -28,6 +28,19 @@ class MainActivity : FlutterFragmentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    /* Force com.rscja.scanner into broadcast output mode (1) at every app
+     * launch so barcode scans flow into our receiver instead of the system
+     * clipboard. Without this, Bin Assign / Count / etc. all toast
+     * "copied to clipboard" on trigger pull. No-op on non-Chainway devices.
+     * Position: AFTER super.onCreate. applicationContext is documented as
+     * unreliable on some Android 8.1 builds before Activity.attach completes,
+     * so we wait until super has run. */
+    Log.d("CarbonChainway", "onCreate after-super: forcing scanner output mode")
+    try {
+      CarbonChainwayRfidController.forceBroadcastOutputMode(applicationContext)
+    } catch (e: Throwable) {
+      Log.e("CarbonChainway", "forceBroadcastOutputMode threw: ${e.message}", e)
+    }
     startService(Intent(this, TaskRemovedSessionService::class.java))
     // Request WRITE_EXTERNAL_STORAGE on API <= 28 for KeyboardHelperParam.xml UHF patch
     if (Build.VERSION.SDK_INT <= 28) {
@@ -188,6 +201,16 @@ class MainActivity : FlutterFragmentActivity() {
           hardwareBarcodeRelay?.deactivateTriggerRelay()
           result.success(true)
         }
+        "scanner.setTriggerMode2d" -> {
+          Log.d("CarbonChainway", "MC: setTriggerMode2d called, relay=${hardwareBarcodeRelay}")
+          hardwareBarcodeRelay?.setTriggerMode(TriggerMode.BARCODE_2D)
+          result.success(true)
+        }
+        "scanner.setTriggerModeUhf" -> {
+          Log.d("CarbonChainway", "MC: setTriggerModeUhf called, relay=${hardwareBarcodeRelay}")
+          hardwareBarcodeRelay?.setTriggerMode(TriggerMode.UHF)
+          result.success(true)
+        }
         "scanner.enableNativeTrigger" -> {
           chainway.enableNativeTrigger()
           result.success(true)
@@ -282,6 +305,18 @@ class MainActivity : FlutterFragmentActivity() {
           zebra.setAntennaPowerDbm(p)
           chainway.setAntennaPowerDbm(p)
           result.success(null)
+        }
+        "geiger.setTarget" -> {
+          val args = call.arguments as? Map<*, *>
+          val epc = (args?.get("epc") as? String)?.trim()?.uppercase()
+          GeigerGate.setTarget(epc)
+          result.success(true)
+        }
+        "geiger.setEnabled" -> {
+          val args = call.arguments as? Map<*, *>
+          val on = args?.get("enabled") == true
+          GeigerGate.setEnabled(on)
+          result.success(true)
         }
         "rfid.writeEpc" -> {
           val args = call.arguments as? Map<*, *>
