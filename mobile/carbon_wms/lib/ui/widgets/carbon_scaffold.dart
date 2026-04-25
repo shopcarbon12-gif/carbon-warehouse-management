@@ -208,12 +208,17 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
           children: [
             GestureDetector(
               onTap: _toggleDrawer,
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/carbon_logo.png',
-                  width: 36.w,
-                  height: 36.w,
-                  fit: BoxFit.cover,
+              // Wrap in SizedBox.square so the AppBar Row's flexible siblings
+              // (long page-title text on narrow displays e.g. Chainway c72e)
+              // can't squish the Image's width into an oval. ClipOval inherits
+              // the box's aspect ratio, so an enforced square box is required.
+              child: SizedBox.square(
+                dimension: 36.w,
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/carbon_logo.png',
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),
