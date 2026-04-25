@@ -184,8 +184,9 @@ class CarbonChainwayRfidController(private val context: Context) {
             val epc = tagInfo.getEPC()
             if (epc.isNullOrBlank()) return
             val normalized = epc.trim().uppercase()
-            Log.d(TAG, "UHF callback EPC=$normalized rssi=${tagInfo.getRssi()} ant=${tagInfo.getAnt()}")
-            emitEpc(normalized, tagInfo.getRssi()?.toIntOrNull())
+            val rssiDbm = parseRssiDbm(tagInfo.getRssi())
+            Log.d(TAG, "UHF callback EPC=$normalized rssi=${tagInfo.getRssi()} parsed=$rssiDbm ant=${tagInfo.getAnt()}")
+            emitEpc(normalized, rssiDbm)
           }
         })
         uhfReader = instance
@@ -302,6 +303,7 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   fun startInventoryFlutterResult(result: MethodChannel.Result) {
     Log.d(TAG, "startInventoryFlutterResult uartOwned=$uartOwned scanning=${scanning.get()}")
+    Log.d("LAT", "TRIGGER_ACK ts=${System.currentTimeMillis()} stack=chainway")
     executor.execute {
       try {
         // Direct SDK path — try RFIDWithUHFUART first (works on C72E when canOwnUart=false)
@@ -582,7 +584,7 @@ class CarbonChainwayRfidController(private val context: Context) {
             val epc = tagInfo.getEPC()
             if (epc.isNullOrBlank()) return
             val normalized = epc.trim().uppercase()
-            emitEpc(normalized, tagInfo.getRssi()?.toIntOrNull())
+            emitEpc(normalized, parseRssiDbm(tagInfo.getRssi()))
           }
         })
       }
@@ -1161,8 +1163,44 @@ class CarbonChainwayRfidController(private val context: Context) {
     // Do not hard-drop duplicate sightings here; Count screen uses repeated sightings
     // to mark defective duplicate behavior (xN). Higher layers still own quantity logic.
     Log.d(TAG, "EPC: $up")
+    Log.d("LAT", "NATIVE_EPC ts=${System.currentTimeMillis()} epc=$up rssi=$rssi")
+    // Native-originated per-tag beep — fire before the sink post so audio feedback
+    // does not wait for Dart scheduling. RSSI comes from [UHFTAGInfo.getRssi] via
+    // the SDK callback (see [parseRssiDbm]); the reflective drain-loop fallback
+    // still passes null so the beep stays audible but won't vary with distance.
+    ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssi))
     val sink = tagSink ?: return
     mainHandler.post { sink.success(mapOf("epc" to up, "rssi" to (rssi ?: 0))) }
+  }
+
+  /**
+   * Parses the RSSI string returned by [UHFTAGInfo.getRssi] into signed dBm.
+   *
+   * Observed wire formats on this SDK (DeviceAPI_ver20251103):
+   *   - "-72.80"  — signed decimal dBm (most common on C72E)
+   *   - "-65"     — signed integer dBm
+   *   - "72"      — unsigned magnitude (rare; some firmwares drop the sign)
+   *
+   * We accept any of them: toDouble handles both decimal and integer forms;
+   * if the parsed value is positive (unsigned magnitude), we negate it so
+   * callers always receive a negative dBm value in the -90..-30 range.
+   * Returns null for "", null, or unparseable strings (callers treat as
+   * "no RSSI" — beep falls back to mid-range default).
+   */
+  private fun parseRssiDbm(raw: String?): Int? {
+    if (raw.isNullOrBlank()) return null
+    val v = raw.trim().toDoubleOrNull() ?: return null
+    // Signed or unsigned magnitude → always return as negative dBm.
+    val dbm = if (v > 0.0) -v else v
+    return dbm.toInt()
+  }
+
+  /** dBm → 0–100 normalized scale. Matches W4.3 geiger spec so UI and audio agree. */
+  private fun normalizeRssi(dbm: Int?): Int {
+    if (dbm == null || dbm == 0) return 60  // no-rssi default keeps beep audible
+    // rssi_dbm >= -40 → 100, rssi_dbm <= -90 → 0, linear between
+    val clamped = dbm.coerceIn(-90, -40)
+    return ((clamped + 90) * 2).coerceIn(0, 100)
   }
 
   private fun extractHexCandidate(raw: String): String {

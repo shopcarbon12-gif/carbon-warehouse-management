@@ -53,6 +53,13 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
       "success" to "assets/sounds/success.mp3",
       "error"   to "assets/sounds/uhf-error.mp3",
     )
+
+    /**
+     * Process-wide singleton reference so native RFID controllers can fire the
+     * per-tag beep from inside their emit path, without the Dart round-trip.
+     * Set by [MainActivity.configureFlutterEngine] after [register] is called.
+     */
+    @Volatile var shared: ScanSoundPool? = null
   }
 
   fun register(messenger: BinaryMessenger) {
@@ -81,9 +88,12 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
     if (pool != null && soundIds.size == ASSETS.size) return true
 
     return try {
+      // USAGE_MEDIA / CONTENT_TYPE_MUSIC routes through STREAM_MUSIC, which
+      // survives Chainway ringer-silent mode. USAGE_ASSISTANCE_SONIFICATION
+      // gets mapped to notification-like streams that are muted by SILENT.
       val attrs = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
         .build()
       val p = SoundPool.Builder()
         .setMaxStreams(MAX_STREAMS)
@@ -126,6 +136,22 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
     }
   }
 
+  /**
+   * Native-originated per-tag read beep with RSSI-scaled volume.
+   *
+   * Called from inside the RFID controllers' emit path so the beep does not
+   * wait for a Dart→MethodChannel→native round-trip. Floor at 0.3 so
+   * low-signal reads stay audible, ceiling at 1.0 at touch proximity.
+   *
+   * [rssiNormalized] is the already-normalized 0–100 value (dBm → 0–100
+   * scaling lives in the caller so the proximity UI and audio agree).
+   */
+  fun playTagBeep(rssiNormalized: Int) {
+    val n = rssiNormalized.coerceIn(0, 100)
+    val vol = (0.3f + (n / 100.0f) * 0.7f).coerceIn(0f, 1f)
+    playCue("read", vol)
+  }
+
   private fun playCue(cue: String, volume: Float) {
     val p = pool
     if (p == null) { Log.w(TAG, "playCue($cue): pool is null"); return }
@@ -143,6 +169,7 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
       return
     }
     // priority=1, loop=0 (one-shot), rate=1.0 neutral pitch.
+    Log.d("LAT", "BEEP_PLAY ts=${System.currentTimeMillis()} cue=$cue vol=$volume")
     val streamId = p.play(sid, volume, volume, 1, 0, 1.0f)
     if (streamId == 0) {
       Log.w(TAG, "playCue($cue): SoundPool.play returned 0 (sid=$sid, pool busy?)")

@@ -86,7 +86,11 @@ class CarbonZebraRfidController(
       } catch (e: Throwable) {
         Log.e(TAG, "connectAsync: failed", e)
         lastError = e.message ?: e.javaClass.simpleName
+        // Unconditional full teardown + 500ms settle gives the BT stack time to
+        // release the SPP socket before Flutter can call back. Without the
+        // settle, a fast retry inherits the half-open socket and hangs.
         disconnectSync()
+        try { Thread.sleep(500) } catch (_: InterruptedException) { /* ignore */ }
         mainHandler.post { onDone(e) }
       }
     }
@@ -104,6 +108,7 @@ class CarbonZebraRfidController(
   }
 
   fun startInventoryFlutterResult(result: MethodChannel.Result) {
+    Log.d("LAT", "TRIGGER_ACK ts=${System.currentTimeMillis()} stack=zebra")
     executor.execute {
       try {
         val r = reader
@@ -464,69 +469,102 @@ class CarbonZebraRfidController(
 
     applyTransmitPowerDbm(r)
 
-    val sing = r.Config.Antennas.getSingulationControl(1)
-    sing.setSession(SESSION.SESSION_S1)
-    sing.Action.setInventoryState(INVENTORY_STATE.INVENTORY_STATE_A)
-    sing.Action.setSLFlag(SL_FLAG.SL_ALL)
-    r.Config.Antennas.setSingulationControl(1, sing)
-    r.Actions.PreFilters.deleteAll()
+    // Singulation-control setup is an optimization, not a requirement.
+    // Some RFD8500 firmware revisions reject SESSION_S1 + INVENTORY_STATE_A + SL_ALL
+    // as a combo with OperationFailureException and no recoverable detail. When that
+    // happens, fall back to S0, then to the reader's defaults — we'd rather read
+    // tags at suboptimal singulation than refuse to connect at all.
+    applyOptionalSingulationControl(r)
+    try {
+      r.Actions.PreFilters.deleteAll()
+    } catch (e: Exception) {
+      Log.w(TAG, "PreFilters.deleteAll ignored: ${e.message}")
+    }
   }
 
+  private fun applyOptionalSingulationControl(r: RFIDReader) {
+    val sessions = listOf(SESSION.SESSION_S1, SESSION.SESSION_S0)
+    for (session in sessions) {
+      try {
+        val sing = r.Config.Antennas.getSingulationControl(1)
+        sing.setSession(session)
+        sing.Action.setInventoryState(INVENTORY_STATE.INVENTORY_STATE_A)
+        sing.Action.setSLFlag(SL_FLAG.SL_ALL)
+        r.Config.Antennas.setSingulationControl(1, sing)
+        Log.d(TAG, "singulation: $session accepted")
+        return
+      } catch (e: Exception) {
+        Log.w(TAG, "singulation: $session rejected (${e.message}); trying next")
+      }
+    }
+    Log.w(TAG, "singulation: all fallbacks rejected — using reader defaults")
+  }
+
+  /**
+   * Best-effort full teardown. Every step is guarded and every step is always
+   * attempted, regardless of [RFIDReader.isConnected] — the earlier "only
+   * disconnect if connected" gate left a half-open SPP socket on failed connects
+   * which wedged Samsung's BT stack and required manual Settings toggling.
+   *
+   * Call ordering is reverse-construction: Readers.deattach → remove listeners
+   * → stop inventory → disconnect → Dispose Readers. Every try block swallows
+   * exceptions so a later step's failure doesn't skip an earlier unwind.
+   */
   private fun disconnectSync() {
     inventoryActive = false
+
+    // 1. Detach the RFIDReaderEventHandler (process-wide listener slot).
     if (readersAttached) {
-      try {
-        Readers.deattach(this)
-      } catch (_: Exception) {
-        /* ignore */
-      }
+      try { Readers.deattach(this) } catch (_: Exception) { /* ignore */ }
       readersAttached = false
     }
-    try {
-      val r = reader
-      if (r != null) {
-        val eh = eventHandler
-        if (eh != null) {
-          try {
-            r.Events.removeEventsListener(eh)
-          } catch (_: Exception) {
-            /* ignore */
-          }
-        }
-        try {
-          if (r.isConnected) {
-            try {
-              r.Actions.Inventory.stop()
-            } catch (_: Exception) {
-              /* ignore */
-            }
-            r.disconnect()
-          }
-        } catch (_: Exception) {
-          /* ignore */
-        }
-      }
-    } catch (_: Exception) {
-      /* ignore */
+
+    val r = reader
+    val eh = eventHandler
+
+    // 2. Remove per-reader events listener — unconditional so a failed-connect
+    //    reader that never registered cleanly doesn't leak a dangling ref.
+    if (r != null && eh != null) {
+      try { r.Events.removeEventsListener(eh) } catch (_: Exception) { /* ignore */ }
     }
+
+    // 3. Stop inventory — SDK tolerates being called when not actively
+    //    inventorying. Harmless no-op in the connect-failed case.
+    if (r != null) {
+      try { r.Actions.Inventory.stop() } catch (_: Exception) { /* ignore */ }
+    }
+
+    // 4. Disconnect UNCONDITIONALLY. On a connect-failed path the SDK still
+    //    owns an in-flight SPP socket attempt; disconnect() is how we tell it
+    //    to release. Skipping this because isConnected==false was the wedge.
+    if (r != null) {
+      try { r.disconnect() } catch (_: Exception) { /* ignore */ }
+    }
+
     reader = null
     eventHandler = null
-    try {
-      readers?.Dispose()
-    } catch (_: Exception) {
-      /* ignore */
-    }
+
+    // 5. Dispose the Readers container — releases native allocations.
+    try { readers?.Dispose() } catch (_: Exception) { /* ignore */ }
     readers = null
   }
 
   private fun emitTag(epc: String, rssi: Short?) {
     val sink = tagSink ?: return
-    val payload =
-      mapOf(
-        "epc" to epc.trim().uppercase(),
-        "rssi" to (rssi?.toInt() ?: -56),
-      )
+    val clean = epc.trim().uppercase()
+    Log.d("LAT", "NATIVE_EPC ts=${System.currentTimeMillis()} epc=$clean")
+    val rssiInt = rssi?.toInt() ?: -56
+    // Native-originated per-tag beep — fire before sink post so audio feedback
+    // does not wait for Dart scheduling.
+    ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssiInt))
+    val payload = mapOf("epc" to clean, "rssi" to rssiInt)
     mainHandler.post { sink.success(payload) }
+  }
+
+  /** dBm → 0–100 normalized scale. Same mapping as the Chainway controller. */
+  private fun normalizeRssi(dbm: Int): Int {
+    val clamped = dbm.coerceIn(-90, -40)
+    return ((clamped + 90) * 2).coerceIn(0, 100)
   }
 
   override fun RFIDReaderAppeared(readerDevice: ReaderDevice) {

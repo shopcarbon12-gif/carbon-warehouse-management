@@ -87,6 +87,9 @@ class MainActivity : FlutterFragmentActivity() {
     val soundPool = ScanSoundPool(this)
     soundPool.register(messenger)
     scanSoundPool = soundPool
+    // Process-wide handle so Chainway/Zebra controllers can fire the per-tag
+    // beep from inside their emit path (skips the Dart round-trip).
+    ScanSoundPool.shared = soundPool
 
     EventChannel(messenger, "carbon_wms/rfid_tag_stream").setStreamHandler(
       object : EventChannel.StreamHandler {
@@ -306,6 +309,7 @@ class MainActivity : FlutterFragmentActivity() {
     if (!isChangingConfigurations && isFinishing) {
       SessionPrefsBridge.clearWmsSessionToken(this)
     }
+    ScanSoundPool.shared = null
     zebraController?.dispose()
     chainwayController?.dispose()
     hardwareBarcodeRelay?.dispose()
