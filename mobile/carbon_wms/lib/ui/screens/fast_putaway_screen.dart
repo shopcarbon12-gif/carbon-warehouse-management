@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
@@ -137,6 +138,13 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   final _hiddenCtrl = TextEditingController();
   StreamSubscription<dynamic>? _hardwareBarcodeSub;
 
+  /// Saved on entry, restored on dispose — Bin Assign forces a 2D-barcode-only
+  /// scanner mode (UHF must NOT fire) so we have to remember and restore the
+  /// global scan context the user was in before they navigated here.
+  RfidManager? _rfidManager;
+  String? _previousScanContext;
+  bool _previousSuppressEdge = false;
+
   String _pendingSku = '';
   String _currentBin = '';
   String _currentBinId = '';
@@ -191,6 +199,33 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (_shouldUseHardwareScanner) {
       unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
     }
+    unawaited(_force2dLaserOnlyMode());
+  }
+
+  /// Bin Assign is a barcode workflow — UHF reads must not fire here, and the
+  /// hardware trigger must drive the 2D laser instead of starting an inventory.
+  /// Mirrors [count_inventory_screen]'s opposite-direction setup. Wrapped in a
+  /// try/catch so a missing vendor SDK on a Samsung S25U (no Chainway/Zebra
+  /// AAR) doesn't crash the screen.
+  Future<void> _force2dLaserOnlyMode() async {
+    try {
+      _rfidManager ??= context.read<RfidManager>();
+      _previousScanContext ??= _rfidManager?.scanContext;
+      _previousSuppressEdge = _rfidManager?.suppressEdgeStreaming ?? false;
+      _rfidManager?.scanContext = 'BIN_ASSIGN_2D';
+      _rfidManager?.suppressEdgeStreaming = true;
+      unawaited(_rfidManager?.pauseScanning());
+    } catch (_) {
+      /* RfidManager unavailable — non-handheld build */
+    }
+    /* Hardware trigger → 2D laser only; physically open the engine in case a
+     * prior screen (Count, Search & Encode) closed it. */
+    try {
+      await RfidVendorChannel.disableRfidFunctionMode();
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.open2dBarcode();
+    } catch (_) {}
   }
 
   @override
@@ -209,6 +244,16 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(_stopHardware2dScan());
     _hardwareBarcodeSub = null;
+    /* Restore the scan context + edge-streaming flag so other screens (Count,
+     * Locate, etc.) resume with their pre-existing state. We don't auto-start
+     * inventory here — the next screen owns that decision. */
+    final rfid = _rfidManager;
+    if (rfid != null) {
+      try {
+        rfid.scanContext = _previousScanContext ?? 'TRANSFER';
+        rfid.suppressEdgeStreaming = _previousSuppressEdge;
+      } catch (_) {}
+    }
     _hiddenCtrl.dispose();
     _scanFocus.dispose();
     super.dispose();
