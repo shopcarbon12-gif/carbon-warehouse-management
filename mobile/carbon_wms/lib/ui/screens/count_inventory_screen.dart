@@ -26,6 +26,83 @@ const _countInvPrefsKey = 'count_inventory_module_settings_v1';
 const _assetCachePrefsKey = 'count_inventory_asset_cache_v1';
 const _countEpcPrefixFilter = 'F0A0B';
 
+/// When true, strip a trailing `<COLOR> <SIZE>` or `<SIZE>` suffix from the
+/// catalog `name` before rendering. Some catalogs store the variant's color
+/// and size baked into the matrix description (e.g., `m.description` comes
+/// back as "ELODIE TOP SWEATSUIT BLACK S" for every variant of that matrix),
+/// which visually duplicates catalog-sourced `color` and `size` fields when
+/// rendered as `name · size / color`.
+///
+/// Strategy: data-driven strip — we only remove the trailing segment when it
+/// exactly matches the catalog's own color/size values. No blind regex over
+/// unrelated words. Generic "S"/"M"/"L" letter fallback is also applied when
+/// no explicit size hint is available, guarded by the flag.
+///
+/// Cosmetic only — does not mutate the catalog or any stored data, only the
+/// rendered string. Default true for this tenant's data shape; flip to false
+/// on any catalog where the matrix description is already variant-clean.
+const bool kStripNameSizeSuffix = true;
+final RegExp _nameSizeLetterSuffix = RegExp(r'\s+(XXL|XXS|XL|XS|S|M|L)\s*$');
+
+/// Normalize a bin code to the canonical `X-X-XX-X` shape used by the Bin
+/// Assign screen. Strips any existing separators, uppercases, and re-inserts
+/// dashes at the fixed positions when the compacted code is exactly 5 chars.
+/// Other lengths pass through uppercased so older / malformed codes still
+/// render (without silently dropping characters).
+String _formatBinCode(String raw) {
+  final s = raw.trim().toUpperCase().replaceAll(RegExp(r'[-\s]'), '');
+  if (s.length == 5) {
+    return '${s[0]}-${s[1]}-${s.substring(2, 4)}-${s[4]}';
+  }
+  return raw.trim().toUpperCase();
+}
+
+/// Strip any trailing `<color> <size>`, `<size>`, or `<color>` tail from [name]
+/// when [kStripNameSizeSuffix] is true. Matching is case-insensitive against
+/// the catalog values. Generic letter-size regex is also applied (S/M/L/XL/XS/
+/// XXL/XXS), to catch cases where the matrix description embeds a variant
+/// that differs from the current variant (e.g., description baked with
+/// "BLACK S" but the current variant row is "BLACK L").
+///
+/// Iterates until no more tails peel — this handles the common pattern where
+/// the description is "<NAME> <COLOR> <SIZE>" and we need to remove both in
+/// sequence regardless of which layer matches first.
+String _stripNameSizeSuffix(String name, {String? size, String? color}) {
+  if (!kStripNameSizeSuffix) return name;
+  var out = name.trimRight();
+  final sz = size?.trim() ?? '';
+  final cl = color?.trim() ?? '';
+
+  bool stripTail(String tail) {
+    if (tail.isEmpty) return false;
+    final lower = out.toLowerCase();
+    final t = tail.toLowerCase();
+    if (lower.endsWith(' $t')) {
+      out = out.substring(0, out.length - (t.length + 1)).trimRight();
+      return true;
+    }
+    return false;
+  }
+
+  // Iterate: peel the longest matching tail first, then retry. Up to 4 passes
+  // (color+size, size alone, color alone, generic letter-size) to converge.
+  var changed = true;
+  var guard = 0;
+  while (changed && guard < 4) {
+    changed = false;
+    guard++;
+    if (sz.isNotEmpty && cl.isNotEmpty && stripTail('$cl $sz')) { changed = true; continue; }
+    if (sz.isNotEmpty && stripTail(sz)) { changed = true; continue; }
+    if (cl.isNotEmpty && stripTail(cl)) { changed = true; continue; }
+    if (_nameSizeLetterSuffix.hasMatch(out)) {
+      out = out.replaceFirst(_nameSizeLetterSuffix, '').trimRight();
+      changed = true;
+      continue;
+    }
+  }
+  return out;
+}
+
 class CountInventoryScreen extends StatefulWidget {
   const CountInventoryScreen({super.key});
 
@@ -300,9 +377,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
   }
 
-  Future<void> _playBeep() async {
-    ScanSounds.instance.play(ScanCue.read);
-  }
+  // _playBeep removed — read-cue beep is fired from native controllers.
+  // Start/stop cues remain Dart-initiated: they mark user intent (trigger pull /
+  // release), not SDK callback cadence, so there's no Dart-bounce to eliminate.
 
   Future<void> _playStartTone() async {
     ScanSounds.instance.play(ScanCue.start);
@@ -321,6 +398,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   void _ingestEpc({required String epc, required int rssi}) {
+    // W1 latency instrumentation; debug-only. Native-side LAT logs stay on in release
+    // because Log.d is effectively free — they let us re-measure end-to-end cheaply.
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('[LAT] DART_INGEST ts=${DateTime.now().millisecondsSinceEpoch} epc=$epc');
+    }
     final now = DateTime.now();
     // Normalize to even-length hex so odd-padded and unpadded forms map to the same key.
     final normalized = epc.length.isOdd ? '0$epc' : epc;
@@ -343,8 +426,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       lastSeen: now,
       rssi: rssi,
     );
-    // Audible feedback on accepted EPC only — native SoundPool; does not block ingest.
-    unawaited(_playBeep());
+    // Read beep is now native-originated: CarbonChainwayRfidController.emitEpc /
+    // CarbonZebraRfidController.emitTag call ScanSoundPool.playTagBeep directly.
+    // Dart no longer fires per-tag beeps — saves a Dart→native round-trip.
     // Group by system_id so repeated scans of the same SKU accumulate into one row.
     // Fall back to the raw EPC for tags we can't decode (legacy/foreign).
     final systemId = decodeSystemId(normalized);
@@ -434,7 +518,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!g.catalogResolved || g.catalogMissing || g.epcInvalid) return '';
     final bin = g.binLocation;
     if (bin == null || bin.trim().isEmpty) return '';
-    return 'BIN ${bin.trim()}';
+    return 'BIN ${_formatBinCode(bin)}';
   }
 
   // Fallback row-2 text when the group is still pending, missing, or invalid —
@@ -545,13 +629,17 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   Future<void> _startScan() async {
     if (_scanOn) return;
-    await RfidVendorChannel.clearChainwaySeenEpcs();
-    await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
+    // Fire start tone immediately — user gets audible ack during SDK warm-up window.
+    unawaited(_playStartTone());
+    // Config calls run unawaited: they're idempotent and must not serialize before
+    // the inventory start. Power + seen-epc reset land within a few ms either way
+    // and the reader tolerates racing with the first reads.
+    unawaited(RfidVendorChannel.clearChainwaySeenEpcs());
+    unawaited(RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm));
     try { await _rfidManager?.startLocateScanning(); } catch (_) {}
     if (!mounted) return;
     setState(() { _scanOn = true; });
     _startUiFlushTimer();
-    unawaited(_playStartTone());
   }
 
   String? _extractHardwareEpc(String raw) {
@@ -642,6 +730,161 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     return path;
   }
 
+  /// W3 spec: rows for the session report upload.
+  ///
+  /// One row per unique EPC. Columns match the W3 CSV schema:
+  ///   epc, system_id, custom_sku, item_name, color, size, retail_price, bin,
+  ///   seen_count, first_seen_iso, last_seen_iso
+  ///
+  /// Returned as `List<Map<String, dynamic>>` so [WmsApiClient.uploadCycleCountReport]
+  /// can post it as a JSON `rows` field, and so the same data can be serialized
+  /// to CSV locally via [_buildCycleCountReportCsv].
+  List<Map<String, dynamic>> _buildCycleCountReportRows() {
+    final groups = _groupedRows.values.toList()
+      ..sort((a, b) => a.assetId.compareTo(b.assetId));
+    final out = <Map<String, dynamic>>[];
+    for (final g in groups) {
+      final systemId = g.epcInvalid ? null : int.tryParse(g.assetId);
+      final bin = (g.binLocation != null && g.binLocation!.trim().isNotEmpty)
+          ? _formatBinCode(g.binLocation!)
+          : '';
+      final retailPrice = g.retailPriceStr != null && g.retailPriceStr!.trim().isNotEmpty
+          ? double.tryParse(g.retailPriceStr!.trim())
+          : null;
+      for (final epc in g.epcs) {
+        final row = _epcRows[epc];
+        if (row == null) continue;
+        out.add(<String, dynamic>{
+          'epc': row.epc,
+          'system_id': systemId,
+          'custom_sku': g.customSku,
+          'item_name': g.itemName,
+          'color': g.color,
+          'size': g.size,
+          'retail_price': retailPrice,
+          'bin': bin,
+          'seen_count': row.scans,
+          'first_seen_iso': row.firstSeen.toUtc().toIso8601String(),
+          'last_seen_iso': row.lastSeen.toUtc().toIso8601String(),
+        });
+      }
+    }
+    return out;
+  }
+
+  /// W3 spec: serialize [_buildCycleCountReportRows] output to CSV.
+  /// UTF-8, no BOM, comma-delimited, `_csv()` quotes embedded commas/quotes.
+  /// Kept available so the backend route (once it lands) or a future "export
+  /// CSV to file" UX can reuse the exact schema without duplicating logic.
+  // ignore: unused_element
+  String _buildCycleCountReportCsv(List<Map<String, dynamic>> rows) {
+    final b = StringBuffer(
+      'epc,system_id,custom_sku,item_name,color,size,retail_price,bin,seen_count,first_seen_iso,last_seen_iso\n',
+    );
+    for (final r in rows) {
+      final price = r['retail_price'];
+      final priceStr = price is num ? price.toStringAsFixed(2) : '';
+      b.writeln([
+        _csv((r['epc'] as String?) ?? ''),
+        (r['system_id'] as int?)?.toString() ?? '',
+        _csv((r['custom_sku'] as String?) ?? ''),
+        _csv((r['item_name'] as String?) ?? ''),
+        _csv((r['color'] as String?) ?? ''),
+        _csv((r['size'] as String?) ?? ''),
+        priceStr,
+        _csv((r['bin'] as String?) ?? ''),
+        (r['seen_count'] as int?)?.toString() ?? '',
+        (r['first_seen_iso'] as String?) ?? '',
+        (r['last_seen_iso'] as String?) ?? '',
+      ].join(','));
+    }
+    return b.toString();
+  }
+
+  /// Apply the count session to the WMS: scanned EPCs are looked up in `items`
+  /// and transitioned to `status='in-stock'` with `last_seen_at = now()` so the
+  /// catalog grid's Qty (EPC) and the per-SKU RFID modal reflect what was
+  /// physically present at this location.
+  ///
+  /// Posts a minimal CSV (`epc,bin,sku`) to `POST /api/inventory/upload`. EPCs
+  /// not yet in `items` (i.e. uncommissioned tags) are reported back via the
+  /// `ingestErrors` field — they are NOT auto-created, since commissioning is
+  /// the only path that mints new item rows.
+  ///
+  /// `overrideCatalog` is currently informational; the server semantics are
+  /// W3 UPLOAD pipeline: archive the audit record FIRST, then apply to inventory.
+  ///
+  /// Step 1 — POST the structured rows to `/api/reports/uploads` for 1-year
+  /// retention. If this fails we abort: per reviewer policy, we never modify
+  /// inventory based on data we can't trace. The caller surfaces the failure
+  /// and preserves the session for retry.
+  ///
+  /// Step 2 — POST the CSV to `/api/inventory/upload`. Server stamps each
+  /// matched item to in-stock + last_seen_at and refreshes Qty (EPC). The
+  /// `mode` carries the override-catalog flag so the server-side ingest can
+  /// branch on whether scanned counts replace or add to existing on-hand.
+  ///
+  /// The two POSTs run sequentially on a single button tap; both must succeed
+  /// for the operation to be considered done.
+  Future<void> _uploadCountReport({required bool overrideCatalog}) async {
+    final api = context.read<WmsApiClient>();
+    final rfid = context.read<RfidManager>();
+    final rows = _buildCycleCountReportRows();
+    if (rows.isEmpty) {
+      throw WmsApiException(400, 'No rows to upload');
+    }
+    // Step 1 — archive (1y retention). Throws on non-2xx and aborts the
+    // pipeline before the inventory mutation in step 2.
+    await api.uploadCycleCountReport(
+      activity: rfid.scanContext,
+      when: DateTime.now(),
+      rows: rows,
+      overrideCatalog: overrideCatalog,
+    );
+    // Step 2 — apply to inventory. Reuses the existing CSV ingest contract
+    // (epc, bin, sku) that the server agent extended to make bin optional.
+    final csv = _buildInventoryUploadCsv(rows);
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    await api.postInventoryUpload(
+      deviceId: deviceId,
+      mode: overrideCatalog ? 'count_inventory_override' : 'count_inventory',
+      csvData: csv,
+    );
+  }
+
+  /// Minimal CSV the server's `applyInventoryCsvToItems` understands.
+  /// One row per scanned EPC; `bin` is left blank when the count session does
+  /// not capture a destination bin (the server preserves the existing bin).
+  String _buildInventoryUploadCsv(List<Map<String, dynamic>> rows) {
+    final b = StringBuffer('epc,bin,sku\n');
+    for (final r in rows) {
+      final epc = (r['epc'] as String?)?.trim() ?? '';
+      if (epc.isEmpty) continue;
+      final bin = (r['bin'] as String?)?.trim() ?? '';
+      final sku = (r['custom_sku'] as String?)?.trim() ?? '';
+      b.writeln('${_csv(epc)},${_csv(bin)},${_csv(sku)}');
+    }
+    return b.toString();
+  }
+
+  /// W3: archive a Save-to-File local CSV report to the reports endpoint,
+  /// best-effort. Local-save success does not depend on this returning OK —
+  /// the caller catches and snackbars any failure separately. Override flag
+  /// is intentionally false: SAVE TO FILE never overrides catalog quantities,
+  /// only UPLOAD does.
+  Future<void> _archiveSavedReport() async {
+    final api = context.read<WmsApiClient>();
+    final rfid = context.read<RfidManager>();
+    final rows = _buildCycleCountReportRows();
+    if (rows.isEmpty) return;
+    await api.uploadCycleCountReport(
+      activity: rfid.scanContext,
+      when: DateTime.now(),
+      rows: rows,
+      overrideCatalog: false,
+    );
+  }
+
   Future<void> _openContinue() async {
     final groups = _groupedRows.values.toList()
       ..sort((a, b) => a.assetId.compareTo(b.assetId));
@@ -652,6 +895,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           locationName: _currentLocationName,
           onSaveCsv: _saveSessionCsvToDevice,
           buildBackendPreviewPayload: () => _buildBackendPreviewPayload(groups),
+          onUploadReport: _uploadCountReport,
+          onArchiveReport: _archiveSavedReport,
         ),
       ),
     );
@@ -1058,6 +1303,45 @@ class _CountItemContainer extends StatefulWidget {
 class _CountItemContainerState extends State<_CountItemContainer> {
   bool _expanded = false;
 
+  // Swipe-to-reveal trash-button state. Horizontal drag (right-to-left) peels
+  // the row aside to expose a red trash button; tap the button to confirm
+  // delete. Tapping anywhere else while revealed snaps it closed. This is
+  // intentionally not Dismissible: the reviewer wanted the delete commit to
+  // be an explicit tap, not a full-swipe auto-confirm.
+  static const double _trashWidth = 72;
+  static const double _revealThreshold = 24; // drag past this → snap open
+  double _revealOffset = 0; // 0 = closed, [_trashWidth] = fully revealed
+
+  bool get _isRevealed => _revealOffset > 0;
+
+  void _handleHorizontalDragUpdate(DragUpdateDetails d) {
+    setState(() {
+      // endToStart swipe is a negative dx; accumulate the absolute value.
+      _revealOffset = (_revealOffset - d.delta.dx).clamp(0.0, _trashWidth);
+    });
+  }
+
+  void _handleHorizontalDragEnd(DragEndDetails _) {
+    setState(() {
+      // Snap to open if past threshold, otherwise snap closed.
+      _revealOffset = _revealOffset >= _revealThreshold ? _trashWidth : 0;
+    });
+  }
+
+  void _closeReveal() {
+    if (!_isRevealed) return;
+    setState(() => _revealOffset = 0);
+  }
+
+  Future<void> _handleTrashTap() async {
+    final confirm = widget.confirmDelete;
+    final onDelete = widget.onDelete;
+    if (confirm == null || onDelete == null) return;
+    final ok = await confirm();
+    if (ok) onDelete();
+    if (mounted) setState(() => _revealOffset = 0);
+  }
+
   // Cache styles per State instance — GoogleFonts.xxx() is a map lookup each
   // call, and we rebuild every 150ms during a scan burst. Building them once
   // per row instead of once per build saves a lot of work.
@@ -1104,13 +1388,25 @@ class _CountItemContainerState extends State<_CountItemContainer> {
     final priceStyle = _priceStyle;
     final binStyle = _binStyle;
 
+    // Row 2: "name · color · size" (catalog-sourced fields only, single line,
+    // middle-dot separator between each chunk). Price lives on row 1 next to
+    // SKU, so it is not repeated here. Embedded color+size in `itemName` (the
+    // catalog's matrix description is shared across variants and can bake in
+    // a representative variant's color+size, e.g. "ELODIE TOP SWEATSUIT BLACK
+    // S") visually duplicates catalog color/size. `_stripNameSizeSuffix`
+    // trims that tail when it matches the catalog's own color/size values.
+    final cleanName = _stripNameSizeSuffix(
+      widget.itemName,
+      size: widget.size,
+      color: widget.color,
+    );
     final descLeft = widget.descriptionFallback.isNotEmpty
         ? widget.descriptionFallback
         : [
-            if (widget.itemName.isNotEmpty) widget.itemName,
+            if (cleanName.isNotEmpty) cleanName,
             if (widget.color.isNotEmpty) widget.color,
             if (widget.size.isNotEmpty) widget.size,
-          ].join(' ');
+          ].join(' · ');
 
     final hasPrice = widget.priceText.isNotEmpty;
     final hasBin = widget.binText.isNotEmpty;
@@ -1199,21 +1495,52 @@ class _CountItemContainerState extends State<_CountItemContainer> {
       return content;
     }
 
-    return Dismissible(
-      key: ValueKey<String>(widget.rowKey),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: EdgeInsets.symmetric(horizontal: 14.w),
-        color: const Color(0xFFBF2E2E),
-        child: Icon(Icons.delete_outline, color: Colors.white, size: 26.sp),
+    // Swipe-to-reveal pattern:
+    //   Stack children are — red trash button (right, fixed width), then the
+    //   scrollable container content translated left by _revealOffset.
+    //   Horizontal drag updates the offset; end-of-drag snaps to 0 or
+    //   _trashWidth. Tapping the content while revealed closes the reveal
+    //   instead of expanding/collapsing details.
+    final trashButton = Container(
+      width: _trashWidth,
+      color: const Color(0xFFBF2E2E),
+      alignment: Alignment.center,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _handleTrashTap,
+          child: Center(
+            child: Icon(Icons.delete_outline, color: Colors.white, size: 28.sp),
+          ),
+        ),
       ),
-      confirmDismiss: (_) async {
-        final ok = await widget.confirmDelete!.call();
-        if (ok) widget.onDelete!.call();
-        return ok;
-      },
-      child: content,
+    );
+
+    return GestureDetector(
+      onHorizontalDragUpdate: _handleHorizontalDragUpdate,
+      onHorizontalDragEnd: _handleHorizontalDragEnd,
+      child: ClipRect(
+        child: Stack(
+          children: [
+            // Red button lives on the right; becomes visible as the content
+            // slides left. Only takes pointer events when actually revealed
+            // (otherwise it's covered by the content).
+            Positioned(top: 0, right: 0, bottom: 0, child: trashButton),
+            // Content, translated left when revealed. Tapping while revealed
+            // closes the reveal; normal tap (closed) still toggles expand.
+            Transform.translate(
+              offset: Offset(-_revealOffset, 0),
+              child: _isRevealed
+                  ? GestureDetector(
+                      onTap: _closeReveal,
+                      behavior: HitTestBehavior.opaque,
+                      child: AbsorbPointer(child: content),
+                    )
+                  : content,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1244,10 +1571,12 @@ class _CountEpcListScreen extends StatelessWidget {
     final skuValue = skuLine.startsWith('SKU: ')
         ? skuLine.substring(5).trim()
         : skuLine;
-    // Same idea for the bin — caller passes "BIN xxxxx".
+    // Caller passes "BIN xxxxx" (already formatted via _formatBinCode). For the
+    // drilldown we render under a "BIN" label, so drop the "BIN " prefix and
+    // keep just the code — the label + value render as "BIN  1-A-03-C".
     final binValue = binText.startsWith('BIN ')
         ? binText.substring(4).trim()
-        : binText;
+        : binText.trim();
 
     final headerBg = const Color(0xFFECECEC);
 
@@ -1306,10 +1635,15 @@ class _CountEpcListScreen extends StatelessWidget {
       );
     }
 
-    final nameColorValue = [
-      if (itemName.isNotEmpty) itemName,
-      if (color.isNotEmpty) color,
-    ].join(': ');
+    // Drilldown header: 4 labelled rows; BIN row hidden when unassigned.
+    //   Row 1 — SKU: <value>   $price
+    //   Row 2 — ITEM: <name>   (size+color stripped by _stripNameSizeSuffix so
+    //                          the name doesn't visually repeat row 3)
+    //   Row 3 — color: "<color>"   size: "<size>"  (two labeled inline chunks;
+    //                                               whole row hidden when both empty)
+    //   Row 4 — BIN# <value>   (hidden entirely when bin is empty/null)
+    final cleanName = _stripNameSizeSuffix(itemName, size: size, color: color);
+    final hasColorSize = color.isNotEmpty || size.isNotEmpty;
 
     return CarbonScaffold(
       pageTitle: 'EPC LIST',
@@ -1332,20 +1666,44 @@ class _CountEpcListScreen extends StatelessWidget {
                   trailing:
                       priceText.isNotEmpty ? Text(priceText, style: priceStyle) : null,
                 ),
-                if (nameColorValue.isNotEmpty)
-                  labeledRow(label: 'NAME:COLOR:', value: nameColorValue),
-                if (size.isNotEmpty) labeledRow(label: 'SIZE:', value: size),
-                if (binValue.isNotEmpty) labeledRow(label: 'BIN:', value: binValue),
+                // Row 2 — ITEM: <name>
+                if (cleanName.isNotEmpty)
+                  labeledRow(label: 'ITEM:', value: cleanName),
+                // Row 3 — COLOR: <color>    SIZE: <size>
+                // Two labeled chunks on a single row; hidden entirely when both
+                // are empty. Label + value font sizes match SKU and ITEM rows.
+                if (hasColorSize)
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 4.h),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text('COLOR:', style: labelStyle),
+                        SizedBox(width: 6.w),
+                        Text(color, style: valueStyle),
+                        SizedBox(width: 16.w),
+                        Text('SIZE:', style: labelStyle),
+                        SizedBox(width: 6.w),
+                        Expanded(child: Text(size, style: valueStyle)),
+                      ],
+                    ),
+                  ),
+                // Row 4 — BIN  <code> (hidden entirely when unassigned).
+                // Uses a bare "BIN" label (no colon, no #) so the row reads
+                // "BIN 1-A-03-C" matching the Bin Assign page convention.
+                if (binValue.isNotEmpty)
+                  labeledRow(label: 'BIN', value: binValue),
               ],
             ),
           ),
           Padding(
-            padding: EdgeInsets.fromLTRB(20.w, 4.h, 20.w, 4.h),
+            padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 6.h),
             child: Text(
               'EPCs (${epcs.length})',
               style: GoogleFonts.spaceGrotesk(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w700,
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w800,
                 color: const Color(0xFF5A6464),
                 letterSpacing: 2.0,
               ),
@@ -1396,8 +1754,14 @@ class _CountEpcListScreen extends StatelessWidget {
                       Tooltip(
                         message: 'Locate this tag (Geiger)',
                         child: IconButton(
+                          iconSize: 40.sp,
+                          padding: EdgeInsets.all(8.w),
+                          constraints: BoxConstraints(
+                            minWidth: 56.w,
+                            minHeight: 56.w,
+                          ),
                           icon: Icon(Icons.sensors,
-                              size: 26.sp, color: AppColors.primary),
+                              size: 40.sp, color: AppColors.primary),
                           onPressed: () {
                             Navigator.of(context).push<void>(
                               MaterialPageRoute<void>(
@@ -1426,12 +1790,20 @@ class _CountInventoryContinueScreen extends StatefulWidget {
     required this.locationName,
     required this.onSaveCsv,
     required this.buildBackendPreviewPayload,
+    required this.onUploadReport,
+    required this.onArchiveReport,
   });
 
   final List<_GroupedRow> groupedRows;
   final String locationName;
   final Future<String?> Function() onSaveCsv;
   final Map<String, dynamic> Function() buildBackendPreviewPayload;
+  // UPLOAD: 2-step pipeline — archive then apply to inventory. Both must
+  // succeed; archive failure aborts before inventory mutation.
+  final Future<void> Function({required bool overrideCatalog}) onUploadReport;
+  // SAVE TO FILE: best-effort backend archive after the local save succeeds.
+  // Local save is the primary deliverable; archive failure is non-fatal.
+  final Future<void> Function() onArchiveReport;
 
   @override
   State<_CountInventoryContinueScreen> createState() =>
@@ -1442,6 +1814,90 @@ class _CountInventoryContinueScreenState
     extends State<_CountInventoryContinueScreen> {
   bool _overrideEntireCloudQuantities = false;
   bool _savingCsv = false;
+  // UPLOAD pipeline runs both archive + apply under one flag — single spinner.
+  bool _uploadingReport = false;
+
+  /// UPLOAD button. Runs the parent's 2-step pipeline (archive then apply).
+  /// `_uploadCountReport` throws on the first failure so step 2 is skipped —
+  /// preserving the "no inventory changes without an audit record" guarantee.
+  /// Session is preserved on any failure for retry.
+  Future<void> _handleUploadReport() async {
+    if (_uploadingReport) return;
+    setState(() => _uploadingReport = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await widget.onUploadReport(
+        overrideCatalog: _overrideEntireCloudQuantities,
+      );
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Inventory uploaded — Qty (EPC) updated'),
+        duration: Duration(seconds: 3),
+      ));
+      navigator.pop();
+    } on WmsApiException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text('Upload failed (${e.statusCode}) — session preserved, retry available'),
+        duration: const Duration(seconds: 6),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text('Upload failed: $e — session preserved, retry available'),
+        duration: const Duration(seconds: 6),
+      ));
+    } finally {
+      if (mounted) setState(() => _uploadingReport = false);
+    }
+  }
+
+  /// SAVE TO FILE button. Local CSV save is the primary deliverable; the
+  /// backend archive is best-effort and never blocks local-save success.
+  /// Three terminal snackbars:
+  ///   - local save failed → "Save failed" (no archive attempted)
+  ///   - local saved + archive ok → "Saved locally and archived to reports"
+  ///   - local saved + archive failed → "Saved locally; report archive failed"
+  Future<void> _handleSaveToFile() async {
+    if (_savingCsv) return;
+    setState(() => _savingCsv = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final localPath = await widget.onSaveCsv();
+      if (!mounted) return;
+      if (localPath == null) {
+        messenger.showSnackBar(const SnackBar(
+          content: Text('Save failed'),
+          duration: Duration(seconds: 4),
+        ));
+        return;
+      }
+      // Local save ok — try the backend archive best-effort.
+      try {
+        await widget.onArchiveReport();
+        if (!mounted) return;
+        messenger.showSnackBar(SnackBar(
+          content: Text('Saved locally and archived to reports\n$localPath'),
+          duration: const Duration(seconds: 4),
+        ));
+      } on WmsApiException catch (e) {
+        if (!mounted) return;
+        messenger.showSnackBar(SnackBar(
+          content: Text('Saved locally; report archive failed (${e.statusCode})'),
+          duration: const Duration(seconds: 5),
+        ));
+      } catch (e) {
+        if (!mounted) return;
+        messenger.showSnackBar(SnackBar(
+          content: Text('Saved locally; report archive failed: $e'),
+          duration: const Duration(seconds: 5),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _savingCsv = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1478,7 +1934,9 @@ class _CountInventoryContinueScreenState
                     child: SizedBox(
                       height: double.infinity,
                       child: FilledButton(
-                        onPressed: canUpload ? () {} : null,
+                        onPressed: (canUpload && !_uploadingReport)
+                            ? _handleUploadReport
+                            : null,
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF1B7D7D),
                           disabledBackgroundColor: const Color(0xFF1B7D7D),
@@ -1492,7 +1950,16 @@ class _CountInventoryContinueScreenState
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.cloud_upload, size: 20.sp),
+                              _uploadingReport
+                                  ? SizedBox(
+                                      width: 20.w,
+                                      height: 20.h,
+                                      child: const CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : Icon(Icons.cloud_upload, size: 20.sp),
                               SizedBox(width: 8.w),
                               Text(
                                 'UPLOAD',
@@ -1515,28 +1982,7 @@ class _CountInventoryContinueScreenState
                     child: SizedBox(
                       height: double.infinity,
                       child: FilledButton(
-                        onPressed: _savingCsv
-                            ? null
-                            : () async {
-                                setState(() => _savingCsv = true);
-                                final messenger = ScaffoldMessenger.of(context);
-                                try {
-                                  final path = await widget.onSaveCsv();
-                                  if (!mounted) return;
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      content: Text(path != null
-                                          ? 'Saved: $path'
-                                          : 'Save failed'),
-                                      duration: const Duration(seconds: 4),
-                                    ),
-                                  );
-                                } finally {
-                                  if (mounted) {
-                                    setState(() => _savingCsv = false);
-                                  }
-                                }
-                              },
+                        onPressed: _savingCsv ? null : _handleSaveToFile,
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF2BA3A3),
                           foregroundColor: Colors.white,

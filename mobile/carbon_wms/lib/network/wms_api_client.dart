@@ -492,6 +492,50 @@ class WmsApiClient {
     return <String, dynamic>{};
   }
 
+  /// Upload a Count-session report row list to the reports archive (1y
+  /// retention). Used as:
+  ///   - step 1 of the UPLOAD button pipeline (then [postInventoryUpload]).
+  ///   - the best-effort backend leg of SAVE TO FILE after the local CSV
+  ///     write succeeds.
+  ///
+  /// Payload: JSON envelope carrying the session's activity (e.g. `COUNT`,
+  /// `TRANSFER`), the session timestamp for filename derivation, the
+  /// override-catalog-quantities flag (UPLOAD only — SAVE TO FILE always
+  /// passes false), and the row list (epc, system_id, custom_sku, item_name,
+  /// color, size, retail_price, bin, seen_count, first_seen_iso,
+  /// last_seen_iso).
+  ///
+  /// Target: `POST /api/reports/uploads`. The route is being built by a
+  /// separate backend agent in parallel; until it ships this call returns
+  /// 404 and callers surface the failure (UPLOAD aborts step 2; SAVE TO
+  /// FILE keeps the local save and snackbars an archive-failed warning).
+  Future<Map<String, dynamic>> uploadCycleCountReport({
+    required String activity,
+    required DateTime when,
+    required List<Map<String, dynamic>> rows,
+    required bool overrideCatalog,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/reports/uploads');
+    final body = jsonEncode({
+      'activity': activity,
+      'when': when.toUtc().toIso8601String(),
+      'overrideCatalog': overrideCatalog,
+      'rows': rows,
+    });
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...await sessionAuthHeaders(),
+    };
+    final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
   Future<Map<String, String>> sessionAuthHeaders() async {
     final t = await getSessionToken();
     final h = <String, String>{};
