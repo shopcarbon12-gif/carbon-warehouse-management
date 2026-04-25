@@ -17,8 +17,7 @@ export default async function ProductCatalogPage() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Inventory catalog</h1>
           <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
-            Lightspeed item lines (SKU, vendor, POS on-hand when available) and a separate RFID view with
-            active EPCs.
+            Lightspeed item lines (SKU, color, size, retail price, bin) with active EPCs from RFID scans.
           </p>
         </div>
         <Link

@@ -100,11 +100,11 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
 }
 
 type SortKey =
-  | "system_id" | "name" | "sku" | "upc" | "vendor"
+  | "system_id" | "name" | "sku" | "upc"
   | "color" | "size" | "retail_price" | "bin"
   | "qty_epc";
 
-const COL_COUNT = 11;
+const COL_COUNT = 10;
 const COL_MIN_PX = 40;
 const SCROLLBAR_THICKNESS = 14;
 
@@ -491,7 +491,7 @@ export function CatalogWorkspace({
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, SKU, UPC, system ID, vendor…"
+              placeholder="Search name, SKU, UPC, system ID…"
               className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-lg"
             />
           </div>
@@ -708,7 +708,6 @@ export function CatalogWorkspace({
                       { key: "name", label: "Item name" },
                       { key: "sku", label: "Custom SKU" },
                       { key: "upc", label: "UPC" },
-                      { key: "vendor", label: "Vendor" },
                       { key: "color", label: "Color" },
                       { key: "size", label: "Size" },
                       { key: "retail_price", label: "Retail price", align: "right" },
@@ -755,13 +754,13 @@ export function CatalogWorkspace({
               <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-10 text-center text-[var(--wms-muted)]">
+                    <td colSpan={10} className="px-4 py-10 text-center text-[var(--wms-muted)]">
                       Loading catalog…
                     </td>
                   </tr>
                 ) : showNoMatches ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-14 text-center text-[var(--wms-muted)]">
+                    <td colSpan={10} className="px-4 py-14 text-center text-[var(--wms-muted)]">
                       <p className="font-mono text-sm text-[var(--wms-muted)]">No rows match your search.</p>
                     </td>
                   </tr>
@@ -785,9 +784,6 @@ export function CatalogWorkspace({
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5">{r.sku}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]" title={r.vendor ?? ""}>
-                        {r.vendor?.trim() || "—"}
-                      </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.size?.trim() || "—"}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
