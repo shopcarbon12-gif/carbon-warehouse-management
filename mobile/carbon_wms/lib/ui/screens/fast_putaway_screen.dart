@@ -136,6 +136,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   final _scanFocus = FocusNode();
   final _hiddenCtrl = TextEditingController();
   StreamSubscription<dynamic>? _hardwareBarcodeSub;
+  StreamSubscription<String>? _barcodeSdkSub;
 
   String _pendingSku = '';
   String _currentBin = '';
@@ -196,6 +197,20 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   @override
   void initState() {
     super.initState();
+    // Bin Assign drives the Chainway 2D engine via the SDK directly: it grabs
+    // /dev/ttyMT1 (cooperatively-evicting UHF), arms the laser on KEY_DOWN, and
+    // emits decoded text via barcodeDataStream. dispose() releases the UART so
+    // Count / Search & Encode can claim it on entry.
+    //
+    // Symmetric eviction: tell com.rscja.scanner to release RFID function mode
+    // BEFORE we open the BarcodeDecoder, so the broadcast UHF service isn't
+    // still holding the UART when we try to claim it via the SDK.
+    unawaited(() async {
+      await RfidVendorChannel.disableRfidFunctionMode();
+      await RfidVendorChannel.startBarcodeDecode();
+    }());
+    _barcodeSdkSub =
+        RfidVendorChannel.barcodeDataStream().listen(_dispatchScanLine);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _load();
       _loadUserEmail();
@@ -206,9 +221,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   @override
   void dispose() {
     _hardwareBarcodeSub?.cancel();
+    _barcodeSdkSub?.cancel();
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(_stopHardware2dScan());
+    unawaited(RfidVendorChannel.stopBarcodeDecode());
     _hardwareBarcodeSub = null;
+    _barcodeSdkSub = null;
     _hiddenCtrl.dispose();
     _scanFocus.dispose();
     super.dispose();

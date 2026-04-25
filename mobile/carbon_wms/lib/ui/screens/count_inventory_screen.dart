@@ -311,6 +311,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       // Keep the existing active hardware session; avoid reconnect churn that can
       // momentarily disable RFID function mode before Count starts.
 
+      // Cooperative UART eviction: if Bin Assign left the direct BarcodeDecoder open
+      // (it owns /dev/ttyMT1 via the SDK), release it BEFORE any UHF setup. Otherwise
+      // the broadcast scanner service can't claim the UART and EPCs never arrive.
+      await RfidVendorChannel.releaseBarcodeDecoder();
       // Disable 2D barcode trigger relay — prevent red laser in RFID count mode.
       // Trigger events are handled by our _triggerSub below (starts RFID, not 2D scan).
       await RfidVendorChannel.scannerDisableTriggerRelay();

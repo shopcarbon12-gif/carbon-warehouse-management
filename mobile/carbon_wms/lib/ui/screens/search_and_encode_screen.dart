@@ -103,6 +103,9 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
   // exactly once on first frame — BEFORE the user touches START. That way pulling the trigger
   // on entry can initiate a scan, and the vendor stack is already warm.
   Future<void> _ensureScannerReady() async {
+    // Cooperative UART eviction: Bin Assign may have left the direct BarcodeDecoder
+    // open holding /dev/ttyMT1. Release it BEFORE any UHF setup or EPCs never arrive.
+    await RfidVendorChannel.releaseBarcodeDecoder();
     await RfidVendorChannel.scannerDisableTriggerRelay();
     await RfidVendorChannel.close2dBarcode();
     await RfidVendorChannel.enableRfidFunctionMode();

@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets
  */
 class CarbonHardwareBarcodeRelay(
   private val context: Context,
+  private val barcode: CarbonChainwayBarcode,
 ) : EventChannel.StreamHandler {
   private var sink: EventChannel.EventSink? = null
   private var receiver: BroadcastReceiver? = null
@@ -66,12 +67,20 @@ class CarbonHardwareBarcodeRelay(
           Log.d(TAG, "RX action=$rxAction extras=${extrasSummary(intent)}")
           when (rxAction) {
             KEY_DOWN_ACTION -> {
-              // In UHF continuous inventory mode, the firmware owns the physical trigger.
-              // Do NOT call startHardwareScan/stopHardwareScan here — those send
-              // BARCODESTARTSCAN/BARCODESTOPSCAN which will kill the active UHF inventory.
+              // If the direct barcode decoder is open (Bin Assign), drive it via the SDK —
+              // bypasses com.rscja.scanner entirely so the laser fires and decoded text
+              // arrives via barcode.onDecode rather than scanner-broadcast routing.
+              // Otherwise UHF owns the trigger (firmware-driven continuous inventory)
+              // and we must NOT broadcast BARCODESTARTSCAN, which would kill UHF.
+              if (barcode.isOpen()) {
+                barcode.startScan()
+              }
               return
             }
             KEY_UP_ACTION -> {
+              if (barcode.isOpen()) {
+                barcode.stopScan()
+              }
               return
             }
           }
@@ -220,7 +229,10 @@ class CarbonHardwareBarcodeRelay(
   fun startHardwareScan() {
     scanActive = true
     cancelScanTimeout()
-    runCatching { context.sendBroadcast(Intent(ACTION_SCAN_START)) }
+    // Direct SDK path replaces the legacy BARCODESTARTSCAN broadcast: it talks to the
+    // 2D engine without going through com.rscja.scanner, so it works regardless of
+    // scanner-service output mode and never produces a clipboard toast.
+    runCatching { barcode.startScan() }
     scheduleScanTimeout(SCAN_TIMEOUT_MS)
   }
 
@@ -234,7 +246,7 @@ class CarbonHardwareBarcodeRelay(
   fun stopHardwareScan() {
     scanActive = false
     cancelScanTimeout()
-    runCatching { context.sendBroadcast(Intent(ACTION_SCAN_STOP)) }
+    runCatching { barcode.stopScan() }
   }
 
   private fun scheduleScanTimeout(ms: Long) {
@@ -310,8 +322,6 @@ class CarbonHardwareBarcodeRelay(
 
     const val KEY_DOWN_ACTION = "com.rscja.android.KEY_DOWN"
     const val KEY_UP_ACTION = "com.rscja.android.KEY_UP"
-    const val ACTION_SCAN_START = "android.intent.action.BARCODESTARTSCAN"
-    const val ACTION_SCAN_STOP = "android.intent.action.BARCODESTOPSCAN"
     /** Long idle window so warehouse passes don't drop UHF mid-aisle. */
     const val SCAN_TIMEOUT_MS = 120_000L
   }

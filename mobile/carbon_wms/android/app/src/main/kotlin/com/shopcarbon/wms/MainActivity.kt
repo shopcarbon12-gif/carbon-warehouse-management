@@ -20,10 +20,12 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterFragmentActivity() {
   private var zebraController: CarbonZebraRfidController? = null
   private var chainwayController: CarbonChainwayRfidController? = null
+  private var chainwayBarcode: CarbonChainwayBarcode? = null
   private var hardwareBarcodeRelay: CarbonHardwareBarcodeRelay? = null
   private var hardwareTriggerRelay: CarbonHardwareTriggerRelay? = null
   private var scannerLogcatBridge: ScannerLogcatBridge? = null
   private var scanSoundPool: ScanSoundPool? = null
+  private val mainHandlerForBarcode = android.os.Handler(android.os.Looper.getMainLooper())
 
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,10 +60,12 @@ class MainActivity : FlutterFragmentActivity() {
 
     val zebra = CarbonZebraRfidController(this)
     val chainway = CarbonChainwayRfidController(this)
-    val barcodeRelay = CarbonHardwareBarcodeRelay(this)
+    val barcode = CarbonChainwayBarcode(this)
+    val barcodeRelay = CarbonHardwareBarcodeRelay(this, barcode)
     val triggerRelay = CarbonHardwareTriggerRelay(this)
     zebraController = zebra
     chainwayController = chainway
+    chainwayBarcode = barcode
     hardwareBarcodeRelay = barcodeRelay
     hardwareTriggerRelay = triggerRelay
 
@@ -108,7 +112,9 @@ class MainActivity : FlutterFragmentActivity() {
       },
     )
 
-    MethodChannel(messenger, "carbon_wms/rfid").setMethodCallHandler { call, result ->
+    val rfidChannel = MethodChannel(messenger, "carbon_wms/rfid")
+    barcode.bindMethodChannel(rfidChannel)
+    rfidChannel.setMethodCallHandler { call, result ->
       when (call.method) {
         "ping" -> result.success("ok")
         "device.manufacturer" -> result.success(Build.MANUFACTURER ?: "")
@@ -213,6 +219,32 @@ class MainActivity : FlutterFragmentActivity() {
           openScanner2dEngine(this, "MainActivity")
           result.success(true)
         }
+        // Direct Chainway barcode SDK — bypasses com.rscja.scanner / broadcast routing.
+        // Cooperative UART eviction: UHF must be disconnected before the decoder opens
+        // because both share /dev/ttyMT1 on MTK C72E.
+        //
+        // barcode.start ARMS the decoder (open + callback). It does NOT fire the laser.
+        // The CarbonHardwareBarcodeRelay's KEY_DOWN handler is the only path that calls
+        // startScan(), so the laser only fires when the user pulls the trigger.
+        "barcode.start" -> {
+          chainway.disconnectAsync() // releases UART before decoder.open()
+          mainHandlerForBarcode.postDelayed({
+            val ok = barcode.open()
+            result.success(ok)
+          }, BARCODE_OPEN_DELAY_MS)
+        }
+        "barcode.stop" -> {
+          barcode.stopScan()
+          barcode.close() // releases UART so a subsequent UHF connect can claim it
+          result.success(true)
+        }
+        // Symmetric eviction for screens that use broadcast UHF (Count, Search & Encode)
+        // rather than chainway.connect/startInventory. Call this BEFORE the broadcast
+        // setup sequence so the decoder releases /dev/ttyMT1 in time.
+        "scanner.releaseBarcodeDecoder" -> {
+          barcode.close()
+          result.success(true)
+        }
         "zebra.connect" -> {
           val args = call.arguments as? Map<*, *>
           val name = args?.get("readerName") as? String
@@ -243,6 +275,10 @@ class MainActivity : FlutterFragmentActivity() {
         }
         "chainway.connect" -> {
           zebra.disconnectAsync()
+          // Cooperative UART eviction: if Bin Assign left the barcode decoder
+          // holding /dev/ttyMT1 (e.g. dispose still draining), close it before
+          // UHF tries to claim the UART.
+          barcode.close()
           chainway.connectAsync { err ->
             if (err != null) {
               result.error("CONNECT_FAILED", err.message ?: "chainway_connect", null)
@@ -273,6 +309,9 @@ class MainActivity : FlutterFragmentActivity() {
             result.error("NO_SDK", "Chainway DeviceAPI not present.", null)
             return@setMethodCallHandler
           }
+          // Cooperative UART eviction: ensure barcode decoder isn't still holding
+          // the UART (Bin Assign → straight-to-Count without going through connect).
+          barcode.close()
           chainway.startInventoryFlutterResult(result)
         }
         "rfid.setAntennaPower" -> {
@@ -312,6 +351,7 @@ class MainActivity : FlutterFragmentActivity() {
     ScanSoundPool.shared = null
     zebraController?.dispose()
     chainwayController?.dispose()
+    chainwayBarcode?.dispose()
     hardwareBarcodeRelay?.dispose()
     hardwareTriggerRelay?.dispose()
     scannerLogcatBridge?.dispose()
@@ -319,6 +359,7 @@ class MainActivity : FlutterFragmentActivity() {
     hardwareTriggerRelay = null
     zebraController = null
     chainwayController = null
+    chainwayBarcode = null
     scannerLogcatBridge = null
     MainActivity.scannerLogcatBridge = null
     super.onDestroy()
@@ -336,6 +377,10 @@ class MainActivity : FlutterFragmentActivity() {
     private const val TAG = "MainActivity"
     private const val REQ_WRITE_STORAGE = 1001
     private const val REQ_BLUETOOTH = 1002
+    // Wait for chainway.disconnectAsync() to flush its UART teardown before opening
+    // the barcode decoder on the same /dev/ttyMT1. ~120ms is the pause the existing
+    // disconnect path needs on C72E MTK to fully release.
+    private const val BARCODE_OPEN_DELAY_MS = 120L
     const val ZEBRA_RFID_READER = "com.zebra.rfid.api3.RFIDReader"
     private const val SCANNER_PACKAGE = "com.rscja.scanner"
     @Volatile var scannerLogcatBridge: ScannerLogcatBridge? = null

@@ -29,6 +29,28 @@ class RfidVendorChannel {
   static const EventChannel _hardwareTriggerEvents =
       EventChannel('carbon_wms/hardware_trigger');
 
+  // Direct Chainway barcode SDK delivers decoded text as a *call from platform*
+  // ("barcode.onDecode") rather than an EventChannel — mirrors the Senitron-style
+  // reference contract. We multiplex it into a broadcast stream so multiple
+  // listeners can subscribe (current usage: a single Bin Assign listener).
+  static StreamController<String>? _barcodeStreamCtrl;
+  static bool _barcodeHandlerInstalled = false;
+
+  static void _ensureBarcodeHandlerInstalled() {
+    if (_barcodeHandlerInstalled) return;
+    _barcodeHandlerInstalled = true;
+    _method.setMethodCallHandler((call) async {
+      if (call.method == 'barcode.onDecode') {
+        final args = call.arguments;
+        if (args is Map) {
+          final s = args['barcode']?.toString().trim() ?? '';
+          if (s.isNotEmpty) _barcodeStreamCtrl?.add(s);
+        }
+      }
+      return null;
+    });
+  }
+
   static Future<String?> ping() async {
     try {
       return await _method.invokeMethod<String>('ping');
@@ -136,6 +158,54 @@ class RfidVendorChannel {
     try {
       await _method.invokeMethod<void>('scanner.open2dBarcode');
     } catch (_) {}
+  }
+
+  /// Opens the direct Chainway barcode SDK (cooperative-evicts UHF) and arms
+  /// the laser. Decoded text arrives via [barcodeDataStream]. Idempotent.
+  static Future<bool> startBarcodeDecode() async {
+    if (!_isAndroid) return false;
+    _ensureBarcodeHandlerInstalled();
+    try {
+      final ok = await _method.invokeMethod<bool>('barcode.start');
+      return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Stops in-flight scan and releases the 2D engine + UART so a subsequent
+  /// UHF connect (Count, Search & Encode) can claim it. Idempotent.
+  static Future<bool> stopBarcodeDecode() async {
+    if (!_isAndroid) return false;
+    try {
+      final ok = await _method.invokeMethod<bool>('barcode.stop');
+      return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Cooperative UART eviction for screens that use broadcast UHF (Count,
+  /// Search & Encode). Call BEFORE any UHF setup so the barcode decoder
+  /// releases /dev/ttyMT1 — otherwise EPC reads silently fail because the
+  /// decoder still owns the UART. Idempotent.
+  static Future<bool> releaseBarcodeDecoder() async {
+    if (!_isAndroid) return false;
+    try {
+      final ok =
+          await _method.invokeMethod<bool>('scanner.releaseBarcodeDecoder');
+      return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Decoded barcode text from [startBarcodeDecode]. Broadcast — multiple
+  /// listeners are allowed but in practice only Bin Assign subscribes.
+  static Stream<String> barcodeDataStream() {
+    _ensureBarcodeHandlerInstalled();
+    final ctrl = _barcodeStreamCtrl ??= StreamController<String>.broadcast();
+    return ctrl.stream;
   }
 
   static Future<void> scannerEnableTriggerRelay() async {
