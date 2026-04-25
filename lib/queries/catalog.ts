@@ -28,6 +28,12 @@ export type CatalogItemRow = {
   epc: string;
   status: string;
   bin_code: string;
+  last_seen_at: string | null;
+  /** Matrix description (variant-clean product name). */
+  name: string;
+  size: string | null;
+  color: string | null;
+  sku: string;
 };
 
 /** Matrix (UPC) rows with custom SKU / EPC totals for the active location. */
@@ -123,13 +129,25 @@ export async function listCatalogItemsForCustomSku(
     epc: string;
     status: string;
     bin_code: string | null;
+    last_seen_at: Date | null;
+    name: string;
+    size: string | null;
+    color: string | null;
+    sku: string;
   }>(
     `SELECT
        i.serial_number::text AS serial_number,
        i.epc,
        i.status,
-       COALESCE(b.code, '') AS bin_code
+       COALESCE(b.code, '') AS bin_code,
+       i.last_seen_at,
+       m.description AS name,
+       cs.size,
+       cs.color_code AS color,
+       cs.sku
      FROM items i
+     INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
+     INNER JOIN matrices m ON m.id = cs.matrix_id
      LEFT JOIN bins b ON b.id = i.bin_id
      WHERE i.custom_sku_id = $1::uuid AND i.location_id = $2::uuid
      ORDER BY i.serial_number ASC`,
@@ -140,5 +158,10 @@ export async function listCatalogItemsForCustomSku(
     epc: row.epc,
     status: row.status,
     bin_code: row.bin_code ?? "—",
+    last_seen_at: row.last_seen_at ? row.last_seen_at.toISOString() : null,
+    name: row.name,
+    size: row.size,
+    color: row.color,
+    sku: row.sku,
   }));
 }

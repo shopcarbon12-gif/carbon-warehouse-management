@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { ChevronDown, ChevronUp, ChevronsUpDown, Radio, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Radio } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
-import type { CatalogItemRow } from "@/lib/queries/catalog";
+import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
 
 const PAGE_SIZE = 50;
 
@@ -314,14 +314,6 @@ export function CatalogWorkspace({
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const { data: itemData, isLoading: itemsLoading } = useSWR<CatalogItemRow[]>(
-    modalSku
-      ? `/api/inventory/catalog?customSkuId=${encodeURIComponent(modalSku.custom_sku_id)}`
-      : null,
-    fetcher,
-    { revalidateOnFocus: false },
-  );
-
   const closeModal = useCallback(() => setModalSku(null), []);
 
   const submitManualCatalogLine = useCallback(async () => {
@@ -439,20 +431,6 @@ export function CatalogWorkspace({
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [catalogMenuOpen]);
-
-  useEffect(() => {
-    if (!modalSku) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeModal();
-    };
-    window.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [modalSku, closeModal]);
 
   const showCatalogEmpty = !isLoading && total === 0 && !debounced;
   const showNoMatches = !isLoading && total === 0 && Boolean(debounced);
@@ -999,57 +977,11 @@ export function CatalogWorkspace({
       ) : null}
 
       {modalSku ? (
-        <>
-          <button
-            type="button"
-            aria-label="Close"
-            className="fixed inset-0 z-[60] bg-black/70"
-            onClick={closeModal}
-          />
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="max-h-[min(90vh,560px)] w-full max-w-lg overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
-              <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-[var(--wms-fg)]">RFID tags</h3>
-                  <p className="mt-0.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">
-                    {modalSku.sku} · UPC {displayUpc(modalSku)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
-                  aria-label="Close"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="max-h-[420px] overflow-y-auto p-4">
-                {itemsLoading ? (
-                  <p className="font-mono text-xs text-[var(--wms-muted)]">Loading EPCs…</p>
-                ) : !itemData || itemData.length === 0 ? (
-                  <p className="py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
-                    No items at the active location for this custom SKU.
-                  </p>
-                ) : (
-                  <ul className="space-y-2 font-mono text-[0.65rem]">
-                    {itemData.map((it) => (
-                      <li
-                        key={it.epc}
-                        className="rounded border border-[var(--wms-border)]/80 bg-[var(--wms-surface-elevated)]/50 px-3 py-2"
-                      >
-                        <div className="text-teal-400/90">{it.epc}</div>
-                        <div className="mt-1 text-[var(--wms-muted)]">
-                          #{it.serial_number} · {it.status} · bin {it.bin_code}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </div>
-        </>
+        <RfidTagsModal
+          modalSku={modalSku}
+          onClose={closeModal}
+          onMutated={() => void mutate()}
+        />
       ) : null}
     </div>
   );
