@@ -44,6 +44,36 @@ function sleep(ms: number) {
 
 const CATALOG_SYNC_JOB_TYPES = new Set(["lightspeed_catalog", "lightspeed_pull"]);
 
+const REPORT_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+let lastReportCleanupAt: Date | null = null;
+
+/**
+ * Daily-throttled retention cleanup for `inventory_reports` (1-year audit window).
+ * Resets to `null` on worker boot; runs on first loop iteration after start.
+ * Wrapped in try/catch so a failure (e.g. transient DB blip) cannot crash the worker.
+ */
+async function runReportRetentionCleanup(pool: Pool): Promise<void> {
+  const now = new Date();
+  if (
+    lastReportCleanupAt &&
+    now.getTime() - lastReportCleanupAt.getTime() < REPORT_CLEANUP_INTERVAL_MS
+  ) {
+    return;
+  }
+  try {
+    const r = await pool.query(
+      `DELETE FROM inventory_reports WHERE expires_at < now()`,
+    );
+    lastReportCleanupAt = now;
+    console.log(
+      `[worker] inventory_reports cleanup: rowsDeleted=${r.rowCount ?? 0}`,
+    );
+  } catch (e) {
+    /* Don't update lastReportCleanupAt — let the next iteration retry. */
+    console.error("[worker] inventory_reports cleanup failed", e);
+  }
+}
+
 async function processStub(pool: Pool, job: JobRow): Promise<void> {
   if (CATALOG_SYNC_JOB_TYPES.has(job.job_type)) {
     await executeLightspeedCatalogJob(pool, job.id);
@@ -68,6 +98,7 @@ async function main() {
 
   while (running) {
     try {
+      await runReportRetentionCleanup(pool);
       const job = await claimJob(pool);
       if (!job) {
         await sleep(800);

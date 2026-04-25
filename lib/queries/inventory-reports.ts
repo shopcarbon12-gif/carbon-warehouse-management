@@ -211,6 +211,201 @@ export async function listReplenishmentLogs(
   }));
 }
 
+/* ---------- inventory_reports (count-session audit archive) ---------- */
+
+export type CountSessionReportRow = {
+  id: string;
+  activity: string;
+  uploaded_at: string;
+  uploaded_by: string | null;
+  device_id: string | null;
+  override_catalog: boolean;
+  row_count: number;
+  filename: string;
+  expires_at: string;
+};
+
+export type CountSessionReportInsert = {
+  tenantId: string;
+  activity: string;
+  uploadedAt: Date;
+  uploadedBy: string | null;
+  deviceId: string | null;
+  overrideCatalog: boolean;
+  rowCount: number;
+  csvContent: string;
+  filename: string;
+};
+
+export async function insertCountSessionReport(
+  pool: Pool,
+  input: CountSessionReportInsert,
+): Promise<CountSessionReportRow> {
+  const r = await pool.query<{
+    id: string;
+    activity: string;
+    uploaded_at: Date;
+    uploaded_by: string | null;
+    device_id: string | null;
+    override_catalog: boolean;
+    row_count: number;
+    filename: string;
+    expires_at: Date;
+  }>(
+    `INSERT INTO inventory_reports
+       (tenant_id, activity, uploaded_at, uploaded_by, device_id,
+        override_catalog, row_count, csv_content, filename, expires_at)
+     VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9,
+             ($3::timestamptz + interval '1 year'))
+     RETURNING id::text, activity, uploaded_at, uploaded_by, device_id,
+               override_catalog, row_count, filename, expires_at`,
+    [
+      input.tenantId,
+      input.activity,
+      input.uploadedAt,
+      input.uploadedBy,
+      input.deviceId,
+      input.overrideCatalog,
+      input.rowCount,
+      input.csvContent,
+      input.filename,
+    ],
+  );
+  const row = r.rows[0];
+  if (!row) throw new Error("insert inventory_reports failed");
+  return {
+    id: row.id,
+    activity: row.activity,
+    uploaded_at: row.uploaded_at.toISOString(),
+    uploaded_by: row.uploaded_by,
+    device_id: row.device_id,
+    override_catalog: row.override_catalog,
+    row_count: row.row_count,
+    filename: row.filename,
+    expires_at: row.expires_at.toISOString(),
+  };
+}
+
+export type CountSessionReportListOpts = {
+  activity?: string;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+};
+
+export async function listCountSessionReports(
+  pool: Pool,
+  tenantId: string,
+  opts: CountSessionReportListOpts,
+): Promise<{ rows: CountSessionReportRow[]; total: number; page: number; limit: number }> {
+  const page = Math.max(1, opts.page ?? 1);
+  const limit = Math.min(opts.limit ?? 25, 100);
+  const offset = (page - 1) * limit;
+
+  const conditions: string[] = ["tenant_id = $1::uuid"];
+  const params: unknown[] = [tenantId];
+  let p = 2;
+
+  if (opts.activity?.trim()) {
+    conditions.push(`activity = $${p}`);
+    params.push(opts.activity.trim());
+    p++;
+  }
+  if (opts.search?.trim()) {
+    conditions.push(`filename ILIKE $${p}`);
+    params.push(`%${opts.search.trim()}%`);
+    p++;
+  }
+  if (opts.dateFrom) {
+    conditions.push(`uploaded_at >= $${p}::date`);
+    params.push(opts.dateFrom);
+    p++;
+  }
+  if (opts.dateTo) {
+    conditions.push(`uploaded_at < ($${p}::date + interval '1 day')`);
+    params.push(opts.dateTo);
+    p++;
+  }
+
+  const whereSql = conditions.join(" AND ");
+
+  const countR = await pool.query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c FROM inventory_reports WHERE ${whereSql}`,
+    params,
+  );
+  const total = Number(countR.rows[0]?.c ?? 0);
+
+  params.push(limit, offset);
+  const r = await pool.query<{
+    id: string;
+    activity: string;
+    uploaded_at: Date;
+    uploaded_by: string | null;
+    device_id: string | null;
+    override_catalog: boolean;
+    row_count: number;
+    filename: string;
+    expires_at: Date;
+  }>(
+    `SELECT id::text, activity, uploaded_at, uploaded_by, device_id,
+            override_catalog, row_count, filename, expires_at
+     FROM inventory_reports
+     WHERE ${whereSql}
+     ORDER BY uploaded_at DESC
+     LIMIT $${p} OFFSET $${p + 1}`,
+    params,
+  );
+
+  return {
+    rows: r.rows.map((row) => ({
+      id: row.id,
+      activity: row.activity,
+      uploaded_at: row.uploaded_at.toISOString(),
+      uploaded_by: row.uploaded_by,
+      device_id: row.device_id,
+      override_catalog: row.override_catalog,
+      row_count: row.row_count,
+      filename: row.filename,
+      expires_at: row.expires_at.toISOString(),
+    })),
+    total,
+    page,
+    limit,
+  };
+}
+
+export async function getCountSessionReportCsv(
+  pool: Pool,
+  tenantId: string,
+  id: string,
+): Promise<{ filename: string; csv: string } | null> {
+  const r = await pool.query<{ csv_content: string; filename: string }>(
+    `SELECT csv_content, filename
+     FROM inventory_reports
+     WHERE id = $1::uuid AND tenant_id = $2::uuid
+     LIMIT 1`,
+    [id, tenantId],
+  );
+  const row = r.rows[0];
+  return row ? { filename: row.filename, csv: row.csv_content } : null;
+}
+
+export async function listCountSessionActivities(
+  pool: Pool,
+  tenantId: string,
+): Promise<string[]> {
+  const r = await pool.query<{ a: string }>(
+    `SELECT DISTINCT activity AS a
+     FROM inventory_reports
+     WHERE tenant_id = $1::uuid
+     ORDER BY 1`,
+    [tenantId],
+  );
+  return r.rows.map((row) => row.a);
+}
+
 export async function listExternalSystemLogs(
   pool: Pool,
   tenantId: string,

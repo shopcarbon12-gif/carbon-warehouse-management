@@ -10,6 +10,7 @@ import {
   ArrowRightLeft,
   Banknote,
   ChevronDown,
+  ClipboardList,
   Download,
   FolderInput,
   LayoutDashboard,
@@ -101,6 +102,7 @@ const sections: NavSection[] = [
     isActiveSection: (p) => p.startsWith("/reports/"),
     items: [
       { href: "/reports/inventory-compare", label: "POS compare", icon: Banknote },
+      { href: "/reports/count-sessions", label: "Count sessions", icon: ClipboardList },
       { href: "/reports/uploads", label: "Device upload logs", icon: Upload },
       { href: "/reports/activity", label: "Activity history", icon: Activity },
       { href: "/reports/asset-movements", label: "Asset movements", icon: Route },

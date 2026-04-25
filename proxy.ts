@@ -25,6 +25,12 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/settings/mobile-sync") return true;
   if (pathname === "/api/inventory/upload") return true;
   if (pathname === "/api/inventory/putaway-assign") return true;
+  /* Count-session report archive (POST + GET list + GET /[id]/download + activities):
+   * dual auth (session OR edge key) handled inside each route. */
+  if (
+    pathname === "/api/reports/count-sessions" ||
+    pathname.startsWith("/api/reports/count-sessions/")
+  ) return true;
   if (pathname === "/api/mobile/status") return true;
   if (pathname === "/api/mobile/epc-visibility") return true;
   /* OTA: handheld downloads APK with plain GET (no cookies). Else proxy redirects to /login HTML. */
