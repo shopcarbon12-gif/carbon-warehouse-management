@@ -66,3 +66,8 @@ public/uploads/mobile-apk/
 docs/light-theme-evidence/before/*.png
 docs/light-theme-evidence/after/*.png
 docs/light-theme-evidence/changed-pages-button-theme/*.png
+
+# Local handoff / recon artifacts (workspace docs + zips, not source)
+HANDOFF_FOR_OTHER_CLAUDE.md
+carbon_rfid_recon.zip
+carbon_rfid_recon_v1.1.13_delta.zip
