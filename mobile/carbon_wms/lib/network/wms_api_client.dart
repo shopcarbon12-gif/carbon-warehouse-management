@@ -1102,6 +1102,34 @@ class WmsApiClient {
     }
   }
 
+  /// Mobile poller for this handheld's EPC drop queue (Cloud + Geiger).
+  /// Server marks rows `consumed` atomically; subsequent polls return only
+  /// new drops. Returns `{ deviceUuid, epcs, count }`.
+  Future<({String deviceUuid, List<String> epcs, int count})>
+      pollMyEpcQueue({required String deviceId}) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/handheld/epc-queue');
+    final headers = <String, String>{
+      ...await handheldAuthHeaders(),
+      'x-wms-device-id': deviceId,
+    };
+    final res = await _http.get(uri, headers: headers);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      final epcsRaw = decoded['epcs'];
+      final epcs = epcsRaw is List ? epcsRaw.cast<String>() : <String>[];
+      return (
+        deviceUuid: decoded['deviceUuid'] as String? ?? '',
+        epcs: epcs,
+        count: decoded['count'] as int? ?? epcs.length,
+      );
+    }
+    return (deviceUuid: '', epcs: <String>[], count: 0);
+  }
+
   void close() => _http.close();
 }
 

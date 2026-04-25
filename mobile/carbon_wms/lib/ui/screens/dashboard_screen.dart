@@ -25,6 +25,7 @@ import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
+import 'package:carbon_wms/ui/screens/cloud_geiger_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_app_drawer.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
 import 'package:carbon_wms/ui/widgets/ota_update_dialog.dart';
@@ -761,6 +762,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       label: 'Upload',
                       onTap: () =>
                           _push(const EncodeSuiteScreen(initialTab: 2))),
+                  _SmallTile(
+                      icon: LucideIcons.cloud,
+                      label: 'Cloud + Geiger',
+                      onTap: () => _push(const CloudGeigerScreen())),
                 ]),
               ),
             ),
