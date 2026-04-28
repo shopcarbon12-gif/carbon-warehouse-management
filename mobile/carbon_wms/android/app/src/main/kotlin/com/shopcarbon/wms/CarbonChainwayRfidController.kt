@@ -43,7 +43,7 @@ class CarbonChainwayRfidController(private val context: Context) {
   // and gives ~3m read range. 30 dBm/1W is the chip's max but historically
   // wedged this MTK firmware variant on cold-init; Dart can push to 30
   // later via setAntennaPowerDbm if the user opts in.
-  private val requestedPowerDbm = AtomicInteger(20)
+  private val requestedPowerDbm = AtomicInteger(23)
   @Volatile private var drainThread: Thread? = null
   @Volatile private var uartOwned = false
   @Volatile private var uhfReader: RFIDWithUHFUART? = null
@@ -170,7 +170,7 @@ class CarbonChainwayRfidController(private val context: Context) {
       // applyPower() targets the reflective uhfClass path (uartOwned=true)
       // which we don't take, so it stays a no-op. The slider's value will
       // apply on the next app launch.
-      requestedPowerDbm.set(dbm.coerceIn(5, 27))
+      requestedPowerDbm.set(dbm.coerceIn(5, 30))
       applyPower()
     }
   }
@@ -200,43 +200,77 @@ class CarbonChainwayRfidController(private val context: Context) {
           Log.w(TAG, "RFIDWithUHFUART init failed")
           return false
         }
+        // -------------------------------------------------------------
+        // Senitron-pattern init: region → protocol → EPC mode → power
+        // On this firmware variant the chip's NVRAM-persisted region is
+        // unreliable (boots into mode 8 on cold boot). Always re-apply.
+        // -------------------------------------------------------------
+        try {
+          val freqOk = instance.setFrequencyMode(2)  // 2 = FCC US 902-928 MHz
+          Log.d(TAG, "init: setFrequencyMode(2) FCC -> $freqOk")
+        } catch (t: Throwable) {
+          Log.w(TAG, "init: setFrequencyMode(2) threw: ${t.message}")
+        }
+        // setProtocol(0) is rejected by this firmware (err -1).
+        // The reference app does not call setProtocol at init either —
+        // chip default protocol is fine. Skipping.
+        try {
+          val epcOk = instance.setEPCMode()
+          Log.d(TAG, "init: setEPCMode() -> $epcOk")
+        } catch (t: Throwable) {
+          Log.w(TAG, "init: setEPCMode() threw: ${t.message}")
+        }
+        // Diagnostic readback after writes
+        try {
+          Log.d(TAG, "init: post-region readbacks freq=" +
+            "${instance.getFrequencyMode()} proto=${instance.getProtocol()}")
+        } catch (_: Throwable) {}
+
         // Apply the user's requested power (Dart-side runtime config sets
         // this to 27 dBm for warehouse inventory). 20 dBm = 100 mW = ~1m
         // range, which only finds the closest 2-3 tags out of a 200-tag
         // crowd. 27 dBm = 500 mW = ~3m range. setPower(30)=1W historically
         // wedged this firmware variant; 27 is in the safe range.
-        val initPower = requestedPowerDbm.get().coerceIn(5, 27)
+        val initPower = requestedPowerDbm.get().coerceIn(5, 30)
         val powerOk = instance.setPower(initPower)
         Log.d(TAG, "RFIDWithUHFUART.setPower($initPower) -> $powerOk")
 
-        // Gen2 inventory profile for dense-crowd reads. Read the chip's
-        // existing entity (preserves all fields the firmware shipped with)
-        // and only override the two fields that matter for "read 200 tags
-        // not just 2": Session=S0 so tag flags reset ~immediately (under S1
-        // each tag goes silent for ~5s after one read = handheld hits the
-        // 2 nearest and misses everything else), and Q range 2..8 so the
-        // chip auto-grows slots when it sees collisions. Setting all fields
-        // to zeros (last attempt) wedged the chip — chip rejects mismatched
-        // queryDR/queryM/linkFrequency combos and stops transmitting. By
-        // round-tripping getGen2()→mutate→setGen2() we never set a 0 where
-        // the chip wants a non-zero default.
-        runCatching {
-          val current = instance.javaClass.getMethod("getGen2").invoke(instance)
-          if (current != null) {
-            val gen2Cls = current.javaClass
-            gen2Cls.getMethod("setQuerySession", Int::class.javaPrimitiveType).invoke(current, 0)
-            gen2Cls.getMethod("setQueryTarget", Int::class.javaPrimitiveType).invoke(current, 0)
-            gen2Cls.getMethod("setStartQ", Int::class.javaPrimitiveType).invoke(current, 4)
-            gen2Cls.getMethod("setMinQ", Int::class.javaPrimitiveType).invoke(current, 2)
-            gen2Cls.getMethod("setMaxQ", Int::class.javaPrimitiveType).invoke(current, 8)
-            val setGen2 = instance.javaClass.getMethod("setGen2", gen2Cls)
-            val gen2Ok = setGen2.invoke(instance, current) as? Boolean ?: false
-            Log.d(TAG, "RFIDWithUHFUART.setGen2(session=0/target=0/dynQ=2..8 over chip defaults) -> $gen2Ok")
-          } else {
-            Log.w(TAG, "setGen2 skipped: getGen2() returned null")
+        // Gen2 left at chip defaults (Q=6 fixed, Session=S1) for now —
+        // matches the working recovery-app baseline. The recon showed
+        // identical 2-EPC floor with both Q-fixed/S1 and Q-dynamic/S0,
+        // so Gen2 is NOT what's blocking reads. Re-tune after we confirm
+        // the chip is in a known-good state with proper region/protocol/
+        // EPC mode + 27 dBm power.
+        if (false) {
+          // Gen2 inventory profile for dense-crowd reads. Read the chip's
+          // existing entity (preserves all fields the firmware shipped with)
+          // and only override the two fields that matter for "read 200 tags
+          // not just 2": Session=S0 so tag flags reset ~immediately (under S1
+          // each tag goes silent for ~5s after one read = handheld hits the
+          // 2 nearest and misses everything else), and Q range 2..8 so the
+          // chip auto-grows slots when it sees collisions. Setting all fields
+          // to zeros (last attempt) wedged the chip — chip rejects mismatched
+          // queryDR/queryM/linkFrequency combos and stops transmitting. By
+          // round-tripping getGen2()→mutate→setGen2() we never set a 0 where
+          // the chip wants a non-zero default.
+          runCatching {
+            val current = instance.javaClass.getMethod("getGen2").invoke(instance)
+            if (current != null) {
+              val gen2Cls = current.javaClass
+              gen2Cls.getMethod("setQuerySession", Int::class.javaPrimitiveType).invoke(current, 0)
+              gen2Cls.getMethod("setQueryTarget", Int::class.javaPrimitiveType).invoke(current, 0)
+              gen2Cls.getMethod("setStartQ", Int::class.javaPrimitiveType).invoke(current, 4)
+              gen2Cls.getMethod("setMinQ", Int::class.javaPrimitiveType).invoke(current, 2)
+              gen2Cls.getMethod("setMaxQ", Int::class.javaPrimitiveType).invoke(current, 8)
+              val setGen2 = instance.javaClass.getMethod("setGen2", gen2Cls)
+              val gen2Ok = setGen2.invoke(instance, current) as? Boolean ?: false
+              Log.d(TAG, "RFIDWithUHFUART.setGen2(session=0/target=0/dynQ=2..8 over chip defaults) -> $gen2Ok")
+            } else {
+              Log.w(TAG, "setGen2 skipped: getGen2() returned null")
+            }
+          }.onFailure {
+            Log.w(TAG, "setGen2 failed: ${it.message}")
           }
-        }.onFailure {
-          Log.w(TAG, "setGen2 failed: ${it.message}")
         }
 
         // Diagnostic readback so we can compare against the working device.
@@ -710,7 +744,7 @@ class CarbonChainwayRfidController(private val context: Context) {
       // Re-assert user-configured power before write. initUhfReaderDirect now sets 30 dBm
       // for scanning; writes need more link budget than reads, and the user-configured value
       // (typically 30) must actually be in effect on the radio at write time.
-      val reqPower = requestedPowerDbm.get().coerceIn(5, 27)
+      val reqPower = requestedPowerDbm.get().coerceIn(5, 30)
       val curPower = runCatching { reader.getPower() }.getOrDefault(-1)
       val pwrSetOk = runCatching { reader.setPower(reqPower) }.getOrDefault(false)
       Log.d(TAG, "pre-write power: getPower()=$curPower requested=$reqPower setPower($reqPower)=$pwrSetOk")
@@ -1421,7 +1455,7 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   private fun applyPower() {
     val cls = uhfClass ?: return; val inst = uhfInstance ?: return
-    val p = requestedPowerDbm.get().coerceIn(5, 27)
+    val p = requestedPowerDbm.get().coerceIn(5, 30)
     val m = cls.methods.firstOrNull { it.name in setOf("UHFSetPower", "setPower", "SetPower", "setOutputPower") && it.parameterCount == 1 }
       ?.also { it.isAccessible = true } ?: return
     val arg: Any = if (m.parameterTypes[0] == java.lang.Character.TYPE) java.lang.Character(p.toChar()) else java.lang.Integer(p)
