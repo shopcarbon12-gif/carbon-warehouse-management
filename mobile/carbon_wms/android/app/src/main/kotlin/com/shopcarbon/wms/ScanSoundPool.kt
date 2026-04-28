@@ -38,6 +38,14 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
   private val activeStreams: MutableList<Int> = mutableListOf()
   private val lock = Any()
 
+  /**
+   * User-controlled global volume scale (0..1) set from the Settings screen
+   * volume slider. Multiplied with the per-call volume in [playCue] so the
+   * RSSI ramp inside [playTagBeep] still works — but capped by the user's
+   * preference. Defaults to 1.0 (no attenuation) until Dart pushes a value.
+   */
+  @Volatile private var userVolume: Float = 1.0f
+
   companion object {
     private const val TAG = "ScanSoundPool"
     private const val CHANNEL = "carbon_wms/scan_sound"
@@ -76,6 +84,13 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
         val volRaw = (args?.get("volume") as? Number)?.toFloat() ?: 1.0f
         val vol = volRaw.coerceIn(0f, 1f)
         playCue(cue, vol)
+        result.success(null)
+      }
+      "setUserVolume" -> {
+        val args = call.arguments as? Map<*, *>
+        val v = (args?.get("volume") as? Number)?.toFloat() ?: 1.0f
+        userVolume = v.coerceIn(0f, 1f)
+        Log.d(TAG, "userVolume set to $userVolume")
         result.success(null)
       }
       "stopAll" -> { stopAll(); result.success(null) }
@@ -168,9 +183,13 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
       Log.w(TAG, "playCue($cue): sid=$sid not loaded yet")
       return
     }
-    // priority=1, loop=0 (one-shot), rate=1.0 neutral pitch.
-    Log.d("LAT", "BEEP_PLAY ts=${System.currentTimeMillis()} cue=$cue vol=$volume")
-    val streamId = p.play(sid, volume, volume, 1, 0, 1.0f)
+    // priority=1, loop=0 (one-shot), rate=1.0 neutral pitch. Per-call volume
+    // is scaled by the user's preference set from the Settings screen
+    // (carbon_wms/scan_sound 'setUserVolume') so the RSSI ramp inside
+    // [playTagBeep] is preserved but capped at the user's chosen level.
+    val finalVol = (volume * userVolume).coerceIn(0f, 1f)
+    Log.d("LAT", "BEEP_PLAY ts=${System.currentTimeMillis()} cue=$cue base=$volume user=$userVolume final=$finalVol")
+    val streamId = p.play(sid, finalVol, finalVol, 1, 0, 1.0f)
     if (streamId == 0) {
       Log.w(TAG, "playCue($cue): SoundPool.play returned 0 (sid=$sid, pool busy?)")
       return

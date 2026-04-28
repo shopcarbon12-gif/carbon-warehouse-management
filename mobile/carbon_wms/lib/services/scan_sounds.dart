@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show MethodChannel, MissingPluginException, PlatformException;
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Shared scan-event audio cues used by any RFID scanning screen (Count, Encode, …).
 //
@@ -46,6 +47,30 @@ class ScanSounds {
       _ready = false;
       debugPrint('[ScanSounds] native init failed: $e');
     }
+    // Push the user's saved beep volume to the native SoundPool so the
+    // Settings → Sound slider takes effect from cold start, not just after
+    // the user re-opens the Settings screen.
+    if (_ready) await _applySavedUserVolume();
+  }
+
+  Future<void> _applySavedUserVolume() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final enabled = p.getBool('wms_sound_tag_read_v1') ?? true;
+      final v = p.getDouble('wms_tag_read_volume_v1') ?? 1.0;
+      await setUserVolume(enabled ? v : 0.0);
+    } catch (e) {
+      debugPrint('[ScanSounds] failed to apply saved volume: $e');
+    }
+  }
+
+  /// Set the global beep volume scale (0..1). Multiplied with the per-call
+  /// RSSI-scaled volume inside the native SoundPool. 0.0 == effectively muted.
+  Future<void> setUserVolume(double volume) async {
+    final v = volume.clamp(0.0, 1.0);
+    try {
+      await _channel.invokeMethod<void>('setUserVolume', <String, dynamic>{'volume': v});
+    } catch (_) {/* native may not be ready yet */}
   }
 
   // Fire-and-forget. Safe before init completes (becomes a no-op on the native side).

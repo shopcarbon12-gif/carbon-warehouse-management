@@ -71,15 +71,22 @@ class MainActivity : FlutterFragmentActivity() {
     //      cooperative eviction doesn't work).
     //   2. Wait briefly for the kernel to release the fd.
     //   3. Open the UART directly via `RFIDWithUHFUART.init(ctx)` and keep it for the
-    //      app's lifetime. Senitron does this implicitly at launch; we have to be
-    //      explicit because the scanner service auto-restarts after a few seconds.
+    //      app's lifetime. The reference app does this implicitly at launch; we
+    //      have to be explicit because the scanner service auto-restarts after a few seconds.
+    // Kill com.rscja.scanner BEFORE acquireUartEarly: on this firmware the
+    // scanner service holds /dev/ttyMT1 exclusive, and ScannerUtility's
+    // disableFunction() is a no-op stub on MTK. Without the kill, our
+    // RFIDWithUHFUART.init may return true but startInventoryTag returns
+    // false (silent UART contention). The recovery app gets away without
+    // killing because its 5s test runs in a window where scanner happened
+    // to be idle; we need this for reliable repeated inventory cycles.
     Thread({
       try {
         val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
         am.killBackgroundProcesses("com.rscja.scanner")
         am.killBackgroundProcesses("com.rscja.ht")
         Log.d("MainActivity", "Killed com.rscja.scanner / com.rscja.ht for UART acquire")
-        Thread.sleep(400) // let kernel release /dev/ttyMT1
+        Thread.sleep(400)
       } catch (t: Throwable) {
         Log.w("MainActivity", "killBackgroundProcesses pre-acquire failed: ${t.message}")
       }

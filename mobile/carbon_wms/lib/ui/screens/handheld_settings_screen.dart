@@ -14,6 +14,7 @@ import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
+import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
@@ -84,18 +85,29 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
     if (!p.containsKey(_keyVolume)) {
       await p.setDouble(_keyVolume, 1.0);
     }
+    await _pushVolumeToNative(_soundEnabled ? _volume : 0.0);
+  }
+
+  Future<void> _pushVolumeToNative(double v) async {
+    await ScanSounds.instance.setUserVolume(v);
   }
 
   Future<void> _setSoundEnabled(bool v) async {
     setState(() => _soundEnabled = v);
     final p = await SharedPreferences.getInstance();
     await p.setBool(_keySoundEnabled, v);
+    // When sound is muted, push 0 so the per-tag beep is silent regardless
+    // of where the slider sits; restore the slider value when re-enabled.
+    await _pushVolumeToNative(v ? _volume : 0.0);
   }
 
   Future<void> _setVolume(double v) async {
     setState(() => _volume = v);
     final p = await SharedPreferences.getInstance();
     await p.setDouble(_keyVolume, v);
+    if (_soundEnabled) {
+      await _pushVolumeToNative(v);
+    }
   }
 
   Future<void> _setScannerSource(String src) async {

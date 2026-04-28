@@ -39,13 +39,17 @@ class CarbonChainwayRfidController(private val context: Context) {
   private var uhfClass: Class<*>? = null
   private var uhfInstance: Any? = null
   private val scanning = AtomicBoolean(false)
-  private val requestedPowerDbm = AtomicInteger(30)
+  // Default at 27 dBm = 500 mW. Matches Dart's runtime warehouse-default
+  // and gives ~3m read range. 30 dBm/1W is the chip's max but historically
+  // wedged this MTK firmware variant on cold-init; Dart can push to 30
+  // later via setAntennaPowerDbm if the user opts in.
+  private val requestedPowerDbm = AtomicInteger(20)
   @Volatile private var drainThread: Thread? = null
   @Volatile private var uartOwned = false
   @Volatile private var uhfReader: RFIDWithUHFUART? = null
   @Volatile private var uhfInitialized: Boolean = false
   @Volatile private var uhfInventoryActive: Boolean = false
-  // Senitron-pattern poller (see HANDOFF_FOR_OTHER_CLAUDE.md §3.1) — `setInventoryCallback`
+  // Reference-app-pattern poller (see HANDOFF_FOR_OTHER_CLAUDE.md §3.1) — `setInventoryCallback`
   // is unreliable on C72E MTK firmware (callback never fires); polling `readTagFromBuffer()`
   // from a plain Java Thread does. Keep both paths active and dedup via [seenEpcs] —
   // whichever fires first wins.
@@ -158,7 +162,15 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   fun setAntennaPowerDbm(dbm: Int) {
     executor.execute {
-      requestedPowerDbm.set(dbm.coerceIn(0, 30))
+      // Update the cached preference but DO NOT push to the chip. On C72E
+      // MTK firmware any setPower call after the initial one wedges the
+      // chip — startInventoryTag returns true but the firmware never
+      // transmits (0 hits / N null reads symptom). The SDK accepts a single
+      // setPower at init and that value sticks until the chip is freed.
+      // applyPower() targets the reflective uhfClass path (uartOwned=true)
+      // which we don't take, so it stays a no-op. The slider's value will
+      // apply on the next app launch.
+      requestedPowerDbm.set(dbm.coerceIn(5, 27))
       applyPower()
     }
   }
@@ -172,11 +184,11 @@ class CarbonChainwayRfidController(private val context: Context) {
         return true
       }
       return try {
-        // Senitron pattern (HANDOFF Part 8 #2): bind the side trigger to keycode 139
-        // BEFORE initializing the UHF reader. Without this the firmware may not emit
-        // any Android KeyEvent for trigger pulls on a fresh-reset device, even when
-        // the SDK init itself succeeds. Reflective so it's safe if SDK build differs.
-        configureScannerSideKey()
+        // Phase 1 — recovery-app-style minimal init (just getInstance/init/
+        // setPower/startInventoryTag/poll). The recovery app uses setPower(20)
+        // because its 5s test only needs to prove "reads work at all". For
+        // production warehouse use we need real read range across hundreds of
+        // tags, so we use the working device dump's value of 30 dBm.
         val instance = RFIDWithUHFUART.getInstance()
         if (instance == null) {
           Log.w(TAG, "RFIDWithUHFUART.getInstance() returned null")
@@ -188,22 +200,62 @@ class CarbonChainwayRfidController(private val context: Context) {
           Log.w(TAG, "RFIDWithUHFUART init failed")
           return false
         }
-        // Recovery memory: after init, engage the antenna PA gate. Without this
-        // call the chip accepts inventory but never transmits — `readTagFromBuffer`
-        // returns null forever (4400 null reads / 0 hits in 1.2.6 trace).
-        engageAntennaPaGate()
-        val powerOk = instance.setPower(27)
-        Log.d(TAG, "RFIDWithUHFUART.setPower(27) -> $powerOk")
-        instance.setInventoryCallback(object : IUHFInventoryCallback {
-          override fun callback(tagInfo: UHFTAGInfo) {
-            val epc = tagInfo.getEPC()
-            if (epc.isNullOrBlank()) return
-            val normalized = epc.trim().uppercase()
-            val rssiDbm = parseRssiDbm(tagInfo.getRssi())
-            Log.d(TAG, "UHF callback EPC=$normalized rssi=${tagInfo.getRssi()} parsed=$rssiDbm ant=${tagInfo.getAnt()}")
-            emitEpc(normalized, rssiDbm)
+        // Apply the user's requested power (Dart-side runtime config sets
+        // this to 27 dBm for warehouse inventory). 20 dBm = 100 mW = ~1m
+        // range, which only finds the closest 2-3 tags out of a 200-tag
+        // crowd. 27 dBm = 500 mW = ~3m range. setPower(30)=1W historically
+        // wedged this firmware variant; 27 is in the safe range.
+        val initPower = requestedPowerDbm.get().coerceIn(5, 27)
+        val powerOk = instance.setPower(initPower)
+        Log.d(TAG, "RFIDWithUHFUART.setPower($initPower) -> $powerOk")
+
+        // Gen2 inventory profile for dense-crowd reads. Read the chip's
+        // existing entity (preserves all fields the firmware shipped with)
+        // and only override the two fields that matter for "read 200 tags
+        // not just 2": Session=S0 so tag flags reset ~immediately (under S1
+        // each tag goes silent for ~5s after one read = handheld hits the
+        // 2 nearest and misses everything else), and Q range 2..8 so the
+        // chip auto-grows slots when it sees collisions. Setting all fields
+        // to zeros (last attempt) wedged the chip — chip rejects mismatched
+        // queryDR/queryM/linkFrequency combos and stops transmitting. By
+        // round-tripping getGen2()→mutate→setGen2() we never set a 0 where
+        // the chip wants a non-zero default.
+        runCatching {
+          val current = instance.javaClass.getMethod("getGen2").invoke(instance)
+          if (current != null) {
+            val gen2Cls = current.javaClass
+            gen2Cls.getMethod("setQuerySession", Int::class.javaPrimitiveType).invoke(current, 0)
+            gen2Cls.getMethod("setQueryTarget", Int::class.javaPrimitiveType).invoke(current, 0)
+            gen2Cls.getMethod("setStartQ", Int::class.javaPrimitiveType).invoke(current, 4)
+            gen2Cls.getMethod("setMinQ", Int::class.javaPrimitiveType).invoke(current, 2)
+            gen2Cls.getMethod("setMaxQ", Int::class.javaPrimitiveType).invoke(current, 8)
+            val setGen2 = instance.javaClass.getMethod("setGen2", gen2Cls)
+            val gen2Ok = setGen2.invoke(instance, current) as? Boolean ?: false
+            Log.d(TAG, "RFIDWithUHFUART.setGen2(session=0/target=0/dynQ=2..8 over chip defaults) -> $gen2Ok")
+          } else {
+            Log.w(TAG, "setGen2 skipped: getGen2() returned null")
           }
-        })
+        }.onFailure {
+          Log.w(TAG, "setGen2 failed: ${it.message}")
+        }
+
+        // Diagnostic readback so we can compare against the working device.
+        val fwVersion = runCatching { instance.getVersion() }.getOrNull()
+        val hwVersion = runCatching { instance.getHardwareVersion() }.getOrNull()
+        val gotPower = runCatching { instance.getPower() }.getOrDefault(-1)
+        val gotFreq = runCatching { instance.getFrequencyMode() }.getOrDefault(-1)
+        val gotProto = runCatching { instance.getProtocol() }.getOrDefault(-1)
+        val gotRFLink = runCatching { instance.getRFLink() }.getOrDefault(-1)
+        Log.d(TAG, "RFIDWithUHFUART post-init: fw=$fwVersion hw=$hwVersion power=$gotPower freq=$gotFreq proto=$gotProto rflink=$gotRFLink")
+        if (fwVersion.isNullOrBlank()) {
+          lastError = "uhf_radio_dead"
+          Log.w(TAG, "RFIDWithUHFUART post-init: getVersion() returned null/empty — radio likely dead")
+        }
+        // setInventoryCallback intentionally NOT called — the recovery app's
+        // proven-working pattern uses only readTagFromBuffer() polling. On C72E
+        // MTK firmware, registering a callback may switch the SDK into
+        // "callback mode" which silently routes tags away from the buffer
+        // without firing the callback either, producing the 0-hits symptom.
         uhfReader = instance
         uhfInitialized = true
         Log.d(TAG, "UHF reader initialized successfully")
@@ -216,7 +268,7 @@ class CarbonChainwayRfidController(private val context: Context) {
   }
 
   /**
-   * Senitron pattern (HANDOFF Part 8 #2): bind the C72E side trigger (keycode 139)
+   * reference-app pattern (HANDOFF Part 8 #2): bind the C72E side trigger (keycode 139)
    * to the scanner key dispatcher BEFORE the UHF SDK initializes. Without this call
    * the firmware may not emit any Android KeyEvent for trigger pulls — even when
    * the SDK init itself succeeds — on a fresh-reset or post-recovery device.
@@ -246,7 +298,7 @@ class CarbonChainwayRfidController(private val context: Context) {
   }
 
   /**
-   * Recovery memory note + Senitron pattern: invoke `ScannerUtility.resetScan(ctx)`
+   * Recovery memory note + reference-app pattern: invoke `ScannerUtility.resetScan(ctx)`
    * to engage the R2000's antenna PA gate. Without this, `init=true` and
    * `startInventoryTag=true` but `readTagFromBuffer()` always returns null —
    * exactly the symptom we observed in 1.2.6 (4400 null reads, 0 hits). The
@@ -261,9 +313,12 @@ class CarbonChainwayRfidController(private val context: Context) {
       }
       val m = cls.getMethod("resetScan", Context::class.java)
       m.invoke(instance, context.applicationContext)
-      Log.d(TAG, "engageAntennaPaGate: resetScan(ctx) invoked, sleeping 1s")
-      Thread.sleep(1000)
-      Log.d(TAG, "engageAntennaPaGate: ready")
+      // 50ms is enough for the scanner service to reset the antenna PA gate.
+      // The earlier 1000ms sleep was a "huge delay" complaint from the user
+      // because it blocks every trigger pull. resetScan returns once the
+      // command is queued; the gate opens within a few ms.
+      Thread.sleep(50)
+      Log.d(TAG, "engageAntennaPaGate: resetScan(ctx) done")
     } catch (t: Throwable) {
       val cause = (t as? java.lang.reflect.InvocationTargetException)?.cause ?: t
       Log.w(TAG, "engageAntennaPaGate: ${cause.javaClass.simpleName}: ${cause.message}")
@@ -271,7 +326,7 @@ class CarbonChainwayRfidController(private val context: Context) {
   }
 
   /**
-   * Senitron pattern (HANDOFF_FOR_OTHER_CLAUDE.md §D1): initialize the UHF SDK at
+   * reference-app pattern (HANDOFF_FOR_OTHER_CLAUDE.md §D1): initialize the UHF SDK at
    * app launch, not lazily on Count entry. This grabs `/dev/ttyMT1` before the
    * system scanner service rebinds it, eliminating the `init=false` failure we see
    * when Count tries to acquire the UART after `com.rscja.scanner` has it locked.
@@ -283,13 +338,16 @@ class CarbonChainwayRfidController(private val context: Context) {
     // Try multiple times with progressively-more-aggressive UART eviction. The
     // scanner service auto-restarts after `killBackgroundProcesses` so we need to
     // race it: kill, sleep just enough for the kernel to release the fd, init.
+    //
+    // SDK init only — the reflective UHFOpenAndConnect path consistently fails
+    // on this device's UART (returns -1/-98) and leaving the chip in a half-open
+    // state from a failed reflective attempt also breaks the subsequent SDK
+    // init. Stick to SDK init here and let connectAsync handle reflective.
     repeat(3) { attempt ->
       try {
         val ok = initUhfReaderDirect()
         Log.d(TAG, "acquireUartEarly attempt #${attempt + 1}: initUhfReaderDirect -> $ok")
         if (ok) return true
-        // Init failed — UART almost certainly held by com.rscja.scanner. Kill
-        // it and any other consumers, wait for kernel to drop the fd, retry.
         try {
           val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
           am.killBackgroundProcesses("com.rscja.scanner")
@@ -308,8 +366,8 @@ class CarbonChainwayRfidController(private val context: Context) {
   }
 
   /**
-   * Senitron-style ensureReaderReady (HANDOFF Part 8 #4): verify the reader is
-   * initialized and re-init lazily if not. Senitron's wrapper does this on every
+   * Reference-app-style ensureReaderReady (HANDOFF Part 8 #4): verify the reader is
+   * initialized and re-init lazily if not. the reference wrapper does this on every
    * `startInventoryTag` call — that's why a Count screen re-entry works for them
    * and fails for us. Returns true if the reader is ready to start inventory.
    */
@@ -322,7 +380,7 @@ class CarbonChainwayRfidController(private val context: Context) {
     return acquireUartEarly()
   }
 
-  // ── Senitron-pattern TagThread poller ──────────────────────────────────────
+  // ── Reference-app-pattern TagThread poller ──────────────────────────────────────
   // Drain `readTagFromBuffer()` continuously while inventory is running. Critical
   // because `setInventoryCallback` doesn't fire on C72E MTK firmware. Sleeping ONLY
   // when the buffer is empty keeps tag throughput at hardware-max while keeping CPU
@@ -404,54 +462,23 @@ class CarbonChainwayRfidController(private val context: Context) {
         // back to the scanner service, after which UHFInit always returns -1.
         // Only dispose() tears down; here we just attempt to (re)acquire.
 
-        // Pre-flight: only attempt direct UART if ScannerUtility can FUNCTIONALLY release it
-        // AND this SoC is not MTK. MTK-based Chainway devices (C72E etc.) have ScannerUtility_mtk
-        // which binds successfully (iScanner !== newActionUtility) but disableFunction() doesn't
-        // actually evict /dev/ttyMT1 — the MTK UART port implementation keeps the fd open.
-        // UHFInit then grabs the fd, UHFOpenAndConnect fails, and the scanner service is wedged.
-        if (!canOwnUart()) {
-          Log.w(TAG, "canOwnUart=false — broadcast-only path")
+        // Skip the reflective UART path entirely on first launch. The recovery
+        // app's proven sequence is just init → setPower → startInventoryTag →
+        // readTagFromBuffer via RFIDWithUHFUART. Running additional reflective
+        // UHFInit/UHFOpenAndConnect in parallel wedges the chip on C72E MTK
+        // firmware (init=false from recovery app after our retries left chip
+        // wedged). Delegate to acquireUartEarly which uses the SDK init path
+        // and is synchronized via uhfLock + idempotent — two callers won't
+        // race the chip. If the SDK reader is already initialized this
+        // returns immediately.
+        if (acquireUartEarly()) {
+          Log.d(TAG, "connectAsync: SDK init via acquireUartEarly OK")
+          lastError = null
+          mainHandler.post { onDone(null) }
+        } else {
+          Log.w(TAG, "connectAsync: acquireUartEarly failed — falling back to broadcast")
           connectBroadcastOnly(onDone)
-          return@execute
         }
-
-        val cls = resolveUhfClass() ?: run {
-          Log.w(TAG, "DeviceAPI class not found — broadcast-only path")
-          connectBroadcastOnly(onDone)
-          return@execute
-        }
-        uhfClass = cls
-
-        val inst = getStaticInstance(cls)
-        if (inst == null) {
-          Log.w(TAG, "DeviceAPI getInstance null — broadcast-only path")
-          connectBroadcastOnly(onDone)
-          return@execute
-        }
-
-        // ScannerUtility present — attempt direct UART takeover without eviction.
-        // On MTK C72E, disableFunction() is a no-op stub that doesn't release /dev/ttyMT1.
-        // Calling it wakes the scanner service. Instead, configure broadcast routing first
-        // (non-destructive), then attempt UART open directly — if the scanner service is
-        // idle the port is available; if not, we fall back to broadcast.
-        scannerUtilityConfigureBroadcast()
-
-        uhfInstance = inst
-        uartOwned = initUart(cls, inst)
-        if (!uartOwned) {
-          Log.w(TAG, "initUart failed — broadcast-only path (scanner service holds UART)")
-          connectBroadcastOnly(onDone)
-          return@execute
-        }
-
-        Log.d(TAG, "UART owned — direct scan path active")
-        lastError = null
-        // Auto-start drain loop immediately — don't wait for Flutter startInventory call.
-        scanning.set(true)
-        applyPower()
-        startDrainLoop(cls, inst)
-        Log.d(TAG, "drain loop auto-started after UART acquire")
-        mainHandler.post { onDone(null) }
       } catch (e: Throwable) {
         lastError = e.message ?: e.javaClass.simpleName
         Log.e(TAG, "connect failed: ${e.message}", e)
@@ -494,11 +521,13 @@ class CarbonChainwayRfidController(private val context: Context) {
     executor.execute {
       try {
         // Lazy reflective UART takeover when Dart skipped chainway.connect.
-        // The SDK's setInventoryCallback path is unreliable on C72E MTK firmware
-        // (callback never fires even though startInventoryTag returns true), so the
-        // reflective UHFInit/UHFOpenAndConnect + UHFGetReceived_EX2 polling path that
-        // the vendor reference app uses is preferred whenever it can be acquired.
-        if (!uartOwned && canOwnUart()) {
+        // SKIP this entirely if the SDK reader is already initialized — calling
+        // UHFInit reflectively while the SDK has the UART triggers a sequence
+        // of UHFInit -> -1 errors that leave the chip half-initialized, and
+        // the subsequent startInventoryTag returns true but no tags ever come
+        // through readTagFromBuffer. The SDK path matches what the recovery
+        // app uses, so trust it.
+        if (!uartOwned && uhfReader == null && canOwnUart()) {
           val cls = uhfClass ?: resolveUhfClass()
           val inst = uhfInstance ?: cls?.let { getStaticInstance(it) }
           if (cls != null && inst != null) {
@@ -509,30 +538,70 @@ class CarbonChainwayRfidController(private val context: Context) {
           } else {
             Log.w(TAG, "lazy UART takeover skipped — class/instance resolve failed")
           }
+        } else if (uhfReader != null) {
+          Log.d(TAG, "lazy UART takeover skipped — SDK reader already initialized")
         }
 
         // SDK fallback when reflective takeover declined or failed.
-        // Senitron pattern (HANDOFF Part 8 #4): if the SDK reader isn't ready,
+        // reference-app pattern (HANDOFF Part 8 #4): if the SDK reader isn't ready,
         // run the kill-and-retry cycle from acquireUartEarly. Without this, a
         // single early init failure permanently bricks the session for this
         // app instance — the user sees "trigger does nothing" on every pull.
         if (!uartOwned) {
-          if (ensureReaderReady()) {
-            val reader = uhfReader
-            if (reader != null) {
-              val startOk = reader.startInventoryTag()
-              Log.d(TAG, "RFIDWithUHFUART.startInventoryTag() -> $startOk")
-              uhfInventoryActive = startOk
-              if (startOk) {
-                scanning.set(true)
-                // Senitron pattern: poll readTagFromBuffer() — `setInventoryCallback`
-                // doesn't fire on C72E MTK firmware. The two paths coexist; dedup via
-                // [seenEpcs] handles double-emission if both happen to fire.
-                startTagPollThread()
-                mainHandler.post { result.success(null) }
-                return@execute
-              }
+          // Recovery-app pattern (the only proven-working path on this device):
+          // engage antenna PA gate, then startInventoryTag, then poll. No
+          // per-trigger kill of com.rscja.scanner — that was injecting ~400ms
+          // lag plus sometimes wedged the chip antenna gate between probe and
+          // start. Scanner is killed once at app launch in MainActivity which
+          // gives the SDK exclusive UART; from there we trust the connection.
+          //
+          // If startInventoryTag returns false the chip is wedged → kill
+          // scanner, free reader, re-init, retry. Rare path.
+          var reader = uhfReader
+          var startOk = false
+          if (reader != null) {
+            // Recovery-app pattern: NO setPower here. Power is set exactly
+            // once in initUhfReaderDirect and stays. Calling setPower a
+            // second time with the same value wedges this MTK firmware
+            // variant — startInventoryTag returns true but the chip never
+            // transmits (0 hits / N null reads symptom we hit at 27 dBm).
+            engageAntennaPaGate()
+            startOk = runCatching { reader!!.startInventoryTag() }.getOrDefault(false)
+            Log.d(TAG, "RFIDWithUHFUART.startInventoryTag() -> $startOk (fast path)")
+          }
+          if (!startOk) {
+            Log.d(TAG, "fast path failed, falling into kill+reinit recovery")
+            try {
+              val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+              am.killBackgroundProcesses("com.rscja.scanner")
+              am.killBackgroundProcesses("com.rscja.ht")
+            } catch (_: Throwable) {}
+            synchronized(uhfLock) {
+              try { uhfReader?.free() } catch (_: Throwable) {}
+              uhfReader = null
+              uhfInitialized = false
             }
+            Thread.sleep(300)
+            if (initUhfReaderDirect()) {
+              reader = uhfReader
+              if (reader != null) {
+                engageAntennaPaGate()
+                startOk = runCatching { reader!!.startInventoryTag() }.getOrDefault(false)
+                Log.d(TAG, "RFIDWithUHFUART.startInventoryTag() -> $startOk (recovery)")
+              }
+            } else {
+              Log.w(TAG, "recovery re-init failed")
+            }
+          }
+          uhfInventoryActive = startOk
+          if (startOk) {
+            scanning.set(true)
+            // reference-app pattern: poll readTagFromBuffer() — `setInventoryCallback`
+            // doesn't fire on C72E MTK firmware. The two paths coexist; dedup via
+            // [seenEpcs] handles double-emission if both happen to fire.
+            startTagPollThread()
+            mainHandler.post { result.success(null) }
+            return@execute
           }
         }
         if (uartOwned) {
@@ -558,7 +627,7 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   fun stopInventoryAsync() {
     if (!scanning.getAndSet(false)) return
-    // Senitron-pattern poller — interrupt immediately so the next read() call returns.
+    // Reference-app-pattern poller — interrupt immediately so the next read() call returns.
     stopTagPollThread()
     // Direct SDK stop — mirrors the direct start path
     if (uhfInventoryActive) {
@@ -638,10 +707,10 @@ class CarbonChainwayRfidController(private val context: Context) {
         return false
       }
 
-      // Re-assert user-configured power before write. initUhfReaderDirect hard-codes 27 dBm
+      // Re-assert user-configured power before write. initUhfReaderDirect now sets 30 dBm
       // for scanning; writes need more link budget than reads, and the user-configured value
       // (typically 30) must actually be in effect on the radio at write time.
-      val reqPower = requestedPowerDbm.get().coerceIn(5, 30)
+      val reqPower = requestedPowerDbm.get().coerceIn(5, 27)
       val curPower = runCatching { reader.getPower() }.getOrDefault(-1)
       val pwrSetOk = runCatching { reader.setPower(reqPower) }.getOrDefault(false)
       Log.d(TAG, "pre-write power: getPower()=$curPower requested=$reqPower setPower($reqPower)=$pwrSetOk")
@@ -1352,12 +1421,42 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   private fun applyPower() {
     val cls = uhfClass ?: return; val inst = uhfInstance ?: return
-    val p = requestedPowerDbm.get().coerceIn(0, 30)
+    val p = requestedPowerDbm.get().coerceIn(5, 27)
     val m = cls.methods.firstOrNull { it.name in setOf("UHFSetPower", "setPower", "SetPower", "setOutputPower") && it.parameterCount == 1 }
       ?.also { it.isAccessible = true } ?: return
     val arg: Any = if (m.parameterTypes[0] == java.lang.Character.TYPE) java.lang.Character(p.toChar()) else java.lang.Integer(p)
     runCatching { m.invoke(inst, arg) }
     Log.d(TAG, "${m.name}($p) applied")
+  }
+
+  /**
+   * Phase 1 — apply the chip config that the working device dump (HC720A210300240
+   * / HH-574) reports while the reference app is running. Without these the chip
+   * accepts inventory but never transmits — same symptom as 1.2.7's "0 hits"
+   * trace. Called right after a successful reflective UART takeover.
+   *
+   *   getFrequencyMode() = 8
+   *   getRFLink()        = 1
+   *   getProtocol()      = -1   ← never set (skip)
+   *   getPower()         = 30   ← applied separately via applyPower()
+   *
+   * EPC-only inventory mode (UHFSetMode(0)) matches the SDK call setEPCMode().
+   */
+  private fun applyChipConfigReflective(cls: Class<*>, inst: Any) {
+    fun callChar(name: String, value: Int) {
+      val m = cls.methods.firstOrNull { it.name == name && it.parameterCount == 1 } ?: run {
+        Log.d(TAG, "applyChipConfigReflective: $name not found"); return
+      }
+      m.isAccessible = true
+      val arg: Any = if (m.parameterTypes[0] == java.lang.Character.TYPE) java.lang.Character(value.toChar()) else java.lang.Integer(value)
+      val r = runCatching { (m.invoke(inst, arg) as? Number)?.toInt() ?: -1 }.getOrDefault(-2)
+      Log.d(TAG, "applyChipConfigReflective: $name($value) -> $r")
+    }
+    callChar("UHFSetFrequency_EX", 8)   // matches working device dump
+    callChar("UHFSetMode", 0)           // EPC-only inventory frames
+    callChar("UHFSetRFLink", 1)         // matches working device dump
+    // setProtocol intentionally skipped — working dump reports getProtocol()=-1 (unset)
+    applyPower()                         // UHFSetPower(30) by default
   }
 
   private fun invokeNoArgs(cls: Class<*>, inst: Any, vararg names: String) {
