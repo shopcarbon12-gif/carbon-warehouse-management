@@ -45,6 +45,11 @@ class CarbonChainwayRfidController(private val context: Context) {
   @Volatile private var uhfReader: RFIDWithUHFUART? = null
   @Volatile private var uhfInitialized: Boolean = false
   @Volatile private var uhfInventoryActive: Boolean = false
+  // Senitron-pattern poller (see HANDOFF_FOR_OTHER_CLAUDE.md §3.1) — `setInventoryCallback`
+  // is unreliable on C72E MTK firmware (callback never fires); polling `readTagFromBuffer()`
+  // from a plain Java Thread does. Keep both paths active and dedup via [seenEpcs] —
+  // whichever fires first wins.
+  @Volatile private var tagPollThread: Thread? = null
   private val uhfLock = Any()
 
   // Cached PathClassLoader on keyboard.apk — shared by DeviceAPI and ScannerUtility
@@ -67,6 +72,7 @@ class CarbonChainwayRfidController(private val context: Context) {
   }
 
   fun setTagSink(sink: EventChannel.EventSink?) {
+    Log.d(TAG, "TRACE setTagSink: sink=${if (sink != null) "BOUND" else "NULL"} (was ${if (tagSink != null) "BOUND" else "NULL"})")
     tagSink = sink
     if (sink != null) registerScannerWriteReceiver() else unregisterScannerWriteReceiver()
   }
@@ -166,6 +172,11 @@ class CarbonChainwayRfidController(private val context: Context) {
         return true
       }
       return try {
+        // Senitron pattern (HANDOFF Part 8 #2): bind the side trigger to keycode 139
+        // BEFORE initializing the UHF reader. Without this the firmware may not emit
+        // any Android KeyEvent for trigger pulls on a fresh-reset device, even when
+        // the SDK init itself succeeds. Reflective so it's safe if SDK build differs.
+        configureScannerSideKey()
         val instance = RFIDWithUHFUART.getInstance()
         if (instance == null) {
           Log.w(TAG, "RFIDWithUHFUART.getInstance() returned null")
@@ -177,6 +188,10 @@ class CarbonChainwayRfidController(private val context: Context) {
           Log.w(TAG, "RFIDWithUHFUART init failed")
           return false
         }
+        // Recovery memory: after init, engage the antenna PA gate. Without this
+        // call the chip accepts inventory but never transmits — `readTagFromBuffer`
+        // returns null forever (4400 null reads / 0 hits in 1.2.6 trace).
+        engageAntennaPaGate()
         val powerOk = instance.setPower(27)
         Log.d(TAG, "RFIDWithUHFUART.setPower(27) -> $powerOk")
         instance.setInventoryCallback(object : IUHFInventoryCallback {
@@ -198,6 +213,178 @@ class CarbonChainwayRfidController(private val context: Context) {
         false
       }
     }
+  }
+
+  /**
+   * Senitron pattern (HANDOFF Part 8 #2): bind the C72E side trigger (keycode 139)
+   * to the scanner key dispatcher BEFORE the UHF SDK initializes. Without this call
+   * the firmware may not emit any Android KeyEvent for trigger pulls — even when
+   * the SDK init itself succeeds — on a fresh-reset or post-recovery device.
+   *
+   * Reflective + idempotent. Safe to call multiple times. Failures are logged and
+   * non-fatal — older SDK builds without this method just continue.
+   */
+  private fun configureScannerSideKey() {
+    try {
+      val cls = Class.forName("com.rscja.scanner.utility.ScannerUtility")
+      val instance = cls.getMethod("getScannerInerface").invoke(null) ?: run {
+        Log.w(TAG, "configureScannerSideKey: getScannerInerface returned null")
+        return
+      }
+      val m = cls.getMethod(
+        "setScanKey",
+        Context::class.java,
+        Int::class.javaPrimitiveType,
+        IntArray::class.java,
+      )
+      m.invoke(instance, context.applicationContext, 0, intArrayOf(139, 1, 1, 1))
+      Log.d(TAG, "configureScannerSideKey: setScanKey(ctx, 0, {139,1,1,1}) OK")
+    } catch (t: Throwable) {
+      val cause = (t as? java.lang.reflect.InvocationTargetException)?.cause ?: t
+      Log.w(TAG, "configureScannerSideKey: ${cause.javaClass.simpleName}: ${cause.message}")
+    }
+  }
+
+  /**
+   * Recovery memory note + Senitron pattern: invoke `ScannerUtility.resetScan(ctx)`
+   * to engage the R2000's antenna PA gate. Without this, `init=true` and
+   * `startInventoryTag=true` but `readTagFromBuffer()` always returns null —
+   * exactly the symptom we observed in 1.2.6 (4400 null reads, 0 hits). The
+   * recovery app's red button does this; we do it inline.
+   */
+  private fun engageAntennaPaGate() {
+    try {
+      val cls = Class.forName("com.rscja.scanner.utility.ScannerUtility")
+      val instance = cls.getMethod("getScannerInerface").invoke(null) ?: run {
+        Log.w(TAG, "engageAntennaPaGate: getScannerInerface returned null")
+        return
+      }
+      val m = cls.getMethod("resetScan", Context::class.java)
+      m.invoke(instance, context.applicationContext)
+      Log.d(TAG, "engageAntennaPaGate: resetScan(ctx) invoked, sleeping 1s")
+      Thread.sleep(1000)
+      Log.d(TAG, "engageAntennaPaGate: ready")
+    } catch (t: Throwable) {
+      val cause = (t as? java.lang.reflect.InvocationTargetException)?.cause ?: t
+      Log.w(TAG, "engageAntennaPaGate: ${cause.javaClass.simpleName}: ${cause.message}")
+    }
+  }
+
+  /**
+   * Senitron pattern (HANDOFF_FOR_OTHER_CLAUDE.md §D1): initialize the UHF SDK at
+   * app launch, not lazily on Count entry. This grabs `/dev/ttyMT1` before the
+   * system scanner service rebinds it, eliminating the `init=false` failure we see
+   * when Count tries to acquire the UART after `com.rscja.scanner` has it locked.
+   *
+   * Safe to call multiple times — `initUhfReaderDirect` is idempotent. Returns true
+   * on success.
+   */
+  fun acquireUartEarly(): Boolean {
+    // Try multiple times with progressively-more-aggressive UART eviction. The
+    // scanner service auto-restarts after `killBackgroundProcesses` so we need to
+    // race it: kill, sleep just enough for the kernel to release the fd, init.
+    repeat(3) { attempt ->
+      try {
+        val ok = initUhfReaderDirect()
+        Log.d(TAG, "acquireUartEarly attempt #${attempt + 1}: initUhfReaderDirect -> $ok")
+        if (ok) return true
+        // Init failed — UART almost certainly held by com.rscja.scanner. Kill
+        // it and any other consumers, wait for kernel to drop the fd, retry.
+        try {
+          val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+          am.killBackgroundProcesses("com.rscja.scanner")
+          am.killBackgroundProcesses("com.rscja.ht")
+          Log.d(TAG, "acquireUartEarly: killed scanner pkgs (retry imminent)")
+        } catch (t: Throwable) {
+          Log.w(TAG, "acquireUartEarly killBackgroundProcesses failed: ${t.message}")
+        }
+        Thread.sleep(500L) // kernel needs time to release /dev/ttyMT1
+      } catch (t: Throwable) {
+        Log.w(TAG, "acquireUartEarly attempt #${attempt + 1} threw: ${t.message}", t)
+      }
+    }
+    Log.w(TAG, "acquireUartEarly: all 3 attempts failed")
+    return false
+  }
+
+  /**
+   * Senitron-style ensureReaderReady (HANDOFF Part 8 #4): verify the reader is
+   * initialized and re-init lazily if not. Senitron's wrapper does this on every
+   * `startInventoryTag` call — that's why a Count screen re-entry works for them
+   * and fails for us. Returns true if the reader is ready to start inventory.
+   */
+  private fun ensureReaderReady(): Boolean {
+    synchronized(uhfLock) {
+      if (uhfInitialized && uhfReader != null) return true
+    }
+    Log.d(TAG, "ensureReaderReady: reader not initialized, attempting recovery")
+    // Run the same retry-with-kill cycle as acquireUartEarly. Idempotent.
+    return acquireUartEarly()
+  }
+
+  // ── Senitron-pattern TagThread poller ──────────────────────────────────────
+  // Drain `readTagFromBuffer()` continuously while inventory is running. Critical
+  // because `setInventoryCallback` doesn't fire on C72E MTK firmware. Sleeping ONLY
+  // when the buffer is empty keeps tag throughput at hardware-max while keeping CPU
+  // idle when no tags are present. Pattern from HANDOFF_FOR_OTHER_CLAUDE.md §3.1.
+
+  private fun startTagPollThread() {
+    if (tagPollThread?.isAlive == true) {
+      Log.d(TAG, "TagThread: already running")
+      return
+    }
+    val reader = uhfReader ?: run {
+      Log.w(TAG, "TagThread: uhfReader is null — cannot start")
+      return
+    }
+    val t = Thread({
+      Log.d(TAG, "TRACE TagThread: STARTED scanning=${scanning.get()}")
+      var loops = 0
+      var nullReads = 0
+      var hits = 0
+      try {
+        while (scanning.get() && !Thread.currentThread().isInterrupted) {
+          loops++
+          try {
+            val tag = reader.readTagFromBuffer()
+            if (tag != null) {
+              hits++
+              val epc = tag.getEPC()
+              Log.d(TAG, "TRACE TagThread: HIT #$hits epc=$epc rssi=${tag.getRssi()}")
+              if (!epc.isNullOrBlank()) {
+                val normalized = epc.trim().uppercase()
+                val rssiDbm = parseRssiDbm(tag.getRssi())
+                emitEpc(normalized, rssiDbm)
+              }
+              // No sleep — immediately fetch next buffered tag.
+            } else {
+              nullReads++
+              if (nullReads % 100 == 0) {
+                Log.d(TAG, "TRACE TagThread: $nullReads null reads, $hits hits, $loops loops")
+              }
+              Thread.sleep(20L)
+            }
+          } catch (ie: InterruptedException) {
+            Thread.currentThread().interrupt()
+          } catch (e: Exception) {
+            Log.w(TAG, "TRACE TagThread: loop error: ${e.message}")
+            try { Thread.sleep(50L) } catch (_: InterruptedException) {
+              Thread.currentThread().interrupt()
+            }
+          }
+        }
+      } finally {
+        Log.d(TAG, "TRACE TagThread: STOPPED scanning=${scanning.get()} loops=$loops hits=$hits nulls=$nullReads")
+      }
+    }, "CarbonChainway-TagThread").apply { isDaemon = true }
+    tagPollThread = t
+    t.start()
+  }
+
+  private fun stopTagPollThread() {
+    val t = tagPollThread ?: return
+    tagPollThread = null
+    runCatching { t.interrupt() }
   }
 
   // ── Connect ─────────────────────────────────────────────────────────────────
@@ -302,13 +489,35 @@ class CarbonChainwayRfidController(private val context: Context) {
   // ── Inventory ────────────────────────────────────────────────────────────────
 
   fun startInventoryFlutterResult(result: MethodChannel.Result) {
-    Log.d(TAG, "startInventoryFlutterResult uartOwned=$uartOwned scanning=${scanning.get()}")
+    Log.d(TAG, "TRACE startInventoryFlutterResult: ENTER uartOwned=$uartOwned scanning=${scanning.get()} uhfReader=${uhfReader != null} tagSinkBound=${tagSink != null}")
     Log.d("LAT", "TRIGGER_ACK ts=${System.currentTimeMillis()} stack=chainway")
     executor.execute {
       try {
-        // Direct SDK path — try RFIDWithUHFUART first (works on C72E when canOwnUart=false)
+        // Lazy reflective UART takeover when Dart skipped chainway.connect.
+        // The SDK's setInventoryCallback path is unreliable on C72E MTK firmware
+        // (callback never fires even though startInventoryTag returns true), so the
+        // reflective UHFInit/UHFOpenAndConnect + UHFGetReceived_EX2 polling path that
+        // the vendor reference app uses is preferred whenever it can be acquired.
+        if (!uartOwned && canOwnUart()) {
+          val cls = uhfClass ?: resolveUhfClass()
+          val inst = uhfInstance ?: cls?.let { getStaticInstance(it) }
+          if (cls != null && inst != null) {
+            uhfClass = cls
+            uhfInstance = inst
+            uartOwned = initUart(cls, inst)
+            Log.d(TAG, "lazy UART takeover -> uartOwned=$uartOwned")
+          } else {
+            Log.w(TAG, "lazy UART takeover skipped — class/instance resolve failed")
+          }
+        }
+
+        // SDK fallback when reflective takeover declined or failed.
+        // Senitron pattern (HANDOFF Part 8 #4): if the SDK reader isn't ready,
+        // run the kill-and-retry cycle from acquireUartEarly. Without this, a
+        // single early init failure permanently bricks the session for this
+        // app instance — the user sees "trigger does nothing" on every pull.
         if (!uartOwned) {
-          if (initUhfReaderDirect()) {
+          if (ensureReaderReady()) {
             val reader = uhfReader
             if (reader != null) {
               val startOk = reader.startInventoryTag()
@@ -316,6 +525,10 @@ class CarbonChainwayRfidController(private val context: Context) {
               uhfInventoryActive = startOk
               if (startOk) {
                 scanning.set(true)
+                // Senitron pattern: poll readTagFromBuffer() — `setInventoryCallback`
+                // doesn't fire on C72E MTK firmware. The two paths coexist; dedup via
+                // [seenEpcs] handles double-emission if both happen to fire.
+                startTagPollThread()
                 mainHandler.post { result.success(null) }
                 return@execute
               }
@@ -323,11 +536,11 @@ class CarbonChainwayRfidController(private val context: Context) {
           }
         }
         if (uartOwned) {
-          // legacy UART path — unreachable after canOwnUart=false, kept for safety
           val cls = uhfClass; val inst = uhfInstance
           if (cls != null && inst != null && !scanning.getAndSet(true)) {
             applyPower()
             startDrainLoop(cls, inst)
+            Log.d(TAG, "startInventory: drain loop armed (uartOwned path)")
           }
         } else {
           // Broadcast-only: arm the firmware's continuous UHF inventory.
@@ -345,6 +558,8 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   fun stopInventoryAsync() {
     if (!scanning.getAndSet(false)) return
+    // Senitron-pattern poller — interrupt immediately so the next read() call returns.
+    stopTagPollThread()
     // Direct SDK stop — mirrors the direct start path
     if (uhfInventoryActive) {
       uhfInventoryActive = false
@@ -652,7 +867,7 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   // ── ScannerUtility cooperative eviction ──────────────────────────────────────
 
-  private fun canOwnUart(): Boolean = false
+  private fun canOwnUart(): Boolean = true
 
   // Cached per process lifetime — probe is expensive and deterministic.
   @Volatile private var scannerUtilityFunctionalCache: Boolean? = null
@@ -916,7 +1131,11 @@ class CarbonChainwayRfidController(private val context: Context) {
         val args = mOpen.parameterTypes.map { t -> if (t == String::class.java) uart else null }.toTypedArray()
         val r = timedInvoke(1500) { (mOpen.invoke(inst, *args) as? Number)?.toInt() ?: -1 }
         Log.d(TAG, "UHFOpenAndConnect('$uart') -> $r")
-        if (r >= 0) { Log.d(TAG, "UART takeover complete via UHFOpenAndConnect"); return true }
+        if (r >= 0) {
+          Log.d(TAG, "UART takeover complete via UHFOpenAndConnect")
+          logChipDiagnostics(cls, inst)
+          return true
+        }
       }
       // All paths failed — release via UHFFree only (UHFCloseAndDisconnect is called internally).
       // Double-closing causes inconsistent kernel port state on some Chainway firmware.
@@ -927,7 +1146,53 @@ class CarbonChainwayRfidController(private val context: Context) {
       return false
     }
 
-    Log.d(TAG, "UHFOpenAndConnect not found — UHFInit-only path OK"); return true
+    Log.d(TAG, "UHFOpenAndConnect not found — UHFInit-only path OK")
+    logChipDiagnostics(cls, inst)
+    return true
+  }
+
+  /**
+   * One-shot dump of the chip's actual reported state right after UART acquisition.
+   * Used to distinguish "chip is healthy + RF active but no tag in field"
+   * from "chip is misconfigured (wrong frequency / power=0 / hardware fault)".
+   */
+  private fun logChipDiagnostics(cls: Class<*>, inst: Any) {
+    runCatching {
+      val m = cls.methods.firstOrNull { it.name == "UHFGetHwType" && it.parameterCount == 0 }
+      m?.isAccessible = true
+      val raw = m?.invoke(inst)
+      val hex = when (raw) {
+        is CharArray -> raw.map { "%02X".format(it.code and 0xFF) }.joinToString("")
+        is ByteArray -> raw.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
+        else -> raw?.toString() ?: "<null>"
+      }
+      Log.d(TAG, "DIAG UHFGetHwType -> $hex")
+    }.onFailure { Log.w(TAG, "DIAG UHFGetHwType failed: ${it.message}") }
+
+    runCatching {
+      val m = cls.methods.firstOrNull { it.name == "UHFGetFrequency_Ex" && it.parameterCount == 0 }
+        ?: cls.methods.firstOrNull { it.name == "UHFGetFrequency" && it.parameterCount == 0 }
+      m?.isAccessible = true
+      val raw = m?.invoke(inst)
+      val hex = when (raw) {
+        is CharArray -> raw.map { "%02X".format(it.code and 0xFF) }.joinToString("")
+        is ByteArray -> raw.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
+        else -> raw?.toString() ?: "<null>"
+      }
+      Log.d(TAG, "DIAG UHFGetFrequency -> $hex")
+    }.onFailure { Log.w(TAG, "DIAG UHFGetFrequency failed: ${it.message}") }
+
+    runCatching {
+      val m = cls.methods.firstOrNull { it.name == "UHFGetPower" && it.parameterCount == 0 }
+      m?.isAccessible = true
+      val raw = m?.invoke(inst)
+      val hex = when (raw) {
+        is CharArray -> raw.map { "%02X".format(it.code and 0xFF) }.joinToString("")
+        is ByteArray -> raw.joinToString("") { "%02X".format(it.toInt() and 0xFF) }
+        else -> raw?.toString() ?: "<null>"
+      }
+      Log.d(TAG, "DIAG UHFGetPower -> $hex")
+    }.onFailure { Log.w(TAG, "DIAG UHFGetPower failed: ${it.message}") }
   }
 
   // ── Drain loop ──────────────────────────────────────────────────────────────
@@ -1131,6 +1396,7 @@ class CarbonChainwayRfidController(private val context: Context) {
     disableNativeTrigger()
     unregisterScannerWriteReceiver()
     scanning.set(false)
+    stopTagPollThread()
     drainThread?.interrupt(); drainThread = null
     val cls = uhfClass; val inst = uhfInstance
     if (cls != null && inst != null) {
@@ -1159,18 +1425,25 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   private fun emitEpc(hex: String, rssi: Int?) {
     val up = hex.uppercase().replace(Regex("[^0-9A-F]"), "")
-    if (up.isEmpty()) return
-    // Do not hard-drop duplicate sightings here; Count screen uses repeated sightings
-    // to mark defective duplicate behavior (xN). Higher layers still own quantity logic.
-    Log.d(TAG, "EPC: $up")
+    if (up.isEmpty()) {
+      Log.d(TAG, "TRACE emitEpc: input empty after normalize ('$hex')")
+      return
+    }
+    Log.d(TAG, "TRACE emitEpc: ENTER epc=$up rssi=$rssi sinkBound=${tagSink != null}")
     Log.d("LAT", "NATIVE_EPC ts=${System.currentTimeMillis()} epc=$up rssi=$rssi")
-    // Native-originated per-tag beep — fire before the sink post so audio feedback
-    // does not wait for Dart scheduling. RSSI comes from [UHFTAGInfo.getRssi] via
-    // the SDK callback (see [parseRssiDbm]); the reflective drain-loop fallback
-    // still passes null so the beep stays audible but won't vary with distance.
     ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssi))
-    val sink = tagSink ?: return
-    mainHandler.post { sink.success(mapOf("epc" to up, "rssi" to (rssi ?: 0))) }
+    val sink = tagSink ?: run {
+      Log.w(TAG, "TRACE emitEpc: tagSink is NULL — Dart never subscribed to rfid_tag_stream OR setTagSink(null) was called")
+      return
+    }
+    mainHandler.post {
+      try {
+        sink.success(mapOf("epc" to up, "rssi" to (rssi ?: 0)))
+        Log.d(TAG, "TRACE emitEpc: SINK POSTED epc=$up")
+      } catch (e: Throwable) {
+        Log.w(TAG, "TRACE emitEpc: sink.success threw: ${e.message}")
+      }
+    }
   }
 
   /**

@@ -65,6 +65,27 @@ class MainActivity : FlutterFragmentActivity() {
     hardwareBarcodeRelay = barcodeRelay
     hardwareTriggerRelay = triggerRelay
 
+    // UART acquisition strategy on C72E MTK firmware:
+    //   1. Kill `com.rscja.scanner` (which holds /dev/ttyMT1 exclusive on this firmware,
+    //      and `ScannerUtility.disableFunction(FUNCTION_UHF)` is a no-op on MTK so
+    //      cooperative eviction doesn't work).
+    //   2. Wait briefly for the kernel to release the fd.
+    //   3. Open the UART directly via `RFIDWithUHFUART.init(ctx)` and keep it for the
+    //      app's lifetime. Senitron does this implicitly at launch; we have to be
+    //      explicit because the scanner service auto-restarts after a few seconds.
+    Thread({
+      try {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        am.killBackgroundProcesses("com.rscja.scanner")
+        am.killBackgroundProcesses("com.rscja.ht")
+        Log.d("MainActivity", "Killed com.rscja.scanner / com.rscja.ht for UART acquire")
+        Thread.sleep(400) // let kernel release /dev/ttyMT1
+      } catch (t: Throwable) {
+        Log.w("MainActivity", "killBackgroundProcesses pre-acquire failed: ${t.message}")
+      }
+      chainway.acquireUartEarly()
+    }, "Carbon-AcquireUart").apply { isDaemon = true }.start()
+
     EventChannel(messenger, "carbon_wms/hardware_barcode").setStreamHandler(barcodeRelay)
     EventChannel(messenger, "carbon_wms/hardware_trigger").setStreamHandler(
       object : EventChannel.StreamHandler {

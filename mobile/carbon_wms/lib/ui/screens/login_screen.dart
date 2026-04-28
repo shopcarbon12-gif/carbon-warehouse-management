@@ -30,7 +30,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
-  static const String kDefaultLoginEmail = 'user@carbonjeanscompany.com';
+  static const String kDefaultLoginEmail = 'elior@carbonjeanscompany.com';
+  /// Default password prefilled on every cold launch when no value is typed.
+  /// Held in memory only — never written to disk (rugged-device password
+  /// policy in [LoginCredentialsStore] forbids password persistence).
+  static const String kDefaultLoginPassword = 'Carbonusa1!';
   static const String kLockedServerDisplay = 'https://wms.shopcarbon.com';
 
   /// Bundled from brand kit: `Neuzeit Grotesk W01 Regular.otf` (bold via [FontWeight.w700]).
@@ -115,7 +119,15 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
     if (_rememberEmail && saved != null && saved.isNotEmpty) {
       _email.text = saved;
     } else {
-      _email.text = '';
+      // No persisted value yet — fall back to the canonical default email so
+      // the user only has to tap Sign In.
+      _email.text = kDefaultLoginEmail;
+    }
+    // Prefill the password every cold launch (in-memory only — see
+    // [kDefaultLoginPassword] doc). The field is still editable so users can
+    // type a different password without clearing the prefill manually.
+    if (_password.text.isEmpty) {
+      _password.text = kDefaultLoginPassword;
     }
     setState(() {
       _offerBiometricSetupAfterSignIn = offerBio;
