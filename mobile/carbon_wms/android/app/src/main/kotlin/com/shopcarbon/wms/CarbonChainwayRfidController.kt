@@ -170,7 +170,7 @@ class CarbonChainwayRfidController(private val context: Context) {
       // applyPower() targets the reflective uhfClass path (uartOwned=true)
       // which we don't take, so it stays a no-op. The slider's value will
       // apply on the next app launch.
-      requestedPowerDbm.set(dbm.coerceIn(5, 30))
+      requestedPowerDbm.set(dbm.coerceIn(5, 23))
       applyPower()
     }
   }
@@ -220,6 +220,11 @@ class CarbonChainwayRfidController(private val context: Context) {
         } catch (t: Throwable) {
           Log.w(TAG, "init: setEPCMode() threw: ${t.message}")
         }
+        // Stage-2 revert: both setFastID(true) AND setTagFocus(true) removed.
+        // Stage 1 (TagFocus retained, FastID removed) showed 4 reads in
+        // the first 118 ms then dead silence — classic TagFocus signature
+        // (tags reply once and stay quiet indefinitely on this firmware).
+        // Bisect continues: drop TagFocus, keep Gen2 tuning only.
         // Diagnostic readback after writes
         try {
           Log.d(TAG, "init: post-region readbacks freq=" +
@@ -231,46 +236,57 @@ class CarbonChainwayRfidController(private val context: Context) {
         // range, which only finds the closest 2-3 tags out of a 200-tag
         // crowd. 27 dBm = 500 mW = ~3m range. setPower(30)=1W historically
         // wedged this firmware variant; 27 is in the safe range.
-        val initPower = requestedPowerDbm.get().coerceIn(5, 30)
+        val initPower = requestedPowerDbm.get().coerceIn(5, 23)
         val powerOk = instance.setPower(initPower)
         Log.d(TAG, "RFIDWithUHFUART.setPower($initPower) -> $powerOk")
 
-        // Gen2 left at chip defaults (Q=6 fixed, Session=S1) for now —
-        // matches the working recovery-app baseline. The recon showed
-        // identical 2-EPC floor with both Q-fixed/S1 and Q-dynamic/S0,
-        // so Gen2 is NOT what's blocking reads. Re-tune after we confirm
-        // the chip is in a known-good state with proper region/protocol/
-        // EPC mode + 27 dBm power.
-        if (false) {
-          // Gen2 inventory profile for dense-crowd reads. Read the chip's
-          // existing entity (preserves all fields the firmware shipped with)
-          // and only override the two fields that matter for "read 200 tags
-          // not just 2": Session=S0 so tag flags reset ~immediately (under S1
-          // each tag goes silent for ~5s after one read = handheld hits the
-          // 2 nearest and misses everything else), and Q range 2..8 so the
-          // chip auto-grows slots when it sees collisions. Setting all fields
-          // to zeros (last attempt) wedged the chip — chip rejects mismatched
-          // queryDR/queryM/linkFrequency combos and stops transmitting. By
-          // round-tripping getGen2()→mutate→setGen2() we never set a 0 where
-          // the chip wants a non-zero default.
-          runCatching {
-            val current = instance.javaClass.getMethod("getGen2").invoke(instance)
-            if (current != null) {
-              val gen2Cls = current.javaClass
-              gen2Cls.getMethod("setQuerySession", Int::class.javaPrimitiveType).invoke(current, 0)
-              gen2Cls.getMethod("setQueryTarget", Int::class.javaPrimitiveType).invoke(current, 0)
-              gen2Cls.getMethod("setStartQ", Int::class.javaPrimitiveType).invoke(current, 4)
-              gen2Cls.getMethod("setMinQ", Int::class.javaPrimitiveType).invoke(current, 2)
-              gen2Cls.getMethod("setMaxQ", Int::class.javaPrimitiveType).invoke(current, 8)
-              val setGen2 = instance.javaClass.getMethod("setGen2", gen2Cls)
-              val gen2Ok = setGen2.invoke(instance, current) as? Boolean ?: false
-              Log.d(TAG, "RFIDWithUHFUART.setGen2(session=0/target=0/dynQ=2..8 over chip defaults) -> $gen2Ok")
-            } else {
-              Log.w(TAG, "setGen2 skipped: getGen2() returned null")
+        // S0/A Gen2 profile — chip-friendly tuning for the stationary
+        // test. Session=0 makes tags reset their session flag almost
+        // immediately, so the chip can re-read the same tags repeatedly
+        // without waiting for S1's ~500ms persistence to expire. StartQ/
+        // MinQ/MaxQ left at the chip's default (4 / 0 / 15) so the dynamic-
+        // Q algorithm can shrink to 1 slot when only a handful of tags
+        // are responding (which has been the actual population on this
+        // antenna position).
+        runCatching {
+          val current = instance.javaClass.getMethod("getGen2").invoke(instance)
+          if (current != null) {
+            val gen2Cls = current.javaClass
+            // Pre-mutation readback — log every getter on the Gen2 entity.
+            val preFields = gen2Cls.methods
+              .filter { it.name.startsWith("get") && it.parameterCount == 0 && it.name != "getClass" }
+              .joinToString(", ") { m ->
+                runCatching { "${m.name.removePrefix("get")}=${m.invoke(current)}" }
+                  .getOrDefault("${m.name.removePrefix("get")}=ERR")
+              }
+            Log.d(TAG, "init: getGen2() pre-mutation: $preFields")
+
+            gen2Cls.getMethod("setQuerySession", Int::class.javaPrimitiveType).invoke(current, 0)
+            gen2Cls.getMethod("setQueryTarget", Int::class.javaPrimitiveType).invoke(current, 0)
+            gen2Cls.getMethod("setStartQ", Int::class.javaPrimitiveType).invoke(current, 4)
+            gen2Cls.getMethod("setMinQ", Int::class.javaPrimitiveType).invoke(current, 0)
+            gen2Cls.getMethod("setMaxQ", Int::class.javaPrimitiveType).invoke(current, 15)
+            val setGen2 = instance.javaClass.getMethod("setGen2", gen2Cls)
+            val gen2Ok = setGen2.invoke(instance, current) as? Boolean ?: false
+            Log.d(TAG, "init: setGen2(session=0/target=0/Q=4,0..15) -> $gen2Ok")
+
+            // Post-write readback — should be identical to pre since
+            // mutation is disabled. Kept for diagnostic symmetry.
+            val verify = instance.javaClass.getMethod("getGen2").invoke(instance)
+            if (verify != null) {
+              val postFields = verify.javaClass.methods
+                .filter { it.name.startsWith("get") && it.parameterCount == 0 && it.name != "getClass" }
+                .joinToString(", ") { m ->
+                  runCatching { "${m.name.removePrefix("get")}=${m.invoke(verify)}" }
+                    .getOrDefault("${m.name.removePrefix("get")}=ERR")
+                }
+              Log.d(TAG, "init: getGen2() post-write: $postFields")
             }
-          }.onFailure {
-            Log.w(TAG, "setGen2 failed: ${it.message}")
+          } else {
+            Log.w(TAG, "init: setGen2 skipped — getGen2() returned null")
           }
+        }.onFailure {
+          Log.w(TAG, "init: setGen2 failed: ${it.message}")
         }
 
         // Diagnostic readback so we can compare against the working device.
@@ -744,7 +760,7 @@ class CarbonChainwayRfidController(private val context: Context) {
       // Re-assert user-configured power before write. initUhfReaderDirect now sets 30 dBm
       // for scanning; writes need more link budget than reads, and the user-configured value
       // (typically 30) must actually be in effect on the radio at write time.
-      val reqPower = requestedPowerDbm.get().coerceIn(5, 30)
+      val reqPower = requestedPowerDbm.get().coerceIn(5, 23)
       val curPower = runCatching { reader.getPower() }.getOrDefault(-1)
       val pwrSetOk = runCatching { reader.setPower(reqPower) }.getOrDefault(false)
       Log.d(TAG, "pre-write power: getPower()=$curPower requested=$reqPower setPower($reqPower)=$pwrSetOk")
@@ -1455,7 +1471,7 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   private fun applyPower() {
     val cls = uhfClass ?: return; val inst = uhfInstance ?: return
-    val p = requestedPowerDbm.get().coerceIn(5, 30)
+    val p = requestedPowerDbm.get().coerceIn(5, 23)
     val m = cls.methods.firstOrNull { it.name in setOf("UHFSetPower", "setPower", "SetPower", "setOutputPower") && it.parameterCount == 1 }
       ?.also { it.isAccessible = true } ?: return
     val arg: Any = if (m.parameterTypes[0] == java.lang.Character.TYPE) java.lang.Character(p.toChar()) else java.lang.Integer(p)
