@@ -22,6 +22,11 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/api/handheld")) return true;
   /* Handheld edge firehose (API key + device registry; no browser session). */
   if (pathname === "/api/edge/ingest") return true;
+  /* Carbon CDM agent endpoints: Bearer-authenticate inside each route via
+   * cdm_agents.api_token_hash. No user session involved. */
+  if (pathname === "/api/cdm-agents/heartbeat") return true;
+  if (pathname === "/api/cdm-agents/config") return true;
+  if (pathname === "/api/cdm-agents/reads") return true;
   if (pathname === "/api/settings/mobile-sync") return true;
   if (pathname === "/api/inventory/upload") return true;
   if (pathname === "/api/inventory/putaway-assign") return true;

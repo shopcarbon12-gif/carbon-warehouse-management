@@ -1,0 +1,26 @@
+[Unit]
+Description=Carbon CDM agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=carbon
+WorkingDirectory=/opt/carbon-cdm
+EnvironmentFile=/opt/carbon-cdm/.env
+ExecStart=/usr/bin/node /opt/carbon-cdm/dist/index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Light hardening — read-only system, isolated tmp, no new privileges.
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

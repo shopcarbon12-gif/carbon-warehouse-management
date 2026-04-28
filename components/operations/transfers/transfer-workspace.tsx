@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Radio, ScanLine, Shuffle } from "lucide-react";
 import { TransferCommitModal, type StagedRow } from "./transfer-commit-modal";
+import { StagedEpcsModal } from "./staged-epcs-modal";
 
 type LocationRow = { id: string; code: string; name: string };
 type BinRow = { id: string; code: string; in_stock_count: number };
@@ -15,7 +16,70 @@ type LookupRow = {
   bin_id: string | null;
   bin_code: string | null;
   status: string;
+  name: string | null;
+  color: string | null;
+  size: string | null;
+  upc: string | null;
+  asset_id: string | null;
+  vendor: string | null;
+  retail_price: string | null;
+  custom_sku_id: string;
 };
+
+/** A row in the staged-payload table, grouped by Custom SKU. Mirrors the
+ *  Inventory Catalog layout — name, sku, upc, color, size, retail price,
+ *  bin, qty (count of unique EPCs). */
+type StagedSkuRow = {
+  custom_sku_id: string;
+  name: string | null;
+  sku: string;
+  upc: string | null;
+  color: string | null;
+  size: string | null;
+  retail_price: string | null;
+  bin_code: string | null;
+  location_code: string;
+  qty: number;
+  epcs: string[];
+};
+
+function groupStagedBySku(rows: LookupRow[]): StagedSkuRow[] {
+  const map = new Map<string, StagedSkuRow>();
+  for (const r of rows) {
+    const key = r.custom_sku_id;
+    let g = map.get(key);
+    if (!g) {
+      g = {
+        custom_sku_id: key,
+        name: r.name,
+        sku: r.sku,
+        upc: r.upc,
+        color: r.color,
+        size: r.size,
+        retail_price: r.retail_price,
+        bin_code: r.bin_code,
+        location_code: r.location_code,
+        qty: 0,
+        epcs: [],
+      };
+      map.set(key, g);
+    }
+    if (!g.epcs.includes(r.epc)) {
+      g.epcs.push(r.epc);
+      g.qty++;
+    }
+  }
+  return [...map.values()].sort((a, b) =>
+    (a.name ?? a.sku).localeCompare(b.name ?? b.sku),
+  );
+}
+
+function formatPrice(p: string | null): string {
+  if (!p) return "—";
+  const n = Number(p);
+  if (!Number.isFinite(n)) return "—";
+  return `$${n.toFixed(2)}`;
+}
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -45,6 +109,11 @@ export function TransferWorkspace() {
   const [commitOpen, setCommitOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [manualEpc, setManualEpc] = useState("");
+  const [epcsModalSku, setEpcsModalSku] = useState<StagedSkuRow | null>(null);
+
+  const removeEpcFromStaged = useCallback((epc: string) => {
+    setStaged((s) => s.filter((r) => r.epc !== epc));
+  }, []);
 
   const { data: locData } = useSWR<LocationRow[]>("/api/locations", fetcher);
   const locations = locData ?? [];
@@ -276,21 +345,62 @@ export function TransferWorkspace() {
         </div>
         <div className="max-h-[min(50vh,400px)] overflow-auto">
           <table className="w-full border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
-              <tr>
-                <th className="px-3 py-2">EPC</th>
-                <th className="px-3 py-2">SKU</th>
-                <th className="px-3 py-2">Current location</th>
+            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+              <tr className="border-b border-[var(--wms-border)]">
+                <th className="px-3 py-2">Item name</th>
+                <th className="px-3 py-2">Custom SKU</th>
+                <th className="px-3 py-2">UPC</th>
+                <th className="px-3 py-2">Color</th>
+                <th className="px-3 py-2">Size</th>
+                <th className="px-3 py-2 text-right">Retail price</th>
                 <th className="px-3 py-2">Bin</th>
+                <th className="px-3 py-2 text-right">Qty (EPC)</th>
+                <th className="px-3 py-2">RFID</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[0.65rem] text-[var(--wms-fg)]">
-              {staged.map((r) => (
-                <tr key={r.epc}>
-                  <td className="px-3 py-2 text-teal-400/85">{r.epc}</td>
-                  <td className="px-3 py-2">{r.sku}</td>
-                  <td className="px-3 py-2 text-amber-400/80">{r.location_code}</td>
-                  <td className="px-3 py-2 text-[var(--wms-muted)]">{r.bin_code ?? "—"}</td>
+            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
+              {groupStagedBySku(staged).map((g) => (
+                <tr
+                  key={g.custom_sku_id}
+                  className="hover:bg-[var(--wms-surface-elevated)]/50"
+                >
+                  <td
+                    className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5"
+                    title={g.name ?? undefined}
+                  >
+                    {g.name ?? "—"}
+                  </td>
+                  <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5">
+                    {g.sku}
+                  </td>
+                  <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-[var(--wms-muted)]">
+                    {g.upc ?? "—"}
+                  </td>
+                  <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-[var(--wms-muted)]">
+                    {g.color?.trim() || "—"}
+                  </td>
+                  <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-[var(--wms-muted)]">
+                    {g.size?.trim() || "—"}
+                  </td>
+                  <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                    {formatPrice(g.retail_price)}
+                  </td>
+                  <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-[var(--wms-muted)]">
+                    {g.bin_code ?? "—"}
+                  </td>
+                  <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                    {g.qty}
+                  </td>
+                  <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setEpcsModalSku(g)}
+                      className="inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 py-1 text-[0.6rem] font-medium text-[var(--wms-accent)] hover:opacity-90"
+                    >
+                      <Radio className="h-3 w-3" />
+                      EPCs
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -322,6 +432,23 @@ export function TransferWorkspace() {
         rows={stagedTable}
         destinationLabel={destLabel}
         onConfirm={doCommit}
+      />
+
+      <StagedEpcsModal
+        open={epcsModalSku !== null}
+        onClose={() => setEpcsModalSku(null)}
+        sku={epcsModalSku?.sku ?? ""}
+        name={epcsModalSku?.name ?? null}
+        color={epcsModalSku?.color ?? null}
+        size={epcsModalSku?.size ?? null}
+        epcs={epcsModalSku?.epcs ?? []}
+        onRemoveEpc={(epc) => {
+          removeEpcFromStaged(epc);
+          // If that was the last EPC for this SKU, close the modal.
+          if (epcsModalSku && epcsModalSku.epcs.length <= 1) {
+            setEpcsModalSku(null);
+          }
+        }}
       />
     </div>
   );

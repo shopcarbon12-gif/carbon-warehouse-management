@@ -37,6 +37,15 @@ export type TransferLookupRow = {
   bin_id: string | null;
   bin_code: string | null;
   status: string;
+  /** Catalog-enriched fields. Match mobile count-screen `_GroupedRow`. */
+  name: string | null;
+  color: string | null;
+  size: string | null;
+  upc: string | null;
+  asset_id: string | null;
+  vendor: string | null;
+  retail_price: string | null;
+  custom_sku_id: string;
 };
 
 export async function lookupTransferEpcs(
@@ -57,6 +66,14 @@ export async function lookupTransferEpcs(
     bin_id: string | null;
     bin_code: string | null;
     status: string;
+    name: string | null;
+    color: string | null;
+    size: string | null;
+    upc: string | null;
+    asset_id: string | null;
+    vendor: string | null;
+    retail_price: string | null;
+    custom_sku_id: string;
   }>(
     `SELECT
        i.epc,
@@ -65,10 +82,19 @@ export async function lookupTransferEpcs(
        l.code AS location_code,
        i.bin_id::text AS bin_id,
        b.code AS bin_code,
-       i.status
+       i.status,
+       m.description AS name,
+       cs.color_code AS color,
+       cs.size,
+       COALESCE(cs.upc, m.upc) AS upc,
+       cs.asset_id,
+       m.vendor,
+       cs.retail_price::text AS retail_price,
+       cs.id::text AS custom_sku_id
      FROM items i
      INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
+     LEFT JOIN matrices m ON m.id = cs.matrix_id
      LEFT JOIN bins b ON b.id = i.bin_id
      WHERE i.epc = ANY($2::text[])`,
     [tenantId, norm],
@@ -82,6 +108,14 @@ export async function lookupTransferEpcs(
     bin_id: row.bin_id,
     bin_code: row.bin_code,
     status: row.status,
+    name: row.name,
+    color: row.color,
+    size: row.size,
+    upc: row.upc,
+    asset_id: row.asset_id,
+    vendor: row.vendor,
+    retail_price: row.retail_price,
+    custom_sku_id: row.custom_sku_id,
   }));
 }
 
@@ -99,6 +133,14 @@ export async function listSimTransferEpcs(
     bin_id: string | null;
     bin_code: string | null;
     status: string;
+    name: string | null;
+    color: string | null;
+    size: string | null;
+    upc: string | null;
+    asset_id: string | null;
+    vendor: string | null;
+    retail_price: string | null;
+    custom_sku_id: string;
   }>(
     `SELECT
        i.epc,
@@ -107,10 +149,19 @@ export async function listSimTransferEpcs(
        l.code AS location_code,
        i.bin_id::text AS bin_id,
        b.code AS bin_code,
-       i.status
+       i.status,
+       m.description AS name,
+       cs.color_code AS color,
+       cs.size,
+       COALESCE(cs.upc, m.upc) AS upc,
+       cs.asset_id,
+       m.vendor,
+       cs.retail_price::text AS retail_price,
+       cs.id::text AS custom_sku_id
      FROM items i
      INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
+     LEFT JOIN matrices m ON m.id = cs.matrix_id
      LEFT JOIN bins b ON b.id = i.bin_id
      WHERE i.location_id = $2::uuid
        AND i.status = 'in-stock'
@@ -126,6 +177,14 @@ export async function listSimTransferEpcs(
     bin_id: row.bin_id,
     bin_code: row.bin_code,
     status: row.status,
+    name: row.name,
+    color: row.color,
+    size: row.size,
+    upc: row.upc,
+    asset_id: row.asset_id,
+    vendor: row.vendor,
+    retail_price: row.retail_price,
+    custom_sku_id: row.custom_sku_id,
   }));
 }
 

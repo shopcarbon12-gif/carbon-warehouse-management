@@ -1,0 +1,163 @@
+import type { Pool } from "pg";
+
+export type HardwareAntennaRow = {
+  id: string;
+  name: string;
+  status_online: boolean;
+  config: Record<string, unknown>;
+};
+
+export type HardwareReaderRow = {
+  id: string;
+  name: string;
+  network_address: string | null;
+  device_type: string;
+  status_online: boolean;
+  config: Record<string, unknown>;
+  cdm_agent_id: string | null;
+  cdm_agent_name: string | null;
+  antennas: HardwareAntennaRow[];
+};
+
+export type HardwareZoneRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  readers: HardwareReaderRow[];
+};
+
+export type HardwareLocationRow = {
+  id: string;
+  code: string;
+  name: string;
+  zones: HardwareZoneRow[];
+  unzonedReaders: HardwareReaderRow[];
+};
+
+export type HardwareConfigTree = {
+  locations: HardwareLocationRow[];
+};
+
+const READER_TYPES = new Set(["fixed_reader", "transaction_reader", "door_reader"]);
+
+type RawDevice = {
+  id: string;
+  device_type: string;
+  name: string;
+  network_address: string | null;
+  status_online: boolean;
+  config: Record<string, unknown> | null;
+  zone_id: string | null;
+  parent_device_id: string | null;
+  cdm_agent_id: string | null;
+  cdm_agent_name: string | null;
+  location_id: string;
+};
+
+export async function buildHardwareConfigTree(
+  pool: Pool,
+  tenantId: string,
+): Promise<HardwareConfigTree> {
+  const [locations, zones, devices] = await Promise.all([
+    pool.query<{ id: string; code: string; name: string }>(
+      `SELECT id::text, code, name
+         FROM locations
+         WHERE tenant_id = $1::uuid
+         ORDER BY code ASC`,
+      [tenantId],
+    ),
+    pool.query<{
+      id: string;
+      location_id: string;
+      name: string;
+      description: string | null;
+    }>(
+      `SELECT id::text, location_id::text, name, description
+         FROM zones
+         WHERE tenant_id = $1::uuid
+         ORDER BY name ASC`,
+      [tenantId],
+    ),
+    pool.query<RawDevice>(
+      `SELECT
+         d.id::text,
+         d.device_type,
+         d.name,
+         d.network_address,
+         d.status_online,
+         COALESCE(d.config, '{}'::jsonb) AS config,
+         d.zone_id::text   AS zone_id,
+         d.parent_device_id::text AS parent_device_id,
+         d.cdm_agent_id::text AS cdm_agent_id,
+         a.name AS cdm_agent_name,
+         d.location_id::text AS location_id
+       FROM devices d
+       LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
+       WHERE d.tenant_id = $1::uuid
+         AND d.device_type IN ('fixed_reader','transaction_reader','door_reader','antenna')
+       ORDER BY d.name ASC`,
+      [tenantId],
+    ),
+  ]);
+
+  const antennasByParent = new Map<string, HardwareAntennaRow[]>();
+  for (const d of devices.rows) {
+    if (d.device_type !== "antenna" || !d.parent_device_id) continue;
+    const arr = antennasByParent.get(d.parent_device_id) ?? [];
+    arr.push({
+      id: d.id,
+      name: d.name,
+      status_online: d.status_online,
+      config: (d.config ?? {}) as Record<string, unknown>,
+    });
+    antennasByParent.set(d.parent_device_id, arr);
+  }
+
+  const readersByZone = new Map<string, HardwareReaderRow[]>();
+  const readersByLocationUnzoned = new Map<string, HardwareReaderRow[]>();
+  for (const d of devices.rows) {
+    if (!READER_TYPES.has(d.device_type)) continue;
+    const reader: HardwareReaderRow = {
+      id: d.id,
+      name: d.name,
+      network_address: d.network_address,
+      device_type: d.device_type,
+      status_online: d.status_online,
+      config: (d.config ?? {}) as Record<string, unknown>,
+      cdm_agent_id: d.cdm_agent_id,
+      cdm_agent_name: d.cdm_agent_name,
+      antennas: antennasByParent.get(d.id) ?? [],
+    };
+    if (d.zone_id) {
+      const arr = readersByZone.get(d.zone_id) ?? [];
+      arr.push(reader);
+      readersByZone.set(d.zone_id, arr);
+    } else {
+      const arr = readersByLocationUnzoned.get(d.location_id) ?? [];
+      arr.push(reader);
+      readersByLocationUnzoned.set(d.location_id, arr);
+    }
+  }
+
+  const zonesByLocation = new Map<string, HardwareZoneRow[]>();
+  for (const z of zones.rows) {
+    const arr = zonesByLocation.get(z.location_id) ?? [];
+    arr.push({
+      id: z.id,
+      name: z.name,
+      description: z.description,
+      readers: readersByZone.get(z.id) ?? [],
+    });
+    zonesByLocation.set(z.location_id, arr);
+  }
+
+  return {
+    locations: locations.rows.map((l) => ({
+      id: l.id,
+      code: l.code,
+      name: l.name,
+      zones: zonesByLocation.get(l.id) ?? [],
+      unzonedReaders: readersByLocationUnzoned.get(l.id) ?? [],
+    })),
+  };
+}

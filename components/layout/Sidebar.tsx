@@ -11,6 +11,7 @@ import {
   Banknote,
   ChevronDown,
   ClipboardList,
+  Cpu,
   Download,
   FolderInput,
   LayoutDashboard,
@@ -83,7 +84,8 @@ const sections: NavSection[] = [
       p.startsWith("/rfid/epc-tracker") ||
       p.startsWith("/rfid/commissioning") ||
       p.startsWith("/operations/exceptions") ||
-      p.startsWith("/infrastructure/devices"),
+      p.startsWith("/infrastructure/devices") ||
+      p.startsWith("/hardware_config"),
     items: [
       { href: "/rfid/epc-tracker", label: "EPC Tracker", icon: Search },
       { href: "/rfid/commissioning", label: "Print / Commission", icon: Printer },
@@ -94,6 +96,7 @@ const sections: NavSection[] = [
         notify: true,
       },
       { href: "/infrastructure/devices", label: "Devices", icon: Router },
+      { href: "/hardware_config", label: "Hardware Config", icon: Cpu },
     ],
   },
   {

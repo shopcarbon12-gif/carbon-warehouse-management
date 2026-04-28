@@ -1,0 +1,18 @@
+# Carbon CDM agent — ignore build artifacts + secrets.
+
+node_modules/
+dist/
+deploy-bundle/
+*.tsbuildinfo
+
+# Local env (CONTAINS API TOKEN — never commit)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
