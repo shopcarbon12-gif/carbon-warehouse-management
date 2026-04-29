@@ -1,11 +1,12 @@
 [Unit]
-Description=Carbon CDM agent
+Description=Carbon CDM agent (WMS bridge + orchestrator controller)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=carbon
+User=shopcarbon
+Group=shopcarbon
 WorkingDirectory=/opt/carbon-cdm
 EnvironmentFile=/opt/carbon-cdm/.env
 ExecStart=/usr/bin/node /opt/carbon-cdm/dist/index.js
@@ -16,11 +17,14 @@ StandardError=journal
 KillSignal=SIGTERM
 TimeoutStopSec=15
 
-# Light hardening — read-only system, isolated tmp, no new privileges.
-NoNewPrivileges=yes
+# The agent listens on 127.0.0.1:8765 (cdm-bridge) and talks to systemctl
+# via a sudoers entry installed by bootstrap-legacy-rfid.sh.
+NoNewPrivileges=no
 ProtectSystem=full
 ProtectHome=yes
 PrivateTmp=yes
+# Allow the agent to write the legacy readers.json.
+ReadWritePaths=/opt/legacy-rfid/runtime
 
 [Install]
 WantedBy=multi-user.target

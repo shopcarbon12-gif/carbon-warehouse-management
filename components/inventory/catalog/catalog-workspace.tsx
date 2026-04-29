@@ -682,7 +682,10 @@ export function CatalogWorkspace({
                 <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
                   {(
                     [
-                      { key: "system_id", label: "System ID", cls: "text-teal-400/80" },
+                      // System ID column kept in DOM for data access but
+                      // hidden from UI per stakeholder request — still pulled
+                      // by the API and present on every row object.
+                      { key: "system_id", label: "System ID", cls: "text-teal-400/80", hidden: true },
                       { key: "name", label: "Item name" },
                       { key: "sku", label: "Custom SKU" },
                       { key: "upc", label: "UPC" },
@@ -692,8 +695,8 @@ export function CatalogWorkspace({
                       { key: "bin", label: "Bin" },
                       { key: "qty_epc", label: "Qty (EPC)", align: "right" },
                       { key: "rfid", label: "RFID", sortable: false },
-                    ] as { key: SortKey | "rfid"; label: string; cls?: string; align?: string; sortable?: boolean }[]
-                  ).map(({ key, label, cls, align, sortable }, colIdx) => {
+                    ] as { key: SortKey | "rfid"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean }[]
+                  ).map(({ key, label, cls, align, sortable, hidden }, colIdx) => {
                     const isSortable = sortable !== false;
                     const active = isSortable && sortBy === key;
                     const next = active && sortDir === "asc" ? "desc" : "asc";
@@ -703,7 +706,7 @@ export function CatalogWorkspace({
                       <th
                         key={key}
                         style={w !== null ? { width: w, minWidth: w } : undefined}
-                        className={`relative overflow-hidden px-2 py-2 ${align === "right" ? "text-right" : ""} ${cls ?? ""}`}
+                        className={`relative overflow-hidden px-2 py-2 ${align === "right" ? "text-right" : ""} ${cls ?? ""} ${hidden ? "hidden" : ""}`}
                       >
                         {isSortable ? (
                           <button
@@ -754,7 +757,7 @@ export function CatalogWorkspace({
                       className={`hover:bg-[var(--wms-surface-elevated)]/50 ${archivedRowCls}`}
                       title={isArchived ? "Archived in Lightspeed" : undefined}
                     >
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-teal-400/85">
+                      <td className="hidden overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-teal-400/85">
                         {r.sku_ls_system_id ?? "—"}
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>

@@ -1,0 +1,33 @@
+[Unit]
+Description=Carbon CDM legacy orchestrator (cdm)
+# Start AFTER the agent so the bridge listener (127.0.0.1:8765) is up
+# before cdm tries to POST tag reads to it.
+After=network-online.target carbon-cdm-agent.service
+Wants=network-online.target
+PartOf=carbon-cdm-agent.service
+
+[Service]
+Type=simple
+User=shopcarbon
+Group=shopcarbon
+WorkingDirectory=/opt/legacy-rfid/runtime
+# cdm reads ./cdm.json and ./readers.json from cwd. The agent rewrites
+# readers.json from the WMS bundle and then asks systemd to restart us.
+ExecStart=/opt/legacy-rfid/cdm
+# Ship to the legacy logs dir as well as journal — it's small and useful
+# when comparing behavior to the original Senitron deployment.
+StandardOutput=append:/opt/legacy-rfid/runtime/logs/cdm.out.log
+StandardError=append:/opt/legacy-rfid/runtime/logs/cdm.err.log
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# Hardening — the legacy binary is opaque so we lock it down.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ReadWritePaths=/opt/legacy-rfid/runtime
+
+[Install]
+WantedBy=multi-user.target
