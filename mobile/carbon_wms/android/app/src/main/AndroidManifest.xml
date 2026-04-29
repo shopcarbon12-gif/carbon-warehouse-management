@@ -2,6 +2,9 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- In-app volume slider forces STREAM_MUSIC level via AudioManager so the
+         OS media-volume cap and silent-ringer mode never gate scan cues. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Handheld device-ping: Wi‑Fi MAC / BT address (best-effort; OEM-dependent) -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />

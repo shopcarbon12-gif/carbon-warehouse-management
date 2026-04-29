@@ -3,6 +3,7 @@ package com.shopcarbon.wms
 import android.content.Context
 import android.content.res.AssetFileDescriptor
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.SoundPool
 import android.util.Log
 import io.flutter.plugin.common.BinaryMessenger
@@ -90,6 +91,7 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
         val args = call.arguments as? Map<*, *>
         val v = (args?.get("volume") as? Number)?.toFloat() ?: 1.0f
         userVolume = v.coerceIn(0f, 1f)
+        forceMediaStreamVolume(userVolume)
         Log.d(TAG, "userVolume set to $userVolume")
         result.success(null)
       }
@@ -183,11 +185,16 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
       Log.w(TAG, "playCue($cue): sid=$sid not loaded yet")
       return
     }
-    // priority=1, loop=0 (one-shot), rate=1.0 neutral pitch. Per-call volume
-    // is scaled by the user's preference set from the Settings screen
-    // (carbon_wms/scan_sound 'setUserVolume') so the RSSI ramp inside
-    // [playTagBeep] is preserved but capped at the user's chosen level.
-    val finalVol = (volume * userVolume).coerceIn(0f, 1f)
+    // priority=1, loop=0 (one-shot), rate=1.0 neutral pitch.
+    //
+    // The Settings → Sound slider drives STREAM_MUSIC index directly via
+    // [forceMediaStreamVolume], so Android's natural log curve handles the
+    // perceived volume gradient (mute … low … mid … high … max). We deliberately
+    // do NOT multiply [userVolume] into the SoundPool play volume here — that
+    // would double-attenuate (linear * log) and produce the "max-or-mute" feel.
+    // userVolume == 0 still hard-mutes the SoundPool output as a fail-safe so
+    // a saved zero pref silences cues even before the stream-volume push lands.
+    val finalVol = if (userVolume <= 0f) 0f else volume.coerceIn(0f, 1f)
     Log.d("LAT", "BEEP_PLAY ts=${System.currentTimeMillis()} cue=$cue base=$volume user=$userVolume final=$finalVol")
     val streamId = p.play(sid, finalVol, finalVol, 1, 0, 1.0f)
     if (streamId == 0) {
@@ -211,6 +218,26 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
     }
     for (s in snapshot) {
       try { p.stop(s) } catch (_: Throwable) { /* stream may have already ended */ }
+    }
+  }
+
+  /**
+   * Force-set STREAM_MUSIC index from the in-app slider so the OS media-volume
+   * cap and silent-ringer mode never gate scan cues. The slider is the single
+   * source of truth for cue loudness; whatever the device-level volume rocker
+   * is set to is overridden here. Index uses the OS's natural log mapping so
+   * the slider produces smooth perceptual steps instead of "max-or-mute".
+   */
+  private fun forceMediaStreamVolume(v: Float) {
+    val clamped = v.coerceIn(0f, 1f)
+    try {
+      val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+      val maxIdx = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+      val targetIdx = (clamped * maxIdx).toInt().coerceIn(0, maxIdx)
+      am.setStreamVolume(AudioManager.STREAM_MUSIC, targetIdx, 0)
+      Log.d(TAG, "STREAM_MUSIC -> $targetIdx/$maxIdx (slider=$clamped)")
+    } catch (t: Throwable) {
+      Log.w(TAG, "setStreamVolume failed: ${t.message}")
     }
   }
 

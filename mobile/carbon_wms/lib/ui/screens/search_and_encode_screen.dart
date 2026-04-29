@@ -140,11 +140,11 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     unawaited(_triggerSub?.cancel());
     unawaited(_rfid?.stopLocateScanning());
     _sounds.stopAll();
-    // Restore 2D trigger for other screens that rely on it.
-    unawaited(() async {
-      await RfidVendorChannel.open2dBarcode();
-      await RfidVendorChannel.scannerEnableTriggerRelay();
-    }());
+    // Reopen the 2D engine for the next screen, but don't pre-enable the
+    // trigger relay — Bin Assign / Fast Putaway own their own setup, and
+    // pre-enabling it here lit the 2D laser on the next RFID-only screen's
+    // first trigger pull (before its postFrameCallback could disable it).
+    unawaited(RfidVendorChannel.open2dBarcode());
     super.dispose();
   }
 

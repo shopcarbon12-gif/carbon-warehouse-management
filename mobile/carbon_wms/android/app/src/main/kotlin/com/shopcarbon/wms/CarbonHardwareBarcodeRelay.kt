@@ -24,7 +24,13 @@ class CarbonHardwareBarcodeRelay(
   private val mainHandler = Handler(Looper.getMainLooper())
   private var scanTimeoutRunnable: Runnable? = null
   @Volatile private var scanActive = false
-  @Volatile private var triggerRelayEnabled = true
+  // Defaults to false so the 2D laser never fires on trigger pull until a
+  // 2D-only screen (Bin Assign / Fast Putaway) explicitly opts in via
+  // [activateTriggerRelay]. RFID screens (Count, Re-encode) should never
+  // see this flip — leaving it false closes the race where a trigger pull
+  // arriving before the screen's postFrameCallback would otherwise fire
+  // BARCODESTARTSCAN and light the laser inside an RFID flow.
+  @Volatile private var triggerRelayEnabled = false
 
   override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
     sink = events
@@ -66,12 +72,29 @@ class CarbonHardwareBarcodeRelay(
           Log.d(TAG, "RX action=$rxAction extras=${extrasSummary(intent)}")
           when (rxAction) {
             KEY_DOWN_ACTION -> {
-              // In UHF continuous inventory mode, the firmware owns the physical trigger.
-              // Do NOT call startHardwareScan/stopHardwareScan here — those send
-              // BARCODESTARTSCAN/BARCODESTOPSCAN which will kill the active UHF inventory.
+              // Two trigger modes share this relay:
+              //   - 2D mode (Bin Assign / Fast Putaway): triggerRelayEnabled=true,
+              //     so each trigger pull toggles the 2D laser. First pull turns
+              //     it on (stays lit until SCAN_TIMEOUT_MS or a barcode decodes —
+              //     the Dart side calls scanner.stop2d after a successful decode);
+              //     a second pull during that dwell turns it off so the operator
+              //     can abort without waiting out the full window.
+              //   - RFID mode (Count): triggerRelayEnabled=false; the trigger is
+              //     consumed by Count's hardware_trigger handler, which toggles
+              //     UHF inventory directly. Sending BARCODESTARTSCAN here would
+              //     kill the active UHF session, so we skip it.
+              if (triggerRelayEnabled) {
+                if (scanActive) {
+                  stopHardwareScan()
+                } else {
+                  startHardwareScan()
+                }
+              }
               return
             }
             KEY_UP_ACTION -> {
+              // Intentional: trigger is one-shot (no hold-to-keep-on). The 2D
+              // laser stays lit for SCAN_TIMEOUT_MS or until a decode arrives.
               return
             }
           }
@@ -220,7 +243,21 @@ class CarbonHardwareBarcodeRelay(
   fun startHardwareScan() {
     scanActive = true
     cancelScanTimeout()
-    runCatching { context.sendBroadcast(Intent(ACTION_SCAN_START)) }
+    // Send to all receivers AND directly to com.rscja.scanner with the
+    // stopped-package flag so the broadcast wakes the scanner service even if
+    // it was force-stopped (the UART acquire path kills it once at startup).
+    runCatching {
+      context.sendBroadcast(
+        Intent(ACTION_SCAN_START).addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES),
+      )
+    }
+    runCatching {
+      context.sendBroadcast(
+        Intent(ACTION_SCAN_START)
+          .setPackage(SCANNER_PACKAGE)
+          .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES),
+      )
+    }
     scheduleScanTimeout(SCAN_TIMEOUT_MS)
   }
 
@@ -234,7 +271,18 @@ class CarbonHardwareBarcodeRelay(
   fun stopHardwareScan() {
     scanActive = false
     cancelScanTimeout()
-    runCatching { context.sendBroadcast(Intent(ACTION_SCAN_STOP)) }
+    runCatching {
+      context.sendBroadcast(
+        Intent(ACTION_SCAN_STOP).addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES),
+      )
+    }
+    runCatching {
+      context.sendBroadcast(
+        Intent(ACTION_SCAN_STOP)
+          .setPackage(SCANNER_PACKAGE)
+          .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES),
+      )
+    }
   }
 
   private fun scheduleScanTimeout(ms: Long) {
@@ -312,7 +360,14 @@ class CarbonHardwareBarcodeRelay(
     const val KEY_UP_ACTION = "com.rscja.android.KEY_UP"
     const val ACTION_SCAN_START = "android.intent.action.BARCODESTARTSCAN"
     const val ACTION_SCAN_STOP = "android.intent.action.BARCODESTOPSCAN"
-    /** Long idle window so warehouse passes don't drop UHF mid-aisle. */
-    const val SCAN_TIMEOUT_MS = 120_000L
+    const val SCANNER_PACKAGE = "com.rscja.scanner"
+    /**
+     * One-shot 2D laser dwell for Bin Assign / Fast Putaway. Trigger pull fires
+     * the laser; if no barcode is decoded inside this window the laser stops on
+     * its own and the next trigger pull starts a fresh one-shot. UHF continuous
+     * inventory does not flow through this timeout (scanActive stays false on
+     * the Count screen), so the value is purely the 2D dwell budget.
+     */
+    const val SCAN_TIMEOUT_MS = 15_000L
   }
 }

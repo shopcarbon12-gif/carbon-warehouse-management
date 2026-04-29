@@ -179,10 +179,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       unawaited(rfid.pauseScanning());
       unawaited(rfid.reapplyHandheldHardwareSettings());
     }
-    unawaited(() async {
-      await RfidVendorChannel.open2dBarcode();
-      await RfidVendorChannel.scannerEnableTriggerRelay();
-    }());
+    // Reopen the 2D engine for any 2D-only successor screen, but do NOT
+    // re-enable the trigger relay here — that would race with whatever
+    // screen mounts next (Bin Assign sets it itself on _load; Re-encode and
+    // any RFID screen want it off). Letting the next screen own its mode
+    // closes the early-pull window where the laser was firing on Re-encode.
+    unawaited(RfidVendorChannel.open2dBarcode());
     super.dispose();
   }
 

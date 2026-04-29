@@ -225,6 +225,51 @@ class CarbonChainwayRfidController(private val context: Context) {
         // the first 118 ms then dead silence — classic TagFocus signature
         // (tags reply once and stay quiet indefinitely on this firmware).
         // Bisect continues: drop TagFocus, keep Gen2 tuning only.
+        //
+        // Stage-3: NOT setting these to true was insufficient. Field testing on
+        // 1.2.16/1.2.17 reproduced the same 1-3-hits-then-silence pattern even
+        // with setQuerySession=0 applied — meaning the chip's NVRAM is still
+        // booting with TagFocus and/or FastID enabled from a prior session.
+        // Explicitly clearing them at init (false/0) is what unsticks the
+        // chip back to multi-read-per-tag inventory. The runCatching wraps
+        // both because some Chainway SDK builds don't expose one or the
+        // other; whichever is missing silently no-ops.
+        runCatching {
+          val tfMethod = instance.javaClass.methods.firstOrNull {
+            it.name == "setTagFocus" && it.parameterCount == 1
+          }
+          if (tfMethod != null) {
+            tfMethod.isAccessible = true
+            val ptype = tfMethod.parameterTypes[0]
+            val arg: Any = when {
+              ptype == java.lang.Boolean.TYPE -> false
+              ptype == Int::class.javaPrimitiveType -> 0
+              else -> 0
+            }
+            val r = tfMethod.invoke(instance, arg)
+            Log.d(TAG, "init: setTagFocus(false/0) -> $r")
+          } else {
+            Log.d(TAG, "init: setTagFocus method not found on this SDK build")
+          }
+        }.onFailure { Log.w(TAG, "init: setTagFocus(false) threw: ${it.message}") }
+        runCatching {
+          val fiMethod = instance.javaClass.methods.firstOrNull {
+            it.name == "setFastID" && it.parameterCount == 1
+          }
+          if (fiMethod != null) {
+            fiMethod.isAccessible = true
+            val ptype = fiMethod.parameterTypes[0]
+            val arg: Any = when {
+              ptype == java.lang.Boolean.TYPE -> false
+              ptype == Int::class.javaPrimitiveType -> 0
+              else -> false
+            }
+            val r = fiMethod.invoke(instance, arg)
+            Log.d(TAG, "init: setFastID(false) -> $r")
+          } else {
+            Log.d(TAG, "init: setFastID method not found on this SDK build")
+          }
+        }.onFailure { Log.w(TAG, "init: setFastID(false) threw: ${it.message}") }
         // Diagnostic readback after writes
         try {
           Log.d(TAG, "init: post-region readbacks freq=" +
@@ -450,6 +495,20 @@ class CarbonChainwayRfidController(private val context: Context) {
       var loops = 0
       var nullReads = 0
       var hits = 0
+      // Dead-air watchdog: this firmware drops into a post-singulation silence
+      // after the first few tags reply (Session-1 / TagFocus-like behavior even
+      // with QuerySession=0 + setTagFocus(false)). Holding the trigger does not
+      // unstick it; the operator has to release and re-pull. To restore
+      // hold-to-scan UX we cycle stopInventoryTag → startInventoryTag whenever
+      // we see ~750 ms of consecutive null reads (≈ 38 * 20 ms = 760 ms). The
+      // cycle does NOT touch setPower (which is the path that wedges this
+      // chip), so it's safe to repeat indefinitely while scanning is true.
+      var consecutiveNullReads = 0
+      var kicks = 0
+      val deadAirThreshold = 38   // 38 * 20ms ≈ 760ms of silence before a kick
+      val maxKicksPerSecond = 2   // hard cap so we never thrash the UART
+      var kicksWindowStart = System.currentTimeMillis()
+      var kicksInWindow = 0
       try {
         while (scanning.get() && !Thread.currentThread().isInterrupted) {
           loops++
@@ -457,6 +516,7 @@ class CarbonChainwayRfidController(private val context: Context) {
             val tag = reader.readTagFromBuffer()
             if (tag != null) {
               hits++
+              consecutiveNullReads = 0
               val epc = tag.getEPC()
               Log.d(TAG, "TRACE TagThread: HIT #$hits epc=$epc rssi=${tag.getRssi()}")
               if (!epc.isNullOrBlank()) {
@@ -467,10 +527,33 @@ class CarbonChainwayRfidController(private val context: Context) {
               // No sleep — immediately fetch next buffered tag.
             } else {
               nullReads++
+              consecutiveNullReads++
               if (nullReads % 100 == 0) {
                 Log.d(TAG, "TRACE TagThread: $nullReads null reads, $hits hits, $loops loops")
               }
               Thread.sleep(20L)
+              if (consecutiveNullReads >= deadAirThreshold && scanning.get()) {
+                val nowMs = System.currentTimeMillis()
+                if (nowMs - kicksWindowStart >= 1000L) {
+                  kicksWindowStart = nowMs
+                  kicksInWindow = 0
+                }
+                if (kicksInWindow < maxKicksPerSecond) {
+                  kicksInWindow++
+                  kicks++
+                  Log.d(TAG, "TRACE TagThread: dead-air kick #$kicks (${consecutiveNullReads * 20}ms silent)")
+                  runCatching { reader.stopInventory() }
+                  // Brief settle so the chip's pending Q round drains before the
+                  // restart — without this the next startInventoryTag often
+                  // returns false on the fast path and forces a full re-init.
+                  try { Thread.sleep(40L) } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                  }
+                  val restarted = runCatching { reader.startInventoryTag() }.getOrDefault(false)
+                  Log.d(TAG, "TRACE TagThread: kick startInventoryTag -> $restarted")
+                  consecutiveNullReads = 0
+                }
+              }
             }
           } catch (ie: InterruptedException) {
             Thread.currentThread().interrupt()
@@ -482,7 +565,7 @@ class CarbonChainwayRfidController(private val context: Context) {
           }
         }
       } finally {
-        Log.d(TAG, "TRACE TagThread: STOPPED scanning=${scanning.get()} loops=$loops hits=$hits nulls=$nullReads")
+        Log.d(TAG, "TRACE TagThread: STOPPED scanning=${scanning.get()} loops=$loops hits=$hits nulls=$nullReads kicks=$kicks")
       }
     }, "CarbonChainway-TagThread").apply { isDaemon = true }
     tagPollThread = t
