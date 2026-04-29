@@ -24,13 +24,15 @@ type LookupRow = {
   vendor: string | null;
   retail_price: string | null;
   custom_sku_id: string;
+  sku_ls_system_id: string | null;
 };
 
 /** A row in the staged-payload table, grouped by Custom SKU. Mirrors the
- *  Inventory Catalog layout — name, sku, upc, color, size, retail price,
- *  bin, qty (count of unique EPCs). */
+ *  Inventory Catalog layout — system_id, name, sku, upc, color, size,
+ *  retail price, bin, qty (count of unique EPCs). */
 type StagedSkuRow = {
   custom_sku_id: string;
+  sku_ls_system_id: string | null;
   name: string | null;
   sku: string;
   upc: string | null;
@@ -51,6 +53,7 @@ function groupStagedBySku(rows: LookupRow[]): StagedSkuRow[] {
     if (!g) {
       g = {
         custom_sku_id: key,
+        sku_ls_system_id: r.sku_ls_system_id,
         name: r.name,
         sku: r.sku,
         upc: r.upc,
@@ -347,6 +350,7 @@ export function TransferWorkspace() {
           <table className="w-full border-collapse text-left text-xs">
             <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
               <tr className="border-b border-[var(--wms-border)]">
+                <th className="px-3 py-2">System ID</th>
                 <th className="px-3 py-2">Item name</th>
                 <th className="px-3 py-2">Custom SKU</th>
                 <th className="px-3 py-2">UPC</th>
@@ -364,6 +368,9 @@ export function TransferWorkspace() {
                   key={g.custom_sku_id}
                   className="hover:bg-[var(--wms-surface-elevated)]/50"
                 >
+                  <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 tabular-nums text-teal-400/85">
+                    {g.sku_ls_system_id ?? "—"}
+                  </td>
                   <td
                     className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5"
                     title={g.name ?? undefined}

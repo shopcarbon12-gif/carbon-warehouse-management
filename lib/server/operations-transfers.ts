@@ -46,6 +46,8 @@ export type TransferLookupRow = {
   vendor: string | null;
   retail_price: string | null;
   custom_sku_id: string;
+  /** custom_skus.ls_system_id — surfaced as "System ID" in UI, mirroring catalog. */
+  sku_ls_system_id: string | null;
 };
 
 export async function lookupTransferEpcs(
@@ -74,6 +76,7 @@ export async function lookupTransferEpcs(
     vendor: string | null;
     retail_price: string | null;
     custom_sku_id: string;
+    sku_ls_system_id: string | null;
   }>(
     `SELECT
        i.epc,
@@ -90,7 +93,8 @@ export async function lookupTransferEpcs(
        cs.asset_id,
        m.vendor,
        cs.retail_price::text AS retail_price,
-       cs.id::text AS custom_sku_id
+       cs.id::text AS custom_sku_id,
+       cs.ls_system_id::text AS sku_ls_system_id
      FROM items i
      INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
@@ -116,6 +120,7 @@ export async function lookupTransferEpcs(
     vendor: row.vendor,
     retail_price: row.retail_price,
     custom_sku_id: row.custom_sku_id,
+    sku_ls_system_id: row.sku_ls_system_id,
   }));
 }
 
@@ -141,6 +146,7 @@ export async function listSimTransferEpcs(
     vendor: string | null;
     retail_price: string | null;
     custom_sku_id: string;
+    sku_ls_system_id: string | null;
   }>(
     `SELECT
        i.epc,
@@ -157,7 +163,8 @@ export async function listSimTransferEpcs(
        cs.asset_id,
        m.vendor,
        cs.retail_price::text AS retail_price,
-       cs.id::text AS custom_sku_id
+       cs.id::text AS custom_sku_id,
+       cs.ls_system_id::text AS sku_ls_system_id
      FROM items i
      INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
@@ -185,6 +192,7 @@ export async function listSimTransferEpcs(
     vendor: row.vendor,
     retail_price: row.retail_price,
     custom_sku_id: row.custom_sku_id,
+    sku_ls_system_id: row.sku_ls_system_id,
   }));
 }
 
