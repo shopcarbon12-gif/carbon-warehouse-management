@@ -225,11 +225,21 @@ export async function listCatalogGrid(
        cs.archived AS archived,
        bool_and(cs.archived) OVER (PARTITION BY cs.matrix_id) AS matrix_archived,
        (
-         SELECT COUNT(*)::int
-         FROM items i
-         WHERE i.custom_sku_id = cs.id
-           AND i.location_id = $${locIdx}::uuid
-           AND i.status = 'in-stock'
+         (
+           SELECT COUNT(*)::int
+           FROM items i
+           WHERE i.custom_sku_id = cs.id
+             AND i.location_id = $${locIdx}::uuid
+             AND i.status = 'in-stock'
+         )
+         +
+         COALESCE((
+           SELECT SUM(qty_delta)::int
+           FROM inventory_adjustments ia
+           WHERE ia.custom_sku_id = cs.id
+             AND ia.location_id = $${locIdx}::uuid
+             AND ia.state = 'settled'
+         ), 0)
        ) AS active_epc_count,
        (
          SELECT string_agg(DISTINCT b.code, ', ' ORDER BY b.code)

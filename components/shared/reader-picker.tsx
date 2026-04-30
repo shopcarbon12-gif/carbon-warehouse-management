@@ -34,16 +34,29 @@ type Props = {
   label?: string;
   /** Render as disabled (e.g. while page is in some lock state). */
   disabled?: boolean;
+  /**
+   * Pre-select every reader whose name matches this string (case-insensitive,
+   * exact match). Applied once on first data load only — never overrides a
+   * user's later manual change.
+   */
+  defaultReaderName?: string;
 };
 
 type FlatReader = HardwareReaderRow & { _zoneName: string; _locationCode: string };
 
-export function ReaderPicker({ selected, onChange, label = "Readers", disabled = false }: Props) {
+export function ReaderPicker({
+  selected,
+  onChange,
+  label = "Readers",
+  disabled = false,
+  defaultReaderName,
+}: Props) {
   const { data } = useSWR<HardwareConfigTree>("/api/hardware-config", fetcher, {
     revalidateOnFocus: false,
   });
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+  const defaultAppliedRef = useRef(false);
 
   // Flatten the tree into a list with zone+location metadata for grouping.
   const flat: FlatReader[] = useMemo(() => {
@@ -78,6 +91,31 @@ export function ReaderPicker({ selected, onChange, label = "Readers", disabled =
     }
     return Array.from(m.entries()).map(([k, v]) => ({ key: k, readers: v }));
   }, [flat]);
+
+  // Apply defaultReaderName once on first data load. Skipped if the parent
+  // already has a non-empty selection — that means somebody (the user, or a
+  // previous mount) already populated the picker.
+  useEffect(() => {
+    if (defaultAppliedRef.current) return;
+    if (!defaultReaderName || flat.length === 0) return;
+    if (selected.size > 0) {
+      defaultAppliedRef.current = true;
+      return;
+    }
+    const target = defaultReaderName.trim().toLowerCase();
+    if (target.length === 0) {
+      defaultAppliedRef.current = true;
+      return;
+    }
+    const matches = flat
+      .filter((r) => r.name.trim().toLowerCase() === target)
+      .map((r) => r.id);
+    if (matches.length > 0) {
+      onChange(new Set(matches));
+    }
+    defaultAppliedRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flat, defaultReaderName]);
 
   // Click-outside to close.
   useEffect(() => {

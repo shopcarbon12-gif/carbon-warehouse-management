@@ -62,7 +62,6 @@ const sections: NavSection[] = [
     label: "Inventory",
     isActiveSection: (p) =>
       p.startsWith("/inventory/catalog") ||
-      p.startsWith("/inventory/transfers") ||
       p.startsWith("/inventory/bulk-status") ||
       p.startsWith("/overview/locations") ||
       p.startsWith("/rfid/cycle-counts") ||
@@ -71,10 +70,9 @@ const sections: NavSection[] = [
       { href: "/inventory/catalog", label: "Catalog", icon: Package },
       { href: "/overview/locations", label: "Locations & Bins", icon: Map },
       { href: "/rfid/cycle-counts", label: "Cycle Counts", icon: ScanLine },
-      { href: "/inventory/transfers/out", label: "Transfer out", icon: ArrowRightLeft },
-      { href: "/inventory/transfers/in", label: "Transfer in", icon: FolderInput },
+      { href: "/operations/transfers/out", label: "Transfer Out", icon: ArrowRightLeft },
+      { href: "/operations/transfers/in", label: "Transfer In", icon: FolderInput },
       { href: "/inventory/bulk-status", label: "Bulk status", icon: SlidersHorizontal },
-      { href: "/operations/transfers", label: "Transfers (legacy)", icon: Route },
     ],
   },
   {
@@ -106,6 +104,8 @@ const sections: NavSection[] = [
     items: [
       { href: "/reports/inventory-compare", label: "POS compare", icon: Banknote },
       { href: "/reports/count-sessions", label: "Count sessions", icon: ClipboardList },
+      { href: "/reports/transfers/out", label: "Transfer out (report)", icon: ArrowRightLeft },
+      { href: "/reports/transfers/in", label: "Transfer in (report)", icon: FolderInput },
       { href: "/reports/uploads", label: "Device upload logs", icon: Upload },
       { href: "/reports/activity", label: "Activity history", icon: Activity },
       { href: "/reports/asset-movements", label: "Asset movements", icon: Route },
