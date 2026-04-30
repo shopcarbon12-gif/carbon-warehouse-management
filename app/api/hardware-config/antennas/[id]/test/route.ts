@@ -46,11 +46,29 @@ export async function POST(req: Request, { params }: Ctx) {
   }
 
   // Set the pending flag — agent picks it up on next config poll.
-  await pool.query(
-    `UPDATE devices SET test_pending_at = now(), updated_at = now()
-       WHERE id = $1::uuid`,
-    [id],
-  );
+  try {
+    await pool.query(
+      `UPDATE devices SET test_pending_at = now(), updated_at = now()
+         WHERE id = $1::uuid`,
+      [id],
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Database error";
+    // Most common failure here is the test_pending_at column not existing —
+    // 033 / 035 ensure migrations should've run on container start. Surface
+    // a useful message instead of a generic 500.
+    console.error("[antennas/test]", msg);
+    if (msg.toLowerCase().includes("test_pending_at")) {
+      return NextResponse.json(
+        {
+          error:
+            "Antenna test schema missing — redeploy to run the latest migrations (033 / 035).",
+        },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 
   return NextResponse.json({
     ok: true,
