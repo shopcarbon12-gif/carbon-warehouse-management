@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { ChevronDown, ChevronUp, ChevronsUpDown, Radio } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
+import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epcs-modal";
 
 const PAGE_SIZE = 50;
 
@@ -260,6 +261,7 @@ export function CatalogWorkspace({
   const [catalogMenuOpen, setCatalogMenuOpen] = useState<null | "lightspeed" | "more">(null);
   const [newItemOpen, setNewItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [defectiveOpen, setDefectiveOpen] = useState(false);
   const [manualMatrixUpc, setManualMatrixUpc] = useState("");
   const [manualDesc, setManualDesc] = useState("");
   const [manualSku, setManualSku] = useState("");
@@ -590,6 +592,17 @@ export function CatalogWorkspace({
                   className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl"
                   role="menu"
                 >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setCatalogMenuOpen(null);
+                      setDefectiveOpen(true);
+                    }}
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))]"
+                  >
+                    Defective EPC&apos;s
+                  </button>
                   <button
                     type="button"
                     role="menuitem"
@@ -985,6 +998,10 @@ export function CatalogWorkspace({
           onClose={closeModal}
           onMutated={() => void mutate()}
         />
+      ) : null}
+
+      {defectiveOpen ? (
+        <DefectiveEpcsModal onClose={() => setDefectiveOpen(false)} />
       ) : null}
     </div>
   );

@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { findTransferBlockedEpc } from "@/lib/server/status-label-enforcement";
+import { ingestEpcs } from "@/lib/server/epc-ingress";
 
 function normalizeEpc(s: string): string {
   return s.replace(/\s/g, "").toUpperCase();
@@ -50,6 +51,64 @@ export type TransferLookupRow = {
   sku_ls_system_id: string | null;
 };
 
+/**
+ * For any EPCs that aren't yet in `items`, run them through the unified
+ * ingress (decode + catalog lookup + insert). Picks an arbitrary tenant
+ * location to associate with the new items — the operator's commit will
+ * relocate them to the actual destination, so the initial location is
+ * just bookkeeping.
+ *
+ * Quietly returns when there are no missing EPCs or when the tenant has
+ * no locations (in which case ingress would fail anyway).
+ */
+async function maybeIngestNewTransferEpcs(
+  pool: Pool,
+  tenantId: string,
+  epcs: string[],
+): Promise<void> {
+  if (epcs.length === 0) return;
+
+  const existing = await pool.query<{ epc: string }>(
+    `SELECT i.epc
+       FROM items i
+       INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
+       WHERE i.epc = ANY($2::text[])`,
+    [tenantId, epcs],
+  );
+  const existingSet = new Set(existing.rows.map((r) => r.epc));
+  const missing = epcs.filter((e) => !existingSet.has(e));
+  if (missing.length === 0) return;
+
+  // Pick any tenant location for the initial insert. The operator's commit
+  // will move these items to the actual destination location/bin.
+  const loc = await pool.query<{ id: string }>(
+    `SELECT id::text FROM locations WHERE tenant_id = $1::uuid ORDER BY code LIMIT 1`,
+    [tenantId],
+  );
+  if (loc.rowCount === 0 || !loc.rows[0]) return;
+  const stagingLocationId = loc.rows[0].id;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await ingestEpcs(client, missing.map((epc) => ({
+      tenantId,
+      epc,
+      source: "transfer" as const,
+      sourceDeviceLabel: null,
+      locationId: stagingLocationId,
+      receivedAt: new Date(),
+    })));
+    await client.query("COMMIT");
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch { /* ignore */ }
+    // Don't fail the whole lookup if ingress fails — log and move on.
+    console.error("[transfers/lookup] ingress failed", e);
+  } finally {
+    client.release();
+  }
+}
+
 export async function lookupTransferEpcs(
   pool: Pool,
   tenantId: string,
@@ -59,6 +118,14 @@ export async function lookupTransferEpcs(
     /^[0-9A-F]{24}$/.test(e),
   );
   if (norm.length === 0) return [];
+
+  // Unified ingress: any EPC not already in `items` is decoded against the
+  // tenant's EPC formula and matched to a custom_sku via ls_system_id.
+  // Matched → status='in-stock' (LIVE). Unmatched/undecodable → status='tag_killed'
+  // (which is not visible to scanner — gets filtered out of the response below).
+  // This is what makes the Transfers page able to "auto-flip a previously-unknown
+  // EPC to LIVE" the moment a matching SKU exists in the catalog.
+  await maybeIngestNewTransferEpcs(pool, tenantId, norm);
 
   const r = await pool.query<{
     epc: string;

@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { createHash, randomBytes } from "node:crypto";
 import { publishEdgeScanEvent } from "@/lib/server/edge-scan-hub";
+import { ingestEpcs } from "@/lib/server/epc-ingress";
 
 export type CdmAgentRow = {
   id: string;
@@ -416,8 +417,8 @@ export async function ingestAgentReads(
   auth: { agentId: string; tenantId: string },
   body: IngestReadsBody,
 ): Promise<{ inserted: number }> {
-  const ownership = await client.query<{ id: string; location_id: string }>(
-    `SELECT id::text, location_id::text FROM devices
+  const ownership = await client.query<{ id: string; location_id: string; name: string }>(
+    `SELECT id::text, location_id::text, name FROM devices
        WHERE id = $1::uuid AND tenant_id = $2::uuid AND cdm_agent_id = $3::uuid
          AND device_type IN ('fixed_reader','transaction_reader','door_reader')`,
     [body.readerId, auth.tenantId, auth.agentId],
@@ -426,40 +427,37 @@ export async function ingestAgentReads(
     throw new Error("BAD_REQUEST:Reader not found or not owned by this agent");
   }
   const readerLocationId = ownership.rows[0].location_id;
+  const readerName = ownership.rows[0].name;
 
-  // ── Auto-commission unknown EPCs ──
-  // Any EPC that isn't already in `items` gets inserted with the
-  // "AUTO-PENDING" placeholder SKU + the reader's location. This makes
-  // it appear in the Transfers UI immediately. The operator can
-  // reassign to a real Custom SKU later via the catalog admin.
-  const epcSet = Array.from(new Set(body.reads.map((r) => r.epcHex.toUpperCase())));
-  if (epcSet.length > 0) {
-    const placeholder = await client.query<{ id: string }>(
-      `SELECT id::text FROM custom_skus WHERE sku = 'AUTO-PENDING' LIMIT 1`,
-    );
-    if (placeholder.rowCount && placeholder.rows[0]) {
-      const placeholderSkuId = placeholder.rows[0].id;
-      // Insert any EPCs that don't already exist. ON CONFLICT DO NOTHING
-      // because items.epc is unique.
-      await client.query(
-        `INSERT INTO items (epc, serial_number, custom_sku_id, location_id, status, last_seen_at)
-         SELECT
-           epc,
-           (extract(epoch from now())::bigint * 1000 + (row_number() OVER ())) AS serial_number,
-           $2::uuid,
-           $3::uuid,
-           'in-stock',
-           now()
-         FROM unnest($1::text[]) AS epc
-         ON CONFLICT (epc) DO UPDATE
-           SET last_seen_at = now()`,
-        [epcSet, placeholderSkuId, readerLocationId],
-      );
-    }
-  }
-
+  // ── Unified EPC ingress ──
+  // Every EPC goes through epc-ingress: decode against tenant_epc_config,
+  // look up `ls_system_id` in custom_skus, and write items with status
+  // 'in-stock' on match or 'tag_killed' on miss. Replaces the old
+  // AUTO-PENDING placeholder bucket.
   const antennaIdMap = await getAntennaIdMap(client, body.readerId);
-
+  const dedupedEpcs = Array.from(new Set(body.reads.map((r) => r.epcHex.toUpperCase())));
+  // Map each unique EPC back to the antenna it was last seen on (best-effort
+  // device label). If the same EPC came from multiple antennas in this batch,
+  // the last one wins — fine for source attribution, doesn't affect status.
+  const lastAntennaForEpc = new Map<string, number | undefined>();
+  for (const r of body.reads) {
+    lastAntennaForEpc.set(r.epcHex.toUpperCase(), r.antennaNumber);
+  }
+  if (dedupedEpcs.length > 0) {
+    await ingestEpcs(client, dedupedEpcs.map((epc) => {
+      const antNum = lastAntennaForEpc.get(epc);
+      const antLabel = antNum !== undefined ? `${readerName} · A${antNum}` : readerName;
+      return {
+        tenantId: auth.tenantId,
+        epc,
+        source: "fixed_reader" as const,
+        sourceDeviceLabel: antLabel,
+        locationId: readerLocationId,
+        receivedAt: new Date(),
+      };
+    }));
+  }
+  // Antenna lookup map is needed below for the cdm_reads insert too — already loaded above.
   if (body.reads.length === 0) return { inserted: 0 };
 
   const tenantIds: string[] = [];
