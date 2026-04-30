@@ -51,6 +51,12 @@ type ReaderSlot = {
   lastSeen: Map<string, number>;  // epcHex → ms timestamp
   backoffMs: number;
   shuttingDown: boolean;
+  /** ms timestamp of the most recent byte arrival on streamSocket. The
+   *  watchdog uses this to detect a "stuck but alive" MonsoonReader — the
+   *  binary occasionally enters a state where the process is up, the stream
+   *  socket is connected, but no inventory bytes ever arrive. We force a
+   *  respawn after STREAM_SILENCE_TIMEOUT_MS of zero traffic. */
+  lastByteAt: number;
   /**
    * Active antenna-test windows for THIS reader. Each entry is
    * incremented every time we observe an EPC byte sequence on the stream.
@@ -74,6 +80,14 @@ export type AntennaTestCallback = (result: {
 const TEST_WINDOW_MS = 30_000;
 /** How often the supervisor sweeps active test windows for expiration. */
 const TEST_SWEEP_INTERVAL_MS = 1_000;
+/**
+ * Force-respawn MonsoonReader if its stream socket has been silent for this
+ * long. The binary occasionally enters a "alive but not streaming" state
+ * after the initial inventory burst — process is up, socket is open, no
+ * bytes arrive. Detected by comparing now() vs slot.lastByteAt.
+ */
+const STREAM_SILENCE_TIMEOUT_MS = 45_000;
+const WATCHDOG_INTERVAL_MS = 5_000;
 
 export class MonsoonSupervisor {
   private slots = new Map<string, ReaderSlot>();
@@ -81,6 +95,7 @@ export class MonsoonSupervisor {
   private epcByteLen = 12;
   private bundleVersion = 0;
   private testSweepHandle: NodeJS.Timeout | null = null;
+  private streamWatchdogHandle: NodeJS.Timeout | null = null;
   /** Set of antenna IDs we've already started a test for (one-shot per pending). */
   private testedAntennas = new Set<string>();
 
@@ -102,6 +117,35 @@ export class MonsoonSupervisor {
         () => this.sweepExpiredTests(),
         TEST_SWEEP_INTERVAL_MS,
       );
+    }
+    // Stream-silence watchdog: every WATCHDOG_INTERVAL_MS, look at every slot
+    // and force-respawn any whose stream socket has been silent longer than
+    // STREAM_SILENCE_TIMEOUT_MS. The MonsoonReader binary occasionally enters
+    // a "alive but not streaming" state where the process is up, the socket
+    // is open, but no inventory bytes flow. Killing the child triggers the
+    // exit handler which respawns immediately.
+    this.streamWatchdogHandle = setInterval(
+      () => this.runStreamWatchdog(),
+      WATCHDOG_INTERVAL_MS,
+    );
+  }
+
+  private runStreamWatchdog(): void {
+    const now = Date.now();
+    for (const slot of this.slots.values()) {
+      if (slot.shuttingDown) continue;
+      if (!slot.child) continue;
+      const silentMs = now - slot.lastByteAt;
+      if (silentMs >= STREAM_SILENCE_TIMEOUT_MS) {
+        log.warn("supervisor: stream silent — kicking MonsoonReader", {
+          readerId: slot.spec.id,
+          readerName: slot.spec.name,
+          silentMs,
+        });
+        slot.lastByteAt = now;
+        slot.child?.kill("SIGTERM");
+        // exit handler respawns
+      }
     }
   }
 
@@ -152,6 +196,7 @@ export class MonsoonSupervisor {
         backoffMs: MIN_BACKOFF_MS,
         shuttingDown: false,
         activeTests: new Map(),
+        lastByteAt: Date.now(),
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -261,6 +306,10 @@ export class MonsoonSupervisor {
       clearInterval(this.testSweepHandle);
       this.testSweepHandle = null;
     }
+    if (this.streamWatchdogHandle) {
+      clearInterval(this.streamWatchdogHandle);
+      this.streamWatchdogHandle = null;
+    }
     for (const slot of this.slots.values()) {
       slot.shuttingDown = true;
       this.stopSlot(slot);
@@ -278,17 +327,21 @@ export class MonsoonSupervisor {
     if (slot.shuttingDown) return;
     const { spec } = slot;
     const powerArg = Math.round(this.avgPower(spec) * 10);
-    // Enabled antennas the operator configured in /hardware_config. We must
-    // pass each port via -a so MonsoonReader cycles them; without it the
-    // binary defaults to antenna 1 only and silently misses everything wired
-    // to ports 2-4 (this was breaking ALL scanning).
+    // MonsoonReader's `--num` is the reader INDEX (default 1), and `-a` takes
+    // a SINGLE antenna number — using two `-a` flags makes the binary thread-
+    // resource-throw because last-wins semantics combine with `--num` as
+    // count-of-readers. So one process per reader, antenna 1 only by default;
+    // explicit antenna number only when the operator configured exactly one
+    // and it isn't 1. Multi-antenna readers will be handled by spawning one
+    // child process per antenna in a future change (each with its own
+    // stream / control port pair).
     const enabledAntennas = spec.antennas.filter((a) => a.enabled);
     const antennaArgs: string[] = [];
-    for (const a of enabledAntennas) {
-      antennaArgs.push("-a", String(a.antenna_number));
+    if (enabledAntennas.length === 1 && enabledAntennas[0]!.antenna_number !== 1) {
+      antennaArgs.push("-a", String(enabledAntennas[0]!.antenna_number));
     }
     const args = [
-      "--num", String(Math.max(1, enabledAntennas.length)),
+      "--num", "1",
       "--cstream",
       "--stream", String(slot.streamPort),
       "--control", String(slot.controlPort),
@@ -299,20 +352,30 @@ export class MonsoonSupervisor {
       "--serial_port", String(spec.monsoon_serial_port),
       "--fastid",
       "--nocache",
-      "--infinite",   // continuous inventory cycles, no client needed to drive it
+      // `--infinite` is what tells MonsoonReader to start an inventory loop
+      // automatically. Without it the binary sits in command-processor mode
+      // waiting for external commands on the control port and the stream
+      // socket stays silent. Verified via verbose run: no `--infinite` →
+      // process exits cleanly without ever calling do_single_inventory().
+      "--infinite",
     ];
     log.info("supervisor: spawning MonsoonReader", {
       readerId: spec.id,
       readerName: spec.name,
       antennas: enabledAntennas.map((a) => a.antenna_number),
+      antennaScanned: antennaArgs.length > 0 ? Number(antennaArgs[1]) : 1,
       power: powerArg,
     });
 
     const child = spawn(this.monsoonBinary, args, {
       stdio: ["ignore", "pipe", "pipe"],
-      cwd: "/opt/legacy-rfid",
+      cwd: "/opt/legacy-rfid/runtime",
     });
     slot.child = child;
+    // Grace window for startup — without this the watchdog would kick a
+    // freshly-spawned MonsoonReader before its stream socket has even
+    // produced its first byte.
+    slot.lastByteAt = Date.now();
 
     // We don't need MonsoonReader's stdout/stderr — drain to avoid back-pressure.
     child.stdout?.resume();
@@ -323,14 +386,28 @@ export class MonsoonSupervisor {
       slot.streamSocket?.destroy();
       slot.streamSocket = null;
       if (slot.shuttingDown) return;
-      log.warn("supervisor: MonsoonReader exited, will respawn", {
-        readerId: spec.id,
-        code,
-        signal,
-        backoffMs: slot.backoffMs,
-      });
-      setTimeout(() => this.spawnReader(slot), slot.backoffMs);
-      slot.backoffMs = Math.min(slot.backoffMs * 2, MAX_BACKOFF_MS);
+      // MonsoonReader's design (matching the legacy Senitron `cdm`
+      // orchestrator) is to run a fixed-cycles inventory and exit cleanly.
+      // The legacy `readers.json` doesn't use any "infinite" flag — the
+      // orchestrator just respawns on every exit. Treat code=0 as a healthy
+      // completion (no backoff growth, immediate respawn). Non-zero exits or
+      // signals are treated as faults — exponential backoff up to MAX.
+      const cleanExit = code === 0 && !signal;
+      const delay = cleanExit ? 250 : slot.backoffMs;
+      if (cleanExit) {
+        log.debug("supervisor: MonsoonReader cycle complete, respawning", {
+          readerId: spec.id,
+        });
+      } else {
+        log.warn("supervisor: MonsoonReader exited unexpectedly, will respawn", {
+          readerId: spec.id,
+          code,
+          signal,
+          backoffMs: slot.backoffMs,
+        });
+      }
+      setTimeout(() => this.spawnReader(slot), delay);
+      slot.backoffMs = cleanExit ? 1000 : Math.min(slot.backoffMs * 2, MAX_BACKOFF_MS);
     });
 
     // Connect to the MonsoonReader's stream port to receive tag-read bytes.
@@ -391,6 +468,9 @@ export class MonsoonSupervisor {
    * chars and dedupe within a 1-second window.
    */
   private consumeStreamBytes(slot: ReaderSlot, chunk: Buffer): void {
+    if (chunk.length > 0) {
+      slot.lastByteAt = Date.now();
+    }
     // Append to slot buffer; cap growth to avoid unbounded memory.
     slot.buffer = Buffer.concat([slot.buffer, chunk]);
     if (slot.buffer.length > 1024 * 1024) {
