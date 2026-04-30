@@ -284,6 +284,7 @@ export async function listSimTransferEpcs(
 
 export type TransferCommitResult = {
   transferId: string;
+  slipNumber: number | null;
   rfidCount: number;
   manualCount: number;
   auditId: string;
@@ -359,13 +360,14 @@ export async function commitTransfer(
     }
   }
 
-  // 1. Create the transfer record.
-  const trIns = await client.query<{ id: string }>(
+  // 1. Create the transfer record. slip_number defaults to nextval() of the
+  // 70000-start sequence (see migration 036).
+  const trIns = await client.query<{ id: string; slip_number: string | null }>(
     `INSERT INTO transfer_records
        (tenant_id, source_location_id, destination_location_id, state,
         rfid_count, manual_count, created_by, notes)
      VALUES ($1::uuid, $2::uuid, $3::uuid, 'in-transit', $4, $5, $6::uuid, $7)
-     RETURNING id::text`,
+     RETURNING id::text, slip_number::text`,
     [
       session.tid,
       sourceLocationId,
@@ -377,6 +379,8 @@ export async function commitTransfer(
     ],
   );
   const transferId = trIns.rows[0]!.id;
+  const slipNumberRaw = trIns.rows[0]!.slip_number;
+  const slipNumber = slipNumberRaw == null ? null : Number(slipNumberRaw);
 
   // 2. Flip RFID items to in-transit, attach to this transfer.
   let movedRfid = 0;
@@ -428,6 +432,7 @@ export async function commitTransfer(
       session.sub,
       JSON.stringify({
         transfer_id: transferId,
+        slip_number: slipNumber,
         source_location: { id: src.id, code: src.code, name: src.name },
         destination_location: { id: dst.id, code: dst.code, name: dst.name },
         epcs,
@@ -441,6 +446,7 @@ export async function commitTransfer(
 
   return {
     transferId,
+    slipNumber,
     rfidCount: movedRfid,
     manualCount: manualUnits,
     auditId: audit.rows[0]?.id ?? "",
@@ -453,6 +459,7 @@ export async function commitTransfer(
 
 export type PendingTransferRow = {
   id: string;
+  slip_number: number | null;
   source_location_id: string;
   source_location_code: string;
   source_location_name: string;
@@ -476,6 +483,7 @@ export async function listPendingTransfersForDestination(
 ): Promise<PendingTransferRow[]> {
   const r = await pool.query<{
     id: string;
+    slip_number: string | null;
     source_location_id: string;
     source_location_code: string;
     source_location_name: string;
@@ -493,6 +501,7 @@ export async function listPendingTransfersForDestination(
   }>(
     `SELECT
        tr.id::text,
+       tr.slip_number::text,
        tr.source_location_id::text,
        sloc.code AS source_location_code,
        sloc.name AS source_location_name,
@@ -525,16 +534,23 @@ export async function listPendingTransfersForDestination(
      LIMIT 100`,
     [tenantId, destinationLocationId],
   );
-  return r.rows;
+  return r.rows.map((row) => ({
+    ...row,
+    slip_number: row.slip_number == null ? null : Number(row.slip_number),
+  }));
 }
 
 export type TransferDetailRow = {
   id: string;
+  slip_number: number | null;
   state: string;
+  created_at: string;
   source_location_id: string;
   destination_location_id: string;
   source_location_code: string;
+  source_location_name: string;
   destination_location_code: string;
+  destination_location_name: string;
   rfid: Array<{
     epc: string;
     serial_number: string | null;
@@ -570,19 +586,27 @@ export async function getTransferDetail(
 ): Promise<TransferDetailRow | null> {
   const tr = await pool.query<{
     id: string;
+    slip_number: string | null;
     state: string;
+    created_at: string;
     source_location_id: string;
     destination_location_id: string;
     source_location_code: string;
+    source_location_name: string;
     destination_location_code: string;
+    destination_location_name: string;
   }>(
     `SELECT
        tr.id::text,
+       tr.slip_number::text,
        tr.state,
+       tr.created_at::text,
        tr.source_location_id::text,
        tr.destination_location_id::text,
        sl.code AS source_location_code,
-       dl.code AS destination_location_code
+       sl.name AS source_location_name,
+       dl.code AS destination_location_code,
+       dl.name AS destination_location_name
      FROM transfer_records tr
      INNER JOIN locations sl ON sl.id = tr.source_location_id
      INNER JOIN locations dl ON dl.id = tr.destination_location_id
@@ -660,11 +684,15 @@ export async function getTransferDetail(
 
   return {
     id: t.id,
+    slip_number: t.slip_number == null ? null : Number(t.slip_number),
     state: t.state,
+    created_at: t.created_at,
     source_location_id: t.source_location_id,
     destination_location_id: t.destination_location_id,
     source_location_code: t.source_location_code,
+    source_location_name: t.source_location_name,
     destination_location_code: t.destination_location_code,
+    destination_location_name: t.destination_location_name,
     rfid: rfidRows.rows.map((r) => ({
       epc: r.epc,
       serial_number: r.serial_number,
@@ -691,6 +719,258 @@ export async function getTransferDetail(
       qty: r.qty_delta,
       state: r.state,
     })),
+  };
+}
+
+/* ===========================================================================
+ *  Reports — list of all transfer slips with search + filters
+ * ========================================================================= */
+
+export type TransferSlipReportRow = {
+  id: string;
+  slip_number: number | null;
+  state: string;
+  source_location_code: string;
+  source_location_name: string;
+  destination_location_code: string;
+  destination_location_name: string;
+  created_at: string;
+  received_at: string | null;
+  rfid_count: number;
+  manual_count: number;
+  sent_qty: number;
+  received_qty: number;
+  missing_qty: number;
+  doc_number: string | null;
+  ref_number: string | null;
+  created_by_email: string | null;
+};
+
+export type TransferSlipReportFilters = {
+  /** Optional case-insensitive search across slip#, EPC, custom SKU, UPC, item name. */
+  q?: string;
+  /** ISO date string (yyyy-mm-dd) — inclusive. */
+  shippedFrom?: string;
+  shippedTo?: string;
+  receivedFrom?: string;
+  receivedTo?: string;
+  /** Optional filter on transfer_records.state. */
+  state?: string;
+  /** Outbound vs inbound view filter. Out = ship-from = session location, In = ship-to. */
+  direction: "out" | "in";
+  /** Operator's session location used to scope by direction. Admin can pass another. */
+  scopeLocationId?: string;
+  page: number;
+  limit: number;
+};
+
+export type TransferSlipReportResult = {
+  rows: TransferSlipReportRow[];
+  total: number;
+  status_counts: { all: number; pending: number; partially_received: number; received: number; cancelled: number };
+};
+
+export async function listTransferSlipReport(
+  pool: Pool,
+  tenantId: string,
+  filters: TransferSlipReportFilters,
+): Promise<TransferSlipReportResult> {
+  const { q, shippedFrom, shippedTo, receivedFrom, receivedTo, state, direction, scopeLocationId, page, limit } = filters;
+  const safeLimit = Math.min(500, Math.max(1, limit));
+  const offset = Math.max(0, (page - 1) * safeLimit);
+
+  const where: string[] = ["tr.tenant_id = $1::uuid"];
+  const params: unknown[] = [tenantId];
+
+  if (scopeLocationId) {
+    if (direction === "out") {
+      params.push(scopeLocationId);
+      where.push(`tr.source_location_id = $${params.length}::uuid`);
+    } else {
+      params.push(scopeLocationId);
+      where.push(`tr.destination_location_id = $${params.length}::uuid`);
+    }
+  }
+
+  if (state && state !== "all") {
+    params.push(state);
+    where.push(`tr.state = $${params.length}`);
+  }
+
+  if (shippedFrom) {
+    params.push(shippedFrom);
+    where.push(`tr.created_at >= $${params.length}::timestamptz`);
+  }
+  if (shippedTo) {
+    // Inclusive end-of-day.
+    params.push(shippedTo);
+    where.push(`tr.created_at < ($${params.length}::date + INTERVAL '1 day')`);
+  }
+  if (receivedFrom) {
+    params.push(receivedFrom);
+    where.push(`tr.received_at >= $${params.length}::timestamptz`);
+  }
+  if (receivedTo) {
+    params.push(receivedTo);
+    where.push(`tr.received_at < ($${params.length}::date + INTERVAL '1 day')`);
+  }
+
+  // Free-text search across slip#, EPC, sku, upc, item description.
+  if (q && q.trim().length > 0) {
+    params.push(`%${q.trim()}%`);
+    const like = `$${params.length}`;
+    params.push(q.trim());
+    const exact = `$${params.length}`;
+    where.push(`(
+      CAST(tr.slip_number AS TEXT) = ${exact}
+      OR EXISTS (
+        SELECT 1 FROM items i
+        INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
+        LEFT JOIN matrices m ON m.id = cs.matrix_id
+        WHERE i.transfer_id = tr.id
+          AND (
+            i.epc ILIKE ${like}
+            OR cs.sku ILIKE ${like}
+            OR COALESCE(cs.upc, m.upc) ILIKE ${like}
+            OR m.description ILIKE ${like}
+          )
+      )
+      OR EXISTS (
+        SELECT 1 FROM inventory_adjustments ia
+        INNER JOIN custom_skus cs ON cs.id = ia.custom_sku_id
+        LEFT JOIN matrices m ON m.id = cs.matrix_id
+        WHERE ia.transfer_id = tr.id
+          AND ia.side = 'destination'
+          AND (
+            cs.sku ILIKE ${like}
+            OR COALESCE(cs.upc, m.upc) ILIKE ${like}
+            OR m.description ILIKE ${like}
+          )
+      )
+    )`);
+  }
+
+  const whereSql = where.join(" AND ");
+
+  const countQ = await pool.query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c FROM transfer_records tr WHERE ${whereSql}`,
+    params,
+  );
+  const total = Number(countQ.rows[0]?.c ?? 0);
+
+  // Status counts ignore the `state` filter so the pills always show all states.
+  const statusWhere = where.filter((w) => !w.startsWith("tr.state =")).join(" AND ");
+  const statusParams = state && state !== "all" ? params.slice(0, params.length - 0) : params;
+  // Re-build params without the state value at index of the state where clause.
+  // Simpler: re-run count without state filter.
+  const sw: string[] = ["tr.tenant_id = $1::uuid"];
+  const sp: unknown[] = [tenantId];
+  if (scopeLocationId) {
+    sp.push(scopeLocationId);
+    sw.push(direction === "out"
+      ? `tr.source_location_id = $${sp.length}::uuid`
+      : `tr.destination_location_id = $${sp.length}::uuid`);
+  }
+  if (shippedFrom) { sp.push(shippedFrom); sw.push(`tr.created_at >= $${sp.length}::timestamptz`); }
+  if (shippedTo)   { sp.push(shippedTo); sw.push(`tr.created_at < ($${sp.length}::date + INTERVAL '1 day')`); }
+  if (receivedFrom){ sp.push(receivedFrom); sw.push(`tr.received_at >= $${sp.length}::timestamptz`); }
+  if (receivedTo)  { sp.push(receivedTo); sw.push(`tr.received_at < ($${sp.length}::date + INTERVAL '1 day')`); }
+  void statusWhere; void statusParams; // appease unused
+  const statusQ = await pool.query<{
+    state: string;
+    c: string;
+  }>(
+    `SELECT tr.state, COUNT(*)::text AS c FROM transfer_records tr WHERE ${sw.join(" AND ")} GROUP BY tr.state`,
+    sp,
+  );
+  const counts = { all: 0, pending: 0, partially_received: 0, received: 0, cancelled: 0 };
+  for (const row of statusQ.rows) {
+    const c = Number(row.c);
+    counts.all += c;
+    if (row.state === "in-transit") counts.pending += c;
+    else if (row.state === "partially_received") counts.partially_received += c;
+    else if (row.state === "received") counts.received += c;
+    else if (row.state === "cancelled") counts.cancelled += c;
+  }
+
+  params.push(safeLimit);
+  const limIdx = params.length;
+  params.push(offset);
+  const offIdx = params.length;
+
+  const rowsQ = await pool.query<{
+    id: string;
+    slip_number: string | null;
+    state: string;
+    source_location_code: string;
+    source_location_name: string;
+    destination_location_code: string;
+    destination_location_name: string;
+    created_at: string;
+    received_at: string | null;
+    rfid_count: number;
+    manual_count: number;
+    received_qty: number;
+    created_by_email: string | null;
+  }>(
+    `SELECT
+       tr.id::text,
+       tr.slip_number::text,
+       tr.state,
+       sl.code AS source_location_code,
+       sl.name AS source_location_name,
+       dl.code AS destination_location_code,
+       dl.name AS destination_location_name,
+       tr.created_at::text,
+       tr.received_at::text,
+       tr.rfid_count,
+       tr.manual_count,
+       (
+         (SELECT COUNT(*)::int FROM items i WHERE i.transfer_id = tr.id AND i.status = 'in-stock')
+         +
+         COALESCE((
+           SELECT SUM(qty_delta)::int FROM inventory_adjustments ia
+           WHERE ia.transfer_id = tr.id
+             AND ia.side = 'destination' AND ia.state = 'settled'
+         ), 0)
+       ) AS received_qty,
+       u.email AS created_by_email
+     FROM transfer_records tr
+     INNER JOIN locations sl ON sl.id = tr.source_location_id
+     INNER JOIN locations dl ON dl.id = tr.destination_location_id
+     LEFT JOIN users u ON u.id = tr.created_by
+     WHERE ${whereSql}
+     ORDER BY tr.created_at DESC
+     LIMIT $${limIdx} OFFSET $${offIdx}`,
+    params,
+  );
+
+  return {
+    rows: rowsQ.rows.map((r) => {
+      const sent = (r.rfid_count ?? 0) + (r.manual_count ?? 0);
+      const received = r.received_qty ?? 0;
+      return {
+        id: r.id,
+        slip_number: r.slip_number == null ? null : Number(r.slip_number),
+        state: r.state,
+        source_location_code: r.source_location_code,
+        source_location_name: r.source_location_name,
+        destination_location_code: r.destination_location_code,
+        destination_location_name: r.destination_location_name,
+        created_at: r.created_at,
+        received_at: r.received_at,
+        rfid_count: r.rfid_count,
+        manual_count: r.manual_count,
+        sent_qty: sent,
+        received_qty: received,
+        missing_qty: Math.max(0, sent - received),
+        doc_number: null,
+        ref_number: null,
+        created_by_email: r.created_by_email,
+      };
+    }),
+    total,
+    status_counts: counts,
   };
 }
 

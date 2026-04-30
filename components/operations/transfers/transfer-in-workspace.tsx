@@ -27,6 +27,7 @@ type LocationRow = { id: string; code: string; name: string };
 
 type PendingRow = {
   id: string;
+  slip_number: number | null;
   source_location_id: string;
   source_location_code: string;
   source_location_name: string;
@@ -73,11 +74,15 @@ type DetailManualRow = {
 
 type DetailResponse = {
   id: string;
+  slip_number: number | null;
   state: string;
+  created_at: string;
   source_location_id: string;
   destination_location_id: string;
   source_location_code: string;
+  source_location_name: string;
   destination_location_code: string;
+  destination_location_name: string;
   rfid: DetailRfidRow[];
   manual: DetailManualRow[];
 };

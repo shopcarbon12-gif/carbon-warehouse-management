@@ -162,6 +162,14 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
 
   // Commit progress.
   const [committing, setCommitting] = useState(false);
+  // After a successful commit the page becomes a frozen receipt: source / dest
+  // locations + all the staged rows stay visible but every interactive control
+  // (Start scan, Non-RFID search, qty editor, Review & transfer) is locked.
+  // Operator presses Clear staged to start a new session — that's the only
+  // way back to an editable state, and it's also the wipe for an in-progress
+  // session (so behaviour is identical whether or not a commit happened).
+  const [committedSlip, setCommittedSlip] = useState<{ id: string; slipNumber: number | null } | null>(null);
+  const isLocked = committedSlip !== null;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Stage mutations
@@ -281,8 +289,15 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
   }, []);
 
   const clearStaged = useCallback(() => {
+    // Always restarts a session — both during an active session AND after a
+    // commit (when the page is locked as a receipt). Either way, blank slate.
     setStaged(new Map());
     setScanning(false);
+    setCommittedSlip(null);
+    setSearchQ("");
+    setSearchOpen(false);
+    setSearchResults([]);
+    setEpcsModalSku(null);
   }, []);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -415,6 +430,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
       const data = (await res.json()) as {
         error?: string;
         transferId?: string;
+        slipNumber?: number | null;
         rfidCount?: number;
         manualCount?: number;
       };
@@ -422,11 +438,25 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
         showToast(data.error ?? "Transfer failed.");
         return;
       }
+      const slipNum = data.slipNumber ?? null;
       showToast(
-        `Sent. RFID×${data.rfidCount ?? 0}, Manual×${data.manualCount ?? 0}. Items are IN TRANSIT until received at destination.`,
+        `Slip #${slipNum ?? "?"} created — RFID×${data.rfidCount ?? 0}, Manual×${data.manualCount ?? 0}. Items are IN TRANSIT until received at destination.`,
       );
-      setStaged(new Map());
+      // Freeze the page as a read-only receipt and pop the printable slip
+      // in a new tab. Cleared by pressing Clear staged.
+      setCommittedSlip({ id: data.transferId ?? "", slipNumber: slipNum });
       setScanning(false);
+      if (data.transferId) {
+        try {
+          window.open(
+            `/api/operations/transfers/${encodeURIComponent(data.transferId)}/pdf?autoprint=1`,
+            "_blank",
+            "noopener",
+          );
+        } catch {
+          /* ignore popup blockers */
+        }
+      }
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Transfer failed.");
     } finally {
@@ -489,13 +519,24 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
         </label>
       </div>
 
+      {/* Locked banner shown after a commit succeeds. */}
+      {isLocked ? (
+        <div className="rounded-lg border border-emerald-700/45 bg-emerald-950/25 px-4 py-3 font-mono text-xs text-emerald-200">
+          <span className="font-semibold">Slip #{committedSlip?.slipNumber ?? "?"} created</span> — page is now read-only.
+          The printable slip opened in a new tab; CSV is available from{" "}
+          <a className="underline" href="/reports/transfers/out" target="_blank" rel="noopener">Reports → Transfer Out</a>.
+          Press <span className="font-semibold">Clear staged</span> to start a new session.
+        </div>
+      ) : null}
+
       {/* Scan controls */}
       <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4">
         <div className="flex flex-wrap items-end gap-3">
           <button
             type="button"
+            disabled={isLocked}
             onClick={() => setScanning((s) => !s)}
-            className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors ${
+            className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-40 ${
               scanning
                 ? "border-amber-500/60 bg-amber-950/40 text-amber-100"
                 : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-teal-500/40"
@@ -531,10 +572,11 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
             <input
               type="text"
               value={searchQ}
+              disabled={isLocked}
               onChange={(e) => setSearchQ(e.target.value)}
               onFocus={() => setSearchOpen(true)}
               placeholder="Non-RFID search — name / SKU / UPC / vendor / color / size / system ID"
-              className="flex-1 bg-transparent font-mono text-xs text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70"
+              className="flex-1 bg-transparent font-mono text-xs text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70 disabled:opacity-40"
             />
             {searchQ ? (
               <button
@@ -714,6 +756,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
       <button
         type="button"
         disabled={
+          isLocked ||
           stagedList.length === 0 ||
           !destLocationId ||
           !sourceLocationId ||

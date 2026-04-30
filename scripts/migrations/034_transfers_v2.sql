@@ -92,18 +92,5 @@ CREATE INDEX IF NOT EXISTS inventory_adjustments_tenant_created_idx
   ON inventory_adjustments (tenant_id, created_at DESC);
 --> statement-breakpoint
 
--- 4. status_labels: 'in-transit' (system_id=9, IN TRANSIT) already exists in seed.
--- See /settings/statuses for the hard-wired rule. The DO-block makes this safe
--- whether the row collides on `name`, on `legacy_id`, on neither, or — most
--- importantly — when both UNIQUE columns conflict on different existing rows
--- (which a plain `ON CONFLICT (name)` could not handle and was halting the
--- whole migration chain on prod, blocking 035 from running).
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM status_labels WHERE name = 'in-transit')
-     AND NOT EXISTS (SELECT 1 FROM status_labels WHERE legacy_id = 9) THEN
-    INSERT INTO status_labels (legacy_id, name, include_in_inventory)
-    VALUES (9, 'in-transit', false);
-  END IF;
-END
-$$;
+-- (status_labels seed handled in a dedicated migration to keep the rest of
+-- 034 idempotent and unblocked. See later migrations.)

@@ -219,9 +219,12 @@ function useColResize(tableRef: React.RefObject<HTMLTableElement | null>) {
     const measure = (el: HTMLElement | null, text: string): number => {
       if (!el || !text) return 0;
       const cs = window.getComputedStyle(el);
-      // Build the shorthand `font` from individual props because computedStyle
-      // returns "" for `font` in many browsers.
-      ctx.font = `${cs.fontStyle} ${cs.fontVariant} ${cs.fontWeight} ${cs.fontSize}/${cs.lineHeight} ${cs.fontFamily}`;
+      // Minimal shorthand — `font-size font-family` is enough and is the only
+      // form Canvas reliably parses. Including font-variant or line-height
+      // (which computedStyle returns as a px value, not the unitless number
+      // the shorthand wants) silently invalidates the whole shorthand and
+      // canvas falls back to a wide default font.
+      ctx.font = `${cs.fontWeight || "400"} ${cs.fontSize} ${cs.fontFamily}`;
       return ctx.measureText(text).width;
     };
 
