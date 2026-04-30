@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Radio, ScanLine, RefreshCw, CheckCircle2 } from "lucide-react";
+import { Radio, ScanLine, RefreshCw, ChevronDown, ChevronRight, Printer } from "lucide-react";
 import { ReaderPicker } from "@/components/shared/reader-picker";
 
 type LocationRow = { id: string; code: string; name: string };
@@ -44,6 +44,7 @@ type PendingRow = {
 
 type DetailRfidRow = {
   epc: string;
+  serial_number: string | null;
   custom_sku_id: string;
   sku: string;
   sku_ls_system_id: string | null;
@@ -51,6 +52,7 @@ type DetailRfidRow = {
   color: string | null;
   size: string | null;
   upc: string | null;
+  retail_price: string | null;
   received: boolean;
 };
 
@@ -63,6 +65,7 @@ type DetailManualRow = {
   color: string | null;
   size: string | null;
   upc: string | null;
+  retail_price: string | null;
   qty: number;
   state: string;
 };
@@ -91,6 +94,239 @@ type Props = {
   sessionLocationId: string;
   isAdmin: boolean;
 };
+
+type SkuRowData = {
+  custom_sku_id: string;
+  sku_ls_system_id: string | null;
+  sku: string;
+  name: string | null;
+  color: string | null;
+  size: string | null;
+  upc: string | null;
+  retail_price: string | null;
+  sent: number;
+  received: number;
+  confirmed_in_session: number;
+  rfid: DetailRfidRow[];
+  manual: DetailManualRow[];
+};
+
+function FragmentLikeRow({
+  open,
+  onToggle,
+  idx,
+  g,
+  sessionReceived,
+  missing,
+  confirmedEpcs,
+  confirmedAdjustmentIds,
+  toggleEpc,
+  toggleManual,
+  formatPrice,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  idx: number;
+  g: SkuRowData;
+  sessionReceived: number;
+  missing: number;
+  confirmedEpcs: Set<string>;
+  confirmedAdjustmentIds: Set<string>;
+  toggleEpc: (epc: string) => void;
+  toggleManual: (adjustmentId: string) => void;
+  formatPrice: (p: string | null) => string;
+}) {
+  // Drawer status helpers — RFID line: "received" (settled) | "checked"
+  // (queued in this session) | "pending" (in-transit, not yet confirmed).
+  // Manual line: same labels but mapped from adjustment state + session set.
+  return (
+    <>
+      <tr
+        className={`hover:bg-[var(--wms-surface-elevated)]/50 ${
+          open ? "bg-[var(--wms-surface-elevated)]/40" : ""
+        }`}
+      >
+        <td className="px-3 py-1.5 text-right tabular-nums text-[var(--wms-muted)]">
+          {idx + 1}
+        </td>
+        <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5">
+          {g.sku}
+        </td>
+        <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-[var(--wms-muted)]">
+          {g.upc ?? "—"}
+        </td>
+        <td
+          className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5"
+          title={g.name ?? undefined}
+        >
+          {g.name ?? "—"}
+        </td>
+        <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-[var(--wms-muted)]">
+          {g.color?.trim() || "—"}
+        </td>
+        <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-[var(--wms-muted)]">
+          {g.size?.trim() || "—"}
+        </td>
+        <td className="px-3 py-1.5 text-right tabular-nums">
+          {formatPrice(g.retail_price)}
+        </td>
+        <td className="px-3 py-1.5 text-right tabular-nums">{g.sent}</td>
+        <td className="px-3 py-1.5 text-right tabular-nums text-emerald-300">
+          {sessionReceived}
+        </td>
+        <td className="px-3 py-1.5 text-right tabular-nums">
+          <span className={missing > 0 ? "text-red-400/90" : "text-[var(--wms-muted)]"}>
+            {missing}
+          </span>
+        </td>
+        <td className="px-2 py-1.5 text-right">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface)]/80"
+            aria-label={open ? "Collapse" : "Expand"}
+          >
+            {open ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
+        </td>
+      </tr>
+      {open ? (
+        <tr className="bg-[var(--wms-surface)]/60">
+          <td colSpan={11} className="px-0 py-0">
+            <div className="border-y border-[var(--wms-border)]/60">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="bg-orange-900/15 font-mono text-[0.55rem] uppercase tracking-wider text-orange-200/90">
+                  <tr>
+                    <th className="w-10 px-3 py-1.5"></th>
+                    <th className="px-3 py-1.5">Serial #</th>
+                    <th className="px-3 py-1.5">EPC</th>
+                    <th className="px-3 py-1.5">Status</th>
+                    <th className="w-20 px-3 py-1.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--wms-border)]/40 font-mono text-[0.7rem] text-[var(--wms-fg)]">
+                  {g.rfid.map((r) => {
+                    const checked = r.received || confirmedEpcs.has(r.epc);
+                    const status = r.received
+                      ? "received"
+                      : confirmedEpcs.has(r.epc)
+                        ? "checked"
+                        : "pending";
+                    return (
+                      <tr
+                        key={r.epc}
+                        className="hover:bg-[var(--wms-surface-elevated)]/40"
+                      >
+                        <td className="px-3 py-1">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={r.received}
+                            onChange={() => toggleEpc(r.epc)}
+                            className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)]"
+                          />
+                        </td>
+                        <td className="px-3 py-1 tabular-nums text-teal-400/85">
+                          {r.serial_number ?? "—"}
+                        </td>
+                        <td className="px-3 py-1 tabular-nums text-[var(--wms-muted)]">
+                          {r.epc}
+                        </td>
+                        <td className="px-3 py-1">
+                          <StatusPill status={status} />
+                        </td>
+                        <td className="px-3 py-1 text-right">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                            title="Print label (placeholder)"
+                          >
+                            <Printer className="h-3 w-3" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {g.manual.map((a) =>
+                    Array.from({ length: a.qty }).map((_, i) => {
+                      const checked =
+                        a.state === "settled" || confirmedAdjustmentIds.has(a.adjustment_id);
+                      const status =
+                        a.state === "settled"
+                          ? "received"
+                          : confirmedAdjustmentIds.has(a.adjustment_id)
+                            ? "checked"
+                            : "pending";
+                      return (
+                        <tr
+                          key={`${a.adjustment_id}-${i}`}
+                          className="hover:bg-[var(--wms-surface-elevated)]/40"
+                        >
+                          <td className="px-3 py-1">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={a.state === "settled" || i > 0}
+                              onChange={() => toggleManual(a.adjustment_id)}
+                              className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)] disabled:opacity-50"
+                              title={
+                                i > 0
+                                  ? "All units of this manual line confirm together"
+                                  : undefined
+                              }
+                            />
+                          </td>
+                          <td className="px-3 py-1 text-[var(--wms-muted)]">—</td>
+                          <td className="px-3 py-1 text-[var(--wms-muted)]">
+                            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider text-amber-300">
+                              Manual
+                            </span>
+                          </td>
+                          <td className="px-3 py-1">
+                            <StatusPill status={status} />
+                          </td>
+                          <td className="px-3 py-1 text-right">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                              title="Print label (placeholder)"
+                            >
+                              <Printer className="h-3 w-3" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
+function StatusPill({ status }: { status: "pending" | "checked" | "received" }) {
+  const cls =
+    status === "received"
+      ? "bg-emerald-500/15 text-emerald-300"
+      : status === "checked"
+        ? "bg-teal-500/15 text-teal-300"
+        : "bg-zinc-500/15 text-zinc-300";
+  return (
+    <span
+      className={`inline-block rounded px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider ${cls}`}
+    >
+      {status}
+    </span>
+  );
+}
 
 export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
   const { data: locData } = useSWR<LocationRow[]>("/api/locations", fetcher);
@@ -239,87 +475,104 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
     color: string | null;
     size: string | null;
     upc: string | null;
-    rfid_total: number;
-    rfid_received: number;
-    rfid_pending_in_transit: number;
-    rfid_confirmed_in_session: number;
-    manual_total: number;
-    manual_received: number;
-    manual_confirmed_in_session: number;
-    manual_adjustment_ids: string[];
-    epcs: DetailRfidRow[];
+    retail_price: string | null;
+    sent: number;
+    received: number;
+    confirmed_in_session: number;
+    rfid: DetailRfidRow[];
+    manual: DetailManualRow[];
   };
 
   const grouped: SkuRow[] = useMemo(() => {
     if (!detail) return [];
     const map = new Map<string, SkuRow>();
-    for (const r of detail.rfid) {
-      let g = map.get(r.custom_sku_id);
+    const ensure = (key: string, seed: Pick<SkuRow,
+      "custom_sku_id" | "sku_ls_system_id" | "sku" | "name" | "color" | "size" | "upc" | "retail_price"
+    >): SkuRow => {
+      let g = map.get(key);
       if (!g) {
         g = {
-          custom_sku_id: r.custom_sku_id,
-          sku_ls_system_id: r.sku_ls_system_id,
-          sku: r.sku,
-          name: r.name,
-          color: r.color,
-          size: r.size,
-          upc: r.upc,
-          rfid_total: 0,
-          rfid_received: 0,
-          rfid_pending_in_transit: 0,
-          rfid_confirmed_in_session: 0,
-          manual_total: 0,
-          manual_received: 0,
-          manual_confirmed_in_session: 0,
-          manual_adjustment_ids: [],
-          epcs: [],
+          ...seed,
+          sent: 0,
+          received: 0,
+          confirmed_in_session: 0,
+          rfid: [],
+          manual: [],
         };
-        map.set(r.custom_sku_id, g);
+        map.set(key, g);
       }
-      g.rfid_total++;
-      g.epcs.push(r);
-      if (r.received) g.rfid_received++;
-      else g.rfid_pending_in_transit++;
-      if (confirmedEpcs.has(r.epc)) g.rfid_confirmed_in_session++;
+      return g;
+    };
+    for (const r of detail.rfid) {
+      const g = ensure(r.custom_sku_id, {
+        custom_sku_id: r.custom_sku_id,
+        sku_ls_system_id: r.sku_ls_system_id,
+        sku: r.sku,
+        name: r.name,
+        color: r.color,
+        size: r.size,
+        upc: r.upc,
+        retail_price: r.retail_price,
+      });
+      g.rfid.push(r);
+      g.sent += 1;
+      if (r.received) g.received += 1;
+      else if (confirmedEpcs.has(r.epc)) g.confirmed_in_session += 1;
     }
     for (const r of detail.manual) {
-      let g = map.get(r.custom_sku_id);
-      if (!g) {
-        g = {
-          custom_sku_id: r.custom_sku_id,
-          sku_ls_system_id: r.sku_ls_system_id,
-          sku: r.sku,
-          name: r.name,
-          color: r.color,
-          size: r.size,
-          upc: r.upc,
-          rfid_total: 0,
-          rfid_received: 0,
-          rfid_pending_in_transit: 0,
-          rfid_confirmed_in_session: 0,
-          manual_total: 0,
-          manual_received: 0,
-          manual_confirmed_in_session: 0,
-          manual_adjustment_ids: [],
-          epcs: [],
-        };
-        map.set(r.custom_sku_id, g);
-      }
-      g.manual_total += r.qty;
-      g.manual_adjustment_ids.push(r.adjustment_id);
-      if (r.state === "settled") g.manual_received += r.qty;
-      if (confirmedAdjustmentIds.has(r.adjustment_id)) g.manual_confirmed_in_session += r.qty;
+      const g = ensure(r.custom_sku_id, {
+        custom_sku_id: r.custom_sku_id,
+        sku_ls_system_id: r.sku_ls_system_id,
+        sku: r.sku,
+        name: r.name,
+        color: r.color,
+        size: r.size,
+        upc: r.upc,
+        retail_price: r.retail_price,
+      });
+      g.manual.push(r);
+      g.sent += r.qty;
+      if (r.state === "settled") g.received += r.qty;
+      else if (confirmedAdjustmentIds.has(r.adjustment_id)) g.confirmed_in_session += r.qty;
     }
     return [...map.values()].sort((a, b) =>
       (a.name ?? a.sku).localeCompare(b.name ?? b.sku),
     );
   }, [detail, confirmedEpcs, confirmedAdjustmentIds]);
 
-  const totalUnits = grouped.reduce((acc, g) => acc + g.rfid_total + g.manual_total, 0);
-  const confirmedUnits = grouped.reduce(
-    (acc, g) => acc + g.rfid_confirmed_in_session + g.manual_confirmed_in_session,
-    0,
-  );
+  // Per-row drawer expand/collapse. SKUs default to closed.
+  const [openRows, setOpenRows] = useState<Set<string>>(() => new Set());
+  const toggleOpen = useCallback((skuId: string) => {
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(skuId)) next.delete(skuId);
+      else next.add(skuId);
+      return next;
+    });
+  }, []);
+  // Reset drawer state when transfer changes.
+  useEffect(() => {
+    setOpenRows(new Set());
+  }, [selectedTransferId]);
+
+  const toggleEpc = useCallback((epc: string) => {
+    setConfirmedEpcs((prev) => {
+      const next = new Set(prev);
+      if (next.has(epc)) next.delete(epc);
+      else next.add(epc);
+      return next;
+    });
+  }, []);
+
+  const formatPrice = (p: string | null): string => {
+    if (!p) return "—";
+    const n = Number(p);
+    if (!Number.isFinite(n)) return "—";
+    return `$${n.toFixed(2)}`;
+  };
+
+  const totalUnits = grouped.reduce((acc, g) => acc + g.sent, 0);
+  const confirmedUnits = grouped.reduce((acc, g) => acc + g.confirmed_in_session, 0);
 
   const doReceive = useCallback(async () => {
     if (!selectedTransferId) return;
@@ -498,88 +751,41 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
             <table className="w-full border-collapse text-left text-xs">
               <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
                 <tr className="border-b border-[var(--wms-border)]">
-                  <th className="px-3 py-2">System ID</th>
-                  <th className="px-3 py-2">Item name</th>
+                  <th className="w-10 px-3 py-2 text-right">#</th>
                   <th className="px-3 py-2">Custom SKU</th>
                   <th className="px-3 py-2">UPC</th>
+                  <th className="px-3 py-2">Item name</th>
                   <th className="px-3 py-2">Color</th>
                   <th className="px-3 py-2">Size</th>
-                  <th className="px-3 py-2 text-right">RFID</th>
-                  <th className="px-3 py-2 text-right">Manual</th>
-                  <th className="px-3 py-2"></th>
+                  <th className="px-3 py-2 text-right">Price</th>
+                  <th className="px-3 py-2 text-right">Sent</th>
+                  <th className="px-3 py-2 text-right">Received</th>
+                  <th className="px-3 py-2 text-right">Missing</th>
+                  <th className="w-10 px-3 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
-                {grouped.map((g) => (
-                  <tr key={g.custom_sku_id} className="hover:bg-[var(--wms-surface-elevated)]/50">
-                    <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 tabular-nums text-teal-400/85">
-                      {g.sku_ls_system_id ?? "—"}
-                    </td>
-                    <td
-                      className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5"
-                      title={g.name ?? undefined}
-                    >
-                      {g.name ?? "—"}
-                    </td>
-                    <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5">
-                      {g.sku}
-                    </td>
-                    <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-[var(--wms-muted)]">
-                      {g.upc ?? "—"}
-                    </td>
-                    <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-[var(--wms-muted)]">
-                      {g.color?.trim() || "—"}
-                    </td>
-                    <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 text-[var(--wms-muted)]">
-                      {g.size?.trim() || "—"}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {g.rfid_total === 0 ? (
-                        <span className="text-[var(--wms-muted)]">—</span>
-                      ) : (
-                        <span>
-                          <span className="text-teal-300">
-                            {g.rfid_received + g.rfid_confirmed_in_session}
-                          </span>
-                          <span className="text-[var(--wms-muted)]"> / {g.rfid_total}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {g.manual_total === 0 ? (
-                        <span className="text-[var(--wms-muted)]">—</span>
-                      ) : (
-                        <span>
-                          <span className="text-amber-300">
-                            {g.manual_received + g.manual_confirmed_in_session}
-                          </span>
-                          <span className="text-[var(--wms-muted)]"> / {g.manual_total}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      {g.manual_total > g.manual_received &&
-                      g.manual_adjustment_ids.some(
-                        (id) => !confirmedAdjustmentIds.has(id),
-                      ) ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            for (const aid of g.manual_adjustment_ids) {
-                              if (!confirmedAdjustmentIds.has(aid)) {
-                                toggleManual(aid);
-                              }
-                            }
-                          }}
-                          className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-950/30 px-2 py-1 text-[0.6rem] font-medium text-amber-200 hover:bg-amber-900/30"
-                        >
-                          <CheckCircle2 className="h-3 w-3" />
-                          Confirm manual
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
+                {grouped.map((g, idx) => {
+                  const open = openRows.has(g.custom_sku_id);
+                  const sessionReceived = g.received + g.confirmed_in_session;
+                  const missing = Math.max(0, g.sent - sessionReceived);
+                  return (
+                    <FragmentLikeRow
+                      key={g.custom_sku_id}
+                      open={open}
+                      onToggle={() => toggleOpen(g.custom_sku_id)}
+                      idx={idx}
+                      g={g}
+                      sessionReceived={sessionReceived}
+                      missing={missing}
+                      confirmedEpcs={confirmedEpcs}
+                      confirmedAdjustmentIds={confirmedAdjustmentIds}
+                      toggleEpc={toggleEpc}
+                      toggleManual={toggleManual}
+                      formatPrice={formatPrice}
+                    />
+                  );
+                })}
               </tbody>
             </table>
           )}

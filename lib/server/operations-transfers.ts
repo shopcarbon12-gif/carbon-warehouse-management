@@ -537,6 +537,7 @@ export type TransferDetailRow = {
   destination_location_code: string;
   rfid: Array<{
     epc: string;
+    serial_number: string | null;
     custom_sku_id: string;
     sku: string;
     sku_ls_system_id: string | null;
@@ -544,6 +545,7 @@ export type TransferDetailRow = {
     color: string | null;
     size: string | null;
     upc: string | null;
+    retail_price: string | null;
     received: boolean;
   }>;
   manual: Array<{
@@ -555,6 +557,7 @@ export type TransferDetailRow = {
     color: string | null;
     size: string | null;
     upc: string | null;
+    retail_price: string | null;
     qty: number;
     state: string;
   }>;
@@ -591,6 +594,7 @@ export async function getTransferDetail(
 
   const rfidRows = await pool.query<{
     epc: string;
+    serial_number: string | null;
     custom_sku_id: string;
     sku: string;
     sku_ls_system_id: string | null;
@@ -598,10 +602,12 @@ export async function getTransferDetail(
     color: string | null;
     size: string | null;
     upc: string | null;
+    retail_price: string | null;
     status: string;
   }>(
     `SELECT
        i.epc,
+       i.serial_number::text AS serial_number,
        i.custom_sku_id::text,
        cs.sku,
        cs.ls_system_id::text AS sku_ls_system_id,
@@ -609,6 +615,7 @@ export async function getTransferDetail(
        cs.color_code AS color,
        cs.size,
        COALESCE(cs.upc, m.upc) AS upc,
+       cs.retail_price::text AS retail_price,
        i.status
      FROM items i
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
@@ -627,6 +634,7 @@ export async function getTransferDetail(
     color: string | null;
     size: string | null;
     upc: string | null;
+    retail_price: string | null;
     qty_delta: number;
     state: string;
   }>(
@@ -639,6 +647,7 @@ export async function getTransferDetail(
        cs.color_code AS color,
        cs.size,
        COALESCE(cs.upc, m.upc) AS upc,
+       cs.retail_price::text AS retail_price,
        ia.qty_delta,
        ia.state
      FROM inventory_adjustments ia
@@ -658,6 +667,7 @@ export async function getTransferDetail(
     destination_location_code: t.destination_location_code,
     rfid: rfidRows.rows.map((r) => ({
       epc: r.epc,
+      serial_number: r.serial_number,
       custom_sku_id: r.custom_sku_id,
       sku: r.sku,
       sku_ls_system_id: r.sku_ls_system_id,
@@ -665,6 +675,7 @@ export async function getTransferDetail(
       color: r.color,
       size: r.size,
       upc: r.upc,
+      retail_price: r.retail_price,
       received: r.status === "in-stock",
     })),
     manual: manualRows.rows.map((r) => ({
@@ -676,6 +687,7 @@ export async function getTransferDetail(
       color: r.color,
       size: r.size,
       upc: r.upc,
+      retail_price: r.retail_price,
       qty: r.qty_delta,
       state: r.state,
     })),
