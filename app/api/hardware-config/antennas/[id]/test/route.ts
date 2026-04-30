@@ -3,6 +3,7 @@ import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
+import { ensureAntennaTestSchema } from "@/lib/server/ensure-antenna-test-schema";
 
 /**
  * POST /api/hardware-config/antennas/[id]/test
@@ -45,6 +46,12 @@ export async function POST(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: "Antenna not found" }, { status: 404 });
   }
 
+  // Self-heal: ensure the schema columns exist before writing. Migrations
+  // 033 / 035 should have added these but the migration runner has been
+  // failing partway on prod. ensureAntennaTestSchema is IF-NOT-EXISTS and
+  // module-cached so it's a no-op on subsequent calls.
+  await ensureAntennaTestSchema(pool);
+
   // Set the pending flag — agent picks it up on next config poll.
   try {
     await pool.query(
@@ -54,19 +61,7 @@ export async function POST(req: Request, { params }: Ctx) {
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Database error";
-    // Most common failure here is the test_pending_at column not existing —
-    // 033 / 035 ensure migrations should've run on container start. Surface
-    // a useful message instead of a generic 500.
     console.error("[antennas/test]", msg);
-    if (msg.toLowerCase().includes("test_pending_at")) {
-      return NextResponse.json(
-        {
-          error:
-            "Antenna test schema missing — redeploy to run the latest migrations (033 / 035).",
-        },
-        { status: 500 },
-      );
-    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 

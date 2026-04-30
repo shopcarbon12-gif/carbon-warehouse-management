@@ -123,11 +123,11 @@ const DEFAULT_COL_WIDTHS: number[] = [
   130,  // sku
   90,   // upc
   200,  // name
-  90,   // color
-  60,   // size
-  90,   // retail price
-  70,   // bin
-  80,   // qty (epc)
+  130,  // color (fits "GREY WASHED" + chevron)
+  70,   // size
+  100,  // retail price (fits header + "$XXX.XX")
+  80,   // bin
+  90,   // qty (epc) — centered numerals
   70,   // rfid
 ];
 
@@ -798,7 +798,7 @@ export function CatalogWorkspace({
                       { key: "size", label: "Size" },
                       { key: "retail_price", label: "Retail price" },
                       { key: "bin", label: "Bin" },
-                      { key: "qty_epc", label: "Qty (EPC)" },
+                      { key: "qty_epc", label: "Qty (EPC)", align: "center" },
                       { key: "rfid", label: "RFID", sortable: false },
                     ] as { key: SortKey | "rfid"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean }[]
                   ).map(({ key, label, cls, align, sortable, hidden }, colIdx) => {
@@ -811,7 +811,7 @@ export function CatalogWorkspace({
                       <th
                         key={key}
                         style={w !== null ? { width: w, minWidth: w } : undefined}
-                        className={`relative overflow-hidden px-2 py-2 ${align === "right" ? "text-right" : ""} ${cls ?? ""} ${hidden ? "hidden" : ""}`}
+                        className={`relative overflow-hidden px-2 py-2 ${align === "right" ? "text-right" : align === "center" ? "text-center" : ""} ${cls ?? ""} ${hidden ? "hidden" : ""}`}
                       >
                         {isSortable ? (
                           <button
@@ -878,7 +878,7 @@ export function CatalogWorkspace({
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">
                         {r.bin_location ?? "—"}
                       </td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-[var(--wms-fg)]">
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-center tabular-nums text-[var(--wms-fg)]">
                         {r.active_epc_count}
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5">

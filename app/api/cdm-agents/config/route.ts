@@ -4,6 +4,7 @@ import {
   authenticateAgentToken,
   getAgentConfigBundle,
 } from "@/lib/server/cdm-agents";
+import { ensureAntennaTestSchema } from "@/lib/server/ensure-antenna-test-schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +25,11 @@ export async function GET(req: Request) {
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
+
+  // Guard: getAgentConfigBundle SELECTs devices.test_pending_at; if the column
+  // is missing the agent's startup poll throws and the agent disconnects,
+  // which is what's been blocking ALL scans on prod. Self-heal first.
+  await ensureAntennaTestSchema(pool);
 
   const auth_ = await authenticateAgentToken(pool, m[1].trim());
   if (!auth_) {
