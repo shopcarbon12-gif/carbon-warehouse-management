@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { Radio, ScanLine, RefreshCw, ChevronDown, ChevronRight, Printer } from "lucide-react";
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { PrintActionsModal } from "./print-actions-modal";
 
 type LocationRow = { id: string; code: string; name: string };
 
@@ -123,6 +124,7 @@ function FragmentLikeRow({
   toggleEpc,
   toggleManual,
   formatPrice,
+  onPrint,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -135,6 +137,7 @@ function FragmentLikeRow({
   toggleEpc: (epc: string) => void;
   toggleManual: (adjustmentId: string) => void;
   formatPrice: (p: string | null) => string;
+  onPrint: (epc: string | null) => void;
 }) {
   // Drawer status helpers — RFID line: "received" (settled) | "checked"
   // (queued in this session) | "pending" (in-transit, not yet confirmed).
@@ -211,7 +214,7 @@ function FragmentLikeRow({
                 <tbody className="divide-y divide-[var(--wms-border)]/40 font-mono text-[0.7rem] text-[var(--wms-fg)]">
                   {g.rfid.map((r) => {
                     const checked = r.received || confirmedEpcs.has(r.epc);
-                    const status = r.received
+                    const status: "pending" | "checked" | "received" = r.received
                       ? "received"
                       : confirmedEpcs.has(r.epc)
                         ? "checked"
@@ -242,8 +245,9 @@ function FragmentLikeRow({
                         <td className="px-3 py-1 text-right">
                           <button
                             type="button"
+                            onClick={() => onPrint(r.epc)}
                             className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
-                            title="Print label (placeholder)"
+                            title="Print label"
                           >
                             <Printer className="h-3 w-3" />
                           </button>
@@ -255,7 +259,7 @@ function FragmentLikeRow({
                     Array.from({ length: a.qty }).map((_, i) => {
                       const checked =
                         a.state === "settled" || confirmedAdjustmentIds.has(a.adjustment_id);
-                      const status =
+                      const status: "pending" | "checked" | "received" =
                         a.state === "settled"
                           ? "received"
                           : confirmedAdjustmentIds.has(a.adjustment_id)
@@ -292,8 +296,9 @@ function FragmentLikeRow({
                           <td className="px-3 py-1 text-right">
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
-                              title="Print label (placeholder)"
+                              disabled
+                              className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] opacity-40"
+                              title="Manual lines have no EPC to reprint"
                             >
                               <Printer className="h-3 w-3" />
                             </button>
@@ -406,6 +411,7 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
   }, [selectedTransferId]);
 
   const [committing, setCommitting] = useState(false);
+  const [printEpc, setPrintEpc] = useState<string | null>(null);
 
   // SSE — accept reads only when scanning && selected reader && EPC is part
   // of the chosen transfer + currently in-transit.
@@ -783,6 +789,7 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
                       toggleEpc={toggleEpc}
                       toggleManual={toggleManual}
                       formatPrice={formatPrice}
+                      onPrint={(epc) => setPrintEpc(epc)}
                     />
                   );
                 })}
@@ -810,6 +817,12 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
           {toast}
         </p>
       ) : null}
+
+      <PrintActionsModal
+        open={printEpc !== null}
+        epc={printEpc}
+        onClose={() => setPrintEpc(null)}
+      />
     </div>
   );
 }
