@@ -1,9 +1,24 @@
 import type { Pool } from "pg";
 
+export type HardwareCounts = {
+  readers: number;
+  antennas: number;
+  printers: number;
+  handhelds: number;
+};
+
 export type CommandCenterKpis = {
+  /** items at this location with status='in-stock' (LIVE). */
+  live_inventory: number;
+  /** legacy alias of live_inventory. */
   total_items: number;
   receiving_concerns: number;
+  /** items with status='tag_killed' that haven't been dismissed in Defective EPCs. */
+  defective_epcs: number;
+  /** legacy alias of defective_epcs. */
   unknown_assets: number;
+  /** Hardware presence at this location. Drives the Live scan tile's enabled state. */
+  hardware: HardwareCounts;
 };
 
 export type AuditLogListRow = {
@@ -17,9 +32,11 @@ export type AuditLogListRow = {
 export async function getCommandCenterKpis(
   pool: Pool,
   locationId: string,
+  tenantId: string,
 ): Promise<CommandCenterKpis> {
-  const total = await pool.query<{ c: string }>(
-    `SELECT count(*)::text AS c FROM items WHERE location_id = $1::uuid`,
+  const live = await pool.query<{ c: string }>(
+    `SELECT count(*)::text AS c FROM items
+     WHERE location_id = $1::uuid AND status = 'in-stock'`,
     [locationId],
   );
   const incomplete = await pool.query<{ c: string }>(
@@ -27,15 +44,47 @@ export async function getCommandCenterKpis(
      WHERE location_id = $1::uuid AND status = 'pending_visibility'`,
     [locationId],
   );
-  const unknown = await pool.query<{ c: string }>(
-    `SELECT count(*)::text AS c FROM items
-     WHERE location_id = $1::uuid AND status = 'UNKNOWN'`,
+  // Defective EPCs: same predicate as the modal — tag_killed and not yet dismissed,
+  // OR re-scanned since the last dismissal so they re-appear automatically.
+  // Tenant-wide (matches catalog modal scope) since defectives aren't location-specific.
+  const defective = await pool.query<{ c: string }>(
+    `SELECT count(*)::text AS c
+     FROM items i
+     INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
+     WHERE i.status = 'tag_killed'
+       AND (i.defective_acknowledged_at IS NULL
+            OR i.last_seen_at > i.defective_acknowledged_at)`,
+    [tenantId],
+  );
+  const hw = await pool.query<{
+    readers: string;
+    antennas: string;
+    printers: string;
+    handhelds: string;
+  }>(
+    `SELECT
+       COUNT(*) FILTER (WHERE device_type IN ('fixed_reader','transaction_reader','door_reader'))::text AS readers,
+       COUNT(*) FILTER (WHERE device_type = 'antenna')::text AS antennas,
+       COUNT(*) FILTER (WHERE device_type = 'printer')::text AS printers,
+       COUNT(*) FILTER (WHERE device_type = 'handheld_reader')::text AS handhelds
+     FROM devices
+     WHERE location_id = $1::uuid`,
     [locationId],
   );
+  const liveCount = Number(live.rows[0]?.c ?? 0);
+  const defectiveCount = Number(defective.rows[0]?.c ?? 0);
   return {
-    total_items: Number(total.rows[0]?.c ?? 0),
+    live_inventory: liveCount,
+    total_items: liveCount,
     receiving_concerns: Number(incomplete.rows[0]?.c ?? 0),
-    unknown_assets: Number(unknown.rows[0]?.c ?? 0),
+    defective_epcs: defectiveCount,
+    unknown_assets: defectiveCount,
+    hardware: {
+      readers: Number(hw.rows[0]?.readers ?? 0),
+      antennas: Number(hw.rows[0]?.antennas ?? 0),
+      printers: Number(hw.rows[0]?.printers ?? 0),
+      handhelds: Number(hw.rows[0]?.handhelds ?? 0),
+    },
   };
 }
 

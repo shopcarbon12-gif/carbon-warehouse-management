@@ -2,26 +2,42 @@
 
 import useSWR from "swr";
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   Cpu,
-  Package,
   Printer,
   Radio,
   Smartphone,
   Wifi,
 } from "lucide-react";
 import type { AuditLogListRow } from "@/lib/queries/dashboard-command";
-import { LiveStreamHandler } from "@/components/rfid/live-stream-handler";
+import { useCountUp } from "./use-count-up";
+
+type HardwareCounts = {
+  readers: number;
+  antennas: number;
+  printers: number;
+  handhelds: number;
+};
+
+type Kpis = {
+  live_inventory: number;
+  total_items: number;
+  receiving_concerns: number;
+  defective_epcs: number;
+  unknown_assets: number;
+  hardware: HardwareCounts;
+};
 
 type CommandPayload = {
-  kpis: {
-    total_items: number;
-    receiving_concerns: number;
-    unknown_assets: number;
-  };
+  kpis: Kpis;
   activity: AuditLogListRow[];
+};
+
+type LookupRow = {
+  epc: string;
+  status: string;
 };
 
 const fetcher = async (url: string): Promise<CommandPayload> => {
@@ -32,29 +48,40 @@ const fetcher = async (url: string): Promise<CommandPayload> => {
   return res.json() as Promise<CommandPayload>;
 };
 
-const hardware = [
-  { label: "Readers", count: 1, icon: Radio },
-  { label: "Antennas", count: 9, icon: Wifi },
-  { label: "Printers", count: 1, icon: Printer },
-  { label: "Handhelds", count: 0, icon: Smartphone },
-] as const;
+async function postLookup(epcs: string[]): Promise<LookupRow[]> {
+  const res = await fetch("/api/operations/transfers/lookup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ epcs }),
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { rows?: LookupRow[] };
+  return data.rows ?? [];
+}
 
 function PulsePill({
   label,
   count,
   Icon,
+  active,
+  dim,
 }: {
   label: string;
   count: number;
   Icon: typeof Radio;
+  active?: boolean;
+  dim?: boolean;
 }) {
-  const live = count > 0;
+  const live = (active ?? count > 0) && !dim;
+  const animated = useCountUp(count);
   return (
     <div
       className={`flex min-w-[7.25rem] flex-1 items-center gap-2 rounded-lg border px-3 py-3.5 font-mono text-base sm:min-w-[8rem] ${
-        live
-          ? "border-emerald-700/45 bg-[color-mix(in_srgb,#059669_32%,var(--wms-surface-elevated))] text-emerald-950 shadow-sm dark:border-emerald-500/45 dark:bg-[color-mix(in_srgb,#10b981_22%,var(--wms-surface-elevated))] dark:text-emerald-100"
-          : "border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] text-[var(--wms-fg)] dark:bg-[var(--wms-surface-elevated)]"
+        dim
+          ? "border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/40 text-[var(--wms-muted)]"
+          : live
+            ? "border-emerald-700/45 bg-[color-mix(in_srgb,#059669_32%,var(--wms-surface-elevated))] text-emerald-950 shadow-sm dark:border-emerald-500/45 dark:bg-[color-mix(in_srgb,#10b981_22%,var(--wms-surface-elevated))] dark:text-emerald-100"
+            : "border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] text-[var(--wms-fg)] dark:bg-[var(--wms-surface-elevated)]"
       }`}
     >
       <span
@@ -70,11 +97,19 @@ function PulsePill({
       <Icon className="h-3.5 w-3.5 shrink-0 opacity-80" strokeWidth={2} />
       <div className="min-w-0 leading-tight">
         <div
-          className={`text-xs font-semibold uppercase tracking-wide ${live ? "text-emerald-900 dark:text-emerald-200/90" : "text-[var(--wms-muted)]"}`}
+          className={`text-xs font-semibold uppercase tracking-wide ${
+            dim
+              ? "text-[var(--wms-muted)]"
+              : live
+                ? "text-emerald-900 dark:text-emerald-200/90"
+                : "text-[var(--wms-muted)]"
+          }`}
         >
           {label}
         </div>
-        <div className="tabular-nums text-base font-bold text-[var(--wms-fg)]">{count}</div>
+        <div className="tabular-nums text-base font-bold text-[var(--wms-fg)]">
+          {animated}
+        </div>
       </div>
     </div>
   );
@@ -91,6 +126,7 @@ function KpiTile({
   href: string;
   accent: "teal" | "amber" | "violet";
 }) {
+  const animated = useCountUp(value);
   const skin =
     accent === "teal"
       ? {
@@ -114,8 +150,10 @@ function KpiTile({
       href={href}
       className={`block rounded-xl border p-6 shadow-sm transition-colors ${skin.card}`}
     >
-      <div className={`text-4xl font-bold tabular-nums ${skin.num}`}>{value}</div>
-      <div className={`mt-2.5 font-mono text-base font-semibold uppercase tracking-wider ${skin.label}`}>{title}</div>
+      <div className={`text-4xl font-bold tabular-nums ${skin.num}`}>{animated}</div>
+      <div className={`mt-2.5 font-mono text-base font-semibold uppercase tracking-wider ${skin.label}`}>
+        {title}
+      </div>
     </Link>
   );
 }
@@ -133,45 +171,97 @@ function formatAuditLine(row: AuditLogListRow): string {
 }
 
 export function CommandCenter() {
-  const [liveScanCount, setLiveScanCount] = useState(0);
-
-  const onLiveScan = useCallback((delta: number) => {
-    setLiveScanCount((c) => c + Math.max(0, delta));
-  }, []);
-
   const { data, error, isLoading, isValidating } = useSWR(
     "/api/dashboard/command",
     fetcher,
     { refreshInterval: 15_000, revalidateOnFocus: true },
   );
 
-  const kpis = data?.kpis ?? {
-    total_items: 0,
-    receiving_concerns: 0,
-    unknown_assets: 0,
-  };
+  const kpis: Kpis =
+    data?.kpis ?? {
+      live_inventory: 0,
+      total_items: 0,
+      receiving_concerns: 0,
+      defective_epcs: 0,
+      unknown_assets: 0,
+      hardware: { readers: 0, antennas: 0, printers: 0, handhelds: 0 },
+    };
   const activity = data?.activity ?? [];
+
+  const hardwareTotal =
+    kpis.hardware.readers +
+    kpis.hardware.antennas +
+    kpis.hardware.printers +
+    kpis.hardware.handhelds;
+  const liveScanEnabled = kpis.hardware.readers + kpis.hardware.antennas > 0;
+
+  // Live scan tile — counts unique LIVE-status EPCs that hit the SSE stream
+  // for this session. The agent's ingress already runs decode + catalog match
+  // server-side; we re-look-up after each batch to pick out the in-stock ones.
+  // No idle timeout; resets only on page reload.
+  const [liveScanCount, setLiveScanCount] = useState(0);
+  const seenRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!liveScanEnabled) return;
+    const es = new EventSource("/api/edge/stream");
+    es.onmessage = (ev) => {
+      if (!ev.data?.trim() || ev.data.startsWith(":")) return;
+      let p: { epcs?: string[] };
+      try {
+        p = JSON.parse(ev.data) as { epcs?: string[] };
+      } catch {
+        return;
+      }
+      const list = (p.epcs ?? [])
+        .map((e) => e.replace(/\s/g, "").toUpperCase())
+        .filter((e) => /^[0-9A-F]{24}$/.test(e))
+        .filter((e) => !seenRef.current.has(e));
+      if (list.length === 0) return;
+      // Reserve them locally before lookup so a noisy stream can't trigger
+      // duplicate lookups for the same EPC mid-flight.
+      list.forEach((e) => seenRef.current.add(e));
+      void (async () => {
+        try {
+          const rows = await postLookup(list);
+          // Only count the ones the server resolved as 'in-stock' (LIVE).
+          // Everything else (tag_killed → defective EPCs, stolen / unknown /
+          // pending = scanner ignore) is dropped per /settings/statuses rules.
+          const liveHits = rows.filter((r) => r.status === "in-stock").length;
+          if (liveHits > 0) setLiveScanCount((c) => c + liveHits);
+        } catch {
+          /* transient; ignore */
+        }
+      })();
+    };
+    return () => {
+      es.close();
+    };
+  }, [liveScanEnabled]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
-      <LiveStreamHandler onLiveScanCount={onLiveScan} />
-
       <header className="border-b border-[var(--wms-border)] pb-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="flex items-center gap-2 text-[var(--wms-secondary)]">
               <Cpu className="h-4 w-4 text-[var(--wms-accent)]" strokeWidth={2} />
-              <span className="font-mono text-sm font-semibold uppercase tracking-[0.18em]">Command center</span>
+              <span className="font-mono text-sm font-semibold uppercase tracking-[0.18em]">
+                Command center
+              </span>
             </div>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--wms-fg)]">
               Operations overview
             </h1>
             <p className="mt-1 max-w-xl font-mono text-sm text-[var(--wms-muted)]">
-              KPIs refresh every 15s. RFID edge stream (SSE) updates the live scan counter for this session.
+              KPIs refresh every 15s. Live scan opens an SSE listener against every reader
+              and antenna at this location.
             </p>
           </div>
           <div className="font-mono text-sm text-[var(--wms-muted)]">
-            {isValidating && !isLoading ? <span className="text-[var(--wms-accent)]">Syncing…</span> : null}
+            {isValidating && !isLoading ? (
+              <span className="text-[var(--wms-accent)]">Syncing…</span>
+            ) : null}
             {error ? <span className="text-red-500/90">KPI load error</span> : null}
           </div>
         </div>
@@ -192,7 +282,7 @@ export function CommandCenter() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <KpiTile
               title="Total active inventory"
-              value={kpis.total_items}
+              value={kpis.live_inventory}
               href="/inventory/catalog"
               accent="teal"
             />
@@ -203,9 +293,9 @@ export function CommandCenter() {
               accent="amber"
             />
             <KpiTile
-              title="Unknown assets"
-              value={kpis.unknown_assets}
-              href="/inventory"
+              title="Defective EPCs"
+              value={kpis.defective_epcs}
+              href="/inventory/catalog"
               accent="violet"
             />
           </div>
@@ -219,11 +309,23 @@ export function CommandCenter() {
           Hardware pulse
         </h2>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <PulsePill label="Live scans (session)" count={liveScanCount} Icon={Radio} />
-          {hardware.map((h) => (
-            <PulsePill key={h.label} label={h.label} count={h.count} Icon={h.icon} />
-          ))}
+          <PulsePill
+            label="Live scan"
+            count={liveScanCount}
+            Icon={Radio}
+            active={liveScanEnabled}
+            dim={!liveScanEnabled}
+          />
+          <PulsePill label="Readers" count={kpis.hardware.readers} Icon={Radio} />
+          <PulsePill label="Antennas" count={kpis.hardware.antennas} Icon={Wifi} />
+          <PulsePill label="Printers" count={kpis.hardware.printers} Icon={Printer} />
+          <PulsePill label="Handhelds" count={kpis.hardware.handhelds} Icon={Smartphone} />
         </div>
+        {hardwareTotal === 0 ? (
+          <p className="mt-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+            No hardware configured at this location — Live scan is disabled.
+          </p>
+        ) : null}
       </section>
 
       {/* Bottom: recent activity timeline */}
@@ -294,3 +396,4 @@ export function CommandCenter() {
     </div>
   );
 }
+

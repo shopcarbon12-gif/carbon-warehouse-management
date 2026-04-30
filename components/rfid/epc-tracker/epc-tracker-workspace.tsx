@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Search } from "lucide-react";
+import { Search, Radio, ScanLine } from "lucide-react";
 import { decodeSGTIN96 } from "@/lib/epc";
 import { EpcHistoryTimeline, type HistoryRow } from "./epc-history-timeline";
 import type { TrackerItemDetail, TrackerSearchPickRow } from "@/lib/rfid-tracker-types";
+import { ReaderPicker } from "@/components/shared/reader-picker";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -30,6 +31,45 @@ export function EpcTrackerWorkspace() {
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
   const [selectedEpc, setSelectedEpc] = useState<string | null>(null);
+
+  // Scan controls — same pattern as the other pages. A scanned EPC drops the
+  // operator into the matching tracker page automatically.
+  const [scanning, setScanning] = useState(false);
+  const scanningRef = useRef(scanning);
+  useEffect(() => {
+    scanningRef.current = scanning;
+  }, [scanning]);
+  const [selectedReaders, setSelectedReaders] = useState<Set<string>>(() => new Set());
+  const selectedReadersRef = useRef(selectedReaders);
+  useEffect(() => {
+    selectedReadersRef.current = selectedReaders;
+  }, [selectedReaders]);
+
+  useEffect(() => {
+    const es = new EventSource("/api/edge/stream");
+    es.onmessage = (ev) => {
+      if (!scanningRef.current) return;
+      if (!ev.data?.trim() || ev.data.startsWith(":")) return;
+      let p: { epcs?: string[]; deviceId?: string };
+      try {
+        p = JSON.parse(ev.data) as { epcs?: string[]; deviceId?: string };
+      } catch {
+        return;
+      }
+      const sel = selectedReadersRef.current;
+      if (sel.size === 0) return;
+      if (p.deviceId && !sel.has(p.deviceId)) return;
+      const list = (p.epcs ?? [])
+        .map((e) => e.replace(/\s/g, "").toUpperCase())
+        .filter((e) => /^[0-9A-F]{24}$/.test(e));
+      const first = list[0];
+      if (first) {
+        setQ(first);
+        setSelectedEpc(first);
+      }
+    };
+    return () => es.close();
+  }, []);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebounced(q.trim()), 320);
@@ -113,6 +153,39 @@ export function EpcTrackerWorkspace() {
             {searchErr instanceof Error ? searchErr.message : "Search failed"}
           </p>
         ) : null}
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-3">
+        <button
+          type="button"
+          onClick={() => setScanning((s) => !s)}
+          className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors ${
+            scanning
+              ? "border-amber-500/60 bg-amber-950/40 text-amber-100"
+              : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-teal-500/40"
+          }`}
+        >
+          <Radio
+            className={`h-5 w-5 ${
+              scanning ? "text-amber-400" : "text-[var(--wms-muted)]"
+            }`}
+          />
+          {scanning ? "Scanning… (click to pause)" : "Start scan"}
+        </button>
+        <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} />
+        <button
+          type="button"
+          disabled={q.length === 0 && selectedEpc === null}
+          onClick={() => {
+            setQ("");
+            setSelectedEpc(null);
+            setScanning(false);
+          }}
+          className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] px-4 py-2.5 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-40"
+        >
+          <ScanLine className="h-4 w-4" />
+          Clear staged
+        </button>
       </div>
 
       {pickMatches.length > 0 ? (

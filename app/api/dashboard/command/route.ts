@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const kpis = await getCommandCenterKpis(pool, session.lid);
+    const kpis = await getCommandCenterKpis(pool, session.lid, session.tid);
     const activity = await listRecentAuditForTenant(pool, session.tid, 10);
     return NextResponse.json(
       { kpis, activity },
