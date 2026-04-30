@@ -110,11 +110,19 @@ function buildEntry(
     .map((a) => a.antenna_number)
     .sort((a, b) => a - b)
     .join(",") || "1";
+  // cdm's ReaderType enum (from binary inspection):
+  //   0=FIXED, 1=DOOR, 2=TRANSACTION, 3=AUTOMOTIVE, 4=MOCK, 5=THEFT, 6=FIXED_1SEC
+  // FIXED is the always-on continuous scan mode appropriate for our
+  // SA-2000 + MonsoonReader setup. TRANSACTION is for handheld-style
+  // burst scans triggered per-transaction (which leaves MonsoonReader
+  // idle waiting for commands and exiting after 25s).
+  // For Zebra FX9600, DOOR (1) is the standard continuous-scan mode.
+  const readerTypeInt = isZebra ? 1 : 0;
   return {
     deviceId,
     name: spec.name,
     ip_address: String(spec.network_address ?? ""),
-    reader_type: isZebra ? 1 : 2,
+    reader_type: readerTypeInt,
     antennas: ants,
     command,
     test_command: command,
