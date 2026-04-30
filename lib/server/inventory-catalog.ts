@@ -225,21 +225,11 @@ export async function listCatalogGrid(
        cs.archived AS archived,
        bool_and(cs.archived) OVER (PARTITION BY cs.matrix_id) AS matrix_archived,
        (
-         (
-           SELECT COUNT(*)::int
-           FROM items i
-           WHERE i.custom_sku_id = cs.id
-             AND i.location_id = $${locIdx}::uuid
-             AND i.status = 'in-stock'
-         )
-         +
-         COALESCE((
-           SELECT SUM(qty_delta)::int
-           FROM inventory_adjustments ia
-           WHERE ia.custom_sku_id = cs.id
-             AND ia.location_id = $${locIdx}::uuid
-             AND ia.state = 'settled'
-         ), 0)
+         SELECT COUNT(*)::int
+         FROM items i
+         WHERE i.custom_sku_id = cs.id
+           AND i.location_id = $${locIdx}::uuid
+           AND i.status = 'in-stock'
        ) AS active_epc_count,
        (
          SELECT string_agg(DISTINCT b.code, ', ' ORDER BY b.code)
@@ -267,30 +257,63 @@ export async function listCatalogGrid(
 
   const filters = await listCatalogFilterOptions(pool);
 
+  // Second-pass: overlay settled inventory_adjustments onto active_epc_count for
+  // the SKUs we just fetched. Wrapped in try/catch so a missing or broken table
+  // never breaks the whole catalog response.
+  const adjustmentsBySku = new Map<string, number>();
+  if (data.rows.length > 0) {
+    const skuIds = data.rows.map((r) => r.custom_sku_id);
+    try {
+      const adj = await pool.query<{ custom_sku_id: string; delta: string }>(
+        `SELECT custom_sku_id::text, COALESCE(SUM(qty_delta), 0)::text AS delta
+         FROM inventory_adjustments
+         WHERE custom_sku_id = ANY($1::uuid[])
+           AND location_id = $2::uuid
+           AND state = 'settled'
+         GROUP BY custom_sku_id`,
+        [skuIds, locationId],
+      );
+      for (const r of adj.rows) {
+        adjustmentsBySku.set(r.custom_sku_id, Number(r.delta) || 0);
+      }
+    } catch (e) {
+      // inventory_adjustments table not yet migrated, or transient DB issue.
+      // Don't propagate — catalog should always render.
+      console.warn(
+        "[inventory_catalog] inventory_adjustments overlay skipped:",
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+
   return {
-    rows: data.rows.map((row) => ({
-      custom_sku_id: row.custom_sku_id,
-      matrix_id: row.matrix_id,
-      matrix_ls_system_id: row.matrix_ls_system_id,
-      sku_ls_system_id: row.sku_ls_system_id,
-      sku: row.sku,
-      sku_upc: row.sku_upc,
-      matrix_upc: row.matrix_upc,
-      name: row.name,
-      vendor: row.vendor,
-      color: row.color,
-      size: row.size,
-      retail_price: row.retail_price,
-      ls_on_hand_total: (() => {
-        if (row.ls_on_hand_total == null || row.ls_on_hand_total === "") return null;
-        const n = Number(row.ls_on_hand_total);
-        return Number.isFinite(n) ? n : null;
-      })(),
-      active_epc_count: Number(row.active_epc_count ?? 0),
-      bin_location: row.bin_location ?? null,
-      archived: row.archived === true,
-      matrix_archived: row.matrix_archived === true,
-    })),
+    rows: data.rows.map((row) => {
+      const baseCount = Number(row.active_epc_count ?? 0);
+      const delta = adjustmentsBySku.get(row.custom_sku_id) ?? 0;
+      return {
+        custom_sku_id: row.custom_sku_id,
+        matrix_id: row.matrix_id,
+        matrix_ls_system_id: row.matrix_ls_system_id,
+        sku_ls_system_id: row.sku_ls_system_id,
+        sku: row.sku,
+        sku_upc: row.sku_upc,
+        matrix_upc: row.matrix_upc,
+        name: row.name,
+        vendor: row.vendor,
+        color: row.color,
+        size: row.size,
+        retail_price: row.retail_price,
+        ls_on_hand_total: (() => {
+          if (row.ls_on_hand_total == null || row.ls_on_hand_total === "") return null;
+          const n = Number(row.ls_on_hand_total);
+          return Number.isFinite(n) ? n : null;
+        })(),
+        active_epc_count: baseCount + delta,
+        bin_location: row.bin_location ?? null,
+        archived: row.archived === true,
+        matrix_archived: row.matrix_archived === true,
+      };
+    }),
     total,
     brands: filters.brands,
     categories: filters.categories,
