@@ -278,19 +278,35 @@ export class MonsoonSupervisor {
     if (slot.shuttingDown) return;
     const { spec } = slot;
     const powerArg = Math.round(this.avgPower(spec) * 10);
+    // Enabled antennas the operator configured in /hardware_config. We must
+    // pass each port via -a so MonsoonReader cycles them; without it the
+    // binary defaults to antenna 1 only and silently misses everything wired
+    // to ports 2-4 (this was breaking ALL scanning).
+    const enabledAntennas = spec.antennas.filter((a) => a.enabled);
+    const antennaArgs: string[] = [];
+    for (const a of enabledAntennas) {
+      antennaArgs.push("-a", String(a.antenna_number));
+    }
     const args = [
-      "--num", "1",
+      "--num", String(Math.max(1, enabledAntennas.length)),
       "--cstream",
       "--stream", String(slot.streamPort),
       "--control", String(slot.controlPort),
       "--read_time_ms", "1000",
       "--power", String(powerArg),
+      ...antennaArgs,
       "--serial_host", String(spec.network_address ?? ""),
       "--serial_port", String(spec.monsoon_serial_port),
       "--fastid",
       "--nocache",
       "--infinite",   // continuous inventory cycles, no client needed to drive it
     ];
+    log.info("supervisor: spawning MonsoonReader", {
+      readerId: spec.id,
+      readerName: spec.name,
+      antennas: enabledAntennas.map((a) => a.antenna_number),
+      power: powerArg,
+    });
 
     const child = spawn(this.monsoonBinary, args, {
       stdio: ["ignore", "pipe", "pipe"],
