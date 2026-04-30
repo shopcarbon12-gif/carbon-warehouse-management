@@ -203,36 +203,46 @@ function useColResize(tableRef: React.RefObject<HTMLTableElement | null>) {
   const autoFit = useCallback((colIdx: number) => {
     const tbl = tableRef.current;
     if (!tbl) return;
-    // Measure the actual text bounding box per cell using a Range. The previous
-    // implementation read scrollWidth on the TD which, in auto table-layout,
-    // reflects the column's allocated width (browser stretches columns to fill
-    // the table) — that produced columns much wider than their content. Range
-    // measurement is independent of layout and gives the true text width.
+    // Measure text using canvas — fully layout-independent. Range-based
+    // measurement was returning the parent box width when the cell contained
+    // a flex/w-full child (sortable header buttons), so columns came out way
+    // wider than the actual content. Canvas reads the computed font and
+    // measures glyph width directly.
     const ths = tbl.querySelectorAll<HTMLElement>("thead th");
     const th = ths[colIdx];
     if (!th) return;
 
-    const range = document.createRange();
-    let maxTextW = 0;
-    try {
-      range.selectNodeContents(th);
-      maxTextW = Math.max(maxTextW, range.getBoundingClientRect().width);
-      const rows = tbl.querySelectorAll<HTMLTableRowElement>("tbody tr");
-      rows.forEach((row) => {
-        const cell = row.cells[colIdx];
-        if (!cell) return;
-        range.selectNodeContents(cell);
-        const w = range.getBoundingClientRect().width;
-        if (w > maxTextW) maxTextW = w;
-      });
-    } finally {
-      range.detach();
-    }
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-    // px-2 horizontal padding = 8px each side = 16px. +12px buffer leaves room
-    // for the sort chevron in the header. Cap to a reasonable max so a single
-    // long item description doesn't blow out the row.
-    const target = Math.min(360, Math.max(COL_MIN_PX, Math.ceil(maxTextW) + 28));
+    const measure = (el: HTMLElement | null, text: string): number => {
+      if (!el || !text) return 0;
+      const cs = window.getComputedStyle(el);
+      // Build the shorthand `font` from individual props because computedStyle
+      // returns "" for `font` in many browsers.
+      ctx.font = `${cs.fontStyle} ${cs.fontVariant} ${cs.fontWeight} ${cs.fontSize}/${cs.lineHeight} ${cs.fontFamily}`;
+      return ctx.measureText(text).width;
+    };
+
+    // Header label — find the label span (skip the sort chevron icon).
+    const headerSpan = th.querySelector<HTMLElement>("span") ?? th;
+    let maxTextW = measure(headerSpan, (headerSpan.textContent ?? "").trim());
+
+    // Body cells — straight text content.
+    const rows = tbl.querySelectorAll<HTMLTableRowElement>("tbody tr");
+    rows.forEach((row) => {
+      const cell = row.cells[colIdx];
+      if (!cell) return;
+      const w = measure(cell, (cell.textContent ?? "").trim());
+      if (w > maxTextW) maxTextW = w;
+    });
+
+    // px-2 padding = 16px total + small breathing room. Sortable headers also
+    // render a 16px chevron + 8px gap to its right; bake that into the buffer
+    // so the chevron has space without making non-sortable columns roomy.
+    const buffer = 16 + 14; // padding + chevron/breathing
+    const target = Math.min(320, Math.max(COL_MIN_PX, Math.ceil(maxTextW) + buffer));
     setColWidths((w) => {
       const n = [...w];
       n[colIdx] = target;

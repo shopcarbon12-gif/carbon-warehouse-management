@@ -73,6 +73,11 @@ export async function getCommandCenterKpis(
   );
   const liveCount = Number(live.rows[0]?.c ?? 0);
   const defectiveCount = Number(defective.rows[0]?.c ?? 0);
+  // The /rfid/commissioning page always carries an implicit Zebra default
+  // (192.168.1.3:80 / PSTPRNT) — count it on top of registered printer
+  // devices so the dashboard reflects the printer the operator actually
+  // sees in commissioning.
+  const printersFromDevices = Number(hw.rows[0]?.printers ?? 0);
   return {
     live_inventory: liveCount,
     total_items: liveCount,
@@ -82,7 +87,7 @@ export async function getCommandCenterKpis(
     hardware: {
       readers: Number(hw.rows[0]?.readers ?? 0),
       antennas: Number(hw.rows[0]?.antennas ?? 0),
-      printers: Number(hw.rows[0]?.printers ?? 0),
+      printers: printersFromDevices + 1,
       handhelds: Number(hw.rows[0]?.handhelds ?? 0),
     },
   };

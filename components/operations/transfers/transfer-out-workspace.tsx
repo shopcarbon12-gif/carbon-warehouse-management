@@ -304,10 +304,11 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
       } catch {
         return;
       }
-      if ((p.scanContext ?? "").toUpperCase() !== "TRANSFER") return;
-      // Reader filter: when the picker is empty (e.g. the "Transfer bin"
-      // default reader doesn't exist yet on this tenant) accept all reads.
-      // When at least one reader is picked, only that reader's reads pass.
+      // No scanContext gate — operator already chose the reader they care
+      // about via ReaderPicker, that's the relevance signal. Gating on
+      // scanContext='TRANSFER' was dropping every read for tenants whose
+      // antennas weren't bound to that context. Keep the reader filter:
+      // empty picker accepts all reads, otherwise only matching device IDs.
       const sel = selectedReadersRef.current;
       if (sel.size > 0 && p.deviceId && !sel.has(p.deviceId)) return;
       const list = (p.epcs ?? [])

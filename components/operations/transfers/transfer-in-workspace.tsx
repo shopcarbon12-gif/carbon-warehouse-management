@@ -430,8 +430,9 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
       } catch {
         return;
       }
-      // Accept TRANSFER (matches Transfer Out and live readers binding).
-      if ((p.scanContext ?? "").toUpperCase() !== "TRANSFER") return;
+      // No scanContext gate — receive flow validates each EPC against the
+      // chosen pending transfer below, so accept reads regardless of the
+      // antenna's bound context. Reader filter still applies.
       const sel = selectedReadersRef.current;
       if (sel.size > 0 && p.deviceId && !sel.has(p.deviceId)) return;
       const detailNow = detailRef.current;
