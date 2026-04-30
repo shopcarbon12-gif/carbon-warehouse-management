@@ -27,12 +27,18 @@ export async function assignItemsToBinBySkuScan(
   const binId = bin.rows[0]?.id;
   if (!binId) return { updated: 0 };
 
+  // Multi-bin policy: only place items that are currently homeless
+  // (bin_id IS NULL). Items already in another bin are left alone, which lets
+  // the same SKU naturally split across multiple bins as new EPCs are
+  // commissioned over time. To rebin items already in a bin, the operator
+  // uses the explicit Clean / Remove flow first.
   if (scope === "single_color_all_sizes") {
-    // Move all items whose custom SKU starts with the scanned prefix
+    // Place homeless items whose custom SKU starts with the scanned prefix
     // (mobile app sends matrix+color prefix — all sizes match).
     const r = await pool.query(
       `UPDATE items SET bin_id = $1::uuid
        WHERE location_id = $2::uuid
+         AND bin_id IS NULL
          AND custom_sku_id IN (
            SELECT id FROM custom_skus WHERE sku LIKE $3
          )`,
@@ -41,8 +47,8 @@ export async function assignItemsToBinBySkuScan(
     return { updated: r.rowCount ?? 0 };
   }
 
-  // all_colors — resolve matrix from exact SKU match, then move every item
-  // belonging to that matrix regardless of color/size.
+  // all_colors — resolve matrix from exact SKU match, then place every
+  // homeless item belonging to that matrix regardless of color/size.
   const skuRow = await pool.query<{ matrix_id: string }>(
     `SELECT matrix_id::text FROM custom_skus WHERE sku = $1 LIMIT 1`,
     [trimmed],
@@ -53,6 +59,7 @@ export async function assignItemsToBinBySkuScan(
   const r = await pool.query(
     `UPDATE items SET bin_id = $1::uuid
      WHERE location_id = $2::uuid
+       AND bin_id IS NULL
        AND custom_sku_id IN (
          SELECT id FROM custom_skus WHERE matrix_id = $3::uuid
        )`,

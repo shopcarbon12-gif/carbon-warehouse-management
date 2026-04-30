@@ -65,6 +65,26 @@ String _formatBinCode(String raw) {
   return raw.trim().toUpperCase();
 }
 
+/// Render a SKU's bin location for the UI.
+///
+/// The catalog endpoint returns `bin_location` as a comma-joined list of all
+/// bins that hold the SKU (string_agg on the server side). When a SKU lives
+/// in multiple bins we surface the alphabetically-first one followed by an
+/// `xN` counter (e.g. `3-C-05-R x4`) so the row stays single-line. A single
+/// bin renders without the suffix. Empty input renders empty.
+String _formatBinDisplay(String? raw) {
+  if (raw == null) return '';
+  final parts = raw
+      .split(',')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) return '';
+  final first = _formatBinCode(parts.first);
+  if (parts.length == 1) return first;
+  return '$first x${parts.length}';
+}
+
 /// Strip any trailing `<color> <size>`, `<size>`, or `<color>` tail from [name]
 /// when [kStripNameSizeSuffix] is true. Matching is case-insensitive against
 /// the catalog values. Generic letter-size regex is also applied (S/M/L/XL/XS/
@@ -524,9 +544,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   String _binText(_GroupedRow g) {
     if (!g.catalogResolved || g.catalogMissing || g.epcInvalid) return '';
-    final bin = g.binLocation;
-    if (bin == null || bin.trim().isEmpty) return '';
-    return 'BIN ${_formatBinCode(bin)}';
+    final formatted = _formatBinDisplay(g.binLocation);
+    if (formatted.isEmpty) return '';
+    return 'BIN $formatted';
   }
 
   // Fallback row-2 text when the group is still pending, missing, or invalid —

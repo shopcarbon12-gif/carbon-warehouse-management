@@ -123,21 +123,36 @@ class _StoredItem {
   }
 }
 
+class _AssignSnapshot {
+  const _AssignSnapshot({
+    required this.binCode,
+    required this.binId,
+    required this.skuAssigned,
+    required this.itemName,
+  });
+
+  final String binCode;
+  final String binId;
+  final String skuAssigned;
+  final String itemName;
+}
+
 /// Bin Assign — fast 2D putaway with hardware wedge, camera, or manual entry.
 ///
-/// Scanner policy (intentional, do not change without product approval):
-///   * **2D barcode only**. The hardware trigger drives the C72E's image-based
-///     barcode scanner via `scanner.start2d` / hardware_barcode broadcasts.
-///   * **RFID is prohibited on this screen**. On entry we disable the keyboard
-///     service's RFID emit mode (`disableRfidFunctionMode`) so the scanner
-///     service cannot type EPC strings into focused text fields. The UHF
-///     UART itself stays connected (Count screen's `_ensureScannerReady`
-///     reuses the warm session — disconnecting here would force a 5 s
-///     re-init when the user navigates back).
-///   * Count's own `dispose()` already calls `pauseScanning()`, so by the
-///     time this screen mounts no inventory loop is running on the radio.
-///   * Sources accepted: hardware 2D, paired external scanner (BT wedge),
-///     phone camera, manual keyboard entry. Never RFID.
+/// Scanner policy: 2D barcode only — hardware wedge / external BT scanner /
+/// camera / manual keyboard. The screen does not subscribe to the EPC tag
+/// stream, so any stray RFID reads from the warm SDK session have nowhere
+/// to land. Hardware trigger drives `scanner.start2d` /
+/// `carbon_wms/hardware_barcode` broadcasts via [CarbonHardwareBarcodeRelay].
+///
+/// 1.2.20 regression note: 1.2.19 added `disableRfidFunctionMode()` +
+/// `open2dBarcode()` on entry to "harden" against EPC injection. On C72E
+/// MTK firmware that broadcast set includes `CLOSE_BARCODE_RFID`, which
+/// closes the BARCODE+RFID composite in com.rscja.scanner — trigger pulls
+/// then no longer fire the 2D imager. `open2dBarcode()` only sends
+/// `ACTION_2DS_ENABLE` / `BARCODEUNLOCKSCANKEY` and does not reopen the
+/// composite. Reverted to the 1.2.18 behavior (no scanner-state
+/// broadcasts on entry).
 class FastPutawayScreen extends StatefulWidget {
   const FastPutawayScreen({super.key});
 
@@ -169,6 +184,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   List<_StoredItem> _storedContents = [];
   List<_StoredItem> _undoSnapshot = [];
+  // Last successful assign — surfaced via the undo button after _resetForNextEntry().
+  _AssignSnapshot? _lastAssignSnapshot;
   DateTime _ignoreScansUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
   int get _storedTotal => _storedContents.fold(0, (sum, e) => sum + e.qty);
@@ -196,17 +213,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _externalScanner = p.getBool('bin_assign_external_scanner') ?? false;
       _cameraEnabled = p.getBool('bin_assign_camera_enabled') ?? true;
     });
-    // RFID prohibition: disable the keyboard service's RFID emit mode and
-    // put the scanner stack into 2D mode. We deliberately do NOT call
-    // disconnectChainway() — the UART takes ~5 s to re-acquire and Count's
-    // _ensureScannerReady() relies on the warm SDK session. Count's own
-    // dispose() already pauseScanning()s the radio, so by the time we run
-    // here no inventory loop is active. We just need to:
-    //   1. block keyboard-service RFID emit (no EPC chars typed into TextFields)
-    //   2. open the 2D barcode laser (idempotent if already open)
-    // Trigger relay is wired below conditionally on _shouldUseHardwareScanner.
-    unawaited(RfidVendorChannel.disableRfidFunctionMode());
-    unawaited(RfidVendorChannel.open2dBarcode());
     _syncHardwareBarcodeStream();
     if (_shouldUseHardwareScanner) {
       unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
@@ -228,7 +234,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     _hardwareBarcodeSub?.cancel();
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(_stopHardware2dScan());
-    unawaited(RfidVendorChannel.close2dBarcode());
     _hardwareBarcodeSub = null;
     _hiddenCtrl.dispose();
     _scanFocus.dispose();
@@ -562,6 +567,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       if (!mounted) return;
       setState(() {
         _undoSnapshot = snapshot;
+        _lastAssignSnapshot = null;
         _storedContents = [];
         _busy = false;
       });
@@ -621,6 +627,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       if (!mounted) return;
       setState(() {
         _undoSnapshot = snapshot;
+        _lastAssignSnapshot = null;
         _busy = false;
       });
       _resetForNextEntry();
@@ -704,6 +711,117 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     }
   }
 
+  /// Bottom-bar undo button. Most-recent reversible action wins:
+  /// assign session → two-stage confirmation → remove SKU from bin.
+  /// Otherwise falls through to the existing clean-bin undo.
+  void _onUndoTap() {
+    final assignSnap = _lastAssignSnapshot;
+    if (assignSnap != null) {
+      _showUndoAssignFirst(assignSnap);
+      return;
+    }
+    if (_undoSnapshot.isNotEmpty) {
+      unawaited(_onUndoClean());
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Nothing to undo'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showUndoAssignFirst(_AssignSnapshot snap) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('Reverse last assign?'),
+        content: Text(
+          'You assigned ${snap.itemName.isNotEmpty ? snap.itemName : snap.skuAssigned} '
+          '(SKU ${snap.skuAssigned}) to bin ${snap.binCode}.\n\n'
+          'Reverse this action?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('NO'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showUndoAssignConfirm(snap);
+            },
+            child: const Text('YES'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUndoAssignConfirm(_AssignSnapshot snap) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('Confirm undo'),
+        content: const Text(
+          'This action cannot be reversed. Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _executeUndoAssign(snap);
+            },
+            child: const Text('YES, DELETE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _executeUndoAssign(_AssignSnapshot snap) async {
+    setState(() => _busy = true);
+    try {
+      await context
+          .read<WmsApiClient>()
+          .removeSkuFromBin(snap.binCode, snap.skuAssigned);
+      if (!mounted) return;
+      setState(() {
+        _lastAssignSnapshot = null;
+        _busy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Reversed: ${snap.skuAssigned} removed from ${snap.binCode}.'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Undo failed: $e')));
+      }
+    }
+  }
+
   void _checkAutoEmptyRule(List<_StoredItem> items) {
     if (items.isNotEmpty && items.every((item) => item.qty == 0)) {
       unawaited(() async {
@@ -764,24 +882,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     required _SkuParts skuParts,
     required String matrixId,
   }) {
-    bool addAnother = false;
     showDialog<void>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSt) => AlertDialog(
+      builder: (ctx) => AlertDialog(
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           title: const Text('Assign to bin?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Would you like to assign $itemName to this bin?'),
-              CheckboxListTile(
-                value: addAnother,
-                onChanged: (v) => setSt(() => addAnother = v ?? false),
-                title: const Text('Add another item?'),
-              ),
-            ],
-          ),
+          content: Text('Would you like to assign $itemName to this bin?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -794,12 +900,15 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               ),
               onPressed: () async {
                 Navigator.pop(ctx);
+                final binCodeAtAssign = _currentBin;
+                final binIdAtAssign = _currentBinId;
                 setState(() => _busy = true);
+                bool ok = false;
                 try {
                   await _doAssign(
                       skuScanned: skuParts.searchKeySpecific,
                       scope: 'single_color_all_sizes');
-                  await _refreshContents();
+                  ok = true;
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -808,183 +917,29 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                 } finally {
                   if (mounted) setState(() => _busy = false);
                 }
-                if (mounted && addAnother) {
-                  _showNextProductDialog(skuParts, matrixId);
+                if (!mounted) return;
+                if (ok) {
+                  // Capture the just-completed session for the undo button,
+                  // and clear the clean-bin snapshot — most-recent-wins.
+                  setState(() {
+                    _lastAssignSnapshot = _AssignSnapshot(
+                      binCode: binCodeAtAssign,
+                      binId: binIdAtAssign,
+                      skuAssigned: skuParts.searchKeySpecific,
+                      itemName: itemName,
+                    );
+                    _undoSnapshot = [];
+                  });
+                  // Auto-reset to a fresh session (no follow-up popup).
+                  _resetForNextEntry();
+                } else {
+                  _scanFocus.requestFocus();
                 }
-                if (mounted) _scanFocus.requestFocus();
               },
               child: const Text('YES'),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  // ── Next Product Dialog — Popup 2 ─────────────────────────────────────────
-
-  void _showNextProductDialog(_SkuParts skuParts, String matrixId) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Next item'),
-        content: const Text('Same product different color, or new product?'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              if (mounted) _scanFocus.requestFocus();
-            },
-            child: const Text('NEW PRODUCT'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              shape:
-                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showSameProductColorsDialog(skuParts, matrixId);
-            },
-            child: const Text('SAME PRODUCT'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Same Product Color Picker — fetches matrix rows ───────────────────────
-
-  void _showSameProductColorsDialog(_SkuParts skuParts, String matrixId) {
-    // checked set and available rows are shared across FutureBuilder + actions
-    final checked = <int>{};
-    List<Map<String, dynamic>> availableRows = [];
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSt) => AlertDialog(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          title: const Text('Select colors to assign'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: FutureBuilder<List<dynamic>>(
-              future:
-                  context.read<WmsApiClient>().fetchCatalogMatrixRows(matrixId),
-              builder: (ctx2, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return Padding(
-                    padding: EdgeInsets.all(24.r),
-                    child: const Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final rows = snap.data ?? [];
-                final assignedKeys =
-                    _storedContents.map((e) => e.sku.toUpperCase()).toSet();
-                availableRows = rows
-                    .whereType<Map>()
-                    .map<Map<String, dynamic>>(
-                        (e) => Map<String, dynamic>.from(e))
-                    .where((r) {
-                  final sku = r['custom_sku']?.toString().toUpperCase() ??
-                      r['sku']?.toString().toUpperCase() ??
-                      '';
-                  final parts = _SkuParts.parse(sku);
-                  return !assignedKeys
-                      .contains(parts.searchKeySpecific.toUpperCase());
-                }).toList();
-
-                if (availableRows.isEmpty) {
-                  return const Text(
-                      'All colors are already assigned to this bin.');
-                }
-
-                return SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: availableRows.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final row = entry.value;
-                      final sku = row['custom_sku']?.toString() ??
-                          row['sku']?.toString() ??
-                          '';
-                      final parts = _SkuParts.parse(sku);
-                      final label = '${parts.colorCode}'
-                          '${parts.sizeCode.isNotEmpty ? " · ${parts.sizeCode}" : ""}';
-                      return CheckboxListTile(
-                        dense: true,
-                        value: checked.contains(i),
-                        onChanged: (v) => setSt(() {
-                          if (v == true) {
-                            checked.add(i);
-                          } else {
-                            checked.remove(i);
-                          }
-                        }),
-                        title: Text(
-                          label.isNotEmpty ? label : sku,
-                          style: TextStyle(fontSize: 13.sp),
-                        ),
-                        subtitle:
-                            Text(sku, style: TextStyle(fontSize: 11.sp)),
-                      );
-                    }).toList(),
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                if (mounted) _scanFocus.requestFocus();
-              },
-              child: const Text('CANCEL'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero),
-              ),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                setState(() => _busy = true);
-                try {
-                  final selectedRows = checked
-                      .where((i) => i < availableRows.length)
-                      .map((i) => availableRows[i])
-                      .toList();
-                  for (final row in selectedRows) {
-                    final sku = row['custom_sku']?.toString() ??
-                        row['sku']?.toString() ??
-                        '';
-                    if (sku.isEmpty) continue;
-                    final parts = _SkuParts.parse(sku);
-                    await _doAssign(
-                      skuScanned: parts.searchKeySpecific,
-                      scope: 'single_color_all_sizes',
-                    );
-                  }
-                  await _refreshContents();
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Color assign failed: $e')));
-                  }
-                } finally {
-                  if (mounted) {
-                    setState(() => _busy = false);
-                    _showNextProductDialog(skuParts, matrixId);
-                  }
-                }
-              },
-              child: const Text('ASSIGN'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1253,7 +1208,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               cameraEnabled: _cameraEnabled,
               onCleanBin: () => unawaited(_onCleanBin()),
               onDeleteBin: () => unawaited(_onDeleteBin()),
-              onUndoClean: () => unawaited(_onUndoClean()),
+              onUndoClean: _onUndoTap,
               onAddBin: _addNewBin,
               onAddBinCamera: () async {
                 final code = await _scanWithCamera('SCAN BIN LOCATION');
@@ -1401,6 +1356,25 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
     super.initState();
     _binCtrl.addListener(_onTextChanged);
     _focusNode.addListener(_onFocusChanged);
+    if (widget.manualBin && widget.isActive && widget.binCode.isNotEmpty) {
+      _binCtrl.text = widget.binCode;
+    }
+  }
+
+  @override
+  void didUpdateWidget(_BinInfoBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.manualBin && widget.isActive) {
+      if (widget.binCode != oldWidget.binCode &&
+          _binCtrl.text != widget.binCode) {
+        _binCtrl.value = TextEditingValue(
+          text: widget.binCode,
+          selection: TextSelection.collapsed(offset: widget.binCode.length),
+        );
+      }
+    } else if (oldWidget.isActive && !widget.isActive && _binCtrl.text.isNotEmpty) {
+      _binCtrl.clear();
+    }
   }
 
   @override
@@ -1529,7 +1503,7 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (widget.isActive)
+                    if (widget.isActive && !widget.manualBin)
                       Center(
                         child: Padding(
                           padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 0.h),
@@ -1882,7 +1856,9 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
   }
 
   void _selectResult(Map<String, dynamic> row) {
-    final sku = row['custom_sku']?.toString() ?? row['sku']?.toString() ?? '';
+    final sku = row['sku']?.toString() ??
+        row['custom_sku']?.toString() ??
+        '';
     if (sku.isEmpty) return;
     _focusNode.unfocus();
     setState(() {
@@ -1890,7 +1866,10 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
       _results = [];
     });
     _controller.clear();
-    widget.onManualInput?.call(sku);
+    // Pass the trimmed SKU (base + color, no size) — _onItemSubmit will parse
+    // and show the assign dialog with the all-sizes/single-size scope choice.
+    final trimmed = _SkuParts.parse(sku).searchKeySpecific;
+    widget.onManualInput?.call(trimmed.isNotEmpty ? trimmed : sku);
   }
 
   @override
@@ -1993,12 +1972,24 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                     Divider(height: 1.h, color: Colors.grey.shade200),
                 itemBuilder: (_, i) {
                   final row = _results[i];
-                  final sku = row['custom_sku']?.toString() ??
-                      row['sku']?.toString() ??
+                  final rawSku = row['sku']?.toString() ??
+                      row['custom_sku']?.toString() ??
                       '';
-                  final name = row['title']?.toString() ??
+                  // 11 chars for modern (C-prefix), 9 for legacy. Falls back
+                  // to the raw value if the SKU is too short to parse.
+                  final parsed = _SkuParts.parse(rawSku);
+                  final displaySku = parsed.searchKeySpecific.isNotEmpty
+                      ? parsed.searchKeySpecific
+                      : rawSku;
+                  final name = row['name']?.toString() ??
+                      row['title']?.toString() ??
                       row['description']?.toString() ??
                       '';
+                  final color = row['color']?.toString() ?? '';
+                  final secondLine = [
+                    if (name.isNotEmpty) name,
+                    if (color.isNotEmpty) color,
+                  ].join('  •  ');
                   return InkWell(
                     onTap: () => _selectResult(row),
                     child: Padding(
@@ -2008,7 +1999,7 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            sku,
+                            displaySku,
                             style: GoogleFonts.spaceGrotesk(
                               fontSize: 14.sp,
                               fontWeight: FontWeight.w700,
@@ -2017,10 +2008,10 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          if (name.isNotEmpty) ...[
+                          if (secondLine.isNotEmpty) ...[
                             SizedBox(height: 2.h),
                             Text(
-                              name,
+                              secondLine,
                               style: GoogleFonts.manrope(
                                 fontSize: 12.sp,
                                 color: AppColors.textMuted,
