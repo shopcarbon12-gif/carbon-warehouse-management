@@ -57,8 +57,7 @@ export function EpcTrackerWorkspace() {
         return;
       }
       const sel = selectedReadersRef.current;
-      if (sel.size === 0) return;
-      if (p.deviceId && !sel.has(p.deviceId)) return;
+      if (sel.size > 0 && p.deviceId && !sel.has(p.deviceId)) return;
       const list = (p.epcs ?? [])
         .map((e) => e.replace(/\s/g, "").toUpperCase())
         .filter((e) => /^[0-9A-F]{24}$/.test(e));

@@ -11,6 +11,16 @@ type PrinterRow = {
   status_online: boolean;
 };
 
+// Synthetic option that maps to the same default the /rfid/commissioning page
+// uses (DEFAULT_RFID_COMMISSION_SETTINGS.printerLine). Always shown so the
+// modal still works on tenants that haven't registered any printer devices.
+const COMMISSIONING_DEFAULT_OPTION = {
+  id: "__commissioning_default__",
+  name: "Default (Commissioning)",
+  network_address: "192.168.1.3:80 / PSTPRNT",
+  status_online: true,
+};
+
 const fetcher = async (url: string) => {
   const r = await fetch(url, { cache: "no-store" });
   if (!r.ok) {
@@ -38,26 +48,27 @@ export function PrintActionsModal({ open, epc, onClose }: Props) {
     open ? "/api/devices/printers" : null,
     fetcher,
   );
-  const printers = data?.rows ?? [];
+  // Always include the commissioning default so the modal works even when
+  // no printer devices are registered for this location.
+  const printers: PrinterRow[] = [
+    ...(data?.rows ?? []),
+    COMMISSIONING_DEFAULT_OPTION,
+  ];
 
   const [printerId, setPrinterId] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // Default-select the first online printer (or any printer if none online)
-  // when the modal opens.
+  // Default-select: first online registered printer if any, else commissioning default.
   useEffect(() => {
     if (!open) return;
     setMsg(null);
     setErr(null);
-    if (printers.length === 0) {
-      setPrinterId("");
-      return;
-    }
-    const online = printers.find((p) => p.status_online) ?? printers[0]!;
-    setPrinterId(online.id);
-  }, [open, printers]);
+    const registered = data?.rows ?? [];
+    const online = registered.find((p) => p.status_online);
+    setPrinterId((online ?? registered[0])?.id ?? COMMISSIONING_DEFAULT_OPTION.id);
+  }, [open, data]);
 
   if (!open) return null;
 
@@ -68,7 +79,11 @@ export function PrintActionsModal({ open, epc, onClose }: Props) {
     setMsg(null);
     try {
       const body: Record<string, unknown> = { epc };
-      if (printerId) body.printerId = printerId;
+      if (printerId === COMMISSIONING_DEFAULT_OPTION.id) {
+        body.printerLine = COMMISSIONING_DEFAULT_OPTION.network_address;
+      } else if (printerId) {
+        body.printerId = printerId;
+      }
       const res = await fetch("/api/rfid/reprint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -135,11 +150,6 @@ export function PrintActionsModal({ open, epc, onClose }: Props) {
                 <p className="font-mono text-xs text-red-400/90">
                   Failed to load printers.
                 </p>
-              ) : printers.length === 0 ? (
-                <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/60 px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">
-                  No printers configured at this location — using commissioning default
-                  (192.168.1.3:80 / PSTPRNT).
-                </div>
               ) : (
                 <select
                   value={printerId}

@@ -433,8 +433,7 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
       // Accept TRANSFER (matches Transfer Out and live readers binding).
       if ((p.scanContext ?? "").toUpperCase() !== "TRANSFER") return;
       const sel = selectedReadersRef.current;
-      if (sel.size === 0) return;
-      if (p.deviceId && !sel.has(p.deviceId)) return;
+      if (sel.size > 0 && p.deviceId && !sel.has(p.deviceId)) return;
       const detailNow = detailRef.current;
       if (!detailNow) return;
       const transferEpcs = new Set(detailNow.rfid.map((r) => r.epc));
