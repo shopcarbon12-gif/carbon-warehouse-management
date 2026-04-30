@@ -24,6 +24,14 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 const _countInvPrefsKey = 'count_inventory_module_settings_v1';
 const _assetCachePrefsKey = 'count_inventory_asset_cache_v1';
+
+// TODO: parked while the EPC encoding/decoding formula is still being
+// developed. During development we intentionally accept ALL EPCs (well-formed
+// AND malformed) so the operator can see every tag the radio reads and
+// compare "wrong" vs "good" formats side-by-side. Once the encoding scheme is
+// finalised, wire this prefix into the count ingest path to drop tags whose
+// EPC does not start with the Carbon prefix.
+// ignore: unused_element
 const _countEpcPrefixFilter = 'F0A0B';
 
 /// When true, strip a trailing `<COLOR> <SIZE>` or `<SIZE>` suffix from the
@@ -65,7 +73,7 @@ String _formatBinCode(String raw) {
 /// "BLACK S" but the current variant row is "BLACK L").
 ///
 /// Iterates until no more tails peel — this handles the common pattern where
-/// the description is "<NAME> <COLOR> <SIZE>" and we need to remove both in
+/// the description is `<NAME> <COLOR> <SIZE>` and we need to remove both in
 /// sequence regardless of which layer matches first.
 String _stripNameSizeSuffix(String name, {String? size, String? color}) {
   if (!kStripNameSizeSuffix) return name;
@@ -142,8 +150,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   int _displayEpcCount = 0;
   int _displaySkuCount = 0;
   String? _previousScanContext;
-
-  DateTime? _lastTriggerToggleAt;
 
   @override
   void initState() {
@@ -2902,30 +2908,6 @@ class _GroupedRow {
   bool catalogResolved = false; // true once lookup completes (success OR 404)
   bool catalogMissing = false; // true only if lookup returned null
   bool epcInvalid = false; // true if decodeSystemId returned null
-}
-
-class _DecodedEpc {
-  const _DecodedEpc({
-    required this.prefix,
-    required this.systemId,
-    required this.serial,
-  });
-
-  final String prefix;
-  final int systemId;
-  final int serial;
-}
-
-_DecodedEpc? _decodeEpc(String epc) {
-  final s = epc.toUpperCase().replaceAll(RegExp(r'[^0-9A-F]'), '');
-  if (s.length != 24) return null;
-  final prefix = s.substring(0, 5);
-  final systemIdHex = s.substring(5, 15);
-  final serialHex = s.substring(15, 24);
-  final systemId = int.tryParse(systemIdHex, radix: 16);
-  final serial = int.tryParse(serialHex, radix: 16);
-  if (systemId == null || serial == null) return null;
-  return _DecodedEpc(prefix: prefix, systemId: systemId, serial: serial);
 }
 
 String _csv(String v) {

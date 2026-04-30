@@ -124,6 +124,20 @@ class _StoredItem {
 }
 
 /// Bin Assign — fast 2D putaway with hardware wedge, camera, or manual entry.
+///
+/// Scanner policy (intentional, do not change without product approval):
+///   * **2D barcode only**. The hardware trigger drives the C72E's image-based
+///     barcode scanner via `scanner.start2d` / hardware_barcode broadcasts.
+///   * **RFID is prohibited on this screen**. On entry we disable the keyboard
+///     service's RFID emit mode (`disableRfidFunctionMode`) so the scanner
+///     service cannot type EPC strings into focused text fields. The UHF
+///     UART itself stays connected (Count screen's `_ensureScannerReady`
+///     reuses the warm session — disconnecting here would force a 5 s
+///     re-init when the user navigates back).
+///   * Count's own `dispose()` already calls `pauseScanning()`, so by the
+///     time this screen mounts no inventory loop is running on the radio.
+///   * Sources accepted: hardware 2D, paired external scanner (BT wedge),
+///     phone camera, manual keyboard entry. Never RFID.
 class FastPutawayScreen extends StatefulWidget {
   const FastPutawayScreen({super.key});
 
@@ -142,23 +156,19 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   String _currentBinId = '';
   bool _binActive = false;
   bool _busy = false;
-  bool _flashOk = false;
+  final bool _flashOk = false;
   bool _awaitingBinScan = true;
 
   String _scannerSource = 'hardware';
-  bool _manualMode = false;
   bool _manualBin = false;
   bool _manualAddItem = false;
   bool _externalScanner = false;
   bool _cameraEnabled = true;
 
-  String _scopeForBin = 'all_colors';
-  String _skuForBin = '';
   String? _userEmail;
 
   List<_StoredItem> _storedContents = [];
   List<_StoredItem> _undoSnapshot = [];
-  bool _showUndo = false;
   DateTime _ignoreScansUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
   int get _storedTotal => _storedContents.fold(0, (sum, e) => sum + e.qty);
@@ -181,12 +191,22 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (!mounted) return;
     setState(() {
       _scannerSource = p.getString('wms_scanner_source_v1') ?? 'hardware';
-      _manualMode = p.getBool('bin_assign_manual_mode') ?? false;
       _manualBin = p.getBool('bin_assign_manual_bin') ?? false;
       _manualAddItem = p.getBool('bin_assign_manual_add_item') ?? false;
       _externalScanner = p.getBool('bin_assign_external_scanner') ?? false;
       _cameraEnabled = p.getBool('bin_assign_camera_enabled') ?? true;
     });
+    // RFID prohibition: disable the keyboard service's RFID emit mode and
+    // put the scanner stack into 2D mode. We deliberately do NOT call
+    // disconnectChainway() — the UART takes ~5 s to re-acquire and Count's
+    // _ensureScannerReady() relies on the warm SDK session. Count's own
+    // dispose() already pauseScanning()s the radio, so by the time we run
+    // here no inventory loop is active. We just need to:
+    //   1. block keyboard-service RFID emit (no EPC chars typed into TextFields)
+    //   2. open the 2D barcode laser (idempotent if already open)
+    // Trigger relay is wired below conditionally on _shouldUseHardwareScanner.
+    unawaited(RfidVendorChannel.disableRfidFunctionMode());
+    unawaited(RfidVendorChannel.open2dBarcode());
     _syncHardwareBarcodeStream();
     if (_shouldUseHardwareScanner) {
       unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
@@ -208,6 +228,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     _hardwareBarcodeSub?.cancel();
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(_stopHardware2dScan());
+    unawaited(RfidVendorChannel.close2dBarcode());
     _hardwareBarcodeSub = null;
     _hiddenCtrl.dispose();
     _scanFocus.dispose();
@@ -542,7 +563,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       setState(() {
         _undoSnapshot = snapshot;
         _storedContents = [];
-        _showUndo = true;
         _busy = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -601,7 +621,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       if (!mounted) return;
       setState(() {
         _undoSnapshot = snapshot;
-        _showUndo = true;
         _busy = false;
       });
       _resetForNextEntry();
@@ -670,11 +689,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         );
       }
       await _refreshContents();
-      if (mounted)
+      if (mounted) {
         setState(() {
-          _showUndo = false;
           _undoSnapshot = [];
         });
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -789,8 +808,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                 } finally {
                   if (mounted) setState(() => _busy = false);
                 }
-                if (mounted && addAnother)
+                if (mounted && addAnother) {
                   _showNextProductDialog(skuParts, matrixId);
+                }
                 if (mounted) _scanFocus.requestFocus();
               },
               child: const Text('YES'),
@@ -856,7 +876,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                 if (snap.connectionState != ConnectionState.done) {
                   return Padding(
                     padding: EdgeInsets.all(24.r),
-                    child: Center(child: CircularProgressIndicator()),
+                    child: const Center(child: CircularProgressIndicator()),
                   );
                 }
                 final rows = snap.data ?? [];
@@ -1002,52 +1022,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     }
   }
 
-  Future<void> _onBinSubmit(String raw) async {
-    final bin = raw.trim().toUpperCase();
-    if (bin.isEmpty || _skuForBin.isEmpty) return;
-    _hiddenCtrl.clear();
-    setState(() => _busy = true);
-    try {
-      final api = context.read<WmsApiClient>();
-      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
-      final result = await api.postPutawayAssign(
-        deviceId: deviceId,
-        binCode: bin,
-        skuScanned: _skuForBin,
-        scope: _scopeForBin,
-      );
-      if (!mounted) return;
-      final contents = result['storedContents'];
-      final List<_StoredItem> items = contents is List
-          ? contents
-              .whereType<Map>()
-              .map<_StoredItem>(
-                  (e) => _StoredItem.fromMap(Map<String, dynamic>.from(e)))
-              .toList()
-          : <_StoredItem>[];
-
-      setState(() {
-        _busy = false;
-        _flashOk = true;
-        _currentBin = bin;
-        _binActive = true;
-        _awaitingBinScan = false;
-        _storedContents = items;
-        _pendingSku = '';
-        _skuForBin = '';
-      });
-      await Future<void>.delayed(const Duration(milliseconds: 450));
-      if (mounted) setState(() => _flashOk = false);
-    } catch (e) {
-      if (mounted) {
-        setState(() => _busy = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Putaway failed: $e')));
-      }
-    }
-    if (mounted) _scanFocus.requestFocus();
-  }
-
   void _addNewBin() {
     setState(() {
       _awaitingBinScan = true;
@@ -1085,14 +1059,14 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         builder: (_) => const BinAssignSettingsScreen(),
       ),
     );
-    if (mounted) {
-      await _load();
-      _hiddenCtrl.clear();
-      _ignoreScansUntil =
-          DateTime.now().add(const Duration(milliseconds: 1800));
-      FocusScope.of(context).unfocus();
-      _scanFocus.requestFocus();
-    }
+    if (!mounted) return;
+    await _load();
+    if (!mounted) return;
+    _hiddenCtrl.clear();
+    _ignoreScansUntil =
+        DateTime.now().add(const Duration(milliseconds: 1800));
+    FocusScope.of(context).unfocus();
+    _scanFocus.requestFocus();
   }
 
   @override
@@ -1283,14 +1257,16 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               onAddBin: _addNewBin,
               onAddBinCamera: () async {
                 final code = await _scanWithCamera('SCAN BIN LOCATION');
-                if (code != null && code.isNotEmpty && mounted)
+                if (code != null && code.isNotEmpty && mounted) {
                   unawaited(_handleBinScan(code));
+                }
               },
               onAddItem: _addNewItem,
               onAddItemCamera: () async {
                 final code = await _scanWithCamera('SCAN ITEM');
-                if (code != null && code.isNotEmpty && mounted)
+                if (code != null && code.isNotEmpty && mounted) {
                   unawaited(_onItemSubmit(code));
+                }
               },
             ),
 
@@ -1496,10 +1472,11 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
 
   String get _locationLine {
     final p = widget.binCode.split(RegExp(r'[-_]'));
-    if (p.length < 4)
+    if (p.length < 4) {
       return widget.binCode.isNotEmpty
           ? widget.binCode
           : 'AISLE | ZONE | SHELF | SIDE';
+    }
     return 'AISLE ${p[0]} | ZONE ${p[1]} | SHELF ${p[2]} | SIDE ${p[3]}';
   }
 
@@ -1959,7 +1936,7 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                                   child: SizedBox(
                                       width: 16.w,
                                       height: 16.h,
-                                      child: CircularProgressIndicator(
+                                      child: const CircularProgressIndicator(
                                           strokeWidth: 2)),
                                 )
                               : null,

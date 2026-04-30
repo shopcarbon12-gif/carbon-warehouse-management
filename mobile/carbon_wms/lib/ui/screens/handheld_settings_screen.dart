@@ -314,7 +314,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                             children: [
                               _busy
                                   ? SizedBox(width: 20.w, height: 20.h,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                                      child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
                                   : Icon(Icons.system_update_alt, color: AppColors.primary, size: 20.sp),
                               SizedBox(width: 12.w),
                               Expanded(
@@ -430,7 +430,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                 ),
                 Divider(height: 1.h, color: divColor),
                 ListTile(
-                  leading: Icon(Icons.tune, color: AppColors.primary),
+                  leading: const Icon(Icons.tune, color: AppColors.primary),
                   title: Text(
                     'Open Device Scanner Settings',
                     style: GoogleFonts.manrope(
@@ -448,7 +448,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                 ),
                 Divider(height: 1.h, color: divColor),
                 ListTile(
-                  leading: Icon(Icons.refresh, color: AppColors.primary),
+                  leading: const Icon(Icons.refresh, color: AppColors.primary),
                   title: Text(
                     'Refresh Settings / Permissions',
                     style: GoogleFonts.manrope(
@@ -466,7 +466,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                 ),
                 Divider(height: 1.h, color: divColor),
                 ListTile(
-                  leading: Icon(Icons.bug_report, color: AppColors.primary),
+                  leading: const Icon(Icons.bug_report, color: AppColors.primary),
                   title: Text(
                     'Refresh Diagnostics',
                     style: GoogleFonts.manrope(
@@ -484,7 +484,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                 ),
                 Divider(height: 1.h, color: divColor),
                 ListTile(
-                  leading: Icon(Icons.settings_applications, color: AppColors.primary),
+                  leading: const Icon(Icons.settings_applications, color: AppColors.primary),
                   title: Text(
                     'Open Android App Permissions',
                     style: GoogleFonts.manrope(
@@ -598,7 +598,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
           if (_bioReloading)
             Center(child: Padding(
               padding: EdgeInsets.all(16.r),
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: const CircularProgressIndicator(strokeWidth: 2),
             ))
           else if (!_bioEligible)
             Padding(

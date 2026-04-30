@@ -150,7 +150,7 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
                 _barcodeCtrl.text = code;
                 unawaited(_resolvePreview());
               },
-              icon: Icon(Icons.photo_camera_outlined),
+              icon: const Icon(Icons.photo_camera_outlined),
               label: const Text('Scan with camera'),
             ),
             SizedBox(height: 12.h),
@@ -166,7 +166,7 @@ class _BarcodeIntakeScreenState extends State<BarcodeIntakeScreen> {
                 padding: EdgeInsets.only(bottom: 8.h),
                 child: Text(
                   _lookupErr!,
-                  style: TextStyle(color: Color(0xFFf87171), fontSize: 12.sp, fontFamily: 'monospace'),
+                  style: TextStyle(color: const Color(0xFFf87171), fontSize: 12.sp, fontFamily: 'monospace'),
                 ),
               ),
             FilledButton(

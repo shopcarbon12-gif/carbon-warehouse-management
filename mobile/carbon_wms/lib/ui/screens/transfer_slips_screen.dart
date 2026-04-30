@@ -298,14 +298,14 @@ class _TransferSlipsScreenState extends State<TransferSlipsScreen>
             Text('SELECT SLIP', style: AppTheme.headline(context)),
             const Spacer(),
             IconButton(
-              icon: Icon(Icons.refresh),
+              icon: const Icon(Icons.refresh),
               onPressed: _loadingSlips ? null : () => unawaited(_reloadSlips()),
             ),
           ],
         ),
         if (_loadingSlips) const LinearProgressIndicator(),
         ..._slips.map((row) {
-          if (row is! Map) return SizedBox.shrink();
+          if (row is! Map) return const SizedBox.shrink();
           final n = row['slip_number'];
           final num = n is int ? n : int.tryParse('$n') ?? 0;
           return ListTile(

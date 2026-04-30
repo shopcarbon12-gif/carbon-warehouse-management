@@ -15,7 +15,9 @@ Uint8List _buildBeep({required double frequency, required int durationMs}) {
   final bd = ByteData(fileLen + 8);
   var o = 0;
   void w4(String s) {
-    for (var i = 0; i < 4; i++) bd.setUint8(o++, s.codeUnitAt(i));
+    for (var i = 0; i < 4; i++) {
+      bd.setUint8(o++, s.codeUnitAt(i));
+    }
   }
   void le16(int v) { bd.setUint16(o, v, Endian.little); o += 2; }
   void le32(int v) { bd.setUint32(o, v, Endian.little); o += 4; }

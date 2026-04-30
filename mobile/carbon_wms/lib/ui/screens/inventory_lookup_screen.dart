@@ -184,7 +184,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                 _ctrl.text = code;
                 unawaited(_performLookup());
               },
-              icon: Icon(Icons.photo_camera_outlined),
+              icon: const Icon(Icons.photo_camera_outlined),
               label: const Text('Scan with camera'),
             ),
             SizedBox(height: 12.h),
@@ -193,7 +193,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                 padding: EdgeInsets.only(bottom: 8.h),
                 child: Text(
                   _lookupErr!,
-                  style: TextStyle(color: Color(0xFFf87171), fontSize: 12.sp, fontFamily: 'monospace'),
+                  style: TextStyle(color: const Color(0xFFf87171), fontSize: 12.sp, fontFamily: 'monospace'),
                 ),
               ),
             FilledButton(
@@ -225,7 +225,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                       ),
                     );
                   },
-                  icon: Icon(Icons.sensors),
+                  icon: const Icon(Icons.sensors),
                   label: const Text('LOCATE TAG (GEIGER)'),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,

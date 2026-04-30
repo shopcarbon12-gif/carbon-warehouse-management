@@ -545,8 +545,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(3.0.r)),
                 fillColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected))
+                  if (states.contains(WidgetState.selected)) {
                     return _primaryTeal;
+                  }
                   return Colors.transparent;
                 }),
                 checkColor: Colors.white,

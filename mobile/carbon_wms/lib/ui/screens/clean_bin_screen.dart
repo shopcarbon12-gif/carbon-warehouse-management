@@ -81,7 +81,7 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
                       if (!mounted || code == null || code.isEmpty) return;
                       await _submit(code);
                     },
-              icon: Icon(Icons.photo_camera_outlined),
+              icon: const Icon(Icons.photo_camera_outlined),
               label: const Text('Scan with camera'),
             ),
             SizedBox(height: 12.h),

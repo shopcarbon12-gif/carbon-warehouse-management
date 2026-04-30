@@ -117,9 +117,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) return;
       setState(() {
         _locations = locs;
-        if (locs.isNotEmpty)
+        if (locs.isNotEmpty) {
           _currentLocationName =
               locs.first['name'] ?? locs.first['code'] ?? _currentLocationName;
+        }
       });
     } catch (_) {}
   }
@@ -144,7 +145,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return ListTile(
               title: Text(name),
               trailing: selected
-                  ? Icon(Icons.check, color: AppColors.primary)
+                  ? const Icon(Icons.check, color: AppColors.primary)
                   : null,
               onTap: () {
                 setState(() => _currentLocationName = name);

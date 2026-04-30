@@ -180,7 +180,7 @@ class _SearchEncodeTabState extends State<_SearchEncodeTab> {
         if (_err != null) Padding(padding: EdgeInsets.only(top: 8.h), child: Text(_err!, style: TextStyle(color: Colors.redAccent, fontSize: 12.sp))),
         SizedBox(height: 12.h),
         ..._matches.map((row) {
-          if (row is! Map) return SizedBox.shrink();
+          if (row is! Map) return const SizedBox.shrink();
           final id = row['id']?.toString() ?? '';
           final sku = row['sku']?.toString() ?? '';
           final title = row['description']?.toString() ?? '';
@@ -431,7 +431,7 @@ class _UploadQueueTabState extends State<_UploadQueueTab> {
                         'SKU id ${j.customSkuId} · qty ${j.qty}',
                         style: TextStyle(color: AppColors.textMuted, fontSize: 11.sp),
                       ),
-                      trailing: Icon(Icons.cloud_upload_outlined, color: AppColors.textMuted),
+                      trailing: const Icon(Icons.cloud_upload_outlined, color: AppColors.textMuted),
                     );
                   },
                 ),

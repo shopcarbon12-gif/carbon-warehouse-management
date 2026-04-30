@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
@@ -47,7 +46,7 @@ class EpcDetailScreen extends StatelessWidget {
                       fontSize: 13.sp,
                     ),
                   ),
-                  trailing: Icon(
+                  trailing: const Icon(
                     Icons.radar_outlined,
                     color: AppColors.primary,
                   ),
