@@ -203,26 +203,41 @@ function useColResize(tableRef: React.RefObject<HTMLTableElement | null>) {
   const autoFit = useCallback((colIdx: number) => {
     const tbl = tableRef.current;
     if (!tbl) return;
-    // Temporarily remove width constraint so browser lays out natural widths
+    // Measure the actual text bounding box per cell using a Range. The previous
+    // implementation read scrollWidth on the TD which, in auto table-layout,
+    // reflects the column's allocated width (browser stretches columns to fill
+    // the table) — that produced columns much wider than their content. Range
+    // measurement is independent of layout and gives the true text width.
     const ths = tbl.querySelectorAll<HTMLElement>("thead th");
-    const prevWidth = (ths[colIdx] as HTMLElement | undefined)?.style.width ?? "";
-    if (ths[colIdx]) (ths[colIdx] as HTMLElement).style.width = "";
-    // Measure header cell
-    const th = ths[colIdx] as HTMLElement | undefined;
-    let maxW = th ? th.scrollWidth : COL_MIN_PX;
-    // Measure all body cells in this column
-    const rows = tbl.querySelectorAll<HTMLTableRowElement>("tbody tr");
-    rows.forEach((row) => {
-      const cell = row.cells[colIdx];
-      if (!cell) return;
-      // scrollWidth gives the unconstrained content width
-      const prev = cell.style.whiteSpace;
-      cell.style.whiteSpace = "nowrap";
-      maxW = Math.max(maxW, cell.scrollWidth);
-      cell.style.whiteSpace = prev;
+    const th = ths[colIdx];
+    if (!th) return;
+
+    const range = document.createRange();
+    let maxTextW = 0;
+    try {
+      range.selectNodeContents(th);
+      maxTextW = Math.max(maxTextW, range.getBoundingClientRect().width);
+      const rows = tbl.querySelectorAll<HTMLTableRowElement>("tbody tr");
+      rows.forEach((row) => {
+        const cell = row.cells[colIdx];
+        if (!cell) return;
+        range.selectNodeContents(cell);
+        const w = range.getBoundingClientRect().width;
+        if (w > maxTextW) maxTextW = w;
+      });
+    } finally {
+      range.detach();
+    }
+
+    // px-2 horizontal padding = 8px each side = 16px. +12px buffer leaves room
+    // for the sort chevron in the header. Cap to a reasonable max so a single
+    // long item description doesn't blow out the row.
+    const target = Math.min(360, Math.max(COL_MIN_PX, Math.ceil(maxTextW) + 28));
+    setColWidths((w) => {
+      const n = [...w];
+      n[colIdx] = target;
+      return n;
     });
-    if (ths[colIdx]) (ths[colIdx] as HTMLElement).style.width = prevWidth;
-    setColWidths((w) => { const n = [...w]; n[colIdx] = Math.max(COL_MIN_PX, maxW + 8); return n; });
   }, [tableRef]);
 
   const startDrag = useCallback((colIdx: number, e: React.MouseEvent) => {
@@ -750,7 +765,7 @@ export function CatalogWorkspace({
                       { key: "name", label: "Item name" },
                       { key: "color", label: "Color" },
                       { key: "size", label: "Size" },
-                      { key: "retail_price", label: "Retail price", align: "right" },
+                      { key: "retail_price", label: "Retail price" },
                       { key: "bin", label: "Bin" },
                       { key: "qty_epc", label: "Qty (EPC)", align: "right" },
                       { key: "rfid", label: "RFID", sortable: false },
@@ -826,7 +841,7 @@ export function CatalogWorkspace({
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.size?.trim() || "—"}</td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-[var(--wms-fg)]">
                         {formatPrice(r.retail_price)}
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">
