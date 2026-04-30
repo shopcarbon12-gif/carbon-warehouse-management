@@ -8,6 +8,8 @@ export type AgentConfigAntenna = {
   antenna_number: number;
   transmit_power_dbm: number;
   enabled: boolean;
+  /** ISO timestamp when an operator clicked TEST. null = no test pending. */
+  test_pending_at: string | null;
 };
 
 export type AgentConfigReader = {
@@ -102,4 +104,24 @@ export async function postReads(
     body,
   );
   return { inserted: r.inserted };
+}
+
+export type AntennaTestResult = {
+  antennaId: string;
+  foundAnyEpc: boolean;
+  observedEpcCount: number;
+  testStartedAt: string;
+  testEndedAt: string;
+};
+
+export async function postAntennaTestResult(
+  env: AgentEnv,
+  body: AntennaTestResult,
+): Promise<void> {
+  await request(env, "POST", "/api/cdm-agents/antenna-test-result", body);
+  log.info("antenna test result posted", {
+    antennaId: body.antennaId,
+    foundAnyEpc: body.foundAnyEpc,
+    count: body.observedEpcCount,
+  });
 }

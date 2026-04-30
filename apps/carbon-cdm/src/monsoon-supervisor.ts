@@ -51,21 +51,58 @@ type ReaderSlot = {
   lastSeen: Map<string, number>;  // epcHex → ms timestamp
   backoffMs: number;
   shuttingDown: boolean;
+  /**
+   * Active antenna-test windows for THIS reader. Each entry is
+   * incremented every time we observe an EPC byte sequence on the stream.
+   * When the test window expires, we emit the result. Multiple antennas
+   * on the same reader can have concurrent windows — they all see the
+   * same byte stream (we can't distinguish per-antenna in the binary
+   * protocol yet), so they share the count.
+   */
+  activeTests: Map<string, { startedAt: number; epcCount: number; expiresAt: number }>;
 };
+
+export type AntennaTestCallback = (result: {
+  antennaId: string;
+  foundAnyEpc: boolean;
+  observedEpcCount: number;
+  testStartedAt: string;
+  testEndedAt: string;
+}) => void;
+
+/** Listen window length in ms. */
+const TEST_WINDOW_MS = 30_000;
+/** How often the supervisor sweeps active test windows for expiration. */
+const TEST_SWEEP_INTERVAL_MS = 1_000;
 
 export class MonsoonSupervisor {
   private slots = new Map<string, ReaderSlot>();
   private epcPrefixBytes: Buffer;
   private epcByteLen = 12;
   private bundleVersion = 0;
+  private testSweepHandle: NodeJS.Timeout | null = null;
+  /** Set of antenna IDs we've already started a test for (one-shot per pending). */
+  private testedAntennas = new Set<string>();
 
   constructor(
     private readonly monsoonBinary: string,
     private readonly onRead: SupervisorReadHandler,
+    /**
+     * Optional: receives antenna-test results when a test window closes.
+     * Wire this to wms-client.postAntennaTestResult to push results
+     * back to the WMS.
+     */
+    private readonly onAntennaTestResult: AntennaTestCallback | null = null,
     /** Hex string for EPC prefix to match on the binary stream (e.g. "F0A0"). */
     epcPrefixHex: string = "F0A0",
   ) {
     this.epcPrefixBytes = Buffer.from(epcPrefixHex, "hex");
+    if (this.onAntennaTestResult) {
+      this.testSweepHandle = setInterval(
+        () => this.sweepExpiredTests(),
+        TEST_SWEEP_INTERVAL_MS,
+      );
+    }
   }
 
   /**
@@ -114,6 +151,7 @@ export class MonsoonSupervisor {
         lastSeen: new Map(),
         backoffMs: MIN_BACKOFF_MS,
         shuttingDown: false,
+        activeTests: new Map(),
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -125,9 +163,104 @@ export class MonsoonSupervisor {
       });
       this.spawnReader(slot);
     }
+
+    // Sweep the bundle for antennas with pending tests we haven't started yet.
+    if (this.onAntennaTestResult) {
+      this.startPendingTests(bundle);
+    }
+  }
+
+  /**
+   * For every antenna in the bundle whose `test_pending_at` is set AND we
+   * haven't already opened a window for this exact pending instance, open
+   * a 30-sec listen window on the parent reader's slot. The byte-stream
+   * consumer will increment `epcCount` for the antenna's window every time
+   * it sees an EPC. When `sweepExpiredTests` notices the window expired,
+   * it emits the result via `onAntennaTestResult` and the WMS updates the
+   * antenna's status_online from there.
+   */
+  private startPendingTests(bundle: AgentConfigBundle): void {
+    const now = Date.now();
+    for (const reader of bundle.readers) {
+      const slot = this.slots.get(reader.id);
+      if (!slot) continue; // reader not running, can't test
+      for (const ant of reader.antennas) {
+        if (!ant.test_pending_at) continue;
+        // Idempotency key — same antenna + same trigger timestamp = same test.
+        const testKey = `${ant.id}@${ant.test_pending_at}`;
+        if (this.testedAntennas.has(testKey)) continue;
+        this.testedAntennas.add(testKey);
+        slot.activeTests.set(ant.id, {
+          startedAt: now,
+          epcCount: 0,
+          expiresAt: now + TEST_WINDOW_MS,
+        });
+        log.info("supervisor: antenna test window opened", {
+          antennaId: ant.id,
+          readerId: reader.id,
+          windowMs: TEST_WINDOW_MS,
+        });
+      }
+    }
+
+    // Garbage-collect testedAntennas cache so it doesn't grow forever.
+    // Keep only entries for tests still pending — once test_pending_at is
+    // cleared by the WMS (after we post the result), the next bundle
+    // refresh won't have the matching key, and the entry is safe to drop.
+    if (this.testedAntennas.size > 1000) {
+      const stillPending = new Set<string>();
+      for (const reader of bundle.readers) {
+        for (const ant of reader.antennas) {
+          if (ant.test_pending_at) stillPending.add(`${ant.id}@${ant.test_pending_at}`);
+        }
+      }
+      for (const key of this.testedAntennas) {
+        if (!stillPending.has(key)) this.testedAntennas.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Tick: for each slot, find antenna-test windows that have reached
+   * their `expiresAt`. For each, emit a result via `onAntennaTestResult`
+   * and remove the window.
+   */
+  private sweepExpiredTests(): void {
+    if (!this.onAntennaTestResult) return;
+    const now = Date.now();
+    for (const slot of this.slots.values()) {
+      for (const [antennaId, win] of slot.activeTests) {
+        if (now < win.expiresAt) continue;
+        const result = {
+          antennaId,
+          foundAnyEpc: win.epcCount > 0,
+          observedEpcCount: win.epcCount,
+          testStartedAt: new Date(win.startedAt).toISOString(),
+          testEndedAt: new Date(now).toISOString(),
+        };
+        try {
+          this.onAntennaTestResult(result);
+        } catch (e) {
+          log.warn("supervisor: onAntennaTestResult threw", {
+            err: e instanceof Error ? e.message : String(e),
+          });
+        }
+        slot.activeTests.delete(antennaId);
+        log.info("supervisor: antenna test window closed", {
+          antennaId,
+          readerId: slot.spec.id,
+          foundAnyEpc: result.foundAnyEpc,
+          count: result.observedEpcCount,
+        });
+      }
+    }
   }
 
   shutdown(): void {
+    if (this.testSweepHandle) {
+      clearInterval(this.testSweepHandle);
+      this.testSweepHandle = null;
+    }
     for (const slot of this.slots.values()) {
       slot.shuttingDown = true;
       this.stopSlot(slot);
@@ -258,6 +391,17 @@ export class MonsoonSupervisor {
       const epc = slot.buffer.subarray(idx, idx + this.epcByteLen);
       const epcHex = epc.toString("hex").toUpperCase();
       pos = idx + 1; // search for next occurrence (overlap allowed)
+
+      // Active antenna tests: every EPC found counts toward the test
+      // window, regardless of dedup or prefix. (We restrict by F0A0 only
+      // because that's the prefix we scan for; in practice the test
+      // semantics — "did the reader see ANY tag" — are met since any tag
+      // any operator would test against will be a Carbon F0A0B tag.)
+      if (slot.activeTests.size > 0) {
+        for (const win of slot.activeTests.values()) {
+          win.epcCount += 1;
+        }
+      }
 
       // Dedup within window.
       const last = slot.lastSeen.get(epcHex);

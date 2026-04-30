@@ -7,6 +7,7 @@ import {
 import { startHeartbeat } from "./heartbeat.js";
 import { ReadAggregator } from "./read-aggregator.js";
 import { MonsoonSupervisor } from "./monsoon-supervisor.js";
+import { postAntennaTestResult } from "./wms-client.js";
 
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
 
@@ -29,13 +30,26 @@ async function main(): Promise<void> {
   // (which doesn't talk to MonsoonReader correctly in our deployment) and
   // talks straight to the binary. EPCs come out of the supervisor already
   // parsed and deduped from the binary stream.
-  const supervisor = new MonsoonSupervisor(MONSOON_BINARY, (read) => {
-    aggregator.enqueue({
-      readerId: read.readerId,
-      reads: [{ epcHex: read.epcHex, monsoonTsMs: null }],
-      receivedAt: new Date(read.readAt),
-    });
-  });
+  const supervisor = new MonsoonSupervisor(
+    MONSOON_BINARY,
+    (read) => {
+      aggregator.enqueue({
+        readerId: read.readerId,
+        reads: [{ epcHex: read.epcHex, monsoonTsMs: null }],
+        receivedAt: new Date(read.readAt),
+      });
+    },
+    // Antenna-test callback: post the result back to WMS so it can flip
+    // the antenna's status_online and clear the test_pending_at flag.
+    (result) => {
+      void postAntennaTestResult(env, result).catch((e) => {
+        log.warn("antenna test result post failed", {
+          err: e instanceof Error ? e.message : String(e),
+          antennaId: result.antennaId,
+        });
+      });
+    },
+  );
 
   let lastPullOk = false;
   const stopHeartbeat = startHeartbeat(env, () => !lastPullOk);

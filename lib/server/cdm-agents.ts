@@ -229,6 +229,13 @@ export type AgentConfigAntenna = {
   antenna_number: number;
   transmit_power_dbm: number;
   enabled: boolean;
+  /**
+   * Set when the operator clicks "TEST" in Hardware Config. The agent
+   * runs a 30-second listen window on the parent reader's stream and
+   * POSTs the result to /api/cdm-agents/antenna-test-result.
+   * Null = no test pending.
+   */
+  test_pending_at: string | null;
 };
 
 export type AgentConfigReader = {
@@ -281,6 +288,7 @@ export async function getAgentConfigBundle(
     parent_device_id: string | null;
     zone_id: string | null;
     zone_name: string | null;
+    test_pending_at: string | null;
   }>(
     `SELECT
        d.id::text,
@@ -290,11 +298,16 @@ export async function getAgentConfigBundle(
        COALESCE(d.config, '{}'::jsonb) AS config,
        d.parent_device_id::text,
        d.zone_id::text,
-       z.name AS zone_name
+       z.name AS zone_name,
+       d.test_pending_at
      FROM devices d
      LEFT JOIN zones z ON z.id = d.zone_id
      WHERE d.cdm_agent_id = $1::uuid
        AND d.device_type IN ('fixed_reader','transaction_reader','door_reader','antenna')
+     -- Include reader's own antennas even when antenna.cdm_agent_id is NULL
+     OR (d.device_type = 'antenna' AND d.parent_device_id IN (
+          SELECT id FROM devices WHERE cdm_agent_id = $1::uuid
+        ))
      ORDER BY d.name ASC`,
     [agentId],
   );
@@ -314,6 +327,7 @@ export async function getAgentConfigBundle(
       antenna_number: Number(cfg.antenna_number ?? 1),
       transmit_power_dbm: Number(cfg.transmit_power_dbm ?? 30),
       enabled: cfg.enabled !== false,
+      test_pending_at: d.test_pending_at,
     });
     antennasByParent.set(d.parent_device_id, arr);
   }
