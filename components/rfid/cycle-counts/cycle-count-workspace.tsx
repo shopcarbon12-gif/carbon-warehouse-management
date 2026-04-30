@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { Radio, ScanLine, Shuffle } from "lucide-react";
+import { Radio, ScanLine } from "lucide-react";
 import {
   CycleCountCommitModal,
   type VarianceSummary,
@@ -30,14 +30,6 @@ const fetcher = async (url: string) => {
   return res.json();
 };
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j]!, a[i]!];
-  }
-  return a;
-}
 
 function classify(
   expected: ExpectedRow[],
@@ -155,39 +147,6 @@ export function CycleCountWorkspace() {
     }),
     [c],
   );
-
-  const simulateScan = useCallback(async () => {
-    if (!locationId || expected.length === 0) {
-      setToast("Select a location and load expected tags first.");
-      return;
-    }
-    setToast(null);
-    try {
-      const simRes = await fetch(
-        `/api/rfid/cycle-counts/sim-seeds?locationId=${encodeURIComponent(locationId)}${binId ? `&binId=${encodeURIComponent(binId)}` : ""}`,
-      );
-      if (!simRes.ok) {
-        const j = (await simRes.json().catch(() => ({}))) as { error?: string };
-        throw new Error(j.error ?? "Sim seeds failed");
-      }
-      const sim = (await simRes.json()) as {
-        misplaced: string[];
-        unrecognized: string[];
-      };
-      const shuffled = shuffle(expected);
-      const n = Math.max(1, Math.floor(expected.length * 0.9));
-      const take = shuffled.slice(0, n).map((r) => r.epc);
-      const mis = sim.misplaced.map((e) => e.replace(/\s/g, "").toUpperCase());
-      const un = sim.unrecognized.map((e) => e.replace(/\s/g, "").toUpperCase());
-      setMisplacedSeed(new Set(mis));
-      setUnrecognizedSeed(new Set(un));
-      setScanned([...take, ...mis, ...un]);
-      setScanning(true);
-      setToast("Simulated scan loaded (≈90% matched + misplaced + ghost).");
-    } catch (e) {
-      setToast(e instanceof Error ? e.message : "Simulation failed");
-    }
-  }, [locationId, binId, expected]);
 
   const doCommit = useCallback(async () => {
     if (c.misplaced.length > 0 && !binId) {
@@ -329,15 +288,6 @@ export function CycleCountWorkspace() {
           </button>
           <button
             type="button"
-            disabled={!locationId || expected.length === 0}
-            onClick={() => void simulateScan()}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5 font-mono text-xs text-[var(--wms-fg)] hover:border-violet-500/40 disabled:opacity-40"
-          >
-            <Shuffle className="h-4 w-4" />
-            Simulate scan
-          </button>
-          <button
-            type="button"
             disabled={!locationId || scanned.length === 0}
             onClick={resetScans}
             className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] px-4 py-2.5 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
@@ -347,8 +297,7 @@ export function CycleCountWorkspace() {
           </button>
         </div>
         <p className="mt-3 font-mono text-[0.6rem] text-[var(--wms-muted)]">
-          Hardware SDK can feed EPCs while scanning is active. Use Simulate scan to load ~90% of
-          expected plus sample misplaced and unrecognized tags.
+          Hardware SDK feeds EPCs while scanning is active.
         </p>
       </div>
 

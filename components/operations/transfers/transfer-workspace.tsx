@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { Radio, ScanLine, Shuffle } from "lucide-react";
+import { Radio, ScanLine } from "lucide-react";
 import { TransferCommitModal, type StagedRow } from "./transfer-commit-modal";
 import { StagedEpcsModal } from "./staged-epcs-modal";
 
@@ -163,25 +163,6 @@ export function TransferWorkspace() {
     return () => es.close();
   }, [mergeRows]);
 
-  const simulateScan = useCallback(async () => {
-    setToast(null);
-    try {
-      const res = await fetch("/api/operations/transfers/sim-seeds?limit=5");
-      const data = (await res.json()) as { error?: string; rows?: LookupRow[] };
-      if (!res.ok) throw new Error(data.error ?? "Sim failed");
-      const rows = data.rows ?? [];
-      if (rows.length === 0) {
-        setToast("No in-stock tags at this location to simulate.");
-        return;
-      }
-      setStaged((s) => mergeRows(s, rows));
-      setScanning(true);
-      setToast(`Staged ${rows.length} tag(s) from simulation.`);
-    } catch (e) {
-      setToast(e instanceof Error ? e.message : "Simulation failed");
-    }
-  }, [mergeRows]);
-
   const addManualEpc = useCallback(async () => {
     const e = manualEpc.replace(/\s/g, "").toUpperCase();
     if (!/^[0-9A-F]{24}$/.test(e)) {
@@ -295,14 +276,6 @@ export function TransferWorkspace() {
           >
             <Radio className={`h-5 w-5 ${scanning ? "text-amber-400" : "text-[var(--wms-muted)]"}`} />
             {scanning ? "Scanning…" : "Start scan"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void simulateScan()}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5 font-mono text-xs text-[var(--wms-fg)] hover:border-violet-500/40"
-          >
-            <Shuffle className="h-4 w-4" />
-            Simulate scan
           </button>
           <button
             type="button"
