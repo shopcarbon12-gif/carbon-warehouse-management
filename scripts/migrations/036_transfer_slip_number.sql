@@ -9,8 +9,8 @@ ALTER TABLE transfer_records
   ADD COLUMN IF NOT EXISTS slip_number BIGINT;
 --> statement-breakpoint
 CREATE SEQUENCE IF NOT EXISTS transfer_records_slip_number_seq
-  START WITH 70000
-  MINVALUE 70000;
+  START WITH 1000
+  MINVALUE 1;
 --> statement-breakpoint
 -- Default future inserts to nextval. Existing rows stay NULL until manually
 -- backfilled (no slip# was ever shown to operators for them).

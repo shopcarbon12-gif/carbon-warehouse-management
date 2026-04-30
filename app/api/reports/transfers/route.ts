@@ -53,7 +53,22 @@ export async function GET(req: Request) {
     });
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
-    console.error("[reports/transfers]", e);
-    return NextResponse.json({ error: "Query failed" }, { status: 500 });
+    const msg = e instanceof Error ? e.message : "Query failed";
+    console.error("[reports/transfers]", msg);
+    // Surface migration-state issues directly so the report page can show a
+    // meaningful banner instead of an opaque "Query failed" toast.
+    if (msg.includes("transfer_records") || msg.includes("slip_number")) {
+      return NextResponse.json(
+        {
+          error:
+            "Transfer schema not migrated yet — redeploy / re-run scripts/migrations (034 + 036).",
+          rows: [],
+          total: 0,
+          status_counts: { all: 0, pending: 0, partially_received: 0, received: 0, cancelled: 0 },
+        },
+        { status: 200 },
+      );
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

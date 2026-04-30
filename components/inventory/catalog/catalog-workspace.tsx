@@ -112,6 +112,25 @@ const COL_COUNT = 10;
 const COL_MIN_PX = 40;
 const SCROLLBAR_THICKNESS = 14;
 
+/**
+ * Default column widths — same order as the header config below
+ * (system_id is hidden so its width is irrelevant). Picked to fit the
+ * longest content seen in real catalogs without extra slack. Operators
+ * can drag the resize handle on any column header to adjust.
+ */
+const DEFAULT_COL_WIDTHS: number[] = [
+  0,    // system_id (hidden)
+  130,  // sku
+  90,   // upc
+  200,  // name
+  90,   // color
+  60,   // size
+  90,   // retail price
+  70,   // bin
+  80,   // qty (epc)
+  70,   // rfid
+];
+
 function ThickScrollbars({ scrollRef }: { scrollRef: React.RefObject<HTMLDivElement | null> }) {
   const [state, setState] = useState({ vTop: 0, vH: 0, hLeft: 0, hW: 0, showV: false, showH: false });
 
@@ -198,7 +217,12 @@ function ThickScrollbars({ scrollRef }: { scrollRef: React.RefObject<HTMLDivElem
 }
 
 function useColResize(tableRef: React.RefObject<HTMLTableElement | null>) {
-  const [colWidths, setColWidths] = useState<(number | null)[]>(() => Array(COL_COUNT).fill(null));
+  // Hardcoded widths from the start (no auto-fit). Predictable layout, no
+  // surprise reflows when data lands. Operator can drag a resize handle on
+  // any column to adjust per-session.
+  const [colWidths, setColWidths] = useState<(number | null)[]>(() =>
+    DEFAULT_COL_WIDTHS.map((w) => (w > 0 ? w : null)),
+  );
 
   const autoFit = useCallback((colIdx: number) => {
     const tbl = tableRef.current;
@@ -357,18 +381,12 @@ export function CatalogWorkspace({
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / effectivePageSize));
 
-  // Auto-fit every column to its content once the first batch of rows lands.
-  // Re-runs only when rows go from empty → non-empty (page navigations don't
-  // re-fit so user-resized widths stick).
-  useEffect(() => {
-    if (autoFitDoneRef.current) return;
-    if (rows.length === 0) return;
-    const id = window.setTimeout(() => {
-      for (let i = 0; i < COL_COUNT; i++) autoFit(i);
-      autoFitDoneRef.current = true;
-    }, 0);
-    return () => window.clearTimeout(id);
-  }, [rows.length, autoFit]);
+  // Auto-fit on load is disabled — we ship with hardcoded DEFAULT_COL_WIDTHS
+  // (see top of file) so layout is predictable across reloads. Operators can
+  // still double-click a header to fit one column to its content, or drag the
+  // resize handle. autoFitDoneRef remains because autoFit() still uses it.
+  void autoFitDoneRef;
+  void autoFit;
 
   const closeModal = useCallback(() => setModalSku(null), []);
 
@@ -780,7 +798,7 @@ export function CatalogWorkspace({
                       { key: "size", label: "Size" },
                       { key: "retail_price", label: "Retail price" },
                       { key: "bin", label: "Bin" },
-                      { key: "qty_epc", label: "Qty (EPC)", align: "right" },
+                      { key: "qty_epc", label: "Qty (EPC)" },
                       { key: "rfid", label: "RFID", sortable: false },
                     ] as { key: SortKey | "rfid"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean }[]
                   ).map(({ key, label, cls, align, sortable, hidden }, colIdx) => {
@@ -860,7 +878,7 @@ export function CatalogWorkspace({
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">
                         {r.bin_location ?? "—"}
                       </td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-[var(--wms-fg)]">
                         {r.active_epc_count}
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5">

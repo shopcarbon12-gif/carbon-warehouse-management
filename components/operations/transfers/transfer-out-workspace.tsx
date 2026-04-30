@@ -307,7 +307,6 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
   useEffect(() => {
     const es = new EventSource("/api/edge/stream");
     es.onmessage = (ev) => {
-      if (!scanningRef.current) return;
       if (!ev.data?.trim() || ev.data.startsWith(":")) return;
       let p: { scanContext?: string; epcs?: string[]; deviceId?: string };
       try {
@@ -319,6 +318,16 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
       } catch {
         return;
       }
+      // Trace every event so devtools can confirm the SSE pipeline is
+      // delivering reads (vs. the page-side filters dropping them).
+      // eslint-disable-next-line no-console
+      console.debug("[transfer-out SSE]", {
+        scanContext: p.scanContext,
+        deviceId: p.deviceId,
+        epcs: p.epcs?.length ?? 0,
+        scanning: scanningRef.current,
+      });
+      if (!scanningRef.current) return;
       // No scanContext gate — operator already chose the reader they care
       // about via ReaderPicker, that's the relevance signal. Gating on
       // scanContext='TRANSFER' was dropping every read for tenants whose
