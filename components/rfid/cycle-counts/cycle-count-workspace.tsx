@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReaderPicker } from "@/components/shared/reader-picker";
 import useSWR from "swr";
 import { Radio, ScanLine } from "lucide-react";
 import {
@@ -59,6 +60,14 @@ export function CycleCountWorkspace() {
   const [binId, setBinId] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanned, setScanned] = useState<string[]>([]);
+  // Per-page reader filter — empty set drops every read; non-empty set
+  // accepts only reads from those reader IDs. Operator picks via the
+  // ReaderPicker dropdown next to the Start scan button.
+  const [selectedReaders, setSelectedReaders] = useState<Set<string>>(() => new Set());
+  const selectedReadersRef = useRef(selectedReaders);
+  useEffect(() => {
+    selectedReadersRef.current = selectedReaders;
+  }, [selectedReaders]);
   const [misplacedSeed, setMisplacedSeed] = useState<Set<string>>(() => new Set());
   const [unrecognizedSeed, setUnrecognizedSeed] = useState<Set<string>>(
     () => new Set(),
@@ -110,15 +119,19 @@ export function CycleCountWorkspace() {
     const es = new EventSource("/api/edge/stream");
     es.onmessage = (ev) => {
       if (!ev.data?.trim() || ev.data.startsWith(":")) return;
-      let p: { scanContext?: string; epcs?: string[] };
+      let p: { scanContext?: string; epcs?: string[]; deviceId?: string };
       try {
-        p = JSON.parse(ev.data) as { scanContext?: string; epcs?: string[] };
+        p = JSON.parse(ev.data) as { scanContext?: string; epcs?: string[]; deviceId?: string };
       } catch {
         return;
       }
       const ctx = (p.scanContext ?? "").toUpperCase();
       if (ctx === "TRANSFER") return;
       if (!cycleStreamContexts.has(ctx)) return;
+      // Reader filter — see selectedReaders comment above.
+      const sel = selectedReadersRef.current;
+      if (sel.size === 0) return;
+      if (p.deviceId && !sel.has(p.deviceId)) return;
       const list = (p.epcs ?? [])
         .map((e) => e.replace(/\s/g, "").toUpperCase())
         .filter((e) => /^[0-9A-F]{24}$/.test(e));
@@ -286,6 +299,7 @@ export function CycleCountWorkspace() {
             />
             {scanning ? "Scanning…" : "Start scan"}
           </button>
+          <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} />
           <button
             type="button"
             disabled={!locationId || scanned.length === 0}

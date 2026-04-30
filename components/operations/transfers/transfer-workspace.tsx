@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReaderPicker } from "@/components/shared/reader-picker";
 import useSWR from "swr";
 import { Radio, ScanLine } from "lucide-react";
 import { TransferCommitModal, type StagedRow } from "./transfer-commit-modal";
@@ -109,6 +110,15 @@ export function TransferWorkspace() {
   const [destBinId, setDestBinId] = useState("");
   const [scanning, setScanning] = useState(false);
   const [staged, setStaged] = useState<LookupRow[]>([]);
+  // Per-page reader filter. EPCs from readers NOT in this set are dropped on
+  // the floor by the SSE handler. Empty set = no readers selected = nothing
+  // gets staged. Operator picks via the ReaderPicker dropdown next to the
+  // Start scan button.
+  const [selectedReaders, setSelectedReaders] = useState<Set<string>>(() => new Set());
+  const selectedReadersRef = useRef(selectedReaders);
+  useEffect(() => {
+    selectedReadersRef.current = selectedReaders;
+  }, [selectedReaders]);
   const [commitOpen, setCommitOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [manualEpc, setManualEpc] = useState("");
@@ -138,13 +148,20 @@ export function TransferWorkspace() {
     const es = new EventSource("/api/edge/stream");
     es.onmessage = (ev) => {
       if (!ev.data?.trim() || ev.data.startsWith(":")) return;
-      let p: { scanContext?: string; epcs?: string[] };
+      let p: { scanContext?: string; epcs?: string[]; deviceId?: string };
       try {
-        p = JSON.parse(ev.data) as { scanContext?: string; epcs?: string[] };
+        p = JSON.parse(ev.data) as { scanContext?: string; epcs?: string[]; deviceId?: string };
       } catch {
         return;
       }
       if ((p.scanContext ?? "").toUpperCase() !== "TRANSFER") return;
+      // Reader filter: drop the read if it came from a reader the operator
+      // hasn't selected in the ReaderPicker. Read via ref so this closure
+      // always sees the latest selection without re-subscribing on every
+      // picker change.
+      const sel = selectedReadersRef.current;
+      if (sel.size === 0) return;
+      if (p.deviceId && !sel.has(p.deviceId)) return;
       const list = (p.epcs ?? [])
         .map((e) => e.replace(/\s/g, "").toUpperCase())
         .filter((e) => /^[0-9A-F]{24}$/.test(e));
@@ -277,6 +294,7 @@ export function TransferWorkspace() {
             <Radio className={`h-5 w-5 ${scanning ? "text-amber-400" : "text-[var(--wms-muted)]"}`} />
             {scanning ? "Scanning…" : "Start scan"}
           </button>
+          <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} />
           <button
             type="button"
             disabled={staged.length === 0}
