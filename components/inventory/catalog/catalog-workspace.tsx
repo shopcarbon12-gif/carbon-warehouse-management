@@ -8,7 +8,9 @@ import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
 import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epcs-modal";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [100, 300, 500, 1000, "ALL"] as const;
+const DEFAULT_PAGE_SIZE = 300;
+const ALL_LIMIT = 5000; // matches API cap
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -27,11 +29,12 @@ function buildGridUrl(
   sortBy: string,
   sortDir: SortDir,
   showArchived: boolean,
+  limit: number,
 ): string {
   const p = new URLSearchParams({
     view: "grid",
     page: String(page),
-    limit: String(PAGE_SIZE),
+    limit: String(limit),
   });
   if (q.trim()) p.set("q", q.trim());
   if (sortBy) { p.set("sortBy", sortBy); p.set("sortDir", sortDir); }
@@ -277,10 +280,16 @@ export function CatalogWorkspace({
   const [importErr, setImportErr] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [pageSizeChoice, setPageSizeChoice] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(
+    DEFAULT_PAGE_SIZE,
+  );
+  const effectivePageSize =
+    pageSizeChoice === "ALL" ? ALL_LIMIT : (pageSizeChoice as number);
   const catalogToolbarRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { colWidths, autoFit, startDrag } = useColResize(tableRef);
+  const autoFitDoneRef = useRef(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebounced(search.trim()), 320);
@@ -296,13 +305,17 @@ export function CatalogWorkspace({
   }, [sortBy, sortDir]);
 
   const url = useMemo(
-    () => buildGridUrl(page, debounced, sortBy, sortDir, showArchived),
-    [page, debounced, sortBy, sortDir, showArchived],
+    () => buildGridUrl(page, debounced, sortBy, sortDir, showArchived, effectivePageSize),
+    [page, debounced, sortBy, sortDir, showArchived, effectivePageSize],
   );
 
   useEffect(() => {
     setPage(1);
   }, [showArchived]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [pageSizeChoice]);
 
   const { data, error, isLoading, mutate } = useSWR<{
     rows: CatalogGridRow[];
@@ -314,7 +327,20 @@ export function CatalogWorkspace({
 
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / effectivePageSize));
+
+  // Auto-fit every column to its content once the first batch of rows lands.
+  // Re-runs only when rows go from empty → non-empty (page navigations don't
+  // re-fit so user-resized widths stick).
+  useEffect(() => {
+    if (autoFitDoneRef.current) return;
+    if (rows.length === 0) return;
+    const id = window.setTimeout(() => {
+      for (let i = 0; i < COL_COUNT; i++) autoFit(i);
+      autoFitDoneRef.current = true;
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [rows.length, autoFit]);
 
   const closeModal = useCallback(() => setModalSku(null), []);
 
@@ -439,9 +465,29 @@ export function CatalogWorkspace({
 
   const pagination = !showCatalogEmpty && total > 0 && (
     <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-      <span>
-        {total} row{total === 1 ? "" : "s"} · page {page} / {totalPages}
-      </span>
+      <div className="flex flex-wrap items-center gap-3">
+        <span>
+          {total} row{total === 1 ? "" : "s"} · page {page} / {totalPages}
+        </span>
+        <label className="flex items-center gap-1.5">
+          <span className="uppercase tracking-wide">per page</span>
+          <select
+            value={String(pageSizeChoice)}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "ALL") setPageSizeChoice("ALL");
+              else setPageSizeChoice(Number(v) as (typeof PAGE_SIZE_OPTIONS)[number]);
+            }}
+            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 font-mono text-[0.65rem] text-[var(--wms-fg)]"
+          >
+            {PAGE_SIZE_OPTIONS.map((opt) => (
+              <option key={String(opt)} value={String(opt)}>
+                {opt === "ALL" ? "ALL" : opt}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="flex gap-2">
         <button
           type="button"
@@ -699,9 +745,9 @@ export function CatalogWorkspace({
                       // hidden from UI per stakeholder request — still pulled
                       // by the API and present on every row object.
                       { key: "system_id", label: "System ID", cls: "text-teal-400/80", hidden: true },
-                      { key: "name", label: "Item name" },
                       { key: "sku", label: "Custom SKU" },
                       { key: "upc", label: "UPC" },
+                      { key: "name", label: "Item name" },
                       { key: "color", label: "Color" },
                       { key: "size", label: "Size" },
                       { key: "retail_price", label: "Retail price", align: "right" },
@@ -773,11 +819,11 @@ export function CatalogWorkspace({
                       <td className="hidden overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-teal-400/85">
                         {r.sku_ls_system_id ?? "—"}
                       </td>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5">{r.sku}</td>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
                         {r.name}
                       </td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5">{r.sku}</td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.size?.trim() || "—"}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-[var(--wms-fg)]">

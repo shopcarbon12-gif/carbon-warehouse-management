@@ -49,8 +49,8 @@ export async function GET(req: Request) {
   if (view === "grid") {
     const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
     const limit = Math.min(
-      100,
-      Math.max(1, Number.parseInt(searchParams.get("limit") ?? "50", 10) || 50),
+      5000,
+      Math.max(1, Number.parseInt(searchParams.get("limit") ?? "300", 10) || 300),
     );
     const q = searchParams.get("q")?.trim() ?? "";
     const brand = searchParams.get("brand")?.trim() ?? "";

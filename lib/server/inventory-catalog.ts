@@ -168,7 +168,7 @@ export async function listCatalogGrid(
     page, limit, q, brand, category, vendor, locationId,
     systemId = "", sortBy = "", sortDir = "", showArchived = false,
   } = options;
-  const safeLimit = Math.min(100, Math.max(1, limit));
+  const safeLimit = Math.min(5000, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
 
   const { sql: whereSql, params: whereParams } = buildWhere(
