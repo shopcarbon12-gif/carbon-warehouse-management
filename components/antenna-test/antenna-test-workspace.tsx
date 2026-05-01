@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import {
   useAntennaTestStream,
@@ -8,6 +8,14 @@ import {
 } from "./use-antenna-test-stream";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+type CatalogHit = {
+  sku: string;
+  name: string | null;
+  color: string | null;
+  size: string | null;
+  status: string;
+};
 
 type AntennaPickEntry = {
   readerId: string;
@@ -118,6 +126,57 @@ export function AntennaTestWorkspace() {
   useEffect(() => {
     if (status === "ended" && sessionId) setSessionId(null);
   }, [status, sessionId]);
+
+  // Catalog enrichment: as new EPCs appear in `rows`, batch them and POST to
+  // /api/operations/transfers/lookup (session-cookie). Cache the result so we
+  // don't re-fetch the same EPC. Same pattern used by the dashboard live-scan
+  // tile — auto-ingests previously-unknown EPCs and links them to a custom_sku.
+  const [catalog, setCatalog] = useState<Map<string, CatalogHit>>(new Map());
+  const catalogRef = useRef<Map<string, CatalogHit>>(new Map());
+  const lookedUpRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!sessionId) {
+      catalogRef.current = new Map();
+      lookedUpRef.current = new Set();
+      setCatalog(new Map());
+      return;
+    }
+    // Find EPCs in current rows that we haven't tried to look up yet.
+    const pending: string[] = [];
+    for (const epc of rows.keys()) {
+      if (lookedUpRef.current.has(epc)) continue;
+      lookedUpRef.current.add(epc);
+      // Lookup endpoint requires 24-char hex; sweep mode shorter EPCs are skipped.
+      if (/^[0-9A-F]{24}$/.test(epc)) pending.push(epc);
+    }
+    if (pending.length === 0) return;
+    // Fire-and-forget; merge response into catalog Map.
+    void (async () => {
+      try {
+        const res = await fetch("/api/operations/transfers/lookup", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ epcs: pending }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          rows?: { epc: string; sku: string; name: string | null; color: string | null; size: string | null; status: string }[];
+        };
+        for (const row of data.rows ?? []) {
+          catalogRef.current.set(row.epc.toUpperCase(), {
+            sku: row.sku,
+            name: row.name,
+            color: row.color,
+            size: row.size,
+            status: row.status,
+          });
+        }
+        setCatalog(new Map(catalogRef.current));
+      } catch {
+        /* ignore — operator will see "—" cells; we'll retry on next batch */
+      }
+    })();
+  }, [rows, sessionId]);
 
   const startScan = async () => {
     if (!picked) return;
@@ -339,13 +398,15 @@ export function AntennaTestWorkspace() {
               <th className="px-3 py-2 text-right">Reads</th>
               <th className="px-3 py-2 text-left">Sparkline (5 s)</th>
               <th className="px-3 py-2 text-left">EPC</th>
+              <th className="px-3 py-2 text-left">Custom SKU</th>
+              <th className="px-3 py-2 text-left">Description (name · color · size)</th>
             </tr>
           </thead>
           <tbody>
             {sortedRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={9}
                   className="px-3 py-8 text-center text-xs text-[var(--wms-muted)]"
                 >
                   {isLive
@@ -356,6 +417,10 @@ export function AntennaTestWorkspace() {
             )}
             {sortedRows.map((row, idx) => {
               const bucket = rssiBucket(row.bestRssiDbm);
+              const cat = catalog.get(row.epcHex);
+              const desc = cat
+                ? [cat.name, cat.color, cat.size].filter((x) => x && x.trim()).join(" · ")
+                : "";
               return (
                 <tr
                   key={row.epcHex}
@@ -385,6 +450,12 @@ export function AntennaTestWorkspace() {
                     <Sparkline points={row.spark} />
                   </td>
                   <td className="px-3 py-1.5 font-mono text-[11px]">{row.epcHex}</td>
+                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                    {cat?.sku ?? <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5 text-[11px]">
+                    {desc || <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
                 </tr>
               );
             })}
