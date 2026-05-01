@@ -228,6 +228,104 @@ export function AntennaTestWorkspace() {
     );
   })();
 
+  /**
+   * Export the current table view to a CSV file. Honors the active sort
+   * order, includes catalog enrichment + calibration band, plus a couple
+   * of metadata header rows so the file is self-describing.
+   */
+  const exportCsv = () => {
+    if (!picked) return;
+    const csvEscape = (v: unknown): string => {
+      if (v === null || v === undefined) return "";
+      const s = String(v);
+      // Quote if contains comma, quote, or newline; double-up internal quotes.
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    const lines: string[] = [];
+    // Metadata block — prefixed with # so spreadsheets can ignore if they
+    // care to. Most importers will just put these in the first rows; harmless.
+    lines.push(`# Carbon WMS — Antenna Test export`);
+    lines.push(`# Reader: ${picked.readerName} (${picked.readerHost ?? ""})`);
+    lines.push(`# Antenna: ${picked.antennaName} (A${picked.antennaNumber})`);
+    lines.push(`# Captured at: ${new Date().toISOString()}`);
+    lines.push(`# Power: ${(flags.powerArg / 10).toFixed(1)} dBm; cycle: ${flags.cycleMode}; read_time: ${flags.readTimeMs} ms; tagfocus: ${flags.tagFocus}`);
+    lines.push(
+      `# Sweep: ${
+        sweepEnabled
+          ? `${(sweepCfg.startPowerArg / 10).toFixed(1)}-${(sweepCfg.endPowerArg / 10).toFixed(1)} dBm @ ${(sweepCfg.stepPowerArg / 10).toFixed(1)} dBm step / ${sweepCfg.dwellMs} ms dwell`
+          : "off"
+      }`,
+    );
+    lines.push(
+      `# Calibration points: ${calibPoints.length}${calibPoints.length >= 2 ? " (Distance column = interpolated feet)" : " (Distance column = heuristic bucket)"}`,
+    );
+    lines.push("");
+    // Header row
+    lines.push(
+      [
+        "idx",
+        "distance",
+        "rssi_now_dbm",
+        "best_rssi_dbm",
+        "reads",
+        "epc",
+        "first_read_power_dbm",
+        "antenna_number",
+        "first_seen_iso",
+        "last_seen_iso",
+        "sku",
+        "name",
+        "color",
+        "size",
+      ]
+        .map(csvEscape)
+        .join(","),
+    );
+    sortedRows.forEach((row, idx) => {
+      const bucket = rssiBucket(row.bestRssiDbm);
+      const calibrated = estimateDistance(calibPoints, row.firstReadPowerArg);
+      const distance =
+        calibPoints.length >= 2 && calibrated.feet !== null
+          ? calibrated.band
+          : bucket.label;
+      const cat = catalog.get(row.epcHex);
+      lines.push(
+        [
+          idx + 1,
+          distance,
+          row.rssiDbm.toFixed(1),
+          row.bestRssiDbm.toFixed(1),
+          row.reads,
+          row.epcHex,
+          row.firstReadPowerArg !== null
+            ? (row.firstReadPowerArg / 10).toFixed(1)
+            : "",
+          row.antennaNumber,
+          new Date(row.firstSeenMs).toISOString(),
+          new Date(row.lastSeenMs).toISOString(),
+          cat?.sku ?? "",
+          cat?.name ?? "",
+          cat?.color ?? "",
+          cat?.size ?? "",
+        ]
+          .map(csvEscape)
+          .join(","),
+      );
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const safeReader = picked.readerName.replace(/[^a-z0-9]+/gi, "_");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `antenna-test-${safeReader}-A${picked.antennaNumber}-${stamp}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const [savingDefault, setSavingDefault] = useState(false);
   const [savedDefaultAt, setSavedDefaultAt] = useState<number | null>(null);
   const saveAsDefault = async () => {
@@ -769,6 +867,15 @@ export function AntennaTestWorkspace() {
               title="Wipe the displayed results so the next Start scan begins fresh."
             >
               ⌫ Clear session
+            </button>
+          )}
+          {picked && rows.size > 0 && (
+            <button
+              onClick={exportCsv}
+              className="rounded border border-[var(--wms-border)] bg-[var(--wms-bg)] px-3 py-2 text-sm hover:bg-[var(--wms-card)]"
+              title="Download the current table view as a CSV file (current sort order; metadata header rows included)."
+            >
+              ↓ Export CSV
             </button>
           )}
           {picked && (
