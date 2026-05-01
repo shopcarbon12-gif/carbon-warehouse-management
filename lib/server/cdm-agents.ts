@@ -525,6 +525,24 @@ export async function ingestAgentReads(
     [body.readerId],
   );
 
+  // Mark every antenna that produced a read in this batch as online too.
+  // Hardware Config has separate online dots for the reader and each
+  // antenna; without this update only the reader flips green even when
+  // tags are streaming through specific antennas.
+  const seenAntennaIds = new Set<string>();
+  for (const r of body.reads) {
+    if (r.antennaNumber === undefined) continue;
+    const antId = antennaIdMap.get(r.antennaNumber);
+    if (antId) seenAntennaIds.add(antId);
+  }
+  if (seenAntennaIds.size > 0) {
+    await client.query(
+      `UPDATE devices SET status_online = true, updated_at = now()
+         WHERE id = ANY($1::uuid[])`,
+      [Array.from(seenAntennaIds)],
+    );
+  }
+
   // Fan out to the live SSE hub so the Transfers page (and any other
   // subscriber) sees these EPCs in real time. We publish with
   // scanContext "TRANSFER" so the existing Transfers workspace filter
