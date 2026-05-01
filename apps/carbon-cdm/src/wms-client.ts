@@ -23,6 +23,12 @@ export type AgentConfigReader = {
   control_port: number;
   antenna_count: number;
   epc_prefix: string;
+  /** Which Mojix binary the supervisor should drive for this reader.
+   *  - "stream"  (default): legacy 2019 `MonsoonReader --stream` over TCP.
+   *  - "console": 2024 `new_monsoonreader --console` over stdout. Continuous
+   *               stream, CRC-filtered at the binary, no watchdog needed.
+   *  Server omits the field on older bundles → treat missing as "stream". */
+  monsoon_driver?: "stream" | "console";
   zone_id: string | null;
   zone_name: string | null;
   antennas: AgentConfigAntenna[];

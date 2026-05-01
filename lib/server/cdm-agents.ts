@@ -249,6 +249,14 @@ export type AgentConfigReader = {
   control_port: number;
   antenna_count: number;
   epc_prefix: string;
+  /** Which Mojix binary the agent's supervisor should drive for this reader.
+   *  - "stream"  (default): legacy 2019 `MonsoonReader --stream` binary; binary
+   *               TCP records, prone to alive-but-stuck stalls, needs watchdog.
+   *  - "console": 2024 `new_monsoonreader --console` binary; text stdout, CRC
+   *               filtered at the binary, streams continuously. Senitron's
+   *               current production. Pilot enabled per-reader 2026-05-01.
+   */
+  monsoon_driver: "stream" | "console";
   zone_id: string | null;
   zone_name: string | null;
   antennas: AgentConfigAntenna[];
@@ -342,6 +350,7 @@ export async function getAgentConfigBundle(
       control_port?: number;
       antenna_count?: number;
       epc_prefix?: string;
+      monsoon_driver?: string;
     };
     const list = antennasByParent.get(d.id) ?? [];
     list.sort((a, b) => a.antenna_number - b.antenna_number);
@@ -356,6 +365,7 @@ export async function getAgentConfigBundle(
       control_port: Number(cfg.control_port ?? 20100),
       antenna_count: Number(cfg.antenna_count ?? (list.length || 1)),
       epc_prefix: String(cfg.epc_prefix ?? ""),
+      monsoon_driver: cfg.monsoon_driver === "console" ? "console" : "stream",
       zone_id: d.zone_id,
       zone_name: d.zone_name,
       antennas: list,

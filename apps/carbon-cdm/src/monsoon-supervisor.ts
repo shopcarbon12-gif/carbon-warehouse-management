@@ -7,6 +7,19 @@ import {
   newParserState,
   type ParserState,
 } from "./stream-parser.js";
+import {
+  parseConsoleChunk,
+  newConsoleParserState,
+  type ConsoleParserState,
+} from "./console-parser.js";
+
+/** Paths to the two Mojix binaries we know how to drive. */
+export type MonsoonBinaries = {
+  /** 2019 `MonsoonReader` — TCP `--stream` socket, 50-byte binary records. */
+  stream: string;
+  /** 2024 `new_monsoonreader` — text stdout, one read per line, CRC filtered. */
+  console: string;
+};
 
 /**
  * Drives the legacy MonsoonReader binary directly — bypasses Senitron's
@@ -124,6 +137,16 @@ type ReaderSlot = {
     string,
     { antennaNumber: number; startedAt: number; epcCount: number; expiresAt: number }
   >;
+  /**
+   * Driver actually used for the most recent spawn. Settled at spawn time
+   * from `spec.monsoon_driver`; stored on the slot so reconcile can detect
+   * a driver flip in the WMS config and force a respawn cleanly.
+   */
+  currentDriver: "stream" | "console";
+  /** Console-mode parser state — only relevant when currentDriver === "console". */
+  consoleParserState: ConsoleParserState;
+  /** Antenna number stamped on every console-mode read (binary doesn't include it). */
+  consoleStampAntenna: number;
 };
 
 export type AntennaTestCallback = (result: {
@@ -163,7 +186,7 @@ export class MonsoonSupervisor {
   private testedAntennas = new Set<string>();
 
   constructor(
-    private readonly monsoonBinary: string,
+    private readonly binaries: MonsoonBinaries,
     private readonly onRead: SupervisorReadHandler,
     /**
      * Optional: receives antenna-test results when a test window closes.
@@ -198,6 +221,10 @@ export class MonsoonSupervisor {
     for (const slot of this.slots.values()) {
       if (slot.shuttingDown) continue;
       if (!slot.child) continue;
+      // Console driver streams continuously and doesn't have the
+      // alive-but-stuck silence bug — the watchdog only applies to the
+      // legacy stream driver.
+      if (slot.currentDriver === "console") continue;
       // After we've kicked once per candidate port without hearing back
       // we stop watchdogging this slot — the reader is truly unreachable
       // (no radio behind the WIZnet, dead antennas, etc.) and rotating
@@ -280,6 +307,8 @@ export class MonsoonSupervisor {
         // for this supervisor.
         continue;
       }
+      const desiredDriver: "stream" | "console" =
+        spec.monsoon_driver === "console" ? "console" : "stream";
       const existing = this.slots.get(spec.id);
       if (existing) {
         // If operator changed the configured serial port in WMS, rebuild
@@ -289,12 +318,30 @@ export class MonsoonSupervisor {
           existing.candidatePortIdx = 0;
           existing.bytesSinceSpawn = false;
         }
+        // Driver flip in WMS config → kill the current child and let the
+        // on-exit handler respawn under the new driver.
+        if (existing.currentDriver !== desiredDriver) {
+          log.info("supervisor: driver flip detected, restarting reader", {
+            readerId: spec.id,
+            from: existing.currentDriver,
+            to: desiredDriver,
+          });
+          existing.spec = spec;
+          existing.consoleParserState = newConsoleParserState();
+          existing.parserState = newParserState();
+          existing.buffer = Buffer.alloc(0);
+          existing.bytesSinceSpawn = false;
+          existing.consecutiveZeroByteKicks = 0;
+          if (existing.child && !existing.shuttingDown) existing.child.kill("SIGTERM");
+          continue;
+        }
         // Update the stored spec so any later ops see fresh power/antennas/etc.
         existing.spec = spec;
         // If subprocess is dead, restart cycle will pick it up.
         continue;
       }
       const idx = nextIndex++;
+      const enabledForStamp = spec.antennas.find((a) => a.enabled);
       const slot: ReaderSlot = {
         spec,
         index: idx,
@@ -313,6 +360,9 @@ export class MonsoonSupervisor {
         candidatePortIdx: 0,
         bytesSinceSpawn: false,
         consecutiveZeroByteKicks: 0,
+        currentDriver: desiredDriver,
+        consoleParserState: newConsoleParserState(),
+        consoleStampAntenna: enabledForStamp?.antenna_number ?? 1,
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -442,6 +492,13 @@ export class MonsoonSupervisor {
 
   private spawnReader(slot: ReaderSlot): void {
     if (slot.shuttingDown) return;
+    const desired: "stream" | "console" =
+      slot.spec.monsoon_driver === "console" ? "console" : "stream";
+    slot.currentDriver = desired;
+    if (desired === "console") {
+      this.spawnReaderConsole(slot);
+      return;
+    }
     const { spec } = slot;
     const powerArg = Math.round(this.avgPower(spec) * 10);
 
@@ -515,7 +572,7 @@ export class MonsoonSupervisor {
       serialPort,
     });
 
-    const child = spawn(this.monsoonBinary, args, {
+    const child = spawn(this.binaries.stream, args, {
       stdio: ["ignore", "pipe", "pipe"],
       cwd: "/opt/legacy-rfid/runtime",
     });
@@ -564,6 +621,128 @@ export class MonsoonSupervisor {
     // It takes a couple seconds for MonsoonReader to bind its listener +
     // initialize the radio, so wait before connecting.
     setTimeout(() => this.connectStream(slot), 2_500);
+  }
+
+  /**
+   * Console-driver spawn: drives the 2024 `new_monsoonreader` binary which
+   * outputs one tag-read per line on stdout, CRC-filtered at the source.
+   * No TCP stream port, no stuck-state watchdog needed — this binary streams
+   * continuously (verified ~1500 reads/sec sustained against .76 with no
+   * silence stalls). Antenna number is stamped at spawn time since the binary
+   * doesn't include it in console output.
+   */
+  private spawnReaderConsole(slot: ReaderSlot): void {
+    if (slot.shuttingDown) return;
+    const { spec } = slot;
+    const host = String(spec.network_address ?? "");
+    const port =
+      slot.candidatePorts[slot.candidatePortIdx] ??
+      slot.candidatePorts[0] ??
+      Number(spec.monsoon_serial_port);
+    const powerArg = Math.round(this.avgPower(spec) * 10);
+
+    const enabledAntennas = spec.antennas.filter((a) => a.enabled);
+    const stampAntenna = enabledAntennas[0]?.antenna_number ?? 1;
+    slot.consoleStampAntenna = stampAntenna;
+
+    const antennaArgs: string[] = [];
+    if (enabledAntennas.length === 1 && stampAntenna !== 1) {
+      antennaArgs.push("-a", String(stampAntenna));
+    }
+
+    // CLI: `new_monsoonreader <host> <port> --console --infinite --power N [-a N]`
+    // Positional <host> <port> first; flags after.
+    const args = [
+      host,
+      String(port),
+      "--console",
+      "--infinite",
+      "--power", String(powerArg),
+      ...antennaArgs,
+    ];
+
+    log.info("supervisor: spawning new_monsoonreader (console driver)", {
+      readerId: spec.id,
+      readerName: spec.name,
+      host,
+      port,
+      power: powerArg,
+      stampAntenna,
+    });
+
+    slot.consoleParserState = newConsoleParserState();
+    slot.bytesSinceSpawn = false;
+    slot.lastByteAt = Date.now();
+
+    const child = spawn(this.binaries.console, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      cwd: "/opt/legacy-rfid/runtime",
+    });
+    slot.child = child;
+
+    child.stderr?.on("data", (chunk: Buffer) => {
+      log.debug("supervisor: console reader stderr", {
+        readerId: spec.id,
+        msg: chunk.toString().slice(0, 200),
+      });
+    });
+
+    let totalRecords = 0;
+    let totalBad = 0;
+    let totalMal = 0;
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      if (chunk.length === 0) return;
+      slot.lastByteAt = Date.now();
+      if (!slot.bytesSinceSpawn) slot.bytesSinceSpawn = true;
+      slot.consecutiveZeroByteKicks = 0;
+
+      const result = parseConsoleChunk(chunk.toString("utf8"), slot.consoleParserState);
+      totalRecords += result.records.length;
+      totalBad += result.badCrcCount;
+      totalMal += result.malformedCount;
+
+      const stamp = new Date().toISOString();
+      for (const rec of result.records) {
+        // Antenna-test windows: every record from this child belongs to
+        // `consoleStampAntenna`; if a window is open for that antenna,
+        // count it.
+        if (slot.activeTests.size > 0) {
+          for (const win of slot.activeTests.values()) {
+            if (win.antennaNumber === slot.consoleStampAntenna) {
+              win.epcCount += 1;
+            }
+          }
+        }
+        this.onRead({
+          readerId: spec.id,
+          epcHex: rec.epcHex,
+          antennaNumber: slot.consoleStampAntenna,
+          rssi: rec.rssiDbm,
+          readAt: stamp,
+        });
+      }
+    });
+
+    child.on("exit", (code, signal) => {
+      slot.child = null;
+      if (slot.shuttingDown) return;
+      const cleanExit = code === 0 && !signal;
+      const delay = cleanExit ? 250 : slot.backoffMs;
+      log.info("supervisor: new_monsoonreader exited", {
+        readerId: spec.id,
+        code,
+        signal,
+        totalRecords,
+        droppedBadCrc: totalBad,
+        malformed: totalMal,
+        cleanExit,
+      });
+      setTimeout(() => {
+        void this.spawnReader(slot);
+      }, delay);
+      slot.backoffMs = cleanExit ? 1000 : Math.min(slot.backoffMs * 2, MAX_BACKOFF_MS);
+    });
   }
 
   private connectStream(slot: ReaderSlot): void {

@@ -10,6 +10,8 @@ import { MonsoonSupervisor } from "./monsoon-supervisor.js";
 import { postAntennaTestResult } from "./wms-client.js";
 
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
+/** 2024 Mojix binary; selected per-reader via devices.config.monsoon_driver = "console". */
+const MONSOON_CONSOLE_BINARY = "/opt/legacy-rfid/new_monsoonreader";
 
 async function main(): Promise<void> {
   const env = loadConfig();
@@ -31,7 +33,7 @@ async function main(): Promise<void> {
   // talks straight to the binary. EPCs come out of the supervisor already
   // parsed and deduped from the binary stream.
   const supervisor = new MonsoonSupervisor(
-    MONSOON_BINARY,
+    { stream: MONSOON_BINARY, console: MONSOON_CONSOLE_BINARY },
     (read) => {
       aggregator.enqueue({
         readerId: read.readerId,
