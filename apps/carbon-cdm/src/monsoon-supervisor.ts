@@ -118,16 +118,20 @@ export class MonsoonSupervisor {
         TEST_SWEEP_INTERVAL_MS,
       );
     }
-    // Stream-silence watchdog: every WATCHDOG_INTERVAL_MS, look at every slot
-    // and force-respawn any whose stream socket has been silent longer than
-    // STREAM_SILENCE_TIMEOUT_MS. The MonsoonReader binary occasionally enters
-    // a "alive but not streaming" state where the process is up, the socket
-    // is open, but no inventory bytes flow. Killing the child triggers the
-    // exit handler which respawns immediately.
-    this.streamWatchdogHandle = setInterval(
-      () => this.runStreamWatchdog(),
-      WATCHDOG_INTERVAL_MS,
-    );
+    // Stream-silence watchdog DISABLED 2026-04-30 after switching to
+    // `--oscillating` mode. With --infinite, the binary would routinely enter
+    // an "alive but not streaming" stuck state and needed force-respawning.
+    // With --oscillating it stays healthy indefinitely (matches Senitron's
+    // production cdm orchestrator, which has no watchdog at all). The
+    // watchdog at 45s threshold was firing as a false-positive on quiet
+    // warehouse periods (no tags moving = no bytes from binary, but binary
+    // is fine), causing avoidable kicks that destroyed tag-to-UI latency.
+    // systemd's Restart=on-failure on the parent agent service is sufficient
+    // safety. Method runStreamWatchdog() and constants left in place for
+    // easy re-enable if a different binary mode ever needs them again.
+    void this.runStreamWatchdog;
+    void STREAM_SILENCE_TIMEOUT_MS;
+    void WATCHDOG_INTERVAL_MS;
   }
 
   private runStreamWatchdog(): void {
