@@ -221,10 +221,14 @@ export class MonsoonSupervisor {
     for (const slot of this.slots.values()) {
       if (slot.shuttingDown) continue;
       if (!slot.child) continue;
-      // Console driver streams continuously and doesn't have the
-      // alive-but-stuck silence bug — the watchdog only applies to the
-      // legacy stream driver.
-      if (slot.currentDriver === "console") continue;
+      // Watchdog applies to BOTH drivers, but for different reasons:
+      //   - stream driver: catches the alive-but-stuck silence bug.
+      //   - console driver: catches "spawned with wrong serial port" — the
+      //     binary stays silent because it can't reach the reader, then the
+      //     watchdog kicks and the port-rotation logic advances candidate
+      //     ports the same way it does in stream mode.
+      // A healthy console driver emits continuously, so its lastByteAt is
+      // always fresh and the watchdog never fires.
       // After we've kicked once per candidate port without hearing back
       // we stop watchdogging this slot — the reader is truly unreachable
       // (no radio behind the WIZnet, dead antennas, etc.) and rotating
