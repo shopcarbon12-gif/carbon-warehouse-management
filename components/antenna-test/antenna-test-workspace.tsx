@@ -17,6 +17,48 @@ type CatalogHit = {
   status: string;
 };
 
+type CalibrationPoint = {
+  id: string;
+  distanceFt: number;
+  firstReadPowerArg: number;
+  referenceEpc: string;
+  measuredAt: string;
+};
+
+function estimateDistance(
+  points: CalibrationPoint[],
+  observed: number | null,
+): { feet: number | null; band: string } {
+  if (observed === null) return { feet: null, band: "—" };
+  if (points.length === 0) return { feet: null, band: "—" };
+  const pts = [...points].sort((a, b) => a.firstReadPowerArg - b.firstReadPowerArg);
+  if (pts.length === 1) {
+    const p = pts[0]!;
+    if (observed <= p.firstReadPowerArg) {
+      return { feet: p.distanceFt, band: `≤ ${p.distanceFt.toFixed(1)} ft` };
+    }
+    return { feet: p.distanceFt, band: `> ${p.distanceFt.toFixed(1)} ft` };
+  }
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    if (observed >= a.firstReadPowerArg && observed <= b.firstReadPowerArg) {
+      const t = (observed - a.firstReadPowerArg) /
+                Math.max(1, b.firstReadPowerArg - a.firstReadPowerArg);
+      const feet = a.distanceFt + t * (b.distanceFt - a.distanceFt);
+      const span = Math.abs(b.distanceFt - a.distanceFt);
+      const half = Math.max(1, Math.round(span / 2));
+      return { feet, band: `${feet.toFixed(1)} ft ±${half}` };
+    }
+  }
+  const first = pts[0]!;
+  const last = pts[pts.length - 1]!;
+  if (observed < first.firstReadPowerArg) {
+    return { feet: first.distanceFt, band: `≤ ${first.distanceFt.toFixed(1)} ft (extrap)` };
+  }
+  return { feet: last.distanceFt, band: `> ${last.distanceFt.toFixed(1)} ft (extrap)` };
+}
+
 type AntennaPickEntry = {
   readerId: string;
   readerName: string;
@@ -135,6 +177,16 @@ export function AntennaTestWorkspace() {
   const [error, setError] = useState<string | null>(null);
 
   const picked = picks.find((p) => p.antennaId === pickedAntennaId) ?? null;
+
+  // Calibration points for the picked (reader, antenna). Refetched after every
+  // save/delete so the distance column updates in place.
+  const calibKey = picked
+    ? `/api/antenna-test/calibrate?readerId=${picked.readerId}&antennaId=${picked.antennaId}`
+    : null;
+  const calib = useSWR<{ points: CalibrationPoint[] }>(calibKey, fetcher, {
+    refreshInterval: 0,
+  });
+  const calibPoints = calib.data?.points ?? [];
 
   // If the session ends server-side (e.g. expired), drop the local sessionId
   // so the table resets and the Start button comes back.
@@ -256,6 +308,35 @@ export function AntennaTestWorkspace() {
     });
     return arr;
   }, [rows]);
+
+  // Calibration save flow — operator types the distance for the row whose
+  // EPC they want to save as a reference. We POST to /calibrate, then
+  // refetch points so the distance column updates.
+  const [calibDraft, setCalibDraft] = useState<{ epc: string; distanceFt: string } | null>(null);
+  const submitCalibration = async () => {
+    if (!calibDraft || !picked) return;
+    const row = rows.get(calibDraft.epc);
+    if (!row || row.firstReadPowerArg === null) return;
+    const distance = Number(calibDraft.distanceFt);
+    if (!Number.isFinite(distance) || distance <= 0) return;
+    await fetch("/api/antenna-test/calibrate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        readerId: picked.readerId,
+        antennaId: picked.antennaId,
+        distanceFt: distance,
+        firstReadPowerArg: row.firstReadPowerArg,
+        referenceEpc: row.epcHex,
+      }),
+    });
+    setCalibDraft(null);
+    void calib.mutate();
+  };
+  const deleteCalibrationPoint = async (id: string) => {
+    await fetch(`/api/antenna-test/calibrate/${id}`, { method: "DELETE" });
+    void calib.mutate();
+  };
 
   const isLive = sessionId !== null;
   const elapsedMs = sessionId
@@ -540,6 +621,65 @@ export function AntennaTestWorkspace() {
         </div>
       </div>
 
+      {/* Calibration panel — only relevant when an antenna is picked */}
+      {picked && (
+        <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-card)] p-4">
+          <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
+            Calibration · {picked.readerName} / {picked.antennaName}
+          </h3>
+          <p className="mt-0.5 font-mono text-[10px] text-[var(--wms-muted)]">
+            Place a reference tag at a known distance, run a sweep, then click{" "}
+            <strong>Save as point</strong> on the row matching that tag. With 2+ points
+            the Distance column starts showing real feet instead of the heuristic bucket.
+          </p>
+          {calibPoints.length === 0 ? (
+            <p className="mt-3 font-mono text-[11px] text-[var(--wms-muted)]">
+              No calibration points yet — distance shows the heuristic bucket.
+            </p>
+          ) : (
+            <table className="mt-3 w-full text-sm">
+              <thead className="text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+                <tr>
+                  <th className="px-2 py-1 text-right">Distance (ft)</th>
+                  <th className="px-2 py-1 text-right">First-read power</th>
+                  <th className="px-2 py-1 text-left">Reference EPC</th>
+                  <th className="px-2 py-1 text-left">Measured</th>
+                  <th className="px-2 py-1"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...calibPoints]
+                  .sort((a, b) => a.distanceFt - b.distanceFt)
+                  .map((p) => (
+                    <tr key={p.id} className="border-t border-[var(--wms-border)]">
+                      <td className="px-2 py-1 text-right font-mono text-[11px]">
+                        {p.distanceFt.toFixed(1)}
+                      </td>
+                      <td className="px-2 py-1 text-right font-mono text-[11px]">
+                        {(p.firstReadPowerArg / 10).toFixed(1)} dBm
+                      </td>
+                      <td className="px-2 py-1 font-mono text-[11px]">
+                        {p.referenceEpc}
+                      </td>
+                      <td className="px-2 py-1 font-mono text-[10px] text-[var(--wms-muted)]">
+                        {new Date(p.measuredAt).toLocaleString()}
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        <button
+                          onClick={() => deleteCalibrationPoint(p.id)}
+                          className="text-[10px] text-red-600 hover:underline"
+                        >
+                          delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
       {/* Live table */}
       <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-card)]">
         <table className="w-full text-sm">
@@ -555,13 +695,14 @@ export function AntennaTestWorkspace() {
               <th className="px-3 py-2 text-left">First-read power</th>
               <th className="px-3 py-2 text-left">Custom SKU</th>
               <th className="px-3 py-2 text-left">Description (name · color · size)</th>
+              <th className="px-3 py-2 text-left">Calibrate</th>
             </tr>
           </thead>
           <tbody>
             {sortedRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={11}
                   className="px-3 py-8 text-center text-xs text-[var(--wms-muted)]"
                 >
                   {isLive
@@ -576,6 +717,8 @@ export function AntennaTestWorkspace() {
               const desc = cat
                 ? [cat.name, cat.color, cat.size].filter((x) => x && x.trim()).join(" · ")
                 : "";
+              const calibrated = estimateDistance(calibPoints, row.firstReadPowerArg);
+              const showCalibrated = calibPoints.length >= 2 && calibrated.feet !== null;
               return (
                 <tr
                   key={row.epcHex}
@@ -585,12 +728,18 @@ export function AntennaTestWorkspace() {
                     {idx + 1}
                   </td>
                   <td className="px-3 py-1.5">
-                    <span
-                      className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white"
-                      style={{ background: bucket.color }}
-                    >
-                      {bucket.label}
-                    </span>
+                    {showCalibrated ? (
+                      <span className="font-mono text-[11px] font-semibold text-[var(--wms-fg)]">
+                        {calibrated.band}
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white"
+                        style={{ background: bucket.color }}
+                      >
+                        {bucket.label}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-1.5 font-mono text-[11px]">
                     {row.rssiDbm.toFixed(1)} dBm
@@ -617,6 +766,58 @@ export function AntennaTestWorkspace() {
                   </td>
                   <td className="px-3 py-1.5 text-[11px]">
                     {desc || <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5">
+                    {row.firstReadPowerArg !== null && picked ? (
+                      calibDraft && calibDraft.epc === row.epcHex ? (
+                        <span className="flex items-center gap-1">
+                          <input
+                            autoFocus
+                            type="number"
+                            step={0.5}
+                            min={0.1}
+                            placeholder="ft"
+                            value={calibDraft.distanceFt}
+                            onChange={(e) =>
+                              setCalibDraft({
+                                epc: row.epcHex,
+                                distanceFt: e.target.value,
+                              })
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void submitCalibration();
+                              if (e.key === "Escape") setCalibDraft(null);
+                            }}
+                            className="w-14 rounded border border-[var(--wms-border)] bg-[var(--wms-bg)] px-1 py-0.5 text-[11px]"
+                          />
+                          <button
+                            onClick={() => void submitCalibration()}
+                            className="text-[10px] text-green-700 hover:underline"
+                          >
+                            save
+                          </button>
+                          <button
+                            onClick={() => setCalibDraft(null)}
+                            className="text-[10px] text-[var(--wms-muted)] hover:underline"
+                          >
+                            cancel
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() =>
+                            setCalibDraft({ epc: row.epcHex, distanceFt: "" })
+                          }
+                          className="text-[10px] text-blue-700 hover:underline"
+                        >
+                          save as point
+                        </button>
+                      )
+                    ) : (
+                      <span className="text-[10px] text-[var(--wms-muted)]">
+                        {row.firstReadPowerArg === null ? "(sweep first)" : "—"}
+                      </span>
+                    )}
                   </td>
                 </tr>
               );
