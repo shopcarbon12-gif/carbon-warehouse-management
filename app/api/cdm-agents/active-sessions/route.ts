@@ -35,6 +35,7 @@ export async function GET(req: Request) {
     antennaId: s.antennaId,
     antennaNumber: s.antennaNumber,
     flags: s.flags,
+    sweep: s.sweep,
     startedAt: new Date(s.startedAt).toISOString(),
   }));
 

@@ -9,6 +9,7 @@ import {
 import {
   publishAntennaTestRead,
   publishAntennaTestStats,
+  publishAntennaTestSweepProgress,
 } from "@/lib/server/antenna-test-hub";
 
 export const runtime = "nodejs";
@@ -45,6 +46,15 @@ const bodySchema = z.object({
     })
     .optional(),
   reads: z.array(readSchema).max(500),
+  /** Sweep-mode progress, if applicable; agent advances these each step. */
+  sweepProgress: z
+    .object({
+      currentPowerArg: z.coerce.number().int().min(100).max(330),
+      stepIndex: z.coerce.number().int().min(0),
+      totalSteps: z.coerce.number().int().min(1),
+      stepEndsAtMs: z.coerce.number().int().min(0),
+    })
+    .optional(),
 });
 
 export async function POST(req: Request) {
@@ -95,6 +105,8 @@ export async function POST(req: Request) {
     });
   }
   if (parsed.data.stats) publishAntennaTestStats(s.id, parsed.data.stats);
+  if (parsed.data.sweepProgress)
+    publishAntennaTestSweepProgress(s.id, parsed.data.sweepProgress);
 
   return NextResponse.json({ ok: true });
 }

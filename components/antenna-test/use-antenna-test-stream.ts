@@ -29,7 +29,14 @@ export type AntennaTestStats = {
   droppedBadCrc: number;
 };
 
-export type AntennaTestStatus = "idle" | "armed" | "live" | "ended";
+export type AntennaTestSweepProgress = {
+  currentPowerArg: number;
+  stepIndex: number;
+  totalSteps: number;
+  stepEndsAtMs: number;
+};
+
+export type AntennaTestStatus = "idle" | "armed" | "live" | "ended" | "sweep_done";
 
 const SPARK_WINDOW_MS = 5_000;
 
@@ -44,8 +51,19 @@ type StreamMessage =
         powerArg?: number;
       };
     }
-  | { kind: "lifecycle"; status: "armed" | "live" | "ended"; reason?: string }
-  | { kind: "stats"; uniqueEpcs: number; totalReads: number; droppedBadCrc: number };
+  | {
+      kind: "lifecycle";
+      status: "armed" | "live" | "ended" | "sweep_done";
+      reason?: string;
+    }
+  | { kind: "stats"; uniqueEpcs: number; totalReads: number; droppedBadCrc: number }
+  | {
+      kind: "sweep_progress";
+      currentPowerArg: number;
+      stepIndex: number;
+      totalSteps: number;
+      stepEndsAtMs: number;
+    };
 
 export function useAntennaTestStream(sessionId: string | null) {
   const [rows, setRows] = useState<Map<string, AntennaTestRow>>(new Map());
@@ -55,6 +73,8 @@ export function useAntennaTestStream(sessionId: string | null) {
     droppedBadCrc: 0,
   });
   const [status, setStatus] = useState<AntennaTestStatus>("idle");
+  const [sweepProgress, setSweepProgress] =
+    useState<AntennaTestSweepProgress | null>(null);
   /** Ref so the SSE handler doesn't re-run on every state change. */
   const rowsRef = useRef<Map<string, AntennaTestRow>>(new Map());
 
@@ -65,6 +85,7 @@ export function useAntennaTestStream(sessionId: string | null) {
       setRows(new Map());
       setStats({ uniqueEpcs: 0, totalReads: 0, droppedBadCrc: 0 });
       setStatus("idle");
+      setSweepProgress(null);
       return;
     }
     setStatus("armed");
@@ -106,6 +127,15 @@ export function useAntennaTestStream(sessionId: string | null) {
           uniqueEpcs: msg.uniqueEpcs,
           totalReads: msg.totalReads,
           droppedBadCrc: msg.droppedBadCrc,
+        });
+        return;
+      }
+      if (msg.kind === "sweep_progress") {
+        setSweepProgress({
+          currentPowerArg: msg.currentPowerArg,
+          stepIndex: msg.stepIndex,
+          totalSteps: msg.totalSteps,
+          stepEndsAtMs: msg.stepEndsAtMs,
         });
         return;
       }
@@ -159,5 +189,5 @@ export function useAntennaTestStream(sessionId: string | null) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  return { rows, stats, status };
+  return { rows, stats, status, sweepProgress };
 }

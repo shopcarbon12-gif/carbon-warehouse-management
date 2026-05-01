@@ -33,9 +33,21 @@ const flagsSchema = z.object({
   tagFocus: z.coerce.boolean(),
 });
 
+const sweepSchema = z
+  .object({
+    startPowerArg: z.coerce.number().int().min(100).max(330),
+    endPowerArg: z.coerce.number().int().min(100).max(330),
+    stepPowerArg: z.coerce.number().int().min(1).max(50),
+    dwellMs: z.coerce.number().int().min(500).max(10_000),
+  })
+  .refine((s) => s.endPowerArg > s.startPowerArg, {
+    message: "endPowerArg must be greater than startPowerArg",
+  });
+
 const bodySchema = z.object({
   antennaId: z.string().uuid(),
   flags: flagsSchema,
+  sweep: sweepSchema.nullable().optional(),
 });
 
 export async function POST(req: Request) {
@@ -92,13 +104,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Antenna belongs to another tenant" }, { status: 403 });
   }
 
+  // When sweep is requested, override the initial flags.powerArg with the
+  // sweep's start so the first spawn is at the bottom of the ramp.
+  const initialFlags: AntennaTestFlags = parsed.data.sweep
+    ? {
+        ...(parsed.data.flags as AntennaTestFlags),
+        powerArg: parsed.data.sweep.startPowerArg,
+      }
+    : (parsed.data.flags as AntennaTestFlags);
+
   const result = createSession({
     tenantId: session.tid,
     locationId: row.location_id,
     readerId: row.reader_id,
     antennaId: row.antenna_id,
     antennaNumber: row.antenna_number ?? 1,
-    flags: parsed.data.flags as AntennaTestFlags,
+    flags: initialFlags,
+    sweep: parsed.data.sweep ?? null,
     startedBy: (session as { uid?: string }).uid ?? null,
   });
   if (!result.ok) {

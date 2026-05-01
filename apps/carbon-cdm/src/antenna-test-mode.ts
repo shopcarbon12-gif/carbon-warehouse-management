@@ -48,6 +48,27 @@ export type TestSessionApplied = {
   flags: ActiveAntennaTestSession["flags"];
 };
 
+type SweepRuntime = {
+  /** Inclusive lowest power level dBm × 10. */
+  startPowerArg: number;
+  /** Inclusive highest. */
+  endPowerArg: number;
+  /** Increment per step. */
+  stepPowerArg: number;
+  /** ms per step. */
+  dwellMs: number;
+  /** dBm × 10 the binary is currently spawned at. */
+  currentPowerArg: number;
+  /** 0-indexed step within the ramp. */
+  stepIndex: number;
+  /** Total steps in the ramp (so we can render progress). */
+  totalSteps: number;
+  /** ms-since-epoch the current step started. */
+  stepStartedAtMs: number;
+  /** True once we've stepped past endPowerArg — agent stops bumping. */
+  done: boolean;
+};
+
 export type AntennaTestSupervisorHooks = {
   /** Tell the supervisor to enter TEST_MODE for this reader. Must respawn
    *  the reader's child with the test flags + single antenna. Idempotent
@@ -80,6 +101,9 @@ export class AntennaTestController {
     { uniqueEpcs: Set<string>; totalReads: number; droppedBadCrc: number }
   >();
 
+  /** Per-session sweep state (only populated when session.sweep is set). */
+  private sweep = new Map<string, SweepRuntime>();
+
   private hooks: AntennaTestSupervisorHooks | null = null;
 
   constructor(private readonly env: AgentEnv) {}
@@ -92,7 +116,10 @@ export class AntennaTestController {
   start(): void {
     if (this.pollHandle) return;
     this.pollHandle = setInterval(() => this.tickPoll(), POLL_INTERVAL_MS);
-    this.flushHandle = setInterval(() => void this.flush(), FLUSH_INTERVAL_MS);
+    this.flushHandle = setInterval(() => {
+      this.tickSweep();
+      void this.flush();
+    }, FLUSH_INTERVAL_MS);
     // Fire one poll immediately so a Start-just-clicked operator doesn't
     // wait the full POLL_INTERVAL_MS for the first reconcile.
     void this.tickPoll();
@@ -111,6 +138,7 @@ export class AntennaTestController {
     this.applied.clear();
     this.queue = [];
     this.stats.clear();
+    this.sweep.clear();
   }
 
   /**
@@ -175,6 +203,7 @@ export class AntennaTestController {
         this.hooks.leaveTestMode(applied.readerId);
         this.applied.delete(id);
         this.stats.delete(id);
+        this.sweep.delete(id);
       }
     }
 
@@ -199,7 +228,29 @@ export class AntennaTestController {
           readerId: s.readerId,
           antennaNumber: s.antennaNumber,
           flags: s.flags,
+          sweep: s.sweep ?? null,
         });
+        // If the session is a sweep, set up the sweep state — the timer
+        // will keep bumping currentPowerArg every dwellMs.
+        if (s.sweep) {
+          const totalSteps = Math.max(
+            1,
+            Math.ceil(
+              (s.sweep.endPowerArg - s.sweep.startPowerArg) / s.sweep.stepPowerArg,
+            ) + 1,
+          );
+          this.sweep.set(s.id, {
+            startPowerArg: s.sweep.startPowerArg,
+            endPowerArg: s.sweep.endPowerArg,
+            stepPowerArg: s.sweep.stepPowerArg,
+            dwellMs: s.sweep.dwellMs,
+            currentPowerArg: s.sweep.startPowerArg,
+            stepIndex: 0,
+            totalSteps,
+            stepStartedAtMs: Date.now(),
+            done: false,
+          });
+        }
         this.applied.set(s.id, next);
         this.hooks.enterTestMode(next);
       } else if (flagsChanged) {
@@ -210,6 +261,50 @@ export class AntennaTestController {
         });
         this.applied.set(s.id, next);
         this.hooks.enterTestMode(next); // supervisor treats this as kill+respawn
+      }
+    }
+  }
+
+  // ── sweep ────────────────────────────────────────────────────────────────
+
+  /**
+   * Called every FLUSH_INTERVAL_MS (= 100 ms). For each active sweep, if
+   * dwellMs has elapsed since the step started, advance to the next power
+   * level and tell the supervisor to respawn the child with the new power.
+   */
+  private tickSweep(): void {
+    if (!this.hooks) return;
+    const now = Date.now();
+    for (const [sessionId, sw] of this.sweep) {
+      if (sw.done) continue;
+      if (now - sw.stepStartedAtMs < sw.dwellMs) continue;
+      // Time to advance.
+      const next = sw.currentPowerArg + sw.stepPowerArg;
+      if (next > sw.endPowerArg) {
+        sw.done = true;
+        log.info("antenna-test: sweep completed at top of ramp", {
+          sessionId,
+          atPowerArg: sw.currentPowerArg,
+        });
+        continue;
+      }
+      sw.currentPowerArg = next;
+      sw.stepIndex += 1;
+      sw.stepStartedAtMs = now;
+      const applied = this.applied.get(sessionId);
+      if (applied) {
+        const updated: TestSessionApplied = {
+          ...applied,
+          flags: { ...applied.flags, powerArg: next },
+        };
+        this.applied.set(sessionId, updated);
+        this.hooks.enterTestMode(updated);
+        log.info("antenna-test: sweep advanced", {
+          sessionId,
+          stepIndex: sw.stepIndex,
+          totalSteps: sw.totalSteps,
+          newPowerArg: next,
+        });
       }
     }
   }
@@ -232,7 +327,18 @@ export class AntennaTestController {
     }
     for (const [sessionId, reads] of bySession) {
       const stats = this.stats.get(sessionId);
+      const sw = this.sweep.get(sessionId);
       try {
+        // Stamp every read with the sweep's CURRENT power so the UI can
+        // record first-read-power per EPC. (Reads from the supervisor
+        // already have the spawn-time power from supervisor; we override
+        // here with the sweep's view since they should be identical in
+        // sweep mode.)
+        if (sw) {
+          for (const r of reads) {
+            r.powerArg = sw.currentPowerArg;
+          }
+        }
         await postAntennaTestReads(this.env, {
           sessionId,
           reads,
@@ -241,6 +347,14 @@ export class AntennaTestController {
                 uniqueEpcs: stats.uniqueEpcs.size,
                 totalReads: stats.totalReads,
                 droppedBadCrc: stats.droppedBadCrc,
+              }
+            : undefined,
+          sweepProgress: sw
+            ? {
+                currentPowerArg: sw.currentPowerArg,
+                stepIndex: sw.stepIndex,
+                totalSteps: sw.totalSteps,
+                stepEndsAtMs: sw.stepStartedAtMs + sw.dwellMs,
               }
             : undefined,
         });

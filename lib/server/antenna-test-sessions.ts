@@ -36,6 +36,21 @@ export type AntennaTestFlags = {
   tagFocus: boolean;
 };
 
+/**
+ * Optional sweep configuration. When non-null, the agent walks `powerArg`
+ * from `startPowerArg` to `endPowerArg` in `stepPowerArg` increments,
+ * pausing `dwellMs` at each step. Each read carries the powerArg it was
+ * captured at, so the UI can build a "first-read-power" column.
+ *
+ * powerArg values are dBm × 10 (matches the binary): 100..330.
+ */
+export type AntennaTestSweep = {
+  startPowerArg: number;
+  endPowerArg: number;
+  stepPowerArg: number;
+  dwellMs: number;
+};
+
 export type AntennaTestSession = {
   /** Stable opaque id; used as SSE channel + agent-poll filter. */
   id: string;
@@ -51,6 +66,8 @@ export type AntennaTestSession = {
   antennaNumber: number;
   /** Operator-tunable radio knobs. Mutable via /update. */
   flags: AntennaTestFlags;
+  /** Optional power-sweep program. Agent walks this autonomously. */
+  sweep: AntennaTestSweep | null;
   /** Browser session cookie's user_id, for audit. */
   startedBy: string | null;
   /** ms-since-epoch of session creation. */
@@ -85,6 +102,7 @@ export function createSession(input: {
   antennaId: string;
   antennaNumber: number;
   flags: AntennaTestFlags;
+  sweep: AntennaTestSweep | null;
   startedBy: string | null;
 }): { ok: true; session: AntennaTestSession } | { ok: false; reason: "reader_busy"; existing: AntennaTestSession } {
   const now = Date.now();
@@ -99,6 +117,7 @@ export function createSession(input: {
     antennaId: input.antennaId,
     antennaNumber: input.antennaNumber,
     flags: input.flags,
+    sweep: input.sweep,
     startedBy: input.startedBy,
     startedAt: now,
     lastSeenAt: now,

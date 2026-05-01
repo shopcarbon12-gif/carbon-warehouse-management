@@ -34,11 +34,25 @@ type Flags = {
   tagFocus: boolean;
 };
 
+type SweepConfig = {
+  startPowerArg: number;
+  endPowerArg: number;
+  stepPowerArg: number;
+  dwellMs: number;
+};
+
 const DEFAULT_FLAGS: Flags = {
   powerArg: 270,
   readTimeMs: 1000,
   cycleMode: "infinite",
   tagFocus: false,
+};
+
+const DEFAULT_SWEEP: SweepConfig = {
+  startPowerArg: 100,
+  endPowerArg: 330,
+  stepPowerArg: 10,
+  dwellMs: 1500,
 };
 
 // Distance bucket from RSSI — heuristic, replaced with calibrated curve in
@@ -114,6 +128,8 @@ export function AntennaTestWorkspace() {
 
   const [pickedAntennaId, setPickedAntennaId] = useState<string>("");
   const [flags, setFlags] = useState<Flags>(DEFAULT_FLAGS);
+  const [sweepEnabled, setSweepEnabled] = useState(false);
+  const [sweepCfg, setSweepCfg] = useState<SweepConfig>(DEFAULT_SWEEP);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +138,7 @@ export function AntennaTestWorkspace() {
 
   // If the session ends server-side (e.g. expired), drop the local sessionId
   // so the table resets and the Start button comes back.
-  const { rows, stats, status } = useAntennaTestStream(sessionId);
+  const { rows, stats, status, sweepProgress } = useAntennaTestStream(sessionId);
   useEffect(() => {
     if (status === "ended" && sessionId) setSessionId(null);
   }, [status, sessionId]);
@@ -186,7 +202,11 @@ export function AntennaTestWorkspace() {
       const res = await fetch("/api/antenna-test/start", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ antennaId: picked.antennaId, flags }),
+        body: JSON.stringify({
+          antennaId: picked.antennaId,
+          flags,
+          sweep: sweepEnabled ? sweepCfg : null,
+        }),
       });
       const json = (await res.json()) as { sessionId?: string; error?: string };
       if (!res.ok || !json.sessionId) {
@@ -349,6 +369,140 @@ export function AntennaTestWorkspace() {
           </div>
         </div>
 
+        {/* Sweep mode panel */}
+        <div className="mt-4 rounded border border-[var(--wms-border)] bg-[var(--wms-bg)] p-3">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={sweepEnabled}
+              onChange={(e) => setSweepEnabled(e.target.checked)}
+              disabled={isLive}
+            />
+            <span>Sweep mode — auto-walk power from low to high</span>
+          </label>
+          <p className="mt-1 ml-6 font-mono text-[10px] text-[var(--wms-muted)]">
+            Each tag's <strong>first-read power</strong> column shows the lowest dBm
+            at which it appeared — that's the cleanest distance proxy you can get
+            without calibration.
+          </p>
+          {sweepEnabled && (
+            <div className="mt-3 ml-6 grid gap-3 sm:grid-cols-4">
+              <div>
+                <label className="block text-[10px] font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+                  Start (dBm)
+                </label>
+                <input
+                  type="number"
+                  min={10}
+                  max={33}
+                  step={1}
+                  value={sweepCfg.startPowerArg / 10}
+                  onChange={(e) =>
+                    setSweepCfg((s) => ({
+                      ...s,
+                      startPowerArg: Math.round(Number(e.target.value) * 10),
+                    }))
+                  }
+                  disabled={isLive}
+                  className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-card)] px-2 py-1 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+                  End (dBm)
+                </label>
+                <input
+                  type="number"
+                  min={10}
+                  max={33}
+                  step={1}
+                  value={sweepCfg.endPowerArg / 10}
+                  onChange={(e) =>
+                    setSweepCfg((s) => ({
+                      ...s,
+                      endPowerArg: Math.round(Number(e.target.value) * 10),
+                    }))
+                  }
+                  disabled={isLive}
+                  className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-card)] px-2 py-1 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+                  Step (dBm)
+                </label>
+                <input
+                  type="number"
+                  min={0.1}
+                  max={5}
+                  step={0.1}
+                  value={sweepCfg.stepPowerArg / 10}
+                  onChange={(e) =>
+                    setSweepCfg((s) => ({
+                      ...s,
+                      stepPowerArg: Math.max(
+                        1,
+                        Math.round(Number(e.target.value) * 10),
+                      ),
+                    }))
+                  }
+                  disabled={isLive}
+                  className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-card)] px-2 py-1 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+                  Dwell (ms/step)
+                </label>
+                <input
+                  type="number"
+                  min={500}
+                  max={10000}
+                  step={500}
+                  value={sweepCfg.dwellMs}
+                  onChange={(e) =>
+                    setSweepCfg((s) => ({ ...s, dwellMs: Number(e.target.value) }))
+                  }
+                  disabled={isLive}
+                  className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-card)] px-2 py-1 text-sm"
+                />
+              </div>
+            </div>
+          )}
+          {sweepEnabled && (
+            <p className="mt-2 ml-6 font-mono text-[10px] text-[var(--wms-muted)]">
+              Total ramp:{" "}
+              {Math.max(
+                1,
+                Math.ceil(
+                  (sweepCfg.endPowerArg - sweepCfg.startPowerArg) /
+                    sweepCfg.stepPowerArg,
+                ) + 1,
+              )}{" "}
+              steps × {(sweepCfg.dwellMs / 1000).toFixed(1)} s each ≈{" "}
+              {Math.round(
+                (Math.max(
+                  1,
+                  Math.ceil(
+                    (sweepCfg.endPowerArg - sweepCfg.startPowerArg) /
+                      sweepCfg.stepPowerArg,
+                  ) + 1,
+                ) *
+                  sweepCfg.dwellMs) /
+                  1000,
+              )}{" "}
+              s total.
+            </p>
+          )}
+          {sweepProgress && isLive && (
+            <div className="mt-2 ml-6 font-mono text-[11px] text-[var(--wms-fg)]">
+              ◔ Sweep step {sweepProgress.stepIndex + 1}/{sweepProgress.totalSteps} —
+              currently at{" "}
+              <strong>{(sweepProgress.currentPowerArg / 10).toFixed(1)} dBm</strong>
+            </div>
+          )}
+        </div>
+
         <div className="mt-5 flex items-center gap-3">
           {!isLive ? (
             <button
@@ -398,6 +552,7 @@ export function AntennaTestWorkspace() {
               <th className="px-3 py-2 text-right">Reads</th>
               <th className="px-3 py-2 text-left">Sparkline (5 s)</th>
               <th className="px-3 py-2 text-left">EPC</th>
+              <th className="px-3 py-2 text-left">First-read power</th>
               <th className="px-3 py-2 text-left">Custom SKU</th>
               <th className="px-3 py-2 text-left">Description (name · color · size)</th>
             </tr>
@@ -406,7 +561,7 @@ export function AntennaTestWorkspace() {
             {sortedRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="px-3 py-8 text-center text-xs text-[var(--wms-muted)]"
                 >
                   {isLive
@@ -450,6 +605,13 @@ export function AntennaTestWorkspace() {
                     <Sparkline points={row.spark} />
                   </td>
                   <td className="px-3 py-1.5 font-mono text-[11px]">{row.epcHex}</td>
+                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                    {row.firstReadPowerArg !== null ? (
+                      `${(row.firstReadPowerArg / 10).toFixed(1)} dBm`
+                    ) : (
+                      <span className="text-[var(--wms-muted)]">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-1.5 font-mono text-[11px]">
                     {cat?.sku ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>

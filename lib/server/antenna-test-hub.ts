@@ -33,8 +33,15 @@ export type AntennaTestReadPayload = {
 
 export type AntennaTestStreamMessage =
   | { kind: "read"; read: AntennaTestReadPayload }
-  | { kind: "lifecycle"; status: "armed" | "live" | "ended"; reason?: string }
-  | { kind: "stats"; uniqueEpcs: number; totalReads: number; droppedBadCrc: number };
+  | { kind: "lifecycle"; status: "armed" | "live" | "ended" | "sweep_done"; reason?: string }
+  | { kind: "stats"; uniqueEpcs: number; totalReads: number; droppedBadCrc: number }
+  | {
+      kind: "sweep_progress";
+      currentPowerArg: number;
+      stepIndex: number;
+      totalSteps: number;
+      stepEndsAtMs: number;
+    };
 
 type Subscriber = {
   sessionId: string;
@@ -92,6 +99,27 @@ export function publishAntennaTestStats(
   stats: { uniqueEpcs: number; totalReads: number; droppedBadCrc: number },
 ): void {
   const msg: AntennaTestStreamMessage = { kind: "stats", ...stats };
+  const chunk = `data: ${JSON.stringify(msg)}\n\n`;
+  for (const s of subs) {
+    if (s.sessionId !== sessionId) continue;
+    try {
+      s.send(chunk);
+    } catch {
+      /* broken HTTP stream */
+    }
+  }
+}
+
+export function publishAntennaTestSweepProgress(
+  sessionId: string,
+  payload: {
+    currentPowerArg: number;
+    stepIndex: number;
+    totalSteps: number;
+    stepEndsAtMs: number;
+  },
+): void {
+  const msg: AntennaTestStreamMessage = { kind: "sweep_progress", ...payload };
   const chunk = `data: ${JSON.stringify(msg)}\n\n`;
   for (const s of subs) {
     if (s.sessionId !== sessionId) continue;

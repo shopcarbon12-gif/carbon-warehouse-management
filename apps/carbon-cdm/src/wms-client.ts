@@ -147,6 +147,12 @@ export type ActiveAntennaTestSession = {
     cycleMode: "infinite" | "oscillating";
     tagFocus: boolean;
   };
+  sweep: {
+    startPowerArg: number;
+    endPowerArg: number;
+    stepPowerArg: number;
+    dwellMs: number;
+  } | null;
   startedAt: string;
 };
 
@@ -175,6 +181,12 @@ export async function postAntennaTestReads(
     sessionId: string;
     reads: AntennaTestIngestRead[];
     stats?: { uniqueEpcs: number; totalReads: number; droppedBadCrc: number };
+    sweepProgress?: {
+      currentPowerArg: number;
+      stepIndex: number;
+      totalSteps: number;
+      stepEndsAtMs: number;
+    };
   },
 ): Promise<void> {
   await request(env, "POST", "/api/antenna-test/ingest", body);
