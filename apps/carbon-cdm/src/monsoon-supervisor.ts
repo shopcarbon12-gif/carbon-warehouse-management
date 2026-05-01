@@ -96,8 +96,15 @@ const TEST_SWEEP_INTERVAL_MS = 1_000;
  * long. The binary occasionally enters a "alive but not streaming" state
  * after the initial inventory burst — process is up, socket is open, no
  * bytes arrive. Detected by comparing now() vs slot.lastByteAt.
+ *
+ * Threshold mirrors Senitron's cdm.json `read_timeout: 30` (their canonical
+ * production setting), padded to 60s here because we don't inject the
+ * FFE0A0… heartbeat EPCs Senitron uses to keep the stream non-silent during
+ * quiet warehouse periods, so a 30s threshold would false-positive on real
+ * idle. 60s is a compromise: catches stuck-but-alive within one minute,
+ * tolerant of moderately quiet periods.
  */
-const STREAM_SILENCE_TIMEOUT_MS = 45_000;
+const STREAM_SILENCE_TIMEOUT_MS = 60_000;
 const WATCHDOG_INTERVAL_MS = 5_000;
 
 export class MonsoonSupervisor {
@@ -124,20 +131,19 @@ export class MonsoonSupervisor {
         TEST_SWEEP_INTERVAL_MS,
       );
     }
-    // Stream-silence watchdog DISABLED 2026-04-30 after switching to
-    // `--oscillating` mode. With --infinite, the binary would routinely enter
-    // an "alive but not streaming" stuck state and needed force-respawning.
-    // With --oscillating it stays healthy indefinitely (matches Senitron's
-    // production cdm orchestrator, which has no watchdog at all). The
-    // watchdog at 45s threshold was firing as a false-positive on quiet
-    // warehouse periods (no tags moving = no bytes from binary, but binary
-    // is fine), causing avoidable kicks that destroyed tag-to-UI latency.
-    // systemd's Restart=on-failure on the parent agent service is sufficient
-    // safety. Method runStreamWatchdog() and constants left in place for
-    // easy re-enable if a different binary mode ever needs them again.
-    void this.runStreamWatchdog;
-    void STREAM_SILENCE_TIMEOUT_MS;
-    void WATCHDOG_INTERVAL_MS;
+    // Stream-silence watchdog RE-ENABLED 2026-05-01 after live evidence
+    // showed --oscillating ALSO falls into the alive-but-not-streaming
+    // stuck state (one inventory burst, then 30+ minutes of zero bytes).
+    // Senitron's canonical cdm orchestrator has the same watchdog —
+    // cdm.json `read_timeout: 30` + `respawn_timeouts: 2` + explicit
+    // "MonsoonReader crashed / exited / Restarting" logic in their cdm
+    // binary. The earlier "Senitron has no watchdog" assumption was based
+    // on `cdm-watcher.service` being broken — that's a separate (unused)
+    // service; the real watchdog is built into cdm itself.
+    this.streamWatchdogHandle = setInterval(
+      () => this.runStreamWatchdog(),
+      WATCHDOG_INTERVAL_MS,
+    );
   }
 
   private runStreamWatchdog(): void {
@@ -371,24 +377,20 @@ export class MonsoonSupervisor {
       "--serial_host", String(spec.network_address ?? ""),
       "--serial_port", String(spec.monsoon_serial_port),
       "--fastid",
-      // NOTE: NEITHER `--cstream` NOR `--nocache` are passed. Both flags
-      // independently suppress live emission on the --stream port for
-      // this 2016 binary. Empirical results 2026-05-01 (per-flag bytes
-      // captured over 20s against reader 192.168.1.76 with continuous
-      // tag motion):
-      //   --cstream + --nocache + --oscillating  →   0 bytes (cache flush only)
-      //   --cstream + --cache 1 + --oscillating  →   0 bytes
-      //   --nocache + --oscillating              →   0 bytes (this was the bug)
-      //   --nocache + --infinite                 →  ~7K bytes (and then aborts)
-      //   default cache + --oscillating          →  ~6.6K bytes (continuous)
-      // Default cache (--cache 60) is set internally by the binary; the
-      // stream emits records as they're seen, while the cache is what the
-      // remote-Monsoon protocol uses for back-fill — irrelevant to us.
-      // `--oscillating` (oscillating cycle inventory) — built-in pauses
-      // between cycles keep the binary stable. `--infinite` saturates the
-      // radio and the binary aborts after ~30-45 sec; on-exit respawn
-      // handles those cases when they happen.
-      "--oscillating",
+      // `--infinite` (matches Senitron's canonical readers.json command
+      // for FIXED readers — `--infinite --power N`). Live evidence on
+      // 2026-05-01 showed `--oscillating` produces one inventory burst
+      // (~200 records) then the binary stays alive but stops emitting
+      // any bytes for 30+ minutes — same alive-but-stuck behaviour we
+      // were trying to avoid. With --infinite the binary streams
+      // continuously, occasionally aborts after ~30-45s of saturation,
+      // and the on-exit respawn (plus the re-enabled silence watchdog)
+      // keeps reads flowing in normal warehouse usage. NEITHER --cstream
+      // NOR --nocache are passed — both suppress live emission on the
+      // --stream socket for this 2016 binary in our consumer setup
+      // (Senitron's cdm reads them via the control protocol; we read
+      // raw stream bytes, so we omit them).
+      "--infinite",
     ];
     log.info("supervisor: spawning MonsoonReader", {
       readerId: spec.id,
