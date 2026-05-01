@@ -28,6 +28,7 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/cdm-agents/config") return true;
   if (pathname === "/api/cdm-agents/reads") return true;
   if (pathname === "/api/cdm-agents/antenna-test-result") return true;
+  if (pathname === "/api/cdm-agents/lookup-by-epc") return true;
   if (pathname === "/api/settings/mobile-sync") return true;
   if (pathname === "/api/inventory/upload") return true;
   if (pathname === "/api/inventory/putaway-assign") return true;

@@ -36,7 +36,7 @@ Runs **on the dev box** (or any Node host with outbound HTTPS to the WMS).
 Reads the JSON snapshot, decodes every EPC with the project's actual
 `decodeEpc()` formula (Carbon Jeans `tenant_epc_config`: F0A0B / 20+40+36
 bits), then enriches with `custom_skus` + `matrices` via the WMS endpoint
-`/api/diagnostics/lookup-by-epc` (Bearer-authenticated with the agent token).
+`/api/cdm-agents/lookup-by-epc` (Bearer-authenticated with the agent token).
 
 ```bash
 node build-distance-report.mjs \

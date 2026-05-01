@@ -10,7 +10,7 @@
 //
 // Local decode replicates lib/server/epc-decode.ts (Carbon Jeans tenant_epc_config:
 //   prefix F0A0B, 20-bit prefix + 40-bit asset (=ls_system_id) + 36-bit serial).
-// Catalog enrichment is fetched via /api/diagnostics/lookup-by-epc (Bearer token).
+// Catalog enrichment is fetched via /api/cdm-agents/lookup-by-epc (Bearer token).
 // If the endpoint isn't deployed yet, catalog cells fall back to "—".
 
 import fs from "node:fs/promises";
@@ -102,7 +102,7 @@ async function fetchCatalog(epcs) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 12_000);
   try {
-    const res = await fetch(`${WMS}/api/diagnostics/lookup-by-epc`, {
+    const res = await fetch(`${WMS}/api/cdm-agents/lookup-by-epc`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${TOKEN}`,
