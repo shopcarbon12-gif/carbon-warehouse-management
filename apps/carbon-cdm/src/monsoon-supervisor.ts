@@ -30,6 +30,28 @@ const STREAM_PORT_BASE = 30100;   // MonsoonReader --stream port for reader 0; +
 const CONTROL_PORT_BASE = 20100;  // MonsoonReader --control port; +N per extra reader
 const MIN_BACKOFF_MS = 2_000;
 const MAX_BACKOFF_MS = 60_000;
+/**
+ * Candidate Monsoon-over-Ethernet ports. The first time a reader spawns
+ * we use the operator-configured port; if the resulting child stays silent
+ * (zero bytes before the watchdog kicks at STREAM_SILENCE_TIMEOUT_MS), we
+ * rotate to the next candidate. Operator never needs to know which port
+ * their WIZnet bridge is on — adding the reader's IP is enough.
+ *   10002 — Senitron-configured WIZnet factory image
+ *    1461 — WIZnet WIZ100SR/110SR/140SR factory default data-tunnel port
+ */
+const SERIAL_PORT_FALLBACKS: readonly number[] = [10002, 1461];
+
+function buildCandidatePorts(configured: number): number[] {
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const p of [configured, ...SERIAL_PORT_FALLBACKS]) {
+    if (!Number.isFinite(p) || p <= 0) continue;
+    if (seen.has(p)) continue;
+    seen.add(p);
+    out.push(p);
+  }
+  return out.length > 0 ? out : [10002];
+}
 // Per-(epc, antenna) suppression DISABLED. Empirically the binary flushes
 // its inventory in a single ~22ms-wide burst of 100s of records (each
 // tag reported 5-6 times back-to-back, one per recently-completed cycle).
@@ -60,6 +82,31 @@ type ReaderSlot = {
   lastSeen: Map<string, number>;
   backoffMs: number;
   shuttingDown: boolean;
+  /**
+   * Index into the candidate-port list (configured port + fallbacks, dedup'd).
+   * On every spawn we use `candidatePorts[candidatePortIdx]`. If a spawn
+   * produces zero bytes before the watchdog kicks it, we advance this index
+   * and try the next port — that's how a freshly-installed reader on the
+   * WIZnet factory port (1461) ends up working without operator intervention
+   * even when the WMS config still says 10002.
+   */
+  candidatePorts: number[];
+  candidatePortIdx: number;
+  /**
+   * Has any byte ever arrived on the stream socket since this child was
+   * spawned? Set to true on first byte. Watchdog uses this to decide
+   * whether to rotate ports (no bytes ever = wrong port) or just respawn
+   * (bytes arrived = right port, just hung).
+   */
+  bytesSinceSpawn: boolean;
+  /**
+   * Consecutive watchdog-kicks that produced zero bytes. Reset to 0 the
+   * moment a byte arrives. After we've kicked once per candidate port
+   * (i.e. >= candidatePorts.length) without ever hearing back, we stop
+   * rotating and back off the watchdog so a truly unreachable reader
+   * doesn't spam the log forever.
+   */
+  consecutiveZeroByteKicks: number;
   /** ms timestamp of the most recent byte arrival on streamSocket. The
    *  watchdog uses this to detect a "stuck but alive" MonsoonReader — the
    *  binary occasionally enters a state where the process is up, the stream
@@ -151,16 +198,57 @@ export class MonsoonSupervisor {
     for (const slot of this.slots.values()) {
       if (slot.shuttingDown) continue;
       if (!slot.child) continue;
+      // After we've kicked once per candidate port without hearing back
+      // we stop watchdogging this slot — the reader is truly unreachable
+      // (no radio behind the WIZnet, dead antennas, etc.) and rotating
+      // again won't help. Let the on-exit respawn (with exp backoff) and
+      // the next operator-side change in WMS config handle it.
+      const totalCandidates = Math.max(1, slot.candidatePorts.length);
+      const exhaustedAllPorts = slot.consecutiveZeroByteKicks >= totalCandidates;
+
       const silentMs = now - slot.lastByteAt;
-      if (silentMs >= STREAM_SILENCE_TIMEOUT_MS) {
-        log.warn("supervisor: stream silent — kicking MonsoonReader", {
-          readerId: slot.spec.id,
-          readerName: slot.spec.name,
-          silentMs,
-        });
+      if (silentMs >= STREAM_SILENCE_TIMEOUT_MS && !exhaustedAllPorts) {
+        if (!slot.bytesSinceSpawn) {
+          // Zero-byte kick: rotate to next candidate port if we have one.
+          slot.consecutiveZeroByteKicks += 1;
+          if (slot.candidatePorts.length > 1) {
+            const prevIdx = slot.candidatePortIdx;
+            slot.candidatePortIdx = (slot.candidatePortIdx + 1) % slot.candidatePorts.length;
+            log.warn("supervisor: stream silent + zero bytes — rotating serial port", {
+              readerId: slot.spec.id,
+              readerName: slot.spec.name,
+              silentMs,
+              prevPort: slot.candidatePorts[prevIdx],
+              nextPort: slot.candidatePorts[slot.candidatePortIdx],
+              kicksSoFar: slot.consecutiveZeroByteKicks,
+              totalCandidates,
+            });
+          }
+        } else {
+          // Bytes did flow earlier; binary just hung. Plain respawn.
+          log.warn("supervisor: stream silent — kicking MonsoonReader", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            silentMs,
+          });
+        }
         slot.lastByteAt = now;
         slot.child?.kill("SIGTERM");
-        // exit handler respawns
+      } else if (silentMs >= STREAM_SILENCE_TIMEOUT_MS && exhaustedAllPorts) {
+        // We've tried every candidate port at least once without bytes.
+        // Bump lastByteAt so we don't spam this branch every 5s — but
+        // leave the child running and rely on on-exit respawn cycles
+        // (which themselves are throttled by backoffMs).
+        if (!slot.bytesSinceSpawn) {
+          // Only log once per long stretch.
+          slot.lastByteAt = now;
+          log.warn("supervisor: reader unreachable, all candidate ports exhausted", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            host: slot.spec.network_address,
+            triedPorts: slot.candidatePorts,
+          });
+        }
       }
     }
   }
@@ -194,6 +282,13 @@ export class MonsoonSupervisor {
       }
       const existing = this.slots.get(spec.id);
       if (existing) {
+        // If operator changed the configured serial port in WMS, rebuild
+        // the candidate list and reset rotation so we re-test from scratch.
+        if (existing.spec.monsoon_serial_port !== spec.monsoon_serial_port) {
+          existing.candidatePorts = buildCandidatePorts(Number(spec.monsoon_serial_port));
+          existing.candidatePortIdx = 0;
+          existing.bytesSinceSpawn = false;
+        }
         // Update the stored spec so any later ops see fresh power/antennas/etc.
         existing.spec = spec;
         // If subprocess is dead, restart cycle will pick it up.
@@ -214,6 +309,10 @@ export class MonsoonSupervisor {
         shuttingDown: false,
         activeTests: new Map(),
         lastByteAt: Date.now(),
+        candidatePorts: buildCandidatePorts(Number(spec.monsoon_serial_port)),
+        candidatePortIdx: 0,
+        bytesSinceSpawn: false,
+        consecutiveZeroByteKicks: 0,
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -223,7 +322,7 @@ export class MonsoonSupervisor {
         streamPort: slot.streamPort,
         controlPort: slot.controlPort,
       });
-      this.spawnReader(slot);
+      void this.spawnReader(slot);
     }
 
     // Sweep the bundle for antennas with pending tests we haven't started yet.
@@ -345,6 +444,21 @@ export class MonsoonSupervisor {
     if (slot.shuttingDown) return;
     const { spec } = slot;
     const powerArg = Math.round(this.avgPower(spec) * 10);
+
+    // Pick the current candidate serial port. The candidate list is
+    // [configured, ...fallbacks] dedup'd. On every fresh spawn we use the
+    // current index; if the spawn doesn't produce any stream bytes before
+    // the watchdog kicks it (slot.bytesSinceSpawn stays false), the kick
+    // path advances the index so the next spawn tries the next port.
+    // This is how a freshly-installed reader on the WIZnet factory port
+    // (1461) ends up working without operator intervention even when the
+    // WMS config still says 10002 — we just spawn, observe silence, rotate.
+    const host = String(spec.network_address ?? "");
+    const serialPort =
+      slot.candidatePorts[slot.candidatePortIdx] ??
+      slot.candidatePorts[0] ??
+      Number(spec.monsoon_serial_port);
+    slot.bytesSinceSpawn = false;
     // MonsoonReader's `--num` is the reader INDEX (default 1), and `-a` takes
     // a SINGLE antenna number — using two `-a` flags makes the binary thread-
     // resource-throw because last-wins semantics combine with `--num` as
@@ -374,8 +488,8 @@ export class MonsoonSupervisor {
       "--read_time_ms", "1000",
       "--power", String(powerArg),
       ...antennaArgs,
-      "--serial_host", String(spec.network_address ?? ""),
-      "--serial_port", String(spec.monsoon_serial_port),
+      "--serial_host", host,
+      "--serial_port", String(serialPort),
       "--fastid",
       // `--infinite` (matches Senitron's canonical readers.json command
       // for FIXED readers — `--infinite --power N`). Live evidence on
@@ -398,6 +512,7 @@ export class MonsoonSupervisor {
       antennas: enabledAntennas.map((a) => a.antenna_number),
       antennaScanned: antennaArgs.length > 0 ? Number(antennaArgs[1]) : 1,
       power: powerArg,
+      serialPort,
     });
 
     const child = spawn(this.monsoonBinary, args, {
@@ -439,7 +554,9 @@ export class MonsoonSupervisor {
           backoffMs: slot.backoffMs,
         });
       }
-      setTimeout(() => this.spawnReader(slot), delay);
+      setTimeout(() => {
+        void this.spawnReader(slot);
+      }, delay);
       slot.backoffMs = cleanExit ? 1000 : Math.min(slot.backoffMs * 2, MAX_BACKOFF_MS);
     });
 
@@ -501,6 +618,12 @@ export class MonsoonSupervisor {
   private consumeStreamBytes(slot: ReaderSlot, chunk: Buffer): void {
     if (chunk.length > 0) {
       slot.lastByteAt = Date.now();
+      // First-byte signal: tells the watchdog this candidate port is the
+      // right one and on hang we should respawn (not rotate). Also resets
+      // the unreachable-counter so a reader that recovers gets full
+      // rotation budget back next time it goes silent.
+      if (!slot.bytesSinceSpawn) slot.bytesSinceSpawn = true;
+      slot.consecutiveZeroByteKicks = 0;
     }
     // Append to slot buffer; cap growth to avoid unbounded memory.
     slot.buffer = Buffer.concat([slot.buffer, chunk]);
