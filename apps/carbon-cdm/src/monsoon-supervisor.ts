@@ -352,12 +352,13 @@ export class MonsoonSupervisor {
       "--serial_port", String(spec.monsoon_serial_port),
       "--fastid",
       "--nocache",
-      // `--infinite` is what tells MonsoonReader to start an inventory loop
-      // automatically. Without it the binary sits in command-processor mode
-      // waiting for external commands on the control port and the stream
-      // socket stays silent. Verified via verbose run: no `--infinite` →
-      // process exits cleanly without ever calling do_single_inventory().
-      "--infinite",
+      // Use `--oscillating` (oscillating cycle inventory) — the same mode
+      // Senitron's production cdm uses (verified live 2026-04-30 by ps on
+      // their orchestrator: `./MonsoonReader ... -o`, where -o is the short
+      // form per boost::program_options `oscillating,o`). `--infinite`
+      // saturates the radio and the binary SIGSEGVs after ~30-45s; the
+      // built-in pauses of `--oscillating` keep it stable indefinitely.
+      "--oscillating",
     ];
     log.info("supervisor: spawning MonsoonReader", {
       readerId: spec.id,
