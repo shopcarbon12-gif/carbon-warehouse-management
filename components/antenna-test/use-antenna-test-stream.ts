@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type AntennaTestRow = {
   epcHex: string;
@@ -78,17 +78,37 @@ export function useAntennaTestStream(sessionId: string | null) {
   /** Ref so the SSE handler doesn't re-run on every state change. */
   const rowsRef = useRef<Map<string, AntennaTestRow>>(new Map());
 
+  // Only clear when starting a NEW session — when sessionId goes null
+  // (Stop), the table stays visible until the operator explicitly clears.
+  const prevSessionRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!sessionId) {
-      // Reset on Stop / no session.
+    const prev = prevSessionRef.current;
+    prevSessionRef.current = sessionId;
+    if (sessionId && sessionId !== prev) {
+      // New session starting — wipe stale rows from a prior run.
       rowsRef.current = new Map();
       setRows(new Map());
       setStats({ uniqueEpcs: 0, totalReads: 0, droppedBadCrc: 0 });
-      setStatus("idle");
       setSweepProgress(null);
+      setStatus("armed");
+    }
+  }, [sessionId]);
+
+  /** Wipe all locally-held results — table goes empty and status flips to
+   *  idle. Wired to the workspace's "Clear session" button. */
+  const clear = useCallback(() => {
+    rowsRef.current = new Map();
+    setRows(new Map());
+    setStats({ uniqueEpcs: 0, totalReads: 0, droppedBadCrc: 0 });
+    setSweepProgress(null);
+    setStatus("idle");
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId) {
+      // No active SSE; rows/state persist (frozen final view from last run).
       return;
     }
-    setStatus("armed");
 
     const es = new EventSource(`/api/antenna-test/stream?sessionId=${encodeURIComponent(sessionId)}`);
     let pendingFlush: number | null = null;
@@ -189,5 +209,5 @@ export function useAntennaTestStream(sessionId: string | null) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  return { rows, stats, status, sweepProgress };
+  return { rows, stats, status, sweepProgress, clear };
 }

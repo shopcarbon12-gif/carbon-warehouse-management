@@ -103,15 +103,15 @@ const DEFAULT_SWEEP: SweepConfig = {
   dwellMs: 1500,
 };
 
-// Distance bucket from RSSI — heuristic, replaced with calibrated curve in
-// Phase 3.
+// Distance bucket from RSSI — heuristic foot ranges. Replaced per-row with
+// the calibrated estimate as soon as 2+ calibration points exist.
 function rssiBucket(rssi: number): { label: string; color: string; order: number } {
-  if (rssi >= -55) return { label: "very close", color: "#0f9c4f", order: 0 };
-  if (rssi >= -65) return { label: "close", color: "#3fb35d", order: 1 };
-  if (rssi >= -75) return { label: "near", color: "#bcbf2c", order: 2 };
-  if (rssi >= -85) return { label: "mid", color: "#dd9b2c", order: 3 };
-  if (rssi >= -95) return { label: "far", color: "#d57021", order: 4 };
-  return { label: "fringe", color: "#b53d3d", order: 5 };
+  if (rssi >= -55) return { label: "0–3 ft", color: "#0f9c4f", order: 0 };
+  if (rssi >= -65) return { label: "3–8 ft", color: "#3fb35d", order: 1 };
+  if (rssi >= -75) return { label: "8–15 ft", color: "#bcbf2c", order: 2 };
+  if (rssi >= -85) return { label: "15–25 ft", color: "#dd9b2c", order: 3 };
+  if (rssi >= -95) return { label: "25–45 ft", color: "#d57021", order: 4 };
+  return { label: "45+ ft", color: "#b53d3d", order: 5 };
 }
 
 function buildPickList(tree: unknown): AntennaPickEntry[] {
@@ -262,12 +262,20 @@ export function AntennaTestWorkspace() {
   });
   const calibPoints = calib.data?.points ?? [];
 
-  // If the session ends server-side (e.g. expired), drop the local sessionId
-  // so the table resets and the Start button comes back.
-  const { rows, stats, status, sweepProgress } = useAntennaTestStream(sessionId);
+  // If the session ends server-side (e.g. expired or sweep_done), drop the
+  // local sessionId so the Start button comes back. The table stays visible
+  // until the operator explicitly clicks Clear.
+  const { rows, stats, status, sweepProgress, clear } =
+    useAntennaTestStream(sessionId);
   useEffect(() => {
-    if (status === "ended" && sessionId) setSessionId(null);
+    if ((status === "ended" || status === "sweep_done") && sessionId) {
+      setSessionId(null);
+    }
   }, [status, sessionId]);
+
+  /** True when a session just stopped/expired but rows are still on screen. */
+  const showingFrozenResults =
+    sessionId === null && rows.size > 0 && status !== "live" && status !== "armed";
 
   // Catalog enrichment: as new EPCs appear in `rows`, batch them and POST to
   // /api/operations/transfers/lookup (session-cookie). Cache the result so we
@@ -658,7 +666,7 @@ export function AntennaTestWorkspace() {
           )}
         </div>
 
-        <div className="mt-5 flex items-center gap-3">
+        <div className="mt-5 flex flex-wrap items-center gap-3">
           {!isLive ? (
             <button
               onClick={startScan}
@@ -674,6 +682,15 @@ export function AntennaTestWorkspace() {
               className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {busy ? "Stopping…" : "■ Stop"}
+            </button>
+          )}
+          {showingFrozenResults && (
+            <button
+              onClick={clear}
+              className="rounded border border-[var(--wms-border)] bg-[var(--wms-bg)] px-3 py-2 text-sm hover:bg-[var(--wms-card)]"
+              title="Wipe the displayed results so the next Start scan begins fresh."
+            >
+              ⌫ Clear session
             </button>
           )}
           {picked && (
