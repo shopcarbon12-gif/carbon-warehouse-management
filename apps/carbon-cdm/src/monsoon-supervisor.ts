@@ -755,10 +755,14 @@ export class MonsoonSupervisor {
     } else {
       powerArg = Math.round(this.avgPower(spec) * 10);
       const enabled = spec.antennas.filter((a) => a.enabled);
-      stampAntenna = enabled[0]?.antenna_number ?? 1;
-      cycleMode = "infinite";
-      readTimeMs = 1000;
-      tagFocus = false;
+      const stampAnt = enabled[0];
+      stampAntenna = stampAnt?.antenna_number ?? 1;
+      // Per-antenna saved defaults from /antenna_test → "Save as default";
+      // fall back to hardcoded normal-scan defaults when none set.
+      const beh = stampAnt?.behaviour;
+      cycleMode = beh?.cycle_mode === "oscillating" ? "oscillating" : "infinite";
+      readTimeMs = beh?.read_time_ms ?? 1000;
+      tagFocus = beh?.tag_focus === true;
     }
     slot.consoleStampAntenna = stampAntenna;
 

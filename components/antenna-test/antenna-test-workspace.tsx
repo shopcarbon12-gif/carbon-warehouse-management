@@ -67,6 +67,12 @@ type AntennaPickEntry = {
   antennaId: string;
   antennaName: string;
   antennaNumber: number;
+  defaults: {
+    transmitPowerDbm: number;
+    readTimeMs: number;
+    cycleMode: "infinite" | "oscillating";
+    tagFocus: boolean;
+  } | null;
 };
 
 type Flags = {
@@ -149,6 +155,19 @@ function buildPickList(tree: unknown): AntennaPickEntry[] {
       for (const a of r.antennas ?? []) {
         const cfg = a.config ?? {};
         const num = Number((cfg as { antenna_number?: number }).antenna_number ?? 1);
+        const txPwr = Number(
+          (cfg as { transmit_power_dbm?: number }).transmit_power_dbm ?? 0,
+        );
+        const beh = (cfg as { behaviour?: { read_time_ms?: number; cycle_mode?: string; tag_focus?: boolean } }).behaviour;
+        const defaults = txPwr > 0 || beh
+          ? {
+              transmitPowerDbm: txPwr || 27,
+              readTimeMs: Number(beh?.read_time_ms ?? 1000),
+              cycleMode:
+                beh?.cycle_mode === "oscillating" ? "oscillating" : "infinite",
+              tagFocus: beh?.tag_focus === true,
+            } as AntennaPickEntry["defaults"]
+          : null;
         out.push({
           readerId: r.id,
           readerName: r.name,
@@ -157,6 +176,7 @@ function buildPickList(tree: unknown): AntennaPickEntry[] {
           antennaId: a.id,
           antennaName: a.name,
           antennaNumber: num,
+          defaults,
         });
       }
     }
@@ -177,6 +197,60 @@ export function AntennaTestWorkspace() {
   const [error, setError] = useState<string | null>(null);
 
   const picked = picks.find((p) => p.antennaId === pickedAntennaId) ?? null;
+
+  // Pre-fill knobs from saved defaults when the user picks a different antenna.
+  // Tracking which antenna we last applied for so picks during a live test
+  // don't clobber the operator's mid-test override.
+  const lastApplied = useRef<string>("");
+  useEffect(() => {
+    if (!picked) return;
+    if (lastApplied.current === picked.antennaId) return;
+    lastApplied.current = picked.antennaId;
+    if (picked.defaults) {
+      setFlags({
+        powerArg: Math.round(picked.defaults.transmitPowerDbm * 10),
+        readTimeMs: picked.defaults.readTimeMs,
+        cycleMode: picked.defaults.cycleMode,
+        tagFocus: picked.defaults.tagFocus,
+      });
+    }
+  }, [picked]);
+
+  // Track whether current knobs differ from the saved default — controls the
+  // Save button's enabled state + (saved default) / (unsaved override) badge.
+  const knobsDifferFromDefault = (() => {
+    if (!picked || !picked.defaults) return true; // no default = always "unsaved"
+    return (
+      flags.powerArg !== Math.round(picked.defaults.transmitPowerDbm * 10) ||
+      flags.readTimeMs !== picked.defaults.readTimeMs ||
+      flags.cycleMode !== picked.defaults.cycleMode ||
+      flags.tagFocus !== picked.defaults.tagFocus
+    );
+  })();
+
+  const [savingDefault, setSavingDefault] = useState(false);
+  const [savedDefaultAt, setSavedDefaultAt] = useState<number | null>(null);
+  const saveAsDefault = async () => {
+    if (!picked) return;
+    setSavingDefault(true);
+    try {
+      const res = await fetch(
+        `/api/hardware-config/antennas/${picked.antennaId}/behaviour`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(flags),
+        },
+      );
+      if (res.ok) {
+        setSavedDefaultAt(Date.now());
+        // Refetch the tree so the picker shows new defaults.
+        void tree.mutate();
+      }
+    } finally {
+      setSavingDefault(false);
+    }
+  };
 
   // Calibration points for the picked (reader, antenna). Refetched after every
   // save/delete so the distance column updates in place.
@@ -601,6 +675,29 @@ export function AntennaTestWorkspace() {
             >
               {busy ? "Stopping…" : "■ Stop"}
             </button>
+          )}
+          {picked && (
+            <button
+              onClick={saveAsDefault}
+              disabled={savingDefault || !knobsDifferFromDefault}
+              title="Save these radio knobs as the antenna's default — used by Transfer Out, Dashboard, and any other page that uses the normal scan."
+              className="rounded border border-[var(--wms-border)] bg-[var(--wms-bg)] px-3 py-2 text-sm hover:bg-[var(--wms-card)] disabled:opacity-40"
+            >
+              {savingDefault
+                ? "Saving…"
+                : savedDefaultAt && Date.now() - savedDefaultAt < 5000
+                  ? "✓ Saved"
+                  : "💾 Save as antenna default"}
+            </button>
+          )}
+          {picked && (
+            <span className="font-mono text-[10px] text-[var(--wms-muted)]">
+              {!picked.defaults
+                ? "(no saved default)"
+                : knobsDifferFromDefault
+                  ? "(unsaved override)"
+                  : "(saved default)"}
+            </span>
           )}
           <span className="font-mono text-xs text-[var(--wms-muted)]">
             status: <strong className="text-[var(--wms-fg)]">{status}</strong>

@@ -236,6 +236,14 @@ export type AgentConfigAntenna = {
    * Null = no test pending.
    */
   test_pending_at: string | null;
+  /** Operator-saved radio defaults from /antenna_test → "Save as default".
+   *  Agent uses these for normal-scan spawns; transmit_power_dbm remains
+   *  the canonical source for the power dimension. */
+  behaviour?: {
+    read_time_ms: number;
+    cycle_mode: "infinite" | "oscillating";
+    tag_focus: boolean;
+  };
 };
 
 export type AgentConfigReader = {
@@ -327,8 +335,23 @@ export async function getAgentConfigBundle(
       antenna_number?: number;
       transmit_power_dbm?: number;
       enabled?: boolean;
+      behaviour?: {
+        read_time_ms?: number;
+        cycle_mode?: "infinite" | "oscillating";
+        tag_focus?: boolean;
+      };
     };
     const arr = antennasByParent.get(d.parent_device_id) ?? [];
+    const behaviour =
+      cfg.behaviour && typeof cfg.behaviour === "object"
+        ? {
+            read_time_ms: Number(cfg.behaviour.read_time_ms ?? 1000),
+            cycle_mode: (cfg.behaviour.cycle_mode === "oscillating"
+              ? "oscillating"
+              : "infinite") as "infinite" | "oscillating",
+            tag_focus: cfg.behaviour.tag_focus === true,
+          }
+        : undefined;
     arr.push({
       id: d.id,
       name: d.name,
@@ -336,6 +359,7 @@ export async function getAgentConfigBundle(
       transmit_power_dbm: Number(cfg.transmit_power_dbm ?? 30),
       enabled: cfg.enabled !== false,
       test_pending_at: d.test_pending_at,
+      behaviour,
     });
     antennasByParent.set(d.parent_device_id, arr);
   }

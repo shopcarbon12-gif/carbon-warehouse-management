@@ -10,6 +10,14 @@ export type AgentConfigAntenna = {
   enabled: boolean;
   /** ISO timestamp when an operator clicked TEST. null = no test pending. */
   test_pending_at: string | null;
+  /** Operator-saved radio defaults from /antenna_test → "Save as default"; agent
+   *  uses these for the normal-scan spawn path. transmit_power_dbm above is
+   *  still the canonical source for the power dimension. */
+  behaviour?: {
+    read_time_ms: number;
+    cycle_mode: "infinite" | "oscillating";
+    tag_focus: boolean;
+  };
 };
 
 export type AgentConfigReader = {
