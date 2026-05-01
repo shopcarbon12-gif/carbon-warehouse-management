@@ -381,15 +381,93 @@ export function AntennaTestWorkspace() {
     return () => clearTimeout(handle);
   }, [flags, sessionId]);
 
-  // Sort rows by best RSSI (closest first), then by total reads.
+  // Sort state — click any header to toggle. Default = distance asc (closest
+  // tags at the top), matching the original behaviour.
+  type SortKey =
+    | "distance"
+    | "rssi"
+    | "best"
+    | "reads"
+    | "epc"
+    | "firstPower"
+    | "sku"
+    | "desc";
+  type SortDir = "asc" | "desc";
+  const [sortKey, setSortKey] = useState<SortKey>("distance");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const onHeaderClick = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      // Sensible default direction per column type.
+      const numericClosestFirst = key === "distance" || key === "firstPower";
+      const numericLargestFirst = key === "rssi" || key === "best" || key === "reads";
+      setSortDir(numericClosestFirst ? "asc" : numericLargestFirst ? "desc" : "asc");
+    }
+  };
+
+  // Sortable comparator. For each column we define one canonical comparator
+  // (always "smaller / earlier / lesser first"); the dir multiplier flips it.
   const sortedRows = useMemo<AntennaTestRow[]>(() => {
     const arr = Array.from(rows.values());
+    const dir = sortDir === "asc" ? 1 : -1;
+    const cmpStr = (x: string, y: string) => x.localeCompare(y);
+    const cmpNum = (x: number, y: number) => (x < y ? -1 : x > y ? 1 : 0);
+    const nullsLast = (x: number | null, y: number | null) => {
+      if (x === null && y === null) return 0;
+      if (x === null) return 1;
+      if (y === null) return -1;
+      return cmpNum(x, y);
+    };
     arr.sort((a, b) => {
-      if (b.bestRssiDbm !== a.bestRssiDbm) return b.bestRssiDbm - a.bestRssiDbm;
-      return b.reads - a.reads;
+      let c = 0;
+      switch (sortKey) {
+        case "distance":
+          // "Closer" = higher (less-negative) RSSI. Asc = closer first
+          // (intuitive for "0–3 ft → 45+ ft"), so flip the natural cmp.
+          c = -cmpNum(a.bestRssiDbm, b.bestRssiDbm);
+          break;
+        case "rssi":
+          c = cmpNum(a.rssiDbm, b.rssiDbm);
+          break;
+        case "best":
+          c = cmpNum(a.bestRssiDbm, b.bestRssiDbm);
+          break;
+        case "reads":
+          c = cmpNum(a.reads, b.reads);
+          break;
+        case "epc":
+          c = cmpStr(a.epcHex, b.epcHex);
+          break;
+        case "firstPower":
+          c = nullsLast(a.firstReadPowerArg, b.firstReadPowerArg);
+          break;
+        case "sku": {
+          const sa = catalog.get(a.epcHex)?.sku ?? "";
+          const sb = catalog.get(b.epcHex)?.sku ?? "";
+          c = cmpStr(sa, sb);
+          break;
+        }
+        case "desc": {
+          const ca = catalog.get(a.epcHex);
+          const cb = catalog.get(b.epcHex);
+          const da = ca ? [ca.name, ca.color, ca.size].filter(Boolean).join(" ") : "";
+          const db = cb ? [cb.name, cb.color, cb.size].filter(Boolean).join(" ") : "";
+          c = cmpStr(da, db);
+          break;
+        }
+      }
+      if (c === 0) c = -cmpNum(a.bestRssiDbm, b.bestRssiDbm); // tie-breaker
+      return c * dir;
     });
     return arr;
-  }, [rows]);
+  }, [rows, sortKey, sortDir, catalog]);
+
+  const sortIndicator = (key: SortKey) => {
+    if (sortKey !== key) return "";
+    return sortDir === "asc" ? " ▲" : " ▼";
+  };
 
   // Calibration save flow — operator types the distance for the row whose
   // EPC they want to save as a reference. We POST to /calibrate, then
@@ -800,15 +878,55 @@ export function AntennaTestWorkspace() {
           <thead className="bg-[var(--wms-bg)] text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
             <tr>
               <th className="px-3 py-2 text-right">#</th>
-              <th className="px-3 py-2 text-left">Distance</th>
-              <th className="px-3 py-2 text-left">RSSI now</th>
-              <th className="px-3 py-2 text-left">Best</th>
-              <th className="px-3 py-2 text-right">Reads</th>
+              <th
+                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                onClick={() => onHeaderClick("distance")}
+              >
+                Distance{sortIndicator("distance")}
+              </th>
+              <th
+                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                onClick={() => onHeaderClick("rssi")}
+              >
+                RSSI now{sortIndicator("rssi")}
+              </th>
+              <th
+                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                onClick={() => onHeaderClick("best")}
+              >
+                Best{sortIndicator("best")}
+              </th>
+              <th
+                className="cursor-pointer select-none px-3 py-2 text-right hover:text-[var(--wms-fg)]"
+                onClick={() => onHeaderClick("reads")}
+              >
+                Reads{sortIndicator("reads")}
+              </th>
               <th className="px-3 py-2 text-left">Sparkline (5 s)</th>
-              <th className="px-3 py-2 text-left">EPC</th>
-              <th className="px-3 py-2 text-left">First-read power</th>
-              <th className="px-3 py-2 text-left">Custom SKU</th>
-              <th className="px-3 py-2 text-left">Description (name · color · size)</th>
+              <th
+                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                onClick={() => onHeaderClick("epc")}
+              >
+                EPC{sortIndicator("epc")}
+              </th>
+              <th
+                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                onClick={() => onHeaderClick("firstPower")}
+              >
+                First-read power{sortIndicator("firstPower")}
+              </th>
+              <th
+                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                onClick={() => onHeaderClick("sku")}
+              >
+                Custom SKU{sortIndicator("sku")}
+              </th>
+              <th
+                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                onClick={() => onHeaderClick("desc")}
+              >
+                Description (name · color · size){sortIndicator("desc")}
+              </th>
               <th className="px-3 py-2 text-left">Calibrate</th>
             </tr>
           </thead>
