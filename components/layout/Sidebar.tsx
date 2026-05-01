@@ -83,7 +83,8 @@ const sections: NavSection[] = [
       p.startsWith("/rfid/commissioning") ||
       p.startsWith("/operations/exceptions") ||
       p.startsWith("/infrastructure/devices") ||
-      p.startsWith("/hardware_config"),
+      p.startsWith("/hardware_config") ||
+      p.startsWith("/antenna_test"),
     items: [
       { href: "/rfid/epc-tracker", label: "EPC Tracker", icon: Search },
       { href: "/rfid/commissioning", label: "Print / Commission", icon: Printer },
@@ -95,6 +96,7 @@ const sections: NavSection[] = [
       },
       { href: "/infrastructure/devices", label: "Devices", icon: Router },
       { href: "/hardware_config", label: "Hardware Config", icon: Cpu },
+      { href: "/antenna_test", label: "Antenna Test", icon: Radio },
     ],
   },
   {

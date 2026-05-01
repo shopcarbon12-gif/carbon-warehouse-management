@@ -131,3 +131,51 @@ export async function postAntennaTestResult(
     count: body.observedEpcCount,
   });
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// Antenna-test live mode (Phase 1 /antenna-test page)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type ActiveAntennaTestSession = {
+  id: string;
+  readerId: string;
+  antennaId: string;
+  antennaNumber: number;
+  flags: {
+    powerArg: number;
+    readTimeMs: number;
+    cycleMode: "infinite" | "oscillating";
+    tagFocus: boolean;
+  };
+  startedAt: string;
+};
+
+export async function fetchActiveAntennaTestSessions(
+  env: AgentEnv,
+): Promise<ActiveAntennaTestSession[]> {
+  const r = await request<{ sessions: ActiveAntennaTestSession[] }>(
+    env,
+    "GET",
+    "/api/cdm-agents/active-sessions",
+  );
+  return r.sessions ?? [];
+}
+
+export type AntennaTestIngestRead = {
+  epcHex: string;
+  rssiDbm: number;
+  antennaNumber: number;
+  observedAt?: string;
+  powerArg?: number;
+};
+
+export async function postAntennaTestReads(
+  env: AgentEnv,
+  body: {
+    sessionId: string;
+    reads: AntennaTestIngestRead[];
+    stats?: { uniqueEpcs: number; totalReads: number; droppedBadCrc: number };
+  },
+): Promise<void> {
+  await request(env, "POST", "/api/antenna-test/ingest", body);
+}

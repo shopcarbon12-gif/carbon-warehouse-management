@@ -1,0 +1,258 @@
+import type { AgentEnv } from "./config.js";
+import { log } from "./log.js";
+import {
+  fetchActiveAntennaTestSessions,
+  postAntennaTestReads,
+  type ActiveAntennaTestSession,
+  type AntennaTestIngestRead,
+} from "./wms-client.js";
+
+/**
+ * Owns the agent-side state for the operator-driven /antenna-test page.
+ *
+ *   - Polls WMS every POLL_INTERVAL_MS for active sessions at this agent's
+ *     location. Cheap: one HTTPS GET, returns `{sessions:[]}` 99 % of the
+ *     time when no operator is testing.
+ *   - When a session appears: tells the supervisor to enter TEST_MODE for
+ *     the matching reader (which preempts the reader's normal scan and
+ *     spawns a fresh child with the operator's chosen flags + single
+ *     antenna). Other readers untouched.
+ *   - When the session disappears (operator clicked Stop / browser closed
+ *     long enough that the WMS auto-expired it): tells the supervisor to
+ *     leave TEST_MODE and the reader resumes normal reconcile.
+ *   - When the session's flags change between polls (operator nudged the
+ *     power slider): tells the supervisor to apply the new flags. The
+ *     supervisor implements that as a kill+respawn since MonsoonReader
+ *     can't live-tune those args.
+ *
+ *  Reads from a TEST_MODE child are NOT routed through ReadAggregator
+ *  (which buffers 1 s for the normal scan path). They go through THIS
+ *  module's own micro-batcher: 100 ms or 25 reads, whichever first, so
+ *  the operator's UI feels live. We POST to /api/antenna-test/ingest
+ *  which the WMS fans out via SSE — does NOT write to cdm_reads.
+ */
+
+/** WMS poll cadence — fast enough for click-to-spawn under ~1.5 s. */
+const POLL_INTERVAL_MS = 1_000;
+/** Micro-batcher: ship reads at least this often. */
+const FLUSH_INTERVAL_MS = 100;
+/** Micro-batcher: or earlier if we hit this many. */
+const FLUSH_AT_BATCH = 25;
+/** Per-reader cap on queued reads — drop oldest beyond this if WMS is slow. */
+const QUEUE_MAX = 5_000;
+
+export type TestSessionApplied = {
+  sessionId: string;
+  readerId: string;
+  antennaNumber: number;
+  flags: ActiveAntennaTestSession["flags"];
+};
+
+export type AntennaTestSupervisorHooks = {
+  /** Tell the supervisor to enter TEST_MODE for this reader. Must respawn
+   *  the reader's child with the test flags + single antenna. Idempotent
+   *  on flags-equal calls; on flags-changed calls, must kill+respawn. */
+  enterTestMode: (s: TestSessionApplied) => void;
+  /** Tell the supervisor to leave TEST_MODE for the reader; normal scan
+   *  flags resume on next reconcile cycle. */
+  leaveTestMode: (readerId: string) => void;
+};
+
+type Pending = {
+  sessionId: string;
+  read: AntennaTestIngestRead;
+};
+
+export class AntennaTestController {
+  private polling = false;
+  private pollHandle: NodeJS.Timeout | null = null;
+  private flushHandle: NodeJS.Timeout | null = null;
+
+  /** Sessions we've handed to the supervisor (sessionId → applied). */
+  private applied = new Map<string, TestSessionApplied>();
+
+  /** Queue of reads pending POST to /api/antenna-test/ingest. */
+  private queue: Pending[] = [];
+
+  /** Per-session running tally for the SSE stats messages. */
+  private stats = new Map<
+    string,
+    { uniqueEpcs: Set<string>; totalReads: number; droppedBadCrc: number }
+  >();
+
+  private hooks: AntennaTestSupervisorHooks | null = null;
+
+  constructor(private readonly env: AgentEnv) {}
+
+  /** Set after both controller and supervisor exist (circular ref). */
+  attachSupervisorHooks(hooks: AntennaTestSupervisorHooks): void {
+    this.hooks = hooks;
+  }
+
+  start(): void {
+    if (this.pollHandle) return;
+    this.pollHandle = setInterval(() => this.tickPoll(), POLL_INTERVAL_MS);
+    this.flushHandle = setInterval(() => void this.flush(), FLUSH_INTERVAL_MS);
+    // Fire one poll immediately so a Start-just-clicked operator doesn't
+    // wait the full POLL_INTERVAL_MS for the first reconcile.
+    void this.tickPoll();
+  }
+
+  stop(): void {
+    if (this.pollHandle) clearInterval(this.pollHandle);
+    if (this.flushHandle) clearInterval(this.flushHandle);
+    this.pollHandle = null;
+    this.flushHandle = null;
+    // Tell the supervisor to revert any active test modes so we don't leave
+    // a reader pinned to the test child after agent shutdown.
+    if (this.hooks) {
+      for (const a of this.applied.values()) this.hooks.leaveTestMode(a.readerId);
+    }
+    this.applied.clear();
+    this.queue = [];
+    this.stats.clear();
+  }
+
+  /**
+   * Supervisor hands us each tag-read from a TEST_MODE child by calling
+   * this. We enqueue for the next 100 ms flush.
+   */
+  recordRead(
+    sessionId: string,
+    read: AntennaTestIngestRead,
+    droppedBadCrcDelta: number = 0,
+  ): void {
+    let s = this.stats.get(sessionId);
+    if (!s) {
+      s = { uniqueEpcs: new Set(), totalReads: 0, droppedBadCrc: 0 };
+      this.stats.set(sessionId, s);
+    }
+    s.uniqueEpcs.add(read.epcHex);
+    s.totalReads += 1;
+    s.droppedBadCrc += droppedBadCrcDelta;
+
+    this.queue.push({ sessionId, read });
+    if (this.queue.length > QUEUE_MAX) {
+      const overflow = this.queue.length - QUEUE_MAX;
+      this.queue.splice(0, overflow);
+      log.warn("antenna-test ingest queue overflow — dropping oldest", { overflow });
+    }
+    if (this.queue.length >= FLUSH_AT_BATCH) {
+      void this.flush();
+    }
+  }
+
+  // ── poll ─────────────────────────────────────────────────────────────────
+
+  private async tickPoll(): Promise<void> {
+    if (this.polling) return; // simple in-flight guard
+    this.polling = true;
+    try {
+      const sessions = await fetchActiveAntennaTestSessions(this.env);
+      this.reconcile(sessions);
+    } catch (e) {
+      // Don't spam — log at debug. Real operator-visible errors will
+      // surface via the SSE channel anyway when reads stop flowing.
+      log.debug("active-sessions poll failed", {
+        err: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      this.polling = false;
+    }
+  }
+
+  private reconcile(sessions: ActiveAntennaTestSession[]): void {
+    if (!this.hooks) return; // supervisor not attached yet
+    const desiredById = new Map(sessions.map((s) => [s.id, s]));
+
+    // End sessions that disappeared.
+    for (const [id, applied] of this.applied) {
+      if (!desiredById.has(id)) {
+        log.info("antenna-test: session ended, leaving TEST_MODE", {
+          sessionId: id,
+          readerId: applied.readerId,
+        });
+        this.hooks.leaveTestMode(applied.readerId);
+        this.applied.delete(id);
+        this.stats.delete(id);
+      }
+    }
+
+    // Start / update sessions that are present.
+    for (const s of sessions) {
+      const prior = this.applied.get(s.id);
+      const next: TestSessionApplied = {
+        sessionId: s.id,
+        readerId: s.readerId,
+        antennaNumber: s.antennaNumber,
+        flags: s.flags,
+      };
+      const flagsChanged =
+        prior !== undefined &&
+        (prior.flags.powerArg !== s.flags.powerArg ||
+          prior.flags.readTimeMs !== s.flags.readTimeMs ||
+          prior.flags.cycleMode !== s.flags.cycleMode ||
+          prior.flags.tagFocus !== s.flags.tagFocus);
+      if (prior === undefined) {
+        log.info("antenna-test: session started, entering TEST_MODE", {
+          sessionId: s.id,
+          readerId: s.readerId,
+          antennaNumber: s.antennaNumber,
+          flags: s.flags,
+        });
+        this.applied.set(s.id, next);
+        this.hooks.enterTestMode(next);
+      } else if (flagsChanged) {
+        log.info("antenna-test: flags changed, respawning child", {
+          sessionId: s.id,
+          readerId: s.readerId,
+          flags: s.flags,
+        });
+        this.applied.set(s.id, next);
+        this.hooks.enterTestMode(next); // supervisor treats this as kill+respawn
+      }
+    }
+  }
+
+  // ── flush ────────────────────────────────────────────────────────────────
+
+  private async flush(): Promise<void> {
+    if (this.queue.length === 0) return;
+    // Group by session so we can send one ingest POST per active session.
+    const bySession = new Map<string, AntennaTestIngestRead[]>();
+    const drained = this.queue;
+    this.queue = [];
+    for (const p of drained) {
+      let arr = bySession.get(p.sessionId);
+      if (!arr) {
+        arr = [];
+        bySession.set(p.sessionId, arr);
+      }
+      arr.push(p.read);
+    }
+    for (const [sessionId, reads] of bySession) {
+      const stats = this.stats.get(sessionId);
+      try {
+        await postAntennaTestReads(this.env, {
+          sessionId,
+          reads,
+          stats: stats
+            ? {
+                uniqueEpcs: stats.uniqueEpcs.size,
+                totalReads: stats.totalReads,
+                droppedBadCrc: stats.droppedBadCrc,
+              }
+            : undefined,
+        });
+      } catch (e) {
+        log.warn("antenna-test ingest POST failed; reads dropped", {
+          sessionId,
+          batch: reads.length,
+          err: e instanceof Error ? e.message : String(e),
+        });
+        // Don't requeue — these are diagnostic reads; lost ones don't matter.
+        // Operator will keep seeing fresh ones as the test continues.
+      }
+    }
+  }
+}

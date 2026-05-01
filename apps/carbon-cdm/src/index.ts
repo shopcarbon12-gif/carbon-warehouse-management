@@ -7,6 +7,7 @@ import {
 import { startHeartbeat } from "./heartbeat.js";
 import { ReadAggregator } from "./read-aggregator.js";
 import { MonsoonSupervisor } from "./monsoon-supervisor.js";
+import { AntennaTestController } from "./antenna-test-mode.js";
 import { postAntennaTestResult } from "./wms-client.js";
 
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
@@ -27,6 +28,13 @@ async function main(): Promise<void> {
 
   const aggregator = new ReadAggregator(env);
   aggregator.start();
+
+  // Antenna-test controller — owns the per-reader TEST_MODE override that
+  // the operator-driven /antenna-test page imposes. Polls WMS every 1 s for
+  // active sessions; reads from a TEST_MODE child go through THIS module's
+  // 100 ms micro-batcher straight to /api/antenna-test/ingest (no DB write,
+  // no normal-scan aggregator).
+  const antennaTest = new AntennaTestController(env);
 
   // Native MonsoonReader supervisor — bypasses Senitron's `cdm` middleware
   // (which doesn't talk to MonsoonReader correctly in our deployment) and
@@ -59,6 +67,28 @@ async function main(): Promise<void> {
       });
     },
   );
+
+  // Two-way wiring: supervisor needs to push TEST_MODE reads into the
+  // controller's micro-batcher; controller needs to ask supervisor to
+  // enter/leave TEST_MODE in response to WMS-side session changes.
+  supervisor.attachTestModeHandler((sessionId, read) => {
+    antennaTest.recordRead(sessionId, read);
+  });
+  antennaTest.attachSupervisorHooks({
+    enterTestMode: (s) => {
+      supervisor.enterTestMode({
+        readerId: s.readerId,
+        sessionId: s.sessionId,
+        antennaNumber: s.antennaNumber,
+        powerArg: s.flags.powerArg,
+        readTimeMs: s.flags.readTimeMs,
+        cycleMode: s.flags.cycleMode,
+        tagFocus: s.flags.tagFocus,
+      });
+    },
+    leaveTestMode: (readerId) => supervisor.leaveTestMode(readerId),
+  });
+  antennaTest.start();
 
   let lastPullOk = false;
   const stopHeartbeat = startHeartbeat(env, () => !lastPullOk);
@@ -97,6 +127,7 @@ async function main(): Promise<void> {
     clearInterval(pollHandle);
     clearInterval(statsHandle);
     stopHeartbeat();
+    antennaTest.stop();
     aggregator.stop();
     supervisor.shutdown();
     process.exit(0);

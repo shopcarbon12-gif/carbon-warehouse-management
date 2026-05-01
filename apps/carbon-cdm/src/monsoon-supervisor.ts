@@ -147,7 +147,37 @@ type ReaderSlot = {
   consoleParserState: ConsoleParserState;
   /** Antenna number stamped on every console-mode read (binary doesn't include it). */
   consoleStampAntenna: number;
+  /**
+   * If non-null, this slot is in TEST_MODE: the supervisor preempts the
+   * reader's normal scan, spawns a single MonsoonReader (console driver
+   * forced) configured against ONE antenna with operator-tunable flags,
+   * and routes every parsed read to `onTestModeRead` instead of `onRead`.
+   * Reverts to normal scan when set back to null.
+   */
+  testSession: TestModeSpec | null;
 };
+
+/** Operator-tunable knobs an active /antenna-test session imposes on a reader. */
+export type TestModeSpec = {
+  sessionId: string;
+  antennaNumber: number;
+  powerArg: number;
+  readTimeMs: number;
+  cycleMode: "infinite" | "oscillating";
+  tagFocus: boolean;
+};
+
+/** Callback signature for routing TEST_MODE reads to the controller. */
+export type TestModeReadHandler = (
+  sessionId: string,
+  read: {
+    epcHex: string;
+    rssiDbm: number;
+    antennaNumber: number;
+    observedAt: string;
+    powerArg: number;
+  },
+) => void;
 
 export type AntennaTestCallback = (result: {
   antennaId: string;
@@ -184,6 +214,10 @@ export class MonsoonSupervisor {
   private streamWatchdogHandle: NodeJS.Timeout | null = null;
   /** Set of antenna IDs we've already started a test for (one-shot per pending). */
   private testedAntennas = new Set<string>();
+
+  /** Optional callback for routing TEST_MODE reads to the antenna-test
+   *  controller. Set via attachTestModeHandler() after construction. */
+  private onTestModeRead: TestModeReadHandler | null = null;
 
   constructor(
     private readonly binaries: MonsoonBinaries,
@@ -367,6 +401,7 @@ export class MonsoonSupervisor {
         currentDriver: desiredDriver,
         consoleParserState: newConsoleParserState(),
         consoleStampAntenna: enabledForStamp?.antenna_number ?? 1,
+        testSession: null,
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -472,6 +507,59 @@ export class MonsoonSupervisor {
     }
   }
 
+  /** Wire the controller's recordRead. Called once at agent startup. */
+  attachTestModeHandler(handler: TestModeReadHandler): void {
+    this.onTestModeRead = handler;
+  }
+
+  /**
+   * Enter TEST_MODE for the reader matching `spec.readerId`. Preempts the
+   * reader's normal scan: kills the current child, spawn loop respawns
+   * under the test flags. Idempotent: a second call with identical flags
+   * is a no-op; with different flags, kills+respawns under new flags.
+   */
+  enterTestMode(spec: TestModeSpec & { readerId: string }): void {
+    const slot = this.slots.get(spec.readerId);
+    if (!slot) {
+      log.warn("supervisor: enterTestMode for unknown reader", { readerId: spec.readerId });
+      return;
+    }
+    const prior = slot.testSession;
+    const flagsEqual =
+      prior !== null &&
+      prior.sessionId === spec.sessionId &&
+      prior.antennaNumber === spec.antennaNumber &&
+      prior.powerArg === spec.powerArg &&
+      prior.readTimeMs === spec.readTimeMs &&
+      prior.cycleMode === spec.cycleMode &&
+      prior.tagFocus === spec.tagFocus;
+    if (flagsEqual) return;
+    slot.testSession = {
+      sessionId: spec.sessionId,
+      antennaNumber: spec.antennaNumber,
+      powerArg: spec.powerArg,
+      readTimeMs: spec.readTimeMs,
+      cycleMode: spec.cycleMode,
+      tagFocus: spec.tagFocus,
+    };
+    log.info("supervisor: enterTestMode — killing child to respawn under test flags", {
+      readerId: spec.readerId,
+      sessionId: spec.sessionId,
+    });
+    if (slot.child && !slot.shuttingDown) slot.child.kill("SIGTERM");
+  }
+
+  /** Leave TEST_MODE for the given reader; the on-exit respawn picks up
+   *  the normal flags via the regular spawn path. */
+  leaveTestMode(readerId: string): void {
+    const slot = this.slots.get(readerId);
+    if (!slot) return;
+    if (!slot.testSession) return;
+    log.info("supervisor: leaveTestMode — reverting to normal scan", { readerId });
+    slot.testSession = null;
+    if (slot.child && !slot.shuttingDown) slot.child.kill("SIGTERM");
+  }
+
   shutdown(): void {
     if (this.testSweepHandle) {
       clearInterval(this.testSweepHandle);
@@ -496,8 +584,16 @@ export class MonsoonSupervisor {
 
   private spawnReader(slot: ReaderSlot): void {
     if (slot.shuttingDown) return;
+    // TEST_MODE forces the console driver — the stream binary's bursty
+    // alive-but-stuck behaviour would defeat the live-feedback UX of the
+    // /antenna-test page. The new_monsoonreader is on the VM regardless
+    // of the reader's saved monsoon_driver.
     const desired: "stream" | "console" =
-      slot.spec.monsoon_driver === "console" ? "console" : "stream";
+      slot.testSession !== null
+        ? "console"
+        : slot.spec.monsoon_driver === "console"
+          ? "console"
+          : "stream";
     slot.currentDriver = desired;
     if (desired === "console") {
       this.spawnReaderConsole(slot);
@@ -637,41 +733,65 @@ export class MonsoonSupervisor {
    */
   private spawnReaderConsole(slot: ReaderSlot): void {
     if (slot.shuttingDown) return;
-    const { spec } = slot;
+    const { spec, testSession } = slot;
     const host = String(spec.network_address ?? "");
     const port =
       slot.candidatePorts[slot.candidatePortIdx] ??
       slot.candidatePorts[0] ??
       Number(spec.monsoon_serial_port);
-    const powerArg = Math.round(this.avgPower(spec) * 10);
 
-    const enabledAntennas = spec.antennas.filter((a) => a.enabled);
-    const stampAntenna = enabledAntennas[0]?.antenna_number ?? 1;
+    // Resolve flags. TEST_MODE wins; otherwise normal scan defaults.
+    let powerArg: number;
+    let stampAntenna: number;
+    let cycleMode: "infinite" | "oscillating";
+    let readTimeMs: number;
+    let tagFocus: boolean;
+    if (testSession) {
+      powerArg = testSession.powerArg;
+      stampAntenna = testSession.antennaNumber;
+      cycleMode = testSession.cycleMode;
+      readTimeMs = testSession.readTimeMs;
+      tagFocus = testSession.tagFocus;
+    } else {
+      powerArg = Math.round(this.avgPower(spec) * 10);
+      const enabled = spec.antennas.filter((a) => a.enabled);
+      stampAntenna = enabled[0]?.antenna_number ?? 1;
+      cycleMode = "infinite";
+      readTimeMs = 1000;
+      tagFocus = false;
+    }
     slot.consoleStampAntenna = stampAntenna;
 
     const antennaArgs: string[] = [];
-    if (enabledAntennas.length === 1 && stampAntenna !== 1) {
-      antennaArgs.push("-a", String(stampAntenna));
-    }
+    if (stampAntenna !== 1) antennaArgs.push("-a", String(stampAntenna));
 
-    // CLI: `new_monsoonreader <host> <port> --console --infinite --power N [-a N]`
-    // Positional <host> <port> first; flags after.
-    const args = [
+    const cycleArg = cycleMode === "oscillating" ? "--oscillating" : "--infinite";
+
+    // CLI: `new_monsoonreader <host> <port> --console (--infinite|--oscillating)
+    //       --power N --read_time MS [-a N] [--tagfocus]`
+    const args: string[] = [
       host,
       String(port),
       "--console",
-      "--infinite",
+      cycleArg,
       "--power", String(powerArg),
+      "--read_time", String(readTimeMs),
       ...antennaArgs,
     ];
+    if (tagFocus) args.push("--tagfocus");
 
     log.info("supervisor: spawning new_monsoonreader (console driver)", {
       readerId: spec.id,
       readerName: spec.name,
+      mode: testSession ? "TEST_MODE" : "normal",
+      sessionId: testSession?.sessionId,
       host,
       port,
       power: powerArg,
       stampAntenna,
+      cycleMode,
+      readTimeMs,
+      tagFocus,
     });
 
     slot.consoleParserState = newConsoleParserState();
@@ -707,6 +827,7 @@ export class MonsoonSupervisor {
       totalMal += result.malformedCount;
 
       const stamp = new Date().toISOString();
+      const ts = slot.testSession;
       for (const rec of result.records) {
         // Antenna-test windows: every record from this child belongs to
         // `consoleStampAntenna`; if a window is open for that antenna,
@@ -718,13 +839,25 @@ export class MonsoonSupervisor {
             }
           }
         }
-        this.onRead({
-          readerId: spec.id,
-          epcHex: rec.epcHex,
-          antennaNumber: slot.consoleStampAntenna,
-          rssi: rec.rssiDbm,
-          readAt: stamp,
-        });
+        if (ts && this.onTestModeRead) {
+          // TEST_MODE: route to the controller's own ingest path; do NOT
+          // mix into normal reads (different ingest endpoint, no DB write).
+          this.onTestModeRead(ts.sessionId, {
+            epcHex: rec.epcHex,
+            rssiDbm: rec.rssiDbm,
+            antennaNumber: slot.consoleStampAntenna,
+            observedAt: stamp,
+            powerArg: ts.powerArg,
+          });
+        } else {
+          this.onRead({
+            readerId: spec.id,
+            epcHex: rec.epcHex,
+            antennaNumber: slot.consoleStampAntenna,
+            rssi: rec.rssiDbm,
+            readAt: stamp,
+          });
+        }
       }
     });
 
