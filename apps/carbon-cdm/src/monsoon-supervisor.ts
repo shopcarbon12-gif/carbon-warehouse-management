@@ -2,6 +2,11 @@ import { spawn, type ChildProcess } from "node:child_process";
 import net from "node:net";
 import { log } from "./log.js";
 import type { AgentConfigBundle, AgentConfigReader } from "./wms-client.js";
+import {
+  parseStream,
+  newParserState,
+  type ParserState,
+} from "./stream-parser.js";
 
 /**
  * Drives the legacy MonsoonReader binary directly — bypasses Senitron's
@@ -11,12 +16,11 @@ import type { AgentConfigBundle, AgentConfigReader } from "./wms-client.js";
  * think they're the server, neither connects to the other) and no reads
  * ever flow.
  *
- * The protocol on MonsoonReader's `--stream` port is undocumented but
- * empirical capture shows raw 12-byte EPCs are dropped in the binary
- * stream right at the bytes — anywhere we find the customer's prefix
- * (e.g. F0 A0 B0 ...), the next 12 bytes are a complete SGTIN-96 EPC.
- * We scan for the prefix, extract the EPC, deduplicate over a short
- * window, and hand the EPCs off to the caller (which forwards to WMS).
+ * Stream framing: MonsoonReader emits a 5-byte Boost-archive header on
+ * connect, then fixed 50-byte tag-read records (marker `0x31 0x00`, EPC at
+ * offset 26 with length from byte 3, antenna number at byte 9). All EPCs
+ * are forwarded regardless of prefix; SGTIN decoding happens server-side
+ * via tenant_epc_config. See stream-parser.ts for the full record layout.
  *
  * One MonsoonReader subprocess per reader. We restart any process that
  * dies, but with a backoff so a misconfigured reader can't pin a CPU.
@@ -26,11 +30,14 @@ const STREAM_PORT_BASE = 30100;   // MonsoonReader --stream port for reader 0; +
 const CONTROL_PORT_BASE = 20100;  // MonsoonReader --control port; +N per extra reader
 const MIN_BACKOFF_MS = 2_000;
 const MAX_BACKOFF_MS = 60_000;
-// Window in which a re-read of the same EPC is suppressed (prevents
-// 100×/sec dupes from a single tag flooding the WMS). 1 second matches
-// MonsoonReader's per-antenna dwell time so each cycle reports each
-// tag once.
-const DEDUP_WINDOW_MS = 1_000;
+// Per-(epc, antenna) suppression DISABLED. Empirically the binary flushes
+// its inventory in a single ~22ms-wide burst of 100s of records (each
+// tag reported 5-6 times back-to-back, one per recently-completed cycle).
+// Any dedup window past zero collapses that burst into a single read per
+// tag, which matches "first seen" but starves the live-scan tile of the
+// repeating reads it shows as activity. The WMS does its own dedup at
+// ingest, so emitting every record is safe.
+const DEDUP_WINDOW_MS = 0;
 
 export type SupervisorReadHandler = (read: {
   readerId: string;
@@ -48,7 +55,9 @@ type ReaderSlot = {
   child: ChildProcess | null;
   streamSocket: net.Socket | null;
   buffer: Buffer;
-  lastSeen: Map<string, number>;  // epcHex → ms timestamp
+  parserState: ParserState;
+  /** Per-(epc,antenna) last-seen ms timestamp for short dedupe window. */
+  lastSeen: Map<string, number>;
   backoffMs: number;
   shuttingDown: boolean;
   /** ms timestamp of the most recent byte arrival on streamSocket. The
@@ -58,14 +67,16 @@ type ReaderSlot = {
    *  respawn after STREAM_SILENCE_TIMEOUT_MS of zero traffic. */
   lastByteAt: number;
   /**
-   * Active antenna-test windows for THIS reader. Each entry is
-   * incremented every time we observe an EPC byte sequence on the stream.
-   * When the test window expires, we emit the result. Multiple antennas
-   * on the same reader can have concurrent windows — they all see the
-   * same byte stream (we can't distinguish per-antenna in the binary
-   * protocol yet), so they share the count.
+   * Active antenna-test windows for THIS reader, keyed by antenna_id (the
+   * WMS-side UUID). Counts are incremented only for stream records whose
+   * `antennaNumber` byte matches the antenna's `antenna_number`, so each
+   * antenna's TEST PASSED status reflects ITS own port (not the reader's
+   * other antennas).
    */
-  activeTests: Map<string, { startedAt: number; epcCount: number; expiresAt: number }>;
+  activeTests: Map<
+    string,
+    { antennaNumber: number; startedAt: number; epcCount: number; expiresAt: number }
+  >;
 };
 
 export type AntennaTestCallback = (result: {
@@ -91,8 +102,6 @@ const WATCHDOG_INTERVAL_MS = 5_000;
 
 export class MonsoonSupervisor {
   private slots = new Map<string, ReaderSlot>();
-  private epcPrefixBytes: Buffer;
-  private epcByteLen = 12;
   private bundleVersion = 0;
   private testSweepHandle: NodeJS.Timeout | null = null;
   private streamWatchdogHandle: NodeJS.Timeout | null = null;
@@ -108,10 +117,7 @@ export class MonsoonSupervisor {
      * back to the WMS.
      */
     private readonly onAntennaTestResult: AntennaTestCallback | null = null,
-    /** Hex string for EPC prefix to match on the binary stream (e.g. "F0A0"). */
-    epcPrefixHex: string = "F0A0",
   ) {
-    this.epcPrefixBytes = Buffer.from(epcPrefixHex, "hex");
     if (this.onAntennaTestResult) {
       this.testSweepHandle = setInterval(
         () => this.sweepExpiredTests(),
@@ -196,6 +202,7 @@ export class MonsoonSupervisor {
         child: null,
         streamSocket: null,
         buffer: Buffer.alloc(0),
+        parserState: newParserState(),
         lastSeen: new Map(),
         backoffMs: MIN_BACKOFF_MS,
         shuttingDown: false,
@@ -240,6 +247,7 @@ export class MonsoonSupervisor {
         if (this.testedAntennas.has(testKey)) continue;
         this.testedAntennas.add(testKey);
         slot.activeTests.set(ant.id, {
+          antennaNumber: ant.antenna_number,
           startedAt: now,
           epcCount: 0,
           expiresAt: now + TEST_WINDOW_MS,
@@ -346,7 +354,15 @@ export class MonsoonSupervisor {
     }
     const args = [
       "--num", "1",
-      "--cstream",
+      // NOTE: `--cstream` was being passed historically (it appears in
+      // Senitron's readers.json) — but in this binary `--cstream` is a
+      // "Remote Exclusive" flag intended for a CLIENT consuming from a
+      // remote Monsoon over `--monsoon_host`. In our Serial-Reader-mode
+      // setup it has the side effect of suppressing the live --stream
+      // output: the binary flushes its in-memory cache once on connect,
+      // then stays silent. Verified live 2026-05-01 by toggling the flag
+      // in isolation: with --cstream, 0 bytes after the initial flush;
+      // without --cstream, ~330 bytes/sec of continuous record output.
       "--stream", String(slot.streamPort),
       "--control", String(slot.controlPort),
       "--read_time_ms", "1000",
@@ -355,13 +371,23 @@ export class MonsoonSupervisor {
       "--serial_host", String(spec.network_address ?? ""),
       "--serial_port", String(spec.monsoon_serial_port),
       "--fastid",
-      "--nocache",
-      // Use `--oscillating` (oscillating cycle inventory) — the same mode
-      // Senitron's production cdm uses (verified live 2026-04-30 by ps on
-      // their orchestrator: `./MonsoonReader ... -o`, where -o is the short
-      // form per boost::program_options `oscillating,o`). `--infinite`
-      // saturates the radio and the binary SIGSEGVs after ~30-45s; the
-      // built-in pauses of `--oscillating` keep it stable indefinitely.
+      // NOTE: NEITHER `--cstream` NOR `--nocache` are passed. Both flags
+      // independently suppress live emission on the --stream port for
+      // this 2016 binary. Empirical results 2026-05-01 (per-flag bytes
+      // captured over 20s against reader 192.168.1.76 with continuous
+      // tag motion):
+      //   --cstream + --nocache + --oscillating  →   0 bytes (cache flush only)
+      //   --cstream + --cache 1 + --oscillating  →   0 bytes
+      //   --nocache + --oscillating              →   0 bytes (this was the bug)
+      //   --nocache + --infinite                 →  ~7K bytes (and then aborts)
+      //   default cache + --oscillating          →  ~6.6K bytes (continuous)
+      // Default cache (--cache 60) is set internally by the binary; the
+      // stream emits records as they're seen, while the cache is what the
+      // remote-Monsoon protocol uses for back-fill — irrelevant to us.
+      // `--oscillating` (oscillating cycle inventory) — built-in pauses
+      // between cycles keep the binary stable. `--infinite` saturates the
+      // radio and the binary aborts after ~30-45 sec; on-exit respawn
+      // handles those cases when they happen.
       "--oscillating",
     ];
     log.info("supervisor: spawning MonsoonReader", {
@@ -423,6 +449,10 @@ export class MonsoonSupervisor {
 
   private connectStream(slot: ReaderSlot): void {
     if (slot.shuttingDown || slot.child === null) return;
+    // Each reconnect is a fresh stream from MonsoonReader's perspective —
+    // it sends the 5-byte file header again, so reset parser state.
+    slot.parserState = newParserState();
+    slot.buffer = Buffer.alloc(0);
     const sock = net.createConnection(slot.streamPort, "127.0.0.1");
     slot.streamSocket = sock;
     let connected = false;
@@ -462,15 +492,9 @@ export class MonsoonSupervisor {
   }
 
   /**
-   * Consume bytes from the MonsoonReader stream. Search for the EPC
-   * prefix; whenever we find it, extract the next 12 bytes as an EPC.
-   *
-   * The protocol is binary and not aligned to record boundaries, so we
-   * just scan the byte stream looking for the prefix. EPCs that are
-   * actually arbitrary record metadata (e.g. RSSI byte happens to be
-   * 0xF0 followed by 0xA0) are theoretically possible but vanishingly
-   * rare with a 16-bit prefix; we filter further by requiring 24 hex
-   * chars and dedupe within a 1-second window.
+   * Consume bytes from the MonsoonReader stream and forward every
+   * complete tag-read record. Parsing is delegated to stream-parser.ts
+   * which understands the 50-byte fixed-length record layout.
    */
   private consumeStreamBytes(slot: ReaderSlot, chunk: Buffer): void {
     if (chunk.length > 0) {
@@ -479,50 +503,53 @@ export class MonsoonSupervisor {
     // Append to slot buffer; cap growth to avoid unbounded memory.
     slot.buffer = Buffer.concat([slot.buffer, chunk]);
     if (slot.buffer.length > 1024 * 1024) {
-      // Keep only the tail; protocol records are << 1MB.
+      // Keep only the tail; protocol records are 50B, so 64K covers a huge
+      // multi-record gap if we ever fall behind on read.
       slot.buffer = slot.buffer.subarray(slot.buffer.length - 65_536);
     }
 
-    const now = Date.now();
-    let pos = 0;
-    while (pos <= slot.buffer.length - this.epcByteLen) {
-      const idx = slot.buffer.indexOf(this.epcPrefixBytes, pos);
-      if (idx < 0) break;
-      if (idx + this.epcByteLen > slot.buffer.length) break;
-      const epc = slot.buffer.subarray(idx, idx + this.epcByteLen);
-      const epcHex = epc.toString("hex").toUpperCase();
-      pos = idx + 1; // search for next occurrence (overlap allowed)
+    const result = parseStream(slot.buffer, slot.parserState);
+    slot.buffer = result.remaining;
+    if (result.skipped > 0) {
+      log.debug("supervisor: parser skipped bytes during resync", {
+        readerId: slot.spec.id,
+        skipped: result.skipped,
+      });
+    }
 
-      // Active antenna tests: every EPC found counts toward the test
-      // window, regardless of dedup or prefix. (We restrict by F0A0 only
-      // because that's the prefix we scan for; in practice the test
-      // semantics — "did the reader see ANY tag" — are met since any tag
-      // any operator would test against will be a Carbon F0A0B tag.)
+    const now = Date.now();
+    for (const rec of result.records) {
+      // Per-antenna test windows: count every record whose antenna_number
+      // matches an active window for THIS reader.
       if (slot.activeTests.size > 0) {
         for (const win of slot.activeTests.values()) {
-          win.epcCount += 1;
+          if (win.antennaNumber === rec.antennaNumber) {
+            win.epcCount += 1;
+          }
         }
       }
 
-      // Dedup within window.
-      const last = slot.lastSeen.get(epcHex);
+      // Soft per-(epc, antenna) dedupe to absorb burst repeats.
+      const dedupKey = `${rec.epcHex}@${rec.antennaNumber}`;
+      const last = slot.lastSeen.get(dedupKey);
       if (last !== undefined && now - last < DEDUP_WINDOW_MS) continue;
-      slot.lastSeen.set(epcHex, now);
+      slot.lastSeen.set(dedupKey, now);
 
+      // Always use receive-time as `readAt`. The reader's on-wire timestamp
+      // can be many minutes off (the SA-2000's clock and the radio's
+      // internal sequencing don't track wall-clock reliably), and the user-
+      // facing dashboard cares about "when did the agent see this", not
+      // about the radio's internal epoch.
       this.onRead({
         readerId: slot.spec.id,
-        epcHex,
+        epcHex: rec.epcHex,
+        antennaNumber: rec.antennaNumber,
+        rssi: rec.rssiDbm,
         readAt: new Date(now).toISOString(),
       });
     }
 
-    // Trim consumed prefix; keep the tail in case a prefix straddles
-    // the last byte boundary.
-    if (pos > 0) {
-      slot.buffer = slot.buffer.subarray(Math.max(0, pos - this.epcPrefixBytes.length));
-    }
-
-    // Periodically prune lastSeen to stop unbounded growth (every ~1k entries).
+    // Periodically prune lastSeen to stop unbounded growth.
     if (slot.lastSeen.size > 5_000) {
       const cutoff = now - DEDUP_WINDOW_MS * 5;
       for (const [k, t] of slot.lastSeen) {

@@ -3,7 +3,12 @@ import { Socket } from "node:net";
 import type { AgentEnv } from "./config.js";
 import type { AgentConfigReader } from "./wms-client.js";
 import { log } from "./log.js";
-import { parseStream, type ParsedTagRead } from "./stream-parser.js";
+import {
+  parseStream,
+  newParserState,
+  type ParsedTagRead,
+  type ParserState,
+} from "./stream-parser.js";
 
 export type ReadEvent = {
   readerId: string;
@@ -29,6 +34,7 @@ export class MonsoonRunner {
   private child?: ChildProcess;
   private socket?: Socket;
   private buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+  private parserState: ParserState = newParserState();
   private stopping = false;
   private connectAttempts = 0;
   private childExited = false;
@@ -84,6 +90,9 @@ export class MonsoonRunner {
   private connectStream(): void {
     if (this.stopping || this.childExited) return;
 
+    // Each fresh stream connection starts with the binary's file header.
+    this.parserState = newParserState();
+    this.buffer = Buffer.alloc(0);
     this.connectAttempts++;
     const sock = new Socket();
     this.socket = sock;
@@ -120,7 +129,7 @@ export class MonsoonRunner {
 
   private onData(chunk: Buffer): void {
     this.buffer = Buffer.concat([this.buffer, chunk]);
-    const { records, remaining, skipped } = parseStream(this.buffer);
+    const { records, remaining, skipped } = parseStream(this.buffer, this.parserState);
     this.buffer = remaining;
     if (skipped > 0) {
       log.debug("re-synced parser", { reader_id: this.spec.id, skipped });

@@ -35,7 +35,14 @@ async function main(): Promise<void> {
     (read) => {
       aggregator.enqueue({
         readerId: read.readerId,
-        reads: [{ epcHex: read.epcHex, monsoonTsMs: null }],
+        reads: [
+          {
+            epcHex: read.epcHex,
+            antennaNumber: read.antennaNumber ?? 1,
+            rssiDbm: read.rssi ?? 0,
+            monsoonTsMs: null,
+          },
+        ],
         receivedAt: new Date(read.readAt),
       });
     },
