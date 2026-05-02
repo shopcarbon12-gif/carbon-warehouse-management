@@ -305,6 +305,13 @@ async function fetchRawCatalogFromItemMatrix(
   url.searchParams.set("limit", String(LS_V3_PAGE_LIMIT));
   url.searchParams.set("load_relations", '["Items","Items.ItemShops","Items.ItemAttributes"]');
   url.searchParams.set("sort", "itemMatrixID");
+  // Mirror Lightspeed exactly — pull both archived and non-archived. The WMS
+  // catalog UI defaults to hiding archived (cs.archived = FALSE in
+  // inventory-catalog.ts:50); the variant-level archived flag is what the
+  // "show archived" toggle keys on, and it's only correct if the sync sees
+  // archived items at all. Without `or,true,false`, Lightspeed silently
+  // returns archived=false only.
+  url.searchParams.set("archived", "or,true,false");
 
   const rawItems: Record<string, unknown>[] = [];
   let nextUrl: string | null = url.toString();
@@ -377,6 +384,8 @@ async function fetchRawCatalogItemsV3(
   url.searchParams.set("limit", String(LS_V3_PAGE_LIMIT));
   url.searchParams.set("load_relations", '["ItemShops","ItemAttributes"]');
   url.searchParams.set("sort", "itemID");
+  // See note in fetchRawCatalogFromItemMatrix — mirror LS, pull both states.
+  url.searchParams.set("archived", "or,true,false");
 
   const rawItems: Record<string, unknown>[] = [];
   let nextUrl: string | null = url.toString();
@@ -429,7 +438,9 @@ async function tryFirstItemPage(accessToken: string, accountId: string, pageLimi
     query: {
       limit: pageLimit,
       offset: 0,
-      archived: "false",
+      // Mirror LS — pull both archived and non-archived. UI hides archived by
+      // default; the variant-level archived flag is set per-row by the mapper.
+      archived: "or,true,false",
       load_relations: '["ItemShops","ItemAttributes"]',
     },
   });
@@ -460,7 +471,7 @@ async function fetchRawCatalogItemsLegacy(
 
   const buildBaseQuery = (limit: number) => ({
     limit,
-    archived: "false",
+    archived: "or,true,false",
     load_relations: '["ItemShops","ItemAttributes"]',
   });
 
