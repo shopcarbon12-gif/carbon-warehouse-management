@@ -5,6 +5,7 @@ import {
   findTransferBlockedEpc,
   resolveEpcVisibilityForTenant,
 } from "@/lib/server/status-label-enforcement";
+import { ingestEpcs } from "@/lib/server/epc-ingress";
 
 export type ReconcilerBatchInput = {
   tenantId: string;
@@ -115,6 +116,25 @@ export async function reconcileInventoryFromEdge(
     await client.query("BEGIN");
 
     let rowsAffected = 0;
+
+    // Catalog-filter gate: every EPC the handheld scans flows through the
+    // unified ingress so unknown / undecodable tags land as `tag_killed`
+    // (visible only in Defective EPCs popup) instead of vanishing. Existing
+    // EPCs get last_seen_at bumped. Skipped for EXCEPTION_ALARM since that
+    // path intentionally records a stranger-tag event without commissioning.
+    if (ctx !== "EXCEPTION_ALARM") {
+      await ingestEpcs(
+        client,
+        epcs.map((epc) => ({
+          tenantId: input.tenantId,
+          epc,
+          source: "handheld",
+          sourceDeviceLabel: input.deviceId.slice(0, 256),
+          locationId: input.locationId,
+          receivedAt: input.timestamp ? new Date(input.timestamp) : new Date(),
+        })),
+      );
+    }
 
     let workEpcs = epcs;
     if (ctx === "TRANSFER" || ctx === "STATUS_CHANGE") {

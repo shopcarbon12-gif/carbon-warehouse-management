@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { findAuditBlockedEpc } from "@/lib/server/status-label-enforcement";
+import { ingestEpcs } from "@/lib/server/epc-ingress";
 
 const epcHex24 = z
   .string()
@@ -208,6 +209,25 @@ export async function commitCycleCount(
       [bodyBinId, locationId, epc, session.tid],
     );
     updatedMisplaced += u.rowCount ?? 0;
+  }
+
+  // Catalog-filter gate for cycle-count "unrecognized" scans: route them
+  // through the unified ingress so unknown / undecodable EPCs land as
+  // tag_killed (visible in Defective EPCs popup) instead of being audit-only.
+  // EPCs that decode + match the catalog land as in-stock at this location.
+  const unrecognizedSet = [...new Set(parsed.unrecognized.map(normalizeEpc))];
+  if (unrecognizedSet.length > 0) {
+    await ingestEpcs(
+      client,
+      unrecognizedSet.map((epc) => ({
+        tenantId: session.tid,
+        epc,
+        source: "cycle_count",
+        sourceDeviceLabel: binCode ? `cycle:${loc.code}/${binCode}` : `cycle:${loc.code}`,
+        locationId,
+        receivedAt: new Date(),
+      })),
+    );
   }
 
   const meta = {
