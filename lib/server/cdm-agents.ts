@@ -460,19 +460,45 @@ export function invalidateAntennaCache(): void {
  * Ingest a batch of reads. Validates the agent owns the reader, looks up
  * each antenna's UUID by its number, then bulk-inserts into cdm_reads.
  */
+/**
+ * Hardware blocklist — readers at these IPs run a different (Senitron / old
+ * binary) firmware whose read payloads have malformed shapes that crash the
+ * Carbon ingest path. They're functionally Senitron's not Carbon's; ignore
+ * any reads claiming to come from them. See memory notes on the LAN topology
+ * split.
+ */
+const READER_IP_BLOCKLIST = new Set<string>([
+  "192.168.1.16",
+]);
+
 export async function ingestAgentReads(
   client: PoolClient,
   auth: { agentId: string; tenantId: string },
   body: IngestReadsBody,
 ): Promise<{ inserted: number }> {
-  const ownership = await client.query<{ id: string; location_id: string; name: string }>(
-    `SELECT id::text, location_id::text, name FROM devices
+  const ownership = await client.query<{
+    id: string;
+    location_id: string;
+    name: string;
+    network_address: string | null;
+  }>(
+    `SELECT id::text, location_id::text, name, network_address FROM devices
        WHERE id = $1::uuid AND tenant_id = $2::uuid AND cdm_agent_id = $3::uuid
          AND device_type IN ('fixed_reader','transaction_reader','door_reader')`,
     [body.readerId, auth.tenantId, auth.agentId],
   );
   if (ownership.rowCount === 0) {
     throw new Error("BAD_REQUEST:Reader not found or not owned by this agent");
+  }
+  const readerNetworkAddress = ownership.rows[0].network_address ?? "";
+  if (READER_IP_BLOCKLIST.has(readerNetworkAddress)) {
+    // Don't crash the agent — accept the POST and silently no-op so the
+    // agent's batch-retry doesn't keep hammering. Operator should reconfigure
+    // the agent to stop polling these readers entirely.
+    console.warn(
+      `[ingestAgentReads] dropping ${body.reads.length} reads from blocklisted reader ${readerNetworkAddress} (${ownership.rows[0].name})`,
+    );
+    return { inserted: 0 };
   }
   const readerLocationId = ownership.rows[0].location_id;
   const readerName = ownership.rows[0].name;
@@ -565,53 +591,66 @@ export async function ingestAgentReads(
   // shows zone transitions inside the location. Reader-to-reader within the
   // same zone stays silent. First sighting (NULL → new zone) doesn't emit —
   // that's a backfill, not a movement.
+  //
+  // Wrapped in try/catch on a SAVEPOINT so any failure here (missing column
+  // on a partially-migrated DB, malformed payload, audit_log schema drift)
+  // can't take down the read-ingest pipeline. Worst case: zone-change events
+  // stop emitting until the underlying issue is fixed; reads keep flowing.
   const newZoneId = readerInfo.rows[0]?.zone_id ?? null;
   if (newZoneId && dedupedEpcs.length > 0) {
-    const changed = await client.query<{ epc: string; old_zone_id: string }>(
-      `SELECT i.epc, i.last_seen_zone_id::text AS old_zone_id
-         FROM items i
-         INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
-        WHERE i.epc = ANY($2::text[])
-          AND i.last_seen_zone_id IS NOT NULL
-          AND i.last_seen_zone_id IS DISTINCT FROM $3::uuid`,
-      [auth.tenantId, dedupedEpcs, newZoneId],
-    );
-    // Update last_seen_zone_id for every EPC in this batch (including first
-    // sightings) so the next read can compare correctly.
-    await client.query(
-      `UPDATE items
-          SET last_seen_zone_id = $3::uuid
-        FROM locations l
-        WHERE items.epc = ANY($2::text[])
-          AND l.id = items.location_id AND l.tenant_id = $1::uuid
-          AND items.last_seen_zone_id IS DISTINCT FROM $3::uuid`,
-      [auth.tenantId, dedupedEpcs, newZoneId],
-    );
-    // Bulk-insert audit_log rows for actual transitions.
-    if (changed.rowCount && changed.rowCount > 0) {
-      const auditValues = changed.rows.map((r, i) => {
-        const baseIdx = 2 + i * 2; // params $1=tenantId, then pairs of (entity, metadata)
-        return `($1::uuid, NULL, 'rfid_zone_change', $${baseIdx}::text, $${baseIdx + 1}::jsonb, now())`;
-      });
-      const auditParams: unknown[] = [auth.tenantId];
-      for (const r of changed.rows) {
-        auditParams.push(`epc:${r.epc}`);
-        auditParams.push(
-          JSON.stringify({
-            epc: r.epc,
-            from_zone_id: r.old_zone_id,
-            to_zone_id: newZoneId,
-            reader_id: body.readerId,
-            reader_name: readerName,
-          }),
+    try {
+      await client.query("SAVEPOINT zone_change_tracker");
+      const changed = await client.query<{ epc: string; old_zone_id: string }>(
+        `SELECT i.epc, i.last_seen_zone_id::text AS old_zone_id
+           FROM items i
+           INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
+          WHERE i.epc = ANY($2::text[])
+            AND i.last_seen_zone_id IS NOT NULL
+            AND i.last_seen_zone_id IS DISTINCT FROM $3::uuid`,
+        [auth.tenantId, dedupedEpcs, newZoneId],
+      );
+      await client.query(
+        `UPDATE items
+            SET last_seen_zone_id = $3::uuid
+          FROM locations l
+          WHERE items.epc = ANY($2::text[])
+            AND l.id = items.location_id AND l.tenant_id = $1::uuid
+            AND items.last_seen_zone_id IS DISTINCT FROM $3::uuid`,
+        [auth.tenantId, dedupedEpcs, newZoneId],
+      );
+      if (changed.rowCount && changed.rowCount > 0) {
+        const auditValues = changed.rows.map((_r, i) => {
+          const baseIdx = 2 + i * 2; // $1=tenantId, then pairs of (entity, metadata)
+          return `($1::uuid, NULL, 'rfid_zone_change', $${baseIdx}::text, $${baseIdx + 1}::jsonb, now())`;
+        });
+        const auditParams: unknown[] = [auth.tenantId];
+        for (const r of changed.rows) {
+          auditParams.push(`epc:${r.epc}`);
+          auditParams.push(
+            JSON.stringify({
+              epc: r.epc,
+              from_zone_id: r.old_zone_id,
+              to_zone_id: newZoneId,
+              reader_id: body.readerId,
+              reader_name: readerName,
+            }),
+          );
+        }
+        await client.query(
+          `INSERT INTO audit_log
+             (tenant_id, user_id, action, entity, metadata, created_at)
+           VALUES ${auditValues.join(", ")}`,
+          auditParams,
         );
       }
-      await client.query(
-        `INSERT INTO audit_log
-           (tenant_id, user_id, action, entity, metadata, created_at)
-         VALUES ${auditValues.join(", ")}`,
-        auditParams,
-      );
+      await client.query("RELEASE SAVEPOINT zone_change_tracker");
+    } catch (e) {
+      try {
+        await client.query("ROLLBACK TO SAVEPOINT zone_change_tracker");
+      } catch {
+        /* savepoint may already be invalidated */
+      }
+      console.warn("[ingestAgentReads] zone-change tracker error (continuing)", e);
     }
   }
 
