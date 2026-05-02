@@ -88,7 +88,9 @@ export async function rfidCommissionPrepare(
     upc: string;
     description: string;
   }>(
-    `SELECT cs.id, cs.ls_system_id::text, cs.sku, m.upc, m.description
+    `SELECT cs.id, cs.ls_system_id::text, cs.sku,
+            COALESCE(NULLIF(trim(cs.upc), ''), m.upc) AS upc,
+            m.description
      FROM custom_skus cs
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE cs.id = $1::uuid

@@ -25,8 +25,64 @@ async function nextManualLsSystemId(client: PoolClient): Promise<number> {
   return n;
 }
 
+async function insertManualMatrix(
+  client: PoolClient,
+  matrixUpc: string,
+  matrixDescription: string,
+  vendor: string | null,
+): Promise<string> {
+  const r = await client.query<{ id: string }>(
+    `INSERT INTO matrices (upc, description, brand, category, vendor, ls_system_id)
+     VALUES ($1, $2, NULL, NULL, $3, NULL)
+     RETURNING id::text`,
+    [matrixUpc.trim() || null, matrixDescription.trim(), vendor?.trim() || null],
+  );
+  const id = r.rows[0]?.id;
+  if (!id) throw new Error("matrix_upsert_failed");
+  return id;
+}
+
+async function insertManualCustomSku(
+  client: PoolClient,
+  matrixId: string,
+  sku: string,
+  color: string | null,
+  size: string | null,
+  retailPrice: string | null,
+  variantUpc: string | null,
+): Promise<string> {
+  const lsId = await nextManualLsSystemId(client);
+  const price =
+    retailPrice != null && String(retailPrice).trim() !== ""
+      ? Number.parseFloat(String(retailPrice))
+      : null;
+  const priceParam = price != null && Number.isFinite(price) ? String(price) : null;
+
+  const r = await client.query<{ id: string }>(
+    `INSERT INTO custom_skus (
+       matrix_id, sku, ls_system_id, color_code, size, retail_price, upc
+     )
+     VALUES ($1::uuid, $2, $3::bigint, $4, $5, $6::numeric, $7)
+     RETURNING id::text`,
+    [
+      matrixId,
+      sku.trim(),
+      lsId,
+      color?.trim() || null,
+      size?.trim() || null,
+      priceParam,
+      variantUpc?.trim() || null,
+    ],
+  );
+  const id = r.rows[0]?.id;
+  if (!id) throw new Error("custom_sku_insert_failed");
+  return id;
+}
+
 /**
- * Upsert matrix by UPC and insert a new custom SKU with a synthetic negative `ls_system_id`.
+ * Insert a new manual catalog line: creates a fresh matrix row and one variant
+ * under it. UPC is no longer a unique key — two manual matrices may share a
+ * UPC, just like two Lightspeed-sourced ones may.
  */
 export async function createManualCatalogLine(
   pool: Pool,
@@ -35,45 +91,21 @@ export async function createManualCatalogLine(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    const m = await client.query<{ id: string }>(
-      `INSERT INTO matrices (upc, description, brand, category, vendor, ls_system_id)
-       VALUES ($1, $2, NULL, NULL, $3, NULL)
-       ON CONFLICT (upc) DO UPDATE SET
-         description = EXCLUDED.description,
-         vendor = COALESCE(EXCLUDED.vendor, matrices.vendor)
-       RETURNING id::text`,
-      [input.matrixUpc.trim(), input.matrixDescription.trim(), input.vendor?.trim() || null],
+    const matrixId = await insertManualMatrix(
+      client,
+      input.matrixUpc,
+      input.matrixDescription,
+      input.vendor ?? null,
     );
-    const matrixId = m.rows[0]?.id;
-    if (!matrixId) throw new Error("matrix_upsert_failed");
-
-    const lsId = await nextManualLsSystemId(client);
-    const price =
-      input.retailPrice != null && String(input.retailPrice).trim() !== ""
-        ? Number.parseFloat(String(input.retailPrice))
-        : null;
-    const priceParam = price != null && Number.isFinite(price) ? String(price) : null;
-
-    const cs = await client.query<{ id: string }>(
-      `INSERT INTO custom_skus (
-         matrix_id, sku, ls_system_id, color_code, size, retail_price, upc
-       )
-       VALUES ($1::uuid, $2, $3::bigint, $4, $5, $6::numeric, $7)
-       RETURNING id::text`,
-      [
-        matrixId,
-        input.sku.trim(),
-        lsId,
-        input.color?.trim() || null,
-        input.size?.trim() || null,
-        priceParam,
-        input.variantUpc?.trim() || null,
-      ],
+    const customSkuId = await insertManualCustomSku(
+      client,
+      matrixId,
+      input.sku,
+      input.color ?? null,
+      input.size ?? null,
+      input.retailPrice ?? null,
+      input.variantUpc ?? null,
     );
-    const customSkuId = cs.rows[0]?.id;
-    if (!customSkuId) throw new Error("custom_sku_insert_failed");
-
     await client.query("COMMIT");
     return { matrix_id: matrixId, custom_sku_id: customSkuId };
   } catch (e) {
@@ -90,7 +122,16 @@ export async function createManualCatalogLine(
 
 export type CsvImportRowResult = { line: number; ok: boolean; error?: string };
 
-/** Expected headers (case-insensitive): matrix_upc, sku, name, optional vendor, color, size, retail_price */
+/**
+ * Expected headers (case-insensitive): matrix_upc, sku, name, optional vendor,
+ * color, size, retail_price.
+ *
+ * Rows in the same CSV that share both `matrix_upc` and `name` (case-insensitive)
+ * are grouped under one matrix — a typical "import a product with multiple
+ * size/color variants" workflow. Rows that share a `matrix_upc` but have
+ * different `name` values become separate matrices: that's the bug-fix
+ * rationale, two real products may legitimately share a barcode.
+ */
 export async function importCatalogCsvRows(
   pool: Pool,
   csvText: string,
@@ -136,6 +177,12 @@ export async function importCatalogCsvRows(
 
   const results: CsvImportRowResult[] = [];
   let created = 0;
+  // Cache matrix ids by (upc + name lower) within this CSV so the same product
+  // across multiple rows reuses one matrix, but distinct (upc, name) pairs
+  // become distinct matrices.
+  const matrixIdByGroupKey = new Map<string, string>();
+  const groupKey = (upc: string, name: string) =>
+    `${upc.trim()}::${name.trim().toLowerCase()}`;
 
   for (let li = 1; li < lines.length; li++) {
     const lineNum = li + 1;
@@ -152,22 +199,32 @@ export async function importCatalogCsvRows(
     const size = iSize >= 0 ? cells[iSize]?.trim() || null : null;
     const retailPrice = iPrice >= 0 ? cells[iPrice]?.trim() || null : null;
 
+    const client = await pool.connect();
     try {
-      await createManualCatalogLine(pool, {
-        matrixUpc,
-        matrixDescription: name,
-        sku,
-        vendor,
-        color,
-        size,
-        retailPrice,
-        variantUpc: null,
-      });
+      await client.query("BEGIN");
+      const key = groupKey(matrixUpc, name);
+      let matrixId = matrixIdByGroupKey.get(key);
+      if (!matrixId) {
+        matrixId = await insertManualMatrix(client, matrixUpc, name, vendor);
+        matrixIdByGroupKey.set(key, matrixId);
+      }
+      await insertManualCustomSku(client, matrixId, sku, color, size, retailPrice, null);
+      await client.query("COMMIT");
       created += 1;
       results.push({ line: lineNum, ok: true });
     } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* ignore */
+      }
+      // If the matrix was created but its first variant failed mid-group,
+      // forget the cached id so the next row in the same group will retry.
+      matrixIdByGroupKey.delete(groupKey(matrixUpc, name));
       const msg = err instanceof Error ? err.message : String(err);
       results.push({ line: lineNum, ok: false, error: msg.slice(0, 200) });
+    } finally {
+      client.release();
     }
   }
 

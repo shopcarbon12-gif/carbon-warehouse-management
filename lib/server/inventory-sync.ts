@@ -164,20 +164,21 @@ async function upsertMatrixRow(
   const vendor = row.vendor?.trim() || null;
   const lsSystemId = row.matrixLsSystemId;
 
-  /* When UPC is present, the (upc) UNIQUE constraint dedupes for us.
-   * When UPC is null (loyalty/coupon/service-credit Lightspeed lines), Postgres
-   * treats nulls as distinct in unique indexes — so ON CONFLICT (upc) won't
-   * fire. Resolve manually via ls_system_id (partial unique idx) instead. */
-  if (upc !== null) {
+  /* Identity = ls_system_id (Lightspeed itemMatrixID). Two LS matrices that
+   * legitimately share a UPC must remain distinct WMS rows — keying on UPC
+   * (the old behavior) collapsed them and silently overwrote the parent name.
+   * The partial unique index `matrices_ls_system_id_uidx` (migration 006)
+   * is the conflict target; UPC is now a non-unique attribute. */
+  if (lsSystemId != null) {
     const ins = await client.query<{ id: string }>(
       `INSERT INTO matrices (upc, description, brand, category, vendor, ls_system_id)
        VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (upc) DO UPDATE SET
+       ON CONFLICT (ls_system_id) WHERE ls_system_id IS NOT NULL DO UPDATE SET
+         upc = EXCLUDED.upc,
          description = EXCLUDED.description,
          brand = COALESCE(EXCLUDED.brand, matrices.brand),
          category = COALESCE(EXCLUDED.category, matrices.category),
-         vendor = COALESCE(EXCLUDED.vendor, matrices.vendor),
-         ls_system_id = COALESCE(EXCLUDED.ls_system_id, matrices.ls_system_id)
+         vendor = COALESCE(EXCLUDED.vendor, matrices.vendor)
        RETURNING id::text`,
       [upc, description, brand, category, vendor, lsSystemId],
     );
@@ -186,26 +187,14 @@ async function upsertMatrixRow(
     return id;
   }
 
-  /* upc IS NULL: try update-by-ls_system_id first; insert if no match. */
-  if (lsSystemId != null) {
-    const upd = await client.query<{ id: string }>(
-      `UPDATE matrices SET
-         description = $1,
-         brand = COALESCE($2, brand),
-         category = COALESCE($3, category),
-         vendor = COALESCE($4, vendor)
-       WHERE ls_system_id = $5
-       RETURNING id::text`,
-      [description, brand, category, vendor, lsSystemId],
-    );
-    if (upd.rows[0]?.id) return upd.rows[0].id;
-  }
-
+  /* No LS identity (legacy / simulated payload). Production sync paths always
+   * set matrixLsSystemId; this branch is the safety net. No conflict target —
+   * always insert; manual dedupe is the caller's responsibility. */
   const ins = await client.query<{ id: string }>(
     `INSERT INTO matrices (upc, description, brand, category, vendor, ls_system_id)
-     VALUES (NULL, $1, $2, $3, $4, $5)
+     VALUES ($1, $2, $3, $4, $5, NULL)
      RETURNING id::text`,
-    [description, brand, category, vendor, lsSystemId],
+    [upc, description, brand, category, vendor],
   );
   const id = ins.rows[0]?.id;
   if (!id) throw new Error("matrix upsert returned no id");
