@@ -20,7 +20,19 @@ type CatalogHit = {
   color: string | null;
   size: string | null;
   status: string;
+  upc: string | null;
+  vendor: string | null;
+  retail_price: string | null;
+  asset_id: string | null;
+  sku_ls_system_id: string | null;
+  location_code: string | null;
+  bin_code: string | null;
 };
+
+/** Per-EPC lookup batch size — server enforces max 200 in
+ *  /api/operations/transfers/lookup's zod schema. Stay under it so we
+ *  never silently drop the whole batch. */
+const CATALOG_LOOKUP_CHUNK = 200;
 
 type CalibrationPoint = {
   id: string;
@@ -309,8 +321,9 @@ export function AntennaTestWorkspace() {
       );
     }
     lines.push("");
-    // Header row — `is_reference` is appended at the end so existing
-    // importers that key off the original column order still work.
+    // Header row — every catalog field the lookup endpoint returns gets a
+    // column. `is_reference` stays at the end for backwards-compatible
+    // importers that key off the original prefix.
     lines.push(
       [
         "idx",
@@ -324,9 +337,17 @@ export function AntennaTestWorkspace() {
         "first_seen_iso",
         "last_seen_iso",
         "sku",
+        "system_id",
         "name",
         "color",
         "size",
+        "upc",
+        "vendor",
+        "retail_price",
+        "asset_id",
+        "item_status",
+        "location_code",
+        "bin_code",
         "is_reference",
       ]
         .map(csvEscape)
@@ -355,9 +376,17 @@ export function AntennaTestWorkspace() {
           new Date(row.firstSeenMs).toISOString(),
           new Date(row.lastSeenMs).toISOString(),
           cat?.sku ?? "",
+          cat?.sku_ls_system_id ?? "",
           cat?.name ?? "",
           cat?.color ?? "",
           cat?.size ?? "",
+          cat?.upc ?? "",
+          cat?.vendor ?? "",
+          cat?.retail_price ?? "",
+          cat?.asset_id ?? "",
+          cat?.status ?? "",
+          cat?.location_code ?? "",
+          cat?.bin_code ?? "",
           referenceSet.has(row.epcHex) ? "true" : "false",
         ]
           .map(csvEscape)
@@ -382,6 +411,14 @@ export function AntennaTestWorkspace() {
             epc,
             "",
             picked.antennaNumber,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
             "",
             "",
             "",
@@ -480,8 +517,15 @@ export function AntennaTestWorkspace() {
 
   // Catalog enrichment: as new EPCs appear in `rows`, batch them and POST to
   // /api/operations/transfers/lookup (session-cookie). Cache the result so we
-  // don't re-fetch the same EPC. Same pattern used by the dashboard live-scan
-  // tile — auto-ingests previously-unknown EPCs and links them to a custom_sku.
+  // don't re-fetch the same EPC.
+  //
+  // Chunked at CATALOG_LOOKUP_CHUNK (200) because the server's zod schema
+  // rejects bigger payloads with 400. Pre-fix the whole first burst could
+  // exceed 200 EPCs, the request would 400, the failure was silently
+  // swallowed, AND those EPCs were marked as already-looked-up — so they
+  // never got enriched, and every CSV export missed sku/name/color/size for
+  // the first ~hundreds of rows. Now: chunk, send sequentially, on failure
+  // un-mark so the next render-tick retries the failed chunk.
   const [catalog, setCatalog] = useState<Map<string, CatalogHit>>(new Map());
   const catalogRef = useRef<Map<string, CatalogHit>>(new Map());
   const lookedUpRef = useRef<Set<string>>(new Set());
@@ -492,39 +536,68 @@ export function AntennaTestWorkspace() {
       setCatalog(new Map());
       return;
     }
-    // Find EPCs in current rows that we haven't tried to look up yet.
     const pending: string[] = [];
     for (const epc of rows.keys()) {
       if (lookedUpRef.current.has(epc)) continue;
       lookedUpRef.current.add(epc);
-      // Lookup endpoint requires 24-char hex; sweep mode shorter EPCs are skipped.
       if (/^[0-9A-F]{24}$/.test(epc)) pending.push(epc);
     }
     if (pending.length === 0) return;
-    // Fire-and-forget; merge response into catalog Map.
     void (async () => {
-      try {
-        const res = await fetch("/api/operations/transfers/lookup", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ epcs: pending }),
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          rows?: { epc: string; sku: string; name: string | null; color: string | null; size: string | null; status: string }[];
-        };
-        for (const row of data.rows ?? []) {
-          catalogRef.current.set(row.epc.toUpperCase(), {
-            sku: row.sku,
-            name: row.name,
-            color: row.color,
-            size: row.size,
-            status: row.status,
+      // Slice into ≤200-EPC chunks; sequential keeps load on the server low
+      // and lets the table populate progressively as each chunk lands.
+      for (let i = 0; i < pending.length; i += CATALOG_LOOKUP_CHUNK) {
+        const chunk = pending.slice(i, i + CATALOG_LOOKUP_CHUNK);
+        try {
+          const res = await fetch("/api/operations/transfers/lookup", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ epcs: chunk }),
           });
+          if (!res.ok) {
+            // Un-mark so the next render-tick (typically <100ms away while
+            // reads are flowing) retries this chunk.
+            for (const e of chunk) lookedUpRef.current.delete(e);
+            continue;
+          }
+          const data = (await res.json()) as {
+            rows?: {
+              epc: string;
+              sku: string;
+              name: string | null;
+              color: string | null;
+              size: string | null;
+              status: string;
+              upc: string | null;
+              vendor: string | null;
+              retail_price: string | null;
+              asset_id: string | null;
+              sku_ls_system_id: string | null;
+              location_code: string | null;
+              bin_code: string | null;
+            }[];
+          };
+          for (const row of data.rows ?? []) {
+            catalogRef.current.set(row.epc.toUpperCase(), {
+              sku: row.sku,
+              name: row.name,
+              color: row.color,
+              size: row.size,
+              status: row.status,
+              upc: row.upc,
+              vendor: row.vendor,
+              retail_price: row.retail_price,
+              asset_id: row.asset_id,
+              sku_ls_system_id: row.sku_ls_system_id,
+              location_code: row.location_code,
+              bin_code: row.bin_code,
+            });
+          }
+          setCatalog(new Map(catalogRef.current));
+        } catch {
+          // Network failure / aborted — un-mark and retry on next tick.
+          for (const e of chunk) lookedUpRef.current.delete(e);
         }
-        setCatalog(new Map(catalogRef.current));
-      } catch {
-        /* ignore — operator will see "—" cells; we'll retry on next batch */
       }
     })();
   }, [rows, sessionId]);
@@ -1183,12 +1256,18 @@ export function AntennaTestWorkspace() {
               >
                 Custom SKU{sortIndicator("sku")}
               </th>
+              <th className="px-3 py-2 text-left">System ID</th>
               <th
                 className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("desc")}
               >
                 Description (name · color · size){sortIndicator("desc")}
               </th>
+              <th className="px-3 py-2 text-left">UPC</th>
+              <th className="px-3 py-2 text-left">Vendor</th>
+              <th className="px-3 py-2 text-right">Price</th>
+              <th className="px-3 py-2 text-left">Item status</th>
+              <th className="px-3 py-2 text-left">Loc · Bin</th>
               <th className="px-3 py-2 text-left">Calibrate</th>
             </tr>
           </thead>
@@ -1196,7 +1275,7 @@ export function AntennaTestWorkspace() {
             {sortedRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={11}
+                  colSpan={17}
                   className="px-3 py-8 text-center text-xs text-[var(--wms-muted)]"
                 >
                   {isLive
@@ -1273,8 +1352,51 @@ export function AntennaTestWorkspace() {
                   <td className="px-3 py-1.5 font-mono text-[11px]">
                     {cat?.sku ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
+                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                    {cat?.sku_ls_system_id ?? <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
                   <td className="px-3 py-1.5 text-[11px]">
                     {desc || <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                    {cat?.upc ?? <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5 text-[11px]">
+                    {cat?.vendor ?? <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5 text-right font-mono text-[11px]">
+                    {cat?.retail_price ? (
+                      `$${Number(cat.retail_price).toFixed(2)}`
+                    ) : (
+                      <span className="text-[var(--wms-muted)]">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-[11px]">
+                    {cat?.status ? (
+                      <span
+                        className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white ${
+                          cat.status === "in-stock"
+                            ? "bg-emerald-600"
+                            : cat.status === "tag_killed"
+                              ? "bg-red-600"
+                              : "bg-slate-500"
+                        }`}
+                      >
+                        {cat.status}
+                      </span>
+                    ) : (
+                      <span className="text-[var(--wms-muted)]">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                    {cat?.location_code ? (
+                      <>
+                        {cat.location_code}
+                        {cat.bin_code ? ` · ${cat.bin_code}` : ""}
+                      </>
+                    ) : (
+                      <span className="text-[var(--wms-muted)]">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-1.5">
                     {row.firstReadPowerArg !== null && picked ? (
