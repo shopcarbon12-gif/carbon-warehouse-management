@@ -353,7 +353,8 @@ export function AntennaTestWorkspace() {
         .map(csvEscape)
         .join(","),
     );
-    sortedRows.forEach((row, idx) => {
+    // Export reflects what's on screen — filtered + sorted, in current order.
+    filteredRows.forEach((row, idx) => {
       const bucket = rssiBucket(row.bestRssiDbm);
       const calibrated = estimateDistance(calibPoints, row.firstReadPowerArg);
       const distance =
@@ -397,7 +398,7 @@ export function AntennaTestWorkspace() {
     // export's pass/fail tail. Without this, a missing tag is just absent
     // from the export and easy to overlook downstream.
     if (referenceState.list.length > 0) {
-      let tailIdx = sortedRows.length;
+      let tailIdx = filteredRows.length;
       for (const epc of referenceState.list) {
         if (rows.has(epc)) continue;
         tailIdx += 1;
@@ -746,6 +747,38 @@ export function AntennaTestWorkspace() {
     if (sortKey !== key) return "";
     return sortDir === "asc" ? " ▲" : " ▼";
   };
+
+  // Free-form filter — case-insensitive substring match against everything
+  // visible on a row. Empty query passes all rows. Scoped per-render against
+  // sortedRows so sort + filter compose cleanly.
+  const [filterQuery, setFilterQuery] = useState("");
+  const filteredRows = useMemo<AntennaTestRow[]>(() => {
+    const q = filterQuery.trim().toLowerCase();
+    if (!q) return sortedRows;
+    return sortedRows.filter((row) => {
+      const cat = catalog.get(row.epcHex);
+      const bucket = rssiBucket(row.bestRssiDbm).label;
+      const haystack = [
+        row.epcHex,
+        bucket,
+        cat?.sku,
+        cat?.sku_ls_system_id,
+        cat?.name,
+        cat?.color,
+        cat?.size,
+        cat?.upc,
+        cat?.vendor,
+        cat?.retail_price,
+        cat?.status,
+        cat?.location_code,
+        cat?.bin_code,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [sortedRows, filterQuery, catalog]);
 
   // Calibration save flow — operator types the distance for the row whose
   // EPC they want to save as a reference. We POST to /calibrate, then
@@ -1207,6 +1240,38 @@ export function AntennaTestWorkspace() {
         hasAntennaPicked={picked !== null}
       />
 
+      {/* Filter bar — case-insensitive substring across every visible field.
+          Keeps the live table usable when 1000+ EPCs are streaming in. */}
+      <div className="flex flex-wrap items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-card)] px-3 py-2">
+        <input
+          type="search"
+          placeholder="Filter — EPC, SKU, system ID, name, color, size, UPC, vendor, status, location, bin, distance bucket…"
+          value={filterQuery}
+          onChange={(e) => setFilterQuery(e.target.value)}
+          className="min-w-0 flex-1 rounded border border-[var(--wms-border)] bg-[var(--wms-bg)] px-3 py-1.5 font-mono text-xs"
+        />
+        {filterQuery && (
+          <button
+            onClick={() => setFilterQuery("")}
+            className="rounded border border-[var(--wms-border)] bg-[var(--wms-bg)] px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-[var(--wms-muted)] hover:bg-[var(--wms-card)]"
+            title="Clear filter"
+          >
+            × clear
+          </button>
+        )}
+        {filterQuery.trim() ? (
+          <span className="font-mono text-[10px] text-[var(--wms-muted)]">
+            showing <strong className="text-[var(--wms-fg)]">{filteredRows.length}</strong>{" "}
+            of <strong className="text-[var(--wms-fg)]">{sortedRows.length}</strong>
+          </span>
+        ) : sortedRows.length > 0 ? (
+          <span className="font-mono text-[10px] text-[var(--wms-muted)]">
+            <strong className="text-[var(--wms-fg)]">{sortedRows.length}</strong> row
+            {sortedRows.length === 1 ? "" : "s"}
+          </span>
+        ) : null}
+      </div>
+
       {/* Live table — overflow-x-auto so the page itself doesn't widen, only
           the table region scrolls sideways. table-auto + min-w-max + per-cell
           whitespace-nowrap means columns auto-size to their content — no
@@ -1275,19 +1340,21 @@ export function AntennaTestWorkspace() {
             </tr>
           </thead>
           <tbody>
-            {sortedRows.length === 0 && (
+            {filteredRows.length === 0 && (
               <tr>
                 <td
                   colSpan={17}
                   className="px-3 py-8 text-center text-xs text-[var(--wms-muted)]"
                 >
-                  {isLive
-                    ? "Waiting for first read…"
-                    : "Pick an antenna and click Start scan."}
+                  {filterQuery.trim()
+                    ? `No rows match "${filterQuery.trim()}". Clear the filter to see all ${sortedRows.length} row${sortedRows.length === 1 ? "" : "s"}.`
+                    : isLive
+                      ? "Waiting for first read…"
+                      : "Pick an antenna and click Start scan."}
                 </td>
               </tr>
             )}
-            {sortedRows.map((row, idx) => {
+            {filteredRows.map((row, idx) => {
               const bucket = rssiBucket(row.bestRssiDbm);
               const cat = catalog.get(row.epcHex);
               const desc = cat
