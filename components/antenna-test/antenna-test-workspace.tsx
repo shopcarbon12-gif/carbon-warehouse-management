@@ -347,7 +347,13 @@ export function AntennaTestWorkspace() {
           .join(","),
       );
     });
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    // Prepend UTF-8 BOM (﻿). Excel and most spreadsheets on Windows/Mac
+    // default to Windows-1252 / Latin-1 when opening a CSV, which mojibakes
+    // any non-ASCII byte (e.g. the en-dash '–' in '0–3 ft' becomes 'â€"').
+    // The BOM is the universal "this file is UTF-8" hint they all honour.
+    const blob = new Blob(["﻿", lines.join("\n")], {
+      type: "text/csv;charset=utf-8",
+    });
     const url = URL.createObjectURL(blob);
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const safeReader = picked.readerName.replace(/[^a-z0-9]+/gi, "_");
