@@ -1207,68 +1207,71 @@ export function AntennaTestWorkspace() {
         hasAntennaPicked={picked !== null}
       />
 
-      {/* Live table */}
-      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-card)]">
-        <table className="w-full text-sm">
+      {/* Live table — overflow-x-auto so the page itself doesn't widen, only
+          the table region scrolls sideways. table-auto + min-w-max + per-cell
+          whitespace-nowrap means columns auto-size to their content — no
+          truncation, no wrap, just scroll if it overflows. */}
+      <div className="overflow-x-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-card)]">
+        <table className="min-w-max table-auto text-sm">
           <thead className="bg-[var(--wms-bg)] text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
             <tr>
-              <th className="px-3 py-2 text-right">#</th>
+              <th className="whitespace-nowrap px-3 py-2 text-right">#</th>
               <th
-                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("distance")}
               >
                 Distance{sortIndicator("distance")}
               </th>
               <th
-                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("rssi")}
               >
                 RSSI now{sortIndicator("rssi")}
               </th>
               <th
-                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("best")}
               >
                 Best{sortIndicator("best")}
               </th>
               <th
-                className="cursor-pointer select-none px-3 py-2 text-right hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-right hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("reads")}
               >
                 Reads{sortIndicator("reads")}
               </th>
-              <th className="px-3 py-2 text-left">Sparkline (5 s)</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">Sparkline (5 s)</th>
               <th
-                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("epc")}
               >
                 EPC{sortIndicator("epc")}
               </th>
               <th
-                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("firstPower")}
               >
                 First-read power{sortIndicator("firstPower")}
               </th>
               <th
-                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("sku")}
               >
                 Custom SKU{sortIndicator("sku")}
               </th>
-              <th className="px-3 py-2 text-left">System ID</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">System ID</th>
               <th
-                className="cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("desc")}
               >
                 Description (name · color · size){sortIndicator("desc")}
               </th>
-              <th className="px-3 py-2 text-left">UPC</th>
-              <th className="px-3 py-2 text-left">Vendor</th>
-              <th className="px-3 py-2 text-right">Price</th>
-              <th className="px-3 py-2 text-left">Item status</th>
-              <th className="px-3 py-2 text-left">Loc · Bin</th>
-              <th className="px-3 py-2 text-left">Calibrate</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">UPC</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">Vendor</th>
+              <th className="whitespace-nowrap px-3 py-2 text-right">Price</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">Item status</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">Loc · Bin</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">Calibrate</th>
             </tr>
           </thead>
           <tbody>
@@ -1301,10 +1304,10 @@ export function AntennaTestWorkspace() {
                     isReference ? { background: "rgba(15, 156, 79, 0.08)" } : undefined
                   }
                 >
-                  <td className="px-3 py-1.5 text-right font-mono text-[10px] text-[var(--wms-muted)]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[10px] text-[var(--wms-muted)]">
                     {idx + 1}
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className="whitespace-nowrap px-3 py-1.5">
                     {showCalibrated ? (
                       <span className="font-mono text-[11px] font-semibold text-[var(--wms-fg)]">
                         {calibrated.band}
@@ -1318,19 +1321,19 @@ export function AntennaTestWorkspace() {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {row.rssiDbm.toFixed(1)} dBm
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {row.bestRssiDbm.toFixed(1)} dBm
                   </td>
-                  <td className="px-3 py-1.5 text-right font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[11px]">
                     {row.reads}
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className="whitespace-nowrap px-3 py-1.5">
                     <Sparkline points={row.spark} />
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {isReference && (
                       <span
                         className="mr-1 inline-block align-middle"
@@ -1342,36 +1345,36 @@ export function AntennaTestWorkspace() {
                     )}
                     {row.epcHex}
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {row.firstReadPowerArg !== null ? (
                       `${(row.firstReadPowerArg / 10).toFixed(1)} dBm`
                     ) : (
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {cat?.sku ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {cat?.sku_ls_system_id ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="px-3 py-1.5 text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
                     {desc || <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {cat?.upc ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="px-3 py-1.5 text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
                     {cat?.vendor ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="px-3 py-1.5 text-right font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[11px]">
                     {cat?.retail_price ? (
                       `$${Number(cat.retail_price).toFixed(2)}`
                     ) : (
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
                     {cat?.status ? (
                       <span
                         className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white ${
@@ -1388,7 +1391,7 @@ export function AntennaTestWorkspace() {
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {cat?.location_code ? (
                       <>
                         {cat.location_code}
@@ -1398,7 +1401,7 @@ export function AntennaTestWorkspace() {
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className="whitespace-nowrap px-3 py-1.5">
                     {row.firstReadPowerArg !== null && picked ? (
                       calibDraft && calibDraft.epc === row.epcHex ? (
                         <span className="flex items-center gap-1">
