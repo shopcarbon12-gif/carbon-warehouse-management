@@ -120,6 +120,14 @@ type ReaderSlot = {
    * doesn't spam the log forever.
    */
   consecutiveZeroByteKicks: number;
+  /**
+   * ms timestamp of the last time we either entered the exhausted state OR
+   * reset the exhausted state for a re-probe. The watchdog uses this to
+   * periodically clear `consecutiveZeroByteKicks` so a reader that comes
+   * back online (after a power-cycle, network hiccup, or transient stall)
+   * recovers without operator intervention.
+   */
+  lastExhaustionResetAt: number;
   /** ms timestamp of the most recent byte arrival on streamSocket. The
    *  watchdog uses this to detect a "stuck but alive" MonsoonReader — the
    *  binary occasionally enters a state where the process is up, the stream
@@ -206,6 +214,17 @@ const TEST_SWEEP_INTERVAL_MS = 1_000;
  */
 const STREAM_SILENCE_TIMEOUT_MS = 60_000;
 const WATCHDOG_INTERVAL_MS = 5_000;
+/**
+ * After a reader is declared exhausted (every candidate port tried, all
+ * silent), wait this long before resetting the counter and probing again.
+ * Without this, a reader that loses power for 30s and comes back stays
+ * permanently dark from the agent's perspective until someone manually
+ * restarts the agent — which is what happened on TEST3 the night of
+ * 2026-05-02. 5 minutes is short enough that an operator power-cycle
+ * recovers automatically, long enough that a truly-dead reader doesn't
+ * spam logs every few seconds.
+ */
+const EXHAUSTION_RECOVERY_INTERVAL_MS = 5 * 60_000;
 
 export class MonsoonSupervisor {
   private slots = new Map<string, ReaderSlot>();
@@ -269,7 +288,41 @@ export class MonsoonSupervisor {
       // again won't help. Let the on-exit respawn (with exp backoff) and
       // the next operator-side change in WMS config handle it.
       const totalCandidates = Math.max(1, slot.candidatePorts.length);
-      const exhaustedAllPorts = slot.consecutiveZeroByteKicks >= totalCandidates;
+      let exhaustedAllPorts = slot.consecutiveZeroByteKicks >= totalCandidates;
+
+      // Stamp the exhaustion timer on first entry so the recovery branch
+      // doesn't fire instantly on a freshly-spun-up slot.
+      if (exhaustedAllPorts && slot.lastExhaustionResetAt === 0) {
+        slot.lastExhaustionResetAt = now;
+      }
+      // Periodic exhaustion recovery: if we've been in the exhausted state
+      // for EXHAUSTION_RECOVERY_INTERVAL_MS, reset the counters and force
+      // the next watchdog tick to re-probe from the configured port. Without
+      // this, a reader that briefly went unreachable stays dark forever from
+      // the agent's perspective — the on-exit respawn keeps producing silent
+      // children that the exhausted-branch refuses to kick. Universal across
+      // all readers (current and future).
+      if (
+        exhaustedAllPorts &&
+        slot.lastExhaustionResetAt > 0 &&
+        now - slot.lastExhaustionResetAt >= EXHAUSTION_RECOVERY_INTERVAL_MS
+      ) {
+        log.info("supervisor: exhaustion recovery — re-probing reader", {
+          readerId: slot.spec.id,
+          readerName: slot.spec.name,
+          host: slot.spec.network_address,
+          stuckMs: now - slot.lastExhaustionResetAt,
+        });
+        slot.consecutiveZeroByteKicks = 0;
+        slot.candidatePortIdx = 0;
+        slot.bytesSinceSpawn = false;
+        slot.lastExhaustionResetAt = now;
+        exhaustedAllPorts = false;
+        // Force a respawn so the next child is fresh on the configured port.
+        slot.lastByteAt = now;
+        slot.child?.kill("SIGTERM");
+        continue;
+      }
 
       const silentMs = now - slot.lastByteAt;
       if (silentMs >= STREAM_SILENCE_TIMEOUT_MS && !exhaustedAllPorts) {
@@ -303,15 +356,22 @@ export class MonsoonSupervisor {
         // We've tried every candidate port at least once without bytes.
         // Bump lastByteAt so we don't spam this branch every 5s — but
         // leave the child running and rely on on-exit respawn cycles
-        // (which themselves are throttled by backoffMs).
+        // (which themselves are throttled by backoffMs). The periodic
+        // recovery above will eventually clear the exhaustion and re-probe.
         if (!slot.bytesSinceSpawn) {
-          // Only log once per long stretch.
+          // Only log once per long stretch. Stamp lastExhaustionResetAt
+          // here too so the recovery timer starts from this moment.
           slot.lastByteAt = now;
+          if (slot.lastExhaustionResetAt === 0) slot.lastExhaustionResetAt = now;
           log.warn("supervisor: reader unreachable, all candidate ports exhausted", {
             readerId: slot.spec.id,
             readerName: slot.spec.name,
             host: slot.spec.network_address,
             triedPorts: slot.candidatePorts,
+            recoveryInMs: Math.max(
+              0,
+              EXHAUSTION_RECOVERY_INTERVAL_MS - (now - slot.lastExhaustionResetAt),
+            ),
           });
         }
       }
@@ -370,6 +430,7 @@ export class MonsoonSupervisor {
           existing.buffer = Buffer.alloc(0);
           existing.bytesSinceSpawn = false;
           existing.consecutiveZeroByteKicks = 0;
+          existing.lastExhaustionResetAt = Date.now();
           if (existing.child && !existing.shuttingDown) existing.child.kill("SIGTERM");
           continue;
         }
@@ -398,6 +459,7 @@ export class MonsoonSupervisor {
         candidatePortIdx: 0,
         bytesSinceSpawn: false,
         consecutiveZeroByteKicks: 0,
+        lastExhaustionResetAt: 0,
         currentDriver: desiredDriver,
         consoleParserState: newConsoleParserState(),
         consoleStampAntenna: enabledForStamp?.antenna_number ?? 1,
