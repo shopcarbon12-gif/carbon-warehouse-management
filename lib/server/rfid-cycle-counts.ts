@@ -179,7 +179,7 @@ export async function commitCycleCount(
   for (const epc of missingSet) {
     const u = await client.query(
       `UPDATE items i
-       SET status = 'UNKNOWN'
+       SET status = 'tag_killed'
        FROM locations loc
        WHERE i.epc = $1
          AND i.location_id = loc.id

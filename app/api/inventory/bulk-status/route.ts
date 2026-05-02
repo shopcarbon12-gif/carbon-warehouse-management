@@ -15,7 +15,6 @@ const ALLOWED_STATUS = new Set([
   "sold",
   "stolen",
   "tag_killed",
-  "UNKNOWN",
   "pending_visibility",
   "in-transit",
   "pending_transaction",
@@ -100,7 +99,7 @@ export async function POST(req: Request) {
 
       const to = parsed.data.targetStatus;
       if (from === to) continue;
-      const risky = (from === "sold" && to === "in-stock") || (from === "UNKNOWN" && to === "sold");
+      const risky = (from === "sold" && to === "in-stock") || (from === "tag_killed" && to === "sold");
       if (risky && !parsed.data.override) {
         await client.query("ROLLBACK");
         return NextResponse.json(

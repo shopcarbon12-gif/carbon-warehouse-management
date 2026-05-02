@@ -260,16 +260,6 @@ async function main() {
       system: false,
     },
     {
-      legacyId: 7,
-      name: "UNKNOWN",
-      displayLabel: "Unknown — scanner and UI hidden. Handhelds IGNORE.",
-      isSellable: false,
-      scanner: false,
-      ui: false,
-      superLock: true,
-      system: false,
-    },
-    {
       legacyId: 8,
       name: "PENDING VISIBILITY",
       displayLabel: "System staging — staff cannot select; handheld ignores.",

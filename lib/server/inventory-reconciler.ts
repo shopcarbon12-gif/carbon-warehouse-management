@@ -77,8 +77,8 @@ function mapStatusMetadata(metadata: Record<string, unknown>): string | null {
   if (!raw) return null;
   const u = raw.toUpperCase().replace(/-/g, "_").replace(/\s+/g, "_");
   const m: Record<string, string> = {
-    MISSING: "UNKNOWN",
-    UNKNOWN: "UNKNOWN",
+    MISSING: "tag_killed",
+    UNKNOWN: "tag_killed",
     DAMAGED: "damaged",
     IN_STOCK: "in-stock",
     INSTOCK: "in-stock",

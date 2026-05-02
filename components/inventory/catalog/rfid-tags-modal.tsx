@@ -42,7 +42,6 @@ const WMS_TO_LABEL: Record<string, string> = {
   sold: "SOLD",
   stolen: "STOLEN",
   tag_killed: "TAG KILLED",
-  UNKNOWN: "UNKNOWN",
   pending_visibility: "PENDING VISIBILITY",
   "in-transit": "IN TRANSIT",
   pending_transaction: "PENDING TRANSACTION",

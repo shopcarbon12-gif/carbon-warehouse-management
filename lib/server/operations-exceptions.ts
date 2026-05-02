@@ -150,7 +150,7 @@ export async function resolveRfidException(
   if (resolution === "mark_missing" && epcs.length > 0) {
     const u = await client.query(
       `UPDATE items i
-       SET status = 'UNKNOWN'
+       SET status = 'tag_killed'
        FROM locations l
        WHERE i.epc = ANY($1::text[])
          AND i.location_id = l.id
