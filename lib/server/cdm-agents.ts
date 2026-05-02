@@ -552,12 +552,68 @@ export async function ingestAgentReads(
   );
 
   // Mark the reader as online — its first read in this session.
-  const readerInfo = await client.query<{ location_id: string }>(
+  const readerInfo = await client.query<{ location_id: string; zone_id: string | null }>(
     `UPDATE devices SET status_online = true, updated_at = now()
        WHERE id = $1::uuid
-       RETURNING location_id::text`,
+       RETURNING location_id::text, zone_id::text AS zone_id`,
     [body.readerId],
   );
+
+  // Zone-change tracker: every read carries an implicit "EPC was here at
+  // time T" sighting. When the reader's zone differs from the EPC's
+  // last_seen_zone_id we emit an audit_log row so the EPC tracker timeline
+  // shows zone transitions inside the location. Reader-to-reader within the
+  // same zone stays silent. First sighting (NULL → new zone) doesn't emit —
+  // that's a backfill, not a movement.
+  const newZoneId = readerInfo.rows[0]?.zone_id ?? null;
+  if (newZoneId && dedupedEpcs.length > 0) {
+    const changed = await client.query<{ epc: string; old_zone_id: string }>(
+      `SELECT i.epc, i.last_seen_zone_id::text AS old_zone_id
+         FROM items i
+         INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
+        WHERE i.epc = ANY($2::text[])
+          AND i.last_seen_zone_id IS NOT NULL
+          AND i.last_seen_zone_id IS DISTINCT FROM $3::uuid`,
+      [auth.tenantId, dedupedEpcs, newZoneId],
+    );
+    // Update last_seen_zone_id for every EPC in this batch (including first
+    // sightings) so the next read can compare correctly.
+    await client.query(
+      `UPDATE items
+          SET last_seen_zone_id = $3::uuid
+        FROM locations l
+        WHERE items.epc = ANY($2::text[])
+          AND l.id = items.location_id AND l.tenant_id = $1::uuid
+          AND items.last_seen_zone_id IS DISTINCT FROM $3::uuid`,
+      [auth.tenantId, dedupedEpcs, newZoneId],
+    );
+    // Bulk-insert audit_log rows for actual transitions.
+    if (changed.rowCount && changed.rowCount > 0) {
+      const auditValues = changed.rows.map((r, i) => {
+        const baseIdx = 2 + i * 2; // params $1=tenantId, then pairs of (entity, metadata)
+        return `($1::uuid, NULL, 'rfid_zone_change', $${baseIdx}::text, $${baseIdx + 1}::jsonb, now())`;
+      });
+      const auditParams: unknown[] = [auth.tenantId];
+      for (const r of changed.rows) {
+        auditParams.push(`epc:${r.epc}`);
+        auditParams.push(
+          JSON.stringify({
+            epc: r.epc,
+            from_zone_id: r.old_zone_id,
+            to_zone_id: newZoneId,
+            reader_id: body.readerId,
+            reader_name: readerName,
+          }),
+        );
+      }
+      await client.query(
+        `INSERT INTO audit_log
+           (tenant_id, user_id, action, entity, metadata, created_at)
+         VALUES ${auditValues.join(", ")}`,
+        auditParams,
+      );
+    }
+  }
 
   // Mark every antenna that produced a read in this batch as online too.
   // Hardware Config has separate online dots for the reader and each

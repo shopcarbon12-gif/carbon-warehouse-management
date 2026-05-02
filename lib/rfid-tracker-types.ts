@@ -23,9 +23,14 @@ export type TrackerSearchPickRow = {
   sku: string;
   ls_system_id: string;
   description: string;
+  color: string | null;
+  size: string | null;
+  upc: string | null;
+  vendor: string | null;
   status: string;
   location_code: string;
   bin_code: string | null;
+  archived: boolean;
 };
 
 export type TrackerSearchResult =

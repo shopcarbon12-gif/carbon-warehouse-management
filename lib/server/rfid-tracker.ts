@@ -93,7 +93,22 @@ export async function getTrackerItemByEpc(
   };
 }
 
-export async function searchTrackerBySkuOrSystemId(
+/**
+ * Broad-spectrum EPC search. Match on:
+ *   - exact 24-hex EPC, or partial hex tail (≥4 chars, e.g. "1571")
+ *   - exact ls_system_id (digits-only input)
+ *   - SKU substring
+ *   - matrix description (item name) substring
+ *   - color, size, UPC, vendor, status, location code, bin code substring
+ *
+ * Always returns one row per EPC — no grouping. Operator gets a table they
+ * can click to drill into status / decoded layout / audit timeline.
+ *
+ * Result limit bumped to 200 (was 80) so SKU searches with many tagged
+ * units don't truncate. Archived custom_skus are included; the result
+ * carries the flag so the UI can render an [ARCHIVED] badge.
+ */
+export async function searchEpcTrackerBroad(
   pool: Pool,
   tenantId: string,
   q: string,
@@ -102,41 +117,69 @@ export async function searchTrackerBySkuOrSystemId(
   if (!raw) return [];
 
   const digitsOnly = /^\d+$/.test(raw);
+  const epcHex24 = isEpcHex24(raw);
+  const epcPartial = /^[0-9A-Fa-f]{4,23}$/.test(raw); // partial-hex tail
+  const like = `%${raw.replace(/[\\%_]/g, (s) => `\\${s}`)}%`;
+  const upperPartial = raw.toUpperCase();
 
   const r = await pool.query<{
     epc: string;
     sku: string;
     ls_system_id: string;
     description: string;
+    color: string | null;
+    size: string | null;
+    upc: string | null;
+    vendor: string | null;
     status: string;
     location_code: string;
     bin_code: string | null;
+    archived: boolean;
   }>(
     `SELECT
        i.epc,
        cs.sku,
        cs.ls_system_id::text AS ls_system_id,
        m.description,
+       cs.color_code AS color,
+       cs.size,
+       COALESCE(cs.upc, m.upc) AS upc,
+       m.vendor,
        i.status,
        l.code AS location_code,
-       b.code AS bin_code
+       b.code AS bin_code,
+       cs.archived AS archived
      FROM items i
      INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
      INNER JOIN matrices m ON m.id = cs.matrix_id
      LEFT JOIN bins b ON b.id = i.bin_id
      WHERE
-       ($2::boolean AND cs.ls_system_id::text = $3::text)
-       OR (
-         NOT $2::boolean
-         AND (
-           strpos(lower(cs.sku), lower($3::text)) > 0
-           OR lower(cs.sku) = lower($3::text)
-         )
-       )
-     ORDER BY cs.sku ASC, i.epc ASC
-     LIMIT 80`,
-    [tenantId, digitsOnly, raw],
+       ($2::boolean AND i.epc = $3::text)
+       OR ($4::boolean AND strpos(i.epc, $5::text) > 0)
+       OR ($6::boolean AND cs.ls_system_id::text = $7::text)
+       OR cs.sku ILIKE $8 ESCAPE '\\'
+       OR m.description ILIKE $8 ESCAPE '\\'
+       OR COALESCE(cs.color_code, '') ILIKE $8 ESCAPE '\\'
+       OR COALESCE(cs.size, '') ILIKE $8 ESCAPE '\\'
+       OR COALESCE(cs.upc, '') ILIKE $8 ESCAPE '\\'
+       OR COALESCE(m.upc, '') ILIKE $8 ESCAPE '\\'
+       OR COALESCE(m.vendor, '') ILIKE $8 ESCAPE '\\'
+       OR i.status ILIKE $8 ESCAPE '\\'
+       OR l.code ILIKE $8 ESCAPE '\\'
+       OR COALESCE(b.code, '') ILIKE $8 ESCAPE '\\'
+     ORDER BY cs.archived ASC, cs.sku ASC, i.epc ASC
+     LIMIT 200`,
+    [
+      tenantId,
+      epcHex24,
+      epcHex24 ? upperPartial : "",
+      epcPartial && !epcHex24,
+      epcPartial && !epcHex24 ? upperPartial : "",
+      digitsOnly,
+      digitsOnly ? raw : "",
+      like,
+    ],
   );
 
   return r.rows.map((row) => ({
@@ -144,9 +187,14 @@ export async function searchTrackerBySkuOrSystemId(
     sku: row.sku,
     ls_system_id: row.ls_system_id,
     description: row.description,
+    color: row.color,
+    size: row.size,
+    upc: row.upc,
+    vendor: row.vendor,
     status: row.status,
     location_code: row.location_code,
     bin_code: row.bin_code,
+    archived: row.archived === true,
   }));
 }
 
@@ -160,13 +208,9 @@ export async function searchEpcTracker(
     return { mode: "pick", matches: [] };
   }
 
-  if (isEpcHex24(trimmed)) {
-    const item = await getTrackerItemByEpc(pool, tenantId, trimmed);
-    if (item) return { mode: "direct", item };
-    return { mode: "pick", matches: [] };
-  }
-
-  const matches = await searchTrackerBySkuOrSystemId(pool, tenantId, trimmed);
+  // Always return pick rows — the new EPC tracker UI is table-first; row
+  // click drills into the existing detail + history panel below.
+  const matches = await searchEpcTrackerBroad(pool, tenantId, trimmed);
   return { mode: "pick", matches };
 }
 

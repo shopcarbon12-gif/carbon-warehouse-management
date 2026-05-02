@@ -36,6 +36,12 @@ const ACTION_STYLES: Record<
     dot: "bg-orange-400",
     label: "text-orange-200/90",
   },
+  rfid_zone_change: {
+    border: "border-purple-500/45",
+    bg: "bg-purple-500/10",
+    dot: "bg-purple-400",
+    label: "text-purple-200/90",
+  },
   rfid_alarm: {
     border: "border-red-500/45",
     bg: "bg-red-500/10",
