@@ -40,16 +40,21 @@ INSERT INTO status_labels (
   (4, 'SOLD', 'Sold — not sellable; only Super Admin can return to Live', false, true, true, true, false),
   (5, 'STOLEN', 'Stolen — confirmed loss. Handhelds IGNORE this tag.', false, false, false, true, false),
   (6, 'TAG KILLED', 'Tag killed — scanner and UI hidden. Handhelds IGNORE.', false, false, false, true, false),
-  (7, 'UNKNOWN', 'Unknown — scanner and UI hidden. Handhelds IGNORE.', false, false, false, true, false),
   (8, 'PENDING VISIBILITY', 'System staging — staff cannot select; handheld ignores.', false, false, false, true, true),
   (9, 'IN TRANSIT', 'In transit — system workflow; visible, not sellable', false, true, true, false, true),
   (10, 'PENDING TRANSACTION', 'Pending transaction — system workflow; visible, not sellable', false, true, true, false, true);
 --> statement-breakpoint
--- Remap existing item statuses into the new CHECK set before constraint swap.
-UPDATE items SET status = 'UNKNOWN' WHERE status IN ('missing', 'INCOMPLETE');
-UPDATE items SET status = 'in-stock' WHERE status = 'COMMISSIONED';
---> statement-breakpoint
+-- Drop the constraint FIRST so the remap UPDATE below isn't trapped by
+-- whatever stale CHECK set is on the table at this moment (could be the
+-- legacy {missing, INCOMPLETE, UNKNOWN, COMMISSIONED} from migration 0042
+-- on a fresh deploy, or the modern set from a prior 019 run).
 ALTER TABLE items DROP CONSTRAINT IF EXISTS items_status_check;
+--> statement-breakpoint
+-- Remap legacy + retired statuses into the modern WMS vocabulary.
+-- 'UNKNOWN' was retired in this revision of 019 and collapses to tag_killed
+-- (functionally identical: scanner+UI hidden, handhelds ignore).
+UPDATE items SET status = 'tag_killed' WHERE status IN ('missing', 'INCOMPLETE', 'UNKNOWN');
+UPDATE items SET status = 'in-stock' WHERE status = 'COMMISSIONED';
 --> statement-breakpoint
 DO $$
 BEGIN
@@ -60,7 +65,6 @@ BEGIN
     'sold',
     'stolen',
     'tag_killed',
-    'UNKNOWN',
     'pending_visibility',
     'in-transit',
     'pending_transaction'
