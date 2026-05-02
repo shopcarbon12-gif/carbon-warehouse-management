@@ -134,6 +134,11 @@ type ReaderSlot = {
    *  socket is connected, but no inventory bytes ever arrive. We force a
    *  respawn after STREAM_SILENCE_TIMEOUT_MS of zero traffic. */
   lastByteAt: number;
+  /** ms timestamp of the most recent PARSED tag-read record. Different from
+   *  lastByteAt because a stuck binary can still drip non-record bytes
+   *  (status / heartbeat lines) while producing zero tag reads — the silence
+   *  watchdog won't fire but rate-drop will. 0 = no records ever seen. */
+  lastRecordAt: number;
   /**
    * Active antenna-test windows for THIS reader, keyed by antenna_id (the
    * WMS-side UUID). Counts are incremented only for stream records whose
@@ -214,6 +219,20 @@ const TEST_SWEEP_INTERVAL_MS = 1_000;
  */
 const STREAM_SILENCE_TIMEOUT_MS = 60_000;
 const WATCHDOG_INTERVAL_MS = 5_000;
+/**
+ * Rate-drop watchdog. Catches the "alive but barely producing reads"
+ * stuck state where the binary keeps the TCP socket up, occasionally
+ * dribbles a status byte (so the silence watchdog never fires), but stops
+ * emitting parsed tag-read records. Live evidence 2026-05-02: TEST3 sat
+ * at exactly 501,767 posted reads for 15+ minutes with the socket
+ * ESTABLISHED — strace showed zero stdout writes from the binary.
+ *
+ * We say a slot is "rate-dropped" if it produced records at some point
+ * (lastRecordAt > 0) AND has produced none in this window. When tripped,
+ * SIGTERM the child the same way the silence watchdog does so the on-exit
+ * handler respawns it fresh.
+ */
+const READ_RATE_DROP_TIMEOUT_MS = 60_000;
 /**
  * After a reader is declared exhausted (every candidate port tried, all
  * silent), wait this long before resetting the counter and probing again.
@@ -352,6 +371,21 @@ export class MonsoonSupervisor {
         }
         slot.lastByteAt = now;
         slot.child?.kill("SIGTERM");
+      } else if (
+        slot.lastRecordAt > 0 &&
+        now - slot.lastRecordAt >= READ_RATE_DROP_TIMEOUT_MS
+      ) {
+        // Rate-drop: produced records earlier, none in the last window. The
+        // binary went catatonic. Kick it; the on-exit handler respawns.
+        log.warn("supervisor: read rate dropped to zero — kicking child", {
+          readerId: slot.spec.id,
+          readerName: slot.spec.name,
+          host: slot.spec.network_address,
+          msSinceLastRecord: now - slot.lastRecordAt,
+        });
+        slot.lastRecordAt = 0;
+        slot.lastByteAt = now;
+        slot.child?.kill("SIGTERM");
       } else if (silentMs >= STREAM_SILENCE_TIMEOUT_MS && exhaustedAllPorts) {
         // We've tried every candidate port at least once without bytes.
         // Bump lastByteAt so we don't spam this branch every 5s — but
@@ -460,6 +494,7 @@ export class MonsoonSupervisor {
         bytesSinceSpawn: false,
         consecutiveZeroByteKicks: 0,
         lastExhaustionResetAt: 0,
+        lastRecordAt: 0,
         currentDriver: desiredDriver,
         consoleParserState: newConsoleParserState(),
         consoleStampAntenna: enabledForStamp?.antenna_number ?? 1,
@@ -891,6 +926,7 @@ export class MonsoonSupervisor {
       totalRecords += result.records.length;
       totalBad += result.badCrcCount;
       totalMal += result.malformedCount;
+      if (result.records.length > 0) slot.lastRecordAt = Date.now();
 
       const stamp = new Date().toISOString();
       const ts = slot.testSession;
@@ -1025,6 +1061,7 @@ export class MonsoonSupervisor {
     }
 
     const now = Date.now();
+    if (result.records.length > 0) slot.lastRecordAt = now;
     for (const rec of result.records) {
       // Per-antenna test windows: count every record whose antenna_number
       // matches an active window for THIS reader.

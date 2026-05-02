@@ -23,6 +23,7 @@ import type { ZoneRow } from "@/lib/server/zones";
 import { ZoneEditorModal } from "./zone-editor-modal";
 import { CdmAgentEditorModal } from "./cdm-agent-editor-modal";
 import { TokenRevealModal } from "./token-reveal-modal";
+import { RecoverReadersButton } from "./recover-readers-button";
 import { ReaderEditorModal } from "./reader-editor-modal";
 import { AntennaEditorModal } from "./antenna-editor-modal";
 
@@ -292,6 +293,7 @@ function CdmAgentsSection({
                     {a.device_count}
                   </td>
                   <td className="px-3 py-2 text-right">
+                    <RecoverReadersButton agentId={a.id} agentName={a.name} />
                     <button
                       type="button"
                       onClick={() => onRotateToken(a.id, a.name)}

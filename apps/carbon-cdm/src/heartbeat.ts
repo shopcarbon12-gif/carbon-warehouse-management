@@ -4,9 +4,21 @@ import { postHeartbeat } from "./wms-client.js";
 import { log } from "./log.js";
 
 /**
+ * Process boot time, captured at module load. Sent on every heartbeat so
+ * the server can compare against `cdm_agents.recover_requested_at` and ask
+ * us to exit when an admin has clicked the Recover button.
+ */
+const BOOT_TIME_ISO = new Date().toISOString();
+
+/**
  * Starts a periodic heartbeat loop. Returns a stop() that cancels it.
  * The loop reports degraded status (rather than online) if the last config
  * pull failed, so the WMS dashboard can flag the agent.
+ *
+ * If the heartbeat response sets `restart_requested: true`, the agent
+ * exits cleanly with code 0 and systemd's `Restart=always` respawns us
+ * within RestartSec (5 seconds). This is how the WMS-side Recover button
+ * triggers a fresh agent process to clear stuck supervisor state.
  */
 export function startHeartbeat(
   env: AgentEnv,
@@ -20,11 +32,21 @@ export function startHeartbeat(
   const tick = async () => {
     if (stopped) return;
     try {
-      await postHeartbeat(env, {
+      const r = await postHeartbeat(env, {
         agentVersion: AGENT_VERSION,
         hostname: host,
         status: isDegraded() ? "degraded" : "online",
+        bootTimeIso: BOOT_TIME_ISO,
       });
+      if (r.restart_requested) {
+        log.warn("heartbeat: restart_requested by server — exiting (systemd will respawn)", {
+          bootTime: BOOT_TIME_ISO,
+        });
+        stopped = true;
+        // 250 ms grace lets the log line flush + lets any in-flight HTTP
+        // body finish writing before systemd kills the parent.
+        setTimeout(() => process.exit(0), 250);
+      }
     } catch (e) {
       log.warn("heartbeat failed", {
         err: e instanceof Error ? e.message : String(e),

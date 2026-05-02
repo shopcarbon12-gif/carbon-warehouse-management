@@ -25,6 +25,8 @@ export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname === "/api/mobile/upload-apk") return true;
   if (pathname.startsWith("/reports/inventory-compare")) return true;
   if (pathname === "/api/rfid/zero-out") return true;
+  // /api/cdm-agents/[uuid]/recover  (GET=diagnosis, POST=trigger)
+  if (/^\/api\/cdm-agents\/[0-9a-f-]{36}\/recover$/.test(pathname)) return true;
   return false;
 }
 

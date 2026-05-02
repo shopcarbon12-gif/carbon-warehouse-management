@@ -89,12 +89,30 @@ async function request<T>(
   return parsed as T;
 }
 
+export type HeartbeatResponse = {
+  ok: true;
+  /** Server tells the agent to exit so systemd respawns it.
+   *  Set when an admin clicks "Recover readers" in WMS. */
+  restart_requested?: boolean;
+};
+
 export async function postHeartbeat(
   env: AgentEnv,
-  payload: { agentVersion: string; hostname: string; status: HeartbeatStatus },
-): Promise<void> {
-  await request(env, "POST", "/api/cdm-agents/heartbeat", payload);
+  payload: {
+    agentVersion: string;
+    hostname: string;
+    status: HeartbeatStatus;
+    bootTimeIso?: string;
+  },
+): Promise<HeartbeatResponse> {
+  const r = await request<HeartbeatResponse>(
+    env,
+    "POST",
+    "/api/cdm-agents/heartbeat",
+    payload,
+  );
   log.debug("heartbeat ok", { status: payload.status });
+  return r;
 }
 
 export async function fetchAgentConfig(env: AgentEnv): Promise<AgentConfigBundle> {

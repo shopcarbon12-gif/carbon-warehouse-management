@@ -50,9 +50,12 @@ export async function POST(req: Request) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await recordAgentHeartbeat(client, agent.agentId, parsed.data);
+    const result = await recordAgentHeartbeat(client, agent.agentId, parsed.data);
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      restart_requested: result.restart_requested,
+    });
   } catch (e) {
     try {
       await client.query("ROLLBACK");

@@ -38,9 +38,39 @@ export const heartbeatSchema = z.object({
   agentVersion: z.string().trim().max(32),
   hostname: z.string().trim().max(256).optional(),
   status: z.enum(["online", "degraded"]).default("online"),
+  /** Agent's process boot time (ISO). Server compares this against
+   *  `recover_requested_at` to decide whether to ask the agent to exit. */
+  bootTimeIso: z.string().datetime().optional(),
 });
 
 export type HeartbeatBody = z.infer<typeof heartbeatSchema>;
+
+export type HeartbeatResult = {
+  /** True iff `recover_requested_at` is newer than the agent's boot_time.
+   *  Agent should exit cleanly; systemd will respawn within RestartSec. */
+  restart_requested: boolean;
+};
+
+export type AgentDiagnosis = {
+  agent_id: string;
+  agent_name: string;
+  status: string;
+  last_heartbeat_at: string | null;
+  last_heartbeat_age_seconds: number | null;
+  recover_requested_at: string | null;
+  readers: {
+    id: string;
+    name: string;
+    network_address: string | null;
+    monsoon_driver: string;
+    is_authorized: boolean;
+  }[];
+  recent_reads: {
+    last_read_at: string | null;
+    reads_last_5_min: number;
+    reads_last_hour: number;
+  };
+};
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -174,17 +204,129 @@ export async function recordAgentHeartbeat(
   client: PoolClient,
   agentId: string,
   body: HeartbeatBody,
-): Promise<void> {
-  await client.query(
+): Promise<HeartbeatResult> {
+  const r = await client.query<{ recover_requested_at: string | null }>(
     `UPDATE cdm_agents
        SET status = $2,
            agent_version = $3,
            hostname = COALESCE($4, hostname),
            last_heartbeat_at = now(),
            updated_at = now()
-     WHERE id = $1::uuid`,
+     WHERE id = $1::uuid
+     RETURNING recover_requested_at::text`,
     [agentId, body.status, body.agentVersion, body.hostname ?? null],
   );
+  const recoverRequestedAt = r.rows[0]?.recover_requested_at ?? null;
+  let restartRequested = false;
+  if (recoverRequestedAt && body.bootTimeIso) {
+    const recoverMs = Date.parse(recoverRequestedAt);
+    const bootMs = Date.parse(body.bootTimeIso);
+    if (Number.isFinite(recoverMs) && Number.isFinite(bootMs) && recoverMs > bootMs) {
+      restartRequested = true;
+    }
+  }
+  return { restart_requested: restartRequested };
+}
+
+/**
+ * Admin-driven "recover" — stamps the cdm_agents row so the agent's next
+ * heartbeat sees a request newer than its boot_time and exits cleanly.
+ * systemd respawns it (Restart=always, RestartSec=5), wiping every stuck
+ * child binary and resetting all supervisor slot state.
+ */
+export async function requestAgentRecover(
+  client: PoolClient,
+  tenantId: string,
+  agentId: string,
+  userId: string,
+): Promise<{ recover_requested_at: string }> {
+  const r = await client.query<{ recover_requested_at: string }>(
+    `UPDATE cdm_agents
+       SET recover_requested_at = now(),
+           recover_requested_by = $3::uuid,
+           updated_at = now()
+     WHERE id = $1::uuid AND tenant_id = $2::uuid
+     RETURNING recover_requested_at::text`,
+    [agentId, tenantId, userId],
+  );
+  if (r.rowCount === 0 || !r.rows[0]) {
+    throw new Error("BAD_REQUEST:Agent not found for tenant");
+  }
+  return { recover_requested_at: r.rows[0].recover_requested_at };
+}
+
+/**
+ * Snapshot for the recover-button modal — agent + reader + recent-read
+ * health all in one query bundle. Read-only.
+ */
+export async function getAgentDiagnosis(
+  pool: Pool,
+  tenantId: string,
+  agentId: string,
+): Promise<AgentDiagnosis | null> {
+  const ag = await pool.query<{
+    id: string;
+    name: string;
+    status: string;
+    last_heartbeat_at: string | null;
+    recover_requested_at: string | null;
+  }>(
+    `SELECT id::text, name, status, last_heartbeat_at::text, recover_requested_at::text
+       FROM cdm_agents WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+    [agentId, tenantId],
+  );
+  if (ag.rowCount === 0 || !ag.rows[0]) return null;
+  const a = ag.rows[0];
+
+  const readers = await pool.query<{
+    id: string;
+    name: string;
+    network_address: string | null;
+    monsoon_driver: string;
+    is_authorized: boolean;
+  }>(
+    `SELECT d.id::text, d.name, d.network_address,
+            COALESCE(d.config->>'monsoon_driver', 'stream') AS monsoon_driver,
+            d.is_authorized
+       FROM devices d
+      WHERE d.cdm_agent_id = $1::uuid
+        AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
+      ORDER BY d.name ASC`,
+    [agentId],
+  );
+
+  const reads = await pool.query<{
+    last_read_at: string | null;
+    reads_5m: string;
+    reads_1h: string;
+  }>(
+    `SELECT max(ingested_at)::text AS last_read_at,
+            count(*) FILTER (WHERE ingested_at > now() - interval '5 minutes')::text AS reads_5m,
+            count(*) FILTER (WHERE ingested_at > now() - interval '1 hour')::text   AS reads_1h
+       FROM cdm_reads
+      WHERE cdm_agent_id = $1::uuid`,
+    [agentId],
+  );
+  const rs = reads.rows[0] ?? { last_read_at: null, reads_5m: "0", reads_1h: "0" };
+
+  const lastHbMs = a.last_heartbeat_at ? Date.parse(a.last_heartbeat_at) : null;
+  const ageSec =
+    lastHbMs && Number.isFinite(lastHbMs) ? Math.round((Date.now() - lastHbMs) / 1000) : null;
+
+  return {
+    agent_id: a.id,
+    agent_name: a.name,
+    status: a.status,
+    last_heartbeat_at: a.last_heartbeat_at,
+    last_heartbeat_age_seconds: ageSec,
+    recover_requested_at: a.recover_requested_at,
+    readers: readers.rows,
+    recent_reads: {
+      last_read_at: rs.last_read_at,
+      reads_last_5_min: Number(rs.reads_5m),
+      reads_last_hour: Number(rs.reads_1h),
+    },
+  };
 }
 
 /** Verifies a Bearer token from the Carbon CDM agent. Returns agent if valid, null otherwise. */
