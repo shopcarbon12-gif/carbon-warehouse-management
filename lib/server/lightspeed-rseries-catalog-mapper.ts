@@ -92,6 +92,15 @@ function matrixLsSystemId(matrixKey: string, hash: (s: string) => number): numbe
     if (Number.isFinite(n) && n > 0 && n <= Number.MAX_SAFE_INTEGER) return n;
     return hash(`matrix:${id}`);
   }
+  if (matrixKey.startsWith("i:")) {
+    /* Standalone Item (no parent ItemMatrix) — loyalty/coupon/service-credit
+     * lines and any plain Item without variants. The upsert needs a stable
+     * matrix ls_system_id so re-syncs UPDATE the same row instead of
+     * INSERTing a fresh duplicate every run. Hash the itemId, namespaced
+     * separately from `matrix:` so it can't collide with a real LS
+     * itemMatrixID hash. */
+    return hash(`item-as-matrix:${matrixKey.slice(2)}`);
+  }
   return null;
 }
 
