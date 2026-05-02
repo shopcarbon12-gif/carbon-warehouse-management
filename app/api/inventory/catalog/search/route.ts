@@ -41,7 +41,12 @@ export async function GET(req: Request) {
       upc: string | null;
       vendor: string | null;
       sku_ls_system_id: string | null;
+      archived: boolean;
     }>(
+      // Archived items are included so EPC → system_id resolution stays
+      // consistent with how the catalog sync mirrors archived-from-Lightspeed:
+      // a SKU that's archived in LS still owns its tags. The UI tags each
+      // archived row with a badge so operators can see at a glance.
       `SELECT
          cs.id::text AS custom_sku_id,
          cs.sku AS sku,
@@ -50,11 +55,11 @@ export async function GET(req: Request) {
          cs.size,
          COALESCE(cs.upc, m.upc) AS upc,
          m.vendor,
-         cs.ls_system_id::text AS sku_ls_system_id
+         cs.ls_system_id::text AS sku_ls_system_id,
+         cs.archived AS archived
        FROM custom_skus cs
        INNER JOIN matrices m ON m.id = cs.matrix_id
-       WHERE cs.archived = false
-         AND (
+       WHERE
            m.description ILIKE $1 ESCAPE '\\'
            OR cs.sku ILIKE $1 ESCAPE '\\'
            OR cs.upc ILIKE $1 ESCAPE '\\'
@@ -63,8 +68,8 @@ export async function GET(req: Request) {
            OR cs.color_code ILIKE $1 ESCAPE '\\'
            OR cs.size ILIKE $1 ESCAPE '\\'
            OR cs.ls_system_id::text = $2
-         )
        ORDER BY
+         cs.archived ASC,
          CASE WHEN cs.sku ILIKE $1 ESCAPE '\\' THEN 0 ELSE 1 END,
          m.description NULLS LAST
        LIMIT 10`,

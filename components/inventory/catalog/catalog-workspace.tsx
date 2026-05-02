@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { ChevronDown, ChevronUp, ChevronsUpDown, Radio } from "lucide-react";
+import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, Radio } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
 import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epcs-modal";
@@ -605,14 +605,19 @@ export function CatalogWorkspace({
               type="button"
               aria-pressed={showArchived}
               onClick={() => setShowArchived((v) => !v)}
-              className={`rounded-md border px-3 py-2 font-mono text-xs font-semibold shadow-sm ${
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-xs font-semibold shadow-sm ${
                 showArchived
-                  ? "border-[var(--wms-accent)]/50 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] text-[var(--wms-accent)] hover:opacity-90"
+                  ? "border-amber-500/55 bg-amber-500/15 text-amber-200 hover:opacity-90 dark:bg-amber-950/40"
                   : "border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))]"
               }`}
-              title={showArchived ? "Archived rows visible" : "Archived rows hidden"}
+              title={
+                showArchived
+                  ? "Archived items are visible — click to hide"
+                  : "Archived items are hidden — click to include them"
+              }
             >
-              {showArchived ? "Hide archived" : "Show archived"}
+              <Archive className="h-3.5 w-3.5" />
+              {showArchived ? "Archived: ON" : "Show archived"}
             </button>
             <button
               type="button"

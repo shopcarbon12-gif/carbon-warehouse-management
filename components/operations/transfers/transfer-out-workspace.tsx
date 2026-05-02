@@ -55,6 +55,7 @@ type CatalogSearchRow = {
   upc: string | null;
   vendor: string | null;
   sku_ls_system_id: string | null;
+  archived?: boolean;
 };
 
 type StagedSku = {
@@ -612,8 +613,13 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
                   className="flex w-full items-center justify-between gap-3 border-b border-[var(--wms-border)]/60 px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] last:border-0 hover:bg-[var(--wms-surface)]"
                 >
                   <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate font-semibold">
+                    <span className="flex items-center gap-1.5 truncate font-semibold">
                       {r.name ?? r.sku}
+                      {r.archived ? (
+                        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[0.5rem] font-bold uppercase tracking-wider text-amber-300">
+                          Archived
+                        </span>
+                      ) : null}
                     </span>
                     <span className="truncate text-[0.6rem] text-[var(--wms-muted)]">
                       SKU {r.sku} · {r.color?.trim() || "—"} · {r.size?.trim() || "—"} ·{" "}
