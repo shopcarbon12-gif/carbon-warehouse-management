@@ -6,6 +6,11 @@ import {
   useAntennaTestStream,
   type AntennaTestRow,
 } from "./use-antenna-test-stream";
+import {
+  ReferenceEpcsPanel,
+  buildSightings,
+  useReferenceEpcs,
+} from "./reference-epcs-panel";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -294,8 +299,18 @@ export function AntennaTestWorkspace() {
     lines.push(
       `# Calibration points: ${calibPoints.length}${calibPoints.length >= 2 ? " (Distance column = interpolated feet)" : " (Distance column = heuristic bucket)"}`,
     );
+    // Reference-tag pass/fail summary, when a list is loaded.
+    if (referenceState.list.length > 0) {
+      const sg = buildSightings(referenceState.list, rows);
+      lines.push(
+        `# Reference EPCs: ${sg.seen}/${sg.total} seen${
+          sg.total - sg.seen > 0 ? ` · ${sg.total - sg.seen} missing` : " · ✓ all seen"
+        }`,
+      );
+    }
     lines.push("");
-    // Header row
+    // Header row — `is_reference` is appended at the end so existing
+    // importers that key off the original column order still work.
     lines.push(
       [
         "idx",
@@ -312,6 +327,7 @@ export function AntennaTestWorkspace() {
         "name",
         "color",
         "size",
+        "is_reference",
       ]
         .map(csvEscape)
         .join(","),
@@ -342,11 +358,43 @@ export function AntennaTestWorkspace() {
           cat?.name ?? "",
           cat?.color ?? "",
           cat?.size ?? "",
+          referenceSet.has(row.epcHex) ? "true" : "false",
         ]
           .map(csvEscape)
           .join(","),
       );
     });
+    // Append a row for every reference EPC that was NEVER seen — that's the
+    // export's pass/fail tail. Without this, a missing tag is just absent
+    // from the export and easy to overlook downstream.
+    if (referenceState.list.length > 0) {
+      let tailIdx = sortedRows.length;
+      for (const epc of referenceState.list) {
+        if (rows.has(epc)) continue;
+        tailIdx += 1;
+        lines.push(
+          [
+            tailIdx,
+            "MISSING",
+            "",
+            "",
+            0,
+            epc,
+            "",
+            picked.antennaNumber,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "true",
+          ]
+            .map(csvEscape)
+            .join(","),
+        );
+      }
+    }
     // Prepend UTF-8 BOM (﻿). Excel and most spreadsheets on Windows/Mac
     // default to Windows-1252 / Latin-1 when opening a CSV, which mojibakes
     // any non-ASCII byte (e.g. the en-dash '–' in '0–3 ft' becomes 'â€"').
@@ -399,6 +447,15 @@ export function AntennaTestWorkspace() {
     refreshInterval: 0,
   });
   const calibPoints = calib.data?.points ?? [];
+
+  // Reference-EPC pass/fail tracker — operator-managed list of "tags I placed
+  // in known bins" persisted per (reader, antenna). Used both for the panel
+  // and for highlighting reference rows in the live table.
+  const referenceState = useReferenceEpcs(picked?.readerId, picked?.antennaId);
+  const referenceSet = useMemo(
+    () => new Set(referenceState.list),
+    [referenceState.list],
+  );
 
   // If the session ends server-side (e.g. expired or sweep_done), drop the
   // local sessionId so the Start button comes back. The table stays visible
@@ -649,7 +706,18 @@ export function AntennaTestWorkspace() {
   return (
     <div className="flex flex-col gap-6">
       {/* Picker + knobs */}
-      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-card)] p-4">
+      <section className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-card)] p-4">
+        <header className="mb-3 flex items-baseline justify-between gap-3 border-b border-[var(--wms-border)] pb-2">
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
+              Configuration
+            </h3>
+            <span className="font-mono text-[10px] uppercase tracking-wide text-[var(--wms-muted)]">
+              radio knobs · sweep · controls
+            </span>
+          </div>
+          <StatusPill status={status} isLive={isLive} />
+        </header>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
@@ -765,8 +833,8 @@ export function AntennaTestWorkspace() {
             <span>Sweep mode — auto-walk power from low to high</span>
           </label>
           <p className="mt-1 ml-6 font-mono text-[10px] text-[var(--wms-muted)]">
-            Each tag's <strong>first-read power</strong> column shows the lowest dBm
-            at which it appeared — that's the cleanest distance proxy you can get
+            Each tag&apos;s <strong>first-read power</strong> column shows the lowest dBm
+            at which it appeared — that&apos;s the cleanest distance proxy you can get
             without calibration.
           </p>
           {sweepEnabled && (
@@ -946,31 +1014,32 @@ export function AntennaTestWorkspace() {
                   : "(saved default)"}
             </span>
           )}
-          <span className="font-mono text-xs text-[var(--wms-muted)]">
-            status: <strong className="text-[var(--wms-fg)]">{status}</strong>
-            {runStartedAt !== null && (
-              <>
-                {" · "}
-                {isLive ? "running" : "ran"}{" "}
-                <strong className="text-[var(--wms-fg)]">{fmtDuration(runDurationMs)}</strong>
-              </>
-            )}
-            {(isLive || stats.totalReads > 0) && (
-              <>
-                {" · "}
-                <strong className="text-[var(--wms-fg)]">{stats.uniqueEpcs}</strong>{" "}
-                unique ·{" "}
-                <strong className="text-[var(--wms-fg)]">{stats.totalReads}</strong>{" "}
-                reads · dropped:{" "}
-                <strong className="text-[var(--wms-fg)]">{stats.droppedBadCrc}</strong>
-              </>
-            )}
-          </span>
           {error && (
             <span className="font-mono text-xs text-red-600">{error}</span>
           )}
         </div>
-      </div>
+
+        {/* Stats strip — visible whenever there's anything to report. */}
+        {(runStartedAt !== null || isLive || stats.totalReads > 0) && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 rounded border border-[var(--wms-border)] bg-[var(--wms-bg)] px-3 py-2">
+            <Stat label={isLive ? "running" : "ran"} value={fmtDuration(runDurationMs)} mono />
+            <Stat label="unique EPCs" value={stats.uniqueEpcs.toLocaleString()} />
+            <Stat label="total reads" value={stats.totalReads.toLocaleString()} />
+            <Stat
+              label="dropped"
+              value={stats.droppedBadCrc.toLocaleString()}
+              tone={stats.droppedBadCrc > 0 ? "warn" : "muted"}
+            />
+            {sweepProgress && isLive && (
+              <Stat
+                label="sweep step"
+                value={`${sweepProgress.stepIndex + 1}/${sweepProgress.totalSteps} @ ${(sweepProgress.currentPowerArg / 10).toFixed(1)} dBm`}
+                mono
+              />
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Calibration panel — only relevant when an antenna is picked */}
       {picked && (
@@ -1030,6 +1099,14 @@ export function AntennaTestWorkspace() {
           )}
         </div>
       )}
+
+      {/* Reference EPCs — operator-managed pass/fail list */}
+      <ReferenceEpcsPanel
+        state={referenceState}
+        rows={rows}
+        isLive={isLive}
+        hasAntennaPicked={picked !== null}
+      />
 
       {/* Live table */}
       <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-card)]">
@@ -1110,10 +1187,14 @@ export function AntennaTestWorkspace() {
                 : "";
               const calibrated = estimateDistance(calibPoints, row.firstReadPowerArg);
               const showCalibrated = calibPoints.length >= 2 && calibrated.feet !== null;
+              const isReference = referenceSet.has(row.epcHex);
               return (
                 <tr
                   key={row.epcHex}
                   className="border-t border-[var(--wms-border)] hover:bg-[var(--wms-hover,rgba(0,0,0,0.02))]"
+                  style={
+                    isReference ? { background: "rgba(15, 156, 79, 0.08)" } : undefined
+                  }
                 >
                   <td className="px-3 py-1.5 text-right font-mono text-[10px] text-[var(--wms-muted)]">
                     {idx + 1}
@@ -1144,7 +1225,18 @@ export function AntennaTestWorkspace() {
                   <td className="px-3 py-1.5">
                     <Sparkline points={row.spark} />
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-[11px]">{row.epcHex}</td>
+                  <td className="px-3 py-1.5 font-mono text-[11px]">
+                    {isReference && (
+                      <span
+                        className="mr-1 inline-block align-middle"
+                        title="Reference EPC — listed in the pass/fail tracker"
+                        style={{ color: "#0f9c4f" }}
+                      >
+                        ★
+                      </span>
+                    )}
+                    {row.epcHex}
+                  </td>
                   <td className="px-3 py-1.5 font-mono text-[11px]">
                     {row.firstReadPowerArg !== null ? (
                       `${(row.firstReadPowerArg / 10).toFixed(1)} dBm`
@@ -1224,6 +1316,60 @@ export function AntennaTestWorkspace() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function StatusPill({ status, isLive }: { status: string; isLive: boolean }) {
+  const tone = (() => {
+    if (isLive) return { bg: "#0f9c4f", fg: "#fff", dot: "#a7f3a7" };
+    if (status === "armed") return { bg: "#b45309", fg: "#fff", dot: "#fde68a" };
+    if (status === "ended" || status === "sweep_done")
+      return { bg: "#475569", fg: "#fff", dot: "#cbd5e1" };
+    return { bg: "var(--wms-bg)", fg: "var(--wms-muted)", dot: "var(--wms-muted)" };
+  })();
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide"
+      style={{ background: tone.bg, color: tone.fg }}
+    >
+      <span
+        className="inline-block h-1.5 w-1.5 rounded-full"
+        style={{
+          background: tone.dot,
+          animation: isLive ? "wms-status-pulse 1.4s ease-in-out infinite" : undefined,
+        }}
+      />
+      {status}
+      <style>{`@keyframes wms-status-pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.4 } }`}</style>
+    </span>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  mono,
+  tone,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  tone?: "warn" | "muted";
+}) {
+  const valueColor =
+    tone === "warn" ? "#b45309" : tone === "muted" ? "var(--wms-muted)" : "var(--wms-fg)";
+  return (
+    <div className="flex flex-col leading-tight">
+      <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--wms-muted)]">
+        {label}
+      </span>
+      <span
+        className={`text-sm font-semibold ${mono ? "font-mono" : ""}`}
+        style={{ color: valueColor }}
+      >
+        {value}
+      </span>
     </div>
   );
 }
