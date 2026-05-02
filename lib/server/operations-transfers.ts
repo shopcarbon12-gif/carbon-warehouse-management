@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { findTransferBlockedEpc } from "@/lib/server/status-label-enforcement";
 import { ingestEpcs } from "@/lib/server/epc-ingress";
+import { decodeEpc } from "@/lib/server/epc-decode";
 
 function normalizeEpc(s: string): string {
   return s.replace(/\s/g, "").toUpperCase();
@@ -51,7 +52,9 @@ export type SessionPayload = {
 
 export type TransferLookupRow = {
   epc: string;
-  sku: string;
+  /** Null when the EPC is tag_killed / uncommissioned and no catalog match
+   *  was found by decoded system_id. UI should show "(no SKU)" or hide. */
+  sku: string | null;
   location_id: string;
   location_code: string;
   bin_id: string | null;
@@ -65,7 +68,7 @@ export type TransferLookupRow = {
   asset_id: string | null;
   vendor: string | null;
   retail_price: string | null;
-  custom_sku_id: string;
+  custom_sku_id: string | null;
   /** custom_skus.ls_system_id — surfaced as "System ID" in UI, mirroring catalog. */
   sku_ls_system_id: string | null;
 };
@@ -148,7 +151,7 @@ export async function lookupTransferEpcs(
 
   const r = await pool.query<{
     epc: string;
-    sku: string;
+    sku: string | null;
     location_id: string;
     location_code: string;
     bin_id: string | null;
@@ -161,9 +164,12 @@ export async function lookupTransferEpcs(
     asset_id: string | null;
     vendor: string | null;
     retail_price: string | null;
-    custom_sku_id: string;
+    custom_sku_id: string | null;
     sku_ls_system_id: string | null;
   }>(
+    // LEFT JOIN custom_skus so tag_killed / uncommissioned items still come
+    // back. Without this, the antenna-test page (and any other "show me
+    // everything" view) sees EMPTY catalog data for every defective EPC.
     `SELECT
        i.epc,
        cs.sku,
@@ -183,14 +189,14 @@ export async function lookupTransferEpcs(
        cs.ls_system_id::text AS sku_ls_system_id
      FROM items i
      INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
-     INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
+     LEFT JOIN custom_skus cs ON cs.id = i.custom_sku_id
      LEFT JOIN matrices m ON m.id = cs.matrix_id
      LEFT JOIN bins b ON b.id = i.bin_id
      WHERE i.epc = ANY($2::text[])`,
     [tenantId, norm],
   );
 
-  return r.rows.map((row) => ({
+  const rows: TransferLookupRow[] = r.rows.map((row) => ({
     epc: normalizeEpc(row.epc),
     sku: row.sku,
     location_id: row.location_id,
@@ -208,6 +214,105 @@ export async function lookupTransferEpcs(
     custom_sku_id: row.custom_sku_id,
     sku_ls_system_id: row.sku_ls_system_id,
   }));
+
+  // Second pass: for rows that came back without a SKU (tag_killed / unknown
+  // system_id at ingress time), decode the EPC and look up custom_skus by
+  // ls_system_id. This catches the scenario where the catalog has since
+  // caught up to a system_id that didn't exist during the original ingress
+  // — the UI shows the proper sku/name/color/size instead of an empty row.
+  await enrichRowsWithDecodedFallback(pool, tenantId, rows);
+  return rows;
+}
+
+async function enrichRowsWithDecodedFallback(
+  pool: Pool,
+  tenantId: string,
+  rows: TransferLookupRow[],
+): Promise<void> {
+  const empty = rows.filter((r) => r.sku === null || r.sku === undefined);
+  if (empty.length === 0) return;
+
+  const cfgRow = await pool.query<{
+    prefix_hex: string;
+    prefix_bits: number;
+    asset_bits: number;
+    serial_bits: number;
+    asset_padding_digits: number;
+  }>(
+    `SELECT prefix_hex, prefix_bits, asset_bits, serial_bits, asset_padding_digits
+       FROM tenant_epc_config WHERE tenant_id = $1::uuid`,
+    [tenantId],
+  );
+  const cfg = cfgRow.rows[0];
+  if (!cfg) return;
+
+  const decodedConfig = {
+    prefixHex: cfg.prefix_hex,
+    prefixBits: cfg.prefix_bits,
+    assetBits: cfg.asset_bits,
+    serialBits: cfg.serial_bits,
+    assetPaddingDigits: cfg.asset_padding_digits,
+  };
+
+  const sysIdToRows = new Map<string, TransferLookupRow[]>();
+  for (const row of empty) {
+    const decoded = decodeEpc(row.epc, decodedConfig);
+    if (!decoded.valid || decoded.systemId === null) continue;
+    const sid = decoded.systemId.toString();
+    if (row.sku_ls_system_id === null) row.sku_ls_system_id = sid;
+    const arr = sysIdToRows.get(sid) ?? [];
+    arr.push(row);
+    sysIdToRows.set(sid, arr);
+  }
+  if (sysIdToRows.size === 0) return;
+
+  const ids = [...sysIdToRows.keys()];
+  const cat = await pool.query<{
+    ls_system_id: string;
+    sku: string;
+    color: string | null;
+    size: string | null;
+    asset_id: string | null;
+    retail_price: string | null;
+    sku_upc: string | null;
+    matrix_upc: string | null;
+    name: string | null;
+    vendor: string | null;
+    custom_sku_id: string;
+  }>(
+    `SELECT cs.ls_system_id::text AS ls_system_id,
+            cs.sku,
+            cs.color_code AS color,
+            cs.size,
+            cs.asset_id,
+            cs.retail_price::text AS retail_price,
+            cs.upc AS sku_upc,
+            m.upc AS matrix_upc,
+            m.description AS name,
+            m.vendor,
+            cs.id::text AS custom_sku_id
+       FROM custom_skus cs
+       LEFT JOIN matrices m ON m.id = cs.matrix_id
+      WHERE cs.ls_system_id::text = ANY($1::text[])`,
+    [ids],
+  );
+
+  for (const cr of cat.rows) {
+    const targets = sysIdToRows.get(cr.ls_system_id) ?? [];
+    for (const row of targets) {
+      row.sku = cr.sku;
+      row.name = cr.name;
+      row.color = cr.color;
+      row.size = cr.size;
+      row.upc = (cr.sku_upc && cr.sku_upc.trim()) || cr.matrix_upc || null;
+      row.vendor = cr.vendor;
+      row.retail_price = cr.retail_price;
+      row.sku_ls_system_id = cr.ls_system_id;
+      // Don't overwrite custom_sku_id on the items row — that's how the
+      // catalog still surfaces proper data without re-binding the items
+      // row (which is tag_killed for a reason).
+    }
+  }
 }
 
 export async function listSimTransferEpcs(
