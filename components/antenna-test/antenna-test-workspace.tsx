@@ -105,6 +105,17 @@ const DEFAULT_SWEEP: SweepConfig = {
 
 // Distance bucket from RSSI — heuristic foot ranges. Replaced per-row with
 // the calibrated estimate as soon as 2+ calibration points exist.
+/** Format ms as MM:SS or H:MM:SS for run-duration display. */
+function fmtDuration(ms: number): string {
+  if (ms < 0) ms = 0;
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const pad2 = (n: number) => n.toString().padStart(2, "0");
+  return h > 0 ? `${h}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
+}
+
 function rssiBucket(rssi: number): { label: string; color: string; order: number } {
   if (rssi >= -55) return { label: "0–3 ft", color: "#0f9c4f", order: 0 };
   if (rssi >= -65) return { label: "3–8 ft", color: "#3fb35d", order: 1 };
@@ -196,6 +207,18 @@ export function AntennaTestWorkspace() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Run duration — wall-clock from "Start clicked" → "Stop clicked / session
+  // ended". Tracked client-side so it survives the SSE stream lifecycle.
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const [runEndedAt, setRunEndedAt] = useState<number | null>(null);
+  // Tick every second while live so the displayed elapsed updates.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (!sessionId) return;
+    const t = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [sessionId]);
+
   const picked = picks.find((p) => p.antennaId === pickedAntennaId) ?? null;
 
   // Pre-fill knobs from saved defaults when the user picks a different antenna.
@@ -249,6 +272,17 @@ export function AntennaTestWorkspace() {
     lines.push(`# Reader: ${picked.readerName} (${picked.readerHost ?? ""})`);
     lines.push(`# Antenna: ${picked.antennaName} (A${picked.antennaNumber})`);
     lines.push(`# Captured at: ${new Date().toISOString()}`);
+    lines.push(
+      `# Run duration: ${
+        runStartedAt ? fmtDuration(runDurationMs) : "—"
+      }${
+        runStartedAt
+          ? ` (start: ${new Date(runStartedAt).toISOString()}${
+              runEndedAt ? ` → end: ${new Date(runEndedAt).toISOString()}` : " — still running at export"
+            })`
+          : ""
+      }`,
+    );
     lines.push(`# Power: ${(flags.powerArg / 10).toFixed(1)} dBm; cycle: ${flags.cycleMode}; read_time: ${flags.readTimeMs} ms; tagfocus: ${flags.tagFocus}`);
     lines.push(
       `# Sweep: ${
@@ -367,6 +401,7 @@ export function AntennaTestWorkspace() {
     useAntennaTestStream(sessionId);
   useEffect(() => {
     if ((status === "ended" || status === "sweep_done") && sessionId) {
+      setRunEndedAt(Date.now());
       setSessionId(null);
     }
   }, [status, sessionId]);
@@ -446,6 +481,8 @@ export function AntennaTestWorkspace() {
         return;
       }
       setSessionId(json.sessionId);
+      setRunStartedAt(Date.now());
+      setRunEndedAt(null);
     } finally {
       setBusy(false);
     }
@@ -462,6 +499,7 @@ export function AntennaTestWorkspace() {
       });
     } finally {
       setBusy(false);
+      setRunEndedAt(Date.now());
       setSessionId(null);
     }
   };
@@ -597,8 +635,9 @@ export function AntennaTestWorkspace() {
   };
 
   const isLive = sessionId !== null;
-  const elapsedMs = sessionId
-    ? Math.max(0, Date.now() - (sortedRows[0]?.firstSeenMs ?? Date.now()))
+  // Run duration: live = "now − Start"; frozen = "End − Start"; idle/empty = 0.
+  const runDurationMs = runStartedAt
+    ? (runEndedAt ?? Date.now()) - runStartedAt
     : 0;
 
   return (
@@ -903,7 +942,14 @@ export function AntennaTestWorkspace() {
           )}
           <span className="font-mono text-xs text-[var(--wms-muted)]">
             status: <strong className="text-[var(--wms-fg)]">{status}</strong>
-            {isLive && (
+            {runStartedAt !== null && (
+              <>
+                {" · "}
+                {isLive ? "running" : "ran"}{" "}
+                <strong className="text-[var(--wms-fg)]">{fmtDuration(runDurationMs)}</strong>
+              </>
+            )}
+            {(isLive || stats.totalReads > 0) && (
               <>
                 {" · "}
                 <strong className="text-[var(--wms-fg)]">{stats.uniqueEpcs}</strong>{" "}
@@ -1167,8 +1213,8 @@ export function AntennaTestWorkspace() {
           <div className="border-t border-[var(--wms-border)] px-3 py-2 font-mono text-[10px] text-[var(--wms-muted)]">
             Reading antenna {picked?.antennaName ?? "?"} on {picked?.readerName ?? "?"}{" "}
             · power {(flags.powerArg / 10).toFixed(1)} dBm · cycle {flags.cycleMode}
-            {flags.tagFocus ? " · tagfocus" : ""} · elapsed{" "}
-            {Math.round(elapsedMs / 1000)} s
+            {flags.tagFocus ? " · tagfocus" : ""} · running{" "}
+            {fmtDuration(runDurationMs)}
           </div>
         )}
       </div>
