@@ -65,7 +65,10 @@ type StreamMessage =
       stepEndsAtMs: number;
     };
 
-export function useAntennaTestStream(sessionId: string | null) {
+export function useAntennaTestStream(
+  sessionId: string | null,
+  paused: boolean = false,
+) {
   const [rows, setRows] = useState<Map<string, AntennaTestRow>>(new Map());
   const [stats, setStats] = useState<AntennaTestStats>({
     uniqueEpcs: 0,
@@ -77,6 +80,14 @@ export function useAntennaTestStream(sessionId: string | null) {
     useState<AntennaTestSweepProgress | null>(null);
   /** Ref so the SSE handler doesn't re-run on every state change. */
   const rowsRef = useRef<Map<string, AntennaTestRow>>(new Map());
+  /** Pause is consulted on every incoming read — hold in a ref so the live
+   *  SSE handler picks up the latest value without re-subscribing. While
+   *  paused, reads are simply dropped: radio keeps cycling server-side, the
+   *  table is frozen client-side, and resume picks up from the next read. */
+  const pausedRef = useRef(paused);
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   // Only clear when starting a NEW session — when sessionId goes null
   // (Stop), the table stays visible until the operator explicitly clears.
@@ -138,6 +149,9 @@ export function useAntennaTestStream(sessionId: string | null) {
       } catch {
         return;
       }
+      // Lifecycle, stats, sweep_progress always pass through so the
+      // status pill stays accurate. Read-events are the only thing pause
+      // gates — that's the operator's freeze semantic.
       if (msg.kind === "lifecycle") {
         setStatus(msg.status);
         return;
@@ -160,6 +174,7 @@ export function useAntennaTestStream(sessionId: string | null) {
         return;
       }
       // kind === "read"
+      if (pausedRef.current) return;
       const r = msg.read;
       const now = Date.now();
       const epc = r.epcHex.toUpperCase();

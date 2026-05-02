@@ -457,11 +457,16 @@ export function AntennaTestWorkspace() {
     [referenceState.list],
   );
 
+  // Client-side pause: when true, the SSE stream keeps pinging and the radio
+  // keeps cycling server-side, but new reads are dropped client-side so the
+  // table is frozen for inspection. Resume picks up from the next read.
+  const [paused, setPaused] = useState(false);
+
   // If the session ends server-side (e.g. expired or sweep_done), drop the
   // local sessionId so the Start button comes back. The table stays visible
   // until the operator explicitly clicks Clear.
   const { rows, stats, status, sweepProgress, clear } =
-    useAntennaTestStream(sessionId);
+    useAntennaTestStream(sessionId, paused);
   useEffect(() => {
     if ((status === "ended" || status === "sweep_done") && sessionId) {
       setRunEndedAt(Date.now());
@@ -546,6 +551,7 @@ export function AntennaTestWorkspace() {
       setSessionId(json.sessionId);
       setRunStartedAt(Date.now());
       setRunEndedAt(null);
+      setPaused(false);
     } finally {
       setBusy(false);
     }
@@ -716,7 +722,10 @@ export function AntennaTestWorkspace() {
               radio knobs · sweep · controls
             </span>
           </div>
-          <StatusPill status={status} isLive={isLive} />
+          <StatusPill
+            status={paused && isLive ? "paused" : status}
+            isLive={isLive && !paused}
+          />
         </header>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -965,13 +974,30 @@ export function AntennaTestWorkspace() {
               {busy ? "Starting…" : "▶ Start scan"}
             </button>
           ) : (
-            <button
-              onClick={stopScan}
-              disabled={busy}
-              className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {busy ? "Stopping…" : "■ Stop"}
-            </button>
+            <>
+              <button
+                onClick={stopScan}
+                disabled={busy}
+                className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {busy ? "Stopping…" : "■ Stop"}
+              </button>
+              <button
+                onClick={() => setPaused((p) => !p)}
+                title={
+                  paused
+                    ? "Resume: new reads start updating the table again. Reads received while paused were dropped client-side."
+                    : "Pause: freeze the table client-side. Radio keeps cycling on the reader; reads received while paused are not added to the table."
+                }
+                className={`rounded px-4 py-2 text-sm font-medium ${
+                  paused
+                    ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                    : "border border-[var(--wms-border)] bg-[var(--wms-bg)] text-[var(--wms-fg)] hover:bg-[var(--wms-card)]"
+                }`}
+              >
+                {paused ? "▶ Resume" : "⏸ Pause"}
+              </button>
+            </>
           )}
           {showingFrozenResults && (
             <button
@@ -1323,6 +1349,7 @@ export function AntennaTestWorkspace() {
 function StatusPill({ status, isLive }: { status: string; isLive: boolean }) {
   const tone = (() => {
     if (isLive) return { bg: "#0f9c4f", fg: "#fff", dot: "#a7f3a7" };
+    if (status === "paused") return { bg: "#b45309", fg: "#fff", dot: "#fde68a" };
     if (status === "armed") return { bg: "#b45309", fg: "#fff", dot: "#fde68a" };
     if (status === "ended" || status === "sweep_done")
       return { bg: "#475569", fg: "#fff", dot: "#cbd5e1" };
