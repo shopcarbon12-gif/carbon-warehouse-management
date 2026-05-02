@@ -8,6 +8,7 @@ import {
   CycleCountCommitModal,
   type VarianceSummary,
 } from "./cycle-count-commit-modal";
+import { ZeroOutRfidButton } from "./zero-out-rfid-button";
 
 type LocationRow = { id: string; code: string; name: string };
 type BinRow = { id: string; code: string; in_stock_count: number };
@@ -55,7 +56,7 @@ function classify(
 
 type RowState = "matched" | "missing" | "misplaced" | "unrecognized";
 
-export function CycleCountWorkspace() {
+export function CycleCountWorkspace({ isAdmin = false }: { isAdmin?: boolean }) {
   const [locationId, setLocationId] = useState("");
   const [binId, setBinId] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -308,6 +309,11 @@ export function CycleCountWorkspace() {
             <ScanLine className="h-4 w-4" />
             Clear scans
           </button>
+          {isAdmin ? (
+            <div className="ml-auto">
+              <ZeroOutRfidButton onZeroed={resetScans} />
+            </div>
+          ) : null}
         </div>
         <p className="mt-3 font-mono text-[0.6rem] text-[var(--wms-muted)]">
           Hardware SDK feeds EPCs while scanning is active.

@@ -1,8 +1,12 @@
 import { CycleCountWorkspace } from "@/components/rfid/cycle-counts/cycle-count-workspace";
+import { getSession } from "@/lib/get-session";
+import { isAdminRole } from "@/lib/auth/dashboard-rbac";
 
 export const dynamic = "force-dynamic";
 
-export default function CycleCountsPage() {
+export default async function CycleCountsPage() {
+  const session = await getSession();
+  const isAdmin = isAdminRole(session?.role ?? "");
   return (
     <div className="space-y-6">
       <div>
@@ -13,7 +17,7 @@ export default function CycleCountsPage() {
           audit.
         </p>
       </div>
-      <CycleCountWorkspace />
+      <CycleCountWorkspace isAdmin={isAdmin} />
     </div>
   );
 }

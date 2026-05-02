@@ -24,6 +24,7 @@ export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname.startsWith("/api/lightspeed/sales")) return true;
   if (pathname === "/api/mobile/upload-apk") return true;
   if (pathname.startsWith("/reports/inventory-compare")) return true;
+  if (pathname === "/api/rfid/zero-out") return true;
   return false;
 }
 
