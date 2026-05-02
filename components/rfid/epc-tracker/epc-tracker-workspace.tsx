@@ -153,8 +153,11 @@ export function EpcTrackerWorkspace() {
     { revalidateOnFocus: false },
   );
 
-  const pickMatches: TrackerSearchPickRow[] =
-    searchJson?.result?.mode === "pick" ? searchJson.result.matches : [];
+  const pickMatches: TrackerSearchPickRow[] = useMemo(
+    () =>
+      searchJson?.result?.mode === "pick" ? searchJson.result.matches : [],
+    [searchJson],
+  );
 
   // Detail panel + timeline still drive off selectedEpc, populated by row
   // click. Independent of `live` and `checked`.
@@ -245,23 +248,22 @@ export function EpcTrackerWorkspace() {
     setChecked(next);
   };
 
+  // Refreshing "now" so fmtSince's "Ns ago" updates while live. Stored in
+  // state (rather than reading Date.now() during render) to satisfy React's
+  // purity rule and let the renderer re-run on tick. Frozen between ticks.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [live]);
   const fmtSince = (ms: number): string => {
-    const sec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+    const sec = Math.max(0, Math.floor((nowMs - ms) / 1000));
     if (sec < 5) return "just now";
     if (sec < 60) return `${sec}s ago`;
     if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
     return `${Math.floor(sec / 3600)}h ago`;
   };
-
-  // Re-render every second so the "Last seen N s ago" stays current while
-  // live mode is on. Cheap; a single setState that doesn't touch the heavy
-  // table data.
-  const [, forceTick] = useState(0);
-  useEffect(() => {
-    if (!live) return;
-    const t = setInterval(() => forceTick((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, [live]);
 
   return (
     <div className="space-y-6">
