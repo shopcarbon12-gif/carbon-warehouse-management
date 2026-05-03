@@ -586,10 +586,9 @@ export async function getAgentConfigBundle(
       zone_id: d.zone_id,
       zone_name: d.zone_name,
       antennas: list,
-      effective_paused: isReaderEffectivelyPaused(
-        d.scan_paused_at,
-        d.scan_schedule,
-      ),
+      // Per-reader pause + schedule were removed at operator request 2026-05-03 —
+      // readers run passively, all the time. Always report unpaused.
+      effective_paused: false,
     });
   }
 
@@ -602,7 +601,10 @@ export async function getAgentConfigBundle(
     },
     readers,
     server_time: new Date().toISOString(),
-    live_scan_active: isLiveScanActive(tenantId),
+    // Live-scan session gating was removed at operator request 2026-05-03 —
+    // readers are passive and always-on. Always report active so the agent
+    // never SIGTERMs binaries based on dashboard session state.
+    live_scan_active: true,
   };
 }
 
