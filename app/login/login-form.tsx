@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export function LoginForm({ nextPath }: { nextPath?: string }) {
   const router = useRouter();
@@ -12,18 +12,8 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  // Network prewarm: when /login mounts, fire-and-forget POST so the
-  // server can match our public IP to a registered agent and start the
-  // tenant's live-scan session early. By the time the operator finishes
-  // typing the password, readers have had ~10 s to warm up. Public
-  // endpoint, no auth needed (the IP match IS the auth). On failure or
-  // off-network, response is `{prewarmed: false}` and we proceed
-  // normally — login flow is unaffected.
-  useEffect(() => {
-    void fetch("/api/agents/network-prewarm", { method: "POST" }).catch(() => {
-      /* swallow — prewarm is best-effort */
-    });
-  }, []);
+  // (Network prewarm removed at operator request. Live Scan tile
+  // requires explicit click to start.)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
