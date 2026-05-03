@@ -21,19 +21,72 @@ import type { PoolClient } from "pg";
  *   matrices, custom_skus, status_labels, users, locations, zones, bins,
  *   devices, cdm_agents, antenna_profiles, tenant_settings, etc.
  *
- * Order matters: child tables before parent tables to satisfy FK constraints.
+ * Each table needs its own tenant-scoping clause because not every table
+ * carries a `tenant_id` column directly — most reach the tenant through a
+ * parent FK (location, device, slip, run). The first version of this code
+ * assumed `tenant_id` was universal; the very first table on the list
+ * (`transfer_items`) doesn't have it, so the action died with "column
+ * tenant_id does not exist" before doing anything.
+ *
+ * Order matters: child tables before parent tables to satisfy FK
+ * constraints (compare_lines before compare_runs, transfer_items before
+ * transfer_slips/transfer_records, items deletes are last).
  */
-const ZERO_OUT_TABLES: ReadonlyArray<string> = [
-  "transfer_items",
-  "compare_lines",
-  "asset_movements",
-  "encode_events",
-  "rfid_alarms",
-  "handheld_batches",
-  "device_epc_queue",
-  "inventory_items",
-  "cdm_reads",
-  "items",
+type TableSpec = {
+  name: string;
+  /** WHERE clause body. `$1` is bound to the tenant uuid. */
+  whereClause: string;
+};
+
+const ZERO_OUT_SPECS: ReadonlyArray<TableSpec> = [
+  {
+    name: "transfer_items",
+    // transfer_items has slip_number → transfer_slips/records have tenant_id.
+    whereClause: `slip_number IN (
+      SELECT slip_number FROM transfer_slips WHERE tenant_id = $1::uuid
+      UNION
+      SELECT slip_number FROM transfer_records WHERE tenant_id = $1::uuid
+    )`,
+  },
+  {
+    name: "compare_lines",
+    // compare_lines.compare_run_id → compare_runs.tenant_id.
+    whereClause: `compare_run_id IN (SELECT id FROM compare_runs WHERE tenant_id = $1::uuid)`,
+  },
+  {
+    name: "asset_movements",
+    whereClause: `tenant_id = $1::uuid`,
+  },
+  {
+    name: "encode_events",
+    // encode_events.device_id → devices.tenant_id.
+    whereClause: `device_id IN (SELECT id FROM devices WHERE tenant_id = $1::uuid)`,
+  },
+  {
+    name: "rfid_alarms",
+    whereClause: `tenant_id = $1::uuid`,
+  },
+  {
+    name: "handheld_batches",
+    // handheld_batches.location_id → locations.tenant_id.
+    whereClause: `location_id IN (SELECT id FROM locations WHERE tenant_id = $1::uuid)`,
+  },
+  {
+    name: "device_epc_queue",
+    whereClause: `tenant_id = $1::uuid`,
+  },
+  {
+    name: "inventory_items",
+    whereClause: `location_id IN (SELECT id FROM locations WHERE tenant_id = $1::uuid)`,
+  },
+  {
+    name: "cdm_reads",
+    whereClause: `tenant_id = $1::uuid`,
+  },
+  {
+    name: "items",
+    whereClause: `location_id IN (SELECT id FROM locations WHERE tenant_id = $1::uuid)`,
+  },
 ];
 
 export type ZeroOutCounts = {
@@ -68,26 +121,26 @@ export async function zeroOutRfidData(
   const counts: ZeroOutCounts[] = [];
   let totalDeleted = 0;
 
-  for (const table of ZERO_OUT_TABLES) {
+  for (const spec of ZERO_OUT_SPECS) {
     const exists = await client.query<{ t: string | null }>(
       `SELECT to_regclass($1)::text AS t`,
-      [`public.${table}`],
+      [`public.${spec.name}`],
     );
     if (!exists.rows[0]?.t) {
-      counts.push({ table, before: 0, after: 0, deleted: 0 });
+      counts.push({ table: spec.name, before: 0, after: 0, deleted: 0 });
       continue;
     }
     const beforeRes = await client.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM public.${table} WHERE tenant_id = $1::uuid`,
+      `SELECT count(*)::text AS n FROM public.${spec.name} WHERE ${spec.whereClause}`,
       [args.tenantId],
     );
     const before = Number(beforeRes.rows[0]?.n ?? 0);
     const del = await client.query(
-      `DELETE FROM public.${table} WHERE tenant_id = $1::uuid`,
+      `DELETE FROM public.${spec.name} WHERE ${spec.whereClause}`,
       [args.tenantId],
     );
     const deleted = del.rowCount ?? 0;
-    counts.push({ table, before, after: before - deleted, deleted });
+    counts.push({ table: spec.name, before, after: before - deleted, deleted });
     totalDeleted += deleted;
   }
 

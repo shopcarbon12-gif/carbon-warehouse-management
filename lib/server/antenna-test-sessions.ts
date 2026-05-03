@@ -76,8 +76,21 @@ export type AntennaTestSession = {
   lastSeenAt: number;
 };
 
-/** Idle longer than this and the session is auto-dropped. */
-const SESSION_MAX_IDLE_MS = 5 * 60_000; // 5 min — generous; SSE pings every 25 s
+/**
+ * Idle longer than this and the session is auto-dropped. The browser-side
+ * SSE pings every 25 s, so 60 s allows two missed pings before pruning.
+ *
+ * Why 60 s and not 5 min: when a session is "active", the agent pins the
+ * reader in TEST_MODE, where reads go to /api/antenna-test/ingest instead
+ * of /api/cdm-agents/reads. If the operator closes the tab / loses
+ * internet / their laptop sleeps mid-test, no more SSE pings arrive —
+ * but the reader keeps reading into the (now-orphaned) test session.
+ * From the dashboard's perspective the reader looks dead because no
+ * reads land in cdm_reads. With the old 5-min idle, that "looks dead"
+ * window was 5 minutes long. 60 s is short enough that an accidental
+ * tab close releases the reader almost immediately.
+ */
+const SESSION_MAX_IDLE_MS = 60_000;
 
 const byReader = new Map<string, AntennaTestSession>();
 const byId = new Map<string, AntennaTestSession>();
