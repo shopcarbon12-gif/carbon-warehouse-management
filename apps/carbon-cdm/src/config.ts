@@ -9,7 +9,15 @@ const envSchema = z.object({
     .transform((v) => v.replace(/\/$/, "")),
   CARBON_CDM_TOKEN: z.string().min(8).startsWith("cdm_"),
   CARBON_HEARTBEAT_INTERVAL_SEC: z.coerce.number().int().min(5).max(600).default(30),
-  CARBON_CONFIG_POLL_INTERVAL_SEC: z.coerce.number().int().min(10).max(600).default(60),
+  /**
+   * How often the agent fetches the WMS config bundle. Lowered from 60 s
+   * to 3 s to give the dashboard live-scan tile near-real-time pause/
+   * resume propagation (≤3 s worst case). The bundle is small (a few
+   * hundred bytes) and the query is fully indexed; load on the WMS at
+   * 3 s polling for one agent is ~0.3 req/s, negligible. Override with
+   * `CARBON_CONFIG_POLL_INTERVAL_SEC` env var if needed.
+   */
+  CARBON_CONFIG_POLL_INTERVAL_SEC: z.coerce.number().int().min(2).max(600).default(3),
   CARBON_MONSOON_BINARY: z.string().default("/opt/carbon-cdm/MonsoonReader"),
   CARBON_LOG_LEVEL: z
     .enum(["debug", "info", "warn", "error"])

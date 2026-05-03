@@ -46,6 +46,13 @@ export type AgentConfigBundle = {
   agent: { id: string; name: string; location_id: string; location_code: string };
   readers: AgentConfigReader[];
   server_time: string;
+  /** Master scan toggle. When false, the supervisor pauses ALL readers
+   *  (kills children, stops spawning) regardless of any per-reader
+   *  config. Driven by the dashboard's live-scan tile — set to true
+   *  while a session is active for this tenant, false otherwise. Older
+   *  WMS bundles may omit this; treat missing as `true` so we keep
+   *  scanning the way the agent always did. */
+  live_scan_active?: boolean;
 };
 
 export type HeartbeatStatus = "online" | "degraded";

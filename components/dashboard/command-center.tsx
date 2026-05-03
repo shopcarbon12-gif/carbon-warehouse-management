@@ -65,18 +65,29 @@ function PulsePill({
   Icon,
   active,
   dim,
+  onClick,
+  hint,
 }: {
   label: string;
   count: number;
   Icon: typeof Radio;
   active?: boolean;
   dim?: boolean;
+  /** When provided, the pill renders as a button (master-toggle behavior). */
+  onClick?: () => void;
+  /** Replaces the count when set (e.g. "(click to run)" in IDLE state). */
+  hint?: string;
 }) {
   const live = (active ?? count > 0) && !dim;
   const animated = useCountUp(count);
+  const Cmp = onClick ? "button" : "div";
   return (
-    <div
+    <Cmp
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
       className={`flex min-w-[7.25rem] flex-1 items-center gap-2 rounded-lg border px-3 py-3.5 font-mono text-base sm:min-w-[8rem] ${
+        onClick ? "cursor-pointer text-left transition-colors hover:brightness-110" : ""
+      } ${
         dim
           ? "border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/40 text-[var(--wms-muted)]"
           : live
@@ -108,10 +119,10 @@ function PulsePill({
           {label}
         </div>
         <div className="tabular-nums text-base font-bold text-[var(--wms-fg)]">
-          {animated}
+          {hint ?? animated}
         </div>
       </div>
-    </div>
+    </Cmp>
   );
 }
 
@@ -193,51 +204,72 @@ export function CommandCenter() {
     kpis.hardware.antennas +
     kpis.hardware.printers +
     kpis.hardware.handhelds;
-  const liveScanEnabled = kpis.hardware.readers + kpis.hardware.antennas > 0;
+  const liveScanHardwarePresent = kpis.hardware.readers + kpis.hardware.antennas > 0;
 
-  // Live scan tile — counts unique LIVE-status EPCs that hit the SSE stream
-  // for this session. The agent's ingress already runs decode + catalog match
-  // server-side; we re-look-up after each batch to pick out the in-stock ones.
-  // No idle timeout; resets only on page reload.
+  // Live scan tile is the master ON/OFF toggle for fixed-reader scanning.
+  // IDLE on landing — readers paused server-side.
+  // Click → POST /start → RUNNING → polls /state every 2 s for counter +
+  //   to keep the server-side session alive (the GET refreshes lastSeenAt).
+  // Click again → POST /stop → IDLE (counter back to 0; readers stop).
+  // Tab close / refresh / no internet → polls stop → server auto-expires
+  //   the session at 60 s → readers stop.
+  // suppress unused-import lint until we re-enable lookup-side filtering
+  void postLookup;
+  const [liveScanRunning, setLiveScanRunning] = useState(false);
   const [liveScanCount, setLiveScanCount] = useState(0);
-  const seenRef = useRef<Set<string>>(new Set());
+  const [liveScanBusy, setLiveScanBusy] = useState(false);
 
+  // Poll /state every 2 s while running — this both updates the counter
+  // and acts as the heartbeat that keeps the server-side session alive.
   useEffect(() => {
-    if (!liveScanEnabled) return;
-    const es = new EventSource("/api/edge/stream");
-    es.onmessage = (ev) => {
-      if (!ev.data?.trim() || ev.data.startsWith(":")) return;
-      let p: { epcs?: string[] };
+    if (!liveScanRunning) return;
+    let cancelled = false;
+    const tick = async () => {
       try {
-        p = JSON.parse(ev.data) as { epcs?: string[] };
-      } catch {
-        return;
-      }
-      const list = (p.epcs ?? [])
-        .map((e) => e.replace(/\s/g, "").toUpperCase())
-        .filter((e) => /^[0-9A-F]{24}$/.test(e))
-        .filter((e) => !seenRef.current.has(e));
-      if (list.length === 0) return;
-      // Reserve them locally before lookup so a noisy stream can't trigger
-      // duplicate lookups for the same EPC mid-flight.
-      list.forEach((e) => seenRef.current.add(e));
-      void (async () => {
-        try {
-          const rows = await postLookup(list);
-          // Only count the ones the server resolved as 'in-stock' (LIVE).
-          // Everything else (tag_killed → defective EPCs, stolen / unknown /
-          // pending = scanner ignore) is dropped per /settings/statuses rules.
-          const liveHits = rows.filter((r) => r.status === "in-stock").length;
-          if (liveHits > 0) setLiveScanCount((c) => c + liveHits);
-        } catch {
-          /* transient; ignore */
+        const res = await fetch("/api/dashboard/live-scan/state");
+        if (!res.ok) return;
+        const j = (await res.json()) as {
+          active: boolean;
+          reads_since_start?: number;
+        };
+        if (cancelled) return;
+        if (!j.active) {
+          // Session expired server-side (e.g. WMS restart). Drop back to IDLE.
+          setLiveScanRunning(false);
+          setLiveScanCount(0);
+          return;
         }
-      })();
+        setLiveScanCount(j.reads_since_start ?? 0);
+      } catch {
+        /* transient; ignore */
+      }
     };
+    void tick();
+    const id = setInterval(tick, 2_000);
     return () => {
-      es.close();
+      cancelled = true;
+      clearInterval(id);
     };
-  }, [liveScanEnabled]);
+  }, [liveScanRunning]);
+
+  const onLiveScanClick = useCallback(async () => {
+    if (liveScanBusy) return;
+    setLiveScanBusy(true);
+    try {
+      if (liveScanRunning) {
+        await fetch("/api/dashboard/live-scan/stop", { method: "POST" });
+        setLiveScanRunning(false);
+        setLiveScanCount(0);
+      } else {
+        const res = await fetch("/api/dashboard/live-scan/start", { method: "POST" });
+        if (!res.ok) return;
+        setLiveScanCount(0);
+        setLiveScanRunning(true);
+      }
+    } finally {
+      setLiveScanBusy(false);
+    }
+  }, [liveScanRunning, liveScanBusy]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -313,8 +345,10 @@ export function CommandCenter() {
             label="Live scan"
             count={liveScanCount}
             Icon={Radio}
-            active={liveScanEnabled}
-            dim={!liveScanEnabled}
+            active={liveScanRunning}
+            dim={!liveScanHardwarePresent}
+            onClick={liveScanHardwarePresent ? onLiveScanClick : undefined}
+            hint={liveScanRunning ? undefined : "(click to run)"}
           />
           <PulsePill label="Readers" count={kpis.hardware.readers} Icon={Radio} />
           <PulsePill label="Antennas" count={kpis.hardware.antennas} Icon={Wifi} />

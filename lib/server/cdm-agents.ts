@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createHash, randomBytes } from "node:crypto";
 import { publishEdgeScanEvent } from "@/lib/server/edge-scan-hub";
 import { ingestEpcs } from "@/lib/server/epc-ingress";
+import { isLiveScanActive } from "@/lib/server/live-scan-sessions";
 
 export type CdmAgentRow = {
   id: string;
@@ -417,6 +418,11 @@ export type AgentConfigBundle = {
   readers: AgentConfigReader[];
   /** Server-side time, useful for the agent to detect clock skew. */
   server_time: string;
+  /** Master scan toggle, evaluated server-side from the tenant's
+   *  live-scan session store. False = no readers should scan, regardless
+   *  of any other config. The agent uses this as the outermost gate in
+   *  its supervisor reconcile loop. */
+  live_scan_active: boolean;
 };
 
 export async function getAgentConfigBundle(
@@ -428,14 +434,17 @@ export async function getAgentConfigBundle(
     name: string;
     location_id: string;
     location_code: string;
+    tenant_id: string;
   }>(
-    `SELECT a.id::text, a.name, a.location_id::text, l.code AS location_code
+    `SELECT a.id::text, a.name, a.location_id::text, l.code AS location_code,
+            a.tenant_id::text
        FROM cdm_agents a
        JOIN locations l ON l.id = a.location_id
        WHERE a.id = $1::uuid`,
     [agentId],
   );
   if (ag.rowCount === 0) return null;
+  const tenantId = ag.rows[0].tenant_id;
 
   const devices = await pool.query<{
     id: string;
@@ -539,9 +548,15 @@ export async function getAgentConfigBundle(
   }
 
   return {
-    agent: ag.rows[0],
+    agent: {
+      id: ag.rows[0].id,
+      name: ag.rows[0].name,
+      location_id: ag.rows[0].location_id,
+      location_code: ag.rows[0].location_code,
+    },
     readers,
     server_time: new Date().toISOString(),
+    live_scan_active: isLiveScanActive(tenantId),
   };
 }
 

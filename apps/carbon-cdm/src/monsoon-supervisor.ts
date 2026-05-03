@@ -419,12 +419,29 @@ export class MonsoonSupervisor {
    */
   reconcile(bundle: AgentConfigBundle): void {
     this.bundleVersion += 1;
-    const desiredById = new Map(bundle.readers.map((r) => [r.id, r]));
+
+    // Master scan toggle — driven by the dashboard's live-scan tile.
+    // When false, the operator has not opted into scanning (or their
+    // dashboard session has expired), so we want zero readers active.
+    // Implementation: clear the desired set, fall through to the normal
+    // "stop slots no longer desired" path. Result: every running child
+    // gets SIGTERMed and nothing new spawns until live_scan_active flips
+    // back to true on a future config poll. Backwards-compatible: if the
+    // server omits the field (older WMS bundle), treat as true so the
+    // agent keeps scanning the way it always did.
+    const liveScanActive = bundle.live_scan_active ?? true;
+    const desiredById = new Map(
+      liveScanActive ? bundle.readers.map((r) => [r.id, r] as const) : [],
+    );
 
     // Stop slots for readers no longer in the bundle.
     for (const [id, slot] of this.slots) {
       if (!desiredById.has(id)) {
-        log.info("supervisor: reader removed, stopping", { readerId: id, name: slot.spec.name });
+        log.info("supervisor: reader removed, stopping", {
+          readerId: id,
+          name: slot.spec.name,
+          reason: liveScanActive ? "left_bundle" : "live_scan_inactive",
+        });
         this.stopSlot(slot);
         this.slots.delete(id);
       }
