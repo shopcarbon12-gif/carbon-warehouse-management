@@ -225,8 +225,10 @@ export function CommandCenter() {
   const [liveScanCount, setLiveScanCount] = useState(0);
   const [liveScanBusy, setLiveScanBusy] = useState(false);
 
-  // Poll /state every 2 s while running — this both updates the counter
-  // and acts as the heartbeat that keeps the server-side session alive.
+  // Poll /state every 1 s while running — updates the counter AND acts as
+  // the heartbeat that keeps the server-side session alive. When the tab
+  // closes or loses focus, the polling stops and the server session
+  // auto-expires within 60 s, telling the agent to idle the readers.
   useEffect(() => {
     if (!liveScanRunning) return;
     let cancelled = false;
@@ -251,12 +253,41 @@ export function CommandCenter() {
       }
     };
     void tick();
-    const id = setInterval(tick, 2_000);
+    const id = setInterval(tick, 1_000);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
   }, [liveScanRunning]);
+
+  // Auto-start on mount when this client's public IP matches an agent's
+  // last_known_public_ip — i.e. the operator is signed in from the same
+  // physical network as the warehouse agent. No click required. Fires
+  // exactly once per page mount; if the user later clicks Pause and goes
+  // IDLE, they have to click again to resume (auto-start does NOT keep
+  // re-firing). Off-network logins (different public IP) get
+  // `eligible: false` and IDLE stays IDLE.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/dashboard/live-scan/auto-eligible");
+        if (!res.ok) return;
+        const j = (await res.json()) as { eligible?: boolean };
+        if (cancelled || !j.eligible) return;
+        // Mount-time auto-start: post /start, then transition to RUNNING.
+        const startRes = await fetch("/api/dashboard/live-scan/start", { method: "POST" });
+        if (!startRes.ok || cancelled) return;
+        setLiveScanCount(0);
+        setLiveScanRunning(true);
+      } catch {
+        /* fall back to manual click */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const onLiveScanClick = useCallback(async () => {
     if (liveScanBusy) return;

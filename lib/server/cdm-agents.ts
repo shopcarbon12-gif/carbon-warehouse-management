@@ -209,6 +209,7 @@ export async function recordAgentHeartbeat(
   client: PoolClient,
   agentId: string,
   body: HeartbeatBody,
+  publicIp: string | null = null,
 ): Promise<HeartbeatResult> {
   const r = await client.query<{ recover_requested_at: string | null }>(
     `UPDATE cdm_agents
@@ -216,10 +217,12 @@ export async function recordAgentHeartbeat(
            agent_version = $3,
            hostname = COALESCE($4, hostname),
            last_heartbeat_at = now(),
+           last_known_public_ip = COALESCE($5, last_known_public_ip),
+           last_known_public_ip_at = CASE WHEN $5 IS NOT NULL THEN now() ELSE last_known_public_ip_at END,
            updated_at = now()
      WHERE id = $1::uuid
      RETURNING recover_requested_at::text`,
-    [agentId, body.status, body.agentVersion, body.hostname ?? null],
+    [agentId, body.status, body.agentVersion, body.hostname ?? null, publicIp],
   );
   const recoverRequestedAt = r.rows[0]?.recover_requested_at ?? null;
   let restartRequested = false;
@@ -332,6 +335,32 @@ export async function getAgentDiagnosis(
       reads_last_hour: Number(rs.reads_1h),
     },
   };
+}
+
+/**
+ * Find an agent (any tenant) whose last_known_public_ip matches the given
+ * IP and whose last heartbeat was recent (≤5 min). Used by the dashboard's
+ * auto-eligible endpoint and the public network-prewarm endpoint to
+ * decide whether the requester is on the same public network as a live
+ * agent. Returns the matching agent's tenant_id (so prewarm can create
+ * the live-scan session for the right tenant) or null.
+ */
+export async function findAgentByPublicIp(
+  pool: Pool,
+  publicIp: string,
+): Promise<{ agentId: string; tenantId: string } | null> {
+  if (!publicIp) return null;
+  const r = await pool.query<{ id: string; tenant_id: string }>(
+    `SELECT id::text, tenant_id::text
+       FROM cdm_agents
+      WHERE last_known_public_ip = $1
+        AND last_known_public_ip_at > now() - interval '5 minutes'
+      ORDER BY last_known_public_ip_at DESC
+      LIMIT 1`,
+    [publicIp],
+  );
+  if (r.rowCount === 0 || !r.rows[0]) return null;
+  return { agentId: r.rows[0].id, tenantId: r.rows[0].tenant_id };
 }
 
 /** Verifies a Bearer token from the Carbon CDM agent. Returns agent if valid, null otherwise. */

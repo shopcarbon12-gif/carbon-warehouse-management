@@ -35,6 +35,12 @@ function isPublicPath(pathname: string): boolean {
    * Same path responds to admin GET (session-authed) — that branch goes through
    * isAdminOnlyPath instead of this allowlist. */
   if (pathname === "/api/cdm-agents/wiznet-discoveries") return true;
+  /* Public prewarm endpoint — fires on /login page mount. Reads source
+   * public IP, matches agent, starts tenant's live-scan session early
+   * so readers warm up while the operator types their password. No auth:
+   * the IP match IS the auth. Heartbeat-based timeout cleans up if no
+   * login completes. */
+  if (pathname === "/api/agents/network-prewarm") return true;
   if (pathname === "/api/antenna-test/ingest") return true;
   if (pathname === "/api/settings/mobile-sync") return true;
   if (pathname === "/api/inventory/upload") return true;

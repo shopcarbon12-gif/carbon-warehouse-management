@@ -5,6 +5,7 @@ import {
   heartbeatSchema,
   recordAgentHeartbeat,
 } from "@/lib/server/cdm-agents";
+import { extractPublicIp } from "@/lib/server/request-public-ip";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,10 +48,15 @@ export async function POST(req: Request) {
     );
   }
 
+  // Capture the agent's public IP from proxy headers — this is what the
+  // dashboard's auto-start logic compares against when an operator signs
+  // in. Behind Coolify's Traefik, this is the warehouse's NAT public IP.
+  const publicIp = extractPublicIp(req);
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const result = await recordAgentHeartbeat(client, agent.agentId, parsed.data);
+    const result = await recordAgentHeartbeat(client, agent.agentId, parsed.data, publicIp);
     await client.query("COMMIT");
     return NextResponse.json({
       ok: true,
