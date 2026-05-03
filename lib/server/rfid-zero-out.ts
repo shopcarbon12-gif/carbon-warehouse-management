@@ -121,6 +121,19 @@ export async function zeroOutRfidData(
     throw new Error(`BAD_REQUEST:Confirmation phrase must be exactly "${expected}".`);
   }
 
+  // Hard transaction guards. Verified live against the prod schema with a
+  // dry-run + rollback on 2026-05-03 — without these the chain deadlocked
+  // against the live cdm-agent posting cdm_reads at ~30 rows/s.
+  //   - lock_timeout: fail fast if a row is contested (avoid long hangs)
+  //   - statement_timeout: hard ceiling on any single DELETE
+  //   - session_replication_role='replica': disables FK-trigger checks for
+  //     the duration of THIS transaction, so cascading FK locks don't
+  //     collide with the agent's concurrent INSERTs. Reverts at COMMIT/
+  //     ROLLBACK because we used SET LOCAL.
+  await client.query(`SET LOCAL lock_timeout = '10s'`);
+  await client.query(`SET LOCAL statement_timeout = '120s'`);
+  await client.query(`SET LOCAL session_replication_role = 'replica'`);
+
   const counts: ZeroOutCounts[] = [];
   let totalDeleted = 0;
 
