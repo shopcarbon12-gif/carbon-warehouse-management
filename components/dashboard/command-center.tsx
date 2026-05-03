@@ -28,7 +28,6 @@ type Kpis = {
   defective_epcs: number;
   unknown_assets: number;
   hardware: HardwareCounts;
-  has_scannable_hardware: boolean;
 };
 
 type CommandPayload = {
@@ -203,7 +202,6 @@ export function CommandCenter() {
       defective_epcs: 0,
       unknown_assets: 0,
       hardware: { readers: 0, antennas: 0, printers: 0, handhelds: 0 },
-      has_scannable_hardware: false,
     };
   const activity = data?.activity ?? [];
 
@@ -212,14 +210,7 @@ export function CommandCenter() {
     kpis.hardware.antennas +
     kpis.hardware.printers +
     kpis.hardware.handhelds;
-  // Gate the Live scan tile on CONFIGURED readers, not real-time activity.
-  // Earlier this was `kpis.hardware.readers + kpis.hardware.antennas > 0` —
-  // but those counts now reflect "produced reads in the last 60 s." When
-  // scanning is OFF (the default after `b331061`), both are 0, so the tile
-  // was permanently un-clickable. The operator could see "(click to run)"
-  // but the click was a no-op. has_scannable_hardware stays true while any
-  // reader is configured at this location, regardless of activity.
-  const liveScanHardwarePresent = kpis.has_scannable_hardware;
+  const liveScanHardwarePresent = kpis.hardware.readers + kpis.hardware.antennas > 0;
 
   // Live scan tile is the master ON/OFF toggle for fixed-reader scanning.
   // IDLE on landing — readers paused server-side.

@@ -17,15 +17,8 @@ export type CommandCenterKpis = {
   defective_epcs: number;
   /** legacy alias of defective_epcs. */
   unknown_assets: number;
-  /** Real-time activity counts (last 60 s). hardware.readers/antennas can be 0
-   *  while the location HAS configured readers — that just means scanning is
-   *  off. Use `has_scannable_hardware` to gate the Live scan tile click. */
+  /** Hardware presence at this location. Drives the Live scan tile's enabled state. */
   hardware: HardwareCounts;
-  /** True if the location has at least one configured fixed/transaction/door
-   *  reader. Independent of whether scanning is currently active. The Live
-   *  scan tile enables on this; without it the tile would be permanently
-   *  un-clickable when idle (chicken-and-egg). */
-  has_scannable_hardware: boolean;
 };
 
 export type AuditLogListRow = {
@@ -112,12 +105,6 @@ export async function getCommandCenterKpis(
        ) AS handhelds`,
     [locationId, tenantId],
   );
-  const scannable = await pool.query<{ c: string }>(
-    `SELECT count(*)::text AS c FROM devices
-      WHERE location_id = $1::uuid
-        AND device_type IN ('fixed_reader','transaction_reader','door_reader')`,
-    [locationId],
-  );
   const liveCount = Number(live.rows[0]?.c ?? 0);
   const defectiveCount = Number(defective.rows[0]?.c ?? 0);
   return {
@@ -132,7 +119,6 @@ export async function getCommandCenterKpis(
       printers: Number(hw.rows[0]?.printers ?? 0),
       handhelds: Number(hw.rows[0]?.handhelds ?? 0),
     },
-    has_scannable_hardware: Number(scannable.rows[0]?.c ?? 0) > 0,
   };
 }
 
