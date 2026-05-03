@@ -23,6 +23,11 @@ import com.zebra.rfid.api3.STATUS_EVENT_TYPE
 import com.zebra.rfid.api3.STOP_TRIGGER_TYPE
 import com.zebra.rfid.api3.TagData
 import com.zebra.rfid.api3.TriggerInfo
+import com.zebra.scannercontrol.DCSSDKDefs
+import com.zebra.scannercontrol.DCSScannerInfo
+import com.zebra.scannercontrol.FirmwareUpdateEvent
+import com.zebra.scannercontrol.IDcsSdkApiDelegate
+import com.zebra.scannercontrol.SDKHandler
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
@@ -32,6 +37,14 @@ import kotlin.math.abs
 /**
  * Zebra RFID API3: prefers Bluetooth, then USB service transport.
  * Streams `{"epc","rssi"}` on the Flutter [EventChannel] sink.
+ *
+ * Two SDKs run side-by-side against the same RFD8500:
+ *   - API3 (RFIDReader) owns UHF tag inventory + trigger-mode routing.
+ *   - CoreScanner (SDKHandler) owns barcode decode events. When the trigger
+ *     is flipped to BARCODE_MODE on the API3 side, the imager fires and the
+ *     decoded bytes come back on the CoreScanner session via
+ *     IDcsSdkApiDelegate.dcssdkEventBarcode. This is the same dual-stack
+ *     pattern Zebra's own 123RFID reference app uses.
  */
 class CarbonZebraRfidController(
   private val context: Context,
@@ -43,9 +56,13 @@ class CarbonZebraRfidController(
   @Volatile private var triggerSink: EventChannel.EventSink? = null
   @Volatile private var readerNameHint: String? = null
   @Volatile private var barcodeRelay: CarbonHardwareBarcodeRelay? = null
-  @Volatile private var barcodeListenerRegistered: Boolean = false
-  @Volatile private var barcodeWatcher: Any? = null
-  @Volatile private var barcodeScanner: Any? = null
+
+  // CoreScanner (com.zebra.scannercontrol) state. SDKHandler is constructed
+  // once per connect cycle and torn down in disconnectSync. Scanner ID for
+  // the active session (the paired RFD8500) is captured when CoreScanner
+  // fires dcssdkEventCommunicationSessionEstablished.
+  @Volatile private var sdkHandler: SDKHandler? = null
+  @Volatile private var barcodeScannerId: Int = -1
 
   /** Requested output power in dBm (0–30), forwarded to the reader’s transmit power table. */
   private val requestedPowerDbm = AtomicInteger(30)
@@ -79,11 +96,11 @@ class CarbonZebraRfidController(
   }
 
   /**
-   * Flip the RFD8500 trigger to fire the 2D imager instead of UHF. While in this mode,
-   * trigger pulls do NOT produce RFID tag events; barcode scans flow either via the
-   * Zebra Scanner Control SDK (registered below) or via HID-keyboard emulation if the
-   * sled was paired in keyboard mode (in which case the offstage TextField on
-   * Bin Assign captures them — that path is unchanged by this method).
+   * Flip the RFD8500 trigger to fire the 2D imager instead of UHF. While in
+   * this mode, trigger pulls do NOT produce RFID tag events — the imager
+   * fires and the decoded barcode flows back through the CoreScanner
+   * session as a [IDcsSdkApiDelegate.dcssdkEventBarcode] callback (see
+   * [BarcodeDelegate]).
    *
    * Idempotent. No-ops when the reader is not connected.
    */
@@ -126,7 +143,6 @@ class CarbonZebraRfidController(
             Log.w(TAG, "switchMode() fallback threw: ${e.message}")
           }
         }
-        ensureBarcodeListenerRegistered()
       } catch (e: Exception) {
         Log.w(TAG, "setTriggerModeBarcode failed: ${e.message}")
         lastError = e.message ?: e.javaClass.simpleName
@@ -136,26 +152,6 @@ class CarbonZebraRfidController(
 
   fun setTriggerModeRfid() {
     executor.execute {
-      // CRITICAL: tear down the BarcodeScanner SSI session FIRST, before
-      // touching API3's setTriggerMode. Once CoreScanner has an active
-      // scanner.connect(), it claims trigger routing on the RFD8500 itself
-      // and API3's setTriggerMode(RFID_MODE) is silently overridden — the
-      // trigger continues firing the 2D laser even though API3 says it's
-      // back in RFID mode. Disconnecting the BarcodeScanner releases SSI's
-      // claim and lets API3 take the trigger back.
-      val bs = barcodeScanner
-      if (bs != null) {
-        try {
-          bs.javaClass.getMethod("disconnect").invoke(bs)
-          Log.d(TAG, "setTriggerModeRfid: BarcodeScanner.disconnect() OK")
-        } catch (e: Exception) {
-          Log.w(TAG, "setTriggerModeRfid: BarcodeScanner.disconnect threw: ${e.message}")
-        }
-        barcodeScanner = null
-        // Allow re-connection on the next setTriggerModeBarcode() call.
-        barcodeListenerRegistered = false
-      }
-
       val r = reader ?: run {
         Log.w(TAG, "setTriggerModeRfid: reader is null")
         return@execute
@@ -187,179 +183,116 @@ class CarbonZebraRfidController(
     }
   }
 
+
   /**
-   * Wires the bundled Zebra Barcode Scanner SDK end-to-end so RFD8500 imager
-   * decodes flow into our hardware-barcode EventChannel.
+   * Boots CoreScanner ([SDKHandler]) and registers our [BarcodeDelegate].
+   * Once initialised, the SDK auto-discovers paired RFD8500s and fires
+   * [IDcsSdkApiDelegate.dcssdkEventScannerAppeared] for each one. We then
+   * call [SDKHandler.dcssdkEstablishCommunicationSession] to open the
+   * barcode session — after which trigger-driven imager decodes flow
+   * through [IDcsSdkApiDelegate.dcssdkEventBarcode] into our
+   * [CarbonHardwareBarcodeRelay].
    *
-   * Why this is non-trivial: the API3 AAR bundles a SECOND SDK
-   * (`com.zebra.barcode.sdk`) that sits on top of CoreScanner
-   * (`com.zebra.scannercontrol`). Just registering a [BarcodeDataListener] on
-   * the legacy event handler is a no-op — the events only fire if a
-   * [BarcodeScanner] instance has been `connect()`ed, which is what
-   * initialises CoreScanner internally. The earlier "spike" version of this
-   * method registered the listener without ever connecting, so decoded
-   * barcodes had no path back to Dart.
-   *
-   * Sequence:
-   *   1. `BarcodeScannerSdk.setContext(applicationCtx)`
-   *   2. Build a [BarcodeScannerWatcher] (BLUETOOTH) and add an events
-   *      listener — this fires `onScannerAppeared` / `onScannerConnected`
-   *      whenever a BT scanner is paired or comes into range.
-   *   3. Enumerate already-paired scanners via the management services
-   *      factory; if our RFD8500 is already paired we connect immediately.
-   *   4. On every appear/connect event we call [connectBarcodeScanner], which
-   *      registers a [BarcodeDataListener] AND calls `scanner.connect()` so
-   *      the imager decode path becomes live.
-   *
-   * Reflection-only: we don't import `com.zebra.barcode.sdk.*` because the
-   * AAR's package surface has shifted between minor versions, and we don't
-   * want the controller's connect-async path to crash on a missing class for
-   * an SDK that is technically optional. Failures degrade silently to the
-   * HID-keyboard-wedge path (the offstage TextField on Bin Assign).
+   * Best-effort: failures here do NOT fail the API3 RFID connect. UHF still
+   * works even if the barcode side never comes up.
    */
-  private fun ensureBarcodeListenerRegistered() {
-    if (barcodeListenerRegistered) return
+  private fun initBarcodeSdkOnce() {
+    if (sdkHandler != null) return
     val relay = barcodeRelay ?: run {
-      Log.d(TAG, "barcode SDK: no relay set, skipping")
+      Log.d(TAG, "barcode SDK: no relay set, skipping init")
       return
     }
     try {
-      val sdkClass = Class.forName("com.zebra.barcode.sdk.BarcodeScannerSdk")
-      sdkClass.getMethod("setContext", android.content.Context::class.java)
-        .invoke(null, context.applicationContext)
-
-      val typeClass = Class.forName("com.zebra.barcode.sdk.BarcodeScannerType")
-      val bluetoothType = typeClass.getField("BLUETOOTH").get(null)
-
-      // Why no watcher: 1.2.28 registered both a watcher AND called
-      // BarcodeScannerManager.getScanners(). The watcher's auto-fired
-      // onScannerAppeared (running on the SDK's own thread) raced with our
-      // getScanners iteration, both touching the same HashMap inside
-      // SDKHandler -> ConcurrentModificationException. 1.2.29 dropped the
-      // enumerate hoping the watcher alone would fire — it doesn't (proven
-      // by 47s of silence in logcat). The RFD8500 is already paired before
-      // the app launches, so a one-shot enumerate is the correct path; new
-      // scanners appearing mid-session is not a flow we need to support.
-      val mgmtFactory = sdkClass.getMethod("getBarcodeScannerManagementServicesFactory")
-        .invoke(null)
-      val mgmt = mgmtFactory.javaClass.getMethod("createBarcodeScannerManager", typeClass)
-        .invoke(mgmtFactory, bluetoothType)
-      Log.d(TAG, "barcode SDK: enumerating paired BT scanners via manager")
-      val scanners = mgmt.javaClass.getMethod("getScanners").invoke(mgmt) as? java.util.ArrayList<*>
-      Log.d(TAG, "barcode SDK: enumerate found=${scanners?.size ?: 0} scanner(s)")
-      // Critical filter: BarcodeScannerManager.getScanners() returns EVERY
-      // paired Bluetooth device, not just barcode-capable ones. On the user's
-      // Samsung S25 it returned the Galaxy Watch7 alongside the RFD8500. The
-      // first watch.connect() "succeeded" (CoreScanner accepts any BT device
-      // that respond to its handshake), then claimed ownership of the trigger
-      // routing — and Count screen suddenly fired the 2D laser instead of UHF.
-      // Only attempt connect on devices whose name starts with "RFD" — that
-      // covers RFD8500/RFD9000/RFD2000 etc. Anything else (watches, phones,
-      // headphones, generic BT keyboards) is filtered out.
-      if (!scanners.isNullOrEmpty()) {
-        for (info in scanners) {
-          if (info == null) continue
-          val (name, _) = runCatching {
-            val n = info.javaClass.getMethod("getName").invoke(info)?.toString().orEmpty()
-            val h = info.javaClass.getMethod("getHardwareId").invoke(info)?.toString().orEmpty()
-            Log.d(TAG, "barcode SDK: enumerated name='$n' hwId='$h'")
-            n to h
-          }.getOrDefault("" to "")
-          if (!name.uppercase().startsWith("RFD")) {
-            Log.d(TAG, "barcode SDK: skipping non-RFD device '$name'")
-            continue
-          }
-          connectBarcodeScanner(info, relay)
-        }
-      }
-
-      barcodeListenerRegistered = true
-      Log.d(TAG, "barcode SDK: enumerate complete (RFD-only filter applied)")
-    } catch (e: Throwable) {
-      // Reflection wraps every method exception in InvocationTargetException.
-      // Unwrap so the log shows the real CoreScanner/SDK error class, not the
-      // generic "InvocationTargetException: null" placeholder.
-      val root = unwrap(e)
-      Log.w(
-        TAG,
-        "barcode SDK init failed (${root.javaClass.name}: ${root.message}); " +
-          "falling back to HID-keyboard wedge for Bin Assign decodes",
-        root,
-      )
+      val handler = SDKHandler(context.applicationContext)
+      // BT_NORMAL = Bluetooth Classic SSI, the mode RFD8500 uses when paired
+      // for sled-style operation alongside API3 RFID. The dual-stack pattern
+      // works because the sled's firmware multiplexes RFID and barcode
+      // logical channels on the same physical BT link, which is the same
+      // combination Zebra's own 123RFID app uses.
+      handler.dcssdkSetOperationalMode(DCSSDKDefs.DCSSDK_MODE.DCSSDK_OPMODE_BT_NORMAL)
+      handler.dcssdkSetDelegate(BarcodeDelegate(relay))
+      val mask = (
+        DCSSDKDefs.DCSSDK_EVENT.DCSSDK_EVENT_BARCODE.value or
+          DCSSDKDefs.DCSSDK_EVENT.DCSSDK_EVENT_SCANNER_APPEARANCE.value or
+          DCSSDKDefs.DCSSDK_EVENT.DCSSDK_EVENT_SCANNER_DISAPPEARANCE.value or
+          DCSSDKDefs.DCSSDK_EVENT.DCSSDK_EVENT_SESSION_ESTABLISHMENT.value or
+          DCSSDKDefs.DCSSDK_EVENT.DCSSDK_EVENT_SESSION_TERMINATION.value
+        )
+      handler.dcssdkSubsribeForEvents(mask)
+      handler.dcssdkEnableAutomaticSessionReestablishment(true, 0)
+      handler.dcssdkEnableAvailableScannersDetection(true)
+      handler.dcssdkEnableBluetoothScannersDiscovery(true)
+      sdkHandler = handler
+      Log.d(TAG, "barcode SDK: SDKHandler initialised, awaiting scanner-appeared events")
+    } catch (t: Throwable) {
+      Log.w(TAG, "barcode SDK: init failed (${t.javaClass.name}: ${t.message})", t)
+      sdkHandler = null
     }
-  }
-
-  private fun unwrap(t: Throwable): Throwable {
-    var cur: Throwable = t
-    var depth = 0
-    while (depth < 6) {
-      val cause = (cur as? java.lang.reflect.InvocationTargetException)?.targetException
-        ?: cur.cause
-        ?: break
-      if (cause === cur) break
-      cur = cause
-      depth++
-    }
-    return cur
   }
 
   /**
-   * Builds a [BarcodeScanner] for [info], registers the data listener that
-   * forwards decodes to our [CarbonHardwareBarcodeRelay], then connects the
-   * scanner so the imager pipeline goes live. Idempotent — if we already hold
-   * a connected scanner we skip.
+   * Routes CoreScanner callbacks to our existing barcode relay. Filters
+   * scanner appearances by name so only RFD-class devices ever get a
+   * communication session — paired Galaxy Watches and the like are ignored.
    */
-  private fun connectBarcodeScanner(info: Any, relay: CarbonHardwareBarcodeRelay) {
-    if (barcodeScanner != null) {
-      Log.d(TAG, "barcode SDK: scanner already connected, skipping new info")
-      return
-    }
-    try {
-      val sdkClass = Class.forName("com.zebra.barcode.sdk.BarcodeScannerSdk")
-      val factory = sdkClass.getMethod("getBarcodeScannerFactory").invoke(null)
-      val infoIfClass = Class.forName("com.zebra.barcode.sdk.BarcodeScannerInfo")
-      val scanner = factory.javaClass.getMethod("create", infoIfClass)
-        .invoke(factory, info)
-
-      // Data listener: every decode comes through here. Trim trailing nulls /
-      // CR/LF from SSI byte payloads so the Dart side gets a clean string.
-      val listenerClass = Class.forName("com.zebra.barcode.sdk.BarcodeDataListener")
-      val listener = java.lang.reflect.Proxy.newProxyInstance(
-        listenerClass.classLoader,
-        arrayOf(listenerClass),
-      ) { _, method, args ->
-        if (method.name == "onBarcodeDataReceived" && args != null && args.isNotEmpty()) {
-          runCatching {
-            val ev = args[0]
-            val bytes = ev.javaClass.getMethod("getBarcodeData").invoke(ev) as? ByteArray
-            if (bytes != null && bytes.isNotEmpty()) {
-              val raw = String(bytes, java.nio.charset.StandardCharsets.UTF_8)
-              val cleaned = raw.trimEnd(' ', '\r', '\n', ' ')
-              Log.d(TAG, "barcode SDK: decode bytes=${bytes.size} value='$cleaned'")
-              relay.emitExternal(cleaned)
-            }
-          }.onFailure {
-            Log.w(TAG, "barcode SDK: decode parse failed: ${it.message}")
-          }
-        }
-        null
+  private inner class BarcodeDelegate(
+    private val relay: CarbonHardwareBarcodeRelay,
+  ) : IDcsSdkApiDelegate {
+    override fun dcssdkEventScannerAppeared(scanner: DCSScannerInfo) {
+      val name = scanner.scannerName.orEmpty()
+      val id = scanner.scannerID
+      Log.d(TAG, "barcode SDK: scannerAppeared id=$id name='$name' model='${scanner.scannerModel}'")
+      if (!name.uppercase().startsWith("RFD")) {
+        Log.d(TAG, "barcode SDK: skipping non-RFD scanner '$name'")
+        return
       }
-      scanner.javaClass.getMethod("addBarcodeDataListener", listenerClass)
-        .invoke(scanner, listener)
-
-      // connect() is the load-bearing step — it boots CoreScanner internally
-      // and enables the dcssdkEventBarcode path that fires our listener.
-      scanner.javaClass.getMethod("connect").invoke(scanner)
-      barcodeScanner = scanner
-      Log.d(TAG, "barcode SDK: scanner.connect() succeeded; imager decodes now live")
-    } catch (e: Throwable) {
-      val root = unwrap(e)
-      Log.w(
-        TAG,
-        "barcode SDK: connectBarcodeScanner failed (${root.javaClass.name}: ${root.message})",
-        root,
-      )
+      executor.execute {
+        try {
+          val res = sdkHandler?.dcssdkEstablishCommunicationSession(id)
+          Log.d(TAG, "barcode SDK: establishCommunicationSession id=$id -> $res")
+        } catch (t: Throwable) {
+          Log.w(TAG, "barcode SDK: establishCommunicationSession id=$id threw", t)
+        }
+      }
     }
+
+    override fun dcssdkEventScannerDisappeared(scannerID: Int) {
+      Log.d(TAG, "barcode SDK: scannerDisappeared id=$scannerID")
+      if (barcodeScannerId == scannerID) {
+        barcodeScannerId = -1
+      }
+    }
+
+    override fun dcssdkEventCommunicationSessionEstablished(scanner: DCSScannerInfo) {
+      barcodeScannerId = scanner.scannerID
+      Log.d(TAG, "barcode SDK: sessionEstablished id=${scanner.scannerID} name='${scanner.scannerName}'")
+    }
+
+    override fun dcssdkEventCommunicationSessionTerminated(scannerID: Int) {
+      Log.d(TAG, "barcode SDK: sessionTerminated id=$scannerID")
+      if (barcodeScannerId == scannerID) {
+        barcodeScannerId = -1
+      }
+    }
+
+    override fun dcssdkEventBarcode(barcodeData: ByteArray?, barcodeType: Int, fromScannerID: Int) {
+      if (barcodeData == null || barcodeData.isEmpty()) return
+      val raw = try {
+        String(barcodeData, Charsets.UTF_8)
+      } catch (_: Exception) {
+        return
+      }
+      val cleaned = raw.trim().trimEnd(' ', '\r', '\n', ' ')
+      if (cleaned.isEmpty()) return
+      Log.d(TAG, "barcode SDK: decode id=$fromScannerID type=$barcodeType bytes=${barcodeData.size} value='$cleaned'")
+      relay.emitExternal(cleaned)
+    }
+
+    override fun dcssdkEventImage(imageData: ByteArray?, fromScannerID: Int) { /* not subscribed */ }
+    override fun dcssdkEventVideo(videoData: ByteArray?, fromScannerID: Int) { /* not subscribed */ }
+    override fun dcssdkEventBinaryData(binaryData: ByteArray?, fromScannerID: Int) { /* not subscribed */ }
+    override fun dcssdkEventFirmwareUpdate(event: FirmwareUpdateEvent?) { /* not subscribed */ }
+    override fun dcssdkEventAuxScannerAppeared(newTopology: DCSScannerInfo?, auxScanner: DCSScannerInfo?) { /* not used */ }
   }
 
   fun connectAsync(onDone: (Throwable?) -> Unit) {
@@ -372,6 +305,9 @@ class CarbonZebraRfidController(
         reader = r
         Log.d(TAG, "connectAsync: picked reader, connecting")
         connectAndConfigureReader()
+        // After API3 is up, boot CoreScanner so imager decodes have a path
+        // home. Best-effort: failures don't fail the RFID connect.
+        initBarcodeSdkOnce()
         lastError = null
         Log.d(TAG, "connectAsync: connected and configured")
         mainHandler.post { onDone(null) }
@@ -805,19 +741,26 @@ class CarbonZebraRfidController(
   private fun disconnectSync() {
     inventoryActive = false
 
-    // Tear down the BarcodeScanner first so its CoreScanner socket releases
-    // before we kill the RFID side — same SPP transport, sequence matters.
-    val bs = barcodeScanner
-    if (bs != null) {
+    // Tear down CoreScanner first so its session socket releases before we
+    // kill the RFID side — same physical BT link, sequence matters.
+    val handler = sdkHandler
+    if (handler != null) {
       try {
-        bs.javaClass.getMethod("disconnect").invoke(bs)
+        val sid = barcodeScannerId
+        if (sid >= 0) {
+          handler.dcssdkTerminateCommunicationSession(sid)
+        }
       } catch (e: Exception) {
-        Log.w(TAG, "barcode SDK: scanner.disconnect threw: ${e.message}")
+        Log.w(TAG, "barcode SDK: terminateCommunicationSession threw: ${e.message}")
       }
-      barcodeScanner = null
+      try {
+        handler.dcssdkClose()
+      } catch (e: Exception) {
+        Log.w(TAG, "barcode SDK: dcssdkClose threw: ${e.message}")
+      }
+      sdkHandler = null
     }
-    barcodeWatcher = null
-    barcodeListenerRegistered = false
+    barcodeScannerId = -1
 
     // 1. Detach the RFIDReaderEventHandler (process-wide listener slot).
     if (readersAttached) {
