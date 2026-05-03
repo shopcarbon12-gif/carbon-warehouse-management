@@ -56,6 +56,14 @@ export async function getCommandCenterKpis(
             OR i.last_seen_at > i.defective_acknowledged_at)`,
     [tenantId],
   );
+  // Hardware counts reflect "currently operational" state, not "ever
+  // registered." Each filter requires status_online=true so paused or
+  // stale devices fall out automatically. Handhelds also require
+  // is_authorized=true (operator has approved the device).
+  // Earlier code added +1 to printers for an "implicit Zebra default"
+  // baked into /rfid/commissioning — that wasn't a real device, just a
+  // hardcoded fallback in the form. Removed: dashboard counts the
+  // printers that actually exist in the devices table, period.
   const hw = await pool.query<{
     readers: string;
     antennas: string;
@@ -63,21 +71,27 @@ export async function getCommandCenterKpis(
     handhelds: string;
   }>(
     `SELECT
-       COUNT(*) FILTER (WHERE device_type IN ('fixed_reader','transaction_reader','door_reader'))::text AS readers,
-       COUNT(*) FILTER (WHERE device_type = 'antenna')::text AS antennas,
-       COUNT(*) FILTER (WHERE device_type = 'printer')::text AS printers,
-       COUNT(*) FILTER (WHERE device_type = 'handheld_reader')::text AS handhelds
+       COUNT(*) FILTER (
+         WHERE device_type IN ('fixed_reader','transaction_reader','door_reader')
+           AND status_online = true
+       )::text AS readers,
+       COUNT(*) FILTER (
+         WHERE device_type = 'antenna' AND status_online = true
+       )::text AS antennas,
+       COUNT(*) FILTER (
+         WHERE device_type = 'printer' AND status_online = true
+       )::text AS printers,
+       COUNT(*) FILTER (
+         WHERE device_type = 'handheld_reader'
+           AND status_online = true
+           AND is_authorized = true
+       )::text AS handhelds
      FROM devices
      WHERE location_id = $1::uuid`,
     [locationId],
   );
   const liveCount = Number(live.rows[0]?.c ?? 0);
   const defectiveCount = Number(defective.rows[0]?.c ?? 0);
-  // The /rfid/commissioning page always carries an implicit Zebra default
-  // (192.168.1.3:80 / PSTPRNT) — count it on top of registered printer
-  // devices so the dashboard reflects the printer the operator actually
-  // sees in commissioning.
-  const printersFromDevices = Number(hw.rows[0]?.printers ?? 0);
   return {
     live_inventory: liveCount,
     total_items: liveCount,
@@ -87,7 +101,7 @@ export async function getCommandCenterKpis(
     hardware: {
       readers: Number(hw.rows[0]?.readers ?? 0),
       antennas: Number(hw.rows[0]?.antennas ?? 0),
-      printers: printersFromDevices + 1,
+      printers: Number(hw.rows[0]?.printers ?? 0),
       handhelds: Number(hw.rows[0]?.handhelds ?? 0),
     },
   };

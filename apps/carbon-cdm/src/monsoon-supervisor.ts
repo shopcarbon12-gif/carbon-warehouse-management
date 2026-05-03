@@ -455,9 +455,14 @@ export class MonsoonSupervisor {
       }
     }
 
-    // Start (or update) slots for readers in the bundle.
+    // Start (or update) slots ONLY for readers in the desired set. Iterating
+    // bundle.readers directly here was the bug shipped on 2026-05-03:
+    // pause/live-scan-inactive correctly killed children in the loop above,
+    // then this loop respawned every reader because it ignored the filter.
+    // desiredById already excludes paused readers and (when live_scan is
+    // inactive) is empty.
     let nextIndex = this.slots.size;
-    for (const spec of bundle.readers) {
+    for (const spec of desiredById.values()) {
       const isMonsoon = !((spec.model ?? "").toLowerCase().includes("zebra"));
       if (!isMonsoon) {
         // Zebra readers are handled by a different driver — out of scope

@@ -118,9 +118,15 @@ function PulsePill({
         >
           {label}
         </div>
-        <div className="tabular-nums text-base font-bold text-[var(--wms-fg)]">
-          {hint ?? animated}
-        </div>
+        {hint ? (
+          <div className="text-[0.6rem] font-medium uppercase tracking-wide text-[var(--wms-fg)]">
+            {hint}
+          </div>
+        ) : (
+          <div className="tabular-nums text-base font-bold text-[var(--wms-fg)]">
+            {animated}
+          </div>
+        )}
       </div>
     </Cmp>
   );
