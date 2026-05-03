@@ -8,7 +8,6 @@ import type { PoolClient } from "pg";
  *   - cdm_reads             raw reader stream
  *   - device_epc_queue      pending tag-to-server queue
  *   - asset_movements       tag-derived zone transitions
- *   - encode_events         tag-encoding events
  *   - rfid_alarms           tag-driven alarm events
  *   - handheld_batches      handheld scan batches
  *   - transfer_items        transfer line-items (carry EPC FKs into items)
@@ -18,6 +17,8 @@ import type { PoolClient } from "pg";
  * What stays (logs, history, reports, catalog, infra, auth):
  *   audit_log, inventory_audit_logs, inventory_reports, external_system_logs,
  *   device_upload_logs, replenishment_logs, exceptions, compare_runs,
+ *   encode_events (history of every tag-encode operation — it's a record
+ *   of who-encoded-what-when, not "RFID data" in the operator sense),
  *   matrices, custom_skus, status_labels, users, locations, zones, bins,
  *   devices, cdm_agents, antenna_profiles, tenant_settings, etc.
  *
@@ -41,11 +42,14 @@ type TableSpec = {
 const ZERO_OUT_SPECS: ReadonlyArray<TableSpec> = [
   {
     name: "transfer_items",
-    // transfer_items has slip_number → transfer_slips/records have tenant_id.
-    whereClause: `slip_number IN (
-      SELECT slip_number FROM transfer_slips WHERE tenant_id = $1::uuid
+    // transfer_items.slip_number is integer; transfer_records.slip_number
+    // is bigint while transfer_slips.slip_number is integer. Cast both
+    // sides to bigint to avoid "operator does not exist: integer = bigint"
+    // on the IN.
+    whereClause: `slip_number::bigint IN (
+      SELECT slip_number::bigint FROM transfer_slips WHERE tenant_id = $1::uuid
       UNION
-      SELECT slip_number FROM transfer_records WHERE tenant_id = $1::uuid
+      SELECT slip_number::bigint FROM transfer_records WHERE tenant_id = $1::uuid
     )`,
   },
   {
@@ -60,11 +64,6 @@ const ZERO_OUT_SPECS: ReadonlyArray<TableSpec> = [
   {
     name: "asset_movements",
     whereClause: `tenant_id = $1::uuid`,
-  },
-  {
-    name: "encode_events",
-    // encode_events.device_id → devices.tenant_id.
-    whereClause: `device_id IN (SELECT id FROM devices WHERE tenant_id = $1::uuid)`,
   },
   {
     name: "rfid_alarms",
