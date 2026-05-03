@@ -74,7 +74,16 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         // c72e (Chainway) ships API 27; Zebra API3 AAR minSdk is 24.
         minSdk = maxOf(flutter.minSdkVersion, 27)
-        targetSdk = flutter.targetSdkVersion
+        // Pinned to 31 (not flutter.targetSdkVersion which is 36) because the
+        // bundled Zebra Scanner Control SDK (com.zebra.scannercontrol.SDKHandler)
+        // calls Settings.Secure.getString("bluetooth_address") at init.
+        // Android 12+ blocks that read for apps with targetSdk >= 32, throwing
+        // SecurityException → barcode SDK setContext fails → RFD8500 imager
+        // decodes never reach the app. Pinning to 31 keeps the legacy permission
+        // path open. Cosmetic Android 13+ niceties (themed adaptive icon,
+        // predictive back animation) are lost on the S25; functional behaviour
+        // — including the Bin Assign barcode flow — works.
+        targetSdk = 31
         // versionCode is derived from the dotted versionName (X.Y.Z) using
         //   code = X * 1_000_000 + Y * 1_000 + Z
         // so pubspec.yaml only needs `version: X.Y.Z` (no `+N` build counter).
@@ -93,6 +102,17 @@ android {
             keyAlias = keyProps["keyAlias"] as? String ?: ""
             keyPassword = keyProps["keyPassword"] as? String ?: ""
         }
+    }
+
+    // We sideload Carbon WMS to rugged handhelds (C72E + S25 + RFD8500); we
+    // don't ship through Google Play, so the Play Store target-API policy
+    // (ExpiredTargetSdkVersion ≥ 33) doesn't apply. We deliberately pin
+    // targetSdk to 31 above so the bundled Zebra Scanner Control SDK can read
+    // Settings.Secure.bluetooth_address — without that read, RFD8500 imager
+    // decodes never reach the app on Android 12+. Suppress the lint here so
+    // lintVitalRelease stops aborting the build over a non-applicable rule.
+    lint {
+        disable += "ExpiredTargetSdkVersion"
     }
 
     buildTypes {

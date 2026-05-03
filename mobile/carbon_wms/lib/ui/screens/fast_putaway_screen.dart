@@ -1818,7 +1818,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               child: Image.asset(
                 'assets/carbon_logo.png',
                 width: 36.w,
-                height: 36.h,
+                height: 36.w,
                 fit: BoxFit.cover,
               ),
             ),
@@ -2490,7 +2490,7 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                                   padding: EdgeInsets.all(12.r),
                                   child: SizedBox(
                                       width: 16.w,
-                                      height: 16.h,
+                                      height: 16.w,
                                       child: const CircularProgressIndicator(
                                           strokeWidth: 2)),
                                 )
