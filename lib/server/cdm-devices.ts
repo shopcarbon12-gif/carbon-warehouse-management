@@ -10,7 +10,10 @@ export type ReaderType = z.infer<typeof readerTypeSchema>;
 
 export const upsertReaderSchema = z.object({
   id: z.string().uuid().optional(),
-  zoneId: z.string().uuid(),
+  /** zoneId required on CREATE (id absent), optional on UPDATE — when omitted
+   *  on UPDATE the existing zone_id is preserved. The .superRefine below
+   *  enforces the create-time requirement. */
+  zoneId: z.string().uuid().optional(),
   cdmAgentId: z.string().uuid().nullable().optional(),
   name: z.string().trim().min(1).max(256),
   networkAddress: z.string().trim().min(1).max(256),
@@ -21,6 +24,14 @@ export const upsertReaderSchema = z.object({
   controlPort: z.coerce.number().int().min(1024).max(65535).optional(),
   antennaCount: z.coerce.number().int().min(1).max(32).default(1),
   epcPrefix: z.string().trim().max(32).optional().default(""),
+}).superRefine((val, ctx) => {
+  if (!val.id && !val.zoneId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "zoneId is required when creating a reader",
+      path: ["zoneId"],
+    });
+  }
 });
 
 export type UpsertReaderBody = z.infer<typeof upsertReaderSchema>;
@@ -56,14 +67,34 @@ export async function upsertReader(
   tenantId: string,
   body: UpsertReaderBody,
 ): Promise<{ id: string }> {
-  const zone = await client.query<{ location_id: string }>(
-    `SELECT location_id::text FROM zones WHERE id = $1::uuid AND tenant_id = $2::uuid`,
-    [body.zoneId, tenantId],
-  );
-  if (zone.rowCount === 0) {
-    throw new Error("BAD_REQUEST:Zone not found for this tenant");
+  // On UPDATE without zoneId provided, look up the device's current zone so
+  // we can derive the location_id (needed for the cdm_agent location check
+  // below) without touching zone_id itself. On CREATE, zoneId is required
+  // (enforced in the schema via superRefine) and we resolve location_id from
+  // the supplied zone row.
+  let locationId: string;
+  if (body.zoneId) {
+    const zone = await client.query<{ location_id: string }>(
+      `SELECT location_id::text FROM zones WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+      [body.zoneId, tenantId],
+    );
+    if (zone.rowCount === 0) {
+      throw new Error("BAD_REQUEST:Zone not found for this tenant");
+    }
+    locationId = zone.rows[0].location_id;
+  } else if (body.id) {
+    const cur = await client.query<{ location_id: string }>(
+      `SELECT location_id::text FROM devices WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+      [body.id, tenantId],
+    );
+    if (cur.rowCount === 0) {
+      throw new Error("BAD_REQUEST:Reader not found");
+    }
+    locationId = cur.rows[0].location_id;
+  } else {
+    // Schema's superRefine should have caught this, but guard anyway.
+    throw new Error("BAD_REQUEST:zoneId is required when creating a reader");
   }
-  const locationId = zone.rows[0].location_id;
 
   if (body.cdmAgentId) {
     const a = await client.query(
@@ -89,27 +120,34 @@ export async function upsertReader(
   };
 
   if (body.id) {
+    // UPDATE: only set zone_id when the caller explicitly provided one;
+    // otherwise leave it alone (most edits keep the reader in its zone).
+    const sets = [
+      "name = $3",
+      "network_address = $4",
+      "cdm_agent_id = $5::uuid",
+      "device_type = $6",
+      "config = $7::jsonb",
+      "updated_at = now()",
+    ];
+    const params: unknown[] = [
+      body.id,
+      tenantId,
+      body.name,
+      body.networkAddress,
+      body.cdmAgentId ?? null,
+      body.deviceType,
+      JSON.stringify(config),
+    ];
+    if (body.zoneId) {
+      sets.push(`zone_id = $${params.length + 1}::uuid`);
+      params.push(body.zoneId);
+    }
     const r = await client.query<{ id: string }>(
-      `UPDATE devices
-         SET name = $3,
-             network_address = $4,
-             zone_id = $5::uuid,
-             cdm_agent_id = $6::uuid,
-             device_type = $7,
-             config = $8::jsonb,
-             updated_at = now()
-       WHERE id = $1::uuid AND tenant_id = $2::uuid
+      `UPDATE devices SET ${sets.join(", ")}
+         WHERE id = $1::uuid AND tenant_id = $2::uuid
        RETURNING id::text`,
-      [
-        body.id,
-        tenantId,
-        body.name,
-        body.networkAddress,
-        body.zoneId,
-        body.cdmAgentId ?? null,
-        body.deviceType,
-        JSON.stringify(config),
-      ],
+      params,
     );
     if (r.rowCount === 0) {
       throw new Error("BAD_REQUEST:Reader not found");

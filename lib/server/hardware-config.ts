@@ -16,6 +16,11 @@ export type HardwareReaderRow = {
   config: Record<string, unknown>;
   cdm_agent_id: string | null;
   cdm_agent_name: string | null;
+  /** Surfaced so the reader-editor-modal can pre-fill the Zone field on
+   *  edit. Without this the modal opened with an empty zone, the form
+   *  omitted zoneId from the PATCH body, and the server's zod schema
+   *  rejected the save with "expected string, received undefined". */
+  zone_id: string | null;
   antennas: HardwareAntennaRow[];
 };
 
@@ -126,6 +131,7 @@ export async function buildHardwareConfigTree(
       config: (d.config ?? {}) as Record<string, unknown>,
       cdm_agent_id: d.cdm_agent_id,
       cdm_agent_name: d.cdm_agent_name,
+      zone_id: d.zone_id,
       antennas: antennasByParent.get(d.id) ?? [],
     };
     if (d.zone_id) {

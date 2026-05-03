@@ -85,8 +85,11 @@ export function ReaderEditorModal({
       setStreamPort(cfg.stream_port ? String(cfg.stream_port) : "");
       setControlPort(cfg.control_port ? String(cfg.control_port) : "");
       setEpcPrefix(cfg.epc_prefix ?? "");
-      // zone_id isn't on HardwareReaderRow — leave to user to confirm
-      setZoneId("");
+      // Pre-fill zone from the reader's current zone so saving an edit
+      // without touching the Zone dropdown keeps the reader where it was.
+      // Falls back to "" for legacy unzoned readers; server allows omitted
+      // zoneId on update (preserves existing zone_id).
+      setZoneId(editing.zone_id ?? "");
     } else {
       setZoneId(defaultZoneId ?? "");
       setCdmAgentId("");
