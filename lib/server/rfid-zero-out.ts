@@ -50,8 +50,12 @@ const ZERO_OUT_SPECS: ReadonlyArray<TableSpec> = [
   },
   {
     name: "compare_lines",
-    // compare_lines.compare_run_id → compare_runs.tenant_id.
-    whereClause: `compare_run_id IN (SELECT id FROM compare_runs WHERE tenant_id = $1::uuid)`,
+    // compare_lines.compare_run_id → compare_runs.location_id → locations.tenant_id.
+    // (compare_runs doesn't carry tenant_id directly — it scopes by location.)
+    whereClause: `compare_run_id IN (
+      SELECT id FROM compare_runs
+       WHERE location_id IN (SELECT id FROM locations WHERE tenant_id = $1::uuid)
+    )`,
   },
   {
     name: "asset_movements",
