@@ -9,6 +9,7 @@ import { ReadAggregator } from "./read-aggregator.js";
 import { MonsoonSupervisor } from "./monsoon-supervisor.js";
 import { AntennaTestController } from "./antenna-test-mode.js";
 import { postAntennaTestResult } from "./wms-client.js";
+import { startWiznetDiscovery } from "./wiznet-discovery.js";
 
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
 /** 2024 Mojix binary; selected per-reader via devices.config.monsoon_driver = "console". */
@@ -92,6 +93,7 @@ async function main(): Promise<void> {
 
   let lastPullOk = false;
   const stopHeartbeat = startHeartbeat(env, () => !lastPullOk);
+  const stopWiznetDiscovery = startWiznetDiscovery(env);
 
   const pullConfig = async () => {
     try {
@@ -127,6 +129,7 @@ async function main(): Promise<void> {
     clearInterval(pollHandle);
     clearInterval(statsHandle);
     stopHeartbeat();
+    stopWiznetDiscovery();
     antennaTest.stop();
     aggregator.stop();
     supervisor.shutdown();

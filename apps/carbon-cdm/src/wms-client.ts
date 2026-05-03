@@ -138,6 +138,35 @@ export async function postReads(
   return { inserted: r.inserted };
 }
 
+export type WiznetDiscoveryBody = {
+  discoveries: {
+    mac: string;
+    ip: string;
+    port: number;
+    dhcp?: boolean;
+    raw?: Record<string, unknown>;
+  }[];
+};
+
+export type WiznetDiscoveryResponse = {
+  ok: true;
+  matched_known: number;
+  ip_updated: number;
+  new_discoveries: number;
+};
+
+export async function postWiznetDiscoveries(
+  env: AgentEnv,
+  body: WiznetDiscoveryBody,
+): Promise<WiznetDiscoveryResponse> {
+  return await request<WiznetDiscoveryResponse>(
+    env,
+    "POST",
+    "/api/cdm-agents/wiznet-discoveries",
+    body,
+  );
+}
+
 export type AntennaTestResult = {
   antennaId: string;
   foundAnyEpc: boolean;

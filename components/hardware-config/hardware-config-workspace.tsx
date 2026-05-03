@@ -24,6 +24,7 @@ import { ZoneEditorModal } from "./zone-editor-modal";
 import { CdmAgentEditorModal } from "./cdm-agent-editor-modal";
 import { TokenRevealModal } from "./token-reveal-modal";
 import { RecoverReadersButton } from "./recover-readers-button";
+import { WiznetDiscoveriesPanel } from "./wiznet-discoveries-panel";
 import { ReaderEditorModal } from "./reader-editor-modal";
 import { AntennaEditorModal } from "./antenna-editor-modal";
 
@@ -126,6 +127,8 @@ export function HardwareConfigWorkspace() {
         onDelete={removeAgent}
         onRotateToken={rotateAgentToken}
       />
+
+      <WiznetDiscoveriesPanel />
 
       <HardwareTreeSection
         tree={tree.data}
