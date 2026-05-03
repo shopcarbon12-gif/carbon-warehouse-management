@@ -40,6 +40,11 @@ export type AgentConfigReader = {
   zone_id: string | null;
   zone_name: string | null;
   antennas: AgentConfigAntenna[];
+  /** Per-reader pause flag computed server-side (manual pause OR
+   *  schedule window). True → supervisor treats this reader as if it
+   *  were absent from the bundle (kills child, no spawn). Older WMS
+   *  bundles may omit; treat missing as false (not paused). */
+  effective_paused?: boolean;
 };
 
 export type AgentConfigBundle = {

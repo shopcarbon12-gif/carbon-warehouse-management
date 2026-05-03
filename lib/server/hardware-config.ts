@@ -21,6 +21,9 @@ export type HardwareReaderRow = {
    *  omitted zoneId from the PATCH body, and the server's zod schema
    *  rejected the save with "expected string, received undefined". */
   zone_id: string | null;
+  /** Surfaced so the hardware-config UI can render pause state + schedule. */
+  scan_paused_at: string | null;
+  scan_schedule: unknown | null;
   antennas: HardwareAntennaRow[];
 };
 
@@ -57,6 +60,8 @@ type RawDevice = {
   cdm_agent_id: string | null;
   cdm_agent_name: string | null;
   location_id: string;
+  scan_paused_at: string | null;
+  scan_schedule: unknown | null;
 };
 
 export async function buildHardwareConfigTree(
@@ -95,7 +100,9 @@ export async function buildHardwareConfigTree(
          d.parent_device_id::text AS parent_device_id,
          d.cdm_agent_id::text AS cdm_agent_id,
          a.name AS cdm_agent_name,
-         d.location_id::text AS location_id
+         d.location_id::text AS location_id,
+         d.scan_paused_at::text AS scan_paused_at,
+         d.scan_schedule
        FROM devices d
        LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
        WHERE d.tenant_id = $1::uuid
@@ -132,6 +139,8 @@ export async function buildHardwareConfigTree(
       cdm_agent_id: d.cdm_agent_id,
       cdm_agent_name: d.cdm_agent_name,
       zone_id: d.zone_id,
+      scan_paused_at: d.scan_paused_at,
+      scan_schedule: d.scan_schedule,
       antennas: antennasByParent.get(d.id) ?? [],
     };
     if (d.zone_id) {

@@ -4,6 +4,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { publishEdgeScanEvent } from "@/lib/server/edge-scan-hub";
 import { ingestEpcs } from "@/lib/server/epc-ingress";
 import { isLiveScanActive } from "@/lib/server/live-scan-sessions";
+import {
+  isReaderEffectivelyPaused,
+  type ScanSchedule,
+} from "@/lib/server/scan-schedule";
 
 export type CdmAgentRow = {
   id: string;
@@ -411,6 +415,11 @@ export type AgentConfigReader = {
   zone_id: string | null;
   zone_name: string | null;
   antennas: AgentConfigAntenna[];
+  /** Effective pause state (per-reader manual + per-reader schedule).
+   *  Computed server-side on every bundle response so the agent doesn't
+   *  redo schedule math. When true, the supervisor skips this reader
+   *  entirely (kills any running child, doesn't spawn). */
+  effective_paused: boolean;
 };
 
 export type AgentConfigBundle = {
@@ -456,6 +465,8 @@ export async function getAgentConfigBundle(
     zone_id: string | null;
     zone_name: string | null;
     test_pending_at: string | null;
+    scan_paused_at: string | null;
+    scan_schedule: ScanSchedule | null;
   }>(
     `SELECT
        d.id::text,
@@ -466,7 +477,9 @@ export async function getAgentConfigBundle(
        d.parent_device_id::text,
        d.zone_id::text,
        z.name AS zone_name,
-       d.test_pending_at
+       d.test_pending_at,
+       d.scan_paused_at::text AS scan_paused_at,
+       d.scan_schedule
      FROM devices d
      LEFT JOIN zones z ON z.id = d.zone_id
      WHERE d.cdm_agent_id = $1::uuid
@@ -544,6 +557,10 @@ export async function getAgentConfigBundle(
       zone_id: d.zone_id,
       zone_name: d.zone_name,
       antennas: list,
+      effective_paused: isReaderEffectivelyPaused(
+        d.scan_paused_at,
+        d.scan_schedule,
+      ),
     });
   }
 

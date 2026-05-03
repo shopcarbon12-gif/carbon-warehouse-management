@@ -430,8 +430,16 @@ export class MonsoonSupervisor {
     // server omits the field (older WMS bundle), treat as true so the
     // agent keeps scanning the way it always did.
     const liveScanActive = bundle.live_scan_active ?? true;
+    // Drop readers flagged effective_paused (per-reader manual pause OR
+    // schedule window). The supervisor treats them the same as removed-
+    // from-bundle: kill any running child, don't spawn a new one. Older
+    // WMS bundles omit the field; defaults to false (not paused).
     const desiredById = new Map(
-      liveScanActive ? bundle.readers.map((r) => [r.id, r] as const) : [],
+      liveScanActive
+        ? bundle.readers
+            .filter((r) => !(r.effective_paused ?? false))
+            .map((r) => [r.id, r] as const)
+        : [],
     );
 
     // Stop slots for readers no longer in the bundle.

@@ -4,9 +4,12 @@ import { useState } from "react";
 import useSWR from "swr";
 import {
   Antenna as AntennaIcon,
+  Clock,
   Cpu,
   KeyRound,
+  Pause,
   Pencil,
+  Play,
   Plus,
   Radio,
   Server,
@@ -25,6 +28,10 @@ import { CdmAgentEditorModal } from "./cdm-agent-editor-modal";
 import { TokenRevealModal } from "./token-reveal-modal";
 import { RecoverReadersButton } from "./recover-readers-button";
 import { WiznetDiscoveriesPanel } from "./wiznet-discoveries-panel";
+import {
+  ReaderScheduleModal,
+  type ReaderScheduleType,
+} from "./reader-schedule-modal";
 import { ReaderEditorModal } from "./reader-editor-modal";
 import { AntennaEditorModal } from "./antenna-editor-modal";
 
@@ -67,6 +74,7 @@ export function HardwareConfigWorkspace() {
   const [antennaModalOpen, setAntennaModalOpen] = useState(false);
   const [antennaParent, setAntennaParent] = useState<HardwareReaderRow | null>(null);
   const [antennaEditing, setAntennaEditing] = useState<HardwareAntennaRow | null>(null);
+  const [scheduleModalReader, setScheduleModalReader] = useState<HardwareReaderRow | null>(null);
 
   const reload = async () => {
     await Promise.all([tree.mutate(), zones.mutate(), agents.mutate()]);
@@ -84,6 +92,33 @@ export function HardwareConfigWorkspace() {
   const removeReader = async (id: string, name: string) => {
     if (!window.confirm(`Delete reader "${name}"? All antennas under it are deleted too.`)) return;
     await callDelete(`/api/hardware-config/readers/${id}`, reload);
+  };
+
+  const pauseReader = async (id: string) => {
+    try {
+      const res = await fetch(
+        `/api/hardware-config/readers/${encodeURIComponent(id)}/pause`,
+        { method: "POST" },
+      );
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? "Pause failed");
+      await reload();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Pause failed");
+    }
+  };
+  const resumeReader = async (id: string) => {
+    try {
+      const res = await fetch(
+        `/api/hardware-config/readers/${encodeURIComponent(id)}/resume`,
+        { method: "POST" },
+      );
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? "Resume failed");
+      await reload();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Resume failed");
+    }
   };
   const removeAntenna = async (id: string, name: string) => {
     if (!window.confirm(`Delete "${name}"?`)) return;
@@ -159,7 +194,21 @@ export function HardwareConfigWorkspace() {
           setAntennaModalOpen(true);
         }}
         onDeleteAntenna={removeAntenna}
+        onPauseReader={pauseReader}
+        onResumeReader={resumeReader}
+        onOpenSchedule={(reader) => setScheduleModalReader(reader)}
       />
+
+      {scheduleModalReader ? (
+        <ReaderScheduleModal
+          open
+          readerId={scheduleModalReader.id}
+          readerName={scheduleModalReader.name}
+          initialSchedule={scheduleModalReader.scan_schedule as ReaderScheduleType | null}
+          onClose={() => setScheduleModalReader(null)}
+          onSaved={() => void reload()}
+        />
+      ) : null}
 
       <ZoneEditorModal
         open={zoneModalOpen}
@@ -353,6 +402,9 @@ type TreeProps = {
   onAddAntenna: (reader: HardwareReaderRow) => void;
   onEditAntenna: (reader: HardwareReaderRow, antenna: HardwareAntennaRow) => void;
   onDeleteAntenna: (id: string, name: string) => void;
+  onPauseReader: (id: string) => void;
+  onResumeReader: (id: string) => void;
+  onOpenSchedule: (reader: HardwareReaderRow) => void;
 };
 
 function HardwareTreeSection(props: TreeProps) {
@@ -484,9 +536,17 @@ function ReaderCard({
   onAddAntenna,
   onEditAntenna,
   onDeleteAntenna,
+  onPauseReader,
+  onResumeReader,
+  onOpenSchedule,
 }: {
   reader: HardwareReaderRow;
+  onPauseReader: (id: string) => void;
+  onResumeReader: (id: string) => void;
+  onOpenSchedule: (reader: HardwareReaderRow) => void;
 } & TreeProps) {
+  const isManualPaused = !!reader.scan_paused_at;
+  const hasSchedule = !!reader.scan_schedule;
   return (
     <div className="rounded border border-[var(--wms-border)]/40 bg-[var(--wms-surface)]/30 p-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -505,8 +565,48 @@ function ReaderCard({
           <span className="font-mono text-[0.6rem] text-yellow-400/70">unmanaged</span>
         )}
         <StatusPill status={reader.status_online ? "online" : "offline"} />
+        {isManualPaused ? (
+          <span className="rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300">
+            paused
+          </span>
+        ) : null}
+        {hasSchedule ? (
+          <span
+            title="Schedule configured"
+            className="rounded border border-blue-400/40 bg-blue-500/10 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-blue-300"
+          >
+            sched
+          </span>
+        ) : null}
 
         <div className="ml-auto flex items-center gap-1">
+          {isManualPaused ? (
+            <button
+              type="button"
+              onClick={() => onResumeReader(reader.id)}
+              title="Resume scanning"
+              className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15"
+            >
+              <Play className="h-2.5 w-2.5" /> Resume
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onPauseReader(reader.id)}
+              title="Pause scanning on this reader"
+              className="inline-flex items-center gap-0.5 rounded border border-amber-400/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300 hover:bg-amber-400/15"
+            >
+              <Pause className="h-2.5 w-2.5" /> Pause
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onOpenSchedule(reader)}
+            title="Schedule auto-pause windows"
+            className="inline-flex items-center gap-0.5 rounded border border-[var(--wms-border)] px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+          >
+            <Clock className="h-2.5 w-2.5" /> Sched
+          </button>
           <button
             type="button"
             onClick={() => onAddAntenna(reader)}

@@ -27,6 +27,9 @@ export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname === "/api/rfid/zero-out") return true;
   // /api/cdm-agents/[uuid]/recover  (GET=diagnosis, POST=trigger)
   if (/^\/api\/cdm-agents\/[0-9a-f-]{36}\/recover$/.test(pathname)) return true;
+  // Per-reader scan pause/resume/schedule (Phase 2 of pause feature):
+  if (/^\/api\/hardware-config\/readers\/[0-9a-f-]{36}\/(pause|resume|schedule)$/.test(pathname))
+    return true;
   return false;
 }
 
