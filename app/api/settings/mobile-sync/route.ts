@@ -31,11 +31,37 @@ export async function GET(req: Request) {
   try {
     const row = await ensureTenantSettings(pool, auth.device.tenantId);
     const activeProfiles: EpcProfile[] = row.epc_profiles.filter((p) => p.isActive);
+
+    // Source of truth for EPC bit-decode (used by handheld Count/Encode screens
+    // so they decode systemId with the same formula `lib/server/epc-decode.ts`
+    // applies on every server-side ingress / lookup-by-epc).
+    const cfgRow = await pool.query<{
+      prefix_hex: string;
+      prefix_bits: number;
+      asset_bits: number;
+      serial_bits: number;
+      asset_padding_digits: number;
+    }>(
+      `SELECT prefix_hex, prefix_bits, asset_bits, serial_bits, asset_padding_digits
+         FROM tenant_epc_config WHERE tenant_id = $1::uuid LIMIT 1`,
+      [auth.device.tenantId],
+    );
+    const epcConfig = cfgRow.rows[0]
+      ? {
+          prefix_hex: cfgRow.rows[0].prefix_hex,
+          prefix_bits: cfgRow.rows[0].prefix_bits,
+          asset_bits: cfgRow.rows[0].asset_bits,
+          serial_bits: cfgRow.rows[0].serial_bits,
+          asset_padding_digits: cfgRow.rows[0].asset_padding_digits,
+        }
+      : null;
+
     return NextResponse.json(
       {
         handheld_settings: row.handheld_settings,
         epc_settings: row.epc_settings,
         epc_profiles: activeProfiles,
+        epc_config: epcConfig,
         updated_at: row.updated_at,
       },
       { headers: { "Cache-Control": "no-store" } },

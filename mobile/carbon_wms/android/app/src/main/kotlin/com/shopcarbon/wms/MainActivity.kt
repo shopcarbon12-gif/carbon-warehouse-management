@@ -64,6 +64,10 @@ class MainActivity : FlutterFragmentActivity() {
     chainwayController = chainway
     hardwareBarcodeRelay = barcodeRelay
     hardwareTriggerRelay = triggerRelay
+    // Zebra controller forwards BarcodeScannerSdk decode events to the same
+    // EventChannel that Chainway broadcasts use, so the Dart screens get a
+    // single barcode stream regardless of which sled is connected.
+    zebra.setBarcodeRelay(barcodeRelay)
 
     // UART acquisition strategy on C72E MTK firmware:
     //   1. Kill `com.rscja.scanner` (which holds /dev/ttyMT1 exclusive on this firmware,
@@ -256,6 +260,14 @@ class MainActivity : FlutterFragmentActivity() {
         }
         "zebra.disconnect" -> {
           zebra.disconnectAsync()
+          result.success(null)
+        }
+        "zebra.setTriggerMode2D" -> {
+          zebra.setTriggerModeBarcode()
+          result.success(null)
+        }
+        "zebra.setTriggerModeRfid" -> {
+          zebra.setTriggerModeRfid()
           result.success(null)
         }
         "zebra.stopInventory" -> {

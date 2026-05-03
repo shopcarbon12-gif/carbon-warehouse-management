@@ -13,6 +13,7 @@ import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
+import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
@@ -39,22 +40,57 @@ const Color _tealDarkDk = Color(0xFF1B7D7D);
 const Color _tealLightDk = Color(0xFF4DB6AC);
 
 // ── SKU Parsing ───────────────────────────────────────────────────────────────
+//
+// Carbon's custom-SKU layout (matches the catalog wording in
+// `bin-assign-spec.html`):
+//
+//                ┌── base ──┐┌── color ──┐┌── size ──┐
+//   modern (C-prefix):   C12345678         B8           L
+//                       (9 chars)        (2 chars)   (rest)
+//   legacy:              1234567           B8           L
+//                       (7 chars)        (2 chars)   (rest)
+//
+// `baseColor` = base + color  (the matrix+colour scope used by the server's
+// `single_color_all_sizes` putaway endpoint — assigning all sizes of one
+// colour). `base` alone is the matrix scope (every colour, every size).
+//
+// Backwards-compatible getters [searchKeySpecific] and [sizeCode] mirror the
+// pre-1.2.23 field names so other code paths (assign dialog, undo, etc.)
+// continue to compile while we phase the new spec terminology in.
 
 class _SkuParts {
-  final String raw,
-      base,
-      colorCode,
-      sizeCode,
-      searchKeySpecific,
-      searchKeyAllColors;
   const _SkuParts({
     required this.raw,
     required this.base,
     required this.colorCode,
-    required this.sizeCode,
-    required this.searchKeySpecific,
-    required this.searchKeyAllColors,
+    required this.size,
+    required this.baseColor,
   });
+
+  /// Full input from the operator (uppercased, trimmed). Includes size if scanned.
+  final String raw;
+
+  /// Matrix-only key — every colour, every size.
+  final String base;
+
+  /// Two-character colour code (when present).
+  final String colorCode;
+
+  /// Size suffix (length varies per product line). Spec wording.
+  final String size;
+
+  /// `base` + `colorCode` — every size of one colour. The matrix+colour
+  /// putaway scope. Spec wording.
+  final String baseColor;
+
+  /// Backwards-compatible alias for [baseColor]. Prefer [baseColor] in new code.
+  String get searchKeySpecific => baseColor;
+
+  /// Backwards-compatible alias for [size]. Prefer [size] in new code.
+  String get sizeCode => size;
+
+  /// Backwards-compatible alias for [base]. Prefer [base] in new code.
+  String get searchKeyAllColors => base;
 
   static _SkuParts parse(String sku) {
     final s = sku.trim().toUpperCase();
@@ -66,9 +102,8 @@ class _SkuParts {
         raw: s,
         base: base,
         colorCode: color,
-        sizeCode: size,
-        searchKeySpecific: s.length >= 11 ? s.substring(0, 11) : s,
-        searchKeyAllColors: base,
+        size: size,
+        baseColor: s.length >= 11 ? s.substring(0, 11) : s,
       );
     } else if (s.length >= 7) {
       final base = s.substring(0, 7);
@@ -78,35 +113,53 @@ class _SkuParts {
         raw: s,
         base: base,
         colorCode: color,
-        sizeCode: size,
-        searchKeySpecific: s.length >= 9 ? s.substring(0, 9) : s,
-        searchKeyAllColors: base,
+        size: size,
+        baseColor: s.length >= 9 ? s.substring(0, 9) : s,
       );
     }
     return _SkuParts(
       raw: s,
       base: s,
       colorCode: '',
-      sizeCode: '',
-      searchKeySpecific: s,
-      searchKeyAllColors: s,
+      size: '',
+      baseColor: s,
     );
   }
 }
 
 // ── Stored Item model ─────────────────────────────────────────────────────────
+//
+// One row in the bin's stored-items list. Mirrors the server response shape
+// from `lib/queries/locations.ts:listBinContentsGrouped`. The server filters
+// to `items.status = 'in-stock'` so anything we receive here is a "live"
+// (catalog-sellable) EPC — see `lib/server/wms-status-to-label-name.ts`.
 
 class _StoredItem {
   const _StoredItem({
     required this.sku,
     required this.description,
+    required this.colorCode,
+    required this.size,
     required this.qty,
     required this.epcs,
   });
 
+  /// Full custom SKU, e.g. `C12345678B8L`.
   final String sku;
+
+  /// Matrix description (the human item name), e.g. `Slim Fit Jeans`.
   final String description;
+
+  /// Two-letter colour code from the custom SKU, e.g. `B8`.
+  final String colorCode;
+
+  /// Size suffix from the custom SKU, e.g. `L` or `32W`.
+  final String size;
+
+  /// Live EPC count for this SKU in this bin (`status = 'in-stock'` only).
   final int qty;
+
+  /// Live EPC list for the row-tap → EPC detail screen.
   final List<String> epcs;
 
   static _StoredItem fromMap(Map<String, dynamic> m) {
@@ -117,11 +170,19 @@ class _StoredItem {
     return _StoredItem(
       sku: m['sku']?.toString() ?? '',
       description: m['description']?.toString() ?? '',
+      colorCode: (m['color_code'] ?? m['color'] ?? '').toString(),
+      size: (m['size'] ?? '').toString(),
       qty: m['qty'] as int? ?? m['quantity'] as int? ?? epcs.length,
       epcs: epcs,
     );
   }
 }
+
+/// Result of the "Same product different colour or new product?" dialog
+/// (spec answer #3). Flows out of `_askSameOrNewProductDialog` into
+/// `_runAssignFlow` to decide between the multi-colour picker and the
+/// new-product mid-session re-arm.
+enum _AssignChoice { sameProduct, newProduct }
 
 class _AssignSnapshot {
   const _AssignSnapshot({
@@ -171,8 +232,15 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   String _currentBinId = '';
   bool _binActive = false;
   bool _busy = false;
-  final bool _flashOk = false;
+  bool _flashOk = false; // turned on for 5s after a successful end-of-session.
   bool _awaitingBinScan = true;
+
+  /// True only between a session ending ("Add another item? NO" or auto-empty)
+  /// and the operator's next physical scan. Drives the bottom status label
+  /// (grey "READY FOR NEXT ENTRY" vs. red "TRIGGER TO ADD ITEM"), per spec
+  /// answer #1.
+  bool _readyForNextEntry = false;
+  Timer? _flashTimer;
 
   String _scannerSource = 'hardware';
   bool _manualBin = false;
@@ -192,13 +260,40 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   bool get _shouldUseHardwareScanner =>
       _scannerSource == 'hardware' || _externalScanner;
 
+  /// Hard reset — clears the bin entirely. Used when leaving the screen,
+  /// after a delete-bin, or when the operator chooses "Refresh session".
   void _resetForNextEntry() {
+    _flashTimer?.cancel();
+    _flashTimer = null;
     setState(() {
       _currentBin = '';
       _currentBinId = '';
       _binActive = false;
       _storedContents = [];
       _awaitingBinScan = true;
+      _readyForNextEntry = false;
+      _flashOk = false;
+    });
+    _scanFocus.requestFocus();
+  }
+
+  /// End-of-session — keeps the bin showing (per spec answer #6/#10) and
+  /// flips the bottom label to grey "READY FOR NEXT ENTRY". Plays the
+  /// success cue (same as Re-encode) and shows a 5-second green flash bar
+  /// at the top per spec answer #7. Next physical scan re-triggers a bin
+  /// scan even if the worker is "still on" the same bin code.
+  void _triggerEndOfSession() {
+    ScanSounds.instance.play(ScanCue.success);
+    _flashTimer?.cancel();
+    setState(() {
+      _readyForNextEntry = true;
+      _awaitingBinScan = true; // next scan must be a bin
+      _flashOk = true;
+    });
+    _flashTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      setState(() => _flashOk = false);
+      _flashTimer = null;
     });
     _scanFocus.requestFocus();
   }
@@ -217,6 +312,19 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (_shouldUseHardwareScanner) {
       unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
     }
+    // Hard-lock RFID on this screen (spec answer #19). The radio cannot be
+    // shut down via setPower(0) on the C72E MTK firmware — that wedges the
+    // chip (CarbonChainwayRfidController.kt:165). Instead we defensively
+    // halt any inventory loop that might still be running from a prior
+    // screen. Combined with not subscribing to the EPC stream (this file
+    // never calls RfidVendorChannel.tagReadStream), this prevents a tag
+    // read from ever reaching Bin Assign code paths.
+    unawaited(RfidVendorChannel.stopChainwayInventory());
+    // RFD8500: physically flip the trigger to fire the 2D imager. Mirrors what
+    // the Chainway path achieves via scannerEnableTriggerRelay above.
+    unawaited(RfidVendorChannel.setZebraTriggerMode2D());
+    // Pre-warm the success cue so the end-of-session beep is sub-ms.
+    unawaited(ScanSounds.instance.init());
   }
 
   @override
@@ -231,8 +339,13 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   @override
   void dispose() {
+    _flashTimer?.cancel();
+    _flashTimer = null;
     _hardwareBarcodeSub?.cancel();
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+    // RFD8500: restore the trigger to RFID mode so the next screen
+    // (Count / Re-encode) gets UHF on trigger pull immediately.
+    unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     unawaited(_stopHardware2dScan());
     _hardwareBarcodeSub = null;
     _hiddenCtrl.dispose();
@@ -241,6 +354,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   }
 
   /// Hardware wedge + OEM scan broadcasts (see [CarbonHardwareBarcodeRelay] on Android).
+  ///
+  /// Routing rules (spec answer #11):
+  ///   - awaiting bin   → always _handleBinScan
+  ///   - bin active     → if the payload is bin-shaped (5 chars after
+  ///                       normalisation) treat it as a swap attempt;
+  ///                       otherwise treat it as an item.
   void _dispatchScanLine(String raw) {
     final v = raw.trim();
     if (v.isEmpty || !mounted || _busy) return;
@@ -262,6 +381,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (_awaitingBinScan && normalized.length < 5) return;
     unawaited(_stopHardware2dScan());
     if (_awaitingBinScan) {
+      unawaited(_handleBinScan(v));
+    } else if (normalized.length == 5) {
+      // Bin-shaped scan in mid-session → bin swap or refresh-session error.
       unawaited(_handleBinScan(v));
     } else {
       unawaited(_onItemSubmit(v));
@@ -393,6 +515,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       return;
     }
     _hiddenCtrl.clear();
+    final wasBinActive = _binActive;
     setState(() => _busy = true);
     try {
       final api = context.read<WmsApiClient>();
@@ -406,8 +529,15 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           );
       if (!mounted) return;
       if (match != null) {
+        // Known bin — confirm (or swap, if a different bin was already active).
         await _confirmBin(match['id']?.toString() ?? '', code);
+      } else if (wasBinActive) {
+        // Unknown bin code while another bin is active. Per spec answer
+        // #11 we do NOT offer "create bin" here — that path requires the
+        // operator to refresh the session first.
+        _showRefreshSessionDialog(code);
       } else {
+        // Unknown bin and no active session — normal "create bin?" flow.
         _showCreateBinDialog(code);
       }
     } catch (e) {
@@ -420,6 +550,44 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     }
   }
 
+  /// Mid-session unknown bin scan — operator must refresh the session
+  /// before they can register a brand-new bin. Spec answer #11.
+  void _showRefreshSessionDialog(String unknownCode) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('Bin not in system'),
+        content: Text(
+          'Bin "$unknownCode" is not registered.\n\n'
+          'Refresh the session to start fresh? '
+          'On a fresh screen you can re-scan this code and will be asked '
+          'whether to create the new bin.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              if (mounted) _scanFocus.requestFocus();
+            },
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _resetForNextEntry();
+            },
+            child: const Text('REFRESH SESSION'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _confirmBin(String binId, String code) async {
     final api = context.read<WmsApiClient>();
     final contents = await api.fetchBinContents(binId);
@@ -429,12 +597,19 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             (e) => _StoredItem.fromMap(Map<String, dynamic>.from(e)))
         .toList();
     if (!mounted) return;
+    _flashTimer?.cancel();
+    _flashTimer = null;
     setState(() {
       _currentBin = _formatBinCode(code);
       _currentBinId = binId;
       _binActive = true;
       _awaitingBinScan = false;
       _storedContents = items;
+      // Fresh bin confirmation always returns the screen to mid-session
+      // (red "TRIGGER TO ADD ITEM"), even if we just came from
+      // "READY FOR NEXT ENTRY".
+      _readyForNextEntry = false;
+      _flashOk = false;
     });
     _scanFocus.requestFocus();
   }
@@ -875,87 +1050,439 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     }
   }
 
-  // ── Assign Dialog — Popup 1 ───────────────────────────────────────────────
-
-  void _showAssignDialog({
+  // ── Assign Flow — popup chain (spec answers #2 #3 #4 #5 #7) ─────────────────
+  //
+  // Top-level entry: [_runAssignFlow]. Step-by-step:
+  //
+  //   1. "Assign <item> to bin?"            YES / NO
+  //         NO  → _triggerEndOfSession (label = grey READY FOR NEXT ENTRY)
+  //         YES → server assign(scope=single_color_all_sizes) + refresh →
+  //                 step 2.
+  //   2. "Add another item?"                YES / NO
+  //         NO  → _triggerEndOfSession.
+  //         YES → step 3.
+  //   3. "Same product different colour or new product?"
+  //         (skipped automatically when every colour of this matrix is
+  //          already assigned to the bin — go straight to step 4.)
+  //         NEW  → _enterMidSessionForNewItem (red TRIGGER TO ADD ITEM,
+  //                  refocus scanner, do NOT trigger end-of-session).
+  //         SAME → step 4.
+  //   4. Multi-colour picker — list every colour not yet in this bin.
+  //         CANCEL → mid-session refocus.
+  //         CONFIRM(selected) → assign every colour in series, refresh,
+  //                 then loop back to step 2.
+  //
+  Future<void> _runAssignFlow({
     required String itemName,
     required _SkuParts skuParts,
     required String matrixId,
-  }) {
-    showDialog<void>(
+  }) async {
+    // Step 1 — assign popup
+    final assignYes = await _askAssignDialog(itemName: itemName);
+    if (!mounted) return;
+    if (assignYes != true) {
+      _triggerEndOfSession();
+      return;
+    }
+    final binCodeAtAssign = _currentBin;
+    final binIdAtAssign = _currentBinId;
+    final firstAssignOk = await _performAssign(
+      skuScanned: skuParts.baseColor,
+      itemName: itemName,
+      binCode: binCodeAtAssign,
+      binId: binIdAtAssign,
+    );
+    if (!mounted) return;
+    if (!firstAssignOk) {
+      _scanFocus.requestFocus();
+      return;
+    }
+    // Loop step 2 → 3 → 4 → 2 …
+    while (mounted) {
+      final addAnother = await _askAddAnotherItemDialog();
+      if (!mounted) return;
+      if (addAnother != true) {
+        _triggerEndOfSession();
+        return;
+      }
+      // Determine whether step 3 is still meaningful — if all colours of
+      // this matrix are already assigned to this bin we skip the choice
+      // and go straight to "TRIGGER TO ADD ITEM" mid-session mode (the
+      // operator can scan the next product directly).
+      final hasMoreColours = await _hasUnassignedColoursForMatrix(matrixId);
+      if (!mounted) return;
+      if (!hasMoreColours) {
+        _enterMidSessionForNewItem();
+        return;
+      }
+      final choice = await _askSameOrNewProductDialog();
+      if (!mounted) return;
+      if (choice == _AssignChoice.newProduct) {
+        _enterMidSessionForNewItem();
+        return;
+      }
+      // SAME — multi-colour picker.
+      final picked = await _showColorPicker(matrixId: matrixId, base: skuParts.base);
+      if (!mounted) return;
+      if (picked == null || picked.isEmpty) {
+        // Operator cancelled — return to mid-session.
+        _enterMidSessionForNewItem();
+        return;
+      }
+      final batchOk = await _performMultiColourAssign(
+        base: skuParts.base,
+        colours: picked,
+        itemName: itemName,
+      );
+      if (!mounted) return;
+      if (!batchOk) {
+        // Failure already surfaced via SnackBar — drop back to mid-session
+        // so the operator doesn't get trapped in a confirmation loop.
+        _enterMidSessionForNewItem();
+        return;
+      }
+      // Loop back to "Add another item?" — the worker may want to add
+      // a totally different product after the batch.
+    }
+  }
+
+  Future<bool?> _askAssignDialog({required String itemName}) {
+    return showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('Assign to bin?'),
+        content: Text('Would you like to assign $itemName to this bin?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('NO'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('YES'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _askAddAnotherItemDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('Add another item?'),
+        content: const Text(
+          'You can keep assigning more items to this bin, '
+          'or wrap up and return to the bin overview.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('NO'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('YES'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<_AssignChoice?> _askSameOrNewProductDialog() {
+    return showDialog<_AssignChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('What next?'),
+        content: const Text(
+          'Pick another colour of the same product, or scan a different product.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _AssignChoice.newProduct),
+            child: const Text('NEW PRODUCT'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            onPressed: () => Navigator.pop(ctx, _AssignChoice.sameProduct),
+            child: const Text('SAME PRODUCT'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Returns the list of two-letter colour codes the operator confirmed,
+  /// or null if they cancelled. Empty list means "I picked nothing — close".
+  Future<List<String>?> _showColorPicker({
+    required String matrixId,
+    required String base,
+  }) async {
+    if (matrixId.isEmpty) {
+      // No matrix → fall back to canceling. The catalog couldn't resolve
+      // the matrix from the scanned SKU; the operator can pick "new
+      // product" and scan something else.
+      return null;
+    }
+    setState(() => _busy = true);
+    List<Map<String, dynamic>> rows;
+    try {
+      rows =
+          await context.read<WmsApiClient>().fetchCustomSkusByMatrix(matrixId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Colour list lookup failed: $e')));
+      }
+      return null;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return null;
+    // Already-assigned colour codes for this bin (compared against
+    // _StoredItem.colorCode which is `cs.color_code`). Filter them out so
+    // the picker only shows colours we still need to assign.
+    final assignedColours = _storedContents
+        .where((s) => s.qty > 0)
+        .map((s) => s.colorCode.toUpperCase())
+        .toSet();
+    final colours = <String>{};
+    for (final r in rows) {
+      final c = (r['color_code'] ?? r['color'] ?? '').toString().toUpperCase();
+      if (c.isEmpty) continue;
+      if (assignedColours.contains(c)) continue;
+      colours.add(c);
+    }
+    if (colours.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All colours of this product are already in the bin.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return null;
+    }
+    final ordered = colours.toList()..sort();
+    final selected = <String>{};
+    return showDialog<List<String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          title: const Text('Assign to bin?'),
-          content: Text('Would you like to assign $itemName to this bin?'),
+          title: const Text('Pick colours to assign'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: ordered.length,
+              itemBuilder: (_, i) {
+                final c = ordered[i];
+                final on = selected.contains(c);
+                return CheckboxListTile(
+                  value: on,
+                  onChanged: (v) {
+                    setLocal(() {
+                      if (v == true) {
+                        selected.add(c);
+                      } else {
+                        selected.remove(c);
+                      }
+                    });
+                  },
+                  title: Text(c),
+                  subtitle: Text('all sizes of $base$c'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                );
+              },
+            ),
+          ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('NO'),
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('CANCEL'),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                 shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero),
               ),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                final binCodeAtAssign = _currentBin;
-                final binIdAtAssign = _currentBinId;
-                setState(() => _busy = true);
-                bool ok = false;
-                try {
-                  await _doAssign(
-                      skuScanned: skuParts.searchKeySpecific,
-                      scope: 'single_color_all_sizes');
-                  ok = true;
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Assign failed: $e')));
-                  }
-                } finally {
-                  if (mounted) setState(() => _busy = false);
-                }
-                if (!mounted) return;
-                if (ok) {
-                  // Capture the just-completed session for the undo button,
-                  // and clear the clean-bin snapshot — most-recent-wins.
-                  setState(() {
-                    _lastAssignSnapshot = _AssignSnapshot(
-                      binCode: binCodeAtAssign,
-                      binId: binIdAtAssign,
-                      skuAssigned: skuParts.searchKeySpecific,
-                      itemName: itemName,
-                    );
-                    _undoSnapshot = [];
-                  });
-                  // Auto-reset to a fresh session (no follow-up popup).
-                  _resetForNextEntry();
-                } else {
-                  _scanFocus.requestFocus();
-                }
-              },
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx, selected.toList()..sort()),
               child: const Text('YES'),
             ),
           ],
         ),
+      ),
     );
+  }
+
+  /// Returns true if at least one colour of [matrixId] has no assignment in
+  /// the current bin. Used by the popup chain to skip "same product" when
+  /// everything is already in the bin.
+  Future<bool> _hasUnassignedColoursForMatrix(String matrixId) async {
+    if (matrixId.isEmpty) return true; // be permissive on lookup failure
+    try {
+      final rows = await context
+          .read<WmsApiClient>()
+          .fetchCustomSkusByMatrix(matrixId);
+      final assigned = _storedContents
+          .where((s) => s.qty > 0)
+          .map((s) => s.colorCode.toUpperCase())
+          .toSet();
+      for (final r in rows) {
+        final c = (r['color_code'] ?? r['color'] ?? '').toString().toUpperCase();
+        if (c.isEmpty) continue;
+        if (!assigned.contains(c)) return true;
+      }
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Mid-session "ready for the next item" state — bin still active, scanner
+  /// re-armed, label red "TRIGGER TO ADD ITEM" (per spec answers #5 and #1).
+  void _enterMidSessionForNewItem() {
+    setState(() {
+      _readyForNextEntry = false;
+      _awaitingBinScan = false; // next physical scan should be an item
+      _pendingSku = '';
+    });
+    _scanFocus.requestFocus();
+  }
+
+  /// Single-SKU server assign + contents refresh + last-assign snapshot.
+  /// Returns true on success.
+  Future<bool> _performAssign({
+    required String skuScanned,
+    required String itemName,
+    required String binCode,
+    required String binId,
+  }) async {
+    setState(() => _busy = true);
+    try {
+      await _doAssign(
+        skuScanned: skuScanned,
+        scope: 'single_color_all_sizes',
+      );
+      await _refreshContents();
+      if (!mounted) return false;
+      setState(() {
+        _lastAssignSnapshot = _AssignSnapshot(
+          binCode: binCode,
+          binId: binId,
+          skuAssigned: skuScanned,
+          itemName: itemName,
+        );
+        _undoSnapshot = [];
+      });
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Assign failed: $e')));
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Spec answer #3 — assign every colour the operator picked, one per
+  /// server call (each is `single_color_all_sizes` so all sizes flow with
+  /// the colour). Returns true if every colour assigned successfully.
+  Future<bool> _performMultiColourAssign({
+    required String base,
+    required List<String> colours,
+    required String itemName,
+  }) async {
+    if (colours.isEmpty) return false;
+    setState(() => _busy = true);
+    final binCode = _currentBin;
+    final binId = _currentBinId;
+    try {
+      for (final c in colours) {
+        await _doAssign(
+          skuScanned: '$base$c',
+          scope: 'single_color_all_sizes',
+        );
+      }
+      await _refreshContents();
+      if (!mounted) return false;
+      setState(() {
+        // Snapshot the final colour as the undoable assignment — operators
+        // generally remember the last action they took; also matches the
+        // single-undo behaviour the user signed off on (spec answer #9).
+        final lastSku = '$base${colours.last}';
+        _lastAssignSnapshot = _AssignSnapshot(
+          binCode: binCode,
+          binId: binId,
+          skuAssigned: lastSku,
+          itemName: itemName,
+        );
+        _undoSnapshot = [];
+      });
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Multi-colour assign failed: $e')));
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   // ── Scan handlers ─────────────────────────────────────────────────────────
 
+  /// Spec answer #17 — manual entry / scan routing:
+  ///
+  ///   Full SKU with size       → strip → assign popup (single SKU)
+  ///   Exact base+colour (9/11) → assign popup (single SKU, all sizes)
+  ///   Base only (7 / 9 chars)  → multi-colour picker (every colour, all
+  ///                               sizes — no per-colour confirmation)
+  ///   Partial / name / desc    → not handled here; the dropdown in the
+  ///                               EmptyItemsPlaceholder calls back into
+  ///                               this method with a parsed SKU.
+  ///
+  /// The catalog grid lookup runs once with the most-specific key we can
+  /// build so we know the matrix id for any subsequent multi-colour work.
   Future<void> _onItemSubmit(String raw) async {
     if (!_binActive) return; // guard: bin must be active
     final sku = raw.trim();
     if (sku.isEmpty) return;
     _hiddenCtrl.clear();
-    setState(() => _busy = true);
+    setState(() {
+      _readyForNextEntry = false;
+      _flashOk = false;
+      _busy = true;
+    });
     try {
       final skuParts = _SkuParts.parse(sku);
       final api = context.read<WmsApiClient>();
-      final row =
-          await api.catalogGridSearchFirstRow(skuParts.searchKeySpecific);
+      // Search by base+colour when present, else by base alone — the latter
+      // returns ANY one custom SKU under the matrix, which is enough to
+      // resolve the matrix id and item name for the multi-colour picker.
+      final searchKey = skuParts.baseColor.isNotEmpty
+          ? skuParts.baseColor
+          : skuParts.base;
+      final row = await api.catalogGridSearchFirstRow(searchKey);
       if (!mounted) return;
       final itemName = row?['title']?.toString() ??
           row?['description']?.toString() ??
@@ -966,7 +1493,31 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         _pendingSku = sku;
         _busy = false;
       });
-      _showAssignDialog(
+      // Base-only entry → straight to the multi-colour picker. Skip the
+      // single-SKU assign popup (there's no colour to confirm yet).
+      if (skuParts.colorCode.isEmpty) {
+        final picked =
+            await _showColorPicker(matrixId: matrixId, base: skuParts.base);
+        if (!mounted) return;
+        if (picked == null || picked.isEmpty) {
+          _enterMidSessionForNewItem();
+          return;
+        }
+        final ok = await _performMultiColourAssign(
+          base: skuParts.base,
+          colours: picked,
+          itemName: itemName,
+        );
+        if (!mounted) return;
+        if (ok) {
+          _triggerEndOfSession();
+        } else {
+          _enterMidSessionForNewItem();
+        }
+        return;
+      }
+      // Otherwise the standard popup chain.
+      await _runAssignFlow(
           itemName: itemName, skuParts: skuParts, matrixId: matrixId);
     } catch (e) {
       if (mounted) {
@@ -1139,6 +1690,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               _EmptyItemsPlaceholder(
                 bgLow: bgLow,
                 mutedColor: mutedColor,
+                binActive: _binActive,
                 isManualMode: _manualAddItem,
                 onManualInput: _manualAddItem
                     ? (sku) => unawaited(_onItemSubmit(sku))
@@ -1184,6 +1736,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                           child: _StoredItemRow(
                             sku: item.sku,
                             description: item.description,
+                            colorCode: item.colorCode,
+                            size: item.size,
                             quantity: item.qty,
                             bgLow: bgLow,
                             mainColor: mainColor,
@@ -1205,6 +1759,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               tealDark: tealDark,
               tealLight: tealLight,
               binActive: _binActive,
+              readyForNextEntry: _readyForNextEntry,
               cameraEnabled: _cameraEnabled,
               onCleanBin: () => unawaited(_onCleanBin()),
               onDeleteBin: () => unawaited(_onDeleteBin()),
@@ -1776,11 +2331,18 @@ class _EmptyItemsPlaceholder extends StatefulWidget {
   const _EmptyItemsPlaceholder({
     required this.bgLow,
     required this.mutedColor,
+    required this.binActive,
     this.isManualMode = false,
     this.onManualInput,
   });
   final Color bgLow;
   final Color mutedColor;
+
+  /// When false the placeholder shows "SCAN A BIN TO START"; when true and
+  /// no items are stored yet it shows "TRIGGER OR TAP TO ADD ITEM" — per
+  /// spec answer #16.
+  final bool binActive;
+
   final bool isManualMode;
   final Function(String)? onManualInput;
 
@@ -1843,10 +2405,24 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
     setState(() => _searching = true);
     try {
       final api = context.read<WmsApiClient>();
-      final rows = await api.catalogSearch(q, limit: 10);
+      final rows = await api.catalogSearch(q, limit: 30);
       if (!mounted) return;
+      // Spec answer #17 — dedupe to one row per item+colour. The catalog
+      // returns one row per custom SKU (per-size) so a 5-colour 12-size
+      // product surfaces as 60 rows; we collapse to 5 by `baseColor`.
+      final byBaseColor = <String, Map<String, dynamic>>{};
+      for (final r in rows) {
+        final rawSku = r['sku']?.toString() ??
+            r['custom_sku']?.toString() ??
+            '';
+        if (rawSku.isEmpty) continue;
+        final key = _SkuParts.parse(rawSku).baseColor;
+        if (key.isEmpty) continue;
+        byBaseColor.putIfAbsent(key, () => r);
+      }
+      final deduped = byBaseColor.values.toList();
       setState(() {
-        _results = rows;
+        _results = deduped;
         _showDropdown = true;
         _searching = false;
       });
@@ -1936,7 +2512,9 @@ class _EmptyItemsPlaceholderState extends State<_EmptyItemsPlaceholder> {
                   )
                 : Center(
                     child: Text(
-                      'TRIGGER OR TAP TO ADD ITEM',
+                      widget.binActive
+                          ? 'TRIGGER OR TAP TO ADD ITEM'
+                          : 'SCAN A BIN TO START',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.spaceGrotesk(
                         fontSize: 12.sp,
@@ -2041,19 +2619,44 @@ class _StoredItemRow extends StatelessWidget {
   const _StoredItemRow({
     required this.sku,
     required this.description,
+    required this.colorCode,
+    required this.size,
     required this.quantity,
     required this.bgLow,
     required this.mainColor,
   });
 
+  /// Full custom SKU, e.g. `C12345678B8L`.
   final String sku;
+
+  /// Matrix / product name, e.g. `Slim Fit Jeans`.
   final String description;
+
+  /// Two-letter colour code, e.g. `B8`.
+  final String colorCode;
+
+  /// Size, e.g. `L` or `32W`.
+  final String size;
+
+  /// Live EPC count for this row.
   final int quantity;
+
   final Color bgLow;
   final Color mainColor;
 
   @override
   Widget build(BuildContext context) {
+    // Spec row layout — answer #7 in `bin-assign-spec.html`:
+    //
+    //   <custom-sku>  ·  <item description> (<colour> <size>)  ×N
+    //
+    // Top line: custom SKU (mono, primary). Bottom line: description with
+    // the colour+size variant in muted parentheses, then qty pinned right.
+    final variant = [
+      if (colorCode.isNotEmpty) colorCode,
+      if (size.isNotEmpty) size,
+    ].join(' ');
+    final variantSuffix = variant.isEmpty ? '' : ' ($variant)';
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
       decoration: BoxDecoration(
@@ -2067,17 +2670,18 @@ class _StoredItemRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'SKU:  $sku',
+                  sku,
                   style: GoogleFonts.spaceGrotesk(
                     fontSize: 16.sp,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: mainColor,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                if (description.isNotEmpty) ...[
+                if (description.isNotEmpty || variantSuffix.isNotEmpty) ...[
                   SizedBox(height: 4.h),
                   Text(
-                    description,
+                    '$description$variantSuffix'.trim(),
                     style: GoogleFonts.manrope(
                       fontSize: 14.sp,
                       color: AppColors.textMuted,
@@ -2088,7 +2692,7 @@ class _StoredItemRow extends StatelessWidget {
             ),
           ),
           Text(
-            'x$quantity',
+            '×$quantity',
             style: GoogleFonts.manrope(
               fontSize: 24.sp,
               fontWeight: FontWeight.w800,
@@ -2115,6 +2719,7 @@ class _BottomControlsBlock extends StatelessWidget {
     required this.tealDark,
     required this.tealLight,
     required this.binActive,
+    required this.readyForNextEntry,
     required this.cameraEnabled,
     required this.onCleanBin,
     required this.onDeleteBin,
@@ -2133,6 +2738,11 @@ class _BottomControlsBlock extends StatelessWidget {
   final Color tealDark;
   final Color tealLight;
   final bool binActive;
+
+  /// True between an end-of-session and the operator's next physical scan.
+  /// Drives the grey "READY FOR NEXT ENTRY" status label per spec answer #1.
+  final bool readyForNextEntry;
+
   final bool cameraEnabled;
   final VoidCallback onCleanBin;
   final VoidCallback onDeleteBin;
@@ -2199,22 +2809,20 @@ class _BottomControlsBlock extends StatelessWidget {
             ),
           ),
           SizedBox(height: 8.h),
-          // ── Status label ──────────────────────────────────────────────
+          // ── Status label (spec answer #1) ─────────────────────────────
+          //
+          //   No bin            → red  "TRIGGER TO ADD BIN"
+          //   Bin active, mid-  → red  "TRIGGER TO ADD ITEM"   (also shown
+          //     session                  initially after bin confirm)
+          //   Bin active, end-  → grey "READY FOR NEXT ENTRY"
+          //     of-session
+          //
           Padding(
             padding: EdgeInsets.only(bottom: 6.h),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: binActive
+              child: !binActive
                   ? Text(
-                      'READY FOR NEXT ENTRY',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 2.0,
-                        color: mutedColor,
-                      ),
-                    )
-                  : Text(
                       'TRIGGER TO ADD BIN',
                       style: GoogleFonts.spaceGrotesk(
                         fontSize: 14.sp,
@@ -2222,10 +2830,34 @@ class _BottomControlsBlock extends StatelessWidget {
                         letterSpacing: 2.0,
                         color: Colors.red,
                       ),
-                    ),
+                    )
+                  : readyForNextEntry
+                      ? Text(
+                          'READY FOR NEXT ENTRY',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 2.0,
+                            color: mutedColor,
+                          ),
+                        )
+                      : Text(
+                          'TRIGGER TO ADD ITEM',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 2.0,
+                            color: Colors.red,
+                          ),
+                        ),
             ),
           ),
           // ── ADD BIN + ADD ITEM ────────────────────────────────────────
+          //
+          // ADD BIN is never locked (spec answer #11/#12 — the camera path
+          // is also the bin-swap path). ADD ITEM main + camera lock to 35%
+          // opacity and ignore taps when no bin is confirmed (answer #13).
+          //
           Row(
             children: [
               Expanded(
@@ -2244,9 +2876,10 @@ class _BottomControlsBlock extends StatelessWidget {
                   label: 'ADD ITEM',
                   mainIcon: Icons.add_circle_outline,
                   color: tealLight,
-                  onMain: binActive ? onAddItem : () {},
-                  onCamera: binActive ? onAddItemCamera : () {},
+                  onMain: onAddItem,
+                  onCamera: onAddItemCamera,
                   showCamera: cameraEnabled,
+                  locked: !binActive,
                 ),
               ),
             ],
@@ -2259,6 +2892,10 @@ class _BottomControlsBlock extends StatelessWidget {
 }
 
 /// A button with a main tap zone + an embedded camera icon tap zone on the right.
+///
+/// When [locked] is true the whole button drops to 35 % opacity and **both**
+/// the main and camera tap zones become no-ops, per spec answer #13. Used on
+/// the ADD ITEM button while no bin is confirmed.
 class _DualActionButton extends StatelessWidget {
   const _DualActionButton({
     required this.label,
@@ -2267,6 +2904,7 @@ class _DualActionButton extends StatelessWidget {
     required this.onMain,
     required this.onCamera,
     this.showCamera = true,
+    this.locked = false,
   });
 
   final String label;
@@ -2275,17 +2913,20 @@ class _DualActionButton extends StatelessWidget {
   final VoidCallback onMain;
   final VoidCallback onCamera;
   final bool showCamera;
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final mainTap = locked ? () {} : onMain;
+    final cameraTap = locked ? () {} : onCamera;
+    final body = Container(
       color: color,
       child: Row(
         children: [
           // Main label tap zone
           Expanded(
             child: InkWell(
-              onTap: onMain,
+              onTap: mainTap,
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 16.h),
                 child: Row(
@@ -2312,7 +2953,7 @@ class _DualActionButton extends StatelessWidget {
             Container(width: 1.w, height: 36.h, color: Colors.white24),
             // Camera tap zone
             _IconTapZone(
-              onTap: onCamera,
+              onTap: cameraTap,
               child: Icon(
                 Icons.photo_camera_outlined,
                 color: Colors.white,
@@ -2323,6 +2964,12 @@ class _DualActionButton extends StatelessWidget {
         ],
       ),
     );
+    return locked
+        ? IgnorePointer(
+            ignoring: true,
+            child: Opacity(opacity: 0.35, child: body),
+          )
+        : body;
   }
 }
 

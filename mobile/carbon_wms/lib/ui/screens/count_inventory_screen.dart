@@ -17,6 +17,7 @@ import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/epc/epc_codec.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
@@ -344,6 +345,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       await RfidVendorChannel.scannerDisableTriggerRelay();
       await RfidVendorChannel.close2dBarcode();
       await RfidVendorChannel.enableRfidFunctionMode();
+      // RFD8500: physically route the trigger to UHF (mirrors Chainway's
+      // enableRfidFunctionMode broadcast above). No-op when reader is not connected.
+      await RfidVendorChannel.setZebraTriggerModeRfid();
 
       // Count gear settings override global settings while inside Count.
       await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
@@ -459,7 +463,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // Dart no longer fires per-tag beeps — saves a Dart→native round-trip.
     // Group by system_id so repeated scans of the same SKU accumulate into one row.
     // Fall back to the raw EPC for tags we can't decode (legacy/foreign).
-    final systemId = decodeSystemId(normalized);
+    final cfg = context.read<MobileSettingsRepository>().epcConfig;
+    final systemId = decodeSystemId(normalized, cfg);
     final groupKey = systemId?.toString() ?? normalized;
     final isNewGroup = !_groupedRows.containsKey(groupKey);
     final group = _groupedRows.putIfAbsent(
@@ -1738,13 +1743,16 @@ class _CountEpcListScreen extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: ListView.separated(
+            child: Builder(
+              builder: (innerCtx) {
+                final cfg = innerCtx.read<MobileSettingsRepository>().epcConfig;
+                return ListView.separated(
               padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 12.h),
               itemCount: epcs.length,
               separatorBuilder: (_, __) => Divider(height: 1.h),
               itemBuilder: (_, i) {
                 final epc = epcs[i];
-                final serial = decodeSerial(epc);
+                final serial = decodeSerial(epc, cfg);
                 final serialText = serial == null ? '—' : serial.toString();
                 return Padding(
                   padding: EdgeInsets.symmetric(vertical: 8.h),
@@ -1803,6 +1811,8 @@ class _CountEpcListScreen extends StatelessWidget {
                     ],
                   ),
                 );
+              },
+            );
               },
             ),
           ),

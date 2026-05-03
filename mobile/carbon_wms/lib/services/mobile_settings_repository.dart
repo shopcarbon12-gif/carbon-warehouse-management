@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/epc/epc_codec.dart';
 import 'package:carbon_wms/services/epc_tenant_sync.dart';
 import 'package:carbon_wms/services/handheld_runtime_config.dart';
 
@@ -18,6 +19,7 @@ class MobileSettingsRepository extends ChangeNotifier {
   Map<String, dynamic>? _lastSyncRoot;
   TenantEpcSettings? _epcSettings;
   List<TenantEpcProfile> _epcProfiles = const [];
+  EpcConfig _epcConfig = kFallbackEpcConfig;
 
   HandheldRuntimeConfig get config => _config;
 
@@ -27,10 +29,15 @@ class MobileSettingsRepository extends ChangeNotifier {
 
   List<TenantEpcProfile> get epcProfiles => List.unmodifiable(_epcProfiles);
 
+  /// Tenant SGTIN-96 layout used to decode EPCs. Defaults to
+  /// [kFallbackEpcConfig] until the first successful sync.
+  EpcConfig get epcConfig => _epcConfig;
+
   void _applySyncRoot(Map<String, dynamic>? root) {
     _lastSyncRoot = root;
     _epcSettings = TenantEpcSettings.fromMobileSyncRoot(root);
     _epcProfiles = TenantEpcProfile.listFromMobileSyncRoot(root);
+    _epcConfig = EpcConfig.fromMobileSyncRoot(root) ?? kFallbackEpcConfig;
   }
 
   /// Runtime-only global power (0–30 dBm) for both transfer directions until next server sync.

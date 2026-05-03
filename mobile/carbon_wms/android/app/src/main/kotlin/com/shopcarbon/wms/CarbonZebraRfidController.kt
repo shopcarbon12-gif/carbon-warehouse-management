@@ -42,6 +42,8 @@ class CarbonZebraRfidController(
   @Volatile private var tagSink: EventChannel.EventSink? = null
   @Volatile private var triggerSink: EventChannel.EventSink? = null
   @Volatile private var readerNameHint: String? = null
+  @Volatile private var barcodeRelay: CarbonHardwareBarcodeRelay? = null
+  @Volatile private var barcodeListenerRegistered: Boolean = false
 
   /** Requested output power in dBm (0–30), forwarded to the reader’s transmit power table. */
   private val requestedPowerDbm = AtomicInteger(30)
@@ -68,6 +70,153 @@ class CarbonZebraRfidController(
 
   fun setReaderNameHint(name: String?) {
     readerNameHint = name?.trim()?.takeIf { it.isNotEmpty() }
+  }
+
+  fun setBarcodeRelay(relay: CarbonHardwareBarcodeRelay?) {
+    barcodeRelay = relay
+  }
+
+  /**
+   * Flip the RFD8500 trigger to fire the 2D imager instead of UHF. While in this mode,
+   * trigger pulls do NOT produce RFID tag events; barcode scans flow either via the
+   * Zebra Scanner Control SDK (registered below) or via HID-keyboard emulation if the
+   * sled was paired in keyboard mode (in which case the offstage TextField on
+   * Bin Assign captures them — that path is unchanged by this method).
+   *
+   * Idempotent. No-ops when the reader is not connected.
+   */
+  fun setTriggerModeBarcode() {
+    executor.execute {
+      val r = reader ?: run {
+        Log.w(TAG, "setTriggerModeBarcode: reader is null (Zebra not connected)")
+        return@execute
+      }
+      if (!r.isConnected) {
+        Log.w(TAG, "setTriggerModeBarcode: reader.isConnected=false (RFD8500 link dropped)")
+        return@execute
+      }
+      try {
+        // Stop any in-flight UHF inventory before switching: leaving inventory running
+        // while the trigger flips to BARCODE wedges the SDK's read state on some
+        // firmware builds (it never emits the EndOfInventory status notification, so
+        // the next RFID_MODE switch sees stale state and rejects subsequent perform()).
+        try { r.Actions.Inventory.stop() } catch (_: Exception) { /* not running, fine */ }
+        inventoryActive = false
+        // setTriggerMode returns a boolean: true means the firmware acknowledged the
+        // change. On some RFD8500 firmware revisions the call returns true but does
+        // NOT physically re-route the trigger — switchMode() is the hardware-level
+        // fallback that toggles the radio↔imager routing on the device itself.
+        val accepted = try {
+          r.Config.setTriggerMode(ENUM_TRIGGER_MODE.BARCODE_MODE, true)
+        } catch (e: Exception) {
+          Log.w(TAG, "setTriggerMode(BARCODE_MODE) threw: ${e.message}")
+          false
+        }
+        Log.d(TAG, "setTriggerMode(BARCODE_MODE) returned=$accepted")
+        if (!accepted) {
+          // Fallback: call the hardware-level toggle. switchMode is unconditional;
+          // if the trigger was already in BARCODE this would put it back to RFID,
+          // so we only call it when setTriggerMode rejected the change.
+          try {
+            r.switchMode()
+            Log.d(TAG, "switchMode() invoked as BARCODE fallback")
+          } catch (e: Exception) {
+            Log.w(TAG, "switchMode() fallback threw: ${e.message}")
+          }
+        }
+        ensureBarcodeListenerRegistered()
+      } catch (e: Exception) {
+        Log.w(TAG, "setTriggerModeBarcode failed: ${e.message}")
+        lastError = e.message ?: e.javaClass.simpleName
+      }
+    }
+  }
+
+  fun setTriggerModeRfid() {
+    executor.execute {
+      val r = reader ?: run {
+        Log.w(TAG, "setTriggerModeRfid: reader is null")
+        return@execute
+      }
+      if (!r.isConnected) {
+        Log.w(TAG, "setTriggerModeRfid: reader.isConnected=false")
+        return@execute
+      }
+      try {
+        val accepted = try {
+          r.Config.setTriggerMode(ENUM_TRIGGER_MODE.RFID_MODE, true)
+        } catch (e: Exception) {
+          Log.w(TAG, "setTriggerMode(RFID_MODE) threw: ${e.message}")
+          false
+        }
+        Log.d(TAG, "setTriggerMode(RFID_MODE) returned=$accepted")
+        if (!accepted) {
+          try {
+            r.switchMode()
+            Log.d(TAG, "switchMode() invoked as RFID fallback")
+          } catch (e: Exception) {
+            Log.w(TAG, "switchMode() fallback threw: ${e.message}")
+          }
+        }
+      } catch (e: Exception) {
+        Log.w(TAG, "setTriggerModeRfid failed: ${e.message}")
+        lastError = e.message ?: e.javaClass.simpleName
+      }
+    }
+  }
+
+  /**
+   * Lazily register a [com.zebra.barcode.sdk.BarcodeDataListener] against the
+   * Zebra Scanner Control SDK. The API3 AAR bundles a barcode-scanner SDK that sits
+   * on top of `com.zebra.scannercontrol`; if the RFD8500 was paired in SSI BT (not
+   * HID keyboard) mode, the imager's decode events flow through here. We forward
+   * to [CarbonHardwareBarcodeRelay.emitExternal] so the Dart side receives them on
+   * the same `carbon_wms/hardware_barcode` channel that Chainway broadcasts use.
+   *
+   * Best-effort: if the SDK refuses (no scanner enumerated, pairing in HID mode,
+   * etc.) we log and continue. The HID-keyboard wedge remains as the alternative
+   * path because it relies only on the OS-level keyboard event stream.
+   */
+  private fun ensureBarcodeListenerRegistered() {
+    if (barcodeListenerRegistered) return
+    val relay = barcodeRelay ?: run {
+      Log.d(TAG, "barcode listener: no relay set, skipping")
+      return
+    }
+    try {
+      // Reflective wiring: the SDK classes are in the same AAR as API3, but we keep
+      // the explicit Class.forName fallback so a missing/renamed symbol on a future
+      // SDK rev degrades gracefully instead of crashing connectAsync.
+      val sdkClass = Class.forName("com.zebra.barcode.sdk.BarcodeScannerSdk")
+      sdkClass.getMethod("setContext", android.content.Context::class.java)
+        .invoke(null, context.applicationContext)
+
+      val handlerClass = Class.forName("com.zebra.barcode.sdk.LegacySdkEventHandler")
+      val handler = handlerClass.getMethod("getEventHandler").invoke(null)
+
+      val listenerClass = Class.forName("com.zebra.barcode.sdk.BarcodeDataListener")
+      val listener = java.lang.reflect.Proxy.newProxyInstance(
+        listenerClass.classLoader,
+        arrayOf(listenerClass),
+      ) { _, method, args ->
+        if (method.name == "onBarcodeDataReceived" && args != null && args.isNotEmpty()) {
+          runCatching {
+            val ev = args[0]
+            val bytes = ev.javaClass.getMethod("getBarcodeData").invoke(ev) as? ByteArray
+            if (bytes != null && bytes.isNotEmpty()) {
+              val s = String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+              relay.emitExternal(s)
+            }
+          }.onFailure { Log.w(TAG, "onBarcodeDataReceived parse failed: ${it.message}") }
+        }
+        null
+      }
+      handlerClass.getMethod("setDataEventListeners", listenerClass).invoke(handler, listener)
+      barcodeListenerRegistered = true
+      Log.d(TAG, "barcode listener: registered via Zebra Scanner Control SDK")
+    } catch (e: Throwable) {
+      Log.w(TAG, "barcode listener: registration failed (${e.javaClass.simpleName}: ${e.message})")
+    }
   }
 
   fun connectAsync(onDone: (Throwable?) -> Unit) {

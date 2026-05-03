@@ -106,6 +106,8 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     await RfidVendorChannel.scannerDisableTriggerRelay();
     await RfidVendorChannel.close2dBarcode();
     await RfidVendorChannel.enableRfidFunctionMode();
+    // RFD8500: route the physical trigger to UHF (no-op if Zebra reader not connected).
+    await RfidVendorChannel.setZebraTriggerModeRfid();
     await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
 
     await _directTagSub?.cancel();
@@ -340,9 +342,10 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
   }
 
   Future<void> _processTag(String epc) async {
-    if (isCurrentFormat(epc)) {
-      final systemId = decodeSystemId(epc);
-      final serial = decodeSerial(epc);
+    final cfg = context.read<MobileSettingsRepository>().epcConfig;
+    if (isCurrentFormat(epc, cfg)) {
+      final systemId = decodeSystemId(epc, cfg);
+      final serial = decodeSerial(epc, cfg);
       final card = EncodeTagResult(
         oldEpc: epc,
         newEpc: epc,

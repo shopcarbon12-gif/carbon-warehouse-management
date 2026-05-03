@@ -198,6 +198,26 @@ class RfidVendorChannel {
     } catch (_) {}
   }
 
+  /// Flip the RFD8500 hardware trigger to fire the 2D imager (barcode mode).
+  /// While in this mode trigger pulls do not perform UHF inventory; barcode
+  /// decodes flow back via [hardwareBarcodeStream] (or via HID keyboard if the
+  /// sled is paired in keyboard mode). No-op if Zebra reader is not connected.
+  static Future<void> setZebraTriggerMode2D() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('zebra.setTriggerMode2D');
+    } catch (_) {}
+  }
+
+  /// Flip the RFD8500 hardware trigger back to fire UHF (RFID mode).
+  /// Inverse of [setZebraTriggerMode2D]. No-op if reader not connected.
+  static Future<void> setZebraTriggerModeRfid() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<void>('zebra.setTriggerModeRfid');
+    } catch (_) {}
+  }
+
   static Future<void> disconnectChainway() async {
     if (!_isAndroid) return;
     try {

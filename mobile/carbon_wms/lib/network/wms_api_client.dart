@@ -692,6 +692,24 @@ class WmsApiClient {
     }
   }
 
+  /// Returns every custom SKU under a matrix at the active location, with
+  /// `color_code`, `size`, and `epc_count`. Used by the Bin Assign multi-
+  /// colour picker to enumerate the colours available for "same product
+  /// different colour" assignment.
+  Future<List<Map<String, dynamic>>> fetchCustomSkusByMatrix(String matrixId) async {
+    final id = matrixId.trim();
+    if (id.isEmpty) return [];
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/catalog').replace(
+      queryParameters: {'matrixId': id},
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) return [];
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) return [];
+    return decoded.whereType<Map<String, dynamic>>().toList();
+  }
+
   Future<Map<String, dynamic>> postPutawayAssign({
     required String deviceId,
     required String binCode,

@@ -62,6 +62,25 @@ class CarbonHardwareBarcodeRelay(
     sink = null
   }
 
+  /**
+   * External-source barcode push (used by [CarbonZebraRfidController] when the RFD8500
+   * is in BARCODE_MODE and the imager decode arrives via the Zebra Scanner Control
+   * SDK rather than a Chainway-style broadcast). Same downstream path as the normal
+   * receiver: trim, drop empties, post to the active EventChannel sink.
+   */
+  fun emitExternal(raw: String) {
+    val s = raw.trim()
+    if (s.isEmpty()) return
+    if (s.equals("barcodeCode", ignoreCase = true) ||
+        s.equals("scannerdata", ignoreCase = true) ||
+        s.equals("scan_data", ignoreCase = true)) {
+      return
+    }
+    Log.d(TAG, "emitExternal data=$s")
+    val target = sink ?: return
+    mainHandler.post { target.success(s) }
+  }
+
   private fun register() {
     if (receiver != null) return
     receiver =
