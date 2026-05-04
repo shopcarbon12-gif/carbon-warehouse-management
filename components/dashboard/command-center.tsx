@@ -269,6 +269,52 @@ export function CommandCenter() {
     };
   }, [liveScanRunning]);
 
+  // Per-antenna breakdown of unique EPCs in this session — polled every 2 s
+  // while live-scan is running. Sums across antennas align with the headline
+  // counter (both filter to items currently in-stock).
+  const [perAntenna, setPerAntenna] = useState<
+    {
+      reader_id: string;
+      reader_name: string;
+      antenna_id: string;
+      antenna_name: string;
+      antenna_number: number;
+      network_address: string | null;
+      unique_epcs: number;
+    }[]
+  >([]);
+  useEffect(() => {
+    if (!liveScanRunning) {
+      setPerAntenna([]);
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/dashboard/live-scan/per-antenna");
+        if (!res.ok) return;
+        const j = (await res.json()) as {
+          active: boolean;
+          antennas?: typeof perAntenna;
+        };
+        if (cancelled) return;
+        if (!j.active) {
+          setPerAntenna([]);
+          return;
+        }
+        setPerAntenna(j.antennas ?? []);
+      } catch {
+        /* transient; ignore */
+      }
+    };
+    void tick();
+    const id = setInterval(tick, 2_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [liveScanRunning]);
+
   // Auto-start on mount when this client's public IP matches an agent's
   // last_known_public_ip — i.e. the operator is signed in from the same
   // physical network as the warehouse agent. No click required. Fires
@@ -405,6 +451,39 @@ export function CommandCenter() {
           <p className="mt-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
             No hardware configured at this location — Live scan is disabled.
           </p>
+        ) : null}
+        {liveScanRunning && perAntenna.length > 0 ? (
+          <div className="mt-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
+            <p className="mb-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+              Live scan · per-antenna unique EPCs (this session)
+            </p>
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4">
+              {perAntenna.map((a) => (
+                <div
+                  key={a.antenna_id}
+                  className="flex items-center justify-between rounded border border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/60 px-2 py-1.5"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-mono text-[0.7rem] text-[var(--wms-fg)]">
+                      {a.reader_name}
+                    </div>
+                    <div className="truncate font-mono text-[0.55rem] text-[var(--wms-muted)]">
+                      ant #{a.antenna_number}
+                      {a.network_address ? ` · ${a.network_address}` : ""}
+                    </div>
+                  </div>
+                  <div className="ml-2 font-mono text-base font-semibold text-[var(--wms-accent)]">
+                    {a.unique_epcs}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 font-mono text-[0.55rem] text-[var(--wms-muted)]">
+              Sum across antennas can exceed the headline live count when one
+              tag is read by multiple antennas — same EPC counts once toward
+              the headline, once per antenna here.
+            </p>
+          </div>
         ) : null}
       </section>
 
