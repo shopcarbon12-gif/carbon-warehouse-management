@@ -710,14 +710,55 @@ class WmsApiClient {
     return decoded.whereType<Map<String, dynamic>>().toList();
   }
 
+  /// `mode`:
+  ///   - `'homeless_only'` (default) — server only moves items whose
+  ///     `bin_id IS NULL`. Leaves items already in another bin alone.
+  ///   - `'all'` — server moves every matching item regardless of where it
+  ///     currently lives. Used by the Bin Assign "MOVE ALL HERE" choice.
   Future<Map<String, dynamic>> postPutawayAssign({
+    required String deviceId,
+    required String binCode,
+    required String skuScanned,
+    required String scope,
+    String mode = 'homeless_only',
+  }) async {
+    final base = await resolveBaseUrl();
+    final uri = Uri.parse('$base/api/inventory/putaway-assign');
+    final body = jsonEncode({
+      'deviceId': deviceId,
+      'binCode': binCode,
+      'skuScanned': skuScanned,
+      'scope': scope,
+      'mode': mode,
+    });
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...await handheldAuthHeaders(),
+    };
+    final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  /// Looks up — without moving anything — how items matching `skuScanned`
+  /// are distributed across the location: homeless (`bin_id IS NULL`),
+  /// already in this bin, or in some other bin. Drives the multi-bin
+  /// resolution prompt on the Bin Assign screen.
+  ///
+  /// Response shape:
+  ///   `{ ok, homeless, inThisBin, inOtherBins: [{binCode, qty}], totalMatching }`
+  Future<Map<String, dynamic>> previewPutawayAssign({
     required String deviceId,
     required String binCode,
     required String skuScanned,
     required String scope,
   }) async {
     final base = await resolveBaseUrl();
-    final uri = Uri.parse('$base/api/inventory/putaway-assign');
+    final uri = Uri.parse('$base/api/inventory/putaway-preview');
     final body = jsonEncode({
       'deviceId': deviceId,
       'binCode': binCode,

@@ -184,6 +184,31 @@ class _StoredItem {
 /// new-product mid-session re-arm.
 enum _AssignChoice { sameProduct, newProduct }
 
+/// User's resolution to the multi-bin prompt fired by [_doAssign] when the
+/// preview shows EPCs of the scanned SKU sitting in some other bin.
+enum _MoveOrAddChoice {
+  /// Move every matching EPC (including those already in other bins) here.
+  move,
+
+  /// Leave existing assignments alone; only place homeless EPCs here.
+  add,
+
+  /// Operator backed out — assign nothing.
+  cancel,
+}
+
+/// What [_doAssign] actually did, so callers can tell the operator the
+/// difference between "assigned 5 items", "no EPCs exist for this SKU",
+/// "you cancelled at the move/add prompt", and "everything is already
+/// placed elsewhere".
+enum _AssignOutcomeKind { success, zeroUpdated, noEpcsFound, cancelled }
+
+class _AssignOutcome {
+  const _AssignOutcome({required this.updated, required this.outcome});
+  final int updated;
+  final _AssignOutcomeKind outcome;
+}
+
 class _AssignSnapshot {
   const _AssignSnapshot({
     required this.binCode,
@@ -252,6 +277,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   List<_StoredItem> _storedContents = [];
   List<_StoredItem> _undoSnapshot = [];
+  // Cached bin list, refreshed in _load() and after createBin. The previous
+  // implementation hit `api.fetchBins()` on every scan, which is ~300–600 ms
+  // on Samsung + RFD8500 and was the dominant source of the perceived lag
+  // between trigger pull and the bin code appearing.
+  List<Map<String, dynamic>> _binsCache = const [];
+  bool _binsCacheLoading = false;
   // Last successful assign — surfaced via the undo button after _resetForNextEntry().
   _AssignSnapshot? _lastAssignSnapshot;
   DateTime _ignoreScansUntil = DateTime.fromMillisecondsSinceEpoch(0);
@@ -334,6 +365,24 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     unawaited(_wakeCameraImagerOnce());
     // Pre-warm the success cue so the end-of-session beep is sub-ms.
     unawaited(ScanSounds.instance.init());
+    // Pre-load the bin list so the first trigger pull doesn't pay the
+    // fetchBins round-trip (~300–600 ms on Samsung + RFD8500).
+    unawaited(_refreshBinsCache());
+  }
+
+  Future<void> _refreshBinsCache() async {
+    if (_binsCacheLoading) return;
+    _binsCacheLoading = true;
+    try {
+      final api = context.read<WmsApiClient>();
+      final bins = await api.fetchBins();
+      if (!mounted) return;
+      _binsCache = bins.cast<Map<String, dynamic>>();
+    } catch (_) {
+      // Cache miss is non-fatal — _handleBinScan falls back to a live fetch.
+    } finally {
+      _binsCacheLoading = false;
+    }
   }
 
   Future<void> _wakeCameraImagerOnce() async {
@@ -552,15 +601,39 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     final wasBinActive = _binActive;
     setState(() => _busy = true);
     try {
-      final api = context.read<WmsApiClient>();
-      final bins = await api.fetchBins();
       final want = _normalizeBinForCompare(code);
-      final match = bins.cast<Map<String, dynamic>?>().firstWhere(
-            (b) =>
-                b != null &&
-                _normalizeBinForCompare(b['code']?.toString() ?? '') == want,
-            orElse: () => null,
-          );
+      // Cache-first lookup. If the cache is empty (first run, eviction, or
+      // a previous fetch failed) fall back to a live fetch — that path is
+      // also what the create-bin flow refreshes into the cache.
+      List<Map<String, dynamic>> bins = _binsCache;
+      if (bins.isEmpty) {
+        final api = context.read<WmsApiClient>();
+        final live = await api.fetchBins();
+        bins = live.cast<Map<String, dynamic>>();
+        _binsCache = bins;
+      }
+      Map<String, dynamic>? match;
+      for (final b in bins) {
+        if (_normalizeBinForCompare(b['code']?.toString() ?? '') == want) {
+          match = b;
+          break;
+        }
+      }
+      // Cache-miss fallback: a bin created on another device after our last
+      // refresh wouldn't be in `_binsCache`. Re-fetch once before declaring
+      // the bin unknown so we don't push the operator into "create bin?".
+      if (match == null && _binsCache.isNotEmpty) {
+        final api = context.read<WmsApiClient>();
+        final live = await api.fetchBins();
+        bins = live.cast<Map<String, dynamic>>();
+        _binsCache = bins;
+        for (final b in bins) {
+          if (_normalizeBinForCompare(b['code']?.toString() ?? '') == want) {
+            match = b;
+            break;
+          }
+        }
+      }
       if (!mounted) return;
       if (match != null) {
         // Known bin — confirm (or swap, if a different bin was already active).
@@ -693,6 +766,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                   _awaitingBinScan = false;
                   _storedContents = [];
                 });
+                // Keep the cache in sync so a second scan of this code goes
+                // through the fast path instead of triggering a re-fetch.
+                unawaited(_refreshBinsCache());
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -718,16 +794,164 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   // ── Assignment helpers ────────────────────────────────────────────────────
 
-  Future<void> _doAssign(
-      {required String skuScanned, required String scope}) async {
+  /// Preview the SKU's distribution, optionally prompt the operator when the
+  /// stock is split across bins, then run the actual assign call.
+  ///
+  /// Returns an [_AssignOutcome] that callers use to surface clear feedback:
+  /// the previous void+silent assign hid both "0 items found" and "user
+  /// cancelled at the move/add prompt" behind an indistinguishable success.
+  Future<_AssignOutcome> _doAssign({
+    required String skuScanned,
+    required String scope,
+    bool allowMoveOrAddPrompt = true,
+  }) async {
     final api = context.read<WmsApiClient>();
     final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
-    await api.postPutawayAssign(
+
+    String mode = 'homeless_only';
+
+    if (allowMoveOrAddPrompt) {
+      try {
+        final preview = await api.previewPutawayAssign(
+          deviceId: deviceId,
+          binCode: _currentBin,
+          skuScanned: skuScanned,
+          scope: scope,
+        );
+        final inOtherRaw = preview['inOtherBins'];
+        final inOther = inOtherRaw is List
+            ? inOtherRaw
+                .whereType<Map>()
+                .map((m) => Map<String, dynamic>.from(m))
+                .where((m) =>
+                    (m['binCode']?.toString().isNotEmpty ?? false) &&
+                    (m['qty'] is num ? (m['qty'] as num).toInt() > 0 : false))
+                .toList()
+            : <Map<String, dynamic>>[];
+        final homeless = (preview['homeless'] as num?)?.toInt() ?? 0;
+        final totalMatching =
+            (preview['totalMatching'] as num?)?.toInt() ?? 0;
+
+        if (totalMatching == 0) {
+          // No EPCs at all for this SKU. Likely the matrix isn't commissioned
+          // yet, or the user scanned a barcode that doesn't map to a custom_sku.
+          return const _AssignOutcome(
+            updated: 0,
+            outcome: _AssignOutcomeKind.noEpcsFound,
+          );
+        }
+
+        if (inOther.isNotEmpty) {
+          final choice = await _askMoveOrAddDialog(
+            inOtherBins: inOther,
+            homeless: homeless,
+          );
+          if (!mounted) {
+            return const _AssignOutcome(
+              updated: 0,
+              outcome: _AssignOutcomeKind.cancelled,
+            );
+          }
+          if (choice == _MoveOrAddChoice.cancel) {
+            return const _AssignOutcome(
+              updated: 0,
+              outcome: _AssignOutcomeKind.cancelled,
+            );
+          }
+          mode = choice == _MoveOrAddChoice.move ? 'all' : 'homeless_only';
+        }
+      } catch (e) {
+        // If preview fails (network blip, server hasn't shipped the new
+        // endpoint yet, etc.), fall through to the legacy assign with
+        // homeless_only — same behaviour as pre-1.2.38.
+        debugPrint('[bin-assign] preview failed, falling back: $e');
+      }
+    }
+
+    final res = await api.postPutawayAssign(
       deviceId: deviceId,
       binCode: _currentBin,
       skuScanned: skuScanned,
       scope: scope,
+      mode: mode,
     );
+    final updated = (res['updated'] as num?)?.toInt() ?? 0;
+    return _AssignOutcome(
+      updated: updated,
+      outcome: updated > 0
+          ? _AssignOutcomeKind.success
+          : _AssignOutcomeKind.zeroUpdated,
+    );
+  }
+
+  Future<_MoveOrAddChoice?> _askMoveOrAddDialog({
+    required List<Map<String, dynamic>> inOtherBins,
+    required int homeless,
+  }) {
+    final binSummary = inOtherBins
+        .map((m) => '${m['binCode']} (${m['qty']})')
+        .join(', ');
+    final homelessLine = homeless > 0
+        ? '\n\n$homeless EPC${homeless == 1 ? ' is' : 's are'} unassigned and '
+            'will be added either way.'
+        : '';
+    return showDialog<_MoveOrAddChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('Item already in another bin'),
+        content: Text(
+          'This SKU is currently in: $binSummary.\n\n'
+          'MOVE — pull every EPC out of those bins and into $_currentBin.\n'
+          'ADD — leave the other bins alone; only put unassigned EPCs here.'
+          '$homelessLine',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _MoveOrAddChoice.cancel),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, _MoveOrAddChoice.add),
+            child: const Text('ADD'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              shape:
+                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+            ),
+            onPressed: () => Navigator.pop(ctx, _MoveOrAddChoice.move),
+            child: const Text('MOVE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _surfaceAssignOutcome(_AssignOutcome out, {required String sku}) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    switch (out.outcome) {
+      case _AssignOutcomeKind.success:
+        // Silent — the bin contents list update is the confirmation.
+        return;
+      case _AssignOutcomeKind.cancelled:
+        return;
+      case _AssignOutcomeKind.noEpcsFound:
+        messenger.showSnackBar(SnackBar(
+          content: Text(
+              'No EPCs found for $sku. Has the product been commissioned?'),
+          duration: const Duration(seconds: 4),
+        ));
+        return;
+      case _AssignOutcomeKind.zeroUpdated:
+        messenger.showSnackBar(const SnackBar(
+          content: Text(
+              '0 items assigned — every matching EPC is already placed.'),
+          duration: Duration(seconds: 4),
+        ));
+        return;
+    }
   }
 
   Future<void> _refreshContents() async {
@@ -867,6 +1091,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       final api = context.read<WmsApiClient>();
       // Re-create the bin
       await api.createBin(binCode);
+      // Keep the cache fresh so the recreated bin is reachable through the
+      // fast lookup path immediately.
+      unawaited(_refreshBinsCache());
       // Re-assign all items
       final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       for (final item in snapshot) {
@@ -1401,7 +1628,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   }
 
   /// Single-SKU server assign + contents refresh + last-assign snapshot.
-  /// Returns true on success.
+  /// Returns true if items were actually moved (updated > 0). Returns false
+  /// for every other outcome (cancelled, zero updated, missing EPCs, error)
+  /// so callers can drop back to mid-session without firing the success cue.
   Future<bool> _performAssign({
     required String skuScanned,
     required String itemName,
@@ -1410,12 +1639,14 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   }) async {
     setState(() => _busy = true);
     try {
-      await _doAssign(
+      final outcome = await _doAssign(
         skuScanned: skuScanned,
         scope: 'single_color_all_sizes',
       );
+      _surfaceAssignOutcome(outcome, sku: skuScanned);
       await _refreshContents();
       if (!mounted) return false;
+      if (outcome.outcome != _AssignOutcomeKind.success) return false;
       setState(() {
         _lastAssignSnapshot = _AssignSnapshot(
           binCode: binCode,
@@ -1450,14 +1681,29 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     final binCode = _currentBin;
     final binId = _currentBinId;
     try {
+      int totalUpdated = 0;
       for (final c in colours) {
-        await _doAssign(
+        // Multi-colour batch is a deliberate operator choice from the picker
+        // (which already filters out colours sitting in this bin). Suppress
+        // the per-colour Move/Add prompt so the batch isn't 5 dialogs deep —
+        // we always run homeless_only here.
+        final outcome = await _doAssign(
           skuScanned: '$base$c',
           scope: 'single_color_all_sizes',
+          allowMoveOrAddPrompt: false,
         );
+        totalUpdated += outcome.updated;
       }
       await _refreshContents();
       if (!mounted) return false;
+      if (totalUpdated == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              '0 items assigned across ${colours.length} colour${colours.length == 1 ? '' : 's'} — every matching EPC may already be placed elsewhere.'),
+          duration: const Duration(seconds: 4),
+        ));
+        return false;
+      }
       setState(() {
         // Snapshot the final colour as the undoable assignment — operators
         // generally remember the last action they took; also matches the

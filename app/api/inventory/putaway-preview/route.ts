@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
-import { assignItemsToBinBySkuScan } from "@/lib/queries/putaway-assign";
+import { previewPutawayAssign } from "@/lib/queries/putaway-assign";
 import { authorizeHandheldDeviceRequest } from "@/lib/server/handheld-request-auth";
 
 export const runtime = "nodejs";
@@ -12,10 +12,6 @@ const bodySchema = z.object({
   binCode: z.string().min(1).max(64),
   skuScanned: z.string().min(1).max(256),
   scope: z.enum(["all_colors", "single_color_all_sizes"]),
-  // Optional. Defaults to homeless_only for backwards compat with older clients.
-  // "all" lets the mobile flow rebin items currently sitting in another bin
-  // (used when the operator picks MOVE in the multi-bin prompt).
-  mode: z.enum(["homeless_only", "all"]).optional(),
 });
 
 export async function POST(req: Request) {
@@ -41,17 +37,16 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { updated } = await assignItemsToBinBySkuScan(
+    const preview = await previewPutawayAssign(
       pool,
       auth.device.locationId,
       parsed.data.binCode,
       parsed.data.skuScanned,
       parsed.data.scope,
-      parsed.data.mode ?? "homeless_only",
     );
-    return NextResponse.json({ ok: true, updated });
+    return NextResponse.json({ ok: true, ...preview });
   } catch (e) {
-    console.error("[putaway-assign]", e);
-    return NextResponse.json({ error: "Putaway failed" }, { status: 500 });
+    console.error("[putaway-preview]", e);
+    return NextResponse.json({ error: "Preview failed" }, { status: 500 });
   }
 }

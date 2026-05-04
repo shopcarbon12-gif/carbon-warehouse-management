@@ -45,6 +45,7 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/settings/mobile-sync") return true;
   if (pathname === "/api/inventory/upload") return true;
   if (pathname === "/api/inventory/putaway-assign") return true;
+  if (pathname === "/api/inventory/putaway-preview") return true;
   /* Count-session report archive (POST + GET list + GET /[id]/download + activities):
    * dual auth (session OR edge key) handled inside each route. */
   if (
