@@ -77,7 +77,13 @@ class CarbonHardwareBarcodeRelay(
       return
     }
     Log.d(TAG, "emitExternal data=$s")
-    val target = sink ?: return
+    val target = sink ?: run {
+      // Kept as a warning (no [DIAG] tag) because a null sink means decodes are
+      // being silently dropped — useful signal if Bin Assign ever fails to
+      // subscribe in a future regression.
+      Log.w(TAG, "emitExternal: no Dart subscriber on EventChannel; data='$s' dropped")
+      return
+    }
     mainHandler.post { target.success(s) }
   }
 
@@ -130,6 +136,9 @@ class CarbonHardwareBarcodeRelay(
             return
           }
           Log.d(TAG, "barcode event action=${intent.action} data=$t")
+          if (sink == null) {
+            Log.w(TAG, "barcode broadcast: no Dart subscriber on EventChannel; data='$t' dropped")
+          }
           // Keep OEM UHF inventory running for rapid multi-tag reads; idle timeout stops the session.
           // Stopping after each decode breaks continuous RFID (only ever one tag per START).
           resetScanIdleTimeout()

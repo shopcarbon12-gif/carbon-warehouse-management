@@ -97,34 +97,13 @@ class MainActivity : FlutterFragmentActivity() {
       chainway.acquireUartEarly()
     }, "Carbon-AcquireUart").apply { isDaemon = true }.start()
 
-    // After the kill+restart cycle above, com.rscja.scanner sometimes comes
-    // back without the camera-bound 2D imager attached: BARCODESTARTSCAN
-    // gets received but auto-aborts within milliseconds, no
-    // CameraService::connect, no decode. The user's first trigger pull on
-    // Bin Assign falls into a dead session and the only recovery is a
-    // device reboot. Walk the imager through its wake-up sequence here so
-    // the camera handle binds during boot, before the user ever pulls the
-    // trigger. Gated on com.rscja.scanner being installed (no-op on Samsung
-    // + RFD8500). The brief STARTSCAN / STOPSCAN pair forces
-    // CameraService::connect and is invisible — the C72E imager pipeline
-    // doesn't render a preview UI for broadcast-driven scans.
-    if (chainwayScannerInstalled()) {
-      Thread({
-        try {
-          // Allow com.rscja.scanner ~2s to fully restart and rebind its
-          // BroadcastReceivers after the kill above.
-          Thread.sleep(2000)
-          openScanner2dEngine(this, "Carbon-Wake2D")
-          Thread.sleep(150)
-          broadcastScannerAction(this, "android.intent.action.BARCODESTARTSCAN", "Carbon-Wake2D")
-          Thread.sleep(150)
-          broadcastScannerAction(this, "android.intent.action.BARCODESTOPSCAN", "Carbon-Wake2D")
-          Log.d("MainActivity", "Carbon-Wake2D: imager wake-up sequence sent")
-        } catch (t: Throwable) {
-          Log.w("MainActivity", "Carbon-Wake2D: wake-up sequence failed: ${t.message}")
-        }
-      }, "Carbon-Wake2D").apply { isDaemon = true }.start()
-    }
+    // Note: the C72E camera-bound 2D imager wake-up moved out of this
+    // activity in 1.2.35. Firing BARCODEUNLOCKSCANKEY at app start was
+    // unlocking the system trigger key globally, so the OEM scanner service
+    // started auto-firing the 2D laser on every screen — including the
+    // login screen. The wake-up now happens lazily when Bin Assign loads
+    // (see fast_putaway_screen.dart), which is the only screen that
+    // actually needs the imager warm.
 
     EventChannel(messenger, "carbon_wms/hardware_barcode").setStreamHandler(barcodeRelay)
     EventChannel(messenger, "carbon_wms/hardware_trigger").setStreamHandler(
@@ -401,16 +380,6 @@ class MainActivity : FlutterFragmentActivity() {
       false
     }
 
-  /** True iff the Chainway scanner service package is installed (Mediatek/C72E). */
-  private fun chainwayScannerInstalled(): Boolean =
-    try {
-      packageManager.getPackageInfo(SCANNER_PACKAGE, 0)
-      true
-    } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
-      false
-    } catch (_: Throwable) {
-      false
-    }
 
   companion object {
     private const val TAG = "MainActivity"

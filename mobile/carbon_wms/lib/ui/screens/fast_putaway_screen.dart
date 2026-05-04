@@ -323,8 +323,31 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     // RFD8500: physically flip the trigger to fire the 2D imager. Mirrors what
     // the Chainway path achieves via scannerEnableTriggerRelay above.
     unawaited(RfidVendorChannel.setZebraTriggerMode2D());
+    // Wake the C72E camera-bound 2D imager. After a fresh install, the OEM
+    // scanner service can come back from MainActivity's UART-acquire kill
+    // without grabbing its camera handle, so the user's first trigger pull
+    // on Bin Assign produces no laser. Walking through open2dBarcode + a
+    // brief STARTSCAN/STOPSCAN forces CameraService::connect on entry to
+    // this screen (1.2.33 fired this on app start, but that unlocked the
+    // trigger key globally and made the laser fire on the login screen —
+    // see MainActivity.kt for the regression note).
+    unawaited(_wakeCameraImagerOnce());
     // Pre-warm the success cue so the end-of-session beep is sub-ms.
     unawaited(ScanSounds.instance.init());
+  }
+
+  Future<void> _wakeCameraImagerOnce() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    if (!_shouldUseHardwareScanner) return;
+    try {
+      await RfidVendorChannel.open2dBarcode();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await RfidVendorChannel.scannerStart2d();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await RfidVendorChannel.scannerStop2d();
+    } catch (_) {
+      /* best-effort: imager wake-up never blocks the screen */
+    }
   }
 
   @override
@@ -399,12 +422,23 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     _hardwareBarcodeSub?.cancel();
     _hardwareBarcodeSub = null;
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
-    final useHw = _shouldUseHardwareScanner;
-    if (!useHw) {
+
+    // Trigger relay (whether the physical trigger pull fires the 2D laser)
+    // respects the user's Scanner Source preference: only enable it when the
+    // user picked Hardware (or toggled External scanner on).
+    final useHwTrigger = _shouldUseHardwareScanner;
+    if (useHwTrigger) {
+      unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
+    } else {
       unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
-      return;
     }
-    unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
+
+    // EventChannel subscription is UNCONDITIONAL. If the user's preference is
+    // "camera" or "manual" but a hardware scanner happens to decode anyway —
+    // because the trigger is physical and CoreScanner/the OEM broadcast path
+    // is always live — those bytes should still reach the screen, not be
+    // silently swallowed. Pre-1.2.35 this gate caused bin/item scans to
+    // disappear with no UI feedback whenever the pref defaulted to camera.
     _hardwareBarcodeSub = const EventChannel('carbon_wms/hardware_barcode')
         .receiveBroadcastStream()
         .listen(
