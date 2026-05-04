@@ -12,6 +12,7 @@ import {
   Play,
   Plus,
   Radio,
+  RefreshCw,
   Server,
   Trash2,
   Zap,
@@ -143,6 +144,30 @@ export function HardwareConfigWorkspace() {
       window.alert(e instanceof Error ? e.message : "Resume all failed");
     }
   };
+  const hardResetAll = async () => {
+    if (
+      !window.confirm(
+        "Hard reset every agent + reader at this tenant?\n\n" +
+          "This signals every CDM agent to exit cleanly (systemd respawns within ~5 s), " +
+          "kills every reader child, wipes supervisor slot state, and ends the live-scan " +
+          "session so the counter resets to 0.\n\n" +
+          "Use this when readers feel slow or stuck and a clean restart would clear it.",
+      )
+    )
+      return;
+    try {
+      const res = await fetch(`/api/hardware-config/hard-reset`, { method: "POST" });
+      const j = (await res.json()) as { error?: string; agents_signaled?: number };
+      if (!res.ok) throw new Error(j.error ?? "Hard reset failed");
+      await reload();
+      window.alert(
+        `Hard reset signaled to ${j.agents_signaled ?? 0} agent(s). ` +
+          "They'll respawn within ~30 s. Click Live Scan to start a fresh session.",
+      );
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Hard reset failed");
+    }
+  };
   const setMonsoonDriver = async (id: string, driver: "stream" | "console") => {
     try {
       const res = await fetch(
@@ -239,6 +264,7 @@ export function HardwareConfigWorkspace() {
         onSetMonsoonDriver={setMonsoonDriver}
         onPauseAllReaders={pauseAllReaders}
         onResumeAllReaders={resumeAllReaders}
+        onHardResetAll={hardResetAll}
         onOpenSchedule={(reader) => setScheduleModalReader(reader)}
       />
 
@@ -450,11 +476,12 @@ type TreeProps = {
   onSetMonsoonDriver: (id: string, driver: "stream" | "console") => void;
   onPauseAllReaders: () => void;
   onResumeAllReaders: () => void;
+  onHardResetAll: () => void;
   onOpenSchedule: (reader: HardwareReaderRow) => void;
 };
 
 function HardwareTreeSection(props: TreeProps) {
-  const { tree, onAddZone, onPauseAllReaders, onResumeAllReaders } = props;
+  const { tree, onAddZone, onPauseAllReaders, onResumeAllReaders, onHardResetAll } = props;
   const heading = (
     <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
       <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--wms-muted)]">
@@ -476,6 +503,14 @@ function HardwareTreeSection(props: TreeProps) {
           className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15"
         >
           <Play className="h-2.5 w-2.5" /> Resume all
+        </button>
+        <button
+          type="button"
+          onClick={onHardResetAll}
+          title="Stop everything, restart all agents + readers, reset live-scan counter"
+          className="inline-flex items-center gap-0.5 rounded border border-red-400/50 bg-red-500/5 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-red-300 hover:bg-red-400/20"
+        >
+          <RefreshCw className="h-2.5 w-2.5" /> Hard reset
         </button>
       </div>
     </div>
