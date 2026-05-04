@@ -22,6 +22,15 @@ import { postWiznetDiscoveries } from "./wms-client.js";
 const DEFAULT_INTERVAL_MS = 5 * 60_000;
 const WIZNET_CLI = "/opt/legacy-rfid/wiznet-cli";
 const SCAN_TIMEOUT_MS = 15_000;
+const LOCK_TIMEOUT_MS = 30_000;
+/**
+ * MACs we've already attempted to lock in this agent process. Prevents
+ * re-issuing wiznet-cli against a bridge whose first lock attempt failed
+ * for a non-recoverable reason (e.g. the bridge isn't responding to UDP
+ * config commands). The set resets on agent restart, so a transient
+ * failure can recover after a systemd respawn.
+ */
+const LOCK_ATTEMPTED = new Set<string>();
 
 type WiznetRecord = {
   mac: string;
@@ -87,6 +96,70 @@ async function runWiznetDiscovery(): Promise<WiznetRecord[]> {
 }
 
 /**
+ * Issue `wiznet-cli --ipconfig MAC --static-ip IP --static-gateway GW
+ * --port PORT` to flip a DHCP-enabled bridge to a static lease at its
+ * current IP. The bridge keeps the same address it already has — we're
+ * not assigning a new one, just removing it from the DHCP pool so the
+ * router can't move it later.
+ *
+ * Bridge accepts the config over UDP, writes NVRAM, and reboots its TCP
+ * listener (clients reconnect ~5-10 s later). The agent's existing
+ * watchdog handles the brief disconnect with no operator intervention.
+ *
+ * Tolerant of failure — the next discovery tick will see the bridge
+ * still on DHCP and try again. The LOCK_ATTEMPTED set prevents tight
+ * retry loops within a single agent process.
+ */
+async function lockBridgeStatic(record: WiznetRecord): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const args = [
+      "-n",
+      WIZNET_CLI,
+      "--ipconfig",
+      record.mac,
+      "--static-ip",
+      record.ip,
+      "--static-gateway",
+      record.raw.gateway ?? "192.168.1.1",
+      "--static-netmask",
+      record.raw.netmask ?? "255.255.255.0",
+      "--port",
+      String(record.port),
+    ];
+    const child = spawn("sudo", args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      resolve(ok);
+    };
+    child.stderr.on("data", (b: Buffer) => { stderr += b.toString("utf8"); });
+    child.on("error", (e) => {
+      log.warn("wiznet-discovery: lock spawn failed", { mac: record.mac, err: e.message });
+      finish(false);
+    });
+    child.on("exit", (code) => {
+      if (code !== 0) {
+        log.warn("wiznet-discovery: lock returned non-zero", {
+          mac: record.mac,
+          ip: record.ip,
+          code,
+          stderr: stderr.trim().slice(0, 200),
+        });
+      }
+      finish(code === 0);
+    });
+    setTimeout(() => {
+      if (done) return;
+      log.warn("wiznet-discovery: lock timed out, killing child", { mac: record.mac });
+      child.kill("SIGTERM");
+      finish(false);
+    }, LOCK_TIMEOUT_MS);
+  });
+}
+
+/**
  * Starts a periodic WIZnet-discovery loop. Returns a stop() that cancels it.
  */
 export function startWiznetDiscovery(env: AgentEnv): () => void {
@@ -102,6 +175,29 @@ export function startWiznetDiscovery(env: AgentEnv): () => void {
         return;
       }
       log.info("wiznet-discovery", { count: records.length });
+
+      // Auto-lock any DHCP-enabled bridge to its current IP. Every Carbon
+      // reader should be on a static lease so a router reboot or DHCP
+      // pool recycle can't move it out from under us. We lock to whatever
+      // IP the bridge currently has — that's the address the operator
+      // already commissioned in the WMS. One-shot per MAC per agent
+      // process; retried on the next tick if the lock didn't take.
+      const dhcpBridges = records.filter((r) => r.dhcp && !LOCK_ATTEMPTED.has(r.mac));
+      for (const r of dhcpBridges) {
+        LOCK_ATTEMPTED.add(r.mac);
+        log.info("wiznet-discovery: auto-locking bridge to static", {
+          mac: r.mac,
+          ip: r.ip,
+          gateway: r.raw.gateway,
+        });
+        const ok = await lockBridgeStatic(r);
+        if (!ok) {
+          // Lock failed — drop from set so a future tick can retry once
+          // the bridge is reachable again.
+          LOCK_ATTEMPTED.delete(r.mac);
+        }
+      }
+
       const result = await postWiznetDiscoveries(env, {
         discoveries: records.map((r) => ({
           mac: r.mac,
