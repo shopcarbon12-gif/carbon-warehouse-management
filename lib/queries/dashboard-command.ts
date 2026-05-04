@@ -63,54 +63,39 @@ export async function getCommandCenterKpis(
             OR i.last_seen_at > i.defective_acknowledged_at)`,
     [tenantId],
   );
-  // Hardware counts reflect "actually working RIGHT NOW" state, not
-  // "ever registered" or "configured." Definition of "working":
-  //   - Readers / antennas: produced at least one read in the last 60 s
-  //     (i.e. cdm_reads.ingested_at within the window). A reader that's
-  //     wedged at firmware level shows up as 0 even if its DB row says
-  //     status_online=true. This is the operator's mental model: if .22
-  //     stops scanning, the readers count drops from 2 → 1 immediately.
-  //   - Printers / handhelds: status_online=true (and authorized for
-  //     handhelds). They don't produce a read stream we can sample, so
-  //     the heartbeat-based status is the best signal we have.
+  // Hardware counts reflect "currently operational" state, not "ever
+  // registered." Each filter requires status_online=true so paused or
+  // stale devices fall out automatically. Handhelds also require
+  // is_authorized=true (operator has approved the device).
+  // Earlier code added +1 to printers for an "implicit Zebra default"
+  // baked into /rfid/commissioning — that wasn't a real device, just a
+  // hardcoded fallback in the form. Removed: dashboard counts the
+  // printers that actually exist in the devices table, period.
   const hw = await pool.query<{
     readers: string;
     antennas: string;
     printers: string;
     handhelds: string;
   }>(
-    `WITH active_streams AS (
-       SELECT reader_id, antenna_id
-         FROM cdm_reads
-        WHERE tenant_id = $2::uuid
-          AND ingested_at > now() - interval '60 seconds'
-     )
-     SELECT
-       (SELECT count(DISTINCT a.reader_id)::text
-          FROM active_streams a
-          INNER JOIN devices d ON d.id = a.reader_id
-         WHERE d.location_id = $1::uuid
-           AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
-       ) AS readers,
-       (SELECT count(DISTINCT a.antenna_id)::text
-          FROM active_streams a
-          INNER JOIN devices d ON d.id = a.antenna_id
-         WHERE d.location_id = $1::uuid
-           AND d.device_type = 'antenna'
-           AND a.antenna_id IS NOT NULL
-       ) AS antennas,
-       (SELECT count(*)::text FROM devices
-         WHERE location_id = $1::uuid
-           AND device_type = 'printer'
+    `SELECT
+       COUNT(*) FILTER (
+         WHERE device_type IN ('fixed_reader','transaction_reader','door_reader')
            AND status_online = true
-       ) AS printers,
-       (SELECT count(*)::text FROM devices
-         WHERE location_id = $1::uuid
-           AND device_type = 'handheld_reader'
+       )::text AS readers,
+       COUNT(*) FILTER (
+         WHERE device_type = 'antenna' AND status_online = true
+       )::text AS antennas,
+       COUNT(*) FILTER (
+         WHERE device_type = 'printer' AND status_online = true
+       )::text AS printers,
+       COUNT(*) FILTER (
+         WHERE device_type = 'handheld_reader'
            AND status_online = true
            AND is_authorized = true
-       ) AS handhelds`,
-    [locationId, tenantId],
+       )::text AS handhelds
+     FROM devices
+     WHERE location_id = $1::uuid`,
+    [locationId],
   );
   const scannable = await pool.query<{ c: string }>(
     `SELECT count(*)::text AS c FROM devices
