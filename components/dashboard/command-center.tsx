@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   Cpu,
@@ -209,13 +210,79 @@ export function CommandCenter() {
     kpis.hardware.antennas +
     kpis.hardware.printers +
     kpis.hardware.handhelds;
+  const liveScanHardwarePresent = kpis.hardware.readers + kpis.hardware.antennas > 0;
 
-  // Live Scan tile + per-reader pause + weekly schedule were removed at
-  // operator request 2026-05-03. Readers are passive — they run all the time
-  // (subject to the .219 agent's hardware power cap). Hardware Pulse pills
-  // below reflect what's actively producing reads.
+  // Live scan tile is the master ON/OFF toggle for fixed-reader scanning.
+  // IDLE on landing — readers paused server-side.
+  // Click → POST /start → RUNNING → polls /state every 2 s for counter +
+  //   to keep the server-side session alive (the GET refreshes lastSeenAt).
+  // Click again → POST /stop → IDLE (counter back to 0; readers stop).
+  // Tab close / refresh / no internet → polls stop → server auto-expires
+  //   the session at 60 s → readers stop.
   // suppress unused-import lint until we re-enable lookup-side filtering
   void postLookup;
+  const [liveScanRunning, setLiveScanRunning] = useState(false);
+  const [liveScanCount, setLiveScanCount] = useState(0);
+  const [liveScanBusy, setLiveScanBusy] = useState(false);
+
+  // Poll /state every 1 s while running — updates the counter AND acts as
+  // the heartbeat that keeps the server-side session alive. When the tab
+  // closes or loses focus, the polling stops and the server session
+  // auto-expires within 60 s, telling the agent to idle the readers.
+  useEffect(() => {
+    if (!liveScanRunning) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/dashboard/live-scan/state");
+        if (!res.ok) return;
+        const j = (await res.json()) as {
+          active: boolean;
+          reads_since_start?: number;
+        };
+        if (cancelled) return;
+        if (!j.active) {
+          // Session expired server-side (e.g. WMS restart). Drop back to IDLE.
+          setLiveScanRunning(false);
+          setLiveScanCount(0);
+          return;
+        }
+        setLiveScanCount(j.reads_since_start ?? 0);
+      } catch {
+        /* transient; ignore */
+      }
+    };
+    void tick();
+    const id = setInterval(tick, 1_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [liveScanRunning]);
+
+  // NO auto-start. Tile shows "(click to run)" on mount; operator clicks
+  // to begin scanning. The login-page prewarm is allowed to keep running
+  // (it warms the radio while the operator types their password) but
+  // does NOT visually transition the tile — the click does.
+
+  const onLiveScanClick = useCallback(async () => {
+    if (liveScanBusy) return;
+    setLiveScanBusy(true);
+    try {
+      if (liveScanRunning) {
+        await fetch("/api/dashboard/live-scan/stop", { method: "POST" });
+        setLiveScanRunning(false);
+        setLiveScanCount(0);
+      } else {
+        const res = await fetch("/api/dashboard/live-scan/start", { method: "POST" });
+        if (!res.ok) return;
+        setLiveScanCount(0);
+        setLiveScanRunning(true);
+      }
+    } finally {
+      setLiveScanBusy(false);
+    }
+  }, [liveScanRunning, liveScanBusy]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -287,6 +354,15 @@ export function CommandCenter() {
           Hardware pulse
         </h2>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <PulsePill
+            label="Live scan"
+            count={liveScanCount}
+            Icon={Radio}
+            active={liveScanRunning}
+            dim={!liveScanHardwarePresent}
+            onClick={liveScanHardwarePresent ? onLiveScanClick : undefined}
+            hint={liveScanRunning ? undefined : "(click to run)"}
+          />
           <PulsePill label="Readers" count={kpis.hardware.readers} Icon={Radio} />
           <PulsePill label="Antennas" count={kpis.hardware.antennas} Icon={Wifi} />
           <PulsePill label="Printers" count={kpis.hardware.printers} Icon={Printer} />
@@ -294,7 +370,7 @@ export function CommandCenter() {
         </div>
         {hardwareTotal === 0 ? (
           <p className="mt-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-            No hardware producing reads at this location.
+            No hardware configured at this location — Live scan is disabled.
           </p>
         ) : null}
       </section>
