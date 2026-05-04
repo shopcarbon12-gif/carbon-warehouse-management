@@ -582,7 +582,7 @@ export async function getAgentConfigBundle(
       control_port: Number(cfg.control_port ?? 20100),
       antenna_count: Number(cfg.antenna_count ?? (list.length || 1)),
       epc_prefix: String(cfg.epc_prefix ?? ""),
-      monsoon_driver: cfg.monsoon_driver === "console" ? "console" : "stream",
+      monsoon_driver: cfg.monsoon_driver === "stream" ? "stream" : "console",
       zone_id: d.zone_id,
       zone_name: d.zone_name,
       antennas: list,

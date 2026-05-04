@@ -120,6 +120,46 @@ export function HardwareConfigWorkspace() {
       window.alert(e instanceof Error ? e.message : "Resume failed");
     }
   };
+  const pauseAllReaders = async () => {
+    if (!window.confirm("Pause every reader at this tenant? They'll stop scanning within ~60 s.")) return;
+    try {
+      const res = await fetch(`/api/hardware-config/readers/pause-all`, { method: "POST" });
+      const j = (await res.json()) as { error?: string; paused?: number };
+      if (!res.ok) throw new Error(j.error ?? "Pause all failed");
+      await reload();
+      window.alert(`Paused ${j.paused ?? 0} reader(s).`);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Pause all failed");
+    }
+  };
+  const resumeAllReaders = async () => {
+    try {
+      const res = await fetch(`/api/hardware-config/readers/resume-all`, { method: "POST" });
+      const j = (await res.json()) as { error?: string; resumed?: number };
+      if (!res.ok) throw new Error(j.error ?? "Resume all failed");
+      await reload();
+      window.alert(`Resumed ${j.resumed ?? 0} reader(s).`);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Resume all failed");
+    }
+  };
+  const setMonsoonDriver = async (id: string, driver: "stream" | "console") => {
+    try {
+      const res = await fetch(
+        `/api/hardware-config/readers/${encodeURIComponent(id)}/monsoon-driver`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ driver }),
+        },
+      );
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? "Driver flip failed");
+      await reload();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Driver flip failed");
+    }
+  };
   const removeAntenna = async (id: string, name: string) => {
     if (!window.confirm(`Delete "${name}"?`)) return;
     await callDelete(`/api/hardware-config/antennas/${id}`, reload);
@@ -196,6 +236,9 @@ export function HardwareConfigWorkspace() {
         onDeleteAntenna={removeAntenna}
         onPauseReader={pauseReader}
         onResumeReader={resumeReader}
+        onSetMonsoonDriver={setMonsoonDriver}
+        onPauseAllReaders={pauseAllReaders}
+        onResumeAllReaders={resumeAllReaders}
         onOpenSchedule={(reader) => setScheduleModalReader(reader)}
       />
 
@@ -404,17 +447,43 @@ type TreeProps = {
   onDeleteAntenna: (id: string, name: string) => void;
   onPauseReader: (id: string) => void;
   onResumeReader: (id: string) => void;
+  onSetMonsoonDriver: (id: string, driver: "stream" | "console") => void;
+  onPauseAllReaders: () => void;
+  onResumeAllReaders: () => void;
   onOpenSchedule: (reader: HardwareReaderRow) => void;
 };
 
 function HardwareTreeSection(props: TreeProps) {
-  const { tree, onAddZone } = props;
+  const { tree, onAddZone, onPauseAllReaders, onResumeAllReaders } = props;
+  const heading = (
+    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--wms-muted)]">
+        <Cpu className="h-3.5 w-3.5" /> Hardware hierarchy
+      </h2>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={onPauseAllReaders}
+          title="Pause every reader at this tenant"
+          className="inline-flex items-center gap-0.5 rounded border border-amber-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-amber-300 hover:bg-amber-400/15"
+        >
+          <Pause className="h-2.5 w-2.5" /> Pause all
+        </button>
+        <button
+          type="button"
+          onClick={onResumeAllReaders}
+          title="Resume every paused reader at this tenant"
+          className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15"
+        >
+          <Play className="h-2.5 w-2.5" /> Resume all
+        </button>
+      </div>
+    </div>
+  );
   if (!tree || tree.locations.length === 0) {
     return (
       <section>
-        <h2 className="mb-2 flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--wms-muted)]">
-          <Cpu className="h-3.5 w-3.5" /> Hardware hierarchy
-        </h2>
+        {heading}
         <p className="rounded-md border border-dashed border-[var(--wms-border)] p-3 text-center font-mono text-xs text-[var(--wms-muted)]">
           No locations configured.
         </p>
@@ -424,9 +493,7 @@ function HardwareTreeSection(props: TreeProps) {
 
   return (
     <section>
-      <h2 className="mb-2 flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--wms-muted)]">
-        <Cpu className="h-3.5 w-3.5" /> Hardware hierarchy
-      </h2>
+      {heading}
 
       <div className="space-y-4">
         {tree.locations.map((loc) => (
@@ -538,15 +605,21 @@ function ReaderCard({
   onDeleteAntenna,
   onPauseReader,
   onResumeReader,
+  onSetMonsoonDriver,
   onOpenSchedule,
 }: {
   reader: HardwareReaderRow;
   onPauseReader: (id: string) => void;
   onResumeReader: (id: string) => void;
+  onSetMonsoonDriver: (id: string, driver: "stream" | "console") => void;
   onOpenSchedule: (reader: HardwareReaderRow) => void;
 } & TreeProps) {
   const isManualPaused = !!reader.scan_paused_at;
   const hasSchedule = !!reader.scan_schedule;
+  const driver: "stream" | "console" =
+    (reader.config as { monsoon_driver?: string }).monsoon_driver === "stream"
+      ? "stream"
+      : "console";
   return (
     <div className="rounded border border-[var(--wms-border)]/40 bg-[var(--wms-surface)]/30 p-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -599,6 +672,20 @@ function ReaderCard({
               <Pause className="h-2.5 w-2.5" /> Pause
             </button>
           )}
+          <button
+            type="button"
+            onClick={() =>
+              onSetMonsoonDriver(reader.id, driver === "console" ? "stream" : "console")
+            }
+            title={`Driver: ${driver}. Click to switch to ${driver === "console" ? "stream" : "console"}.`}
+            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide ${
+              driver === "console"
+                ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-400/20"
+                : "border-zinc-400/50 bg-zinc-500/10 text-zinc-300 hover:bg-zinc-400/20"
+            }`}
+          >
+            {driver}
+          </button>
           <button
             type="button"
             onClick={() => onOpenSchedule(reader)}

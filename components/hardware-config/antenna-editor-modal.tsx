@@ -40,7 +40,7 @@ export function AntennaEditorModal({
       };
       setAntennaNumber(String(cfg.antenna_number ?? 1));
       setName(editing.name);
-      setPowerDbm(String(cfg.transmit_power_dbm ?? 30));
+      setPowerDbm(String(cfg.transmit_power_dbm ?? 33));
       setEnabled(cfg.enabled !== false);
       setPosition(cfg.position_description ?? "");
     } else {
@@ -54,7 +54,7 @@ export function AntennaEditorModal({
       while (used.has(next)) next += 1;
       setAntennaNumber(String(next));
       setName(`Antenna ${next}`);
-      setPowerDbm("30");
+      setPowerDbm("33");
       setEnabled(true);
       setPosition("");
     }
