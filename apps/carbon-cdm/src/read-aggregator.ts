@@ -3,7 +3,7 @@ import { postReads } from "./wms-client.js";
 import { log } from "./log.js";
 import type { ReadEvent } from "./monsoon-runner.js";
 
-const FLUSH_INTERVAL_MS = 1000;
+const FLUSH_INTERVAL_MS = 250;
 const MAX_BATCH = 200;
 const MAX_QUEUE_PER_READER = 5000;
 
