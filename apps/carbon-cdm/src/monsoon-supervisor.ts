@@ -420,26 +420,18 @@ export class MonsoonSupervisor {
   reconcile(bundle: AgentConfigBundle): void {
     this.bundleVersion += 1;
 
-    // Master scan toggle — driven by the dashboard's live-scan tile.
-    // When false, the operator has not opted into scanning (or their
-    // dashboard session has expired), so we want zero readers active.
-    // Implementation: clear the desired set, fall through to the normal
-    // "stop slots no longer desired" path. Result: every running child
-    // gets SIGTERMed and nothing new spawns until live_scan_active flips
-    // back to true on a future config poll. Backwards-compatible: if the
-    // server omits the field (older WMS bundle), treat as true so the
-    // agent keeps scanning the way it always did.
-    const liveScanActive = bundle.live_scan_active ?? true;
-    // Drop readers flagged effective_paused (per-reader manual pause OR
-    // schedule window). The supervisor treats them the same as removed-
-    // from-bundle: kill any running child, don't spawn a new one. Older
-    // WMS bundles omit the field; defaults to false (not paused).
+    // Readers run continuously unless explicitly paused. The previous
+    // design gated this on `bundle.live_scan_active`, which was driven by
+    // the dashboard tile's 60-second session prune — meaning an idle
+    // dashboard tab silently killed every reader and broke antenna tests.
+    // Operator-driven OFF switches still work: per-reader pause + the
+    // weekly schedule both flip `effective_paused`, and the tenant-wide
+    // Pause-all + Hard-reset buttons cover bulk control. The dashboard
+    // tile is now informational, not a kill switch.
     const desiredById = new Map(
-      liveScanActive
-        ? bundle.readers
-            .filter((r) => !(r.effective_paused ?? false))
-            .map((r) => [r.id, r] as const)
-        : [],
+      bundle.readers
+        .filter((r) => !(r.effective_paused ?? false))
+        .map((r) => [r.id, r] as const),
     );
 
     // Stop slots for readers no longer in the bundle.
@@ -448,7 +440,7 @@ export class MonsoonSupervisor {
         log.info("supervisor: reader removed, stopping", {
           readerId: id,
           name: slot.spec.name,
-          reason: liveScanActive ? "left_bundle" : "live_scan_inactive",
+          reason: "left_bundle_or_paused",
         });
         this.stopSlot(slot);
         this.slots.delete(id);
