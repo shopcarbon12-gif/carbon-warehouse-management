@@ -232,14 +232,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   String _currentBinId = '';
   bool _binActive = false;
   bool _busy = false;
-  // Optimistic UI: holds the raw scan text from the moment bytes arrive on
-  // the EventChannel until the bin/item lookup resolves. The Samsung +
-  // RFD8500 path can take ~300–600 ms for `api.fetchBins()`, during which
-  // the screen previously showed only the thin top progress bar — the
-  // operator saw nothing change after pulling the trigger. Surfacing the
-  // raw value immediately gives the same instant feedback the C72E gets
-  // from its on-device wedge.
-  String? _pendingScanFeedback;
   bool _flashOk = false; // turned on for 5s after a successful end-of-session.
   bool _awaitingBinScan = true;
 
@@ -411,10 +403,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (blockedNoise.contains(normalized)) return;
     if (_awaitingBinScan && normalized.length < 5) return;
     unawaited(_stopHardware2dScan());
-    // Optimistic feedback: render the raw value the instant bytes land,
-    // before the API round-trip. Cleared in _confirmBin / _onItemSubmit /
-    // _handleBinScan finally branches once the lookup resolves.
-    setState(() => _pendingScanFeedback = v);
     if (_awaitingBinScan) {
       unawaited(_handleBinScan(v));
     } else if (normalized.length == 5) {
@@ -592,12 +580,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             .showSnackBar(SnackBar(content: Text('Bin lookup failed: $e')));
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _pendingScanFeedback = null;
-        });
-      }
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -661,7 +644,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       // "READY FOR NEXT ENTRY".
       _readyForNextEntry = false;
       _flashOk = false;
-      _pendingScanFeedback = null;
     });
     _scanFocus.requestFocus();
   }
@@ -1544,7 +1526,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       setState(() {
         _pendingSku = sku;
         _busy = false;
-        _pendingScanFeedback = null;
       });
       // Base-only entry → straight to the multi-colour picker. Skip the
       // single-SKU assign popup (there's no colour to confirm yet).
@@ -1574,10 +1555,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           itemName: itemName, skuParts: skuParts, matrixId: matrixId);
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _busy = false;
-          _pendingScanFeedback = null;
-        });
+        setState(() => _busy = false);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Item lookup failed: $e')));
       }
@@ -1722,7 +1700,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             _BinInfoBlock(
               binCode: _currentBin,
               pendingSku: _pendingSku,
-              pendingScan: _pendingScanFeedback,
               isActive: _binActive,
               isDark: isDark,
               bgLow: bgLow,
@@ -1928,7 +1905,6 @@ class _BinInfoBlock extends StatefulWidget {
   const _BinInfoBlock({
     required this.binCode,
     required this.pendingSku,
-    required this.pendingScan,
     required this.isActive,
     required this.isDark,
     required this.bgLow,
@@ -1942,9 +1918,6 @@ class _BinInfoBlock extends StatefulWidget {
 
   final String binCode;
   final String pendingSku;
-  /// Raw scan value from the moment the EventChannel delivers bytes until
-  /// the bin/item lookup resolves. Drives the optimistic feedback row.
-  final String? pendingScan;
   final bool isActive;
   final bool isDark;
   final Color bgLow;
@@ -2158,44 +2131,6 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                           ),
                           textCapitalization: TextCapitalization.characters,
                           onSubmitted: (_) => _onVerify(),
-                        ),
-                      )
-                    else if (widget.pendingScan != null &&
-                        widget.pendingScan!.isNotEmpty)
-                      // Optimistic scan feedback: bytes have arrived from the
-                      // hardware wedge but the bin lookup hasn't resolved yet.
-                      // Same vertical footprint as the empty placeholder so the
-                      // layout doesn't jump when the lookup completes.
-                      SizedBox(
-                        width: double.infinity,
-                        height: 60.h,
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                widget.pendingScan!.toUpperCase(),
-                                style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 28.sp,
-                                  fontWeight: FontWeight.w700,
-                                  color:
-                                      AppColors.primary.withValues(alpha: 0.55),
-                                  letterSpacing: 1.0,
-                                ),
-                              ),
-                              SizedBox(height: 2.h),
-                              Text(
-                                'LOOKING UP…',
-                                style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 11.sp,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 1.5,
-                                  color: widget.mutedColor,
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                       )
                     else
