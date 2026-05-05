@@ -18,6 +18,13 @@ if ! command -v "$FLUTTER_BIN" >/dev/null 2>&1; then
 fi
 
 "$FLUTTER_BIN" pub get
+# Bump pubspec.lock mtime so it's >= pubspec.yaml. A version-only bump
+# (e.g. 1.2.43 → 1.2.44) doesn't change the dependency graph, so pub get
+# leaves pubspec.lock alone and its mtime stays stale. The IDE then sees
+# pubspec.yaml > pubspec.lock and prompts "some packages are missing or
+# out of date" on every open. Touching it here keeps the IDE quiet
+# between releases.
+touch "$ROOT/pubspec.lock"
 if [[ "${RUN_FLUTTER_TESTS:-}" == "1" ]]; then
   "$FLUTTER_BIN" test
 fi
