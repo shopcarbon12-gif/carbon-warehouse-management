@@ -26,8 +26,15 @@
  * the same SGTIN-96 layout.
  */
 
-export const LABEL_WIDTH_DOTS = 812;
-export const LABEL_HEIGHT_DOTS = 594;
+// 6.5 × 5 cm physical label stock at 12 dpmm (300 DPI):
+//   65 mm × 12 = 780 dots wide
+//   50 mm × 12 = 600 dots tall
+// Pre-1.2.50 carbon-gen used 812 × 594 which assumed a slightly bigger
+// label — the rightmost ^GB tear-off line at x=783 + bottom row at
+// y=552 fit fine in the carbon-gen-sized stock but pushed past the
+// edge on the warehouse 65×50 mm rolls.
+export const LABEL_WIDTH_DOTS = 780;
+export const LABEL_HEIGHT_DOTS = 600;
 export const PRINTER_DPI = 300;
 
 export type CarbonTagSettings = {
@@ -307,23 +314,23 @@ export function generateCarbonTagZpl(opts: {
 ^LT${settings.labelShiftY}
 ^CWK,E:ARIAL.TTF
 ^CWB,E:ARI000.TTF
-^FO34,79^GB410,427,2^FS
-^FO83,77^GB0,423,3^FS
-^FO207,80^GB0,425,3^FS
-^FO266,80^GB0,425,3^FS
-^FO387,80^GB0,425,3^FS
-^FO612,79^GB107,426,3^FS
-^FO783,57^GB0,477,3^FS
-^FT73,490^AKB,38,^FDTALLA/SIZE^FS
-^FT194,522^AKB,134^FB515,1,0,C^FD${safeSize}^FS
-^FT253,590^ABB,36^FB600,1,0,C^FD${safeUpc}^FS
-^FT313,552^AKB,34^FB550,1,0,C^FD${line1}^FS
-^FT373,552^AKB,34^FB550,1,0,C^FD${line2}^FS
-^FT432,552^AKB,36^FB550,1,0,C^FD${safeColorResolved}^FS
-^FO455,79^BY3,2^BCB,112,N,N,N^FD${barcodeData}^FS
-^FT600,552^AKB,32^FB550,1,0,C^FD${safeSku}^FS
-^FT687,552^ABB,60^FB550,1,0,C^FD$${safePrice}^FS
-^FT765,552^AKB,34^FB550,1,0,C^FD${safeSizes}^FS
+^FO15,86^GB410,427,2^FS
+^FO64,84^GB0,423,3^FS
+^FO188,87^GB0,425,3^FS
+^FO247,87^GB0,425,3^FS
+^FO368,87^GB0,425,3^FS
+^FO593,86^GB107,426,3^FS
+^FO764,64^GB0,477,3^FS
+^FT54,497^AKB,38,^FDTALLA/SIZE^FS
+^FT175,529^AKB,134^FB515,1,0,C^FD${safeSize}^FS
+^FT234,597^ABB,36^FB600,1,0,C^FD${safeUpc}^FS
+^FT294,559^AKB,34^FB550,1,0,C^FD${line1}^FS
+^FT354,559^AKB,34^FB550,1,0,C^FD${line2}^FS
+^FT413,559^AKB,36^FB550,1,0,C^FD${safeColorResolved}^FS
+^FO436,86^BY3,2^BCB,112,N,N,N^FD${barcodeData}^FS
+^FT581,559^AKB,32^FB550,1,0,C^FD${safeSku}^FS
+^FT668,559^ABB,60^FB550,1,0,C^FD$${safePrice}^FS
+^FT746,559^AKB,34^FB550,1,0,C^FD${safeSizes}^FS
 ^RB${epcLength},${settings.companyPrefixBits},${settings.itemNumberBits},${settings.serialBits}^FS
 ^RFW,E^FD${epcWrite.companyPrefix},${epcWrite.itemNumber},${epcWrite.serialNumber}^FS
 ^PQ1,0,1,Y
