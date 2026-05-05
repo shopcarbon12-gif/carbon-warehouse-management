@@ -11,6 +11,10 @@ export type HardwareReaderRow = {
   id: string;
   name: string;
   network_address: string | null;
+  /** WIZnet bridge MAC. When populated, the agent's discovery sweep matches
+   *  this device by MAC and (a) auto-updates `network_address` on DHCP
+   *  shuffles, (b) clears the row from the discovered-bridges panel. */
+  mac_address: string | null;
   device_type: string;
   status_online: boolean;
   config: Record<string, unknown>;
@@ -53,6 +57,7 @@ type RawDevice = {
   device_type: string;
   name: string;
   network_address: string | null;
+  mac_address: string | null;
   status_online: boolean;
   config: Record<string, unknown> | null;
   zone_id: string | null;
@@ -94,6 +99,7 @@ export async function buildHardwareConfigTree(
          d.device_type,
          d.name,
          d.network_address,
+         d.mac_address,
          d.status_online,
          COALESCE(d.config, '{}'::jsonb) AS config,
          d.zone_id::text   AS zone_id,
@@ -133,6 +139,7 @@ export async function buildHardwareConfigTree(
       id: d.id,
       name: d.name,
       network_address: d.network_address,
+      mac_address: d.mac_address,
       device_type: d.device_type,
       status_online: d.status_online,
       config: (d.config ?? {}) as Record<string, unknown>,

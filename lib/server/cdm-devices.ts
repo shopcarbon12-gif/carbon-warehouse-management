@@ -17,6 +17,26 @@ export const upsertReaderSchema = z.object({
   cdmAgentId: z.string().uuid().nullable().optional(),
   name: z.string().trim().min(1).max(256),
   networkAddress: z.string().trim().min(1).max(256),
+  /** WIZnet bridge MAC. Operator pastes whatever form is on the device sticker
+   *  (`0008DC595740`, `00:08:DC:59:57:40`, `00-08-dc-59-57-40`); we strip
+   *  separators, lowercase, and require exactly 12 hex chars. Stored
+   *  lowercase so the agent's discovery sweep matches case-insensitively
+   *  (which is what auto-clears the row from the discovered-bridges panel). */
+  macAddress: z
+    .string()
+    .trim()
+    .max(32)
+    .optional()
+    .nullable()
+    .transform((v) => {
+      if (v === null || v === undefined) return null;
+      const stripped = v.replace(/[\s:.-]/g, "").toLowerCase();
+      return stripped.length === 0 ? null : stripped;
+    })
+    .refine(
+      (v) => v === null || /^[0-9a-f]{12}$/.test(v),
+      { message: "MAC must be 12 hex characters (e.g. 0008DC595740)" },
+    ),
   deviceType: readerTypeSchema.default("fixed_reader"),
   model: z.string().trim().max(64).optional().default("SA-2000"),
   monsoonSerialPort: z.coerce.number().int().min(1).max(65535).default(10002),
@@ -128,6 +148,7 @@ export async function upsertReader(
       "cdm_agent_id = $5::uuid",
       "device_type = $6",
       "config = $7::jsonb",
+      "mac_address = $8",
       "updated_at = now()",
     ];
     const params: unknown[] = [
@@ -138,6 +159,7 @@ export async function upsertReader(
       body.cdmAgentId ?? null,
       body.deviceType,
       JSON.stringify(config),
+      body.macAddress ?? null,
     ];
     if (body.zoneId) {
       sets.push(`zone_id = $${params.length + 1}::uuid`);
@@ -158,9 +180,9 @@ export async function upsertReader(
   const r = await client.query<{ id: string }>(
     `INSERT INTO devices (
        tenant_id, location_id, zone_id, cdm_agent_id,
-       device_type, name, network_address, status_online, config
+       device_type, name, network_address, status_online, config, mac_address
      )
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, false, $8::jsonb)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, false, $8::jsonb, $9)
      RETURNING id::text`,
     [
       tenantId,
@@ -171,6 +193,7 @@ export async function upsertReader(
       body.name,
       body.networkAddress,
       JSON.stringify(config),
+      body.macAddress ?? null,
     ],
   );
   return { id: r.rows[0].id };
@@ -310,6 +333,7 @@ export type FullDeviceRow = {
   device_type: string;
   name: string;
   network_address: string | null;
+  mac_address: string | null;
   status_online: boolean;
   config: Record<string, unknown>;
   zone_id: string | null;
@@ -329,6 +353,7 @@ export async function getDeviceById(
        device_type,
        name,
        network_address,
+       mac_address,
        status_online,
        COALESCE(config, '{}'::jsonb) AS config,
        zone_id::text,

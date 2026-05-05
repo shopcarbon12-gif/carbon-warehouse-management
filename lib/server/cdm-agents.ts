@@ -663,17 +663,6 @@ export function invalidateAntennaCache(): void {
  * Ingest a batch of reads. Validates the agent owns the reader, looks up
  * each antenna's UUID by its number, then bulk-inserts into cdm_reads.
  */
-/**
- * Hardware blocklist — readers at these IPs run a different (Senitron / old
- * binary) firmware whose read payloads have malformed shapes that crash the
- * Carbon ingest path. They're functionally Senitron's not Carbon's; ignore
- * any reads claiming to come from them. See memory notes on the LAN topology
- * split.
- */
-const READER_IP_BLOCKLIST = new Set<string>([
-  "192.168.1.16",
-]);
-
 export async function ingestAgentReads(
   client: PoolClient,
   auth: { agentId: string; tenantId: string },
@@ -692,16 +681,6 @@ export async function ingestAgentReads(
   );
   if (ownership.rowCount === 0) {
     throw new Error("BAD_REQUEST:Reader not found or not owned by this agent");
-  }
-  const readerNetworkAddress = ownership.rows[0].network_address ?? "";
-  if (READER_IP_BLOCKLIST.has(readerNetworkAddress)) {
-    // Don't crash the agent — accept the POST and silently no-op so the
-    // agent's batch-retry doesn't keep hammering. Operator should reconfigure
-    // the agent to stop polling these readers entirely.
-    console.warn(
-      `[ingestAgentReads] dropping ${body.reads.length} reads from blocklisted reader ${readerNetworkAddress} (${ownership.rows[0].name})`,
-    );
-    return { inserted: 0 };
   }
   const readerLocationId = ownership.rows[0].location_id;
   const readerName = ownership.rows[0].name;

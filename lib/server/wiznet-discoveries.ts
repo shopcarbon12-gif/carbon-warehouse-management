@@ -91,6 +91,18 @@ export async function ingestWiznetDiscoveries(
           ],
         );
       }
+      // The bridge is now bound to a device — clear any pending discovery
+      // row for this MAC so it leaves the operator's "Discovered WIZnet
+      // bridges" panel immediately, instead of lingering for 24h until the
+      // last_seen_at age filter drops it.
+      await client.query(
+        `UPDATE cdm_agent_discoveries
+            SET adopted_at = now()
+          WHERE cdm_agent_id = $1::uuid
+            AND lower(mac_address) = $2
+            AND adopted_at IS NULL`,
+        [agentId, macLower],
+      );
       continue;
     }
 

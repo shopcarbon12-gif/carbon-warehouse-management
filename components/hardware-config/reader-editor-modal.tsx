@@ -46,6 +46,7 @@ export function ReaderEditorModal({
   const [cdmAgentId, setCdmAgentId] = useState("");
   const [name, setName] = useState("");
   const [networkAddress, setNetworkAddress] = useState("");
+  const [macAddress, setMacAddress] = useState("");
   const [antennaCount, setAntennaCount] = useState("2");
   const [model, setModel] = useState("SA-2000");
   const [serialPort, setSerialPort] = useState("10002");
@@ -78,6 +79,7 @@ export function ReaderEditorModal({
       };
       setName(editing.name);
       setNetworkAddress(editing.network_address ?? "");
+      setMacAddress(editing.mac_address ?? "");
       setCdmAgentId(editing.cdm_agent_id ?? "");
       setAntennaCount(String(cfg.antenna_count ?? 2));
       setModel(cfg.model ?? "SA-2000");
@@ -95,6 +97,7 @@ export function ReaderEditorModal({
       setCdmAgentId("");
       setName("");
       setNetworkAddress("");
+      setMacAddress("");
       setAntennaCount("2");
       setModel("SA-2000");
       setSerialPort("10002");
@@ -149,6 +152,7 @@ export function ReaderEditorModal({
       const body: Record<string, unknown> = {
         name: name.trim(),
         networkAddress: networkAddress.trim(),
+        macAddress: macAddress.trim() || null,
         antennaCount: Number(antennaCount),
         model: model.trim(),
         monsoonSerialPort: Number(serialPort),
@@ -232,6 +236,21 @@ export function ReaderEditorModal({
               maxLength={256}
               className={inputCls}
             />
+          </Field>
+
+          <Field label="WIZnet MAC (from sticker on bridge)">
+            <input
+              type="text"
+              value={macAddress}
+              onChange={(e) => setMacAddress(e.target.value)}
+              placeholder="0008DC595740"
+              maxLength={32}
+              className={inputCls}
+            />
+            <p className="mt-1 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+              Optional but recommended. With this set, the agent auto-tracks this reader
+              through DHCP IP changes and removes it from &quot;Discovered WIZnet bridges&quot;.
+            </p>
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
