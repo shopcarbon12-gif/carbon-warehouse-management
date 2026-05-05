@@ -204,9 +204,22 @@ enum _MoveOrAddChoice {
 enum _AssignOutcomeKind { success, zeroUpdated, noEpcsFound, cancelled }
 
 class _AssignOutcome {
-  const _AssignOutcome({required this.updated, required this.outcome});
+  const _AssignOutcome({
+    required this.updated,
+    required this.outcome,
+    this.inThisBin = 0,
+    this.inOtherCount = 0,
+    this.firstOtherBin,
+  });
   final int updated;
   final _AssignOutcomeKind outcome;
+  /// When [outcome] is `zeroUpdated`, these explain WHY no rows changed
+  /// — surfaced in the snackbar so the operator can tell whether the
+  /// items are already in this bin (correct no-op), still in other bins
+  /// (because ADD was picked instead of MOVE), or completely unmatched.
+  final int inThisBin;
+  final int inOtherCount;
+  final String? firstOtherBin;
 }
 
 class _AssignSnapshot {
@@ -815,6 +828,14 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
 
     String mode = 'homeless_only';
+    // Preview state captured for the snackbar — when the assign returns
+    // updated=0 we want the operator to see WHY (already in this bin /
+    // still in other bins / picked ADD instead of MOVE). Pre-1.2.45 the
+    // generic "every matching EPC is already placed" message hid all three
+    // failure modes behind one string.
+    int previewInThisBin = 0;
+    int previewInOtherCount = 0;
+    String? previewFirstOtherBin;
 
     if (allowMoveOrAddPrompt) {
       try {
@@ -837,6 +858,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         final homeless = (preview['homeless'] as num?)?.toInt() ?? 0;
         final totalMatching =
             (preview['totalMatching'] as num?)?.toInt() ?? 0;
+        previewInThisBin = (preview['inThisBin'] as num?)?.toInt() ?? 0;
+        previewInOtherCount =
+            inOther.fold<int>(0, (a, m) => a + ((m['qty'] as num).toInt()));
+        previewFirstOtherBin =
+            inOther.isNotEmpty ? inOther.first['binCode']?.toString() : null;
 
         if (totalMatching == 0) {
           // No EPCs at all for this SKU. Likely the matrix isn't commissioned
@@ -887,6 +913,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       outcome: updated > 0
           ? _AssignOutcomeKind.success
           : _AssignOutcomeKind.zeroUpdated,
+      inThisBin: previewInThisBin,
+      inOtherCount: previewInOtherCount,
+      firstOtherBin: previewFirstOtherBin,
     );
   }
 
@@ -951,10 +980,28 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         ));
         return;
       case _AssignOutcomeKind.zeroUpdated:
-        messenger.showSnackBar(const SnackBar(
-          content: Text(
-              '0 items assigned — every matching EPC is already placed.'),
-          duration: Duration(seconds: 4),
+        // Tailored message based on what preview saw, so the operator
+        // can tell which of the three "0 updated" cases they're in:
+        //   1) items already in THIS bin — correct no-op
+        //   2) items still in OTHER bins (operator picked ADD, not MOVE)
+        //   3) something else (e.g. status filter excludes them)
+        String message;
+        if (out.inThisBin > 0 && out.inOtherCount == 0) {
+          message =
+              '$sku already in this bin (${out.inThisBin} EPC${out.inThisBin == 1 ? '' : 's'}).';
+        } else if (out.inOtherCount > 0) {
+          final where = out.firstOtherBin != null
+              ? 'in bin ${out.firstOtherBin}'
+              : 'in other bins';
+          message =
+              '$sku still $where (${out.inOtherCount} EPC${out.inOtherCount == 1 ? '' : 's'}). Re-scan and choose MOVE to relocate.';
+        } else {
+          message =
+              '0 items assigned — every matching EPC is already placed.';
+        }
+        messenger.showSnackBar(SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 5),
         ));
         return;
     }
