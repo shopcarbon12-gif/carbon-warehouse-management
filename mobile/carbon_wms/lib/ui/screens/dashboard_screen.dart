@@ -246,14 +246,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Server-side reachable but auth/decode failed → surface a snackbar
       // so operators can see why the tiles are dashed (Chainway dash-vs-
       // Samsung-26/3 was a stale-JWT mismatch with no UI clue).
+      //
+      // Transient network failures (handheld coming out of sleep, Wi-Fi
+      // reconnecting, mobile data flapping) get suppressed in 1.2.47.
+      // Operators were seeing the snackbar fire every time they unlocked
+      // the device, with the toString'd SocketException about failed
+      // host lookups. The 3-minute periodic refresh already self-heals
+      // the tiles once the radio is back, so the noise serves no
+      // purpose. Schedule a fast follow-up retry instead.
       final apiError = stats['__error']?.toString();
       if (apiError != null) {
-        final messenger = ScaffoldMessenger.of(context);
-        messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(SnackBar(
-          content: Text('Dashboard: $apiError — try Refresh / re-sign-in'),
-          duration: const Duration(seconds: 4),
-        ));
+        if (_isTransientNetworkError(apiError)) {
+          // Silent retry in 5s — by then the radio is usually back up.
+          Future<void>.delayed(const Duration(seconds: 5), () {
+            if (mounted) unawaited(_refreshDashboardStats());
+          });
+        } else {
+          final messenger = ScaffoldMessenger.of(context);
+          messenger.hideCurrentSnackBar();
+          messenger.showSnackBar(SnackBar(
+            content: Text('Dashboard: $apiError — try Refresh / re-sign-in'),
+            duration: const Duration(seconds: 4),
+          ));
+        }
       }
       setState(() {
         _inventoryUnits = (stats['inventory_units'] as num?)?.toInt();
@@ -269,6 +284,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {
       if (mounted) setState(() => _statsLoading = false);
     }
+  }
+
+  /// Match the kind of failure that fires when the handheld's radio
+  /// hasn't reconnected yet after a screen unlock — DNS lookup, broken
+  /// pipe, or socket reset. We retry these silently instead of yelling
+  /// at the operator with a SnackBar they can't act on.
+  bool _isTransientNetworkError(String msg) {
+    final m = msg.toLowerCase();
+    return m.contains('failed host lookup') ||
+        m.contains('socketexception') ||
+        m.contains('handshakeexception') ||
+        m.contains('connection closed') ||
+        m.contains('connection reset') ||
+        m.contains('network is unreachable') ||
+        m.contains('software caused connection abort') ||
+        m.contains('os error');
   }
 
   Future<void> _syncMobileSettings() async {

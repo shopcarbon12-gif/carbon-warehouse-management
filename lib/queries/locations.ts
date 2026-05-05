@@ -144,6 +144,13 @@ export async function listBinContentsGrouped(
     size: string | null;
     qty: string;
   }>(
+    // 1.2.47: bin contents include both primary-bin items (bin_id = $1)
+    // AND multi-bin secondaries ($1 = ANY(additional_bin_ids)). The
+    // `bin` JOIN now resolves against the requested bin directly so
+    // archived-bin filtering still applies. An item that's primary in
+    // bin A and additional in bin B will appear in BOTH bins' contents
+    // lists — operator-stated rule: "qty in bin can be overrided …
+    // bins are not source of truth to anything in my solution".
     `SELECT
        cs.id AS custom_sku_id,
        m.description,
@@ -152,10 +159,10 @@ export async function listBinContentsGrouped(
        cs.size,
        COUNT(i.id)::text AS qty
      FROM items i
-     INNER JOIN bins bin ON bin.id = i.bin_id AND bin.location_id = $2::uuid AND bin.archived_at IS NULL
+     INNER JOIN bins bin ON bin.id = $1::uuid AND bin.location_id = $2::uuid AND bin.archived_at IS NULL
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
      INNER JOIN matrices m ON m.id = cs.matrix_id
-     WHERE i.bin_id = $1::uuid
+     WHERE (i.bin_id = $1::uuid OR $1::uuid = ANY(i.additional_bin_ids))
        AND i.location_id = $2::uuid
        AND i.status IN ('in-stock', 'pending_visibility')
      GROUP BY cs.id, m.id, m.description, cs.sku, cs.color_code, cs.size
@@ -185,6 +192,11 @@ export async function listBinEpcs(
     upc: string | null;
     description: string;
   }>(
+    // 1.2.47: include multi-bin secondaries — see listBinContentsGrouped
+    // for the rationale. The bin existence check moves onto the
+    // requested bin id directly (no longer joining through items.bin_id)
+    // so archived/missing bins still 0-result and additional_bin_ids
+    // entries also surface.
     `SELECT
        i.epc,
        i.serial_number::text AS serial_number,
@@ -192,10 +204,10 @@ export async function listBinEpcs(
        COALESCE(cs.upc, m.upc) AS upc,
        m.description
      FROM items i
-     INNER JOIN bins b ON b.id = i.bin_id AND b.location_id = $2::uuid AND b.archived_at IS NULL
+     INNER JOIN bins b ON b.id = $1::uuid AND b.location_id = $2::uuid AND b.archived_at IS NULL
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
      INNER JOIN matrices m ON m.id = cs.matrix_id
-     WHERE i.bin_id = $1::uuid
+     WHERE (i.bin_id = $1::uuid OR $1::uuid = ANY(i.additional_bin_ids))
        AND i.location_id = $2::uuid
        AND i.status IN ('in-stock', 'pending_visibility')
      ORDER BY cs.sku ASC, i.serial_number ASC`,

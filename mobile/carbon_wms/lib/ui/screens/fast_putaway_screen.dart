@@ -884,7 +884,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               outcome: _AssignOutcomeKind.cancelled,
             );
           }
-          if (choice == _MoveOrAddChoice.cancel) {
+          if (choice == null || choice == _MoveOrAddChoice.cancel) {
+            // 1.2.47: CANCEL button is gone, but the operator can still
+            // dismiss the dialog by tapping outside (Android system back
+            // gesture). Treat dismissal as "stay mid-session" — same
+            // outcome the explicit CANCEL button used to produce.
             return const _AssignOutcome(
               updated: 0,
               outcome: _AssignOutcomeKind.cancelled,
@@ -926,10 +930,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     final binSummary = inOtherBins
         .map((m) => '${m['binCode']} (${m['qty']})')
         .join(', ');
-    final homelessLine = homeless > 0
-        ? '\n\n$homeless EPC${homeless == 1 ? ' is' : 's are'} unassigned and '
-            'will be added either way.'
-        : '';
+    // CANCEL was removed in 1.2.47 per operator request — every dismissal
+    // route landed back at "0 items" snackbar noise. Force a decision:
+    // either MOVE the items here or ADD this bin to their existing
+    // multi-bin list. Tapping outside the dialog falls through to null
+    // → mid-session no-op, same as cancel was before.
     return showDialog<_MoveOrAddChoice>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -938,14 +943,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         content: Text(
           'This SKU is currently in: $binSummary.\n\n'
           'MOVE — pull every EPC out of those bins and into $_currentBin.\n'
-          'ADD — leave the other bins alone; only put unassigned EPCs here.'
-          '$homelessLine',
+          'ADD — also list these EPCs in $_currentBin (multi-bin); '
+          'their original bin keeps them for qty totals.'
+          '${homeless > 0 ? '\n\n$homeless unassigned EPC${homeless == 1 ? '' : 's'} will be placed here either way.' : ''}',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, _MoveOrAddChoice.cancel),
-            child: const Text('CANCEL'),
-          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, _MoveOrAddChoice.add),
             child: const Text('ADD'),

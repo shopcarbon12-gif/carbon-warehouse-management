@@ -11,11 +11,18 @@ export type PutawayScope = "all_colors" | "single_color_all_sizes";
  * because we resolve the matrix from any child SKU.
  *
  * `mode`:
- *   - `"homeless_only"` (default): only move items that are currently
- *     bin_id IS NULL. Items already in another bin are left alone.
- *   - `"all"`: move every matching item regardless of where it currently
- *     lives. Used by the mobile "MOVE ALL HERE" choice when the operator
- *     resolves the multi-bin prompt.
+ *   - `"homeless_only"` — operator picked **ADD**. Items that have no
+ *     live bin home (bin_id NULL / archived / orphan) get bin_id set to
+ *     this bin. Items currently in OTHER live bins keep their primary
+ *     bin (truth bin for qty) and gain this bin in `additional_bin_ids`
+ *     so bin contents views list the SKU under both bins. Items already
+ *     primary-or-additional in this bin are no-ops. 1.2.47 multi-bin
+ *     semantics — operator's rule: "if item in multi bin, use only 1
+ *     random bin for truth qty of items".
+ *   - `"all"` — operator picked **MOVE**. Pull every matching item out
+ *     of wherever it lives (incl. additional_bin_ids on other rows) and
+ *     repoint bin_id to this bin, also clearing additional_bin_ids so a
+ *     subsequent "in this bin" preview returns the right count.
  */
 export async function assignItemsToBinBySkuScan(
   pool: Pool,
@@ -50,73 +57,92 @@ export async function assignItemsToBinBySkuScan(
   const binId = bin.rows[0]?.id;
   if (!binId) return { updated: 0 };
 
-  // homeless_only really means "not currently sitting in a LIVE bin." An
-  // item is functionally homeless when it has no live (non-archived) bin
-  // home — that covers three states the operator perceives as "the bin
-  // doesn't exist in the warehouse anymore":
-  //
-  //   1. bin_id IS NULL                — never assigned
-  //   2. bin_id points to an ARCHIVED bin row (archived_at IS NOT NULL)
-  //   3. bin_id points to a row that no longer exists at all (orphan)
-  //
-  // Pre-1.2.43 we caught only (1). 1.2.44 added (2) via an IN-list
-  // against archived bins. Items in state (3) — orphaned bin_id —
-  // still slipped through and triggered the "0 items assigned, every
-  // matching EPC is already placed" snackbar even though the preview
-  // had counted them as homeless. The preview's LEFT JOIN classifies
-  // them as homeless (b.code is NULL), so we mirror that: the bin
-  // doesn't have a live, non-archived row.
-  //
-  // NOT EXISTS is the canonical way to express "no live bin home" and
-  // matches the preview classifier 1:1. 1.2.46 root-cause fix.
-  const homelessGuard =
-    mode === "homeless_only"
-      ? `AND (
-           bin_id IS NULL
-           OR NOT EXISTS (
-             SELECT 1 FROM bins b
-             WHERE b.id = items.bin_id
-               AND b.archived_at IS NULL
-           )
-         )`
-      : "";
-
+  // Build the SKU filter once — single_color_all_sizes uses LIKE prefix
+  // match, all_colors resolves to a matrix UUID via custom_skus.
+  let skuFilter: string;
+  let skuParam: string | null;
   if (scope === "single_color_all_sizes") {
-    // Place items whose custom SKU starts with the scanned prefix
-    // (mobile app sends matrix+color prefix — all sizes match).
+    skuFilter = `custom_sku_id IN (SELECT id FROM custom_skus WHERE sku LIKE $3)`;
+    skuParam = `${trimmed}%`;
+  } else {
+    const skuRow = await pool.query<{ matrix_id: string }>(
+      `SELECT matrix_id::text FROM custom_skus WHERE sku = $1 LIMIT 1`,
+      [trimmed],
+    );
+    const matrixId = skuRow.rows[0]?.matrix_id;
+    if (!matrixId) return { updated: 0 };
+    skuFilter = `custom_sku_id IN (SELECT id FROM custom_skus WHERE matrix_id = $3::uuid)`;
+    skuParam = matrixId;
+  }
+
+  if (mode === "all") {
+    // MOVE — pull every matching item out of wherever it lives (primary
+    // OR multi-bin secondary) and into this bin. Reset additional_bin_ids
+    // so the next preview sees them only here.
     const r = await pool.query(
-      `UPDATE items SET bin_id = $1::uuid
+      `UPDATE items
+         SET bin_id = $1::uuid,
+             additional_bin_ids = '{}'::uuid[]
        WHERE location_id = $2::uuid
-         ${homelessGuard}
          AND status IN ('in-stock', 'pending_visibility')
-         AND custom_sku_id IN (
-           SELECT id FROM custom_skus WHERE sku LIKE $3
-         )`,
-      [binId, locationId, `${trimmed}%`],
+         AND ${skuFilter}`,
+      [binId, locationId, skuParam],
     );
     return { updated: r.rowCount ?? 0 };
   }
 
-  // all_colors — resolve matrix from exact SKU match, then place every
-  // item belonging to that matrix regardless of color/size.
-  const skuRow = await pool.query<{ matrix_id: string }>(
-    `SELECT matrix_id::text FROM custom_skus WHERE sku = $1 LIMIT 1`,
-    [trimmed],
-  );
-  const matrixId = skuRow.rows[0]?.matrix_id;
-  if (!matrixId) return { updated: 0 };
-
-  const r = await pool.query(
-    `UPDATE items SET bin_id = $1::uuid
+  // ADD — multi-bin path. Three buckets, each gets a separate UPDATE:
+  //
+  //   1. Homeless items (bin_id NULL or pointing to archived/orphan bin)
+  //      → set bin_id = target. Don't touch additional_bin_ids.
+  //   2. Items currently in OTHER live bins → keep their bin_id (truth
+  //      bin for qty), append target to additional_bin_ids if not
+  //      already there. The bin contents view unions both, so the SKU
+  //      will appear under both bins from the operator's perspective.
+  //   3. Items already in target (primary or additional) → no-op,
+  //      excluded by both UPDATEs' WHERE clauses.
+  //
+  // Returning the affected EPCs from each step lets us tally one final
+  // `updated` count without double-counting.
+  const homelessRes = await pool.query<{ id: string }>(
+    `UPDATE items
+       SET bin_id = $1::uuid
      WHERE location_id = $2::uuid
-       ${homelessGuard}
        AND status IN ('in-stock', 'pending_visibility')
-       AND custom_sku_id IN (
-         SELECT id FROM custom_skus WHERE matrix_id = $3::uuid
-       )`,
-    [binId, locationId, matrixId],
+       AND ${skuFilter}
+       AND (
+         bin_id IS NULL
+         OR NOT EXISTS (
+           SELECT 1 FROM bins b
+           WHERE b.id = items.bin_id
+             AND b.archived_at IS NULL
+         )
+       )
+     RETURNING id::text`,
+    [binId, locationId, skuParam],
   );
-  return { updated: r.rowCount ?? 0 };
+
+  const multiBinRes = await pool.query<{ id: string }>(
+    `UPDATE items
+       SET additional_bin_ids = additional_bin_ids || ARRAY[$1::uuid]
+     WHERE location_id = $2::uuid
+       AND status IN ('in-stock', 'pending_visibility')
+       AND ${skuFilter}
+       AND bin_id IS NOT NULL
+       AND bin_id <> $1::uuid
+       AND NOT ($1::uuid = ANY(additional_bin_ids))
+       AND EXISTS (
+         SELECT 1 FROM bins b
+         WHERE b.id = items.bin_id
+           AND b.archived_at IS NULL
+       )
+     RETURNING id::text`,
+    [binId, locationId, skuParam],
+  );
+
+  return {
+    updated: (homelessRes.rowCount ?? 0) + (multiBinRes.rowCount ?? 0),
+  };
 }
 
 export type PutawayPreview = {
@@ -186,46 +212,57 @@ export async function previewPutawayAssign(
     skuParam = matrixId;
   }
 
-  const groups = await pool.query<{
+  // Per-item rows so we can classify by primary bin vs additional bins.
+  // Pre-1.2.47 we GROUPed by bin_id alone; that was fine when each EPC
+  // lived in exactly one bin. With multi-bin (additional_bin_ids), an
+  // item can be both "in the target bin" (via additional_bin_ids) AND
+  // "in some other bin" (via primary bin_id) — we want to count it as
+  // inThisBin, since for the operator scanning this bin it IS here.
+  const rows = await pool.query<{
     bin_id: string | null;
     bin_code: string | null;
-    qty: string;
+    additional: string[] | null;
   }>(
     `SELECT i.bin_id::text AS bin_id,
             b.code AS bin_code,
-            COUNT(i.id)::text AS qty
+            ARRAY(SELECT x::text FROM unnest(i.additional_bin_ids) x)::text[] AS additional
      FROM items i
      LEFT JOIN bins b ON b.id = i.bin_id AND b.archived_at IS NULL
      WHERE i.location_id = $1::uuid
        AND i.status IN ('in-stock', 'pending_visibility')
-       AND i.${skuFilter}
-     GROUP BY i.bin_id, b.code`,
+       AND i.${skuFilter}`,
     [locationId, skuParam],
   );
 
   let homeless = 0;
   let inThisBin = 0;
-  const inOtherBins: { binCode: string; qty: number }[] = [];
+  const otherCounts = new Map<string, number>();
   let total = 0;
-  for (const g of groups.rows) {
-    const qty = Number(g.qty);
-    total += qty;
-    if (g.bin_id === null) {
-      homeless += qty;
-    } else if (targetBinId && g.bin_id === targetBinId) {
-      inThisBin = qty;
-    } else if (g.bin_code) {
-      inOtherBins.push({ binCode: g.bin_code, qty });
-    } else {
-      // Items point at a non-null bin_id but the LEFT JOIN didn't return
-      // a code — the bin row is archived (or rare data drift). To the
-      // operator that bin doesn't exist anymore, so treat the items as
-      // homeless. Pre-1.2.43 these silently fell out of every bucket and
-      // a `homeless_only` assign matched nothing → "0 items assigned"
-      // bug the operator just hit.
-      homeless += qty;
+  for (const r of rows.rows) {
+    total += 1;
+    const additional = r.additional ?? [];
+    const inTarget =
+      (targetBinId && r.bin_id === targetBinId) ||
+      (targetBinId && additional.includes(targetBinId));
+    if (inTarget) {
+      inThisBin += 1;
+      continue;
     }
+    if (r.bin_id === null) {
+      homeless += 1;
+      continue;
+    }
+    if (r.bin_code) {
+      otherCounts.set(r.bin_code, (otherCounts.get(r.bin_code) ?? 0) + 1);
+      continue;
+    }
+    // Items point at a non-null bin_id but the LEFT JOIN didn't return
+    // a code — bin row is archived (or rare data drift). Treat as
+    // homeless: to the operator the bin doesn't exist in the warehouse.
+    homeless += 1;
   }
-  inOtherBins.sort((a, b) => b.qty - a.qty);
+  const inOtherBins = Array.from(otherCounts.entries())
+    .map(([binCode, qty]) => ({ binCode, qty }))
+    .sort((a, b) => b.qty - a.qty);
   return { homeless, inThisBin, inOtherBins, totalMatching: total };
 }
