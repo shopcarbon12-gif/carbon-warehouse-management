@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
-import { buildRfidReftagZpl } from "@/lib/utils/zpl-rfid-reftag";
+import {
+  generateCarbonTagZpl,
+  DEFAULT_CARBON_TAG_SETTINGS,
+} from "@/lib/utils/zpl-carbon-tag";
 import { parsePrinterLine } from "@/components/rfid/commissioning/commissioning-settings-panel";
-import { rfidCommissionPrintAndAudit } from "@/lib/server/rfid-commission";
+import {
+  envCompanyPrefix,
+  rfidCommissionPrintAndAudit,
+} from "@/lib/server/rfid-commission";
 
 /**
  * POST /api/rfid/reprint — reprint an existing item's label without inserting
@@ -99,19 +105,32 @@ export async function POST(req: Request) {
   }
 
   // Look up the EPC's matrix + custom SKU info to fill the label.
+  // 1.2.49 — pulls color_code, size, retail_price for the carbon-gen
+  // layout. The serial_number lets us reconstruct the EPC's
+  // (companyPrefix, lsSystemId, serial) triplet for ^RFW,E encoding.
   const r = await pool.query<{
     epc: string;
+    serial_number: string;
     sku: string;
     sku_ls_system_id: string | null;
     name: string | null;
     upc: string | null;
+    color_code: string | null;
+    size: string | null;
+    retail_price: string | null;
+    matrix_id: string;
   }>(
     `SELECT
        i.epc,
+       i.serial_number::text AS serial_number,
        cs.sku,
        cs.ls_system_id::text AS sku_ls_system_id,
        m.description AS name,
-       COALESCE(cs.upc, m.upc) AS upc
+       COALESCE(cs.upc, m.upc) AS upc,
+       cs.color_code,
+       cs.size,
+       cs.retail_price::text AS retail_price,
+       cs.matrix_id::text AS matrix_id
      FROM items i
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
      LEFT JOIN matrices m ON m.id = cs.matrix_id
@@ -124,18 +143,41 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "EPC not found in this tenant" }, { status: 404 });
   }
 
-  const zpl = buildRfidReftagZpl(
-    {
-      epc: item.epc,
-      sku: item.sku,
-      description: item.name,
-      systemId: item.sku_ls_system_id ?? "",
-      upc: item.upc,
-      pw: parsed.data.labelDimensions?.w ?? 812,
-      ll: parsed.data.labelDimensions?.h ?? 594,
-    },
-    true,
+  const sizesRow = await pool.query<{ size: string | null }>(
+    `SELECT DISTINCT size FROM custom_skus
+       WHERE matrix_id = $1::uuid AND archived = false AND size IS NOT NULL
+       ORDER BY size`,
+    [item.matrix_id],
   );
+  const sizesAvailable = sizesRow.rows
+    .map((r) => (r.size ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
+
+  const cp = envCompanyPrefix();
+  const lsId = Number(item.sku_ls_system_id ?? "0");
+  const serial = Number(item.serial_number ?? "0");
+
+  const zpl = generateCarbonTagZpl({
+    input: {
+      itemName: item.name ?? "",
+      color: item.color_code ?? "",
+      size: item.size ?? "",
+      upc: item.upc ?? "",
+      customSku: item.sku,
+      retailPrice: item.retail_price ?? "0",
+      sizesAvailable,
+    },
+    settings: {
+      ...DEFAULT_CARBON_TAG_SETTINGS,
+      companyPrefix: cp,
+      labelWidthDots:
+        parsed.data.labelDimensions?.w ?? DEFAULT_CARBON_TAG_SETTINGS.labelWidthDots,
+      labelHeightDots:
+        parsed.data.labelDimensions?.h ?? DEFAULT_CARBON_TAG_SETTINGS.labelHeightDots,
+    },
+    epcWrite: { companyPrefix: cp, itemNumber: lsId, serialNumber: serial },
+  });
 
   const outcome = await rfidCommissionPrintAndAudit(pool, session, {
     zpl,

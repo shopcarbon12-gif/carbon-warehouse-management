@@ -2,9 +2,11 @@ import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { generateSGTIN96 } from "@/lib/epc";
 import {
-  buildRfidReftagZplBatch,
-  type RfidReftagZplLabel,
-} from "@/lib/utils/zpl-rfid-reftag";
+  generateCarbonTagZpl,
+  generateCarbonTagBatch,
+  DEFAULT_CARBON_TAG_SETTINGS,
+  type CarbonTagInput,
+} from "@/lib/utils/zpl-carbon-tag";
 
 export const commissionBodySchema = z.object({
   customSkuId: z.string().uuid(),
@@ -87,19 +89,31 @@ export async function rfidCommissionPrepare(
     labelDimensions,
   } = body;
 
-  const pw = labelDimensions?.w ?? 812;
-  const ll = labelDimensions?.h ?? 594;
+  const pw = labelDimensions?.w ?? DEFAULT_CARBON_TAG_SETTINGS.labelWidthDots;
+  const ll = labelDimensions?.h ?? DEFAULT_CARBON_TAG_SETTINGS.labelHeightDots;
 
+  // 1.2.49 — pull the extra columns the carbon-gen layout needs:
+  // color_code, size, retail_price. Also collect every size in the
+  // matrix so the right-hand "sizes available" column on the label
+  // shows the full size run, not just this SKU's size.
   const cs = await client.query<{
     id: string;
     ls_system_id: string;
     sku: string;
     upc: string;
     description: string;
+    color_code: string | null;
+    size: string | null;
+    retail_price: string | null;
+    matrix_id: string;
   }>(
     `SELECT cs.id, cs.ls_system_id::text, cs.sku,
             COALESCE(NULLIF(trim(cs.upc), ''), m.upc) AS upc,
-            m.description
+            m.description,
+            cs.color_code,
+            cs.size,
+            cs.retail_price::text AS retail_price,
+            cs.matrix_id::text AS matrix_id
      FROM custom_skus cs
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE cs.id = $1::uuid
@@ -135,10 +149,40 @@ export async function rfidCommissionPrepare(
     throw new Error("SERVER:Invalid ls_system_id on SKU");
   }
 
+  // Collect the full set of sizes in this matrix for the
+  // "sizes available" column. normalizeSizesColumn will dedupe and
+  // format. Empty array → carbon-gen default "XS, S, M, L".
+  const sizesRow = await client.query<{ size: string | null }>(
+    `SELECT DISTINCT size FROM custom_skus
+       WHERE matrix_id = $1::uuid AND archived = false AND size IS NOT NULL
+       ORDER BY size`,
+    [row.matrix_id],
+  );
+  const sizesAvailable = sizesRow.rows
+    .map((r) => (r.size ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
+
+  const tagSettings = {
+    ...DEFAULT_CARBON_TAG_SETTINGS,
+    companyPrefix: cp,
+    labelWidthDots: pw,
+    labelHeightDots: ll,
+  };
+
   const statusFinal = addToInventory ? "in-stock" : "pending_visibility";
   const inserted: { epc: string; serial_number: number }[] = [];
-  const zplRows: RfidReftagZplLabel[] = [];
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const zplLabels: string[] = [];
+
+  const tagInput: CarbonTagInput = {
+    itemName: row.description ?? "",
+    color: row.color_code ?? "",
+    size: row.size ?? "",
+    upc: row.upc ?? "",
+    customSku: row.sku,
+    retailPrice: row.retail_price ?? "0",
+    sizesAvailable,
+  };
 
   for (let i = 0; i < qty; i += 1) {
     const serial = nextSerial + i;
@@ -149,19 +193,16 @@ export async function rfidCommissionPrepare(
       [epc, serial, row.id, session.lid, binId ?? null, statusFinal],
     );
     inserted.push({ epc, serial_number: serial });
-    zplRows.push({
-      epc,
-      sku: row.sku,
-      description: row.description,
-      systemId: row.ls_system_id,
-      upc: row.upc,
-      dateStr,
-      pw,
-      ll,
-    });
+    zplLabels.push(
+      generateCarbonTagZpl({
+        input: tagInput,
+        settings: tagSettings,
+        epcWrite: { companyPrefix: cp, itemNumber: lsId, serialNumber: serial },
+      }),
+    );
   }
 
-  const zpl = buildRfidReftagZplBatch(zplRows);
+  const zpl = generateCarbonTagBatch(zplLabels);
 
   const meta: Record<string, unknown> = {
     custom_sku_id: row.id,

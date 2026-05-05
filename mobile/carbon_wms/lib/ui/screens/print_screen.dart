@@ -304,6 +304,16 @@ class _PrintScreenState extends State<PrintScreen> {
           }
           final zpl = res['zpl']?.toString() ?? '';
           final host = res['printer_host']?.toString() ?? '';
+          // Server returns the printer port + uri it would use for its
+          // own (cloud-side) print attempt. We mirror those exactly so
+          // the handheld targets the same endpoint a desktop browser
+          // would. Default 80/PSTPRNT matches Zebra ZD500R stock setup.
+          // 1.2.47 hardcoded port 9100 raw TCP, which a lot of printers
+          // either disable or reach via a different code path — prints
+          // appeared successful at the socket layer but nothing came
+          // out of the printer. 1.2.48 lets the server's wiring drive.
+          final port = (res['printer_port'] as num?)?.toInt() ?? 80;
+          final uri = res['printer_uri']?.toString() ?? 'PSTPRNT';
           if (zpl.isEmpty || host.isEmpty) {
             failures.add(
                 '$skuLabel: ${res['printer_error']?.toString() ?? 'no zpl'}');
@@ -311,7 +321,8 @@ class _PrintScreenState extends State<PrintScreen> {
           }
           final tcpErr = await LanZplPrinter.send(
             host: host,
-            port: 9100,
+            port: port,
+            uri: uri,
             zpl: zpl,
           );
           if (tcpErr == null) {
