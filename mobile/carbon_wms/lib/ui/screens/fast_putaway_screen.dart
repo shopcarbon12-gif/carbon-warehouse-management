@@ -1382,7 +1382,13 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     final assignYes = await _askAssignDialog(itemName: itemName);
     if (!mounted) return;
     if (assignYes != true) {
-      _triggerEndOfSession();
+      // NO / dismiss path — pre-1.2.43 this called _triggerEndOfSession
+      // which plays the success cue + green flash bar (the operator
+      // reported "huh?! it gave me a yellow bar and made a success
+      // sound when I said NO"). NO means "don't assign right now"; we
+      // stay mid-session, drop focus back to the scanner, and wait for
+      // the next product scan. No sound, no flash.
+      _enterMidSessionForNewItem();
       return;
     }
     final binCodeAtAssign = _currentBin;

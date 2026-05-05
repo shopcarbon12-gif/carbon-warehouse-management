@@ -35,7 +35,22 @@ export async function assignItemsToBinBySkuScan(
   const binId = bin.rows[0]?.id;
   if (!binId) return { updated: 0 };
 
-  const homelessGuard = mode === "homeless_only" ? "AND bin_id IS NULL" : "";
+  // homeless_only really means "not currently sitting in a LIVE bin." An
+  // item whose bin row was archived/deleted is functionally homeless to
+  // the operator — the bin doesn't exist anymore in the warehouse — so
+  // the assign should pick it up. Pre-1.2.43 we filtered on
+  // `bin_id IS NULL` only, which left items pointing at archived bins
+  // stranded: the operator scanned them, the assign returned 0, and the
+  // dashboard "0 items assigned" snackbar showed up with no clue why.
+  const homelessGuard =
+    mode === "homeless_only"
+      ? `AND (
+           bin_id IS NULL
+           OR bin_id IN (
+             SELECT id FROM bins WHERE archived_at IS NOT NULL
+           )
+         )`
+      : "";
 
   if (scope === "single_color_all_sizes") {
     // Place items whose custom SKU starts with the scanned prefix
@@ -152,11 +167,19 @@ export async function previewPutawayAssign(
     const qty = Number(g.qty);
     total += qty;
     if (g.bin_id === null) {
-      homeless = qty;
+      homeless += qty;
     } else if (targetBinId && g.bin_id === targetBinId) {
       inThisBin = qty;
     } else if (g.bin_code) {
       inOtherBins.push({ binCode: g.bin_code, qty });
+    } else {
+      // Items point at a non-null bin_id but the LEFT JOIN didn't return
+      // a code — the bin row is archived (or rare data drift). To the
+      // operator that bin doesn't exist anymore, so treat the items as
+      // homeless. Pre-1.2.43 these silently fell out of every bucket and
+      // a `homeless_only` assign matched nothing → "0 items assigned"
+      // bug the operator just hit.
+      homeless += qty;
     }
   }
   inOtherBins.sort((a, b) => b.qty - a.qty);
