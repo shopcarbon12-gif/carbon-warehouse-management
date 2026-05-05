@@ -5,7 +5,14 @@ import type { ReadEvent } from "./monsoon-runner.js";
 
 const FLUSH_INTERVAL_MS = 250;
 const MAX_BATCH = 200;
-const MAX_QUEUE_PER_READER = 5000;
+/**
+ * Per-reader queue cap before we drop oldest reads. Sized to absorb a
+ * burst of ~30 s at the busiest single-reader rate we've measured live
+ * (~600 reads/sec on a saturated antenna). Combined with parallel
+ * per-reader flushing below, overflow now requires a sustained WMS
+ * outage, not just a transient spike on one reader.
+ */
+const MAX_QUEUE_PER_READER = 20_000;
 
 type Pending = {
   epcHex: string;
@@ -69,33 +76,51 @@ export class ReadAggregator {
     return { ...this.stats };
   }
 
+  /**
+   * Tick handler — drains every per-reader queue concurrently. The previous
+   * design ran the per-reader loops serially, so a saturated reader could
+   * starve the others while its 5,000-deep queue drained one HTTP round-trip
+   * at a time. With Promise.all each reader's flush awaits its own POST
+   * stack, none of which blocks the others. New readers added at runtime
+   * (via reconcile in the supervisor → enqueue) automatically participate
+   * because we iterate the live `queues` Map every tick — no per-reader
+   * registration step required.
+   */
   private async flush(): Promise<void> {
     if (this.flushing) return;
     this.flushing = true;
     try {
-      for (const [readerId, q] of this.queues) {
-        while (q.length > 0) {
-          const slice = q.slice(0, MAX_BATCH);
-          try {
-            const { inserted } = await postReads(this.env, {
-              readerId,
-              reads: slice,
-            });
-            this.stats.posted += inserted ?? slice.length;
-            q.splice(0, slice.length);
-          } catch (e) {
-            this.stats.failedFlushes++;
-            log.warn("flush failed; will retry", {
-              reader_id: readerId,
-              queued: q.length,
-              err: e instanceof Error ? e.message : String(e),
-            });
-            break; // stop trying this reader for this tick
-          }
-        }
-      }
+      const readerIds = [...this.queues.keys()];
+      await Promise.all(readerIds.map((id) => this.flushReader(id)));
     } finally {
       this.flushing = false;
+    }
+  }
+
+  /** Drain ONE reader's queue. Stops on first POST failure for that reader
+   *  (its remaining items stay queued for the next tick). Errors here don't
+   *  affect other readers' parallel flushes. */
+  private async flushReader(readerId: string): Promise<void> {
+    const q = this.queues.get(readerId);
+    if (!q) return;
+    while (q.length > 0) {
+      const slice = q.slice(0, MAX_BATCH);
+      try {
+        const { inserted } = await postReads(this.env, {
+          readerId,
+          reads: slice,
+        });
+        this.stats.posted += inserted ?? slice.length;
+        q.splice(0, slice.length);
+      } catch (e) {
+        this.stats.failedFlushes++;
+        log.warn("flush failed; will retry", {
+          reader_id: readerId,
+          queued: q.length,
+          err: e instanceof Error ? e.message : String(e),
+        });
+        return; // stop trying this reader for this tick
+      }
     }
   }
 }
