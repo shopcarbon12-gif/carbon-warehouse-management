@@ -1124,14 +1124,102 @@ export class MonsoonSupervisor {
     }
   }
 
+  /**
+   * Stop the binary AND ensure the SA-2000's R2000 chip stops transmitting.
+   *
+   * Critical detail: when MonsoonReader / new_monsoonreader is mid-cycle
+   * and we SIGTERM it, the binary needs time to issue
+   * `RFID_RadioAbortOperation` to the chip before it exits — otherwise
+   * the radio keeps running its `--infinite` cycle independently and the
+   * chassis stays hot, even though no agent is connected. The 3 s grace
+   * we used to give was not always enough; live evidence 2026-05-04 showed
+   * all three readers' radios still cycling after a pause-all click. We
+   * caught it because an operator touched a chassis and reported it hot.
+   *
+   * Mitigation: extend the grace to 10 s. The console binary's abort
+   * sequence ("Cancelling read... Cancel confirmed") finishes within
+   * 1-2 s in practice; 10 s is safe headroom even if a cycle was just
+   * starting when SIGTERM arrived. Worst case (binary genuinely hung):
+   * SIGKILL still fires at 10 s, same as before.
+   *
+   * The streamSocket close is intentionally first — it forces the binary
+   * out of any blocking write-to-stream syscall so its main loop can
+   * notice the SIGTERM and run cleanup.
+   */
   private stopSlot(slot: ReaderSlot): void {
     slot.shuttingDown = true;
     slot.streamSocket?.destroy();
     slot.streamSocket = null;
     if (slot.child) {
       slot.child.kill("SIGTERM");
-      // hard-kill if it doesn't exit promptly
-      setTimeout(() => slot.child?.kill("SIGKILL"), 3_000);
+      setTimeout(() => slot.child?.kill("SIGKILL"), 10_000);
+      // Belt-and-braces: after the child exits, spawn a brief abort cycle
+      // to GUARANTEE the radio is stopped. The legacy stream binary's
+      // startup sequence ALWAYS issues RFID_RadioAbortOperation before
+      // any other radio command — so spawning + immediately stopping it
+      // is a deterministic way to push a stop into the R2000 chip even
+      // if the prior child was SIGKILL'd mid-cycle. Without this, an
+      // operator click on Pause leaves the chassis transmitting RF
+      // ("infinite cycle" command in the chip's queue) and physically
+      // hot, which is exactly the bug 2026-05-04 caught with .79.
+      setTimeout(() => this.ensureRadioStopped(slot.spec), 11_000);
+    }
+  }
+
+  /**
+   * Spawn the legacy MonsoonReader briefly against the given reader, give
+   * it 4 s for its startup abort sequence to land, then kill cleanly.
+   * The binary's first action on connect is RFID_RadioAbortOperation —
+   * which is exactly what we want. Tolerant of failure (segfault on the
+   * binary itself, network unreach, etc.) — radio stays at whatever
+   * state it was in before, which is the same as before this call.
+   */
+  private ensureRadioStopped(spec: AgentConfigReader): void {
+    const host = String(spec.network_address ?? "");
+    if (!host) return;
+    const port = Number(spec.monsoon_serial_port ?? 10002);
+    const args = [
+      "--num", "1",
+      "--stream", "39999",   // ephemeral, never connected
+      "--control", "29999",
+      "--read_time_ms", "1000",
+      "--power", "100",       // low — we don't actually want a long cycle
+      "--serial_host", host,
+      "--serial_port", String(port),
+      "--fastid",
+      "--infinite",
+    ];
+    let child: ChildProcess | null = null;
+    try {
+      child = spawn(this.binaries.stream, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        cwd: "/opt/legacy-rfid/runtime",
+      });
+      child.stdout?.resume();
+      child.stderr?.resume();
+      child.on("error", (e) => {
+        log.debug("ensureRadioStopped: spawn error (radio may already be off)", {
+          host,
+          err: e.message,
+        });
+      });
+      // 4 s gives the binary time to connect + issue the startup abort.
+      // After that we SIGTERM cleanly so it sends another abort on shutdown.
+      setTimeout(() => {
+        try { child?.kill("SIGTERM"); } catch { /* */ }
+        setTimeout(() => {
+          try { child?.kill("SIGKILL"); } catch { /* */ }
+        }, 3_000);
+      }, 4_000);
+      log.info("ensureRadioStopped: forced radio abort sent", {
+        readerId: spec.id,
+        host,
+      });
+    } catch (e) {
+      log.warn("ensureRadioStopped: failed to spawn abort binary", {
+        host,
+        err: e instanceof Error ? e.message : String(e),
+      });
     }
   }
 }

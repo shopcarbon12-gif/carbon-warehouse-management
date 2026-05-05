@@ -7,9 +7,9 @@ import {
   Clock,
   Cpu,
   KeyRound,
-  Pause,
   Pencil,
   Play,
+  Square,
   Plus,
   Radio,
   RefreshCw,
@@ -102,10 +102,10 @@ export function HardwareConfigWorkspace() {
         { method: "POST" },
       );
       const j = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Pause failed");
+      if (!res.ok) throw new Error(j.error ?? "Stop failed");
       await reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Pause failed");
+      window.alert(e instanceof Error ? e.message : "Stop failed");
     }
   };
   const resumeReader = async (id: string) => {
@@ -115,33 +115,42 @@ export function HardwareConfigWorkspace() {
         { method: "POST" },
       );
       const j = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Resume failed");
+      if (!res.ok) throw new Error(j.error ?? "Start failed");
       await reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Resume failed");
+      window.alert(e instanceof Error ? e.message : "Start failed");
     }
   };
   const pauseAllReaders = async () => {
-    if (!window.confirm("Pause every reader at this tenant? They'll stop scanning within ~60 s.")) return;
+    if (
+      !window.confirm(
+        "Stop every reader at this tenant?\n\n" +
+          "The agent will SIGTERM each reader's binary, give it 10 s to issue " +
+          "RFID_RadioAbortOperation to the chip, then run a belt-and-braces " +
+          "abort cycle to GUARANTEE the radio is off — not just disconnected. " +
+          "Use this when readers feel hot or when you actually need them off.",
+      )
+    )
+      return;
     try {
       const res = await fetch(`/api/hardware-config/readers/pause-all`, { method: "POST" });
       const j = (await res.json()) as { error?: string; paused?: number };
-      if (!res.ok) throw new Error(j.error ?? "Pause all failed");
+      if (!res.ok) throw new Error(j.error ?? "Stop all failed");
       await reload();
-      window.alert(`Paused ${j.paused ?? 0} reader(s).`);
+      window.alert(`Stopped ${j.paused ?? 0} reader(s).`);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Pause all failed");
+      window.alert(e instanceof Error ? e.message : "Stop all failed");
     }
   };
   const resumeAllReaders = async () => {
     try {
       const res = await fetch(`/api/hardware-config/readers/resume-all`, { method: "POST" });
       const j = (await res.json()) as { error?: string; resumed?: number };
-      if (!res.ok) throw new Error(j.error ?? "Resume all failed");
+      if (!res.ok) throw new Error(j.error ?? "Start all failed");
       await reload();
-      window.alert(`Resumed ${j.resumed ?? 0} reader(s).`);
+      window.alert(`Started ${j.resumed ?? 0} reader(s).`);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Resume all failed");
+      window.alert(e instanceof Error ? e.message : "Start all failed");
     }
   };
   const hardResetAll = async () => {
@@ -491,18 +500,18 @@ function HardwareTreeSection(props: TreeProps) {
         <button
           type="button"
           onClick={onPauseAllReaders}
-          title="Pause every reader at this tenant"
+          title="Stop every reader at this tenant — radios go cold, not just agent-disconnected"
           className="inline-flex items-center gap-0.5 rounded border border-amber-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-amber-300 hover:bg-amber-400/15"
         >
-          <Pause className="h-2.5 w-2.5" /> Pause all
+          <Square className="h-2.5 w-2.5" /> Stop all
         </button>
         <button
           type="button"
           onClick={onResumeAllReaders}
-          title="Resume every paused reader at this tenant"
+          title="Start every stopped reader at this tenant"
           className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15"
         >
-          <Play className="h-2.5 w-2.5" /> Resume all
+          <Play className="h-2.5 w-2.5" /> Start all
         </button>
         <button
           type="button"
@@ -675,7 +684,7 @@ function ReaderCard({
         <StatusPill status={reader.status_online ? "online" : "offline"} />
         {isManualPaused ? (
           <span className="rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300">
-            paused
+            stopped
           </span>
         ) : null}
         {hasSchedule ? (
@@ -692,19 +701,19 @@ function ReaderCard({
             <button
               type="button"
               onClick={() => onResumeReader(reader.id)}
-              title="Resume scanning"
+              title="Start scanning"
               className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15"
             >
-              <Play className="h-2.5 w-2.5" /> Resume
+              <Play className="h-2.5 w-2.5" /> Start
             </button>
           ) : (
             <button
               type="button"
               onClick={() => onPauseReader(reader.id)}
-              title="Pause scanning on this reader"
+              title="Stop this reader — radio goes cold, agent issues forced abort"
               className="inline-flex items-center gap-0.5 rounded border border-amber-400/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300 hover:bg-amber-400/15"
             >
-              <Pause className="h-2.5 w-2.5" /> Pause
+              <Square className="h-2.5 w-2.5" /> Stop
             </button>
           )}
           <button
