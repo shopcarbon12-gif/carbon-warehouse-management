@@ -244,8 +244,10 @@ function normalizeSizesColumn(value: string): string {
     seen.add(token);
     unique.push(token);
   }
-  if (unique.length === 0) return "XS, S, M, L";
-  return unique.join(", ");
+  // Operator preference (May 2026): no commas in the size-run strip —
+  // just space-separated tokens for cleaner visual scanning.
+  if (unique.length === 0) return "XS S M L";
+  return unique.join(" ");
 }
 
 /**
@@ -271,8 +273,26 @@ export function generateCarbonTagZpl(opts: {
   const safePrice = formatDisplayPrice(input.retailPrice);
   const safeSizes = normalizeSizesColumn(input.sizesAvailable ?? "");
   const [line1, line2] = splitVerticalColumns(input.itemName, safeColorResolved, safeSize);
-  const barcodeY = safeSku.length === 13 ? 95 : 125;
   const epcLength = epcBitTotal(settings);
+  // 1.2.50 — landscape Carbon hang-tag matching the warehouse stock and
+  // operator-approved physical reference (Dropbox 20260505_065405.jpg).
+  // Key changes vs the carbon-gen-port (1.2.49):
+  //   • Bold for UPC + retail price via E:ARI000.TTF (mapped as font B).
+  //     Confirmed bold by side-by-side print test on the warehouse Zebra.
+  //   • Removed the divider line between description line 1 and line 2
+  //     (carbon-gen had ^FO325,80^GB0,425,3 — the operator wanted both
+  //     description lines in the same merged cell).
+  //   • Vertical Code 128 ^BCB at FO 455,79 in the gap column. ^BY3
+  //     module width, height 112. Numeric-only barcode payload (strip
+  //     trailing letter from SKU) so Code 128 picks subset C and renders
+  //     dense bars that scan clean.
+  //   • Code 128 SUBSET B explicit prefix `>:` removed — for the
+  //     numeric-only stripped SKU, auto subset C is the right choice.
+  // The static `TALLA/SIZE` label is hardcoded.
+  // For the barcode-only encoded data we strip a trailing single letter
+  // from the SKU (e.g. "122220711L" → "1222207111"). The full SKU stays
+  // in the human-readable text line.
+  const barcodeData = safeSku.replace(/[A-Z]$/, "1");
 
   return `^XA
 ^CI28
@@ -286,31 +306,26 @@ export function generateCarbonTagZpl(opts: {
 ^LS${settings.labelShiftX}
 ^LT${settings.labelShiftY}
 ^CWK,E:ARIAL.TTF
-
+^CWB,E:ARI000.TTF
 ^FO34,79^GB410,427,2^FS
 ^FO83,77^GB0,423,3^FS
 ^FO207,80^GB0,425,3^FS
 ^FO266,80^GB0,425,3^FS
-^FO325,80^GB0,425,3^FS
 ^FO387,80^GB0,425,3^FS
 ^FO612,79^GB107,426,3^FS
 ^FO783,57^GB0,477,3^FS
-
 ^FT73,490^AKB,38,^FDTALLA/SIZE^FS
 ^FT194,522^AKB,134^FB515,1,0,C^FD${safeSize}^FS
-^FT253,590^AKB,36^FB600,1,0,C^FD${safeUpc}^FS
-^FT313,552^AKB,36^FB550,1,0,C^FD${line1}^FS
-^FT373,552^AKB,36^FB550,1,0,C^FD${line2}^FS
+^FT253,590^ABB,36^FB600,1,0,C^FD${safeUpc}^FS
+^FT313,552^AKB,34^FB550,1,0,C^FD${line1}^FS
+^FT373,552^AKB,34^FB550,1,0,C^FD${line2}^FS
 ^FT432,552^AKB,36^FB550,1,0,C^FD${safeColorResolved}^FS
-
-^FO455,${barcodeY}^BY2,2^BCB,110,N,N,N^FD${safeSku}^FS
+^FO455,79^BY3,2^BCB,112,N,N,N^FD${barcodeData}^FS
 ^FT600,552^AKB,32^FB550,1,0,C^FD${safeSku}^FS
-^FT687,552^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
-^FT765,552^AKB,38^FB550,1,0,C^FD${safeSizes}^FS
-
+^FT687,552^ABB,60^FB550,1,0,C^FD$${safePrice}^FS
+^FT765,594^AKB,34^FB594,1,0,C^FD${safeSizes}^FS
 ^RB${epcLength},${settings.companyPrefixBits},${settings.itemNumberBits},${settings.serialBits}^FS
 ^RFW,E^FD${epcWrite.companyPrefix},${epcWrite.itemNumber},${epcWrite.serialNumber}^FS
-
 ^PQ1,0,1,Y
 ^XZ`;
 }
