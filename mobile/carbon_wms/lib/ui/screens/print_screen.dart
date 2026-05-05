@@ -246,7 +246,12 @@ class _PrintScreenState extends State<PrintScreen> {
         addToInventory: _addToInventory,
       );
       if (!mounted) return;
-      final inserted = (res['inserted'] as num?)?.toInt();
+      // Server-side commission returns `inserted` as a list of
+      // `{epc, serial_number}`, NOT a number — the previous `as num?`
+      // cast threw "type 'List<dynamic>' is not a subtype of type 'num'
+      // in type cast" mid-print. Read the length instead.
+      final insertedRaw = res['inserted'];
+      final inserted = insertedRaw is List ? insertedRaw.length : null;
       final printerOk = res['printer_ok'] == true;
       if (printerOk) {
         ScanSounds.instance.play(ScanCue.success);
@@ -400,6 +405,17 @@ class _PrintScreenState extends State<PrintScreen> {
                 ),
               ),
 
+            // ── add-to-inventory checkbox ────────────────────────────
+            // Sits above the qty stepper per operator preference: the
+            // policy ("are these tags going live in inventory?") is the
+            // bigger commitment, so it's the first decision the operator
+            // makes; qty is the trivial number underneath.
+            _CheckboxRow(
+              label: 'Add tag to inventory?',
+              checked: _addToInventory,
+              onChanged: (v) => setState(() => _addToInventory = v),
+            ),
+
             // ── qty stepper ──────────────────────────────────────────
             _QtyStepper(
               qty: _qty,
@@ -412,13 +428,6 @@ class _PrintScreenState extends State<PrintScreen> {
               onPlus: () => _setQty(_qty + 1),
               onTapNumber: _beginQtyEdit,
               onSubmit: _commitQtyEdit,
-            ),
-
-            // ── add-to-inventory checkbox ────────────────────────────
-            _CheckboxRow(
-              label: 'Add tag to inventory?',
-              checked: _addToInventory,
-              onChanged: (v) => setState(() => _addToInventory = v),
             ),
 
             // ── bottom action row: camera + print ────────────────────
