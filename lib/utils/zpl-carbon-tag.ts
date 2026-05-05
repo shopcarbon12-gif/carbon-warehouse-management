@@ -323,7 +323,7 @@ export function generateCarbonTagZpl(opts: {
 ^FO455,79^BY3,2^BCB,112,N,N,N^FD${barcodeData}^FS
 ^FT600,552^AKB,32^FB550,1,0,C^FD${safeSku}^FS
 ^FT687,552^ABB,60^FB550,1,0,C^FD$${safePrice}^FS
-^FT765,594^AKB,34^FB594,1,0,C^FD${safeSizes}^FS
+^FT765,552^AKB,34^FB550,1,0,C^FD${safeSizes}^FS
 ^RB${epcLength},${settings.companyPrefixBits},${settings.itemNumberBits},${settings.serialBits}^FS
 ^RFW,E^FD${epcWrite.companyPrefix},${epcWrite.itemNumber},${epcWrite.serialNumber}^FS
 ^PQ1,0,1,Y
