@@ -985,6 +985,143 @@ class WmsApiClient {
     return decoded;
   }
 
+  /// `GET /api/scanner/status-labels` — operator-visible status labels for
+  /// the handheld Status Change screen. Each row carries `applicable`
+  /// indicating whether the requesting user can pick it (super-admin gets
+  /// all rows; managers exclude system-only / super-admin-locked).
+  ///
+  /// Returns `{rows: List, super_admin: bool}`.
+  Future<Map<String, dynamic>> fetchScannerStatusLabels() async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/scanner/status-labels');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{'rows': <dynamic>[], 'super_admin': false};
+  }
+
+  /// Look up an EPC's catalog row + current item state for the active
+  /// location. Used by the Status Change screen when a UHF read should
+  /// jump straight from the scanner over the search step. Returns null
+  /// when the EPC isn't present at this location.
+  Future<Map<String, dynamic>?> lookupCatalogByEpc(String epc) async {
+    final e = epc.trim();
+    if (e.isEmpty) return null;
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/catalog').replace(
+      queryParameters: {
+        'view': 'grid',
+        'page': '1',
+        'limit': '1',
+        'q': e,
+      },
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      final rows = decoded['rows'];
+      if (rows is List && rows.isNotEmpty && rows.first is Map<String, dynamic>) {
+        return rows.first as Map<String, dynamic>;
+      }
+    }
+    return null;
+  }
+
+  /// Switch the active session location for the current user. Server mints
+  /// a new JWT scoped to [locationId]; we save it in prefs so subsequent
+  /// API calls (catalog, count, etc.) reflect the new location.
+  /// Returns true on success, false on rejection (invalid location for
+  /// this tenant or user).
+  Future<bool> switchSessionLocation(String locationId) async {
+    final id = locationId.trim();
+    if (id.isEmpty) return false;
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/session/location');
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+        'X-Carbon-Mobile': '1',
+      },
+      body: jsonEncode({'locationId': id}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) return false;
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map<String, dynamic>) {
+        final token = decoded['token'] as String?;
+        if (token != null && token.isNotEmpty) {
+          await setSessionToken(token);
+        }
+      }
+    } catch (_) {
+      return false;
+    }
+    return true;
+  }
+
+  /// `POST /api/rfid/encode-resolve` — what does WMS know about this EPC?
+  /// Returns `{ok, status: 'known'|'valid_orphan'|'foreign', epc, decoded?,
+  /// item?}`. Used by the handheld Encode screen during the brief read
+  /// half of the trigger pull, so the operator sees the tag's current
+  /// SKU/state before we overwrite it.
+  Future<Map<String, dynamic>> postEncodeResolve(String epc) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/rfid/encode-resolve');
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'epc': epc.trim().toUpperCase()}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  /// `POST /api/rfid/encode-claim` — atomic "next serial + insert items
+  /// row + return the new EPC". Server-side computes `MAX(serial)+1` for
+  /// the SKU/location with a 100,001 floor for fresh SKUs and signs the
+  /// new EPC for the handheld to write to the chip. Optional `oldEpc`
+  /// gets marked `tag_killed` server-side.
+  ///
+  /// Returns `{ok, epc, serial, system_id}` on success.
+  Future<Map<String, dynamic>> postEncodeClaim({
+    required String customSkuId,
+    String? oldEpc,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/rfid/encode-claim');
+    final body = <String, dynamic>{'customSkuId': customSkuId.trim()};
+    if (oldEpc != null && oldEpc.trim().isNotEmpty) {
+      body['oldEpc'] = oldEpc.trim().toUpperCase();
+    }
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> postBulkStatus({
     required List<String> epcs,
     required String targetStatus,

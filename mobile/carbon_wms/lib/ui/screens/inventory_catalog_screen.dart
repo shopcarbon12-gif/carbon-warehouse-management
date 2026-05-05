@@ -703,6 +703,22 @@ class _CatalogEpcListScreenState extends State<CatalogEpcListScreen> {
                                                   targetBin: binCode.isEmpty
                                                       ? null
                                                       : binCode,
+                                                  targetSku: sku.isEmpty
+                                                      ? null
+                                                      : sku,
+                                                  targetName: name.isEmpty
+                                                      ? null
+                                                      : name,
+                                                  targetColor: color.isEmpty
+                                                      ? null
+                                                      : color,
+                                                  targetSize: size.isEmpty
+                                                      ? null
+                                                      : size,
+                                                  targetPriceText:
+                                                      priceText.isEmpty
+                                                          ? null
+                                                          : priceText,
                                                 ),
                                               ),
                                             );

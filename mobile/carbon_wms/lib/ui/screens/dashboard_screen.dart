@@ -14,6 +14,7 @@ import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/barcode_intake_screen.dart';
+import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
@@ -65,6 +66,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // dashboard stats
   int? _inventoryUnits;
   int? _orderOpen;
+  // Hardware Pulse — counts come from /api/dashboard/summary, scoped to the
+  // session's location server-side.
+  int? _hwReaders;
+  int? _hwReadersOnline;
+  int? _hwAntennas;
+  int? _hwAntennasOnline;
+  int? _hwPrinters;
+  int? _hwPrintersOnline;
   bool _statsLoading = false;
 
   // user identity
@@ -72,6 +81,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // locations
   List<Map<String, String>> _locations = [];
+  String? _currentLocationId;
   String _currentLocationName = 'Orlando Warehouse';
 
   @override
@@ -117,7 +127,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) return;
       setState(() {
         _locations = locs;
-        if (locs.isNotEmpty) {
+        if (locs.isNotEmpty && _currentLocationId == null) {
+          // Server sets the active lid at login to the user's first
+          // location (sorted by code). Mirror that here for the initial
+          // header text; once the user picks via Change Location we
+          // track the chosen id explicitly.
+          _currentLocationId = locs.first['id'];
           _currentLocationName =
               locs.first['name'] ?? locs.first['code'] ?? _currentLocationName;
         }
@@ -141,6 +156,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           ..._locations.map((loc) {
             final name = loc['name'] ?? loc['code'] ?? '';
+            final id = loc['id'] ?? '';
             final selected = name == _currentLocationName;
             return ListTile(
               title: Text(name),
@@ -148,8 +164,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ? const Icon(Icons.check, color: AppColors.primary)
                   : null,
               onTap: () {
-                setState(() => _currentLocationName = name);
                 Navigator.pop(ctx);
+                if (!selected && id.isNotEmpty) {
+                  unawaited(_applyLocationSwitch(id: id, name: name));
+                }
               },
             );
           }),
@@ -157,6 +175,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
+  }
+
+  /// Server-side location switch: mints a fresh JWT scoped to [id], saves
+  /// it via setSessionToken, and re-fetches dashboard stats so the new
+  /// scope is reflected immediately. All other screens (catalog, count,
+  /// status change…) call the API with the saved token, so the switch
+  /// propagates to them automatically as soon as they refetch.
+  Future<void> _applyLocationSwitch({
+    required String id,
+    required String name,
+  }) async {
+    if (!mounted) return;
+    final api = context.read<WmsApiClient>();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(SnackBar(
+      content: Text('Switching to $name…'),
+      duration: const Duration(seconds: 1),
+    ));
+    try {
+      final ok = await api.switchSessionLocation(id);
+      if (!mounted) return;
+      if (!ok) {
+        messenger.showSnackBar(const SnackBar(
+          content: Text('Location switch refused — check permissions.'),
+        ));
+        return;
+      }
+      setState(() {
+        _currentLocationId = id;
+        _currentLocationName = name;
+        // Clear stats so the UI shows "…" while the new scope loads.
+        _inventoryUnits = null;
+        _orderOpen = null;
+        _hwReaders = null;
+        _hwReadersOnline = null;
+        _hwAntennas = null;
+        _hwAntennasOnline = null;
+        _hwPrinters = null;
+        _hwPrintersOnline = null;
+      });
+      await _refreshDashboardStats();
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text('Active location: $name'),
+        duration: const Duration(seconds: 2),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Switch failed: $e')));
+    }
   }
 
   Future<void> _loadUserEmail() async {
@@ -177,6 +245,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _inventoryUnits = (stats['inventory_units'] as num?)?.toInt();
         _orderOpen = (stats['order_open'] as num?)?.toInt();
+        _hwReaders = (stats['hw_readers'] as num?)?.toInt();
+        _hwReadersOnline = (stats['hw_readers_online'] as num?)?.toInt();
+        _hwAntennas = (stats['hw_antennas'] as num?)?.toInt();
+        _hwAntennasOnline = (stats['hw_antennas_online'] as num?)?.toInt();
+        _hwPrinters = (stats['hw_printers'] as num?)?.toInt();
+        _hwPrintersOnline = (stats['hw_printers_online'] as num?)?.toInt();
         _statsLoading = false;
       });
     } catch (_) {
@@ -322,6 +396,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildDrawer(BuildContext context) {
     return CarbonAppDrawer(
       userEmail: _userEmail,
+      currentLocationName: _currentLocationName,
+      canChangeLocation: _locations.length > 1,
+      onChangeLocation: () {
+        Navigator.pop(context);
+        _pickLocation();
+      },
       onSettings: () {
         Navigator.pop(context);
         _push(const HandheldSettingsScreen());
@@ -458,9 +538,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Consumer2<RfidManager, MobileSettingsRepository>(
       builder: (context, rfid, settings, _) {
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        final readerConnected = rfid.activeScanner != null;
-        final hardwareLinked = rfid.isHardwareLinked;
-
         final mutedColor =
             isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
         final mainColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
@@ -471,23 +548,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         return CustomScrollView(
           slivers: [
-            // ── B. Stat cards ──────────────────────────────────────────
+            // ── A. Location header — sits above the stat cards. No
+            //      "LOCATIONS" label and no inline switcher: the switcher
+            //      moved into the side drawer's "Change Location" item.
             SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 0.h),
+                padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 0),
+                child: Text(
+                  _currentLocationName,
+                  style: GoogleFonts.manrope(
+                    fontSize: 22.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -1.0,
+                    color: mainColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+
+            // ── B. Stat cards ──────────────────────────────────────────
+            //   "Live Scan" was removed — it was a hardware-link mirror,
+            //   not an actionable KPI. Inventory + Receiving remain and
+            //   are wired to /api/dashboard/summary, which scopes by the
+            //   current session location server-side.
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0.h),
                 child: Row(
                   children: [
-                    _StatCard(
-                      label: 'LIVE SCAN',
-                      value: hardwareLinked ? '0' : 'N/A',
-                      dot: true,
-                      dotColor:
-                          hardwareLinked ? Colors.green : AppColors.textMuted,
-                      cardColor: cardColor,
-                      mainColor: mainColor,
-                      mutedColor: mutedColor,
-                    ),
-                    SizedBox(width: 8.w),
                     _StatCard(
                       label: 'INVENTORY',
                       value: _statsLoading
@@ -509,59 +598,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       cardColor: cardColor,
                       mainColor: mainColor,
                       mutedColor: mutedColor,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // ── C. Locations block ────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0.h),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        if (_locations.length > 1) SizedBox(width: 30.w),
-                        Text(
-                          'LOCATIONS',
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 12.sp,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 2.0,
-                            color: mutedColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 2.h),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (_locations.length > 1)
-                          GestureDetector(
-                            onTap: _pickLocation,
-                            child: Padding(
-                              padding: EdgeInsets.only(right: 8.w),
-                              child:
-                                  Icon(Icons.menu, size: 22.sp, color: mutedColor),
-                            ),
-                          ),
-                        Expanded(
-                          child: Text(
-                            _currentLocationName,
-                            style: GoogleFonts.manrope(
-                              fontSize: 22.sp,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -1.0,
-                              color: mainColor,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -622,7 +658,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
 
-            // ── E. Hardware Pulse ─────────────────────────────────────
+            // ── E. Hardware Pulse — 1×3 row, location-scoped counts.
+            //   Each card shows total/online (e.g. "3/2") so the operator
+            //   sees both fleet size and current health at a glance.
+            //   "Handhelds" was dropped since handhelds are inherently
+            //   per-device and not part of the fixed-hardware fleet.
             SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(20.w, 28.h, 20.w, 0.h),
@@ -639,68 +679,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     SizedBox(height: 12.h),
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
-                      childAspectRatio: 2.8,
+                    Row(
                       children: [
-                        _PulseCard(
+                        Expanded(
+                          child: _PulseCard(
                             label: 'Readers',
-                            value: readerConnected ? '1' : '0',
-                            active: readerConnected,
+                            value: _hwPulseValue(_hwReaders, _hwReadersOnline),
+                            active: (_hwReadersOnline ?? 0) > 0,
+                            noSource: _hwReaders == null,
                             cardColor: cardColor,
                             mainColor: mainColor,
-                            mutedColor: mutedColor),
-                        _PulseCard(
+                            mutedColor: mutedColor,
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        Expanded(
+                          child: _PulseCard(
                             label: 'Antennas',
-                            value: '—',
-                            active: false,
-                            noSource: true,
+                            value: _hwPulseValue(_hwAntennas, _hwAntennasOnline),
+                            active: (_hwAntennasOnline ?? 0) > 0,
+                            noSource: _hwAntennas == null,
                             cardColor: cardColor,
                             mainColor: mainColor,
-                            mutedColor: mutedColor),
-                        _PulseCard(
+                            mutedColor: mutedColor,
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        Expanded(
+                          child: _PulseCard(
                             label: 'Printers',
-                            value: '—',
-                            active: false,
-                            noSource: true,
+                            value: _hwPulseValue(_hwPrinters, _hwPrintersOnline),
+                            active: (_hwPrintersOnline ?? 0) > 0,
+                            noSource: _hwPrinters == null,
                             cardColor: cardColor,
                             mainColor: mainColor,
-                            mutedColor: mutedColor),
-                        _PulseCard(
-                            label: 'Handhelds',
-                            value: '—',
-                            active: false,
-                            noSource: true,
-                            cardColor: cardColor,
-                            mainColor: mainColor,
-                            mutedColor: mutedColor),
+                            mutedColor: mutedColor,
+                          ),
+                        ),
                       ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // ── F. Operator + Throughput ──────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 0.h),
-                child: Row(
-                  children: [
-                    const Expanded(
-                        child: _InfoCard(label: 'Operator', value: '—')),
-                    SizedBox(width: 12.w),
-                    Expanded(
-                      child: _InfoCard(
-                        label: 'Throughput',
-                        value: '—',
-                        trailing: Icon(Icons.trending_up,
-                            color: mutedColor, size: 18.sp),
-                      ),
                     ),
                   ],
                 ),
@@ -729,10 +745,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   childAspectRatio: 1.1,
                 ),
                 delegate: SliverChildListDelegate([
+                  // Encode replaces the old "Putaway" small tile (which was a
+                  // duplicate of the Bin Assign hero tile above). The new
+                  // Encode flow is a SKU-first re-encoder for any UHF tag.
                   _SmallTile(
-                      icon: LucideIcons.layers,
-                      label: 'Putaway',
-                      onTap: () => _push(const FastPutawayScreen())),
+                      icon: LucideIcons.tag,
+                      label: 'Encode',
+                      onTap: () => _push(const EncodeScreen())),
                   _SmallTile(
                       icon: LucideIcons.trash2,
                       label: 'Clean Bin',
@@ -796,6 +815,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
     return n.toString();
+  }
+
+  /// Hardware Pulse cell value. Mirrors the web dashboard's command-center
+  /// PulsePill — single number representing currently-online devices at
+  /// the session location. Em-dash while loading; '0' once the server
+  /// answers with no online devices in that category.
+  String _hwPulseValue(int? total, int? online) {
+    if (online == null) {
+      // No online figure yet — fall back to total if we have it.
+      if (total == null) return _statsLoading ? '…' : '—';
+      return total.toString();
+    }
+    return online.toString();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -891,8 +923,6 @@ class _StatCard extends StatelessWidget {
     required this.cardColor,
     required this.mainColor,
     required this.mutedColor,
-    this.dot = false,
-    this.dotColor,
     this.onTap,
   });
 
@@ -901,8 +931,6 @@ class _StatCard extends StatelessWidget {
   final Color cardColor;
   final Color mainColor;
   final Color mutedColor;
-  final bool dot;
-  final Color? dotColor;
   final VoidCallback? onTap;
 
   @override
@@ -917,28 +945,12 @@ class _StatCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  if (dot)
-                    Container(
-                      width: 8.w,
-                      height: 8.h,
-                      margin: EdgeInsets.only(right: 6.w),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: dotColor ?? mutedColor,
-                      ),
-                    ),
-                  Flexible(
-                    child: Text(label,
-                        style: GoogleFonts.spaceGrotesk(
-                            fontSize: 12.sp,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.4,
-                            color: mutedColor)),
-                  ),
-                ],
-              ),
+              Text(label,
+                  style: GoogleFonts.spaceGrotesk(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.4,
+                      color: mutedColor)),
               SizedBox(height: 6.h),
               Text(value,
                   style: GoogleFonts.manrope(
@@ -1082,51 +1094,6 @@ class _PulseCard extends StatelessWidget {
                       color: noSource
                           ? mainColor.withValues(alpha: 0.6)
                           : mainColor)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({required this.label, required this.value, this.trailing});
-
-  final String label;
-  final String value;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1C2828) : _surfaceContainerLow;
-    final mainColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
-    final mutedColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
-    return Container(
-      padding: EdgeInsets.all(14.r),
-      decoration: BoxDecoration(
-          color: cardColor, borderRadius: BorderRadius.circular(2.r)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label.toUpperCase(),
-              style: GoogleFonts.spaceGrotesk(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.5,
-                  color: mutedColor)),
-          SizedBox(height: 6.h),
-          Row(
-            children: [
-              Expanded(
-                child: Text(value,
-                    style: GoogleFonts.manrope(
-                        fontSize: 15.sp,
-                        fontWeight: FontWeight.w700,
-                        color: mainColor.withValues(alpha: 0.6))),
-              ),
-              if (trailing != null) trailing!,
             ],
           ),
         ],

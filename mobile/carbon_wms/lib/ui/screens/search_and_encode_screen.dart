@@ -19,6 +19,7 @@ import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 
 enum _TargetField { customSku, sku, barcode }
 
@@ -78,7 +79,17 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       if (!mounted) return;
       context.read<RfidManager>().scanContext = 'RE_ENCODE';
       final settings = context.read<MobileSettingsRepository>();
-      _powerDbm = settings.config.transferOutAntennaPower;
+      // Re-encode default — operator preference, 1.2.42: enter the screen
+      // at 23 dBm regardless of where the global slider was. Writes need
+      // close range and high power; 23 dBm is the Chainway firmware cap
+      // and a sensible Zebra default for re-encoding. The shared
+      // RfidPowerSlider reads from settings.config.transferOutAntennaPower,
+      // so calling setGlobalAntennaPower(23) here also moves the slider
+      // and live-pushes the new value to the radio in one tick. Operator
+      // can still drag the slider after entry — no save button by design.
+      const reEncodePowerDbm = 23;
+      await settings.setGlobalAntennaPower(reEncodePowerDbm);
+      _powerDbm = reEncodePowerDbm;
       _deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       unawaited(_sounds.init());
       await _resolveWarehouse();
@@ -428,6 +439,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       return;
     }
 
+    final customSkuId = item['id']?.toString() ?? '';
     final systemId = _toInt(item['system_id']);
     final itemName = item['name']?.toString() ?? '';
     _updateCard(card, (c) {
@@ -437,7 +449,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     });
     setState(() => _detectedCount += 1);
 
-    if (systemId == null) {
+    if (systemId == null || customSkuId.isEmpty) {
       _updateCard(card, (c) {
         c.status = EncodeStatus.tagIssue;
         c.failureReason = EncodeFailureReason.badSystemId;
@@ -446,9 +458,21 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       return;
     }
 
-    int serial;
+    // 1.2.42: re-encode now uses the same atomic /api/rfid/encode-claim
+    // endpoint as the new Encode screen. Server allocates the next
+    // serial under MAX(serial)+1 with a 100,001 floor for fresh SKUs,
+    // INSERTs the items row, and kills the old EPC's row in one txn —
+    // so re-encoded tags pick up at the right serial position and never
+    // collide with anything Senitron-issued or commission-issued.
+    //
+    // Drops the legacy nextRfidSerial + client-side buildEpc combo
+    // (per-warehouse counter, no atomic kill, no MAX+1 awareness).
+    Map<String, dynamic> claim;
     try {
-      serial = await api.nextRfidSerial(warehouseId: _warehouseId ?? '');
+      claim = await api.postEncodeClaim(
+        customSkuId: customSkuId,
+        oldEpc: epc,
+      );
     } catch (_) {
       _updateCard(card, (c) {
         c.status = EncodeStatus.tagIssue;
@@ -457,8 +481,16 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       await _openForeignTagPopup(card);
       return;
     }
-
-    final newEpc = buildEpc(systemId, serial);
+    final newEpc = (claim['epc'] as String?)?.toUpperCase() ?? '';
+    final serial = (claim['serial'] as num?)?.toInt() ?? 0;
+    if (newEpc.length != 24 || serial == 0) {
+      _updateCard(card, (c) {
+        c.status = EncodeStatus.tagIssue;
+        c.failureReason = EncodeFailureReason.serialFetchFailed;
+      });
+      await _openForeignTagPopup(card);
+      return;
+    }
     _updateCard(card, (c) {
       c.newEpc = newEpc;
       c.serial = serial;
@@ -803,6 +835,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
                 ),
               ]),
             ),
+            const RfidPowerSlider(),
           ],
         ),
       ),

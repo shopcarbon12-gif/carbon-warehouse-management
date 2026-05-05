@@ -10,27 +10,40 @@ class CarbonAppDrawer extends StatelessWidget {
   const CarbonAppDrawer({
     super.key,
     this.userEmail,
+    this.currentLocationName,
+    this.canChangeLocation = false,
     required this.onSettings,
     required this.onRefresh,
+    this.onChangeLocation,
     this.onLogout,
   });
 
   final String? userEmail;
+  final String? currentLocationName;
+  final bool canChangeLocation;
   final VoidCallback onSettings;
   final VoidCallback onRefresh;
+  final VoidCallback? onChangeLocation;
   final VoidCallback? onLogout;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final rawName = (userEmail?.split('@').first ?? '').replaceAll('.', ' ');
+    // Email's local-part, capitalised on word boundaries — best proxy for a
+    // human name until users.name lands in the schema. Falls back to the
+    // email itself rather than the generic "Operator" placeholder so each
+    // drawer is unambiguously tied to a real account.
+    final email = (userEmail?.trim().isNotEmpty ?? false) ? userEmail!.trim() : '';
+    final rawName = email.isEmpty
+        ? ''
+        : email.split('@').first.replaceAll('.', ' ').replaceAll('_', ' ');
     final displayName = rawName.isEmpty
-        ? 'Operator'
+        ? (email.isEmpty ? '—' : email)
         : rawName
             .split(' ')
             .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
             .join(' ');
-    final email = userEmail ?? '—';
+    final emailLine = email.isEmpty ? '—' : email;
 
     return Drawer(
       backgroundColor: isDark ? const Color(0xFF1C2828) : Colors.white,
@@ -67,7 +80,7 @@ class CarbonAppDrawer extends StatelessWidget {
                 ),
                 SizedBox(height: 6.h),
                 Text(
-                  email,
+                  emailLine,
                   style: GoogleFonts.manrope(
                     fontSize: 14.sp,
                     fontWeight: FontWeight.w500,
@@ -76,10 +89,44 @@ class CarbonAppDrawer extends StatelessWidget {
                   textAlign: TextAlign.center,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (currentLocationName != null &&
+                    currentLocationName!.isNotEmpty) ...[
+                  SizedBox(height: 14.h),
+                  // Location badge — slim teal pill inside the header so the
+                  // operator always sees which warehouse is active without
+                  // opening the drawer item below. The drawer item keeps the
+                  // word "CHANGE" so it's a verb the operator can act on.
+                  Container(
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(2.r),
+                    ),
+                    child: Text(
+                      currentLocationName!.toUpperCase(),
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.6,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
           SizedBox(height: 20.h),
+          if (onChangeLocation != null && canChangeLocation)
+            _DrawerItem(
+              icon: Icons.place_outlined,
+              label: 'Change Location',
+              onTap: onChangeLocation!,
+            ),
+          if (onChangeLocation != null && canChangeLocation) SizedBox(height: 4.h),
           _DrawerItem(
             icon: Icons.settings_outlined,
             label: 'Settings',

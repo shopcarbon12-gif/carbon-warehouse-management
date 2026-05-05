@@ -2091,6 +2091,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               onCleanBin: () => unawaited(_onCleanBin()),
               onDeleteBin: () => unawaited(_onDeleteBin()),
               onUndoClean: _onUndoTap,
+              // Refresh — drops back to the "scan a bin" empty state without
+              // touching DB rows. Same path the screen takes after a successful
+              // assign or a delete-bin.
+              onRefreshSession: _resetForNextEntry,
               onAddBin: _addNewBin,
               onAddBinCamera: () async {
                 final code = await _scanWithCamera('SCAN BIN LOCATION');
@@ -3051,6 +3055,7 @@ class _BottomControlsBlock extends StatelessWidget {
     required this.onCleanBin,
     required this.onDeleteBin,
     required this.onUndoClean,
+    required this.onRefreshSession,
     required this.onAddBin,
     required this.onAddBinCamera,
     required this.onAddItem,
@@ -3074,6 +3079,10 @@ class _BottomControlsBlock extends StatelessWidget {
   final VoidCallback onCleanBin;
   final VoidCallback onDeleteBin;
   final VoidCallback onUndoClean;
+  /// Drops the session back to "scan a bin" — same path used after a
+  /// successful assign. Operator hits this when they want to start over
+  /// without un-doing past actions.
+  final VoidCallback onRefreshSession;
   final VoidCallback onAddBin;
   final VoidCallback onAddBinCamera;
   final VoidCallback onAddItem;
@@ -3123,11 +3132,23 @@ class _BottomControlsBlock extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Undo icon — right tap zone (different behaviour)
+                // Undo icon — reverses the last reversible action.
                 _IconTapZone(
                   onTap: onUndoClean,
                   child: Icon(
                     Icons.undo_rounded,
+                    color: AppColors.textMuted,
+                    size: 22.sp,
+                  ),
+                ),
+                // Refresh icon — kicks the session back to the empty
+                // "scan a bin" state without touching DB rows. Sits to the
+                // right of Undo so the right edge of the row reads
+                // "back-then-restart".
+                _IconTapZone(
+                  onTap: onRefreshSession,
+                  child: Icon(
+                    Icons.refresh_rounded,
                     color: AppColors.textMuted,
                     size: 22.sp,
                   ),

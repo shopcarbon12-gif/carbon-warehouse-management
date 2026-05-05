@@ -15,6 +15,12 @@ export async function GET(req: Request) {
       order_open: 0,
       exceptions_open: 0,
       sync_pending: 0,
+      hw_readers: 0,
+      hw_readers_online: 0,
+      hw_antennas: 0,
+      hw_antennas_online: 0,
+      hw_printers: 0,
+      hw_printers_online: 0,
     },
   );
   return NextResponse.json(kpis);

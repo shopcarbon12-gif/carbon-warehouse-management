@@ -5,10 +5,13 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/count_reports_screen.dart';
+import 'package:carbon_wms/ui/screens/damages_reports_screen.dart';
+import 'package:carbon_wms/ui/screens/status_reports_screen.dart';
+import 'package:carbon_wms/ui/screens/transfer_reports_hub_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
-/// Inventory → Reports hub. Single tile for now ("Count Reports") with room
-/// for additional report families later (audits, recounts, adjustments).
+/// Inventory → Reports hub. Three families today (Counts / Transfers /
+/// Status) with room for more later (audits, recounts, adjustments).
 /// Mirrors the visual rhythm of [InventoryHubScreen] so the operator's eye
 /// tracks consistently between hubs.
 class ReportsHubScreen extends StatelessWidget {
@@ -35,7 +38,7 @@ class ReportsHubScreen extends StatelessWidget {
             childAspectRatio: 1.1,
             children: [
               _ReportTile(
-                label: 'COUNT REPORTS',
+                label: 'COUNTS',
                 icon: LucideIcons.layers,
                 tileColor: tileColor,
                 iconColor: iconColor,
@@ -43,6 +46,39 @@ class ReportsHubScreen extends StatelessWidget {
                 onTap: () => Navigator.of(context).push<void>(
                   MaterialPageRoute<void>(
                       builder: (_) => const CountReportsScreen()),
+                ),
+              ),
+              _ReportTile(
+                label: 'TRANSFERS',
+                icon: LucideIcons.arrowLeftRight,
+                tileColor: tileColor,
+                iconColor: iconColor,
+                textColor: textColor,
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                      builder: (_) => const TransferReportsHubScreen()),
+                ),
+              ),
+              _ReportTile(
+                label: 'STATUS',
+                icon: LucideIcons.activity,
+                tileColor: tileColor,
+                iconColor: iconColor,
+                textColor: textColor,
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                      builder: (_) => const StatusReportsScreen()),
+                ),
+              ),
+              _ReportTile(
+                label: 'DAMAGES',
+                icon: LucideIcons.alertTriangle,
+                tileColor: tileColor,
+                iconColor: iconColor,
+                textColor: textColor,
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                      builder: (_) => const DamagesReportsScreen()),
                 ),
               ),
             ],

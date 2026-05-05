@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart'
@@ -42,6 +43,7 @@ class _GeigerSearchScreenState extends State<GeigerSearchScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
   Timer? _debounce;
+  StreamSubscription<String>? _barcodeSub;
 
   String _query = '';
   int _page = 1;
@@ -55,15 +57,42 @@ class _GeigerSearchScreenState extends State<GeigerSearchScreen> {
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
+    // 2D-only mode: pulling/holding the trigger fires the imager, not UHF.
+    // Both Chainway and Zebra paths covered defensively — calls are no-ops
+    // on devices without the matching SDK so we don't need to know which
+    // hardware we're on.
+    unawaited(RfidVendorChannel.disableRfidFunctionMode());
+    unawaited(RfidVendorChannel.open2dBarcode());
+    unawaited(RfidVendorChannel.setZebraTriggerMode2D());
+    // Decoded 2D barcodes flow in here. We populate the search field +
+    // run a search synchronously so the operator sees results immediately
+    // after release. Only accept payloads that aren't 24-hex EPCs — those
+    // belong on Count/Locate, not the Geiger picker.
+    _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((raw) {
+      if (!mounted) return;
+      final code = raw.trim();
+      if (code.isEmpty) return;
+      _searchCtrl.text = code;
+      _searchCtrl.selection =
+          TextSelection.collapsed(offset: _searchCtrl.text.length);
+      _onSearchChanged(code);
+    }, onError: (_) {});
     // Deliberately no _refresh() on init — start blank (per spec).
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    unawaited(_barcodeSub?.cancel());
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
     _searchCtrl.dispose();
+    // Restore RFID-trigger mode for the next screen. The locate screen
+    // also asserts RFID mode on entry — this is belt-and-braces so any
+    // intermediate screen that doesn't manage trigger state isn't left
+    // accidentally in 2D mode.
+    unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
+    unawaited(RfidVendorChannel.enableRfidFunctionMode());
     super.dispose();
   }
 

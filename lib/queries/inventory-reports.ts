@@ -281,6 +281,10 @@ export async function insertCountSessionReport(
     activity: row.activity,
     uploaded_at: row.uploaded_at.toISOString(),
     uploaded_by: row.uploaded_by,
+    // Insert path doesn't JOIN to users — caller can re-fetch via the
+    // list endpoint when they need the email. Returning null here keeps
+    // the type narrow; list path populates it via the second-pass lookup.
+    uploaded_by_email: null,
     device_id: row.device_id,
     override_catalog: row.override_catalog,
     row_count: row.row_count,

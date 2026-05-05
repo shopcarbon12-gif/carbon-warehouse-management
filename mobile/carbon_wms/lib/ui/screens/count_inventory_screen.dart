@@ -1799,10 +1799,28 @@ class _CountEpcListScreen extends StatelessWidget {
                           icon: Icon(Icons.sensors,
                               size: 40.sp, color: AppColors.primary),
                           onPressed: () {
+                            // Pull-through item context so the locate screen's
+                            // top container actually has data (was empty for
+                            // count-driven locates pre-1.2.42).
+                            final binVal = binText.startsWith('BIN ')
+                                ? binText.substring(4).trim()
+                                : binText;
+                            final skuVal = skuLine.startsWith('SKU: ')
+                                ? skuLine.substring(5).trim()
+                                : skuLine;
                             Navigator.of(context).push<void>(
                               MaterialPageRoute<void>(
-                                builder: (_) =>
-                                    LocateTagScreen(targetEpc: epc),
+                                builder: (_) => LocateTagScreen(
+                                  targetEpc: epc,
+                                  targetBin: binVal.isEmpty ? null : binVal,
+                                  targetSku: skuVal.isEmpty ? null : skuVal,
+                                  targetName:
+                                      itemName.isEmpty ? null : itemName,
+                                  targetColor: color.isEmpty ? null : color,
+                                  targetSize: size.isEmpty ? null : size,
+                                  targetPriceText:
+                                      priceText.isEmpty ? null : priceText,
+                                ),
                               ),
                             );
                           },

@@ -53,7 +53,11 @@ class EpcDetailScreen extends StatelessWidget {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
-                      builder: (_) => LocateTagScreen(targetEpc: epc),
+                      builder: (_) => LocateTagScreen(
+                        targetEpc: epc,
+                        targetSku: sku.isEmpty ? null : sku,
+                        targetName: description.isEmpty ? null : description,
+                      ),
                     ),
                   ),
                 );

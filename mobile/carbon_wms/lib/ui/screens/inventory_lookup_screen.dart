@@ -218,10 +218,18 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                 SizedBox(height: 16.h),
                 FilledButton.icon(
                   onPressed: () {
-                    final epc = _row!.code.trim().toUpperCase().replaceAll(RegExp(r'\s'), '');
+                    final r = _row!;
+                    final epc = r.code.trim().toUpperCase().replaceAll(RegExp(r'\s'), '');
                     Navigator.of(context).push<void>(
                       MaterialPageRoute<void>(
-                        builder: (_) => LocateTagScreen(targetEpc: epc),
+                        builder: (_) => LocateTagScreen(
+                          targetEpc: epc,
+                          targetBin: r.bin.isEmpty ? null : r.bin,
+                          targetSku: r.sku.isEmpty ? null : r.sku,
+                          targetName: r.name.isEmpty ? null : r.name,
+                          targetColor: r.color.isEmpty ? null : r.color,
+                          targetSize: r.size.isEmpty ? null : r.size,
+                        ),
                       ),
                     );
                   },

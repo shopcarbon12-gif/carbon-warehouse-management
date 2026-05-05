@@ -9,10 +9,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/audio/geiger_beep_wav.dart';
+import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
+import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 
 /// Map RSSI (dBm) to 0–1 proximity. Typical UHF range:
 ///   -90 dBm → far edge (0.0)
@@ -44,10 +47,26 @@ class LocateTagScreen extends StatefulWidget {
     super.key,
     this.targetEpc,
     this.targetBin,
+    this.targetSku,
+    this.targetName,
+    this.targetColor,
+    this.targetSize,
+    this.targetPriceText,
   });
 
   final String? targetEpc;
   final String? targetBin;
+
+  // Optional item-detail context for the operator. When supplied, an extra
+  // container is rendered above the EPC strip (matching the Count screen's
+  // row rhythm) so the operator can confirm they're hunting the right item.
+  // Pre-1.2.41 the locate screen showed only the raw EPC, which forced the
+  // operator to mentally cross-reference the catalog mid-sweep.
+  final String? targetSku;
+  final String? targetName;
+  final String? targetColor;
+  final String? targetSize;
+  final String? targetPriceText;
 
   @override
   State<LocateTagScreen> createState() => _LocateTagScreenState();
@@ -62,6 +81,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
 
   RfidManager? _rfid;
   StreamSubscription<RfidTagRead>? _readSub;
+  StreamSubscription<String>? _triggerSub;
   Timer? _beepTimer;
   Timer? _staleTimer;
 
@@ -72,6 +92,16 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   int? _liveRssi;
   double _proximity01 = 0;
   DateTime? _lastTargetReadAt;
+
+  // Diagnostic counters — surfaced as a small overlay so the operator
+  // (and us) can tell at a glance whether the radio is hearing the target
+  // tag at all. Pre-fix, the % was stuck at 0 because reads were either
+  // not arriving for the target EPC or arriving with null RSSI (Zebra's
+  // streaming inventory occasionally drops RSSI on weak reads). The
+  // counter makes that distinction visible without ADB logcat.
+  int _targetReads = 0;
+  int _otherReads = 0;
+  int _nullRssiReads = 0;
 
   // Diagnostic: strongest non-target EPC + RSSI we've seen this session.
   // Surfaces a "WE SEE ANOTHER TAG" hint so the operator can tell the radio
@@ -100,16 +130,38 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       lowerBound: 0,
       upperBound: 1,
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Switch the manager into geiger routing immediately. Pre-1.2.41 this
+    // ran in a postFrame callback, which left a small window where the
+    // listener was attached but reads were still going to the unified
+    // sink. Setting it here closes that window — and we re-assert it on
+    // every scan toggle for belt-and-braces safety.
+    unawaited(ScanSounds.instance.init());
+    // Lock the device to RFID-only mode on entry. Geiger search uses 2D;
+    // when the operator picks a result and lands here we must flip the
+    // trigger back to UHF and physically close the 2D engine on Chainway
+    // so a stray laser can't fire mid-sweep.
+    unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
+    unawaited(RfidVendorChannel.enableRfidFunctionMode());
+    unawaited(RfidVendorChannel.close2dBarcode());
+    // Subscribe to the physical trigger immediately on entry so the very
+    // first pull lights up the locate flow — count_inventory_screen does
+    // the same. Trigger 'down' is the only thing we care about; 'up' is
+    // ignored (the locate UX is press-to-toggle, not press-and-hold).
+    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
       if (!mounted) return;
-      context.read<RfidManager>().scanContext = 'GEIGER_FIND';
-    });
+      if (event == 'down') {
+        unawaited(_toggleScan());
+      }
+    }, onError: (_) {});
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _rfid ??= context.read<RfidManager>();
+    if (_rfid == null) {
+      _rfid = context.read<RfidManager>();
+      _rfid!.scanContext = 'GEIGER_FIND';
+    }
   }
 
   @override
@@ -119,8 +171,12 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     _sweep.dispose();
     _bloom.dispose();
     unawaited(_readSub?.cancel());
+    unawaited(_triggerSub?.cancel());
     unawaited(_rfid?.stopLocateScanning());
     unawaited(_audio.dispose());
+    // Re-open the 2D engine so the next screen (which may need barcode
+    // scanning) doesn't inherit a powered-off imager.
+    unawaited(RfidVendorChannel.open2dBarcode());
     super.dispose();
   }
 
@@ -137,6 +193,13 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   Future<void> _startScan() async {
     final m = _rfid;
     if (m == null || !_epcValid) return;
+    ScanSounds.instance.play(ScanCue.start);
+    // Re-assert the geiger routing flag every start. If the operator
+    // navigated through another scan-using screen (Count, Putaway) and
+    // came back, the manager's _scanContext could have been flipped to
+    // a non-geiger context — that would silently send reads only to the
+    // unified sink and leave this screen on 0%.
+    m.scanContext = 'GEIGER_FIND';
     setState(() {
       _scanning = true;
       _liveRssi = null;
@@ -145,19 +208,27 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       _otherEpc = null;
       _otherRssi = null;
       _otherSeenAt = null;
+      _targetReads = 0;
+      _otherReads = 0;
+      _nullRssiReads = 0;
     });
     _sweep
       ..reset()
       ..repeat();
     _bloom.value = 0;
-    await m.startLocateScanning();
+    // Attach the listener BEFORE starting the inventory so the very first
+    // tag-read after sled bring-up is captured. Pre-fix, attach happened
+    // after startLocateScanning, which on fast Zebras meant the first ~50ms
+    // of reads bypassed _onGeigerRead entirely.
     await _readSub?.cancel();
     _readSub = m.geigerTagReads.listen(_onGeigerRead);
+    await m.startLocateScanning();
     _scheduleBeeps();
     _scheduleStaleSweep();
   }
 
   Future<void> _stopScan() async {
+    ScanSounds.instance.play(ScanCue.stop);
     _beepTimer?.cancel();
     _beepTimer = null;
     _staleTimer?.cancel();
@@ -181,10 +252,21 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     if (!mounted) return;
     final epc = read.epcHex24.toUpperCase();
     if (epc == _epcUpper) {
+      // RSSI fallback: some Zebra firmware streams matches with rssi=null
+      // for a few ticks before settling. Pre-fix, that meant the % stayed
+      // at 0 even though the tag was clearly in range. We now treat
+      // "matched EPC but rssi unknown" as a weak-but-positive signal
+      // (~-75 dBm → ~25%) so the operator gets feedback that the radio
+      // has heard the target — and the value updates as soon as a real
+      // RSSI arrives.
+      const fallbackRssiOnNull = -75;
+      final effectiveRssi = read.rssi ?? _liveRssi ?? fallbackRssiOnNull;
       setState(() {
-        _liveRssi = read.rssi ?? _liveRssi;
-        _proximity01 = rssiToProximity01(_liveRssi);
+        _liveRssi = effectiveRssi;
+        _proximity01 = rssiToProximity01(effectiveRssi);
         _lastTargetReadAt = DateTime.now();
+        _targetReads += 1;
+        if (read.rssi == null) _nullRssiReads += 1;
       });
       // Drive the proximity bloom — animates 0..1 → halo grows / glow gets
       // brighter as the operator closes in. Smoother than direct setState
@@ -192,6 +274,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       _bloom.animateTo(_proximity01, duration: const Duration(milliseconds: 180));
       return;
     }
+    setState(() => _otherReads += 1);
     // Track the strongest non-target tag. Only used as a "we're alive but
     // wrong tag in range" diagnostic — does not affect the percentage.
     final r = read.rssi;
@@ -266,6 +349,11 @@ class _LocateTagScreenState extends State<LocateTagScreen>
 
   @override
   Widget build(BuildContext context) {
+    final hasItemContext = (widget.targetSku?.isNotEmpty ?? false) ||
+        (widget.targetName?.isNotEmpty ?? false) ||
+        (widget.targetColor?.isNotEmpty ?? false) ||
+        (widget.targetSize?.isNotEmpty ?? false) ||
+        (widget.targetBin?.isNotEmpty ?? false);
     return CarbonScaffold(
       pageTitle: 'LOCATE TAG',
       body: SafeArea(
@@ -276,7 +364,18 @@ class _LocateTagScreenState extends State<LocateTagScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(height: 12.h),
-              _HeaderRow(epc: _epcUpper, bin: widget.targetBin),
+              if (hasItemContext) ...[
+                _ItemDetailsContainer(
+                  sku: widget.targetSku,
+                  name: widget.targetName,
+                  color: widget.targetColor,
+                  size: widget.targetSize,
+                  priceText: widget.targetPriceText,
+                  bin: widget.targetBin,
+                ),
+                SizedBox(height: 10.h),
+              ],
+              _HeaderRow(epc: _epcUpper),
               SizedBox(height: 16.h),
               _StatusBar(
                 scanning: _scanning,
@@ -301,19 +400,29 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                 otherRssi: _otherRssi,
                 otherSeenAt: _otherSeenAt,
               ),
+              if (_scanning)
+                Padding(
+                  padding: EdgeInsets.only(top: 4.h),
+                  child: Text(
+                    'TARGET $_targetReads · OTHERS $_otherReads'
+                    '${_nullRssiReads > 0 ? ' · NO-RSSI $_nullRssiReads' : ''}',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                      color: const Color(0xFF8A9595),
+                    ),
+                  ),
+                ),
               SizedBox(height: 12.h),
               _ToggleScanButton(
                 scanning: _scanning,
                 enabled: _epcValid,
-                onTap: () => unawaited(_toggleScan()),
-              ),
-              SizedBox(height: 16.h),
-              Container(
-                width: double.infinity,
-                height: 16.h,
-                color: const Color(0xFFBA1A1A),
               ),
               SizedBox(height: 8.h),
+              const RfidPowerSlider(),
+              SizedBox(height: 4.h),
             ],
           ),
         ),
@@ -327,68 +436,177 @@ class _LocateTagScreenState extends State<LocateTagScreen>
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _HeaderRow extends StatelessWidget {
-  const _HeaderRow({required this.epc, required this.bin});
+  const _HeaderRow({required this.epc});
   final String epc;
+
+  @override
+  Widget build(BuildContext context) {
+    // BIN was previously rendered here; in 1.2.41 it moved into
+    // [_ItemDetailsContainer] above so the EPC row stays a single
+    // information stream (the radio-level identity of the tag).
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'EPC',
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 11.sp,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2.4,
+            color: const Color(0xFF6D7979),
+          ),
+        ),
+        SizedBox(height: 2.h),
+        Text(
+          epc.isEmpty ? '—' : epc,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+            color: AppColors.textMain,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Item-details container — placed above the EPC strip when item context
+/// is supplied. Mirrors the visual rhythm of `_CountItemContainer`:
+/// SKU + price on row 1, name · color · size on row 2, BIN as a teal
+/// pill on the right. Renders with the same `0xFFECECEC` surface as the
+/// Count rows so the operator's eye tracks consistently.
+class _ItemDetailsContainer extends StatelessWidget {
+  const _ItemDetailsContainer({
+    required this.sku,
+    required this.name,
+    required this.color,
+    required this.size,
+    required this.priceText,
+    required this.bin,
+  });
+
+  final String? sku;
+  final String? name;
+  final String? color;
+  final String? size;
+  final String? priceText;
   final String? bin;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'EPC',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2.4,
-                  color: const Color(0xFF6D7979),
-                ),
-              ),
-              SizedBox(height: 2.h),
-              Text(
-                epc.isEmpty ? '—' : epc,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                  color: AppColors.textMain,
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(width: 12.w),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+    final skuStr = (sku ?? '').trim();
+    final nameStr = (name ?? '').trim();
+    final colorStr = (color ?? '').trim();
+    final sizeStr = (size ?? '').trim();
+    final priceStr = (priceText ?? '').trim();
+    final binStr = (bin ?? '').trim();
+
+    final descBits = [
+      if (nameStr.isNotEmpty) nameStr,
+      if (colorStr.isNotEmpty) colorStr,
+      if (sizeStr.isNotEmpty) sizeStr,
+    ];
+    final descLine = descBits.join(' · ');
+
+    final skuStyle = GoogleFonts.robotoMono(
+      fontSize: 17.sp,
+      fontWeight: FontWeight.w700,
+      color: AppColors.textMain,
+      height: 1.2,
+    );
+    final descStyle = GoogleFonts.manrope(
+      fontSize: 13.sp,
+      fontWeight: FontWeight.w700,
+      color: AppColors.textMain,
+      height: 1.2,
+    );
+    final priceStyle = GoogleFonts.manrope(
+      fontSize: 13.sp,
+      fontWeight: FontWeight.w800,
+      color: AppColors.textMain,
+      height: 1.2,
+    );
+    final binLabelStyle = GoogleFonts.spaceGrotesk(
+      fontSize: 10.sp,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.6,
+      color: Colors.white.withValues(alpha: 0.85),
+      height: 1.0,
+    );
+    final binValueStyle = GoogleFonts.spaceGrotesk(
+      fontSize: 18.sp,
+      fontWeight: FontWeight.w800,
+      color: Colors.white,
+      height: 1.05,
+    );
+
+    return Material(
+      color: const Color(0xFFECECEC),
+      borderRadius: BorderRadius.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              'BIN',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2.4,
-                color: const Color(0xFF6D7979),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          skuStr.isEmpty ? 'SKU: —' : 'SKU: $skuStr',
+                          style: skuStyle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (priceStr.isNotEmpty) ...[
+                        SizedBox(width: 8.w),
+                        Text(priceStr, style: priceStyle),
+                      ],
+                    ],
+                  ),
+                  if (descLine.isNotEmpty) ...[
+                    SizedBox(height: 3.h),
+                    Text(
+                      descLine,
+                      style: descStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
               ),
             ),
-            SizedBox(height: 2.h),
-            Text(
-              (bin == null || bin!.isEmpty) ? '—' : bin!,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 20.sp,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
+            SizedBox(width: 8.w),
+            Container(
+              padding:
+                  EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+              color: AppColors.primary,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('BIN', style: binLabelStyle),
+                  SizedBox(height: 2.h),
+                  Text(
+                    binStr.isEmpty ? '—' : binStr,
+                    style: binValueStyle,
+                  ),
+                ],
               ),
             ),
           ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -414,9 +632,9 @@ class _StatusBar extends StatelessWidget {
     if (!epcValid) {
       label = 'NO TARGET';
     } else if (scanning) {
-      label = 'SCANNING ACTIVE';
+      label = 'SCANNING · PULL TRIGGER TO STOP';
     } else {
-      label = 'TAP TO START';
+      label = 'PULL TRIGGER TO LOCATE';
     }
     final dotColor = scanning ? AppColors.primary : const Color(0xFFBCC9C9);
     return Container(
@@ -746,19 +964,20 @@ class _DiagnosticHint extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Tap-to-toggle button (was hold-to-locate in the first 1.2.39 cut)
+// Trigger-only banner. Operator feedback (1.2.41): on-screen tap-to-locate
+// was an extra step the operator had to remember mid-sweep. The locate flow
+// is now driven entirely by the physical trigger; this widget is a status
+// affordance, not a button — it never receives taps.
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _ToggleScanButton extends StatelessWidget {
   const _ToggleScanButton({
     required this.scanning,
     required this.enabled,
-    required this.onTap,
   });
 
   final bool scanning;
   final bool enabled;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -766,48 +985,42 @@ class _ToggleScanButton extends StatelessWidget {
     if (!enabled) {
       bg = const Color(0xFFBCC9C9);
     } else if (scanning) {
-      // Stop state — tonal red so the operator can find it instantly without
-      // reading the label. Still rectangular per the design system's "no
-      // soft corners" rule.
       bg = const Color(0xFFBA1A1A);
     } else {
       bg = AppColors.primary;
     }
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        height: 64.h,
-        decoration: BoxDecoration(
-          color: bg,
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x24000000),
-              blurRadius: 18,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              scanning ? Icons.stop_circle_outlined : Icons.sensors,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      height: 64.h,
+      decoration: BoxDecoration(
+        color: bg,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x24000000),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            scanning ? Icons.stop_circle_outlined : Icons.sensors,
+            color: Colors.white,
+            size: 22.sp,
+          ),
+          SizedBox(width: 12.w),
+          Text(
+            scanning ? 'PULL TRIGGER TO STOP' : 'PULL TRIGGER TO LOCATE',
+            style: GoogleFonts.manrope(
+              fontSize: 15.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2.0,
               color: Colors.white,
-              size: 22.sp,
             ),
-            SizedBox(width: 12.w),
-            Text(
-              scanning ? 'TAP TO STOP' : 'TAP TO LOCATE',
-              style: GoogleFonts.manrope(
-                fontSize: 16.sp,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2.4,
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

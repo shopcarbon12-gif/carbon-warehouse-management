@@ -43,7 +43,13 @@ export function envCompanyPrefix(): number {
     const n = Number.parseInt(raw, 10);
     if (Number.isFinite(n) && n >= 0) return n;
   }
-  return 1_044_991;
+  // Carbon Jeans tenant prefix per Senitron settings page
+  // (encoding standard SENITRON, hex F0A0B). Verified 2026-05-05 against
+  // 23,745 in-stock tags from inventory_export — 100 % use prefix 985611.
+  // The prior default of 1_044_991 (hex FF1FF) was a placeholder that
+  // never matched live tags and would have stamped the wrong prefix on
+  // any commission call that didn't pass an explicit `companyPrefix`.
+  return 985_611;
 }
 
 export function buildPrinterRawUrl(host: string, port: number, uri: string): string {

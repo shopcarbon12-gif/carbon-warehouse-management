@@ -13,6 +13,7 @@ import 'package:carbon_wms/hardware/zebra_scanner.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
+import 'package:carbon_wms/services/scan_sounds.dart';
 
 /// Selects the active sled, dedupes EPCs, surfaces session lists for ops screens,
 /// and batches edge ingest every 500ms (pending queue only — session list is unchanged).
@@ -24,6 +25,13 @@ class RfidManager extends ChangeNotifier {
     _flushTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       unawaited(_flushVisibilityThenEdge());
     });
+    // Pre-load the audio bank so the first scan-driven cue isn't delayed
+    // by SoundPool init. No global trigger listener: each screen plays
+    // start/stop cues in its own scan flow (count + locate already do)
+    // — a global listener here doubles up with those.
+    try {
+      unawaited(ScanSounds.instance.init());
+    } catch (_) {}
   }
 
   final WmsApiClient _api;
@@ -220,6 +228,14 @@ class RfidManager extends ChangeNotifier {
   void _handleFallbackBarcodeRead(String raw) {
     final s = raw.trim().toUpperCase();
     if (s.isEmpty) return;
+    // Global "scanned" cue — fires on every 2D barcode broadcast,
+    // regardless of which screen is in focus. UHF reads beep natively
+    // from the controllers; this brings 2D parity (operator hears a
+    // tick whenever the device captures input). Best-effort: ScanSounds
+    // is a singleton that no-ops cleanly when uninitialised.
+    try {
+      ScanSounds.instance.play(ScanCue.success);
+    } catch (_) {}
     final compact = s.replaceAll(RegExp(r'\s+'), '');
     var read = RfidTagRead.tryParse(compact);
     if (read == null) {

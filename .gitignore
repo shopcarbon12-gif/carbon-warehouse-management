@@ -71,3 +71,8 @@ docs/light-theme-evidence/changed-pages-button-theme/*.png
 HANDOFF_FOR_OTHER_CLAUDE.md
 carbon_rfid_recon.zip
 carbon_rfid_recon_v1.1.13_delta.zip
+
+# Build artifacts (subpath Next.js apps + agent state)
+.next/
+/apps/*/.next/
+.claude/scheduled_tasks.lock
