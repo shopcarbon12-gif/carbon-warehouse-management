@@ -29,7 +29,22 @@ export async function assignItemsToBinBySkuScan(
   if (!trimmed) return { updated: 0 };
 
   const bin = await pool.query<{ id: string }>(
-    `SELECT id::text FROM bins WHERE location_id = $1::uuid AND code = $2 LIMIT 1`,
+    // Normalize both stored code and input parameter — strip every
+    // non-alphanumeric char and uppercase. Mobile clients format 5-char
+    // codes with dashes for display (e.g. `_formatBinCode` turns
+    // "1A01L" into "1-A-01-L") and ship the dashed form to API endpoints.
+    // The bins table stores the undashed canonical form ("1A01L") from
+    // the orlando-bin-grid seed. Pre-1.2.46 the equality test failed
+    // silently, server returned `updated: 0`, and the mobile rendered
+    // "0 items assigned, every matching EPC is already placed" with no
+    // hint that the lookup itself missed. regexp_replace runs over a
+    // few-hundred-row bin table per request — cheap enough vs the
+    // cumulative operator-frustration cost.
+    `SELECT id::text FROM bins
+       WHERE location_id = $1::uuid
+         AND regexp_replace(upper(code), '[^A-Z0-9]', '', 'g')
+             = regexp_replace(upper($2), '[^A-Z0-9]', '', 'g')
+       LIMIT 1`,
     [locationId, binCode.trim()],
   );
   const binId = bin.rows[0]?.id;
@@ -135,7 +150,22 @@ export async function previewPutawayAssign(
   if (!trimmed) return empty;
 
   const bin = await pool.query<{ id: string }>(
-    `SELECT id::text FROM bins WHERE location_id = $1::uuid AND code = $2 LIMIT 1`,
+    // Normalize both stored code and input parameter — strip every
+    // non-alphanumeric char and uppercase. Mobile clients format 5-char
+    // codes with dashes for display (e.g. `_formatBinCode` turns
+    // "1A01L" into "1-A-01-L") and ship the dashed form to API endpoints.
+    // The bins table stores the undashed canonical form ("1A01L") from
+    // the orlando-bin-grid seed. Pre-1.2.46 the equality test failed
+    // silently, server returned `updated: 0`, and the mobile rendered
+    // "0 items assigned, every matching EPC is already placed" with no
+    // hint that the lookup itself missed. regexp_replace runs over a
+    // few-hundred-row bin table per request — cheap enough vs the
+    // cumulative operator-frustration cost.
+    `SELECT id::text FROM bins
+       WHERE location_id = $1::uuid
+         AND regexp_replace(upper(code), '[^A-Z0-9]', '', 'g')
+             = regexp_replace(upper($2), '[^A-Z0-9]', '', 'g')
+       LIMIT 1`,
     [locationId, binCode.trim()],
   );
   const targetBinId = bin.rows[0]?.id ?? null;
