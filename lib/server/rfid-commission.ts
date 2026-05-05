@@ -58,7 +58,13 @@ export function envCompanyPrefix(): number {
 }
 
 export function buildPrinterRawUrl(host: string, port: number, uri: string): string {
-  const path = uri.startsWith("/") ? uri : `/${uri.replace(/^\/+/, "")}`;
+  // The Zebra ZD500R-300dpi web-print endpoint is **case-sensitive**:
+  //   GET /pstprnt → 200, GET /PSTPRNT → 404 (verified on 192.168.1.3).
+  // Most of the codebase carries the URI as "PSTPRNT" (matches Zebra's
+  // historical docs) — lowercase it here at the URL-construction layer
+  // so every caller wins, regardless of where the input came from.
+  const lowered = uri.toLowerCase();
+  const path = lowered.startsWith("/") ? lowered : `/${lowered.replace(/^\/+/, "")}`;
   return `http://${host}:${port}${path}`;
 }
 

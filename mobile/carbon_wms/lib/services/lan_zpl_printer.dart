@@ -64,7 +64,11 @@ class LanZplPrinter {
       // strict certificate validation so HTTPS-by-default doesn't blow
       // up. Plain http:// is what we use anyway.
       client.badCertificateCallback = (_, __, ___) => true;
-      final cleanUri = uri.replaceAll(RegExp(r'^/+'), '');
+      // Zebra ZD500R web-print is case-sensitive: /pstprnt returns 200,
+      // /PSTPRNT returns 404. Most of the codebase carries the URI as
+      // "PSTPRNT" — lowercase here so the existing data model doesn't
+      // need a migration.
+      final cleanUri = uri.toLowerCase().replaceAll(RegExp(r'^/+'), '');
       final url = Uri.parse('http://$host:$port/$cleanUri');
       final req = await client.postUrl(url).timeout(_connectTimeout);
       // Zebra firmware accepts plain text; setting a content-type isn't
