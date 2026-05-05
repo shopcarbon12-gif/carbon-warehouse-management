@@ -367,15 +367,15 @@ class CatalogRowCard extends StatelessWidget {
     required this.onQtyTap,
     this.showQty = true,
     this.onTap,
+    this.selected = false,
   });
 
   final Map<String, dynamic> row;
   final VoidCallback onQtyTap;
 
   /// When false, the right-hand `xN` badge is hidden entirely. Used by
-  /// the Encode screen, where qty is irrelevant (the operator is picking
-  /// a SKU template to write onto a fresh tag — even SKUs with zero
-  /// in-stock items are valid targets).
+  /// the Encode + Print screens, where qty is irrelevant (the operator
+  /// is picking a SKU template, not seeing in-stock count).
   final bool showQty;
 
   /// When provided, the whole row becomes tappable (Material InkWell
@@ -383,6 +383,11 @@ class CatalogRowCard extends StatelessWidget {
   /// that don't want full-row tap (Catalog / Status Change keep using
   /// `onQtyTap` for their drill-down semantics).
   final VoidCallback? onTap;
+
+  /// Highlight state for multi-select callers (Print screen). Tapping
+  /// a row toggles this externally; the card just renders the visual
+  /// difference — primary-teal background + white text when true.
+  final bool selected;
 
   String _formatBin(String? raw) {
     final s = (raw ?? '').trim().toUpperCase().replaceAll(RegExp(r'[-\s]'), '');
@@ -415,35 +420,47 @@ class CatalogRowCard extends StatelessWidget {
     ];
     final desc = descParts.join(' · ');
 
+    // Selected rows render in teal-on-white inverse so the operator
+    // can scan a search result list and instantly see what's already
+    // queued. Used by Print screen's multi-select.
+    final fgMain = selected ? Colors.white : AppColors.textMain;
+    final fgMuted =
+        selected ? Colors.white.withValues(alpha: 0.92) : AppColors.textMain;
+    final fgSecondary = selected
+        ? Colors.white.withValues(alpha: 0.88)
+        : const Color(0xFF3F4A4A);
+    final fgPrimary = selected ? Colors.white : AppColors.primary;
+    final cardBg = selected ? AppColors.primary : const Color(0xFFECECEC);
+
     final skuStyle = GoogleFonts.robotoMono(
       fontSize: 19.sp,
       fontWeight: FontWeight.w700,
-      color: AppColors.textMain,
+      color: fgMain,
       height: 1.2,
     );
     final descStyle = GoogleFonts.manrope(
       fontSize: 14.sp,
       fontWeight: FontWeight.w700,
-      color: AppColors.textMain,
+      color: fgMuted,
       height: 1.2,
     );
     final priceStyle = GoogleFonts.manrope(
       fontSize: 14.sp,
       fontWeight: FontWeight.w800,
-      color: AppColors.textMain,
+      color: fgMuted,
       height: 1.2,
     );
     final binStyle = GoogleFonts.manrope(
       fontSize: 13.sp,
       fontWeight: FontWeight.w700,
-      color: const Color(0xFF3F4A4A),
+      color: fgSecondary,
       letterSpacing: 0.2,
       height: 1.2,
     );
     final qtyStyle = GoogleFonts.spaceGrotesk(
       fontSize: 26.sp,
       fontWeight: FontWeight.w800,
-      color: AppColors.primary,
+      color: fgPrimary,
       height: 1.2,
     );
 
@@ -516,7 +533,7 @@ class CatalogRowCard extends StatelessWidget {
     // the legacy "tap on x N badge only" semantics.
     if (onTap != null) {
       return Material(
-        color: const Color(0xFFECECEC),
+        color: cardBg,
         borderRadius: BorderRadius.zero,
         child: InkWell(
           onTap: onTap,
@@ -525,7 +542,7 @@ class CatalogRowCard extends StatelessWidget {
       );
     }
     return Material(
-      color: const Color(0xFFECECEC),
+      color: cardBg,
       borderRadius: BorderRadius.zero,
       child: body,
     );

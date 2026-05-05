@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/lan_zpl_printer.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart'
@@ -58,7 +59,12 @@ class _PrintScreenState extends State<PrintScreen> {
   StreamSubscription<String>? _barcodeSub;
 
   // ── selection + form state ────────────────────────────────────────────
-  Map<String, dynamic>? _selectedSku;
+  // Multi-select pool — operator builds it by tapping catalog rows.
+  // Tapping the same row again deselects (toggle). The qty stepper
+  // applies to EVERY selected SKU, so the print loop runs N×qty tags
+  // total. Chip row above the qty stepper renders the current pool
+  // and supports per-SKU removal (tap chip → remove).
+  final List<Map<String, dynamic>> _selectedSkus = [];
   int _qty = 1;
   bool _addToInventory = false;
 
@@ -161,10 +167,35 @@ class _PrintScreenState extends State<PrintScreen> {
   }
 
   // ── selection ─────────────────────────────────────────────────────────
-  void _selectSku(Map<String, dynamic> row) {
+  // Toggle: tap a catalog row to add it to the print pool, tap the
+  // same row (or its chip above the qty stepper) to remove it.
+  bool _isSelected(Map<String, dynamic> row) {
+    final id = row['custom_sku_id']?.toString() ?? '';
+    if (id.isEmpty) return false;
+    return _selectedSkus.any((m) =>
+        (m['custom_sku_id']?.toString() ?? '') == id);
+  }
+
+  void _toggleSku(Map<String, dynamic> row) {
+    final id = row['custom_sku_id']?.toString() ?? '';
+    if (id.isEmpty) return;
     setState(() {
-      _selectedSku = row;
       _printError = null;
+      final i = _selectedSkus.indexWhere((m) =>
+          (m['custom_sku_id']?.toString() ?? '') == id);
+      if (i >= 0) {
+        _selectedSkus.removeAt(i);
+      } else {
+        _selectedSkus.add(row);
+      }
+    });
+  }
+
+  void _removeSelectedById(String customSkuId) {
+    if (customSkuId.isEmpty) return;
+    setState(() {
+      _selectedSkus.removeWhere((m) =>
+          (m['custom_sku_id']?.toString() ?? '') == customSkuId);
     });
   }
 
@@ -220,66 +251,102 @@ class _PrintScreenState extends State<PrintScreen> {
   }
 
   // ── print action ──────────────────────────────────────────────────────
+  // Multi-SKU print loop. For each selected SKU we hit
+  // /api/rfid/commission with the same qty. The server skips its own
+  // print (cloud → LAN printer is unroutable) and returns the rendered
+  // ZPL + printer host/port; we send the ZPL straight to the printer
+  // over raw TCP from the handheld via [LanZplPrinter]. We keep going
+  // through the rest of the pool even if one SKU fails — the operator
+  // gets a single tally at the end.
   Future<void> _onPrintTap() async {
-    final sku = _selectedSku;
-    if (sku == null || _printing) return;
-    final customSkuId = sku['custom_sku_id']?.toString() ?? '';
-    if (customSkuId.isEmpty) {
-      setState(() => _printError = 'SKU is missing custom_sku_id');
-      ScanSounds.instance.play(ScanCue.error);
-      return;
-    }
+    if (_selectedSkus.isEmpty || _printing) return;
     final api = context.read<WmsApiClient>();
     final messenger = ScaffoldMessenger.of(context);
     setState(() {
       _printing = true;
       _printError = null;
     });
+    final totalSkus = _selectedSkus.length;
+    final perSkuQty = _qty;
+    final totalTags = totalSkus * perSkuQty;
     messenger.showSnackBar(SnackBar(
-      content: Text('Printing $_qty tag${_qty == 1 ? '' : 's'}…'),
+      content: Text(
+        'Printing $totalTags tag${totalTags == 1 ? '' : 's'}…',
+      ),
       duration: const Duration(seconds: 2),
     ));
+    int printedTags = 0;
+    final List<String> failures = [];
     try {
-      final res = await api.postRfidCommission(
-        customSkuId: customSkuId,
-        qty: _qty,
-        addToInventory: _addToInventory,
-      );
+      for (final sku in List<Map<String, dynamic>>.from(_selectedSkus)) {
+        final customSkuId = sku['custom_sku_id']?.toString() ?? '';
+        final skuLabel = sku['sku']?.toString() ?? customSkuId;
+        if (customSkuId.isEmpty) {
+          failures.add('$skuLabel: missing custom_sku_id');
+          continue;
+        }
+        try {
+          final res = await api.postRfidCommission(
+            customSkuId: customSkuId,
+            qty: perSkuQty,
+            addToInventory: _addToInventory,
+          );
+          if (!mounted) return;
+          final insertedRaw = res['inserted'];
+          final inserted =
+              insertedRaw is List ? insertedRaw.length : perSkuQty;
+          // Cloud-skip path: server returns ZPL + printer info, we TCP
+          // it ourselves on port 9100.
+          final printerOk = res['printer_ok'] == true;
+          if (printerOk) {
+            printedTags += inserted;
+            continue;
+          }
+          final zpl = res['zpl']?.toString() ?? '';
+          final host = res['printer_host']?.toString() ?? '';
+          if (zpl.isEmpty || host.isEmpty) {
+            failures.add(
+                '$skuLabel: ${res['printer_error']?.toString() ?? 'no zpl'}');
+            continue;
+          }
+          final tcpErr = await LanZplPrinter.send(
+            host: host,
+            port: 9100,
+            zpl: zpl,
+          );
+          if (tcpErr == null) {
+            printedTags += inserted;
+          } else {
+            failures.add('$skuLabel: $tcpErr');
+          }
+        } catch (e) {
+          failures.add('$skuLabel: $e');
+        }
+      }
       if (!mounted) return;
-      // Server-side commission returns `inserted` as a list of
-      // `{epc, serial_number}`, NOT a number — the previous `as num?`
-      // cast threw "type 'List<dynamic>' is not a subtype of type 'num'
-      // in type cast" mid-print. Read the length instead.
-      final insertedRaw = res['inserted'];
-      final inserted = insertedRaw is List ? insertedRaw.length : null;
-      final printerOk = res['printer_ok'] == true;
-      if (printerOk) {
+      if (failures.isEmpty) {
         ScanSounds.instance.play(ScanCue.success);
         messenger.hideCurrentSnackBar();
         messenger.showSnackBar(SnackBar(
           content: Text(
-            inserted == null
-                ? 'Printed $_qty tag${_qty == 1 ? '' : 's'} ✓'
-                : 'Printed $inserted tag${inserted == 1 ? '' : 's'} ✓',
+            'Printed $printedTags tag${printedTags == 1 ? '' : 's'} ✓',
           ),
           duration: const Duration(seconds: 2),
         ));
-        // Reset form for the next print run.
         setState(() {
-          _selectedSku = null;
+          _selectedSkus.clear();
           _qty = 1;
           _qtyCtrl.text = '1';
           _addToInventory = false;
         });
       } else {
         ScanSounds.instance.play(ScanCue.error);
-        final err = res['printer_error']?.toString() ?? 'Printer rejected';
-        setState(() => _printError = 'Printer: $err');
+        setState(() {
+          _printError = printedTags == 0
+              ? 'Print failed: ${failures.join(' · ')}'
+              : 'Printed $printedTags · failed: ${failures.join(' · ')}';
+        });
       }
-    } catch (e) {
-      if (!mounted) return;
-      ScanSounds.instance.play(ScanCue.error);
-      setState(() => _printError = '$e');
     } finally {
       if (mounted) setState(() => _printing = false);
     }
@@ -287,7 +354,7 @@ class _PrintScreenState extends State<PrintScreen> {
 
   // ── ui ────────────────────────────────────────────────────────────────
   bool get _canPrint =>
-      _selectedSku != null && _qty >= _qtyMin && !_printing;
+      _selectedSkus.isNotEmpty && _qty >= _qtyMin && !_printing;
 
   @override
   Widget build(BuildContext context) {
@@ -341,49 +408,56 @@ class _PrintScreenState extends State<PrintScreen> {
                 ),
               ),
 
-            // ── catalog rows (or selected SKU pinned at top) ─────────
+            // ── catalog rows (search results — multi-select) ─────────
             Expanded(
-              child: _selectedSku != null
-                  ? _SelectedSkuPanel(
-                      row: _selectedSku!,
-                      onDeselect: () => setState(() => _selectedSku = null),
-                    )
-                  : _query.isEmpty
-                      ? const _SearchEmptyHint()
-                      : _searchLoading && _searchResults.isEmpty
-                          ? const Center(child: CircularProgressIndicator())
-                          : _searchResults.isEmpty
-                              ? Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(24.r),
-                                    child: Text(
-                                      'No matches for "$_query".',
-                                      textAlign: TextAlign.center,
-                                      style: GoogleFonts.manrope(
-                                        fontSize: 14.sp,
-                                        fontWeight: FontWeight.w700,
-                                        color: const Color(0xFF5A6464),
-                                      ),
-                                    ),
+              child: _query.isEmpty
+                  ? const _SearchEmptyHint()
+                  : _searchLoading && _searchResults.isEmpty
+                      ? const Center(child: CircularProgressIndicator())
+                      : _searchResults.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(24.r),
+                                child: Text(
+                                  'No matches for "$_query".',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.manrope(
+                                    fontSize: 14.sp,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF5A6464),
                                   ),
-                                )
-                              : ListView.separated(
-                                  padding: EdgeInsets.fromLTRB(
-                                      20.w, 0, 20.w, 12.h),
-                                  itemCount: _searchResults.length,
-                                  separatorBuilder: (_, __) =>
-                                      SizedBox(height: 12.h),
-                                  itemBuilder: (_, i) {
-                                    final r = _searchResults[i];
-                                    return CatalogRowCard(
-                                      row: r,
-                                      showQty: false,
-                                      onTap: () => _selectSku(r),
-                                      onQtyTap: () => _selectSku(r),
-                                    );
-                                  },
                                 ),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding:
+                                  EdgeInsets.fromLTRB(20.w, 0, 20.w, 12.h),
+                              itemCount: _searchResults.length,
+                              separatorBuilder: (_, __) =>
+                                  SizedBox(height: 12.h),
+                              itemBuilder: (_, i) {
+                                final r = _searchResults[i];
+                                final selected = _isSelected(r);
+                                return CatalogRowCard(
+                                  row: r,
+                                  showQty: false,
+                                  selected: selected,
+                                  onTap: () => _toggleSku(r),
+                                  onQtyTap: () => _toggleSku(r),
+                                );
+                              },
+                            ),
             ),
+
+            // ── chips: SKUs currently in the print pool ──────────────
+            // Visible only once the operator has selected at least one
+            // SKU. Chip tap → remove. Lets the operator search a new
+            // query without losing track of what's already queued.
+            if (_selectedSkus.isNotEmpty)
+              _SelectedChipsRow(
+                selected: _selectedSkus,
+                onRemove: _removeSelectedById,
+              ),
 
             // ── error banner (mid-print failure) ─────────────────────
             if (_printError != null)
@@ -575,117 +649,95 @@ class _SearchEmptyHint extends StatelessWidget {
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Selected-SKU pinned panel (replaces the result list once a SKU is picked)
+// Selected-SKU chips row — horizontally scrollable strip of teal chips,
+// one per SKU in the print pool. Tap a chip to remove that SKU. Sits
+// above the qty stepper so the operator can keep searching while still
+// seeing what's queued. The previous design pinned a single big SKU
+// panel here; multi-select needs a denser layout.
 // ═════════════════════════════════════════════════════════════════════════
 
-class _SelectedSkuPanel extends StatelessWidget {
-  const _SelectedSkuPanel({required this.row, required this.onDeselect});
+class _SelectedChipsRow extends StatelessWidget {
+  const _SelectedChipsRow({
+    required this.selected,
+    required this.onRemove,
+  });
 
-  final Map<String, dynamic> row;
-  final VoidCallback onDeselect;
+  final List<Map<String, dynamic>> selected;
+  final ValueChanged<String> onRemove;
 
   @override
   Widget build(BuildContext context) {
-    final sku = row['sku']?.toString() ?? '';
-    final name = row['name']?.toString() ?? '';
-    final color = row['color']?.toString() ?? '';
-    final size = row['size']?.toString() ?? '';
-    final priceStr = row['retail_price']?.toString();
-    final price = double.tryParse(priceStr ?? '');
-    final priceText =
-        (price != null && price > 0) ? '\$${price.toStringAsFixed(2)}' : '';
-    final desc = [
-      if (name.isNotEmpty) name,
-      if (color.isNotEmpty) color,
-      if (size.isNotEmpty) size,
-    ].join(' · ');
-
-    return ListView(
-      padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 0),
-      children: [
-        Container(
-          width: double.infinity,
-          color: AppColors.primary,
-          padding: EdgeInsets.fromLTRB(16.w, 14.h, 12.w, 14.h),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            sku.isEmpty ? 'SKU: —' : 'SKU: $sku',
-                            style: GoogleFonts.robotoMono(
-                              fontSize: 17.sp,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (priceText.isNotEmpty) ...[
-                          SizedBox(width: 8.w),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16.w, 4.h, 16.w, 4.h),
+      child: Container(
+        width: double.infinity,
+        color: const Color(0xFFEEF4F3),
+        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${selected.length} SELECTED · TAP TO REMOVE',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 10.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.4,
+                color: const Color(0xFF3D4949),
+              ),
+            ),
+            SizedBox(height: 6.h),
+            SizedBox(
+              height: 28.h,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: selected.length,
+                separatorBuilder: (_, __) => SizedBox(width: 6.w),
+                itemBuilder: (_, i) {
+                  final row = selected[i];
+                  final id = row['custom_sku_id']?.toString() ?? '';
+                  final sku = row['sku']?.toString() ?? '';
+                  final color = row['color']?.toString() ?? '';
+                  final size = row['size']?.toString() ?? '';
+                  final label = [
+                    if (sku.isNotEmpty) sku,
+                    if (color.isNotEmpty) color,
+                    if (size.isNotEmpty) size,
+                  ].join(' · ');
+                  return GestureDetector(
+                    onTap: () => onRemove(id),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 10.w, vertical: 4.h),
+                      color: AppColors.primary,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Text(
-                            priceText,
-                            style: GoogleFonts.manrope(
-                              fontSize: 13.sp,
-                              fontWeight: FontWeight.w800,
+                            label.isEmpty ? id : label,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
                               color: Colors.white,
                             ),
+                          ),
+                          SizedBox(width: 6.w),
+                          Icon(
+                            Icons.close,
+                            size: 14.sp,
+                            color: Colors.white.withValues(alpha: 0.92),
                           ),
                         ],
-                      ],
-                    ),
-                    if (desc.isNotEmpty) ...[
-                      SizedBox(height: 4.h),
-                      Text(
-                        desc,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.manrope(
-                          fontSize: 13.sp,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white.withValues(alpha: 0.92),
-                        ),
                       ),
-                    ],
-                  ],
-                ),
-              ),
-              SizedBox(width: 8.w),
-              GestureDetector(
-                onTap: onDeselect,
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(2.r),
-                  ),
-                  child: Text(
-                    'CHANGE',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.4,
-                      color: Colors.white,
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

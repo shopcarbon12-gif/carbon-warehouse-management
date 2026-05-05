@@ -12,26 +12,31 @@ import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
-import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart'
-    show CatalogRowCard;
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 
-/// Status Change — handheld flow.
+/// Status Change — RFID-only handheld flow.
 ///
-///   Step 1: SEARCH    — operator either types a query, fires the 2D
-///                       imager (search box auto-fills), or pulls a UHF
-///                       read (skips straight to step 3 with the matching
-///                       catalog row).
-///   Step 2: PICK EPC  — list the in-stock EPCs for the chosen item.
-///   Step 3: PICK STATUS — list the operator-applicable statuses (per
-///                       /api/scanner/status-labels), tap to choose, hit
-///                       Commit. POSTs single-EPC bulk-status; on success
-///                       we return to step 1.
+///   Step 1: SCAN  — operator pulls the UHF trigger; every unique EPC
+///                   read is resolved against the catalog and dropped
+///                   into a vertical list as a container card. Each
+///                   card shows the item's SKU + name + color + size
+///                   (same shape Count Inventory uses). The EPC string
+///                   itself is intentionally hidden — operators
+///                   identify items by the matrix metadata, not the
+///                   24-hex EPC.
+///   Step 2: PICK STATUS — tap any card to drill into status pick for
+///                         that single EPC. Commit POSTs bulk-status
+///                         for the one EPC, then drops the card from
+///                         the list and returns to step 1 so the
+///                         operator can keep scanning.
 ///
-/// Trigger discipline: BOTH 2D and UHF stay armed on this screen so the
-/// operator can use whichever path is fastest. UHF reads route via the
-/// RfidManager geiger sink; 2D codes flow through hardwareBarcodeStream.
+/// Why no search box: the prior 3-tab Encode-style design (search,
+/// pickEpc, pickStatus) optimized for desktop typing. Operators on the
+/// floor never type — they pull the trigger. Removing the search input
+/// + catalog grid removed ~600 lines of UI, simplified the trigger
+/// discipline (UHF only — 2D doesn't need to fill any text field), and
+/// made the pickEpc step redundant (each scanned EPC IS its own row).
 class StatusChangeScreen extends StatefulWidget {
   const StatusChangeScreen({super.key});
 
@@ -39,7 +44,7 @@ class StatusChangeScreen extends StatefulWidget {
   State<StatusChangeScreen> createState() => _StatusChangeScreenState();
 }
 
-enum _StatusStep { search, pickEpc, pickStatus }
+enum _StatusStep { scan, pickStatus }
 
 class _StatusLabel {
   const _StatusLabel({
@@ -56,25 +61,39 @@ class _StatusLabel {
   final bool systemOnly;
 }
 
+/// One scanned EPC + the catalog row it resolved to. Stored in the
+/// scan-list so we can render a container card per row and pick a
+/// single EPC for status change without round-tripping the catalog
+/// again.
+class _ScannedEpc {
+  const _ScannedEpc({
+    required this.epc,
+    required this.row,
+  });
+  final String epc;
+  final Map<String, dynamic> row;
+
+  String get sku => row['sku']?.toString() ?? '';
+  String get name => row['name']?.toString() ?? '';
+  String get color => row['color']?.toString() ?? '';
+  String get size => row['size']?.toString() ?? '';
+  String get currentStatus => row['status']?.toString() ?? '';
+  String get binCode => row['bin_code']?.toString() ?? '';
+}
+
 class _StatusChangeScreenState extends State<StatusChangeScreen> {
-  static const Duration _searchDebounce = Duration(milliseconds: 300);
-  static const int _minQueryLen = 2;
-
   // ── flow state ────────────────────────────────────────────────────────
-  _StatusStep _step = _StatusStep.search;
-  final TextEditingController _searchCtrl = TextEditingController();
-  Timer? _debounce;
-  String _query = '';
-  bool _searchLoading = false;
-  String? _searchError;
-  List<Map<String, dynamic>> _searchResults = [];
+  _StatusStep _step = _StatusStep.scan;
 
-  Map<String, dynamic>? _selectedItem; // catalog row
-  bool _epcsLoading = false;
-  String? _epcsError;
-  List<Map<String, dynamic>> _itemEpcs = [];
+  // Accumulated UHF reads, ordered newest-first so the operator's most
+  // recent scan is at the top of the list. Keys deduped on uppercased
+  // EPC so a single tag pinged 30× by the radio doesn't spam the list.
+  final List<_ScannedEpc> _scanned = [];
+  final Set<String> _seenEpcs = {};
+  final Set<String> _inFlightEpcs = {}; // suppress race during catalog lookup
 
-  Map<String, dynamic>? _selectedEpcRow; // entry from _itemEpcs
+  // Selected card → which EPC's status are we about to change?
+  _ScannedEpc? _selectedCard;
   String _selectedTargetStatus = '';
   bool _override = false;
   bool _committing = false;
@@ -87,53 +106,35 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
 
   // ── trigger / scanner subscriptions ──────────────────────────────────
   StreamSubscription<RfidTagRead>? _uhfSub;
-  StreamSubscription<String>? _barcodeSub;
 
   @override
   void initState() {
     super.initState();
     unawaited(ScanSounds.instance.init());
-    _activateBothScanners();
-    _attachStreams();
+    // RFID-only: keep the UHF radio armed, suppress 2D so a stray
+    // imager pull doesn't try to fill a search box that no longer
+    // exists.
+    unawaited(RfidVendorChannel.close2dBarcode());
+    unawaited(RfidVendorChannel.enableRfidFunctionMode());
+    unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Route UHF reads through the Geiger sink so they reach _onUhfRead
       // without competing with Count's session-EPC accumulation.
       context.read<RfidManager>().scanContext = 'GEIGER_FIND';
+      final rfid = context.read<RfidManager>();
+      _uhfSub = rfid.geigerTagReads.listen(_onUhfRead, onError: (_) {});
       unawaited(_loadStatusLabels());
     });
   }
 
   @override
   void dispose() {
-    _debounce?.cancel();
     unawaited(_uhfSub?.cancel());
-    unawaited(_barcodeSub?.cancel());
-    _searchCtrl.dispose();
-    // Release scanner-mode flips. Other screens that want a specific
-    // mode will re-assert on entry; we just make sure we don't leave
-    // the device in a half-state.
+    // Other screens that want a specific mode will re-assert on entry;
+    // we just make sure we don't leave the device in a half-state.
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     super.dispose();
-  }
-
-  void _activateBothScanners() {
-    // Keep the 2D engine warm AND the trigger flipped to UHF — Chainway
-    // can fire 2D barcode broadcasts independently of the trigger when
-    // the imager is open, and Zebra reads route through the same
-    // hardware_barcode broadcast when paired in HID-keyboard fallback.
-    unawaited(RfidVendorChannel.open2dBarcode());
-    unawaited(RfidVendorChannel.enableRfidFunctionMode());
-    unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
-  }
-
-  void _attachStreams() {
-    final rfid = context.read<RfidManager>();
-    _uhfSub = rfid.geigerTagReads.listen(_onUhfRead, onError: (_) {});
-    _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen(
-      _onBarcodeRead,
-      onError: (_) {},
-    );
   }
 
   // ── status-label load ────────────────────────────────────────────────
@@ -149,9 +150,10 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
       final parsed = rows.whereType<Map<String, dynamic>>().map((r) {
         return _StatusLabel(
           name: r['name']?.toString() ?? '',
-          displayLabel: (r['display_label']?.toString().trim().isNotEmpty ?? false)
-              ? r['display_label'].toString()
-              : (r['name']?.toString() ?? ''),
+          displayLabel:
+              (r['display_label']?.toString().trim().isNotEmpty ?? false)
+                  ? r['display_label'].toString()
+                  : (r['name']?.toString() ?? ''),
           applicable: r['applicable'] == true,
           superAdminLocked: r['super_admin_locked'] == true,
           systemOnly: r['is_system_only'] == true,
@@ -172,184 +174,108 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     }
   }
 
-  // ── trigger / scanner inputs ─────────────────────────────────────────
-  void _onBarcodeRead(String raw) {
-    if (!mounted) return;
-    final code = raw.trim();
-    if (code.isEmpty) return;
-    // EPC-shaped (24 hex) → treat as a UHF read instead of a search query.
-    final isEpc24 = RegExp(r'^[0-9A-F]{24}$').hasMatch(code.toUpperCase());
-    if (isEpc24) {
-      unawaited(_jumpFromEpc(code.toUpperCase()));
-      return;
-    }
-    // Anything else → drop into the search box and run the search.
-    if (_step != _StatusStep.search) {
-      setState(() => _step = _StatusStep.search);
-    }
-    _searchCtrl.text = code;
-    _searchCtrl.selection =
-        TextSelection.collapsed(offset: _searchCtrl.text.length);
-    _onSearchChanged(code);
-  }
-
+  // ── UHF input ────────────────────────────────────────────────────────
   void _onUhfRead(RfidTagRead read) {
     if (!mounted) return;
+    if (_step == _StatusStep.pickStatus) return; // don't yank state mid-commit
     final epc = read.epcHex24.toUpperCase();
     if (epc.isEmpty) return;
-    // Only accept UHF when the operator is actively at the search step
-    // (or already inspecting a different EPC). Mid-commit reads are
-    // ignored so we don't yank state out from under them.
-    if (_step == _StatusStep.pickStatus && _committing) return;
-    unawaited(_jumpFromEpc(epc));
+    if (_seenEpcs.contains(epc) || _inFlightEpcs.contains(epc)) return;
+    _inFlightEpcs.add(epc);
+    unawaited(_resolveAndAppend(epc));
   }
 
-  Future<void> _jumpFromEpc(String epc) async {
+  Future<void> _resolveAndAppend(String epc) async {
     final api = context.read<WmsApiClient>();
     try {
       final row = await api.lookupCatalogByEpc(epc);
-      if (!mounted) return;
-      if (row == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('EPC not at this location: $epc')),
-        );
+      if (!mounted) {
+        _inFlightEpcs.remove(epc);
         return;
       }
-      // Pre-fetch this EPC's row in fetchCatalogEpcs so we can pre-select.
-      await _selectItem(row, jumpToEpc: epc);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Lookup failed: $e')));
-    }
-  }
-
-  // ── catalog search ───────────────────────────────────────────────────
-  void _onSearchChanged(String value) {
-    _debounce?.cancel();
-    final trimmed = value.trim();
-    if (trimmed.length < _minQueryLen) {
-      if (_searchResults.isNotEmpty || _query.isNotEmpty) {
-        setState(() {
-          _query = '';
-          _searchResults = [];
-          _searchError = null;
-        });
+      _inFlightEpcs.remove(epc);
+      if (row == null) {
+        ScanSounds.instance.play(ScanCue.error);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('EPC not at this location: $epc'),
+          duration: const Duration(seconds: 2),
+        ));
+        return;
       }
-      return;
-    }
-    _debounce = Timer(_searchDebounce, () {
-      if (!mounted) return;
-      if (trimmed == _query) return;
-      setState(() => _query = trimmed);
-      unawaited(_runSearch());
-    });
-  }
-
-  Future<void> _runSearch() async {
-    if (_query.isEmpty) return;
-    setState(() {
-      _searchLoading = true;
-      _searchError = null;
-      _searchResults = [];
-    });
-    try {
-      final api = context.read<WmsApiClient>();
-      final res = await api.fetchCatalogGrid(q: _query, page: 1, limit: 100);
-      if (!mounted) return;
-      final rows = (res['rows'] as List?)
-              ?.whereType<Map<String, dynamic>>()
-              .toList() ??
-          [];
+      // Catalog rows from lookupCatalogByEpc don't include the EPC
+      // itself — we set it explicitly so the status-pick header can
+      // render it (still hidden in the card list per spec).
+      final stamped = Map<String, dynamic>.from(row)..['epc'] = epc;
       setState(() {
-        _searchResults = rows;
-        _searchLoading = false;
+        _seenEpcs.add(epc);
+        // Newest scan on top — operator's most recent pull is what
+        // they're trying to act on.
+        _scanned.insert(0, _ScannedEpc(epc: epc, row: stamped));
       });
+      ScanSounds.instance.play(ScanCue.success);
     } catch (e) {
+      _inFlightEpcs.remove(epc);
       if (!mounted) return;
-      setState(() {
-        _searchLoading = false;
-        _searchError = 'Search failed: $e';
-      });
+      ScanSounds.instance.play(ScanCue.error);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lookup failed: $e')),
+      );
     }
   }
 
-  // ── select item → load EPCs ──────────────────────────────────────────
-  Future<void> _selectItem(
-    Map<String, dynamic> row, {
-    String? jumpToEpc,
-  }) async {
-    final id = row['custom_sku_id']?.toString() ?? '';
-    if (id.isEmpty) return;
+  // ── selection / commit ───────────────────────────────────────────────
+  void _selectCard(_ScannedEpc card) {
     setState(() {
-      _selectedItem = row;
-      _itemEpcs = [];
-      _epcsLoading = true;
-      _epcsError = null;
-      _step = _StatusStep.pickEpc;
-    });
-    try {
-      final api = context.read<WmsApiClient>();
-      final epcs = await api.fetchCatalogEpcs(id);
-      if (!mounted) return;
-      setState(() {
-        _itemEpcs = epcs;
-        _epcsLoading = false;
-      });
-      if (jumpToEpc != null) {
-        Map<String, dynamic>? match;
-        for (final e in epcs) {
-          if ((e['epc']?.toString() ?? '').toUpperCase() == jumpToEpc) {
-            match = e;
-            break;
-          }
-        }
-        if (match != null) {
-          _selectEpc(match);
-        }
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _epcsLoading = false;
-        _epcsError = 'EPC list failed: $e';
-      });
-    }
-  }
-
-  void _selectEpc(Map<String, dynamic> row) {
-    setState(() {
-      _selectedEpcRow = row;
+      _selectedCard = card;
       _selectedTargetStatus = '';
       _override = false;
       _step = _StatusStep.pickStatus;
     });
   }
 
-  // ── commit ───────────────────────────────────────────────────────────
+  void _stepBack() {
+    setState(() {
+      _step = _StatusStep.scan;
+      _selectedCard = null;
+      _selectedTargetStatus = '';
+      _override = false;
+    });
+  }
+
   Future<void> _commit() async {
-    final epcRow = _selectedEpcRow;
+    final card = _selectedCard;
     final target = _selectedTargetStatus.trim();
-    if (epcRow == null || target.isEmpty) return;
-    final epc = epcRow['epc']?.toString() ?? '';
-    if (epc.isEmpty) return;
+    if (card == null || target.isEmpty) return;
     setState(() => _committing = true);
     try {
       final api = context.read<WmsApiClient>();
       final res = await api.postBulkStatus(
-        epcs: [epc],
+        epcs: [card.epc],
         targetStatus: target,
         override: _override,
       );
       if (!mounted) return;
       final updated = (res['updated'] as num?)?.toInt() ?? 0;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(updated > 0
+      ScanSounds.instance.play(
+          updated > 0 ? ScanCue.success : ScanCue.error);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(updated > 0
             ? 'Status updated → $target'
-            : 'No change applied (status may already match)')),
-      );
-      ScanSounds.instance.play(ScanCue.success);
-      _resetToSearch();
+            : 'No change applied (status may already match)'),
+      ));
+      // Drop the card we just acted on so the operator's list
+      // shrinks as they work through it. Then return to the scan
+      // step ready for the next pull.
+      setState(() {
+        if (updated > 0) {
+          _seenEpcs.remove(card.epc);
+          _scanned.removeWhere((c) => c.epc == card.epc);
+        }
+        _step = _StatusStep.scan;
+        _selectedCard = null;
+        _selectedTargetStatus = '';
+        _override = false;
+      });
     } catch (e) {
       if (!mounted) return;
       ScanSounds.instance.play(ScanCue.error);
@@ -360,17 +286,11 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     }
   }
 
-  void _resetToSearch() {
+  void _clearScanList() {
     setState(() {
-      _step = _StatusStep.search;
-      _selectedItem = null;
-      _itemEpcs = [];
-      _selectedEpcRow = null;
-      _selectedTargetStatus = '';
-      _override = false;
-      _searchCtrl.clear();
-      _query = '';
-      _searchResults = [];
+      _scanned.clear();
+      _seenEpcs.clear();
+      _inFlightEpcs.clear();
     });
   }
 
@@ -385,9 +305,18 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
           children: [
             _StepHeader(
               step: _step,
-              onBack: _step == _StatusStep.search ? null : _stepBack,
+              count: _scanned.length,
+              onBack: _step == _StatusStep.pickStatus ? _stepBack : null,
+              onClear:
+                  _step == _StatusStep.scan && _scanned.isNotEmpty
+                      ? _clearScanList
+                      : null,
             ),
-            Expanded(child: _buildStepBody()),
+            Expanded(
+              child: _step == _StatusStep.scan
+                  ? _buildScanList()
+                  : _buildStatusPick(),
+            ),
             const RfidPowerSlider(),
           ],
         ),
@@ -395,202 +324,44 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     );
   }
 
-  void _stepBack() {
-    setState(() {
-      if (_step == _StatusStep.pickStatus) {
-        _step = _StatusStep.pickEpc;
-        _selectedEpcRow = null;
-        _selectedTargetStatus = '';
-        _override = false;
-      } else if (_step == _StatusStep.pickEpc) {
-        _step = _StatusStep.search;
-        _selectedItem = null;
-        _itemEpcs = [];
-      }
-    });
-  }
-
-  Widget _buildStepBody() {
-    switch (_step) {
-      case _StatusStep.search:
-        return _buildSearch();
-      case _StatusStep.pickEpc:
-        return _buildEpcList();
-      case _StatusStep.pickStatus:
-        return _buildStatusPick();
+  // ── scan list step ───────────────────────────────────────────────────
+  Widget _buildScanList() {
+    if (_scanned.isEmpty) {
+      return const _ScanEmptyHint();
     }
-  }
-
-  // ── search step ──────────────────────────────────────────────────────
-  Widget _buildSearch() {
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 8.h),
-          child: _SearchBar(
-            controller: _searchCtrl,
-            onChanged: _onSearchChanged,
-            onClear: () {
-              _searchCtrl.clear();
-              _onSearchChanged('');
-            },
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 8.h),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              _query.isEmpty
-                  ? 'TYPE · 2D · OR PULL TRIGGER FOR UHF'
-                  : (_searchLoading
-                      ? 'SEARCHING…'
-                      : '${_searchResults.length} RESULTS'),
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.4,
-                color: const Color(0xFF6D7979),
-              ),
-            ),
-          ),
-        ),
-        if (_searchError != null)
-          Padding(
-            padding: EdgeInsets.fromLTRB(20.w, 4.h, 20.w, 4.h),
-            child: Text(
-              _searchError!,
-              style: GoogleFonts.manrope(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFFBF2E2E),
-              ),
-            ),
-          ),
-        Expanded(
-          child: _query.isEmpty
-              ? const _SearchEmptyHint()
-              : _searchLoading && _searchResults.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : _searchResults.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(24.r),
-                            child: Text(
-                              'No matches for "$_query".',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.manrope(
-                                fontSize: 14.sp,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF5A6464),
-                              ),
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 12.h),
-                          itemCount: _searchResults.length,
-                          separatorBuilder: (_, __) => SizedBox(height: 12.h),
-                          itemBuilder: (_, i) {
-                            final r = _searchResults[i];
-                            return CatalogRowCard(
-                              row: r,
-                              onQtyTap: () => _selectItem(r),
-                            );
-                          },
-                        ),
-        ),
-      ],
-    );
-  }
-
-  // ── EPC list step ────────────────────────────────────────────────────
-  Widget _buildEpcList() {
-    final item = _selectedItem;
-    final name = item?['name']?.toString() ?? '';
-    final color = item?['color']?.toString() ?? '';
-    final size = item?['size']?.toString() ?? '';
-    final sku = item?['sku']?.toString() ?? '';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _ItemSummaryCard(name: name, color: color, size: size, sku: sku),
-        if (_epcsError != null)
-          Padding(
-            padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 0),
-            child: Text(
-              _epcsError!,
-              style: GoogleFonts.manrope(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFFBF2E2E),
-              ),
-            ),
-          ),
-        Expanded(
-          child: _epcsLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _itemEpcs.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(24.r),
-                        child: Text(
-                          'No in-stock EPCs at this location.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.manrope(
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF5A6464),
-                          ),
-                        ),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 12.h),
-                      itemCount: _itemEpcs.length,
-                      separatorBuilder: (_, __) => SizedBox(height: 8.h),
-                      itemBuilder: (_, i) {
-                        final r = _itemEpcs[i];
-                        return _EpcPickRow(
-                          row: r,
-                          onTap: () => _selectEpc(r),
-                        );
-                      },
-                    ),
-        ),
-      ],
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 12.h),
+      itemCount: _scanned.length,
+      separatorBuilder: (_, __) => SizedBox(height: 8.h),
+      itemBuilder: (_, i) {
+        final card = _scanned[i];
+        return _EpcContainer(
+          card: card,
+          onTap: () => _selectCard(card),
+        );
+      },
     );
   }
 
   // ── status pick step ─────────────────────────────────────────────────
   Widget _buildStatusPick() {
-    final item = _selectedItem;
-    final epcRow = _selectedEpcRow;
-    final name = item?['name']?.toString() ?? '';
-    final color = item?['color']?.toString() ?? '';
-    final size = item?['size']?.toString() ?? '';
-    final sku = item?['sku']?.toString() ?? '';
-    final epc = epcRow?['epc']?.toString().toUpperCase() ?? '';
-    final currentStatus = epcRow?['status']?.toString() ?? '';
-    final binCode = epcRow?['bin_code']?.toString() ?? '';
+    final card = _selectedCard;
+    if (card == null) return const SizedBox.shrink();
 
     final applicable = _statusLabels.where((s) => s.applicable).toList();
     final unavailable = _statusLabels.where((s) => !s.applicable).toList();
 
     final canCommit = _selectedTargetStatus.isNotEmpty &&
-        _selectedTargetStatus != currentStatus &&
+        _selectedTargetStatus != card.currentStatus &&
         !_committing;
 
     return Column(
       children: [
-        _ItemSummaryCard(
-          name: name,
-          color: color,
-          size: size,
-          sku: sku,
-          epc: epc,
-          currentStatus: currentStatus,
-          binCode: binCode,
+        // Selected card preview — same item-detail block, no EPC string,
+        // visually marked as the operator's current target.
+        Padding(
+          padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0),
+          child: _EpcContainer(card: card, onTap: null, highlighted: true),
         ),
         Expanded(
           child: ListView(
@@ -626,7 +397,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
                     label: s.displayLabel,
                     value: s.name,
                     selected: _selectedTargetStatus == s.name,
-                    disabled: s.name == currentStatus,
+                    disabled: s.name == card.currentStatus,
                     onTap: () =>
                         setState(() => _selectedTargetStatus = s.name),
                   ),
@@ -685,23 +456,30 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// step header — shows current step + back affordance
+// step header — shows current step label + scan count + clear/back affordance
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _StepHeader extends StatelessWidget {
-  const _StepHeader({required this.step, this.onBack});
+  const _StepHeader({
+    required this.step,
+    required this.count,
+    this.onBack,
+    this.onClear,
+  });
 
   final _StatusStep step;
+  final int count;
   final VoidCallback? onBack;
+  final VoidCallback? onClear;
 
   String get _label {
     switch (step) {
-      case _StatusStep.search:
-        return '1 · FIND ITEM';
-      case _StatusStep.pickEpc:
-        return '2 · PICK EPC';
+      case _StatusStep.scan:
+        return count == 0
+            ? 'PULL TRIGGER TO SCAN'
+            : '$count SCANNED · TAP TO CHANGE STATUS';
       case _StatusStep.pickStatus:
-        return '3 · PICK STATUS';
+        return 'PICK NEW STATUS';
     }
   }
 
@@ -726,15 +504,34 @@ class _StepHeader extends StatelessWidget {
                 ),
               ),
             ),
-          Text(
-            _label,
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 11.sp,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.6,
-              color: const Color(0xFF3D4949),
+          Expanded(
+            child: Text(
+              _label,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 11.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.6,
+                color: const Color(0xFF3D4949),
+              ),
             ),
           ),
+          if (onClear != null)
+            GestureDetector(
+              onTap: onClear,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4.w),
+                child: Text(
+                  'CLEAR',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.6,
+                    color: const Color(0xFFBF2E2E),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -742,76 +539,11 @@ class _StepHeader extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// search bar (reused styling from geiger)
+// empty state — operator hasn't pulled the trigger yet
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _SearchBar extends StatelessWidget {
-  const _SearchBar({
-    required this.controller,
-    required this.onChanged,
-    required this.onClear,
-  });
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF0F5F4),
-        borderRadius: BorderRadius.all(Radius.circular(2)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 12.w),
-        child: Row(
-          children: [
-            Icon(Icons.search, size: 22.sp, color: const Color(0xFF6D7979)),
-            SizedBox(width: 10.w),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                onChanged: onChanged,
-                autofocus: true,
-                textInputAction: TextInputAction.search,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textMain,
-                ),
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  isCollapsed: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 16.h),
-                  hintText: 'EPC · SKU · UPC · NAME · BIN',
-                  hintStyle: GoogleFonts.spaceGrotesk(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                    color: const Color(0xFF6D7979),
-                  ),
-                ),
-              ),
-            ),
-            if (controller.text.isNotEmpty)
-              GestureDetector(
-                onTap: onClear,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 6.w),
-                  child: Icon(Icons.close,
-                      size: 20.sp, color: const Color(0xFF6D7979)),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchEmptyHint extends StatelessWidget {
-  const _SearchEmptyHint();
+class _ScanEmptyHint extends StatelessWidget {
+  const _ScanEmptyHint();
 
   @override
   Widget build(BuildContext context) {
@@ -825,7 +557,7 @@ class _SearchEmptyHint extends StatelessWidget {
                 size: 48.sp, color: const Color(0xFFBCC9C9)),
             SizedBox(height: 12.h),
             Text(
-              'TYPE · 2D · OR PULL TRIGGER',
+              'PULL TRIGGER TO SCAN',
               textAlign: TextAlign.center,
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 13.sp,
@@ -836,7 +568,7 @@ class _SearchEmptyHint extends StatelessWidget {
             ),
             SizedBox(height: 6.h),
             Text(
-              'A 2D barcode fills the search.\nA UHF read jumps straight to status.',
+              'Each tag becomes a card.\nTap a card to change its status.',
               textAlign: TextAlign.center,
               style: GoogleFonts.manrope(
                 fontSize: 12.sp,
@@ -853,177 +585,110 @@ class _SearchEmptyHint extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// item summary card — shared by EPC-list + status-pick steps
+// Per-EPC container card — same shape Count Inventory uses for items.
+// Shows SKU + matrix description (name · color · size) + bin + current
+// status. EPC string and qty are intentionally NOT displayed: every card
+// represents exactly one tag, identified by its catalog metadata.
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _ItemSummaryCard extends StatelessWidget {
-  const _ItemSummaryCard({
-    required this.name,
-    required this.color,
-    required this.size,
-    required this.sku,
-    this.epc,
-    this.currentStatus,
-    this.binCode,
+class _EpcContainer extends StatelessWidget {
+  const _EpcContainer({
+    required this.card,
+    required this.onTap,
+    this.highlighted = false,
   });
 
-  final String name;
-  final String color;
-  final String size;
-  final String sku;
-  final String? epc;
-  final String? currentStatus;
-  final String? binCode;
+  final _ScannedEpc card;
+  final VoidCallback? onTap;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
     final desc = [
-      if (name.isNotEmpty) name,
-      if (color.isNotEmpty) color,
-      if (size.isNotEmpty) size,
+      if (card.name.isNotEmpty) card.name,
+      if (card.color.isNotEmpty) card.color,
+      if (card.size.isNotEmpty) card.size,
     ].join(' · ');
-    return Container(
-      width: double.infinity,
-      color: const Color(0xFFECECEC),
-      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
-      margin: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Expanded(
-                child: Text(
-                  sku.isEmpty ? 'SKU: —' : 'SKU: $sku',
-                  style: GoogleFonts.robotoMono(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMain,
-                  ),
-                ),
-              ),
-              if (binCode != null && binCode!.isNotEmpty)
-                Container(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-                  color: AppColors.primary,
-                  child: Text(
-                    'BIN $binCode',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          if (desc.isNotEmpty) ...[
-            SizedBox(height: 4.h),
-            Text(
-              desc,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.manrope(
-                fontSize: 13.sp,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textMain,
-              ),
-            ),
-          ],
-          if (epc != null && epc!.isNotEmpty) ...[
-            SizedBox(height: 6.h),
-            Text(
-              'EPC · $epc',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.4,
-                color: const Color(0xFF3F4A4A),
-              ),
-            ),
-          ],
-          if (currentStatus != null && currentStatus!.isNotEmpty) ...[
-            SizedBox(height: 4.h),
-            Text(
-              'CURRENT · ${currentStatus!.toUpperCase()}',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-                color: const Color(0xFF6D7979),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
+    final bg = highlighted
+        ? AppColors.primary
+        : const Color(0xFFECECEC);
+    final fgMain = highlighted ? Colors.white : AppColors.textMain;
+    final fgMuted = highlighted
+        ? Colors.white.withValues(alpha: 0.92)
+        : const Color(0xFF3F4A4A);
+    final binBg = highlighted
+        ? Colors.white.withValues(alpha: 0.18)
+        : AppColors.primary;
+    final binFg = highlighted ? Colors.white : Colors.white;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// EPC list row — tap to drill into status pick
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _EpcPickRow extends StatelessWidget {
-  const _EpcPickRow({required this.row, required this.onTap});
-
-  final Map<String, dynamic> row;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final epc = row['epc']?.toString().toUpperCase() ?? '';
-    final status = row['status']?.toString() ?? '';
-    final bin = row['bin_code']?.toString() ?? '';
     return Material(
-      color: const Color(0xFFECECEC),
+      color: bg,
       borderRadius: BorderRadius.zero,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(12.w, 10.h, 12.w, 10.h),
-          child: Row(
+          padding: EdgeInsets.fromLTRB(14.w, 12.h, 12.w, 12.h),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      epc.isEmpty ? '—' : epc,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      card.sku.isEmpty ? 'SKU: —' : 'SKU: ${card.sku}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 14.sp,
+                      style: GoogleFonts.robotoMono(
+                        fontSize: 16.sp,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                        color: AppColors.textMain,
+                        color: fgMain,
                       ),
                     ),
-                    SizedBox(height: 2.h),
-                    Text(
-                      [
-                        if (status.isNotEmpty) status.toUpperCase(),
-                        if (bin.isNotEmpty) 'BIN $bin',
-                      ].join(' · '),
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 11.sp,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.0,
-                        color: const Color(0xFF6D7979),
+                  ),
+                  if (card.binCode.isNotEmpty)
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                          horizontal: 10.w, vertical: 4.h),
+                      color: binBg,
+                      child: Text(
+                        'BIN ${card.binCode}',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 11.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                          color: binFg,
+                        ),
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
-              Icon(LucideIcons.chevronRight,
-                  size: 18.sp, color: const Color(0xFF6D7979)),
+              if (desc.isNotEmpty) ...[
+                SizedBox(height: 4.h),
+                Text(
+                  desc,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.manrope(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                    color: fgMain,
+                  ),
+                ),
+              ],
+              if (card.currentStatus.isNotEmpty) ...[
+                SizedBox(height: 6.h),
+                Text(
+                  'CURRENT · ${card.currentStatus.toUpperCase()}',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                    color: fgMuted,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

@@ -36,18 +36,32 @@ export async function assignItemsToBinBySkuScan(
   if (!binId) return { updated: 0 };
 
   // homeless_only really means "not currently sitting in a LIVE bin." An
-  // item whose bin row was archived/deleted is functionally homeless to
-  // the operator — the bin doesn't exist anymore in the warehouse — so
-  // the assign should pick it up. Pre-1.2.43 we filtered on
-  // `bin_id IS NULL` only, which left items pointing at archived bins
-  // stranded: the operator scanned them, the assign returned 0, and the
-  // dashboard "0 items assigned" snackbar showed up with no clue why.
+  // item is functionally homeless when it has no live (non-archived) bin
+  // home — that covers three states the operator perceives as "the bin
+  // doesn't exist in the warehouse anymore":
+  //
+  //   1. bin_id IS NULL                — never assigned
+  //   2. bin_id points to an ARCHIVED bin row (archived_at IS NOT NULL)
+  //   3. bin_id points to a row that no longer exists at all (orphan)
+  //
+  // Pre-1.2.43 we caught only (1). 1.2.44 added (2) via an IN-list
+  // against archived bins. Items in state (3) — orphaned bin_id —
+  // still slipped through and triggered the "0 items assigned, every
+  // matching EPC is already placed" snackbar even though the preview
+  // had counted them as homeless. The preview's LEFT JOIN classifies
+  // them as homeless (b.code is NULL), so we mirror that: the bin
+  // doesn't have a live, non-archived row.
+  //
+  // NOT EXISTS is the canonical way to express "no live bin home" and
+  // matches the preview classifier 1:1. 1.2.46 root-cause fix.
   const homelessGuard =
     mode === "homeless_only"
       ? `AND (
            bin_id IS NULL
-           OR bin_id IN (
-             SELECT id FROM bins WHERE archived_at IS NOT NULL
+           OR NOT EXISTS (
+             SELECT 1 FROM bins b
+             WHERE b.id = items.bin_id
+               AND b.archived_at IS NULL
            )
          )`
       : "";

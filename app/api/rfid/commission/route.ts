@@ -41,6 +41,17 @@ export async function POST(req: Request) {
   const host = parsed.data.printerIp ?? "192.168.1.3";
   const port = parsed.data.printerPort ?? 80;
   const uri = parsed.data.printerUri ?? "PSTPRNT";
+  // When the request comes from the handheld (X-Carbon-Mobile: 1) we
+  // skip the server-side print attempt entirely. The cloud WMS can't
+  // route to LAN-only printers (192.168.1.3:* lives on the warehouse
+  // network, blocked from Hetzner egress); the prior request hung on
+  // its outbound POST to the printer until Coolify's request timeout
+  // closed the connection, surfacing as "Print fetch failed" on the
+  // handheld. The handheld is on the same LAN as the printer, so it
+  // sends ZPL directly via TCP after this response returns.
+  const skipServerPrint =
+    req.headers.get("x-carbon-mobile") === "1" ||
+    parsed.data.printerIp === "skip";
 
   const client = await pool.connect();
   let inTx = false;
@@ -51,13 +62,20 @@ export async function POST(req: Request) {
     await client.query("COMMIT");
     inTx = false;
 
-    const print = await rfidCommissionPrintAndAudit(pool, session, {
-      zpl: prep.zpl,
-      printerHost: host,
-      printerPort: port,
-      printerUri: uri,
-      meta: prep.meta,
-    });
+    const print = skipServerPrint
+      ? {
+          printer_ok: false,
+          http_status: 0,
+          printer_error: "skipped: client prints over LAN",
+          printer_url: `http://${host}:${port}/${uri}`,
+        }
+      : await rfidCommissionPrintAndAudit(pool, session, {
+          zpl: prep.zpl,
+          printerHost: host,
+          printerPort: port,
+          printerUri: uri,
+          meta: prep.meta,
+        });
 
     return NextResponse.json({
       ok: true,
@@ -67,6 +85,13 @@ export async function POST(req: Request) {
       http_status: print.http_status,
       printer_error: print.printer_error,
       printer_url: print.printer_url,
+      // ZPL is always returned so the handheld can fall back to a
+      // direct TCP send when the server-side print fails (or was
+      // skipped because the request originated from a mobile client).
+      zpl: prep.zpl,
+      printer_host: host,
+      printer_port: port,
+      printer_uri: uri,
     });
   } catch (e) {
     if (inTx) {

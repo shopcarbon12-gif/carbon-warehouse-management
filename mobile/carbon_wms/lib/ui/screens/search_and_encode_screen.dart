@@ -79,17 +79,18 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       if (!mounted) return;
       context.read<RfidManager>().scanContext = 'RE_ENCODE';
       final settings = context.read<MobileSettingsRepository>();
-      // Re-encode default — operator preference, 1.2.42: enter the screen
-      // at 23 dBm regardless of where the global slider was. Writes need
-      // close range and high power; 23 dBm is the Chainway firmware cap
-      // and a sensible Zebra default for re-encoding. The shared
-      // RfidPowerSlider reads from settings.config.transferOutAntennaPower,
-      // so calling setGlobalAntennaPower(23) here also moves the slider
-      // and live-pushes the new value to the radio in one tick. Operator
-      // can still drag the slider after entry — no save button by design.
-      const reEncodePowerDbm = 23;
-      await settings.setGlobalAntennaPower(reEncodePowerDbm);
-      _powerDbm = reEncodePowerDbm;
+      // Inherit the operator's last global power. The shared
+      // RfidPowerSlider lives at the bottom of this screen and is the
+      // single source of truth — pre-1.2.46 we forcibly reset to 23 dBm
+      // on every entry, then `_startScan` re-applied the local
+      // `_powerDbm` (also frozen at 23) before every run. Net effect:
+      // dragging the bottom slider up to 30 dBm did nothing on RFD8500
+      // because the next trigger pull silently dropped power back to 23,
+      // and the strict verifyEpcWrite (3 new sightings, 0 old) couldn't
+      // see enough new-EPC reads at 23 dBm so every encode reported
+      // writeFailed. Now the slider's value flows straight to the radio
+      // and `_powerDbm` mirrors the repo, not the other way around.
+      _powerDbm = settings.config.transferOutAntennaPower;
       _deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
       unawaited(_sounds.init());
       await _resolveWarehouse();
@@ -119,6 +120,14 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     await RfidVendorChannel.enableRfidFunctionMode();
     // RFD8500: route the physical trigger to UHF (no-op if Zebra reader not connected).
     await RfidVendorChannel.setZebraTriggerModeRfid();
+    // Read fresh from the repo so the radio matches the bottom slider
+    // even if entry-time and ensureScannerReady run in different ticks.
+    if (mounted) {
+      _powerDbm = context
+          .read<MobileSettingsRepository>()
+          .config
+          .transferOutAntennaPower;
+    }
     await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
 
     await _directTagSub?.cancel();
@@ -245,7 +254,15 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
                       final n = v.round();
                       setM(() {});
                       setState(() => _powerDbm = n);
-                      unawaited(RfidVendorChannel.setAntennaPowerDbm(n));
+                      // Route through the repo so the bottom
+                      // RfidPowerSlider stays in sync and the next scan
+                      // start reads the same value. Pre-1.2.46 this
+                      // popup slider called setAntennaPowerDbm directly,
+                      // which set the radio but left the bottom slider
+                      // displaying a stale value.
+                      unawaited(context
+                          .read<MobileSettingsRepository>()
+                          .setGlobalAntennaPower(n));
                     },
                     activeColor: AppColors.primary,
                   ),
@@ -294,6 +311,12 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     if (_running) return;
     final m = _rfid;
     if (m == null) return;
+    // Always read FRESH from the repo — the bottom RfidPowerSlider
+    // updates the repo on every drag tick, so this picks up whatever
+    // the operator just dialled in. Pre-1.2.46 we read `_powerDbm`
+    // here, which never reflected the slider's value.
+    final settings = context.read<MobileSettingsRepository>();
+    _powerDbm = settings.config.transferOutAntennaPower;
     await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
     try {
       await m.startLocateScanning();

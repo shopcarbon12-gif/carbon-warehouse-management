@@ -1220,6 +1220,13 @@ class WmsApiClient {
       headers: {
         ...await sessionAuthHeaders(),
         'Content-Type': 'application/json',
+        // Tells the server to skip its own outbound POST to the printer
+        // — that POST hangs until timeout when the WMS runs in Coolify
+        // (Hetzner egress can't reach the warehouse-LAN printer at
+        // 192.168.1.3). Server still mints serials + inserts items rows
+        // and returns the rendered ZPL; the handheld then sends the ZPL
+        // directly to the printer over TCP (it IS on the same LAN).
+        'X-Carbon-Mobile': '1',
       },
       body: jsonEncode(body),
     );
