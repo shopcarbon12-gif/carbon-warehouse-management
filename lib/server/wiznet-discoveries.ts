@@ -106,6 +106,60 @@ export async function ingestWiznetDiscoveries(
       continue;
     }
 
+    // Step 1.5: no MAC match — fall back to matching by IP+agent. The
+    // operator's expected workflow is to add a reader by IP only and let
+    // the agent fill in the MAC ("the agent already knows what's at .16").
+    // For any device on this agent at the discovered IP that has a NULL
+    // mac_address, auto-bind the discovered MAC to it. Once bound, the
+    // normal MAC-based path handles auto-IP-tracking + auto-clear on
+    // every subsequent sweep.
+    const byIp = await client.query<{ id: string }>(
+      `SELECT d.id::text
+         FROM devices d
+         INNER JOIN cdm_agents a ON a.id = d.cdm_agent_id
+         WHERE d.network_address = $1
+           AND d.mac_address IS NULL
+           AND a.tenant_id = $2::uuid
+           AND a.id = $3::uuid
+           AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
+         LIMIT 1`,
+      [d.ip, tenantId, agentId],
+    );
+    if (byIp.rowCount && byIp.rows[0]) {
+      const deviceId = byIp.rows[0].id;
+      await client.query(
+        `UPDATE devices
+            SET mac_address = $1, updated_at = now()
+          WHERE id = $2::uuid`,
+        [macLower, deviceId],
+      );
+      await client.query(
+        `INSERT INTO audit_log (tenant_id, user_id, action, entity, metadata)
+           VALUES ($1::uuid, NULL, 'cdm_agent_auto_mac_bind', 'devices', $2::jsonb)`,
+        [
+          tenantId,
+          JSON.stringify({
+            device_id: deviceId,
+            ip: d.ip,
+            mac: macLower,
+            source: "wiznet_discovery",
+          }),
+        ],
+      );
+      // Mark any pending discovery for this MAC as adopted so the row
+      // leaves the panel on the next list query (60s SWR window).
+      await client.query(
+        `UPDATE cdm_agent_discoveries
+            SET adopted_at = now()
+          WHERE cdm_agent_id = $1::uuid
+            AND lower(mac_address) = $2
+            AND adopted_at IS NULL`,
+        [agentId, macLower],
+      );
+      matchedKnown += 1;
+      continue;
+    }
+
     // Step 2: unknown — upsert into cdm_agent_discoveries.
     const upsert = await client.query<{ inserted: boolean }>(
       `INSERT INTO cdm_agent_discoveries

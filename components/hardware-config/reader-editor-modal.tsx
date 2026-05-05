@@ -238,18 +238,19 @@ export function ReaderEditorModal({
             />
           </Field>
 
-          <Field label="WIZnet MAC (from sticker on bridge)">
+          <Field label="WIZnet MAC (optional)">
             <input
               type="text"
               value={macAddress}
               onChange={(e) => setMacAddress(e.target.value)}
-              placeholder="0008DC595740"
+              placeholder="auto-filled by agent"
               maxLength={32}
               className={inputCls}
             />
             <p className="mt-1 font-mono text-[0.6rem] text-[var(--wms-muted)]">
-              Optional but recommended. With this set, the agent auto-tracks this reader
-              through DHCP IP changes and removes it from &quot;Discovered WIZnet bridges&quot;.
+              Leave blank — the CDM agent fills this in from LAN discovery once it
+              sees the reader at this IP. Set it manually only to pre-bind a reader
+              before it&apos;s on the LAN.
             </p>
           </Field>
 
