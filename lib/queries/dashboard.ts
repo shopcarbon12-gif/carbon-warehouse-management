@@ -19,18 +19,24 @@ export async function getDashboardKpis(
   tenantId: string,
   locationId: string,
 ): Promise<DashboardKpis> {
+  // Match the web command-center exactly (lib/queries/dashboard-command.ts):
+  //
+  //   live_inventory     = count(*) FROM items WHERE location AND status='in-stock'
+  //   receiving_concerns = count(*) FROM items WHERE location AND status='pending_visibility'
+  //
+  // The previous mobile path counted SUM(inventory_items.qty) and
+  // count(orders) which are entirely different data sources — the
+  // mobile dashboard never matched the web because the SQL diverged.
+  // Aligning here so both surfaces report identical numbers.
   const inv = await pool.query<{ c: string }>(
-    `SELECT coalesce(sum(qty), 0)::text AS c
-     FROM inventory_items
-     WHERE location_id = $1::uuid`,
+    `SELECT count(*)::text AS c FROM items
+     WHERE location_id = $1::uuid AND status = 'in-stock'`,
     [locationId],
   );
   const ord = await pool.query<{ c: string }>(
-    `SELECT count(*)::text AS c FROM orders
-     WHERE tenant_id = $1::uuid
-       AND location_id = $2::uuid
-       AND status NOT IN ('shipped', 'cancelled')`,
-    [tenantId, locationId],
+    `SELECT count(*)::text AS c FROM items
+     WHERE location_id = $1::uuid AND status = 'pending_visibility'`,
+    [locationId],
   );
   const exc = await pool.query<{ c: string }>(
     `SELECT count(*)::text AS c FROM exceptions

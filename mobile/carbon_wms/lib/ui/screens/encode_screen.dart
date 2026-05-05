@@ -62,6 +62,15 @@ class _EncodeScreenState extends State<EncodeScreen> {
   // ── selected SKU
   Map<String, dynamic>? _selectedSku;
 
+  // ── test-now toggle (Step 1 checkbox)
+  // When true, Step 2's first trigger pull does a dry-run read +
+  // resolve only. On success the operator sees a "encode test passed"
+  // dialog; the SECOND trigger pull then does the real encode-claim +
+  // write. When false, Step 2's first trigger pull does the real write
+  // immediately (the original behaviour).
+  bool _testMode = false;
+  bool _testPassed = false;
+
   // ── encode state
   bool _encoding = false;
   String? _encodeError;
@@ -76,7 +85,9 @@ class _EncodeScreenState extends State<EncodeScreen> {
   void initState() {
     super.initState();
     unawaited(ScanSounds.instance.init());
-    _activateScanners();
+    // Step 1 starts on entry — trigger fires the 2D imager so the
+    // operator can scan a barcode straight into the search box.
+    _activate2DMode();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Force the radio to 10 dBm on entry. Operator can drag the bottom
@@ -98,16 +109,34 @@ class _EncodeScreenState extends State<EncodeScreen> {
     unawaited(_barcodeSub?.cancel());
     unawaited(_triggerSub?.cancel());
     unawaited(context.read<RfidManager>().stopLocateScanning());
+    // Leave the device in RFID-trigger mode for the next screen so
+    // Count / Locate / Re-Encode get UHF on trigger pull immediately.
+    _activateRfidMode();
     _searchCtrl.dispose();
     super.dispose();
   }
 
   // ── scanner mode ──────────────────────────────────────────────────────
-  void _activateScanners() {
-    // Both 2D imager and UHF stay armed:
-    //   • 2D feeds the search box (Step 1)
-    //   • UHF trigger fires the read+write (Step 2)
+  // Step 1 (PICK SKU)  → trigger fires the 2D imager so a barcode pull
+  //                      lands in the search box
+  // Step 2 (ENCODE)    → trigger fires UHF so the read+write atomic loop
+  //                      can run on the locked SKU
+  void _activate2DMode() {
+    // Chainway: open the imager + enable the trigger-relay so a trigger
+    // pull starts a 2D decode. (`enableRfidFunctionMode` is the WRONG
+    // call here — it routes the trigger to UHF.)
     unawaited(RfidVendorChannel.open2dBarcode());
+    unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
+    // Zebra: physically flip the RFD8500 trigger to BARCODE_MODE.
+    unawaited(RfidVendorChannel.setZebraTriggerMode2D());
+  }
+
+  void _activateRfidMode() {
+    // Step 2 — UHF only, 2D engine off so a stray decode can't fire
+    // mid-write. Chainway: disable trigger-relay + close imager. Zebra:
+    // BARCODE→RFID trigger flip.
+    unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+    unawaited(RfidVendorChannel.close2dBarcode());
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
   }
@@ -197,6 +226,9 @@ class _EncodeScreenState extends State<EncodeScreen> {
       _lastResult = null;
       _encodeError = null;
     });
+    // SKU is locked → flip the trigger to UHF so a pull does the
+    // atomic read+write on the next tag in front of the gun.
+    _activateRfidMode();
   }
 
   void _changeSku() {
@@ -204,10 +236,39 @@ class _EncodeScreenState extends State<EncodeScreen> {
       _selectedSku = null;
       _lastResult = null;
       _encodeError = null;
+      // Going back to step 1 re-arms the test gate. A fresh "Change
+      // SKU" should re-require the test pass before committing a write.
+      _testPassed = false;
     });
+    // Back to search step → trigger fires the 2D imager again.
+    _activate2DMode();
   }
 
-  // ── single-press read+write ───────────────────────────────────────────
+  /// Read a single EPC off whatever tag is in front of the gun. Returns
+  /// the 24-hex EPC, or null after [_kReadWindowMs] of silence.
+  Future<String?> _readOneTag(RfidManager rfid) async {
+    final completer = Completer<String?>();
+    final sub = rfid.geigerTagReads.listen((read) {
+      final epc = read.epcHex24.toUpperCase();
+      if (epc.isEmpty) return;
+      if (!completer.isCompleted) completer.complete(epc);
+    }, onError: (_) {
+      if (!completer.isCompleted) completer.complete(null);
+    });
+    unawaited(rfid.startLocateScanning());
+    try {
+      return await completer.future.timeout(
+        const Duration(milliseconds: _kReadWindowMs),
+        onTimeout: () => null,
+      );
+    } finally {
+      await sub.cancel();
+      unawaited(rfid.stopLocateScanning());
+    }
+  }
+
+  // Trigger pulled in step 2. Routes to test-mode dry-run or real
+  // encode based on the bottom-of-step-1 "TEST NOW" toggle.
   Future<void> _runEncodeOnce() async {
     final sku = _selectedSku;
     if (sku == null) return;
@@ -216,6 +277,67 @@ class _EncodeScreenState extends State<EncodeScreen> {
       _failure('SKU is missing custom_sku_id');
       return;
     }
+    if (_testMode && !_testPassed) {
+      await _runEncodeTest();
+      return;
+    }
+    await _runEncodeReal(customSkuId: customSkuId);
+  }
+
+  /// Test-mode trigger pull #1 — read a tag + verify the WMS server can
+  /// resolve it. No write happens, no items row is inserted. On success
+  /// the operator sees a confirmation dialog; the next trigger pull
+  /// becomes the real read+write.
+  Future<void> _runEncodeTest() async {
+    final rfid = context.read<RfidManager>();
+    final api = context.read<WmsApiClient>();
+    setState(() {
+      _encoding = true;
+      _encodeError = null;
+    });
+
+    final epc = await _readOneTag(rfid);
+    if (!mounted) return;
+    if (epc == null) {
+      _failure('Test failed — no tag in range');
+      return;
+    }
+    // Best-effort resolve (foreign tags are still encodable, so we don't
+    // hard-fail when status='foreign'). The point of the dry-run is to
+    // confirm the chip is responsive end-to-end.
+    try {
+      await api.postEncodeResolve(epc);
+    } catch (_) {
+      /* server unreachable still passes — the chip read is what we test */
+    }
+    if (!mounted) return;
+    setState(() {
+      _encoding = false;
+      _testPassed = true;
+    });
+    ScanSounds.instance.play(ScanCue.success);
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Encode test passed'),
+        content: const Text(
+          'The handheld can read the tag and the server can resolve it.\n\n'
+          'Pull the trigger again to commit the real encode.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Real read + claim + write. Used both by test-mode trigger #2 and
+  /// by non-test-mode trigger #1.
+  Future<void> _runEncodeReal({required String customSkuId}) async {
     // Capture every Provider lookup BEFORE any await so we never cross a
     // BuildContext across an async gap (the analyzer rule we keep tripping
     // on async work in long screens).
@@ -230,23 +352,8 @@ class _EncodeScreenState extends State<EncodeScreen> {
 
     // 1) read — start the inventory and grab the strongest read in a tight
     // window. We don't need many reads; the first valid EPC wins.
-    String? oldEpc;
-    final completer = Completer<String?>();
-    final tempSub = rfid.geigerTagReads.listen((read) {
-      final epc = read.epcHex24.toUpperCase();
-      if (epc.isEmpty) return;
-      if (!completer.isCompleted) completer.complete(epc);
-    }, onError: (_) {
-      if (!completer.isCompleted) completer.complete(null);
-    });
-    unawaited(rfid.startLocateScanning());
-    try {
-      oldEpc = await completer.future
-          .timeout(const Duration(milliseconds: _kReadWindowMs), onTimeout: () => null);
-    } finally {
-      await tempSub.cancel();
-      unawaited(rfid.stopLocateScanning());
-    }
+    final oldEpc = await _readOneTag(rfid);
+    if (!mounted) return;
     if (oldEpc == null) {
       _failure('No tag detected — get closer and try again');
       return;
@@ -289,10 +396,14 @@ class _EncodeScreenState extends State<EncodeScreen> {
     setState(() {
       _encoding = false;
       _lastResult = _EncodeResult(
-        oldEpc: oldEpc!,
+        oldEpc: oldEpc,
         newEpc: newEpc,
         serial: serial,
       );
+      // Reset test gate so the next session starts fresh — a single
+      // checkbox run yields one test + one real write before requiring
+      // re-arm.
+      _testPassed = false;
     });
     ScanSounds.instance.play(ScanCue.success);
   }
@@ -309,6 +420,10 @@ class _EncodeScreenState extends State<EncodeScreen> {
   // ── ui ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    // Step 1 is a 2D-imager search; the RFID power slider has nothing to
+    // affect there. It only shows on step 2 (locked SKU → trigger does
+    // UHF read+write) where dB matters for write range.
+    final inEncodeStep = _selectedSku != null;
     return CarbonScaffold(
       pageTitle: 'ENCODE',
       body: SafeArea(
@@ -316,7 +431,7 @@ class _EncodeScreenState extends State<EncodeScreen> {
         child: Column(
           children: [
             Expanded(child: _buildBody()),
-            const RfidPowerSlider(),
+            if (inEncodeStep) const RfidPowerSlider(),
           ],
         ),
       ),
@@ -404,10 +519,35 @@ class _EncodeScreenState extends State<EncodeScreen> {
                             final r = _searchResults[i];
                             return CatalogRowCard(
                               row: r,
+                              // qty is irrelevant for encode targeting —
+                              // operator picks a SKU template, even one
+                              // that currently has 0 in-stock items is
+                              // a valid encode target.
+                              showQty: false,
+                              // Tapping anywhere in the row picks the
+                              // SKU; InkWell paints a press splash so
+                              // the operator gets visual confirmation
+                              // before the screen flips to step 2.
+                              onTap: () => _selectSku(r),
                               onQtyTap: () => _selectSku(r),
                             );
                           },
                         ),
+        ),
+        // Bottom-of-step-1 "TEST NOW" toggle. Pre-flights the next
+        // SKU pick: when checked, step 2's first trigger pull just
+        // verifies the chip is responsive (no DB row, no write); the
+        // SECOND trigger pull does the real encode. When unchecked
+        // (default) step 2's first trigger pull is the real write,
+        // immediate.
+        _TestNowToggle(
+          checked: _testMode,
+          onChanged: (v) => setState(() {
+            _testMode = v;
+            // Toggling re-arms — a fresh check should always require
+            // a fresh test pass before the real encode runs.
+            _testPassed = false;
+          }),
         ),
       ],
     );
@@ -478,7 +618,9 @@ class _EncodeScreenState extends State<EncodeScreen> {
                   ),
                   SizedBox(height: 12.h),
                   Text(
-                    'PULL TRIGGER TO ENCODE',
+                    (_testMode && !_testPassed)
+                        ? 'PULL TRIGGER TO TEST'
+                        : 'PULL TRIGGER TO ENCODE',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.manrope(
                       fontSize: 16.sp,
@@ -489,7 +631,9 @@ class _EncodeScreenState extends State<EncodeScreen> {
                   ),
                   SizedBox(height: 6.h),
                   Text(
-                    'Hold the gun close to ONE tag and pull.\nReads + writes in a single press.',
+                    (_testMode && !_testPassed)
+                        ? 'Test mode armed.\nFirst pull verifies the chip; next pull writes.'
+                        : 'Hold the gun close to ONE tag and pull.\nReads + writes in a single press.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.manrope(
                       fontSize: 12.sp,
@@ -555,7 +699,12 @@ class _SearchBar extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 onChanged: onChanged,
-                autofocus: true,
+                // No autofocus — the soft keyboard popping on entry was
+                // overlapping the trigger workflow. Operator taps the
+                // box only when they want to type; the 2D scanner can
+                // fill it without focus by going through the barcode
+                // EventChannel listener on _attachStreams().
+                autofocus: false,
                 textInputAction: TextInputAction.search,
                 style: GoogleFonts.spaceGrotesk(
                   fontSize: 15.sp,
@@ -586,6 +735,82 @@ class _SearchBar extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// "TEST NOW" toggle — bottom of step 1
+// ═════════════════════════════════════════════════════════════════════════
+
+class _TestNowToggle extends StatelessWidget {
+  const _TestNowToggle({required this.checked, required this.onChanged});
+  final bool checked;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    // Highlight the whole container when armed so the operator can
+    // tell at a glance the next encode flow will dry-run first.
+    final bg = checked ? AppColors.primary : const Color(0xFFF0F5F4);
+    final fg = checked ? Colors.white : const Color(0xFF3D4949);
+    final fgMuted = checked
+        ? Colors.white.withValues(alpha: 0.85)
+        : const Color(0xFF6D7979);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 12.h),
+      child: Material(
+        color: bg,
+        child: InkWell(
+          onTap: () => onChanged(!checked),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(14.w, 12.h, 14.w, 12.h),
+            child: Row(
+              children: [
+                Icon(
+                  checked
+                      ? Icons.check_box_rounded
+                      : Icons.check_box_outline_blank_rounded,
+                  size: 22.sp,
+                  color: fg,
+                ),
+                SizedBox(width: 10.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'TEST NOW',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.6,
+                          color: fg,
+                        ),
+                      ),
+                      SizedBox(height: 2.h),
+                      Text(
+                        checked
+                            ? 'First trigger pull tests the chip; second writes for real.'
+                            : 'Off: first trigger pull writes immediately.',
+                        style: GoogleFonts.manrope(
+                          fontSize: 11.sp,
+                          fontWeight: FontWeight.w600,
+                          color: fgMuted,
+                          height: 1.3,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

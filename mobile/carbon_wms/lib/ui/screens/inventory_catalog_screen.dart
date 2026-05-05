@@ -361,10 +361,28 @@ class _ResultMeta extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class CatalogRowCard extends StatelessWidget {
-  const CatalogRowCard({super.key, required this.row, required this.onQtyTap});
+  const CatalogRowCard({
+    super.key,
+    required this.row,
+    required this.onQtyTap,
+    this.showQty = true,
+    this.onTap,
+  });
 
   final Map<String, dynamic> row;
   final VoidCallback onQtyTap;
+
+  /// When false, the right-hand `xN` badge is hidden entirely. Used by
+  /// the Encode screen, where qty is irrelevant (the operator is picking
+  /// a SKU template to write onto a fresh tag — even SKUs with zero
+  /// in-stock items are valid targets).
+  final bool showQty;
+
+  /// When provided, the whole row becomes tappable (Material InkWell
+  /// splash on press). The qty-badge tap path is preserved for callers
+  /// that don't want full-row tap (Catalog / Status Change keep using
+  /// `onQtyTap` for their drill-down semantics).
+  final VoidCallback? onTap;
 
   String _formatBin(String? raw) {
     final s = (raw ?? '').trim().toUpperCase().replaceAll(RegExp(r'[-\s]'), '');
@@ -429,58 +447,56 @@ class CatalogRowCard extends StatelessWidget {
       height: 1.2,
     );
 
-    return Material(
-      color: const Color(0xFFECECEC),
-      borderRadius: BorderRadius.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          sku.isEmpty ? 'SKU: —' : 'SKU: $sku',
-                          style: skuStyle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+    final body = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        sku.isEmpty ? 'SKU: —' : 'SKU: $sku',
+                        style: skuStyle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      if (priceText.isNotEmpty) ...[
-                        SizedBox(width: 8.w),
-                        Text(priceText, style: priceStyle),
-                      ],
+                    ),
+                    if (priceText.isNotEmpty) ...[
+                      SizedBox(width: 8.w),
+                      Text(priceText, style: priceStyle),
                     ],
+                  ],
+                ),
+                if (desc.isNotEmpty) ...[
+                  SizedBox(height: 3.h),
+                  Text(
+                    desc,
+                    style: descStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (desc.isNotEmpty) ...[
-                    SizedBox(height: 3.h),
-                    Text(
-                      desc,
-                      style: descStyle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  if (binText.isNotEmpty) ...[
-                    SizedBox(height: 2.h),
-                    Text(
-                      binText,
-                      style: binStyle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
                 ],
-              ),
+                if (binText.isNotEmpty) ...[
+                  SizedBox(height: 2.h),
+                  Text(
+                    binText,
+                    style: binStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
             ),
+          ),
+          if (showQty) ...[
             SizedBox(width: 4.w),
             GestureDetector(
               onTap: qty > 0 ? onQtyTap : null,
@@ -491,8 +507,27 @@ class CatalogRowCard extends StatelessWidget {
               ),
             ),
           ],
-        ),
+        ],
       ),
+    );
+
+    // Whole-row tappable variant (Encode screen) — InkWell gives a press
+    // splash that's our "you tapped me" affordance. Default callers keep
+    // the legacy "tap on x N badge only" semantics.
+    if (onTap != null) {
+      return Material(
+        color: const Color(0xFFECECEC),
+        borderRadius: BorderRadius.zero,
+        child: InkWell(
+          onTap: onTap,
+          child: body,
+        ),
+      );
+    }
+    return Material(
+      color: const Color(0xFFECECEC),
+      borderRadius: BorderRadius.zero,
+      child: body,
     );
   }
 }

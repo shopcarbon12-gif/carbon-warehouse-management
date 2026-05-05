@@ -450,7 +450,13 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       'NUL',
     };
     if (blockedNoise.contains(normalized)) return;
-    if (_awaitingBinScan && normalized.length < 5) return;
+    // Length gate ONLY filters obvious typing fragments (1–2 chars). Real
+    // bin codes can be 3–4 chars (e.g. "1A", "X7C") and the prior `<5`
+    // gate silently swallowed those whenever an RFD8500 decoded a short
+    // bin label — operators saw beep+green but no bin appeared in the
+    // app. The blockedNoise list above already drops keypress-name
+    // strings (`SCAN`, `START`, etc.).
+    if (_awaitingBinScan && normalized.length < 3) return;
     unawaited(_stopHardware2dScan());
     if (_awaitingBinScan) {
       unawaited(_handleBinScan(v));

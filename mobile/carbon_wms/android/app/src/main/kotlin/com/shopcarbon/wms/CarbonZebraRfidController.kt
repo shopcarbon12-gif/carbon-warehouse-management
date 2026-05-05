@@ -115,6 +115,20 @@ class CarbonZebraRfidController(
         return@execute
       }
       try {
+        // Defensive re-init of the CoreScanner SDK side. The barcode SDK
+        // is normally booted once at connect-time, but a BT drop +
+        // re-pair AFTER connect leaves the new sled identity without a
+        // CoreScanner communication session — the imager fires + green-
+        // beeps + the gun decodes, but the host never sees it because
+        // dcssdkEventBarcode is bound to the OLD scanner ID. Calling
+        // initBarcodeSdkOnce() here is idempotent (it no-ops when
+        // sdkHandler is already set), and forceRebindBarcodeScanner()
+        // re-triggers Available-Scanners discovery so a freshly-paired
+        // RFD8500 gets a session before the operator's first trigger pull.
+        // Fixes the Bin Assign symptom "scan green-beeps but bin code
+        // never appears in the app" on Zebra hardware.
+        initBarcodeSdkOnce()
+        forceRebindBarcodeScanner()
         // Stop any in-flight UHF inventory before switching: leaving inventory running
         // while the trigger flips to BARCODE wedges the SDK's read state on some
         // firmware builds (it never emits the EndOfInventory status notification, so
@@ -227,6 +241,65 @@ class CarbonZebraRfidController(
     } catch (t: Throwable) {
       Log.w(TAG, "barcode SDK: init failed (${t.javaClass.name}: ${t.message})", t)
       sdkHandler = null
+    }
+  }
+
+  /**
+   * Re-bind a paired RFD8500 to the CoreScanner SDK without bouncing the
+   * RFID side. Resolves the "decode green-beeps but Flutter never sees the
+   * data" symptom that happens when the SDK was initialised before the
+   * sled was paired, or when the BT link dropped + auto-reconnected after
+   * the initial connect.
+   *
+   * Strategy:
+   *  1. Ask CoreScanner for the current AvailableScannersList — this also
+   *     re-fires `dcssdkEventScannerAppeared` for any sled that the SDK
+   *     knows about but isn't actively tracking.
+   *  2. If we already have a [barcodeScannerId] mapped, re-issue
+   *     [dcssdkEstablishCommunicationSession] for it (no-op when the
+   *     session is already alive on most firmware revisions; otherwise
+   *     re-opens it).
+   *
+   * Idempotent. No-ops when the SDK never came up.
+   */
+  private fun forceRebindBarcodeScanner() {
+    val handler = sdkHandler ?: return
+    try {
+      // ArrayList is what CoreScanner's API expects/returns; the variant
+      // is intentional. Re-querying the list re-fires scannerAppeared
+      // events for any sled with a known BT identity.
+      val list = ArrayList<DCSScannerInfo>()
+      try {
+        handler.dcssdkGetAvailableScannersList(list)
+        Log.d(TAG, "barcode SDK: rebind — available list size=${list.size}")
+        for (s in list) {
+          val name = s.scannerName.orEmpty()
+          if (!name.uppercase().startsWith("RFD")) continue
+          val id = s.scannerID
+          val res = try {
+            handler.dcssdkEstablishCommunicationSession(id)
+          } catch (t: Throwable) {
+            Log.w(TAG, "barcode SDK: rebind establish id=$id threw", t)
+            -1
+          }
+          Log.d(TAG, "barcode SDK: rebind establish id=$id name='$name' -> $res")
+        }
+      } catch (t: Throwable) {
+        Log.w(TAG, "barcode SDK: getAvailableScannersList threw", t)
+      }
+      // Belt-and-braces: if we still have a remembered scannerID from a
+      // prior session, re-establish it directly.
+      val sid = barcodeScannerId
+      if (sid != -1) {
+        try {
+          val res = handler.dcssdkEstablishCommunicationSession(sid)
+          Log.d(TAG, "barcode SDK: rebind cached id=$sid -> $res")
+        } catch (t: Throwable) {
+          Log.w(TAG, "barcode SDK: rebind cached id=$sid threw", t)
+        }
+      }
+    } catch (t: Throwable) {
+      Log.w(TAG, "barcode SDK: forceRebind failed", t)
     }
   }
 

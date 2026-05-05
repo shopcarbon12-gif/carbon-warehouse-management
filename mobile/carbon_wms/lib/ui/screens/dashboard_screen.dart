@@ -22,6 +22,7 @@ import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_csv_session_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
+import 'package:carbon_wms/ui/screens/print_screen.dart';
 import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
@@ -242,6 +243,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final api = context.read<WmsApiClient>();
       final stats = await api.fetchDashboardStats();
       if (!mounted) return;
+      // Server-side reachable but auth/decode failed → surface a snackbar
+      // so operators can see why the tiles are dashed (Chainway dash-vs-
+      // Samsung-26/3 was a stale-JWT mismatch with no UI clue).
+      final apiError = stats['__error']?.toString();
+      if (apiError != null) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(SnackBar(
+          content: Text('Dashboard: $apiError — try Refresh / re-sign-in'),
+          duration: const Duration(seconds: 4),
+        ));
+      }
       setState(() {
         _inventoryUnits = (stats['inventory_units'] as num?)?.toInt();
         _orderOpen = (stats['order_open'] as num?)?.toInt();
@@ -584,7 +597,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           : (_inventoryUnits != null
                               ? _fmtNum(_inventoryUnits!)
                               : '—'),
-                      onTap: () => _push(const InventoryLookupScreen()),
+                      // When the value is dashed, tap = retry the
+                      // dashboard summary fetch (covers stale-JWT cases
+                      // where the tiles silently empty out). When the
+                      // value is loaded, tap drills into Inventory
+                      // Lookup as before.
+                      onTap: () {
+                        if (_inventoryUnits == null) {
+                          unawaited(_refreshDashboardStats());
+                        } else {
+                          _push(const InventoryLookupScreen());
+                        }
+                      },
                       cardColor: cardColor,
                       mainColor: mainColor,
                       mutedColor: mutedColor,
@@ -594,7 +618,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       label: 'RECEIVING',
                       value:
                           _statsLoading ? '…' : (_orderOpen?.toString() ?? '—'),
-                      onTap: () => _push(const TransferSlipsScreen()),
+                      onTap: () {
+                        if (_orderOpen == null) {
+                          unawaited(_refreshDashboardStats());
+                        } else {
+                          _push(const TransferSlipsScreen());
+                        }
+                      },
                       cardColor: cardColor,
                       mainColor: mainColor,
                       mutedColor: mutedColor,
@@ -771,8 +801,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _SmallTile(
                       icon: LucideIcons.printer,
                       label: 'Print',
-                      onTap: () =>
-                          _push(const EncodeSuiteScreen(initialTab: 1))),
+                      onTap: () => _push(const PrintScreen())),
                   _SmallTile(
                       icon: LucideIcons.refreshCw,
                       label: 'Re-Encode',

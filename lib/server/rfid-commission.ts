@@ -6,28 +6,31 @@ import {
   type RfidReftagZplLabel,
 } from "@/lib/utils/zpl-rfid-reftag";
 
-export const commissionBodySchema = z
-  .object({
-    customSkuId: z.string().uuid(),
-    qty: z.coerce.number().int().min(1).max(500),
-    binId: z.string().uuid().nullable().optional(),
-    addToInventory: z.coerce.boolean().optional().default(false),
-    companyPrefix: z.coerce.number().int().min(0).optional(),
-    /** Printer host (e.g. 192.168.1.3) */
-    printerIp: z.string().max(128).optional(),
-    printerPort: z.coerce.number().int().min(1).max(65535).optional(),
-    printerUri: z.string().max(64).optional(),
-    labelDimensions: z
-      .object({
-        w: z.coerce.number().int().min(100),
-        h: z.coerce.number().int().min(100),
-      })
-      .optional(),
-  })
-  .refine((d) => !d.addToInventory || Boolean(d.binId), {
-    message: "binId is required when addToInventory is true",
-    path: ["binId"],
-  });
+export const commissionBodySchema = z.object({
+  customSkuId: z.string().uuid(),
+  qty: z.coerce.number().int().min(1).max(500),
+  binId: z.string().uuid().nullable().optional(),
+  addToInventory: z.coerce.boolean().optional().default(false),
+  companyPrefix: z.coerce.number().int().min(0).optional(),
+  /** Printer host (e.g. 192.168.1.3) */
+  printerIp: z.string().max(128).optional(),
+  printerPort: z.coerce.number().int().min(1).max(65535).optional(),
+  printerUri: z.string().max(64).optional(),
+  labelDimensions: z
+    .object({
+      w: z.coerce.number().int().min(100),
+      h: z.coerce.number().int().min(100),
+    })
+    .optional(),
+});
+// Pre-1.2.42 we required `binId` whenever `addToInventory=true`. The web
+// commissioning page picks a bin in the form and always passed it, so the
+// refine was a UX safety net there. The handheld Print screen has no bin
+// step — operators print first, assign bins via Bin Assign later — so the
+// refine has been dropped. items.bin_id is nullable in the schema; null
+// just means "unassigned." Web callers continue to send binId because
+// their UI captures it; handheld omits it and the row inserts with
+// bin_id=NULL.
 
 export type CommissionBody = z.infer<typeof commissionBodySchema>;
 

@@ -100,7 +100,42 @@ class WmsApiClient {
 
   Future<String?> getSavedLoginEmail() async {
     final p = await SharedPreferences.getInstance();
-    return p.getString(_prefsSavedLoginEmail)?.trim();
+    final cached = p.getString(_prefsSavedLoginEmail)?.trim();
+    if (cached != null && cached.isNotEmpty) return cached;
+    // Fallback: pull email out of the active session JWT. Covers handhelds
+    // that signed in before the saved-login-email prefs path existed (the
+    // Samsung drawer kept rendering "—" / "—" because the cache was never
+    // written on the older login). Once we read it here, we backfill the
+    // cache so the next launch is a single prefs read again.
+    final fromJwt = _emailFromJwt(p.getString(_prefsKeySession));
+    if (fromJwt != null && fromJwt.isNotEmpty) {
+      await p.setString(_prefsSavedLoginEmail, fromJwt);
+      return fromJwt;
+    }
+    return null;
+  }
+
+  /// Decode the email claim from a HS256-signed session JWT without
+  /// verifying the signature (signature verification is the server's job;
+  /// the mobile only displays the claim). Returns null if the token is
+  /// malformed or has no `email` claim.
+  String? _emailFromJwt(String? token) {
+    if (token == null || token.isEmpty) return null;
+    final parts = token.split('.');
+    if (parts.length != 3) return null;
+    try {
+      var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      while (payload.length % 4 != 0) {
+        payload = '$payload=';
+      }
+      final decoded = utf8.decode(base64.decode(payload));
+      final json = jsonDecode(decoded);
+      if (json is Map<String, dynamic>) {
+        final e = json['email'];
+        if (e is String && e.trim().isNotEmpty) return e.trim();
+      }
+    } catch (_) {/* malformed — fall through to null */}
+    return null;
   }
 
   Future<void> setSavedLoginEmail(String? email) async {
@@ -1197,16 +1232,26 @@ class WmsApiClient {
   }
 
   /// `GET /api/dashboard/summary` — inventory units, open orders, exceptions (Bearer auth).
+  ///
+  /// Pre-1.2.42 swallowed every error and returned `{}`, which surfaced as
+  /// dash placeholders on the dashboard with no clue why. Now returns
+  /// `{__error: 'reason'}` on failure so the screen can show the operator
+  /// a "tap to retry" affordance + log the actual reason. Successful
+  /// responses don't carry `__error`.
   Future<Map<String, dynamic>> fetchDashboardStats() async {
     try {
       final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
       final uri = Uri.parse('$base/api/dashboard/summary');
       final res = await _http.get(uri, headers: await sessionAuthHeaders());
-      if (res.statusCode < 200 || res.statusCode >= 300) return {};
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        return {'__error': 'http ${res.statusCode}'};
+      }
       final decoded = jsonDecode(res.body);
       if (decoded is Map<String, dynamic>) return decoded;
-    } catch (_) {}
-    return {};
+      return {'__error': 'bad shape'};
+    } catch (e) {
+      return {'__error': '$e'};
+    }
   }
 
   /// `GET /api/inventory/catalog?view=grid&matrixId=:id` — all color rows for a product matrix.
