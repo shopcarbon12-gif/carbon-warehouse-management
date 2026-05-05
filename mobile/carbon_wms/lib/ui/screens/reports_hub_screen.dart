@@ -4,13 +4,15 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import 'package:carbon_wms/theme/app_theme.dart';
-import 'package:carbon_wms/ui/screens/count_inventory_screen.dart';
-import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart';
-import 'package:carbon_wms/ui/screens/reports_hub_screen.dart';
+import 'package:carbon_wms/ui/screens/count_reports_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
-class InventoryHubScreen extends StatelessWidget {
-  const InventoryHubScreen({super.key});
+/// Inventory → Reports hub. Single tile for now ("Count Reports") with room
+/// for additional report families later (audits, recounts, adjustments).
+/// Mirrors the visual rhythm of [InventoryHubScreen] so the operator's eye
+/// tracks consistently between hubs.
+class ReportsHubScreen extends StatelessWidget {
+  const ReportsHubScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +23,7 @@ class InventoryHubScreen extends StatelessWidget {
     final textColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
 
     return CarbonScaffold(
-      pageTitle: 'inventory',
+      pageTitle: 'reports',
       body: ColoredBox(
         color: Colors.white,
         child: Padding(
@@ -32,58 +34,15 @@ class InventoryHubScreen extends StatelessWidget {
             crossAxisSpacing: 8,
             childAspectRatio: 1.1,
             children: [
-              _InventoryTile(
-                label: 'COUNT',
+              _ReportTile(
+                label: 'COUNT REPORTS',
                 icon: LucideIcons.layers,
                 tileColor: tileColor,
                 iconColor: iconColor,
                 textColor: textColor,
                 onTap: () => Navigator.of(context).push<void>(
                   MaterialPageRoute<void>(
-                      builder: (_) => const CountInventoryScreen()),
-                ),
-              ),
-              _InventoryTile(
-                label: 'AUDIT',
-                icon: LucideIcons.clipboardList,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-              ),
-              _InventoryTile(
-                label: 'RECOUNT',
-                icon: LucideIcons.refreshCcw,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-              ),
-              _InventoryTile(
-                label: 'ADJUST',
-                icon: LucideIcons.slidersHorizontal,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-              ),
-              _InventoryTile(
-                label: 'CATALOG',
-                icon: LucideIcons.bookOpen,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-                onTap: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                      builder: (_) => const InventoryCatalogScreen()),
-                ),
-              ),
-              _InventoryTile(
-                label: 'REPORTS',
-                icon: LucideIcons.fileText,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-                onTap: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                      builder: (_) => const ReportsHubScreen()),
+                      builder: (_) => const CountReportsScreen()),
                 ),
               ),
             ],
@@ -94,8 +53,8 @@ class InventoryHubScreen extends StatelessWidget {
   }
 }
 
-class _InventoryTile extends StatelessWidget {
-  const _InventoryTile({
+class _ReportTile extends StatelessWidget {
+  const _ReportTile({
     required this.label,
     required this.icon,
     required this.tileColor,

@@ -330,8 +330,39 @@ class CarbonZebraRfidController(
 
   fun setAntennaPowerDbm(dbm: Int) {
     executor.execute {
-      requestedPowerDbm.set(dbm.coerceIn(0, 30))
-      reader?.takeIf { it.isConnected }?.let { applyTransmitPowerDbm(it) }
+      val clamped = dbm.coerceIn(0, 30)
+      requestedPowerDbm.set(clamped)
+      val r = reader
+      if (r == null || !r.isConnected) {
+        Log.d(TAG, "setAntennaPowerDbm($clamped) deferred: reader not connected")
+        return@execute
+      }
+      // RFD8500 firmware rejects setAntennaRfConfig while Inventory is
+      // streaming with OperationFailureException → the previous
+      // applyTransmitPowerDbm swallowed that error, so the operator could
+      // drag the slider in-screen with scan ON and see no change in dBm at
+      // the radio. Pause + apply + resume around the config write.
+      val wasRunning = inventoryActive
+      if (wasRunning) {
+        try {
+          r.Actions.Inventory.stop()
+        } catch (e: Exception) {
+          Log.w(TAG, "setAntennaPowerDbm: pre-apply Inventory.stop ignored: ${e.message}")
+        }
+      }
+      val ok = applyTransmitPowerDbm(r)
+      Log.d(TAG, "setAntennaPowerDbm($clamped) appliedOk=$ok wasRunning=$wasRunning")
+      if (wasRunning) {
+        try {
+          r.Actions.Inventory.perform()
+        } catch (e: Exception) {
+          Log.w(TAG, "setAntennaPowerDbm: post-apply Inventory.perform failed: ${e.message}")
+          // Surfaces in lastError so the diagnostics card and the count
+          // screen's RfidManager can flag the radio as broken.
+          lastError = e.message ?: e.javaClass.simpleName
+          inventoryActive = false
+        }
+      }
     }
   }
 
@@ -587,20 +618,42 @@ class CarbonZebraRfidController(
   /**
    * Map requested dBm (0–30) to [RFIDReader.Config.Antennas] transmit power index.
    * Zebra tables are often centi-dBm (value/100); otherwise treat entries as dBm.
+   *
+   * Returns true if the radio confirmed the config write. The previous
+   * version swallowed every exception which made it impossible to tell
+   * whether the slider was actually doing anything on RFD8500.
    */
-  private fun applyTransmitPowerDbm(r: RFIDReader) {
-    try {
-      val levels = r.ReaderCapabilities.transmitPowerLevelValues ?: return
-      if (levels.isEmpty()) return
+  private fun applyTransmitPowerDbm(r: RFIDReader): Boolean {
+    return try {
+      val levels = r.ReaderCapabilities.transmitPowerLevelValues
+      if (levels == null || levels.isEmpty()) {
+        Log.w(TAG, "applyTransmitPowerDbm: transmitPowerLevelValues missing")
+        return false
+      }
       val tgt = requestedPowerDbm.get().coerceIn(0, 30)
       val idx = indexClosestToDbm(levels, tgt).coerceIn(0, levels.size - 1)
+      val maxRaw = levels.maxOrNull() ?: 0
+      val unit = if (maxRaw > 33) "centi-dBm" else "dBm"
+      val pickedRaw = levels[idx]
+      val pickedDbm = if (maxRaw > 33) pickedRaw / 100 else pickedRaw
       val config = r.Config.Antennas.getAntennaRfConfig(1)
       config.setTransmitPowerIndex(idx)
       config.setTari(0L)
       config.setrfModeTableIndex(0L)
       r.Config.Antennas.setAntennaRfConfig(1, config)
-    } catch (_: Exception) {
-      /* optional on some firmware */
+      Log.d(
+        TAG,
+        "applyTransmitPowerDbm: tgt=${tgt}dBm idx=$idx picked=${pickedDbm}dBm (raw=$pickedRaw $unit) levelsLen=${levels.size}",
+      )
+      true
+    } catch (e: Exception) {
+      // Most common cause: setAntennaRfConfig called while inventory is
+      // streaming → BUSY / OperationFailureException. setAntennaPowerDbm
+      // now stops inventory before calling this, so a failure here means
+      // something else (lost BT link, region locked, etc.).
+      Log.w(TAG, "applyTransmitPowerDbm failed: ${e.javaClass.simpleName}: ${e.message}")
+      lastError = e.message ?: e.javaClass.simpleName
+      false
     }
   }
 

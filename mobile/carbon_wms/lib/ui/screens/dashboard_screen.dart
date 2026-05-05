@@ -17,7 +17,7 @@ import 'package:carbon_wms/ui/screens/barcode_intake_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
-import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
+import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_csv_session_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
@@ -744,7 +744,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _SmallTile(
                       icon: LucideIcons.radio,
                       label: 'Geiger',
-                      onTap: () => _push(const LocateTagScreen())),
+                      onTap: () => _push(const GeigerSearchScreen())),
                   _SmallTile(
                       icon: LucideIcons.clipboardList,
                       label: 'Status',

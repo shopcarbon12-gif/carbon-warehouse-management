@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' show File, HttpClient, Platform, exit;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:install_plugin/install_plugin.dart';
@@ -505,10 +506,11 @@ class WmsApiClient {
   /// color, size, retail_price, bin, seen_count, first_seen_iso,
   /// last_seen_iso).
   ///
-  /// Target: `POST /api/reports/uploads`. The route is being built by a
-  /// separate backend agent in parallel; until it ships this call returns
-  /// 404 and callers surface the failure (UPLOAD aborts step 2; SAVE TO
-  /// FILE keeps the local save and snackbars an archive-failed warning).
+  /// Target: `POST /api/reports/count-sessions`. Server stores the CSV and
+  /// returns the inserted row metadata (id, filename, uploaded_at, etc.).
+  /// 1.2.40 fix: previously this hit `/api/reports/uploads` which doesn't
+  /// exist and silently 404'd — every Save/Upload from Count was failing
+  /// to archive on the server while still claiming success locally.
   Future<Map<String, dynamic>> uploadCycleCountReport({
     required String activity,
     required DateTime when,
@@ -516,12 +518,14 @@ class WmsApiClient {
     required bool overrideCatalog,
   }) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
-    final uri = Uri.parse('$base/api/reports/uploads');
+    final uri = Uri.parse('$base/api/reports/count-sessions');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
     final body = jsonEncode({
       'activity': activity,
       'when': when.toUtc().toIso8601String(),
       'overrideCatalog': overrideCatalog,
       'rows': rows,
+      'deviceId': deviceId,
     });
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -534,6 +538,39 @@ class WmsApiClient {
     final decoded = jsonDecode(res.body);
     if (decoded is Map<String, dynamic>) return decoded;
     return <String, dynamic>{};
+  }
+
+  /// Paginated list of count-session reports for the active tenant.
+  /// Powers the in-app Reports → Count Reports list. Server returns
+  /// `{rows: [{id, activity, uploaded_at, uploaded_by_email, device_id,
+  /// override_catalog, row_count, filename, expires_at}], total, page, limit}`.
+  Future<Map<String, dynamic>> fetchCountSessionReports({
+    int page = 1,
+    int limit = 25,
+    String? activity,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/reports/count-sessions').replace(
+      queryParameters: {
+        'page': '$page',
+        'limit': '$limit',
+        'deviceId': deviceId,
+        if (activity != null && activity.isNotEmpty) 'activity': activity,
+      },
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{
+      'rows': const <Map<String, dynamic>>[],
+      'total': 0,
+      'page': page,
+      'limit': limit,
+    };
   }
 
   Future<Map<String, String>> sessionAuthHeaders() async {
@@ -637,6 +674,54 @@ class WmsApiClient {
     final first = rows.first;
     if (first is Map<String, dynamic>) return first;
     return null;
+  }
+
+  /// Paged catalog grid for the live `/inventory/catalog` mirror screen.
+  /// Returns the raw `{rows, total, brands, categories, vendors}` envelope so
+  /// the caller can drive infinite-scroll without losing pagination metadata.
+  /// Server scopes by `session.lid`, so the rows are always location-correct.
+  Future<Map<String, dynamic>> fetchCatalogGrid({
+    String q = '',
+    int page = 1,
+    int limit = 200,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/catalog').replace(
+      queryParameters: {
+        'view': 'grid',
+        'page': '$page',
+        'limit': '$limit',
+        if (q.trim().isNotEmpty) 'q': q.trim(),
+      },
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) {
+      return {'rows': const <Map<String, dynamic>>[], 'total': 0};
+    }
+    return decoded;
+  }
+
+  /// EPC-level rows for one custom SKU at the active location.
+  /// `GET /api/inventory/catalog?customSkuId=<uuid>` —
+  /// each entry: `{serial_number, epc, status, bin_code, last_seen_at, sku, name, color, size}`.
+  Future<List<Map<String, dynamic>>> fetchCatalogEpcs(String customSkuId) async {
+    final id = customSkuId.trim();
+    if (id.isEmpty) return [];
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/catalog').replace(
+      queryParameters: {'customSkuId': id},
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) return [];
+    return decoded.whereType<Map<String, dynamic>>().toList();
   }
 
   /// Multi-result catalog search across all fields (name, UPC, SKU, asset ID).

@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
-import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
@@ -49,10 +48,6 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
   static const _keyScannerSource = 'wms_scanner_source_v1';
   // 'hardware' | 'camera'
   String _scannerSource = 'hardware';
-  StreamSubscription<String>? _scannerSub;
-  String _lastScannerEvent = 'none';
-  DateTime? _lastScannerEventAt;
-  Map<String, dynamic> _diag = const <String, dynamic>{};
 
   @override
   void initState() {
@@ -60,14 +55,11 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _reloadBiometricSection();
       await _loadLocalPrefs();
-      _attachScannerDiagnosticsStream();
-      await _refreshDiagnostics();
     });
   }
 
   @override
   void dispose() {
-    _scannerSub?.cancel();
     super.dispose();
   }
 
@@ -114,25 +106,6 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
     setState(() => _scannerSource = src);
     final p = await SharedPreferences.getInstance();
     await p.setString(_keyScannerSource, src);
-    _attachScannerDiagnosticsStream();
-  }
-
-  void _attachScannerDiagnosticsStream() {
-    _scannerSub?.cancel();
-    if (_scannerSource != 'hardware') return;
-    _scannerSub = RfidVendorChannel.hardwareBarcodeStream().listen((v) {
-      if (!mounted) return;
-      setState(() {
-        _lastScannerEvent = v;
-        _lastScannerEventAt = DateTime.now();
-      });
-    });
-  }
-
-  Future<void> _refreshDiagnostics() async {
-    final d = await RfidVendorChannel.deviceDiagnostics();
-    if (!mounted) return;
-    setState(() => _diag = d);
   }
 
   Future<void> _openScannerSettings() async {
@@ -168,7 +141,6 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
     await rfid.reapplyHandheldHardwareSettings();
     await _reloadBiometricSection();
     await _loadLocalPrefs();
-    await _refreshDiagnostics();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Hardware settings refreshed.')),
@@ -466,24 +438,6 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                 ),
                 Divider(height: 1.h, color: divColor),
                 ListTile(
-                  leading: const Icon(Icons.bug_report, color: AppColors.primary),
-                  title: Text(
-                    'Refresh Diagnostics',
-                    style: GoogleFonts.manrope(
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.w700,
-                      color: mainColor,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Reload native scanner/RFID runtime status.',
-                    style: TextStyle(color: mutedColor, fontSize: 12.sp),
-                  ),
-                  trailing: Icon(Icons.chevron_right, color: mutedColor, size: 20.sp),
-                  onTap: _refreshDiagnostics,
-                ),
-                Divider(height: 1.h, color: divColor),
-                ListTile(
                   leading: const Icon(Icons.settings_applications, color: AppColors.primary),
                   title: Text(
                     'Open Android App Permissions',
@@ -501,47 +455,6 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                   onTap: _openAndroidAppSettings,
                 ),
               ],
-            ),
-          ),
-
-          SizedBox(height: 24.h),
-
-          // ── LIVE DIAGNOSTICS ────────────────────────────────────────────
-          _Label('Live Diagnostics', mutedColor),
-          SizedBox(height: 8.h),
-          _Card(
-            color: cardColor,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 14.h),
-              child: DefaultTextStyle(
-                style: TextStyle(color: mutedColor, fontSize: 12.5.sp, height: 1.45.h),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'scanner source: $_scannerSource',
-                      style: TextStyle(color: mainColor, fontWeight: FontWeight.w700, fontSize: 13.sp),
-                    ),
-                    SizedBox(height: 6.h),
-                    Text('last scanner event: $_lastScannerEvent'),
-                    Text(
-                      'last scanner event at: ${_lastScannerEventAt?.toIso8601String() ?? 'never'}',
-                    ),
-                    SizedBox(height: 10.h),
-                    Text('manufacturer: ${_diag['manufacturer'] ?? '-'}'),
-                    Text('model: ${_diag['model'] ?? '-'}'),
-                    Text('brand: ${_diag['brand'] ?? '-'}'),
-                    Text('chainway sdk present: ${_diag['chainwaySdkPresent'] ?? false}'),
-                    Text('zebra sdk present: ${_diag['zebraSdkPresent'] ?? false}'),
-                    Text(
-                      'chainway last error: ${(_diag['chainwayLastError'] ?? '').toString().isEmpty ? 'none' : _diag['chainwayLastError']}',
-                    ),
-                    Text(
-                      'zebra last error: ${(_diag['zebraLastError'] ?? '').toString().isEmpty ? 'none' : _diag['zebraLastError']}',
-                    ),
-                  ],
-                ),
-              ),
             ),
           ),
 

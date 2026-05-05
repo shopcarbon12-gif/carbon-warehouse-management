@@ -44,7 +44,7 @@ export async function assignItemsToBinBySkuScan(
       `UPDATE items SET bin_id = $1::uuid
        WHERE location_id = $2::uuid
          ${homelessGuard}
-         AND status = 'in-stock'
+         AND status IN ('in-stock', 'pending_visibility')
          AND custom_sku_id IN (
            SELECT id FROM custom_skus WHERE sku LIKE $3
          )`,
@@ -66,7 +66,7 @@ export async function assignItemsToBinBySkuScan(
     `UPDATE items SET bin_id = $1::uuid
      WHERE location_id = $2::uuid
        ${homelessGuard}
-       AND status = 'in-stock'
+       AND status IN ('in-stock', 'pending_visibility')
        AND custom_sku_id IN (
          SELECT id FROM custom_skus WHERE matrix_id = $3::uuid
        )`,
@@ -138,7 +138,7 @@ export async function previewPutawayAssign(
      FROM items i
      LEFT JOIN bins b ON b.id = i.bin_id AND b.archived_at IS NULL
      WHERE i.location_id = $1::uuid
-       AND i.status = 'in-stock'
+       AND i.status IN ('in-stock', 'pending_visibility')
        AND i.${skuFilter}
      GROUP BY i.bin_id, b.code`,
     [locationId, skuParam],

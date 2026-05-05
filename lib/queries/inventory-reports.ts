@@ -218,6 +218,9 @@ export type CountSessionReportRow = {
   activity: string;
   uploaded_at: string;
   uploaded_by: string | null;
+  /// Convenience join — `users.email` for the row's `uploaded_by`. Null for
+  /// edge-key (deviceId-authed) uploads where there's no logged-in user.
+  uploaded_by_email: string | null;
   device_id: string | null;
   override_catalog: boolean;
   row_count: number;
@@ -358,12 +361,34 @@ export async function listCountSessionReports(
     params,
   );
 
+  // Second-pass user-email lookup. Kept out of the main query so the existing
+  // WHERE clause builder doesn't need to qualify every column with `ir.` (and
+  // doesn't risk `tenant_id` ambiguity now that we'd be joining `users`).
+  // Edge-key uploads have uploaded_by=NULL → no row in this map.
+  const userIds = Array.from(
+    new Set(r.rows.map((row) => row.uploaded_by).filter((v): v is string => !!v)),
+  );
+  const emails = new Map<string, string>();
+  if (userIds.length > 0) {
+    try {
+      const er = await pool.query<{ id: string; email: string }>(
+        `SELECT id::text, email FROM users WHERE id = ANY($1::uuid[])`,
+        [userIds],
+      );
+      for (const row of er.rows) emails.set(row.id, row.email);
+    } catch {
+      /* best-effort — UI still renders the user UUID if email lookup fails */
+    }
+  }
+
   return {
     rows: r.rows.map((row) => ({
       id: row.id,
       activity: row.activity,
       uploaded_at: row.uploaded_at.toISOString(),
       uploaded_by: row.uploaded_by,
+      uploaded_by_email:
+          row.uploaded_by ? emails.get(row.uploaded_by) ?? null : null,
       device_id: row.device_id,
       override_catalog: row.override_catalog,
       row_count: row.row_count,

@@ -1338,6 +1338,40 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     required _SkuParts skuParts,
     required String matrixId,
   }) async {
+    // Pre-flight: gate on 0-EPC SKUs. Without this check the assign popup
+    // looked like an honest YES/NO question even when no RFID tags had ever
+    // been commissioned for the SKU — clicking YES then surfaced the
+    // misleading "0 items assigned" snackbar (1.2.38 regression noticed by
+    // the operator: "if i scanned an item that means i have it in my hand").
+    // If the user genuinely has stock with no tags, the right move is to
+    // commission tags first, not to silently no-op an assign.
+    final api = context.read<WmsApiClient>();
+    Map<String, dynamic>? preview;
+    try {
+      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+      preview = await api.previewPutawayAssign(
+        deviceId: deviceId,
+        binCode: _currentBin,
+        skuScanned: skuParts.baseColor,
+        scope: 'single_color_all_sizes',
+      );
+    } catch (_) {
+      // Older server (no /putaway-preview endpoint) — fall through and
+      // let the legacy assign path do its thing. Same behaviour as 1.2.37.
+    }
+    if (!mounted) return;
+    if (preview != null) {
+      final total = (preview['totalMatching'] as num?)?.toInt() ?? 0;
+      if (total == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'No RFID tags exist for $itemName. Commission tags first.'),
+          duration: const Duration(seconds: 5),
+        ));
+        _enterMidSessionForNewItem();
+        return;
+      }
+    }
     // Step 1 — assign popup
     final assignYes = await _askAssignDialog(itemName: itemName);
     if (!mounted) return;
@@ -1764,9 +1798,22 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           : skuParts.base;
       final row = await api.catalogGridSearchFirstRow(searchKey);
       if (!mounted) return;
-      final itemName = row?['title']?.toString() ??
+      // Catalog grid actually returns `name` (matrix description) and `color`
+      // (color_code) — pre-1.2.39 mobile read non-existent `title` /
+      // `description` fields and silently fell back to the raw SKU, which
+      // produced popups like "Assign C12345678B8 to bin?" instead of
+      // "Assign Ace Jeans WH to bin?".
+      final matrixName = row?['name']?.toString() ??
+          row?['title']?.toString() ??
           row?['description']?.toString() ??
-          skuParts.raw;
+          '';
+      final colorCode =
+          row?['color']?.toString() ?? skuParts.colorCode;
+      final displayLabel = [
+        matrixName.trim(),
+        colorCode.trim(),
+      ].where((s) => s.isNotEmpty).join(' ');
+      final itemName = displayLabel.isNotEmpty ? displayLabel : skuParts.raw;
       final matrixId =
           row?['matrix_id']?.toString() ?? row?['matrixId']?.toString() ?? '';
       setState(() {

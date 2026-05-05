@@ -2360,9 +2360,6 @@ class _CountInventorySettingsScreenState
   Map<String, dynamic> _diag = const <String, dynamic>{};
   static const MethodChannel _device = MethodChannel('carbon_wms/rfid');
 
-  /// Maps stored 0..1 to RSSI display dB in [-90, -30] (stitch mock).
-  int get _rssiDb => (-90 + _rssi * 60).round();
-
   @override
   void initState() {
     super.initState();
@@ -2632,81 +2629,11 @@ class _CountInventorySettingsScreenState
                 ),
               ],
             ),
-            SizedBox(height: 48.h),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'RSSI SENSITIVITY',
-                    style: GoogleFonts.manrope(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2,
-                      color: _outline,
-                    ),
-                  ),
-                ),
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: '$_rssiDb',
-                        style: GoogleFonts.robotoMono(
-                          fontSize: 32.sp,
-                          fontWeight: FontWeight.w700,
-                          color: _primary,
-                        ),
-                      ),
-                      TextSpan(
-                        text: ' dB',
-                        style: GoogleFonts.robotoMono(
-                          fontSize: 14.sp,
-                          fontWeight: FontWeight.w500,
-                          color: _outline,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 24.h),
-            SizedBox(
-              height: 56.h,
-              child: SliderTheme(
-                data: sliderTheme,
-                child: Slider(
-                  value: _rssi,
-                  min: 0,
-                  max: 1,
-                  onChanged: (v) => setState(() => _rssi = v),
-                ),
-              ),
-            ),
-            SizedBox(height: 8.h),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '-90 dB',
-                  style: GoogleFonts.robotoMono(
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.w700,
-                    color: _outline,
-                  ),
-                ),
-                Text(
-                  '-30 dB',
-                  style: GoogleFonts.robotoMono(
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.w700,
-                    color: _outline,
-                  ),
-                ),
-              ],
-            ),
+            // 1.2.39: dropped the "RSSI SENSITIVITY" slider from this popup.
+            // Count is inventory mode — _onTagRead accepts every read regardless
+            // of signal strength, so the slider had no path to hardware and
+            // moving it changed nothing. Locate/Search-and-Encode still surface
+            // RSSI live; that's where signal-strength UX belongs.
             SizedBox(height: 32.h),
             SizedBox(
               width: double.infinity,

@@ -87,6 +87,11 @@ function buildWhere(
         OR m.upc ILIKE $${i}
         OR COALESCE(cs.upc, '') ILIKE $${i}
         OR COALESCE(m.vendor, '') ILIKE $${i}
+        OR EXISTS (
+          SELECT 1 FROM items ie
+          WHERE ie.custom_sku_id = cs.id
+            AND ie.epc ILIKE $${i}
+        )
         ${binExistsClause}
       )`,
     );

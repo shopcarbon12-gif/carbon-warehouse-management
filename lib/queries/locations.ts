@@ -91,7 +91,7 @@ export async function listBinsWithCounts(
        b.code,
        b.capacity::text AS capacity,
        b.status,
-       COUNT(i.id) FILTER (WHERE i.status = 'in-stock')::text AS in_stock_count,
+       COUNT(i.id) FILTER (WHERE i.status IN ('in-stock', 'pending_visibility'))::text AS in_stock_count,
        (
          SELECT string_agg(label, E'\n' ORDER BY label)
          FROM (
@@ -107,7 +107,7 @@ export async function listBinsWithCounts(
            INNER JOIN matrices m ON m.id = cs.matrix_id
            WHERE ii.bin_id = b.id
              AND ii.location_id = $1::uuid
-             AND ii.status = 'in-stock'
+             AND ii.status IN ('in-stock', 'pending_visibility')
          ) sub
        ) AS bin_items
      FROM bins b
@@ -157,7 +157,7 @@ export async function listBinContentsGrouped(
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE i.bin_id = $1::uuid
        AND i.location_id = $2::uuid
-       AND i.status = 'in-stock'
+       AND i.status IN ('in-stock', 'pending_visibility')
      GROUP BY cs.id, m.id, m.description, cs.sku, cs.color_code, cs.size
      ORDER BY m.description ASC, cs.sku ASC`,
     [binId, locationId],
@@ -197,7 +197,7 @@ export async function listBinEpcs(
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE i.bin_id = $1::uuid
        AND i.location_id = $2::uuid
-       AND i.status = 'in-stock'
+       AND i.status IN ('in-stock', 'pending_visibility')
      ORDER BY cs.sku ASC, i.serial_number ASC`,
     [binId, locationId],
   );
