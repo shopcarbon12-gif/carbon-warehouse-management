@@ -1,27 +1,59 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ReaderPicker } from "@/components/shared/reader-picker";
 import useSWR from "swr";
-import { Radio, ScanLine } from "lucide-react";
 import {
-  CycleCountCommitModal,
-  type VarianceSummary,
-} from "./cycle-count-commit-modal";
+  Radio,
+  ScanLine,
+  Pause,
+  Play,
+  X as XIcon,
+  Download,
+  ArrowLeft,
+  Search,
+  History,
+  Clock,
+  CheckCircle2,
+  CircleSlash,
+} from "lucide-react";
+import { ReaderPicker } from "@/components/shared/reader-picker";
+import { CycleCountCommitModal } from "./cycle-count-commit-modal";
 import { ZeroOutRfidButton } from "./zero-out-rfid-button";
+import {
+  AllEpcsTable,
+  buildFlatRows,
+  ByBinTable,
+  BySkuTable,
+  type ExpectedRow,
+  type StateFilter,
+  type Variance,
+} from "./cycle-count-results-views";
 
 type LocationRow = { id: string; code: string; name: string };
 type BinRow = { id: string; code: string; in_stock_count: number };
-type ExpectedRow = {
-  epc: string;
-  sku: string;
-  ls_system_id: string;
-  upc: string;
-  description: string;
+
+type SessionDetail = {
+  id: string;
+  location_id: string;
+  location_code: string;
+  location_name: string;
   bin_id: string | null;
   bin_code: string | null;
-  status: string;
+  name: string;
+  status: "active" | "paused" | "committed" | "canceled";
+  started_at: string;
+  completed_at: string | null;
+  scanned_count: number;
+  expected_count: number;
+  reader_filter: string[];
+  notes: string | null;
+  variance_summary: { matched: number; missing: number; misplaced: number; unrecognized: number } | null;
+  audit_log_id: string | null;
+  expected: ExpectedRow[];
+  scanned_epcs: string[];
 };
+
+type SessionRow = Omit<SessionDetail, "expected" | "scanned_epcs">;
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -32,91 +64,340 @@ const fetcher = async (url: string) => {
   return res.json();
 };
 
-
-function classify(
-  expected: ExpectedRow[],
-  scanned: string[],
-  misplacedSeed: Set<string>,
-  unrecognizedSeed: Set<string>,
-) {
-  const exp = new Set(expected.map((e) => e.epc));
-  const sc = new Set(scanned.map((s) => s.replace(/\s/g, "").toUpperCase()));
-  const matched = [...exp].filter((e) => sc.has(e));
-  const missing = [...exp].filter((e) => !sc.has(e));
-  const extras = [...sc].filter((e) => !exp.has(e));
-  const misplaced: string[] = [];
-  const unrecognized: string[] = [];
-  for (const e of extras) {
-    if (misplacedSeed.has(e)) misplaced.push(e);
-    else if (unrecognizedSeed.has(e)) unrecognized.push(e);
-    else unrecognized.push(e);
-  }
-  return { matched, missing, misplaced, unrecognized };
-}
-
-type RowState = "matched" | "missing" | "misplaced" | "unrecognized";
+const STATE_LABELS = {
+  all: "All",
+  matched: "Matched",
+  missing: "Missing",
+  misplaced: "Misplaced",
+  unrecognized: "Unrecognized",
+} as const;
 
 export function CycleCountWorkspace({ isAdmin = false }: { isAdmin?: boolean }) {
-  const [locationId, setLocationId] = useState("");
-  const [binId, setBinId] = useState("");
-  const [scanning, setScanning] = useState(false);
-  const [scanned, setScanned] = useState<string[]>([]);
-  // Per-page reader filter — empty set drops every read; non-empty set
-  // accepts only reads from those reader IDs. Operator picks via the
-  // ReaderPicker dropdown next to the Start scan button.
-  const [selectedReaders, setSelectedReaders] = useState<Set<string>>(() => new Set());
-  const selectedReadersRef = useRef(selectedReaders);
-  useEffect(() => {
-    selectedReadersRef.current = selectedReaders;
-  }, [selectedReaders]);
-  const [misplacedSeed, setMisplacedSeed] = useState<Set<string>>(() => new Set());
-  const [unrecognizedSeed, setUnrecognizedSeed] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [commitOpen, setCommitOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
+  return (
+    <div className="space-y-6">
+      {activeId ? (
+        <ActiveSessionView
+          sessionId={activeId}
+          onLeave={() => setActiveId(null)}
+          isAdmin={isAdmin}
+        />
+      ) : (
+        <SessionLanding
+          onOpen={(id) => setActiveId(id)}
+          showHistory={showHistory}
+          onToggleHistory={() => setShowHistory((v) => !v)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ──────────── Landing: start new + open existing + history ──────────── */
+function SessionLanding({
+  onOpen,
+  showHistory,
+  onToggleHistory,
+}: {
+  onOpen: (id: string) => void;
+  showHistory: boolean;
+  onToggleHistory: () => void;
+}) {
+  const { data: openData, mutate: mutateOpen } = useSWR<{ sessions: SessionRow[] }>(
+    "/api/rfid/cycle-counts/sessions?status=open",
+    fetcher,
+    { refreshInterval: 5_000 },
+  );
+  const { data: closedData } = useSWR<{ sessions: SessionRow[] }>(
+    showHistory ? "/api/rfid/cycle-counts/sessions?status=closed" : null,
+    fetcher,
+  );
+
+  return (
+    <>
+      <NewSessionForm onCreated={(id) => onOpen(id)} onMutate={mutateOpen} />
+
+      <Section title="Open counts" hint="Active or paused sessions you can resume.">
+        {openData && openData.sessions.length > 0 ? (
+          <SessionTable sessions={openData.sessions} onOpen={onOpen} />
+        ) : (
+          <Empty>No open counts. Start one above.</Empty>
+        )}
+      </Section>
+
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onToggleHistory}
+          className="inline-flex items-center gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+        >
+          <History className="h-3.5 w-3.5" />
+          {showHistory ? "Hide history" : "Show history"}
+        </button>
+      </div>
+
+      {showHistory ? (
+        <Section title="History" hint="Committed and canceled sessions.">
+          {closedData && closedData.sessions.length > 0 ? (
+            <SessionTable sessions={closedData.sessions} onOpen={onOpen} variant="history" />
+          ) : (
+            <Empty>No closed sessions yet.</Empty>
+          )}
+        </Section>
+      ) : null}
+    </>
+  );
+}
+
+function NewSessionForm({
+  onCreated,
+  onMutate,
+}: {
+  onCreated: (id: string) => void;
+  onMutate: () => void;
+}) {
   const { data: locData } = useSWR<{ id: string; code: string; name: string }[]>(
     "/api/locations",
     fetcher,
   );
   const locations: LocationRow[] = locData ?? [];
 
-  const binsUrl =
-    locationId.length > 0
-      ? `/api/locations/bins?locationId=${encodeURIComponent(locationId)}`
-      : null;
+  const [locationId, setLocationId] = useState("");
+  const [binId, setBinId] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const binsUrl = locationId
+    ? `/api/locations/bins?locationId=${encodeURIComponent(locationId)}`
+    : null;
   const { data: binRows } = useSWR<BinRow[]>(binsUrl, fetcher);
 
-  const expectedUrl =
-    locationId.length > 0
-      ? `/api/rfid/cycle-counts/expected?locationId=${encodeURIComponent(locationId)}${binId ? `&binId=${encodeURIComponent(binId)}` : ""}`
-      : null;
-  const { data: expectedPayload, mutate: mutateExpected } = useSWR<{
-    expected: ExpectedRow[];
-  }>(expectedUrl, fetcher);
+  const create = async () => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/rfid/cycle-counts/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          locationId,
+          binId: binId || null,
+          name: name.trim() || undefined,
+        }),
+      });
+      const j = (await res.json()) as { error?: string; session?: { id: string } };
+      if (!res.ok || !j.session) throw new Error(j.error ?? "Create failed");
+      onMutate();
+      onCreated(j.session.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Create failed");
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  const expected = expectedPayload?.expected ?? [];
-
-  const resetScans = useCallback(() => {
-    setScanned([]);
-    setMisplacedSeed(new Set());
-    setUnrecognizedSeed(new Set());
-  }, []);
-
-  const cycleStreamContexts = useMemo(
-    () =>
-      new Set([
-        "CYCLE_COUNT",
-        "GEIGER_FIND",
-        "INVENTORY_LOOKUP",
-        "COMMISSIONING",
-        "STATUS_CHANGE",
-      ]),
-    [],
+  return (
+    <Section title="Start a new count" hint="Pick a location (and optionally a bin) to scope what should be counted. The expected list is frozen at start.">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label="Location">
+          <select
+            value={locationId}
+            onChange={(e) => {
+              setLocationId(e.target.value);
+              setBinId("");
+            }}
+            className={inputCls}
+          >
+            <option value="">— Select —</option>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.code} — {l.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Bin (optional)">
+          <select
+            value={binId}
+            disabled={!locationId}
+            onChange={(e) => setBinId(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">All bins at location</option>
+            {(binRows ?? []).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.code} ({b.in_stock_count} in-stock)
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Name (optional)">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="auto-named with location + time"
+            className={inputCls}
+          />
+        </Field>
+      </div>
+      <div className="mt-3 flex items-center justify-between">
+        {err ? (
+          <p className="font-mono text-xs text-red-400/90">{err}</p>
+        ) : (
+          <span />
+        )}
+        <button
+          type="button"
+          disabled={!locationId || busy}
+          onClick={create}
+          className="wms-btn-primary px-6 font-mono disabled:opacity-50"
+        >
+          {busy ? "Starting…" : "Start count"}
+        </button>
+      </div>
+    </Section>
   );
+}
 
+function SessionTable({
+  sessions,
+  onOpen,
+  variant,
+}: {
+  sessions: SessionRow[];
+  onOpen: (id: string) => void;
+  variant?: "history";
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
+      <table className="w-full border-collapse text-left">
+        <thead className="bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          <tr>
+            <th className="px-3 py-2">Name</th>
+            <th className="px-3 py-2">Location</th>
+            <th className="px-3 py-2">Bin</th>
+            <th className="px-3 py-2">Status</th>
+            <th className="px-3 py-2 text-right">Expected</th>
+            <th className="px-3 py-2 text-right">Scanned</th>
+            <th className="px-3 py-2">Started</th>
+            <th className="px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
+          {sessions.map((s) => (
+            <tr key={s.id} className="hover:bg-[var(--wms-surface-elevated)]/40">
+              <td className="px-3 py-2 truncate max-w-[18rem] text-[var(--wms-accent)]">
+                {s.name}
+              </td>
+              <td className="px-3 py-2">{s.location_code}</td>
+              <td className="px-3 py-2 text-[var(--wms-muted)]">{s.bin_code ?? "(all)"}</td>
+              <td className="px-3 py-2">
+                <StatusPill status={s.status} />
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">{s.expected_count}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{s.scanned_count}</td>
+              <td className="px-3 py-2 text-[var(--wms-muted)]">
+                {new Date(s.started_at).toLocaleString()}
+              </td>
+              <td className="px-3 py-2 text-right">
+                <button
+                  type="button"
+                  onClick={() => onOpen(s.id)}
+                  className="rounded-md border border-[var(--wms-border)] px-3 py-1 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                >
+                  {variant === "history" ? "View" : "Open"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: SessionRow["status"] }) {
+  const cls =
+    status === "active"
+      ? "border-emerald-500/40 bg-emerald-950/40 text-emerald-300"
+      : status === "paused"
+        ? "border-amber-500/40 bg-amber-950/40 text-amber-300"
+        : status === "committed"
+          ? "border-teal-500/40 bg-teal-950/40 text-teal-300"
+          : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-muted)]";
+  const Icon =
+    status === "active" ? Radio : status === "paused" ? Pause : status === "committed" ? CheckCircle2 : CircleSlash;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide ${cls}`}
+    >
+      <Icon className="h-3 w-3" /> {status}
+    </span>
+  );
+}
+
+/* ──────────── Active session view ──────────── */
+
+const cycleStreamContexts = new Set(["CYCLE_COUNT"]);
+
+function ActiveSessionView({
+  sessionId,
+  onLeave,
+  isAdmin,
+}: {
+  sessionId: string;
+  onLeave: () => void;
+  isAdmin: boolean;
+}) {
+  const { data, mutate, error } = useSWR<{
+    session: SessionDetail;
+    variance: Variance;
+  }>(`/api/rfid/cycle-counts/sessions/${sessionId}`, fetcher, {
+    refreshInterval: 5_000,
+  });
+
+  const detail = data?.session;
+  const variance: Variance = data?.variance ?? {
+    matched: [],
+    missing: [],
+    misplaced: [],
+    unrecognized: [],
+  };
+
+  // Local scanned set — driven by SSE stream when status === active.
+  // We sync to server in batched PATCH (every ~3s) and after status flips.
+  const [localScanned, setLocalScanned] = useState<Set<string>>(new Set());
+  const lastReadAtRef = useRef<number | null>(null);
+  const [lastReadAt, setLastReadAt] = useState<number | null>(null);
+  const readsThisMinuteRef = useRef<number[]>([]);
+  const [readsPerMin, setReadsPerMin] = useState(0);
+  const [selectedReaders, setSelectedReaders] = useState<Set<string>>(() => new Set());
+  const selectedReadersRef = useRef(selectedReaders);
   useEffect(() => {
+    selectedReadersRef.current = selectedReaders;
+  }, [selectedReaders]);
+
+  const [tab, setTab] = useState<"all" | "by_sku" | "by_bin">("all");
+  const [stateFilter, setStateFilter] = useState<StateFilter>("all");
+  const [search, setSearch] = useState("");
+  const [commitOpen, setCommitOpen] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Hydrate local scanned set from server on first load + when session changes.
+  useEffect(() => {
+    if (!detail) return;
+    setLocalScanned(new Set(detail.scanned_epcs.map((e) => e.toUpperCase())));
+  }, [detail?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // SSE feed — only acts when status is "active". When paused, ignore reads.
+  useEffect(() => {
+    if (!detail) return;
+    if (detail.status !== "active") return;
     const es = new EventSource("/api/edge/stream");
     es.onmessage = (ev) => {
       if (!ev.data?.trim() || ev.data.startsWith(":")) return;
@@ -127,290 +408,335 @@ export function CycleCountWorkspace({ isAdmin = false }: { isAdmin?: boolean }) 
         return;
       }
       const ctx = (p.scanContext ?? "").toUpperCase();
-      if (ctx === "TRANSFER") return;
       if (!cycleStreamContexts.has(ctx)) return;
-      // Reader filter — see selectedReaders comment above.
       const sel = selectedReadersRef.current;
       if (sel.size > 0 && p.deviceId && !sel.has(p.deviceId)) return;
       const list = (p.epcs ?? [])
         .map((e) => e.replace(/\s/g, "").toUpperCase())
         .filter((e) => /^[0-9A-F]{24}$/.test(e));
       if (list.length === 0) return;
-      setScanned((prev) => {
-        const s = new Set(prev.map((x) => x.replace(/\s/g, "").toUpperCase()));
-        for (const e of list) s.add(e);
-        return [...s];
+      const now = Date.now();
+      lastReadAtRef.current = now;
+      setLastReadAt(now);
+      readsThisMinuteRef.current.push(now);
+      // prune > 60s
+      const cutoff = now - 60_000;
+      while (readsThisMinuteRef.current[0] !== undefined && readsThisMinuteRef.current[0] < cutoff) {
+        readsThisMinuteRef.current.shift();
+      }
+      setReadsPerMin(readsThisMinuteRef.current.length);
+      setLocalScanned((prev) => {
+        const next = new Set(prev);
+        for (const epc of list) next.add(epc);
+        return next;
       });
-      setScanning(true);
     };
     return () => es.close();
-  }, [cycleStreamContexts]);
+  }, [detail?.id, detail?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const c = useMemo(
-    () => classify(expected, scanned, misplacedSeed, unrecognizedSeed),
-    [expected, scanned, misplacedSeed, unrecognizedSeed],
+  // Read-rate refresher even when no new reads arrive (decay to 0).
+  useEffect(() => {
+    const t = setInterval(() => {
+      const cutoff = Date.now() - 60_000;
+      while (readsThisMinuteRef.current[0] !== undefined && readsThisMinuteRef.current[0] < cutoff) {
+        readsThisMinuteRef.current.shift();
+      }
+      setReadsPerMin(readsThisMinuteRef.current.length);
+    }, 1500);
+    return () => clearInterval(t);
+  }, []);
+
+  // Server-sync — push local scanned set on a 3s debounce while active.
+  useEffect(() => {
+    if (!detail) return;
+    if (detail.status !== "active") return;
+    const t = setInterval(() => {
+      const arr = [...localScanned];
+      // Only PATCH if the server's count differs.
+      if (arr.length === detail.scanned_count) return;
+      void fetch(`/api/rfid/cycle-counts/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scannedEpcs: arr }),
+      }).then(() => mutate());
+    }, 3000);
+    return () => clearInterval(t);
+  }, [detail?.id, detail?.status, detail?.scanned_count, localScanned, sessionId, mutate]);
+
+  const flatRows = useMemo(
+    () => (detail ? buildFlatRows(detail.expected, variance) : []),
+    [detail, variance],
   );
 
-  const kpi: VarianceSummary = useMemo(
-    () => ({
-      matched: c.matched.length,
-      missing: c.missing.length,
-      misplaced: c.misplaced.length,
-      unrecognized: c.unrecognized.length,
-    }),
-    [c],
-  );
-
-  const doCommit = useCallback(async () => {
-    if (c.misplaced.length > 0 && !binId) {
-      throw new Error("Select a bin before committing misplaced tags.");
-    }
-    const res = await fetch("/api/rfid/cycle-counts/commit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        locationId,
-        binId: binId || null,
-        matched: c.matched,
-        missing: c.missing,
-        misplaced: c.misplaced,
-        unrecognized: c.unrecognized,
-      }),
-    });
-    const data = (await res.json()) as { error?: string; ok?: boolean };
-    if (!res.ok) throw new Error(data.error ?? "Commit failed");
-    setToast(
-      `Committed — missing updated: ${(data as { updated_missing?: number }).updated_missing ?? 0}, misplaced moves: ${(data as { updated_misplaced?: number }).updated_misplaced ?? 0}`,
-    );
-    resetScans();
-    setScanning(false);
-    await mutateExpected();
-  }, [binId, c, locationId, mutateExpected, resetScans]);
-
-  const scanSet = useMemo(
-    () => new Set(scanned.map((s) => s.replace(/\s/g, "").toUpperCase())),
-    [scanned],
-  );
-
-  const gridRows = useMemo(() => {
-    const map = new Map<string, ExpectedRow>();
-    for (const r of expected) map.set(r.epc, r);
-    const seen = new Set<string>();
-    const rows: {
-      epc: string;
-      sku: string;
-      bin: string;
-      expected: boolean;
-      scanned: boolean;
-      state: RowState;
-    }[] = [];
-
-    for (const r of expected) {
-      seen.add(r.epc);
-      const isScanned = scanSet.has(r.epc);
-      rows.push({
-        epc: r.epc,
-        sku: r.sku,
-        bin: r.bin_code ?? "—",
-        expected: true,
-        scanned: isScanned,
-        state: isScanned ? "matched" : "missing",
-      });
-    }
-
-    for (const epc of scanSet) {
-      if (seen.has(epc)) continue;
-      seen.add(epc);
-      const st: RowState = c.misplaced.includes(epc) ? "misplaced" : "unrecognized";
-      const base = map.get(epc);
-      rows.push({
-        epc,
-        sku: base?.sku ?? "—",
-        bin: base?.bin_code ?? "—",
-        expected: false,
-        scanned: true,
-        state: st,
-      });
-    }
-
-    return rows;
-  }, [expected, scanSet, c]);
-
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4 sm:grid-cols-2">
-        <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
-          Location
-          <select
-            value={locationId}
-            onChange={(e) => {
-              setLocationId(e.target.value);
-              setBinId("");
-              resetScans();
-            }}
-            className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
-          >
-            <option value="">— Select —</option>
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.code} — {l.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
-          Bin (optional)
-          <select
-            value={binId}
-            onChange={(e) => {
-              setBinId(e.target.value);
-              resetScans();
-            }}
-            disabled={!locationId}
-            className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] disabled:opacity-40"
-          >
-            <option value="">All bins at location</option>
-            {(binRows ?? []).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.code} ({b.in_stock_count} in-stock)
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <button
-            type="button"
-            disabled={!locationId}
-            onClick={() => {
-              setScanning((s) => !s);
-              if (scanning) resetScans();
-            }}
-            className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors ${
-              scanning
-                ? "border-amber-500/60 bg-amber-950/40 text-amber-100"
-                : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-teal-500/40"
-            } disabled:opacity-40`}
-          >
-            <Radio
-              className={`h-5 w-5 ${scanning ? "text-amber-400" : "text-[var(--wms-muted)]"}`}
-            />
-            {scanning ? "Scanning…" : "Start scan"}
-          </button>
-          <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} />
-          <button
-            type="button"
-            disabled={!locationId || scanned.length === 0}
-            onClick={resetScans}
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] px-4 py-2.5 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
-          >
-            <ScanLine className="h-4 w-4" />
-            Clear scans
-          </button>
-          {isAdmin ? (
-            <div className="ml-auto">
-              <ZeroOutRfidButton onZeroed={resetScans} />
-            </div>
-          ) : null}
-        </div>
-        <p className="mt-3 font-mono text-[0.6rem] text-[var(--wms-muted)]">
-          Hardware SDK feeds EPCs while scanning is active.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {(
-          [
-            ["Matched", kpi.matched, "wms-status-success"],
-            ["Missing", kpi.missing, "wms-status-warning"],
-            ["Misplaced", kpi.misplaced, "wms-status-orange"],
-            ["Unrecognized", kpi.unrecognized, "text-[var(--wms-muted)]"],
-          ] as const
-        ).map(([label, n, cls]) => (
-          <div
-            key={label}
-            className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 px-3 py-3 text-center"
-          >
-            <div className="font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
-              {label}
-            </div>
-            <div className={`mt-1 font-mono text-2xl tabular-nums ${cls}`}>{n}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
-        <div className="border-b border-[var(--wms-border)] px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
-          Results ({gridRows.length} rows)
-        </div>
-        <div className="max-h-[min(60vh,480px)] overflow-auto">
-          <table className="w-full border-collapse text-left">
-            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
-              <tr>
-                <th className="px-3 py-2">EPC</th>
-                <th className="px-3 py-2">SKU</th>
-                <th className="px-3 py-2">Bin</th>
-                <th className="px-3 py-2">Expected</th>
-                <th className="px-3 py-2">Scanned</th>
-                <th className="px-3 py-2">State</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
-              {gridRows.map((r) => (
-                <tr key={r.epc}>
-                  <td className="px-3 py-2 font-medium text-[var(--wms-accent)]">{r.epc}</td>
-                  <td className="px-3 py-2">{r.sku}</td>
-                  <td className="px-3 py-2 text-[var(--wms-muted)]">{r.bin}</td>
-                <td className="px-3 py-2">{r.expected ? "Yes" : "No"}</td>
-                <td className="px-3 py-2">{r.scanned ? "Yes" : "No"}</td>
-                  <td className="px-3 py-2">
-                    <span
-                      className={
-                        r.state === "matched"
-                          ? "wms-status-success"
-                          : r.state === "missing"
-                            ? "wms-status-warning"
-                            : r.state === "misplaced"
-                              ? "wms-status-orange"
-                              : "text-[var(--wms-muted)]"
-                      }
-                    >
-                      {r.state.toUpperCase()}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {gridRows.length === 0 ? (
-            <p className="p-6 text-center font-mono text-xs text-[var(--wms-muted)]">
-              Select a location to load expected in-stock EPCs.
-            </p>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
+  if (error) {
+    return (
+      <Section title="Couldn’t load session" hint="">
+        <p className="font-mono text-xs text-red-400/90">{(error as Error).message}</p>
         <button
           type="button"
-          disabled={
-            !locationId ||
-            scanned.length === 0 ||
-            (c.misplaced.length > 0 && !binId)
-          }
-          onClick={() => setCommitOpen(true)}
-          className="wms-btn-primary px-6 font-mono disabled:opacity-40"
+          onClick={onLeave}
+          className="mt-3 rounded-md border border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]"
         >
-          Review & commit
+          Back to sessions
         </button>
-        {c.misplaced.length > 0 && !binId ? (
-          <span className="self-center font-mono text-[0.65rem] text-amber-500/90">
-            Select a bin to commit misplaced corrections.
-          </span>
-        ) : null}
+      </Section>
+    );
+  }
+  if (!detail) {
+    return <Empty>Loading session…</Empty>;
+  }
+
+  const closed = detail.status === "committed" || detail.status === "canceled";
+
+  const setStatus = async (next: "active" | "paused" | "canceled") => {
+    if (next === "canceled" && !confirm("Cancel this count? No inventory changes will be applied.")) {
+      return;
+    }
+    setBusyAction(next);
+    try {
+      // Push any pending scans first (so the server snapshot is current).
+      await fetch(`/api/rfid/cycle-counts/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scannedEpcs: [...localScanned], status: next }),
+      });
+      await mutate();
+      setToast(`Session ${next}`);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const doCommit = async (opts: {
+    acceptMissing: string[];
+    acceptMisplaced: string[];
+    acceptUnrecognized: string[];
+    notes: string;
+  }) => {
+    // Make sure latest scans are persisted before committing.
+    await fetch(`/api/rfid/cycle-counts/sessions/${sessionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scannedEpcs: [...localScanned] }),
+    });
+    const res = await fetch(
+      `/api/rfid/cycle-counts/sessions/${sessionId}/commit`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(opts),
+      },
+    );
+    const j = (await res.json()) as { error?: string };
+    if (!res.ok) throw new Error(j.error ?? "Commit failed");
+    await mutate();
+    setToast("Cycle count committed");
+  };
+
+  const expectedCount = detail.expected.length;
+  const matchedCount = variance.matched.length;
+  const coverage = expectedCount === 0 ? 0 : Math.round((matchedCount / expectedCount) * 100);
+  const lastReadStr = lastReadAt ? `${Math.max(1, Math.round((Date.now() - lastReadAt) / 1000))}s ago` : "—";
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <button
+              type="button"
+              onClick={onLeave}
+              className="mb-2 inline-flex items-center gap-1 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+            >
+              <ArrowLeft className="h-3 w-3" /> All sessions
+            </button>
+            <h2 className="truncate text-base font-semibold text-[var(--wms-fg)]">
+              {detail.name}
+            </h2>
+            <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+              {detail.location_code} · {detail.bin_code ?? "all bins"} ·{" "}
+              <StatusPill status={detail.status} /> ·{" "}
+              started {new Date(detail.started_at).toLocaleString()}
+            </p>
+          </div>
+          <a
+            href={`/api/rfid/cycle-counts/sessions/${sessionId}/export`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+          >
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </a>
+        </div>
       </div>
+
+      {/* KPI strip with coverage + read rate */}
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+        <KpiTile big label="Coverage" value={`${coverage}%`} cls={coverage === 100 ? "wms-status-success" : coverage >= 80 ? "text-amber-400" : "text-red-400"} />
+        <KpiTile label="Matched" value={`${variance.matched.length} / ${expectedCount}`} cls="wms-status-success" />
+        <KpiTile label="Missing" value={String(variance.missing.length)} cls="text-amber-400" />
+        <KpiTile label="Misplaced" value={String(variance.misplaced.length)} cls="text-orange-400" />
+        <KpiTile label="Unrecognized" value={String(variance.unrecognized.length)} cls="text-[var(--wms-muted)]" />
+        <KpiTile
+          label="Read rate"
+          value={`${readsPerMin}/min`}
+          sub={`last read ${lastReadStr}`}
+          cls={readsPerMin > 0 ? "text-emerald-300" : "text-[var(--wms-muted)]"}
+        />
+      </div>
+
+      {/* Action bar */}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-3">
+        {detail.status === "active" ? (
+          <button
+            type="button"
+            disabled={busyAction !== null}
+            onClick={() => setStatus("paused")}
+            className="inline-flex min-h-[2.5rem] items-center gap-2 rounded-lg border border-amber-500/50 bg-amber-950/40 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-900/40 disabled:opacity-50"
+          >
+            <Pause className="h-4 w-4" /> Pause
+          </button>
+        ) : detail.status === "paused" ? (
+          <button
+            type="button"
+            disabled={busyAction !== null}
+            onClick={() => setStatus("active")}
+            className="inline-flex min-h-[2.5rem] items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-950/40 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-emerald-100 hover:bg-emerald-900/40 disabled:opacity-50"
+          >
+            <Play className="h-4 w-4" /> Resume
+          </button>
+        ) : null}
+
+        {!closed ? (
+          <>
+            <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} />
+            <button
+              type="button"
+              disabled={busyAction !== null || localScanned.size === 0}
+              onClick={() => {
+                if (!confirm("Clear all scans for this session? (You can re-scan; this doesn't end the session.)")) return;
+                setLocalScanned(new Set());
+                void fetch(`/api/rfid/cycle-counts/sessions/${sessionId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ scannedEpcs: [] }),
+                }).then(() => mutate());
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+            >
+              <ScanLine className="h-4 w-4" /> Clear scans
+            </button>
+          </>
+        ) : null}
+
+        {!closed ? (
+          <button
+            type="button"
+            disabled={busyAction !== null}
+            onClick={() => setStatus("canceled")}
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+          >
+            <XIcon className="h-4 w-4" /> Cancel session
+          </button>
+        ) : null}
+
+        <div className="ml-auto flex items-center gap-2">
+          {!closed ? (
+            <button
+              type="button"
+              disabled={localScanned.size === 0}
+              onClick={() => setCommitOpen(true)}
+              className="wms-btn-primary px-6 font-mono disabled:opacity-50"
+            >
+              Review &amp; commit
+            </button>
+          ) : (
+            <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+              <Clock className="mr-1 inline h-3 w-3" />
+              Closed {detail.completed_at ? new Date(detail.completed_at).toLocaleString() : ""}
+            </span>
+          )}
+          {isAdmin && !closed ? <ZeroOutRfidButton onZeroed={() => mutate()} /> : null}
+        </div>
+      </div>
+
+      {/* Filters + tabs */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex overflow-hidden rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
+          {(["all", "by_sku", "by_bin"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide ${
+                tab === t
+                  ? "bg-[var(--wms-accent)] text-[var(--wms-accent-fg)]"
+                  : "text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+              }`}
+            >
+              {t === "all" ? "All EPCs" : t === "by_sku" ? "By SKU" : "By Bin"}
+            </button>
+          ))}
+        </div>
+
+        {tab === "all" ? (
+          <div className="inline-flex flex-wrap gap-1">
+            {(Object.keys(STATE_LABELS) as StateFilter[]).map((s) => {
+              const n =
+                s === "all"
+                  ? flatRows.length
+                  : s === "matched"
+                    ? variance.matched.length
+                    : s === "missing"
+                      ? variance.missing.length
+                      : s === "misplaced"
+                        ? variance.misplaced.length
+                        : variance.unrecognized.length;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStateFilter(s)}
+                  className={`rounded-full border px-2.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide ${
+                    stateFilter === s
+                      ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/15 text-[var(--wms-fg)]"
+                      : "border-[var(--wms-border)] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                  }`}
+                >
+                  {STATE_LABELS[s]} ({n})
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        <div className="ml-auto inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 px-2 py-1">
+          <Search className="h-3.5 w-3.5 text-[var(--wms-muted)]" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="search EPC / SKU / bin"
+            className="bg-transparent font-mono text-xs text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]"
+          />
+        </div>
+      </div>
+
+      {/* Tab body */}
+      {tab === "all" ? (
+        <AllEpcsTable rows={flatRows} search={search} stateFilter={stateFilter} />
+      ) : tab === "by_sku" ? (
+        <BySkuTable expected={detail.expected} variance={variance} search={search} />
+      ) : (
+        <ByBinTable expected={detail.expected} variance={variance} />
+      )}
+
+      {detail.status === "committed" && detail.variance_summary ? (
+        <p className="font-mono text-xs text-[var(--wms-muted)]">
+          Committed: {detail.variance_summary.matched} matched · {detail.variance_summary.missing} missing
+          · {detail.variance_summary.misplaced} misplaced · {detail.variance_summary.unrecognized} unrecognized.
+          Audit log: {detail.audit_log_id ?? "—"}.
+        </p>
+      ) : null}
 
       {toast ? (
         <p className="font-mono text-xs text-[var(--wms-muted)]">{toast}</p>
@@ -419,9 +745,95 @@ export function CycleCountWorkspace({ isAdmin = false }: { isAdmin?: boolean }) 
       <CycleCountCommitModal
         open={commitOpen}
         onClose={() => setCommitOpen(false)}
-        summary={kpi}
+        expected={detail.expected}
+        variance={variance}
+        binCodeForCommit={detail.bin_code}
         onCommit={doCommit}
       />
     </div>
   );
 }
+
+/* ──────────── Tiny UI primitives ──────────── */
+
+function Section({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-2">
+      <div>
+        <h2 className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          {title}
+        </h2>
+        {hint ? (
+          <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]/80">{hint}</p>
+        ) : null}
+      </div>
+      <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-md border border-dashed border-[var(--wms-border)] p-4 text-center font-mono text-xs text-[var(--wms-muted)]">
+      {children}
+    </p>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      {label}
+      <div className="mt-1">{children}</div>
+    </label>
+  );
+}
+
+function KpiTile({
+  label,
+  value,
+  cls,
+  big,
+  sub,
+}: {
+  label: string;
+  value: string;
+  cls: string;
+  big?: boolean;
+  sub?: string;
+}) {
+  return (
+    <div
+      className={`rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 px-3 py-2 text-center ${big ? "lg:col-span-1" : ""}`}
+    >
+      <div className="font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+        {label}
+      </div>
+      <div className={`mt-0.5 font-mono ${big ? "text-3xl" : "text-xl"} tabular-nums ${cls}`}>
+        {value}
+      </div>
+      {sub ? (
+        <div className="mt-0.5 font-mono text-[0.5rem] text-[var(--wms-muted)]">{sub}</div>
+      ) : null}
+    </div>
+  );
+}
+
+const inputCls =
+  "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]";
