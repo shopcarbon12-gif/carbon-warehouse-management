@@ -296,10 +296,17 @@ export function generateCarbonTagZpl(opts: {
   //   • Code 128 SUBSET B explicit prefix `>:` removed — for the
   //     numeric-only stripped SKU, auto subset C is the right choice.
   // The static `TALLA/SIZE` label is hardcoded.
-  // For the barcode-only encoded data we strip a trailing single letter
-  // from the SKU (e.g. "122220711L" → "1222207111"). The full SKU stays
-  // in the human-readable text line.
-  const barcodeData = safeSku.replace(/[A-Z]$/, "1");
+  // Strip ALL trailing letters from the SKU and replace the run with a
+  // single "1" so the encoded barcode is numeric-only and Code 128
+  // picks subset C (dense bars). For single-letter sizes the regex
+  // `/[A-Z]$/` was sufficient; multi-letter sizes (XXL, XXXL) left
+  // letters in the payload, forced subset B, and pushed the rendered
+  // barcode ~75–95 % wider — overflowing the right table border on
+  // the printed label. The `+` quantifier captures the full trailing
+  // letter run regardless of size length. Verified on the warehouse
+  // sample sheet (L / M / XXL / XXXL) — all four sizes now share the
+  // same 10-digit `1222207111` payload, identical bar width.
+  const barcodeData = safeSku.replace(/[A-Z]+$/, "1");
 
   return `^XA
 ^CI28
