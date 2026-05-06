@@ -315,7 +315,18 @@ class _PrintScreenState extends State<PrintScreen> {
           // either disable or reach via a different code path — prints
           // appeared successful at the socket layer but nothing came
           // out of the printer. 1.2.48 lets the server's wiring drive.
-          final port = (res['printer_port'] as num?)?.toInt() ?? 80;
+          // 1.2.55 — force raw TCP 9100 from the handheld, regardless of
+          // what the server's `printer_port` field says. Diagnosed on a
+          // Samsung phone running 1.2.54 against printer 192.168.1.3:
+          // HTTP POST /pstprnt returned 200 OK from this device but the
+          // printer never printed (odometer didn't move, valid+void
+          // counters didn't move). Same printer prints fine from a
+          // Linux box's curl. Same printer prints fine from `nc 9100`
+          // on the same Samsung — raw TCP is what works on Android.
+          // The HTTP path was originally added in 1.2.48 because port
+          // 9100 was disabled on the printer at the time; it's open
+          // now (confirmed via TCP probe), so raw TCP is correct.
+          final port = 9100;
           final uri = res['printer_uri']?.toString() ?? 'PSTPRNT';
           if (zpl.isEmpty || host.isEmpty) {
             failures.add(
