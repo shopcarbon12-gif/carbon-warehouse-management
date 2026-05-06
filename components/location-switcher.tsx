@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Loc = { id: string; code: string; name: string };
@@ -10,8 +9,8 @@ export function LocationSwitcher({
 }: {
   activeLocationId: string;
 }) {
-  const router = useRouter();
   const [locations, setLocations] = useState<Loc[]>([]);
+  const [switching, setSwitching] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/locations");
@@ -36,12 +35,21 @@ export function LocationSwitcher({
   async function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const locationId = e.target.value;
     if (!locationId || locationId === activeLocationId) return;
+    setSwitching(true);
     const res = await fetch("/api/session/location", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ locationId }),
     });
-    if (res.ok) router.refresh();
+    if (!res.ok) {
+      setSwitching(false);
+      return;
+    }
+    // router.refresh() only re-runs RSCs — client useState, SWR caches, and
+    // any in-flight EventSource subscriptions still hold the previous
+    // location's data. Force a full document load so every workspace
+    // re-mounts fresh against the new wms_session cookie.
+    window.location.assign("/");
   }
 
   return (
@@ -49,7 +57,8 @@ export function LocationSwitcher({
       <span className="sr-only">Active location</span>
       <select
         title={activeLabel || undefined}
-        className="w-full min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-3 font-mono text-base leading-snug text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/40 md:text-lg"
+        disabled={switching}
+        className="w-full min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-3 font-mono text-base leading-snug text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/40 disabled:opacity-60 md:text-lg"
         value={activeLocationId}
         onChange={onChange}
       >
@@ -63,6 +72,11 @@ export function LocationSwitcher({
           ))
         )}
       </select>
+      {switching && (
+        <span className="mt-1 block text-xs text-[var(--wms-muted)]">
+          Switching location… reloading.
+        </span>
+      )}
     </label>
   );
 }
