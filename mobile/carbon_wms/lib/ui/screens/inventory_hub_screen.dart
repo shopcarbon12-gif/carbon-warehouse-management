@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/screens/add_on_count_source_picker_screen.dart';
 import 'package:carbon_wms/ui/screens/count_inventory_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart';
 import 'package:carbon_wms/ui/screens/reports_hub_screen.dart';
@@ -44,11 +45,15 @@ class InventoryHubScreen extends StatelessWidget {
                 ),
               ),
               _InventoryTile(
-                label: 'AUDIT',
-                icon: LucideIcons.clipboardList,
+                label: 'ADD-ON',
+                icon: LucideIcons.plusCircle,
                 tileColor: tileColor,
                 iconColor: iconColor,
                 textColor: textColor,
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                      builder: (_) => const AddOnCountSourcePickerScreen()),
+                ),
               ),
               _InventoryTile(
                 label: 'RECOUNT',

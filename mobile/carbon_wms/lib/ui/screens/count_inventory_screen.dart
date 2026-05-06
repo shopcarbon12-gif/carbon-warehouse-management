@@ -335,8 +335,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     try {
       final rfid = context.read<RfidManager>();
       _previousScanContext ??= rfid.scanContext;
+      // 2026-05-05: scanContext is human-readable now ("MOBILE COUNT") — it
+      // surfaces directly as inventory_reports.activity for legacy archive
+      // paths. Add-On Count picker filter matches both new + legacy values.
       rfid.suppressEdgeStreaming = true;
-      rfid.scanContext = 'COUNT';
+      rfid.scanContext = 'MOBILE COUNT';
       // Keep the existing active hardware session; avoid reconnect churn that can
       // momentarily disable RFID function mode before Count starts.
 
@@ -847,72 +850,57 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   /// `overrideCatalog` is currently informational; the server semantics are
   /// W3 UPLOAD pipeline: archive the audit record FIRST, then apply to inventory.
   ///
-  /// Step 1 — POST the structured rows to `/api/reports/uploads` for 1-year
-  /// retention. If this fails we abort: per reviewer policy, we never modify
-  /// inventory based on data we can't trace. The caller surfaces the failure
-  /// and preserves the session for retry.
+  /// Phase 4c (post-2026-05-05): Count UPLOAD now goes through the unified
+  /// `/api/handheld/scan-finalize` endpoint which:
+  ///   - archives the structured rows to inventory_reports (1y retention)
+  ///   - runs the per-EPC system-id validator (lib/server/epc-decode.ts)
+  ///   - flips valid EPCs to 'in-stock' (Q9: creates new items rows for
+  ///     never-seen valid EPCs)
+  ///   - tag-kills failures, attaches a defective CSV to the report row,
+  ///     and surfaces them in the Defective EPCs modal (Q23 lock)
+  ///   - in override mode (Q21): wipes existing 'in-stock' items for the
+  ///     scanned SKUs to 'tag_killed' before applying the scan
   ///
-  /// Step 2 — POST the CSV to `/api/inventory/upload`. Server stamps each
-  /// matched item to in-stock + last_seen_at and refreshes Qty (EPC). The
-  /// `mode` carries the override-catalog flag so the server-side ingest can
-  /// branch on whether scanned counts replace or add to existing on-hand.
-  ///
-  /// The two POSTs run sequentially on a single button tap; both must succeed
-  /// for the operation to be considered done.
+  /// One server call instead of the prior archive-then-upload pair: the
+  /// finalize endpoint runs the whole sequence inside a single transaction.
   Future<void> _uploadCountReport({required bool overrideCatalog}) async {
     final api = context.read<WmsApiClient>();
-    final rfid = context.read<RfidManager>();
     final rows = _buildCycleCountReportRows();
     if (rows.isEmpty) {
       throw WmsApiException(400, 'No rows to upload');
     }
-    // Step 1 — archive (1y retention). Throws on non-2xx and aborts the
-    // pipeline before the inventory mutation in step 2.
-    await api.uploadCycleCountReport(
-      activity: rfid.scanContext,
-      when: DateTime.now(),
+    final result = await api.postScanFinalize(
+      intent: 'upload',
+      screen: overrideCatalog ? 'count_inventory_override' : 'count_inventory',
       rows: rows,
       overrideCatalog: overrideCatalog,
     );
-    // Step 2 — apply to inventory. Reuses the existing CSV ingest contract
-    // (epc, bin, sku) that the server agent extended to make bin optional.
-    final csv = _buildInventoryUploadCsv(rows);
-    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
-    await api.postInventoryUpload(
-      deviceId: deviceId,
-      mode: overrideCatalog ? 'count_inventory_override' : 'count_inventory',
-      csvData: csv,
-    );
-  }
-
-  /// Minimal CSV the server's `applyInventoryCsvToItems` understands.
-  /// One row per scanned EPC; `bin` is left blank when the count session does
-  /// not capture a destination bin (the server preserves the existing bin).
-  String _buildInventoryUploadCsv(List<Map<String, dynamic>> rows) {
-    final b = StringBuffer('epc,bin,sku\n');
-    for (final r in rows) {
-      final epc = (r['epc'] as String?)?.trim() ?? '';
-      if (epc.isEmpty) continue;
-      final bin = (r['bin'] as String?)?.trim() ?? '';
-      final sku = (r['custom_sku'] as String?)?.trim() ?? '';
-      b.writeln('${_csv(epc)},${_csv(bin)},${_csv(sku)}');
+    final valid = result['rowsValid'] ?? 0;
+    final failed = result['rowsFailed'] ?? 0;
+    final wiped = result['wipedCount'] ?? 0;
+    if (mounted) {
+      final extras = <String>[];
+      if (failed != 0) extras.add('$failed defective');
+      if (wiped != 0) extras.add('$wiped wiped');
+      final suffix = extras.isEmpty ? '' : ' (${extras.join(', ')})';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Uploaded · $valid live$suffix')),
+      );
     }
-    return b.toString();
   }
 
-  /// W3: archive a Save-to-File local CSV report to the reports endpoint,
-  /// best-effort. Local-save success does not depend on this returning OK —
-  /// the caller catches and snackbars any failure separately. Override flag
-  /// is intentionally false: SAVE TO FILE never overrides catalog quantities,
-  /// only UPLOAD does.
+  /// W3: archive-only path (SAVE button). Phase 4c flips this through the
+  /// unified `scan-finalize` endpoint with intent='save' — no catalog
+  /// mutation, just an inventory_reports row created server-side. Local-save
+  /// success does not depend on this returning OK; caller best-effort
+  /// snackbars any failure separately.
   Future<void> _archiveSavedReport() async {
     final api = context.read<WmsApiClient>();
-    final rfid = context.read<RfidManager>();
     final rows = _buildCycleCountReportRows();
     if (rows.isEmpty) return;
-    await api.uploadCycleCountReport(
-      activity: rfid.scanContext,
-      when: DateTime.now(),
+    await api.postScanFinalize(
+      intent: 'save',
+      screen: 'count_inventory',
       rows: rows,
       overrideCatalog: false,
     );

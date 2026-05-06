@@ -27,7 +27,10 @@ export type EpcSource =
   | "handheld"
   | "transfer"
   | "manual"
-  | "cycle_count";
+  | "cycle_count"
+  | "count_inventory"
+  | "count_inventory_override"
+  | "add_on_count";
 
 export type EpcIngressInput = {
   /** Tenant the EPC belongs to. Required for catalog lookup + config load. */

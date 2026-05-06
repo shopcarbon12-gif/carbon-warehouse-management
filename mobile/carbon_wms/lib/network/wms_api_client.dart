@@ -1463,6 +1463,257 @@ class WmsApiClient {
     return (deviceUuid: '', epcs: <String>[], count: 0);
   }
 
+  /* ---------- Add-On Count + scan-finalize (v1) ---------- */
+
+  Future<List<Map<String, dynamic>>> listScanSources({
+    bool includeCompleted = false,
+    int limit = 100,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/scan-sources').replace(
+      queryParameters: <String, String>{
+        'deviceId': deviceId,
+        if (includeCompleted) 'includeCompleted': '1',
+        'limit': '$limit',
+      },
+    );
+    final res = await _http.get(uri, headers: await handheldAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return const [];
+    final rows = decoded['rows'];
+    if (rows is! List) return const [];
+    return rows.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<List<String>> getScanSourceEpcs({
+    required String sourceType,
+    required String sourceId,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/scan-sources/$sourceId/epcs').replace(
+      queryParameters: <String, String>{
+        'type': sourceType,
+        'deviceId': deviceId,
+      },
+    );
+    final res = await _http.get(uri, headers: await handheldAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return const [];
+    final epcs = decoded['epcs'];
+    if (epcs is! List) return const [];
+    return epcs.whereType<String>().map((e) => e.toUpperCase()).toList();
+  }
+
+  Future<Map<String, dynamic>> startAddOnSession({
+    required String sourceType,
+    required String sourceId,
+    required String sourceSlip,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/add-on-sessions');
+    final body = jsonEncode({
+      'sourceType': sourceType,
+      'sourceId': sourceId,
+      'sourceSlip': sourceSlip,
+      'deviceId': deviceId,
+    });
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...await handheldAuthHeaders(),
+    };
+    final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> getAddOnSession(String sessionId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/add-on-sessions/$sessionId').replace(
+      queryParameters: {'deviceId': deviceId},
+    );
+    final res = await _http.get(uri, headers: await handheldAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  Future<void> touchAddOnSession(String sessionId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/add-on-sessions/$sessionId').replace(
+      queryParameters: {'op': 'touch', 'deviceId': deviceId},
+    );
+    final res = await _http.post(uri, headers: await handheldAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+  }
+
+  Future<Map<String, dynamic>> signoutAddOnSession(String sessionId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/add-on-sessions/$sessionId').replace(
+      queryParameters: {'op': 'signout', 'deviceId': deviceId},
+    );
+    final res = await _http.post(uri, headers: await handheldAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  /// Submit one EPC read to the session. Server dedupes against the in-source
+  /// list (passed as [inSource]) and the cross-device session ledger; outcome
+  /// is 'new', 'duplicate', or 'failed'.
+  Future<Map<String, dynamic>> submitAddOnSessionEpc({
+    required String sessionId,
+    required String epc,
+    bool inSource = false,
+    bool validationFailed = false,
+    String? failureReason,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/add-on-sessions/$sessionId/epc');
+    final body = jsonEncode({
+      'epc': epc,
+      'inSource': inSource,
+      'validationFailed': validationFailed,
+      if (failureReason != null) 'failureReason': failureReason,
+      'deviceId': deviceId,
+    });
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...await handheldAuthHeaders(),
+    };
+    final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> requestJoinAddOnSession(String sessionId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/add-on-sessions/$sessionId/join-request');
+    final body = jsonEncode({'kind': 'request', 'deviceId': deviceId});
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...await handheldAuthHeaders(),
+    };
+    final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> respondJoinAddOnSession({
+    required String sessionId,
+    required bool approve,
+    String? requesterUserId,
+    String? requesterDeviceId,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/add-on-sessions/$sessionId/join-request');
+    final body = jsonEncode({
+      'kind': 'respond',
+      'approve': approve,
+      if (requesterUserId != null) 'requesterUserId': requesterUserId,
+      if (requesterDeviceId != null) 'requesterDeviceId': requesterDeviceId,
+      'deviceId': deviceId,
+    });
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...await handheldAuthHeaders(),
+    };
+    final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  /// Bulk EPC → product info enrichment for handheld screens. Used by
+  /// Add-On Count to populate review-row labels (sku/name/color/size).
+  Future<List<Map<String, dynamic>>> lookupEpcs(List<String> epcs) async {
+    if (epcs.isEmpty) return const [];
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/epc-lookup');
+    final body = jsonEncode({'epcs': epcs, 'deviceId': deviceId});
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...await handheldAuthHeaders(),
+    };
+    final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return const [];
+    final rows = decoded['rows'];
+    if (rows is! List) return const [];
+    return rows.whereType<Map<String, dynamic>>().toList();
+  }
+
+  /// Unified SAVE/UPLOAD finalisation. [intent] is 'save' or 'upload';
+  /// [screen] is 'count_inventory' / 'count_inventory_override' / 'add_on_count'.
+  Future<Map<String, dynamic>> postScanFinalize({
+    required String intent,
+    required String screen,
+    required List<Map<String, dynamic>> rows,
+    bool overrideCatalog = false,
+    String? addOnSourceType,
+    String? addOnSourceId,
+    String? addOnSessionId,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/scan-finalize');
+    final body = jsonEncode({
+      'intent': intent,
+      'screen': screen,
+      'overrideCatalog': overrideCatalog,
+      'rows': rows,
+      'deviceId': deviceId,
+      if (addOnSourceType != null) 'addOnSourceType': addOnSourceType,
+      if (addOnSourceId != null) 'addOnSourceId': addOnSourceId,
+      if (addOnSessionId != null) 'addOnSessionId': addOnSessionId,
+    });
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...await handheldAuthHeaders(),
+    };
+    final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
   void close() => _http.close();
 }
 

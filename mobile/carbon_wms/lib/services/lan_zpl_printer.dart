@@ -24,6 +24,14 @@ import 'dart:io';
 /// supports both transports and routes by `printer_port` returned from
 /// the server.
 ///
+/// 1.2.53 sets `Content-Length` explicitly. Without it Dart's HttpClient
+/// can frame the POST with `Transfer-Encoding: chunked`, which the
+/// Zebra ZD500R web-print server replies 200 OK to but does NOT
+/// reassemble for printing. Same symptom as 1.2.47: app reports
+/// "Printed N tags" while no label feeds out. Reproduced from a Linux
+/// box by hand-crafting a chunked POST — printer 200'd but printed
+/// nothing. Confirmed fixed once Content-Length is set.
+///
 /// Returns null on success, or a short reason string on failure
 /// (timeout, connection refused, IO error, non-2xx HTTP). Never throws.
 class LanZplPrinter {
@@ -71,10 +79,17 @@ class LanZplPrinter {
       final cleanUri = uri.toLowerCase().replaceAll(RegExp(r'^/+'), '');
       final url = Uri.parse('http://$host:$port/$cleanUri');
       final req = await client.postUrl(url).timeout(_connectTimeout);
+      final bytes = utf8.encode(zpl);
       // Zebra firmware accepts plain text; setting a content-type isn't
       // strictly necessary but stops some proxies from rewriting.
       req.headers.set(HttpHeaders.contentTypeHeader, 'application/x-zpl');
-      req.add(utf8.encode(zpl));
+      // Force a Content-Length-framed POST. Without an explicit length,
+      // Dart's HttpClient can fall back to Transfer-Encoding: chunked,
+      // which Zebra's print server replies 200 OK to but does NOT
+      // reassemble for printing — symptom: app shows "Printed" while no
+      // label feeds out.
+      req.contentLength = bytes.length;
+      req.add(bytes);
       final res = await req.close().timeout(_writeTimeout);
       // Drain the body so the connection releases cleanly.
       await res.drain<void>();
