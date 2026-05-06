@@ -6,9 +6,13 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/add_on_session_state.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/widgets/add_on_epc_card.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 /// Review screen for an Add-On Count session.
+///
+/// One container per EPC — no grouping, no per-SKU quantity. Each tag stays
+/// separate so the operator confirms exactly what they scanned.
 ///
 /// SAVE  → audit only. POST /api/handheld/scan-finalize { intent: 'save' }.
 /// UPLOAD → audit + per-EPC ingest + defective CSV. Server validates each EPC,
@@ -75,7 +79,7 @@ class _AddOnCountReviewScreenState extends State<AddOnCountReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final groups = _groupBySku(widget.newEntries);
+    final entries = widget.newEntries;
     return CarbonScaffold(
       pageTitle: 'review',
       body: ColoredBox(
@@ -87,7 +91,7 @@ class _AddOnCountReviewScreenState extends State<AddOnCountReviewScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '${widget.newEntries.length} new EPCs · grouped by SKU',
+                  '${entries.length} new EPCs',
                   style: GoogleFonts.manrope(
                     fontSize: 13.sp,
                     fontWeight: FontWeight.w700,
@@ -97,74 +101,24 @@ class _AddOnCountReviewScreenState extends State<AddOnCountReviewScreen> {
               ),
             ),
             Expanded(
-              child: ListView.separated(
-                padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 8.h),
-                itemCount: groups.length,
-                separatorBuilder: (_, __) => Divider(height: 12.h),
-                itemBuilder: (_, i) {
-                  final g = groups[i];
-                  return _GroupedRow(group: g);
-                },
-              ),
+              child: entries.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No new EPCs to review',
+                        style: GoogleFonts.manrope(color: AppColors.textMuted),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 8.h),
+                      itemCount: entries.length,
+                      separatorBuilder: (_, __) => SizedBox(height: 8.h),
+                      itemBuilder: (_, i) => AddOnEpcCard(entry: entries[i]),
+                    ),
             ),
             _ActionBar(busy: _busy, onSave: () => _finalize('save'), onUpload: () => _finalize('upload')),
           ],
         ),
       ),
-    );
-  }
-
-  static List<_SkuGroup> _groupBySku(List<NewEpcEntry> entries) {
-    final map = <String, _SkuGroup>{};
-    for (final e in entries) {
-      final key = e.customSku ?? e.epc;
-      final g = map.putIfAbsent(key, () => _SkuGroup(label: _labelFor(e), count: 0));
-      g.count++;
-    }
-    return map.values.toList()..sort((a, b) => a.label.compareTo(b.label));
-  }
-
-  static String _labelFor(NewEpcEntry e) => [
-        e.customSku,
-        e.itemName,
-        e.color,
-        e.size,
-      ].where((s) => s != null && s.toString().isNotEmpty).join(' · ');
-}
-
-class _SkuGroup {
-  _SkuGroup({required this.label, required this.count});
-  String label;
-  int count;
-}
-
-class _GroupedRow extends StatelessWidget {
-  const _GroupedRow({required this.group});
-  final _SkuGroup group;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            group.label.isEmpty ? '(unknown)' : group.label,
-            style: GoogleFonts.manrope(
-              fontSize: 12.sp,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textMain,
-            ),
-          ),
-        ),
-        Text(
-          '×${group.count}',
-          style: GoogleFonts.spaceGrotesk(
-            fontSize: 14.sp,
-            fontWeight: FontWeight.w800,
-            color: AppColors.primary,
-          ),
-        ),
-      ],
     );
   }
 }

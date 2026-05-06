@@ -295,13 +295,16 @@ class _PrintScreenState extends State<PrintScreen> {
           final insertedRaw = res['inserted'];
           final inserted =
               insertedRaw is List ? insertedRaw.length : perSkuQty;
-          // Cloud-skip path: server returns ZPL + printer info, we TCP
-          // it ourselves on port 9100.
-          final printerOk = res['printer_ok'] == true;
-          if (printerOk) {
-            printedTags += inserted;
-            continue;
-          }
+          // 1.2.54 — always run the LAN print from the handheld, even
+          // when the server claims it already printed (printer_ok=true).
+          // The cloud WMS at wms.shopcarbon.com cannot route to LAN
+          // printers on 192.168.1.0/24 — any printer_ok=true coming back
+          // from cloud is either a proxy/CDN false positive or a stale
+          // cache, and trusting it caused the 1.2.51–1.2.53 regression
+          // where the app reported "Printed N tags" while no label fed
+          // out (counters on the printer never moved). The handheld is
+          // on the same LAN as the printer; it's the authoritative
+          // print attempt, full stop.
           final zpl = res['zpl']?.toString() ?? '';
           final host = res['printer_host']?.toString() ?? '';
           // Server returns the printer port + uri it would use for its
@@ -328,7 +331,9 @@ class _PrintScreenState extends State<PrintScreen> {
           if (tcpErr == null) {
             printedTags += inserted;
           } else {
-            failures.add('$skuLabel: $tcpErr');
+            // Surface host:port/uri in the error so a transport regression
+            // is diagnosable without logcat.
+            failures.add('$skuLabel: $tcpErr [$host:$port/$uri]');
           }
         } catch (e) {
           failures.add('$skuLabel: $e');

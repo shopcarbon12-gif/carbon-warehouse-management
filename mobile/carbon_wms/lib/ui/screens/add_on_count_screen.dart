@@ -16,6 +16,7 @@ import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/add_on_count_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/add_on_count_review_screen.dart';
+import 'package:carbon_wms/ui/widgets/add_on_epc_card.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 /// Add-On Count scan screen.
@@ -56,6 +57,12 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
   @override
   void initState() {
     super.initState();
+    // RFID-only screen: we deliberately don't subscribe to the camera
+    // wedge / 2D-barcode broadcast streams here. Add-On Count surfaces
+    // surprise EPCs read by the UHF radio — barcode scans (1D/2D) would
+    // pollute the new-EPC list and aren't part of this flow. The single
+    // listener below is `rfid.visibleEpcs`, which is the EPC-only stream
+    // emitted by `_handleTagRead` after the UHF radio decodes a tag.
     _session = AddOnSessionState(
       sessionId: widget.sessionId,
       sourceType: widget.sourceType,
@@ -348,46 +355,13 @@ class _NewList extends StatelessWidget {
         ),
       );
     }
-    return ListView.builder(
-      padding: EdgeInsets.symmetric(horizontal: 12.w),
+    // One container per EPC. No grouping by SKU, no qty counter — each tag is
+    // its own row so the operator sees every individual surprise.
+    return ListView.separated(
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
       itemCount: entries.length,
-      itemBuilder: (_, i) => _NewRow(entry: entries[i]),
-    );
-  }
-}
-
-class _NewRow extends StatelessWidget {
-  const _NewRow({required this.entry});
-  final NewEpcEntry entry;
-
-  @override
-  Widget build(BuildContext context) {
-    final title = [entry.customSku, entry.itemName, entry.color, entry.size]
-        .where((s) => s != null && s.isNotEmpty)
-        .join(' · ');
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 6.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (title.isNotEmpty)
-            Text(
-              title,
-              style: GoogleFonts.manrope(
-                fontSize: 12.sp,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textMain,
-              ),
-            ),
-          Text(
-            'EPC ${entry.epc}',
-            style: GoogleFonts.spaceMono(
-              fontSize: 11.sp,
-              color: AppColors.textMuted,
-            ),
-          ),
-        ],
-      ),
+      separatorBuilder: (_, __) => SizedBox(height: 8.h),
+      itemBuilder: (_, i) => AddOnEpcCard(entry: entries[i]),
     );
   }
 }

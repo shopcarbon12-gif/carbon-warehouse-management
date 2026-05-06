@@ -24,6 +24,13 @@ import 'dart:io';
 /// supports both transports and routes by `printer_port` returned from
 /// the server.
 ///
+/// 1.2.54 keeps the explicit `Content-Length` (carried over from
+/// 1.2.53). The print-screen code path was changed in 1.2.54 to always
+/// run the LAN print from the handheld regardless of the server's
+/// `printer_ok` field; the cloud WMS can't reach LAN printers, so any
+/// "ok" coming back from the server was misleading and caused
+/// silent-no-label "successes."
+///
 /// 1.2.53 sets `Content-Length` explicitly. Without it Dart's HttpClient
 /// can frame the POST with `Transfer-Encoding: chunked`, which the
 /// Zebra ZD500R web-print server replies 200 OK to but does NOT
