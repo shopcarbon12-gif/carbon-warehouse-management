@@ -461,8 +461,12 @@ export class MonsoonSupervisor {
         // for this supervisor.
         continue;
       }
+      // Multi-antenna readers must run on the stream driver regardless of
+      // the saved monsoon_driver — the console binary's text output omits
+      // per-tag antenna numbers and would mis-attribute every read.
+      const enabledCount = spec.antennas.filter((a) => a.enabled).length;
       const desiredDriver: "stream" | "console" =
-        spec.monsoon_driver === "console" ? "console" : "stream";
+        enabledCount >= 2 ? "stream" : spec.monsoon_driver === "console" ? "console" : "stream";
       const existing = this.slots.get(spec.id);
       if (existing) {
         // If operator changed the configured serial port in WMS, rebuild
@@ -707,12 +711,20 @@ export class MonsoonSupervisor {
     // alive-but-stuck behaviour would defeat the live-feedback UX of the
     // /antenna-test page. The new_monsoonreader is on the VM regardless
     // of the reader's saved monsoon_driver.
+    //
+    // Multi-antenna readers (≥2 enabled antennas) force the stream
+    // driver too, so per-tag antenna numbers come through (the console
+    // binary's text output omits them). See spawnReader's args block
+    // below for the matching --cmux --mxa --mux_cycles invocation.
+    const enabledAntennaCount = slot.spec.antennas.filter((a) => a.enabled).length;
     const desired: "stream" | "console" =
       slot.testSession !== null
         ? "console"
-        : slot.spec.monsoon_driver === "console"
-          ? "console"
-          : "stream";
+        : enabledAntennaCount >= 2
+          ? "stream"
+          : slot.spec.monsoon_driver === "console"
+            ? "console"
+            : "stream";
     slot.currentDriver = desired;
     if (desired === "console") {
       this.spawnReaderConsole(slot);
@@ -735,21 +747,30 @@ export class MonsoonSupervisor {
       slot.candidatePorts[0] ??
       Number(spec.monsoon_serial_port);
     slot.bytesSinceSpawn = false;
-    // MonsoonReader's `--num` is the reader INDEX (default 1), and `-a` takes
-    // a SINGLE antenna number — using two `-a` flags makes the binary thread-
-    // resource-throw because last-wins semantics combine with `--num` as
-    // count-of-readers. So one process per reader, antenna 1 only by default;
-    // explicit antenna number only when the operator configured exactly one
-    // and it isn't 1.
-    //
-    // Multi-antenna mux via `--cmux --mxa N1,N2` was attempted in commit
-    // 78a5700 — verified live the binary goes silent under that flag combo
-    // (zero stream bytes, supervisor watchdog kicks at 60s). Reverted; per-
-    // antenna multi-port attribution is parked until we work out the
-    // legacy binary's mux quirks or wire the chassis's internal mux config.
+    // Antenna selection. Three modes, bench-tested live against .16 on
+    // 2026-05-07:
+    //   1. Single antenna #1: no flag (binary default)
+    //   2. Single antenna #N (N>1): `-a N`
+    //   3. Multi-antenna: `--cmux --mxa N1,N2,... --mux_cycles -1`. CRITICAL:
+    //      `--infinite` is INCOMPATIBLE with mux mode — combo produces zero
+    //      stream bytes (see prior 78a5700 regression). Use `--mux_cycles -1`
+    //      for infinite mux cycling instead. Bench: 25-second capture of
+    //      this combo against .16 produced 130 valid records correctly
+    //      stamped per antenna (byte 9 of the 50-byte stream record).
+    //      Binary occasionally crashes with a boost-thread error during
+    //      cleanup; supervisor's on-exit respawn handles it.
     const enabledAntennas = spec.antennas.filter((a) => a.enabled);
     const antennaArgs: string[] = [];
-    if (enabledAntennas.length === 1 && enabledAntennas[0]!.antenna_number !== 1) {
+    const useMux = enabledAntennas.length >= 2;
+    if (useMux) {
+      antennaArgs.push(
+        "--cmux",
+        "--mxa",
+        enabledAntennas.map((a) => a.antenna_number).join(","),
+        "--mux_cycles",
+        "-1",
+      );
+    } else if (enabledAntennas.length === 1 && enabledAntennas[0]!.antenna_number !== 1) {
       antennaArgs.push("-a", String(enabledAntennas[0]!.antenna_number));
     }
     const args = [
@@ -771,26 +792,21 @@ export class MonsoonSupervisor {
       "--serial_host", host,
       "--serial_port", String(serialPort),
       "--fastid",
-      // `--infinite` (matches Senitron's canonical readers.json command
-      // for FIXED readers — `--infinite --power N`). Live evidence on
-      // 2026-05-01 showed `--oscillating` produces one inventory burst
-      // (~200 records) then the binary stays alive but stops emitting
-      // any bytes for 30+ minutes — same alive-but-stuck behaviour we
-      // were trying to avoid. With --infinite the binary streams
-      // continuously, occasionally aborts after ~30-45s of saturation,
-      // and the on-exit respawn (plus the re-enabled silence watchdog)
-      // keeps reads flowing in normal warehouse usage. NEITHER --cstream
-      // NOR --nocache are passed — both suppress live emission on the
-      // --stream socket for this 2016 binary in our consumer setup
-      // (Senitron's cdm reads them via the control protocol; we read
-      // raw stream bytes, so we omit them).
-      "--infinite",
+      // Single-antenna readers: `--infinite` cycles continuously. Multi-
+      // antenna readers omit `--infinite` and use `--mux_cycles -1` (set
+      // above) instead — combining the two flags produces zero stream
+      // output (verified live 2026-05-07 with the .16 chassis).
+      ...(useMux ? [] : ["--infinite"]),
     ];
     log.info("supervisor: spawning MonsoonReader", {
       readerId: spec.id,
       readerName: spec.name,
       antennas: enabledAntennas.map((a) => a.antenna_number),
-      antennaScanned: antennaArgs.length > 0 ? Number(antennaArgs[1]) : 1,
+      mode: useMux
+        ? `mux:${enabledAntennas.map((a) => a.antenna_number).join(",")}`
+        : enabledAntennas.length === 1
+          ? `single:${enabledAntennas[0]!.antenna_number}`
+          : "default:1",
       power: powerArg,
       serialPort,
     });
