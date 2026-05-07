@@ -315,34 +315,10 @@ export function CommandCenter() {
     };
   }, [liveScanRunning]);
 
-  // Auto-start on mount when this client's public IP matches an agent's
-  // last_known_public_ip — i.e. the operator is signed in from the same
-  // physical network as the warehouse agent. No click required. Fires
-  // exactly once per page mount; if the user later clicks Pause and goes
-  // IDLE, they have to click again to resume (auto-start does NOT keep
-  // re-firing). Off-network logins (different public IP) get
-  // `eligible: false` and IDLE stays IDLE.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/dashboard/live-scan/auto-eligible");
-        if (!res.ok) return;
-        const j = (await res.json()) as { eligible?: boolean };
-        if (cancelled || !j.eligible) return;
-        // Mount-time auto-start: post /start, then transition to RUNNING.
-        const startRes = await fetch("/api/dashboard/live-scan/start", { method: "POST" });
-        if (!startRes.ok || cancelled) return;
-        setLiveScanCount(0);
-        setLiveScanRunning(true);
-      } catch {
-        /* fall back to manual click */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Live scan default: IDLE on every page load. Removed the mount-time
+  // auto-start (it used to call /start when the operator's public IP
+  // matched the agent's last_known_public_ip) — tile only goes to RUNNING
+  // when the user clicks it.
 
   const onLiveScanClick = useCallback(async () => {
     if (liveScanBusy) return;
