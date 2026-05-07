@@ -27,15 +27,19 @@ export type SyncStatusSummary = {
 export async function getSyncStatusSummary(
   pool: Pool,
   tenantId: string,
+  /** Active location to scope the result to. Pass null/undefined for all. */
+  locationId?: string | null,
 ): Promise<SyncStatusSummary> {
+  const scoped = !!locationId;
   const [last, cnt] = await Promise.all([
     pool.query<{ t: Date | null }>(
       `SELECT MAX(updated_at) AS t
        FROM sync_jobs
        WHERE tenant_id = $1::uuid
          AND job_type = 'lightspeed_catalog'
-         AND status = 'completed'`,
-      [tenantId],
+         AND status = 'completed'
+         ${scoped ? "AND location_id = $2::uuid" : ""}`,
+      scoped ? [tenantId, locationId] : [tenantId],
     ),
     pool.query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM custom_skus`),
   ]);
@@ -52,16 +56,20 @@ export async function listSyncJobLogs(
   tenantId: string,
   page: number,
   limit: number,
+  /** Active location to scope the result to. Pass null/undefined for all. */
+  locationId?: string | null,
 ): Promise<{ rows: SyncJobLogRow[]; total: number }> {
   const safeLimit = Math.min(100, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
+  const scoped = !!locationId;
 
   const countR = await pool.query<{ c: string }>(
     `SELECT COUNT(*)::text AS c
      FROM sync_jobs
      WHERE tenant_id = $1::uuid
+       ${scoped ? "AND location_id = $2::uuid" : ""}
        AND job_type IN ('lightspeed_catalog', 'lightspeed_reconcile', 'lightspeed_push')`,
-    [tenantId],
+    scoped ? [tenantId, locationId] : [tenantId],
   );
   const total = Number(countR.rows[0]?.c ?? 0);
 
@@ -74,13 +82,21 @@ export async function listSyncJobLogs(
     created_at: Date;
     updated_at: Date;
   }>(
-    `SELECT id::text, status, job_type, error, payload, created_at, updated_at
-     FROM sync_jobs
-     WHERE tenant_id = $1::uuid
-       AND job_type IN ('lightspeed_catalog', 'lightspeed_reconcile', 'lightspeed_push')
-     ORDER BY created_at DESC
-     LIMIT $2 OFFSET $3`,
-    [tenantId, safeLimit, offset],
+    scoped
+      ? `SELECT id::text, status, job_type, error, payload, created_at, updated_at
+           FROM sync_jobs
+          WHERE tenant_id = $1::uuid
+            AND location_id = $2::uuid
+            AND job_type IN ('lightspeed_catalog', 'lightspeed_reconcile', 'lightspeed_push')
+          ORDER BY created_at DESC
+          LIMIT $3 OFFSET $4`
+      : `SELECT id::text, status, job_type, error, payload, created_at, updated_at
+           FROM sync_jobs
+          WHERE tenant_id = $1::uuid
+            AND job_type IN ('lightspeed_catalog', 'lightspeed_reconcile', 'lightspeed_push')
+          ORDER BY created_at DESC
+          LIMIT $2 OFFSET $3`,
+    scoped ? [tenantId, locationId, safeLimit, offset] : [tenantId, safeLimit, offset],
   );
 
   return {

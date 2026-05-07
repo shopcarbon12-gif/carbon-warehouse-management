@@ -18,7 +18,15 @@ export type SessionPayload = {
 export async function listRfidExceptions(
   pool: Pool,
   tenantId: string,
+  /**
+   * Active location to scope the result to. The audit_log table has no
+   * dedicated `location_id` column, so we filter on `metadata->>'location_id'`
+   * which `simulateDockAlarm` (and any other code path producing these rows)
+   * is required to populate.
+   */
+  locationId?: string | null,
 ): Promise<RfidExceptionAuditRow[]> {
+  const scoped = !!locationId;
   const r = await pool.query<{
     id: string;
     action: string;
@@ -30,9 +38,10 @@ export async function listRfidExceptions(
      FROM audit_log
      WHERE tenant_id = $1::uuid
        AND action IN ('rfid_alarm', 'rfid_exception')
+       ${scoped ? "AND metadata->>'location_id' = $2::text" : ""}
      ORDER BY created_at DESC
      LIMIT 200`,
-    [tenantId],
+    scoped ? [tenantId, locationId] : [tenantId],
   );
 
   return r.rows.map((row) => ({

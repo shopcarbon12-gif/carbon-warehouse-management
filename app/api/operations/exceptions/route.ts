@@ -15,7 +15,9 @@ export async function GET(req: Request) {
   }
 
   try {
-    const rows = await listRfidExceptions(pool, session.tid);
+    // Scope to active location so users on FL Mall don't see Orlando's RFID
+    // alarms / exceptions.
+    const rows = await listRfidExceptions(pool, session.tid, session.lid);
     return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("[operations/exceptions]", e);

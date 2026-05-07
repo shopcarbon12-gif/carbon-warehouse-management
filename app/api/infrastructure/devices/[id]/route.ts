@@ -4,10 +4,24 @@ import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
+import { assertRowLocation } from "@/lib/server/assert-row-location";
 import { deleteDevice } from "@/lib/server/infrastructure-devices";
 import { setDeviceAuthorization } from "@/lib/queries/enterprise-devices";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+async function guard(
+  pool: Parameters<typeof assertRowLocation>[0],
+  id: string,
+  tid: string,
+  lid: string | null | undefined,
+): Promise<NextResponse | null> {
+  const r = await assertRowLocation(pool, "devices", id, tid, lid);
+  if (r === "not_found") return NextResponse.json({ error: "Device not found" }, { status: 404 });
+  if (r === "wrong_location")
+    return NextResponse.json({ error: "Wrong location for this device" }, { status: 403 });
+  return null;
+}
 
 const patchSchema = z.object({
   androidId: z.string().max(128).nullable().optional(),
@@ -47,6 +61,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
 
+  const blocked = await guard(pool, id, session.tid, session.lid);
+  if (blocked) return blocked;
+
   try {
     const ok = await setDeviceAuthorization(pool, session.tid, id, {
       android_id: parsed.data.androidId,
@@ -80,6 +97,9 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
+
+  const blocked = await guard(pool, id, session.tid, session.lid);
+  if (blocked) return blocked;
 
   const client = await pool.connect();
   try {

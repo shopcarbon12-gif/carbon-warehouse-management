@@ -18,7 +18,9 @@ export async function GET(req: Request) {
   }
 
   try {
-    const rows = await listAuthorizedHandheldsForTenant(pool, session.tid);
+    // Scope to active location so the "Send to handheld" drawer only lists
+    // handhelds present at the user's current site.
+    const rows = await listAuthorizedHandheldsForTenant(pool, session.tid, session.lid);
     /* Strip the `config` blob (may contain device-private fields). */
     const trimmed = rows.map((r) => ({
       id: r.id,

@@ -88,7 +88,10 @@ export function generateAgentToken(): string {
 export async function listCdmAgentsForTenant(
   pool: Pool,
   tenantId: string,
+  /** Active location to scope the result to. Pass null/undefined for all. */
+  locationId?: string | null,
 ): Promise<CdmAgentRow[]> {
+  const scoped = !!locationId;
   const r = await pool.query<CdmAgentRow>(
     `SELECT
        a.id::text,
@@ -110,8 +113,9 @@ export async function listCdmAgentsForTenant(
        SELECT COUNT(*) AS total FROM devices d WHERE d.cdm_agent_id = a.id
      ) d_count ON TRUE
      WHERE a.tenant_id = $1::uuid
+       ${scoped ? "AND a.location_id = $2::uuid" : ""}
      ORDER BY l.code ASC, a.name ASC`,
-    [tenantId],
+    scoped ? [tenantId, locationId] : [tenantId],
   );
   return r.rows;
 }

@@ -19,7 +19,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
   try {
-    const agents = await listCdmAgentsForTenant(pool, session.tid);
+    // Scope to active location so users on FL Mall don't see Orlando's
+    // CDM agents in the hardware-config UI.
+    const agents = await listCdmAgentsForTenant(pool, session.tid, session.lid);
     return NextResponse.json({ agents }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("[cdm-agents GET]", e);

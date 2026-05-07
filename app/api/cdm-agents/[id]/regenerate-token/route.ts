@@ -3,6 +3,7 @@ import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
+import { assertRowLocation } from "@/lib/server/assert-row-location";
 import { regenerateAgentToken } from "@/lib/server/cdm-agents";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -26,6 +27,11 @@ export async function POST(req: Request, { params }: Ctx) {
   if (denied) return denied;
 
   const { id } = await params;
+  const guard = await assertRowLocation(pool, "cdm_agents", id, session.tid, session.lid);
+  if (guard === "not_found")
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (guard === "wrong_location")
+    return NextResponse.json({ error: "Wrong location for this resource" }, { status: 403 });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

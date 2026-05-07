@@ -3,6 +3,7 @@ import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
+import { assertRowLocation } from "@/lib/server/assert-row-location";
 import {
   deleteZone,
   getZoneById,
@@ -11,6 +12,19 @@ import {
 } from "@/lib/server/zones";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+async function guard(
+  pool: Parameters<typeof assertRowLocation>[0],
+  id: string,
+  tid: string,
+  lid: string | null | undefined,
+): Promise<NextResponse | null> {
+  const r = await assertRowLocation(pool, "zones", id, tid, lid);
+  if (r === "not_found") return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (r === "wrong_location")
+    return NextResponse.json({ error: "Wrong location for this resource" }, { status: 403 });
+  return null;
+}
 
 export async function GET(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
@@ -22,6 +36,8 @@ export async function GET(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
   const { id } = await params;
+  const blocked = await guard(pool, id, session.tid, session.lid);
+  if (blocked) return blocked;
   const zone = await getZoneById(pool, session.tid, id);
   if (!zone) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -60,6 +76,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
 
+  const blocked = await guard(pool, id, session.tid, session.lid);
+  if (blocked) return blocked;
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -97,6 +116,8 @@ export async function DELETE(req: Request, { params }: Ctx) {
   if (denied) return denied;
 
   const { id } = await params;
+  const blocked = await guard(pool, id, session.tid, session.lid);
+  if (blocked) return blocked;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

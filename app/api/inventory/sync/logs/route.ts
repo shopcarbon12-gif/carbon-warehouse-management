@@ -19,7 +19,15 @@ export async function GET(req: Request) {
   }
 
   try {
-    const { rows, total } = await listSyncJobLogs(pool, session.tid, page, limit);
+    // Scope to active location so users on FL Mall don't see Orlando's sync
+    // history.
+    const { rows, total } = await listSyncJobLogs(
+      pool,
+      session.tid,
+      page,
+      limit,
+      session.lid,
+    );
     return NextResponse.json(
       { rows, total, page, limit },
       { headers: { "Cache-Control": "no-store" } },

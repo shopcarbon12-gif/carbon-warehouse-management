@@ -72,14 +72,26 @@ type RawDevice = {
 export async function buildHardwareConfigTree(
   pool: Pool,
   tenantId: string,
+  /**
+   * Active location to scope the tree to. When provided, locations/zones/
+   * devices are filtered so a user on FL Mall doesn't see Orlando's hardware.
+   * Pass `null`/`undefined` to keep the legacy tenant-wide tree.
+   */
+  locationId?: string | null,
 ): Promise<HardwareConfigTree> {
+  const scoped = !!locationId;
   const [locations, zones, devices] = await Promise.all([
     pool.query<{ id: string; code: string; name: string }>(
-      `SELECT id::text, code, name
-         FROM locations
-         WHERE tenant_id = $1::uuid
-         ORDER BY code ASC`,
-      [tenantId],
+      scoped
+        ? `SELECT id::text, code, name
+             FROM locations
+             WHERE tenant_id = $1::uuid AND id = $2::uuid
+             ORDER BY code ASC`
+        : `SELECT id::text, code, name
+             FROM locations
+             WHERE tenant_id = $1::uuid
+             ORDER BY code ASC`,
+      scoped ? [tenantId, locationId] : [tenantId],
     ),
     pool.query<{
       id: string;
@@ -87,11 +99,16 @@ export async function buildHardwareConfigTree(
       name: string;
       description: string | null;
     }>(
-      `SELECT id::text, location_id::text, name, description
-         FROM zones
-         WHERE tenant_id = $1::uuid
-         ORDER BY name ASC`,
-      [tenantId],
+      scoped
+        ? `SELECT id::text, location_id::text, name, description
+             FROM zones
+             WHERE tenant_id = $1::uuid AND location_id = $2::uuid
+             ORDER BY name ASC`
+        : `SELECT id::text, location_id::text, name, description
+             FROM zones
+             WHERE tenant_id = $1::uuid
+             ORDER BY name ASC`,
+      scoped ? [tenantId, locationId] : [tenantId],
     ),
     pool.query<RawDevice>(
       `SELECT
@@ -112,9 +129,10 @@ export async function buildHardwareConfigTree(
        FROM devices d
        LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
        WHERE d.tenant_id = $1::uuid
+         ${scoped ? "AND d.location_id = $2::uuid" : ""}
          AND d.device_type IN ('fixed_reader','transaction_reader','door_reader','antenna')
        ORDER BY d.name ASC`,
-      [tenantId],
+      scoped ? [tenantId, locationId] : [tenantId],
     ),
   ]);
 

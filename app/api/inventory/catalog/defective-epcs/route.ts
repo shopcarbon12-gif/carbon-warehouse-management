@@ -73,8 +73,8 @@ export async function GET(req: Request) {
 
   const config = await loadEpcConfig(pool, session.tid);
 
-  // Tag-killed items, scoped to this tenant via location.tenant_id, where
-  // the row hasn't been dismissed OR has been re-scanned since dismissal.
+  // Tag-killed items at the user's *active location*. Matches the dashboard
+  // KPI scope so the modal count and the dashboard tile agree.
   const r = await pool.query<{
     epc: string;
     serial_number: string;
@@ -93,12 +93,13 @@ export async function GET(req: Request) {
             i.source_device_label
        FROM items i
        INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
-       WHERE i.status = 'tag_killed'
+       WHERE i.location_id = $2::uuid
+         AND i.status = 'tag_killed'
          AND (i.defective_acknowledged_at IS NULL
               OR i.last_seen_at > i.defective_acknowledged_at)
        ORDER BY i.first_scanned_at DESC NULLS LAST, i.last_seen_at DESC NULLS LAST
-       LIMIT $2::int`,
-    [session.tid, MAX_ROWS],
+       LIMIT $3::int`,
+    [session.tid, session.lid, MAX_ROWS],
   );
 
   const rows: DefectiveEpcRow[] = r.rows.map((row) => {
@@ -154,17 +155,18 @@ export async function POST(req: Request) {
   }
   const epcs = parsed.data.epcs.map((e) => e.toUpperCase());
 
-  // Tenant-scoped UPDATE — only modifies rows whose location belongs to this
-  // tenant. Status is intentionally NOT changed; only the dismissal timestamp.
+  // Location-scoped UPDATE — only modifies rows at the user's active site.
+  // Status is intentionally NOT changed; only the dismissal timestamp.
   const r = await pool.query(
     `UPDATE items i
         SET defective_acknowledged_at = now()
        FROM locations l
       WHERE i.location_id = l.id
         AND l.tenant_id = $1::uuid
-        AND i.epc = ANY($2::text[])
+        AND i.location_id = $2::uuid
+        AND i.epc = ANY($3::text[])
         AND i.status = 'tag_killed'`,
-    [session.tid, epcs],
+    [session.tid, session.lid, epcs],
   );
 
   return NextResponse.json({ dismissed: r.rowCount ?? 0 });

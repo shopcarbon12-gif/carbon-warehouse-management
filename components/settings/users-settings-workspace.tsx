@@ -11,6 +11,7 @@ import {
   getSectionMode,
   setSectionMode,
 } from "@/lib/settings/permission-catalog";
+import { PosAccessPanel } from "./pos-access-panel";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -33,7 +34,7 @@ function hydratePermissions(raw: unknown): PermissionsMap {
   return out;
 }
 
-type Tab = "users" | "roles";
+type Tab = "users" | "roles" | "pos";
 
 export function UsersSettingsWorkspace() {
   const [tab, setTab] = useState<Tab>("users");
@@ -180,9 +181,24 @@ export function UsersSettingsWorkspace() {
         >
           User roles
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "pos"}
+          onClick={() => setTab("pos")}
+          className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
+            tab === "pos"
+              ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+              : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+          }`}
+        >
+          POS
+        </button>
       </div>
 
-      {tab === "users" ? (
+      {tab === "pos" ? (
+        <PosAccessPanel />
+      ) : tab === "users" ? (
         <>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button

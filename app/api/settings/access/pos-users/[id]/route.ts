@@ -4,19 +4,25 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
-import { deleteTenantLocation, updateTenantLocation } from "@/lib/queries/settings-locations-admin";
+import {
+  deactivateTenantPosUser,
+  updateTenantPosUser,
+} from "@/lib/queries/settings-pos-users";
 
 const patchSchema = z.object({
-  code: z.string().min(1).max(32),
-  name: z.string().min(1).max(256),
-  lightspeedShopId: z.number().int().positive().nullable().optional(),
+  posRoleId: z.number().int().positive().nullable(),
   isActive: z.boolean(),
-  userIds: z.array(z.string().uuid()),
-  email: z.string().email().max(256).nullable().optional(),
-  /** Optional new password. Omit to leave the existing hash untouched. */
-  password: z.string().min(4).max(128).nullable().optional(),
+  resetPin: z
+    .string()
+    .regex(/^\d{4}$/, "PIN must be 4 digits")
+    .optional(),
 });
 
+/**
+ * PATCH /api/settings/access/pos-users/{id}
+ * Update a POS user's role + active flag. Optionally reset the PIN.
+ * `id` is the users.id (UUID).
+ */
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -25,8 +31,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
 
-  const { id: locationId } = await ctx.params;
-  if (!/^[0-9a-f-]{36}$/i.test(locationId)) {
+  const { id } = await ctx.params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
@@ -42,46 +48,43 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
 
   try {
-    const ok = await updateTenantLocation(pool, session.tid, locationId, {
-      code: parsed.data.code,
-      name: parsed.data.name,
-      lightspeed_shop_id: parsed.data.lightspeedShopId ?? null,
-      is_active: parsed.data.isActive,
-      userIds: parsed.data.userIds,
-      email: parsed.data.email ?? null,
-      password: parsed.data.password ?? null,
+    const ok = await updateTenantPosUser(pool, session.tid, id, {
+      posRoleId: parsed.data.posRoleId,
+      isActive: parsed.data.isActive,
+      resetPin: parsed.data.resetPin,
     });
     if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const code = (e as { code?: string }).code;
-    if (code === "23505") {
-      return NextResponse.json({ error: "Location code or Lightspeed shop ID conflict" }, { status: 409 });
-    }
-    console.error("[access/locations PATCH]", e);
+    console.error("[access/pos-users PATCH]", e);
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const session = await getSessionFromRequest(_req);
+/**
+ * DELETE /api/settings/access/pos-users/{id}
+ * Soft-deactivates the POS user (sets pos_employees.is_active = false). We
+ * never hard-delete because past sales reference cashier_id.
+ */
+export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
 
-  const { id: locationId } = await ctx.params;
-  if (!/^[0-9a-f-]{36}$/i.test(locationId)) {
+  const { id } = await ctx.params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
   try {
-    const ok = await deleteTenantLocation(pool, session.tid, locationId);
+    const ok = await deactivateTenantPosUser(pool, session.tid, id);
     if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error("[access/locations DELETE]", e);
-    return NextResponse.json({ error: "Delete failed" }, { status: 500 });
+    console.error("[access/pos-users DELETE]", e);
+    return NextResponse.json({ error: "Deactivate failed" }, { status: 500 });
   }
 }

@@ -25,7 +25,13 @@ export const upsertZoneSchema = z.object({
 
 export type UpsertZoneBody = z.infer<typeof upsertZoneSchema>;
 
-export async function listZonesForTenant(pool: Pool, tenantId: string): Promise<ZoneRow[]> {
+export async function listZonesForTenant(
+  pool: Pool,
+  tenantId: string,
+  /** Active location to scope the result to. Pass null/undefined for all. */
+  locationId?: string | null,
+): Promise<ZoneRow[]> {
+  const scoped = !!locationId;
   const r = await pool.query<ZoneRow>(
     `SELECT
        z.id::text,
@@ -51,8 +57,9 @@ export async function listZonesForTenant(pool: Pool, tenantId: string): Promise<
        WHERE d.zone_id = z.id
      ) d_count ON TRUE
      WHERE z.tenant_id = $1::uuid
+       ${scoped ? "AND z.location_id = $2::uuid" : ""}
      ORDER BY l.code ASC, z.name ASC`,
-    [tenantId],
+    scoped ? [tenantId, locationId] : [tenantId],
   );
   return r.rows;
 }

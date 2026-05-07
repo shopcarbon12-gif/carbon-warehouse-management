@@ -67,7 +67,13 @@ function buildConfig(body: UpsertDeviceBody): Record<string, unknown> {
   return base;
 }
 
-export async function listDevicesForTenant(pool: Pool, tenantId: string): Promise<DeviceGridRow[]> {
+export async function listDevicesForTenant(
+  pool: Pool,
+  tenantId: string,
+  /** Active location to scope the result to. Pass null/undefined for all. */
+  locationId?: string | null,
+): Promise<DeviceGridRow[]> {
+  const scoped = !!locationId;
   const r = await pool.query<{
     id: string;
     device_type: string;
@@ -101,8 +107,9 @@ export async function listDevicesForTenant(pool: Pool, tenantId: string): Promis
      INNER JOIN locations l ON l.id = d.location_id AND l.tenant_id = d.tenant_id
      LEFT JOIN bins b ON b.id = d.bin_id AND b.archived_at IS NULL
      WHERE d.tenant_id = $1::uuid
+       ${scoped ? "AND d.location_id = $2::uuid" : ""}
      ORDER BY l.code ASC, d.device_type ASC, d.name ASC`,
-    [tenantId],
+    scoped ? [tenantId, locationId] : [tenantId],
   );
 
   return r.rows.map((row) => ({
@@ -129,8 +136,10 @@ export async function listDevicesForTenant(pool: Pool, tenantId: string): Promis
 export async function listAuthorizedHandheldsForTenant(
   pool: Pool,
   tenantId: string,
+  /** Active location to scope the result to. Pass null/undefined for all. */
+  locationId?: string | null,
 ): Promise<DeviceGridRow[]> {
-  const all = await listDevicesForTenant(pool, tenantId);
+  const all = await listDevicesForTenant(pool, tenantId, locationId);
   return all.filter(
     (d) => d.device_type === "handheld_reader" && d.is_authorized,
   );

@@ -14,7 +14,12 @@ export async function GET(req: Request) {
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
   try {
-    const rows = await listUserRoles(pool);
+    // Default to wms scope so existing callers keep working. Pass ?scope=pos
+    // for the POS roles UI, ?scope=all for both.
+    const url = new URL(req.url);
+    const raw = url.searchParams.get("scope");
+    const scope = raw === "pos" ? "pos" : raw === "all" ? undefined : "wms";
+    const rows = await listUserRoles(pool, scope);
     return NextResponse.json(rows, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("[access/user-roles GET]", e);
@@ -25,6 +30,7 @@ export async function GET(req: Request) {
 const postSchema = z.object({
   name: z.string().min(1).max(256),
   permissions: z.record(z.string(), z.record(z.string(), z.enum(["view", "hide"]))).optional(),
+  scope: z.enum(["wms", "pos"]).optional(),
 });
 
 export async function POST(req: Request) {
@@ -47,7 +53,12 @@ export async function POST(req: Request) {
   }
 
   try {
-    const id = await insertUserRole(pool, parsed.data.name, parsed.data.permissions ?? {});
+    const id = await insertUserRole(
+      pool,
+      parsed.data.name,
+      parsed.data.permissions ?? {},
+      parsed.data.scope ?? "wms",
+    );
     return NextResponse.json({ id }, { status: 201 });
   } catch (e) {
     const code = (e as { code?: string }).code;

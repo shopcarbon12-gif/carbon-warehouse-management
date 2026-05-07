@@ -51,17 +51,19 @@ export async function getCommandCenterKpis(
      WHERE location_id = $1::uuid AND status = 'pending_visibility'`,
     [locationId],
   );
-  // Defective EPCs: same predicate as the modal — tag_killed and not yet dismissed,
-  // OR re-scanned since the last dismissal so they re-appear automatically.
-  // Tenant-wide (matches catalog modal scope) since defectives aren't location-specific.
+  // Defective EPCs: same predicate as the modal — tag_killed and not yet
+  // dismissed, OR re-scanned since the last dismissal so they re-appear
+  // automatically. Scoped to the *active location* so switching from Orlando
+  // to FL Mall doesn't leak Orlando's defective items into the FL count.
   const defective = await pool.query<{ c: string }>(
     `SELECT count(*)::text AS c
      FROM items i
      INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
-     WHERE i.status = 'tag_killed'
+     WHERE i.location_id = $2::uuid
+       AND i.status = 'tag_killed'
        AND (i.defective_acknowledged_at IS NULL
             OR i.last_seen_at > i.defective_acknowledged_at)`,
-    [tenantId],
+    [tenantId, locationId],
   );
   // Hardware counts reflect "currently operational" state, not "ever
   // registered." Each filter requires status_online=true so paused or

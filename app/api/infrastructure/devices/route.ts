@@ -21,7 +21,8 @@ export async function GET(req: Request) {
   }
 
   try {
-    const devices = await listDevicesForTenant(pool, session.tid);
+    // Scope to active location so users on FL Mall don't see Orlando's devices.
+    const devices = await listDevicesForTenant(pool, session.tid, session.lid);
     return NextResponse.json({ devices }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("[infrastructure/devices GET]", e);

@@ -15,7 +15,9 @@ export async function GET(req: Request) {
   }
 
   try {
-    const summary = await getSyncStatusSummary(pool, session.tid);
+    // Scope to active location so users on FL Mall don't see Orlando's
+    // last-success timestamp for catalog sync.
+    const summary = await getSyncStatusSummary(pool, session.tid, session.lid);
     return NextResponse.json(summary, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("[inventory/sync/status]", e);

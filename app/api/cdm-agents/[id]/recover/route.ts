@@ -2,10 +2,24 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { isAdminRole } from "@/lib/auth/dashboard-rbac";
+import { assertRowLocation } from "@/lib/server/assert-row-location";
 import {
   getAgentDiagnosis,
   requestAgentRecover,
 } from "@/lib/server/cdm-agents";
+
+async function guard(
+  pool: Parameters<typeof assertRowLocation>[0],
+  id: string,
+  tid: string,
+  lid: string | null | undefined,
+): Promise<NextResponse | null> {
+  const r = await assertRowLocation(pool, "cdm_agents", id, tid, lid);
+  if (r === "not_found") return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+  if (r === "wrong_location")
+    return NextResponse.json({ error: "Wrong location for this resource" }, { status: 403 });
+  return null;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +48,8 @@ export async function GET(
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
+  const blocked = await guard(pool, id, session.tid, session.lid);
+  if (blocked) return blocked;
   const diag = await getAgentDiagnosis(pool, session.tid, id);
   if (!diag) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   return NextResponse.json({ ok: true, diagnosis: diag });
@@ -52,6 +68,8 @@ export async function POST(
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
+  const blocked = await guard(pool, id, session.tid, session.lid);
+  if (blocked) return blocked;
   const before = await getAgentDiagnosis(pool, session.tid, id);
   if (!before) return NextResponse.json({ error: "Agent not found" }, { status: 404 });
 

@@ -40,6 +40,7 @@ export function LocationsSettingsWorkspace() {
           lightspeedShopId: row.lightspeed_shop_id,
           isActive: next,
           userIds: row.users.map((u) => u.id),
+          email: row.email,
         }),
       });
       if (!res.ok) {
@@ -48,6 +49,37 @@ export function LocationsSettingsWorkspace() {
         return;
       }
       void mutate();
+    },
+    [mutate],
+  );
+
+  const resetPassword = useCallback(
+    async (row: TenantLocationAdminRow) => {
+      const next = window.prompt(
+        `New password for location "${row.name}" (4–128 chars):`,
+        "",
+      );
+      if (next == null) return;
+      const trimmed = next.trim();
+      if (trimmed.length < 4) {
+        window.alert("Password must be at least 4 characters.");
+        return;
+      }
+      const res = await fetch(
+        `/api/settings/access/locations/${row.id}/reset-password`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: trimmed }),
+        },
+      );
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        window.alert(j.error ?? "Reset failed");
+        return;
+      }
+      void mutate();
+      window.alert("Password updated.");
     },
     [mutate],
   );
@@ -97,6 +129,8 @@ export function LocationsSettingsWorkspace() {
               <th className="px-3 py-3">Location name</th>
               <th className="px-3 py-3">Code</th>
               <th className="px-3 py-3">Lightspeed shop ID</th>
+              <th className="px-3 py-3">POS email</th>
+              <th className="px-3 py-3">POS password</th>
               <th className="px-3 py-3">Status</th>
               <th className="px-3 py-3">Assigned users</th>
               <th className="px-3 py-3 text-right">Actions</th>
@@ -105,7 +139,7 @@ export function LocationsSettingsWorkspace() {
           <tbody className="divide-y divide-[var(--wms-border)]/90">
             {!locations ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+                <td colSpan={8} className="px-3 py-8 text-center text-[var(--wms-muted)]">
                   Loading…
                 </td>
               </tr>
@@ -116,6 +150,16 @@ export function LocationsSettingsWorkspace() {
                   <td className="px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]">{row.code}</td>
                   <td className="px-3 py-2.5 font-mono text-xs font-medium text-[var(--wms-accent)]">
                     {row.lightspeed_shop_id ?? "—"}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                    {row.email ?? "—"}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-[0.65rem]">
+                    {row.has_password ? (
+                      <span className="text-emerald-500/85">●●●●●●●●</span>
+                    ) : (
+                      <span className="text-[var(--wms-muted)]">not set</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5">
                     <button
@@ -140,6 +184,14 @@ export function LocationsSettingsWorkspace() {
                       className="text-teal-400/90 hover:underline"
                     >
                       Edit
+                    </button>
+                    <span className="mx-2 text-[var(--wms-muted)]">|</span>
+                    <button
+                      type="button"
+                      onClick={() => void resetPassword(row)}
+                      className="text-amber-400/85 hover:underline"
+                    >
+                      Reset password
                     </button>
                     <span className="mx-2 text-[var(--wms-muted)]">|</span>
                     <button
@@ -196,6 +248,8 @@ function LocationFormModal({
   const [shopId, setShopId] = useState(row?.lightspeed_shop_id != null ? String(row.lightspeed_shop_id) : "");
   const [isActive, setIsActive] = useState(row?.is_active ?? true);
   const [userIds, setUserIds] = useState<Set<string>>(() => new Set(row?.users.map((u) => u.id) ?? []));
+  const [email, setEmail] = useState(row?.email ?? "");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -205,6 +259,8 @@ function LocationFormModal({
     setShopId(row?.lightspeed_shop_id != null ? String(row.lightspeed_shop_id) : "");
     setIsActive(row?.is_active ?? true);
     setUserIds(new Set(row?.users.map((u) => u.id) ?? []));
+    setEmail(row?.email ?? "");
+    setPassword("");
   }, [row]);
 
   const toggleUser = (id: string) => {
@@ -227,15 +283,27 @@ function LocationFormModal({
       setErr("Lightspeed shop ID must be a positive integer or empty");
       return;
     }
+    const emailTrim = email.trim();
+    if (emailTrim && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      setErr("Email looks invalid");
+      return;
+    }
+    const passwordTrim = password.trim();
+    if (passwordTrim && (passwordTrim.length < 4 || passwordTrim.length > 128)) {
+      setErr("Password must be 4–128 characters");
+      return;
+    }
     setBusy(true);
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         code: code.trim(),
         name: name.trim(),
         lightspeedShopId: shopNum,
         isActive: isActive,
         userIds: [...userIds],
+        email: emailTrim || null,
       };
+      if (passwordTrim) payload.password = passwordTrim;
       if (mode === "add") {
         const res = await fetch("/api/settings/access/locations", {
           method: "POST",
@@ -304,6 +372,37 @@ function LocationFormModal({
               inputMode="numeric"
               className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
               placeholder="e.g. 1"
+            />
+          </label>
+          <label className="block text-[var(--wms-muted)]">
+            Location email (POS sign-in / contact)
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              autoComplete="off"
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+              placeholder="store@shopcarbon.com"
+            />
+          </label>
+          <label className="block text-[var(--wms-muted)]">
+            Location password{" "}
+            {mode === "edit" ? (
+              <span className="text-[0.6rem] text-[var(--wms-muted)]">
+                (leave blank to keep current; use Reset password on the row instead)
+              </span>
+            ) : (
+              <span className="text-[0.6rem] text-[var(--wms-muted)]">(4–128 chars)</span>
+            )}
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type="password"
+              autoComplete="new-password"
+              minLength={4}
+              maxLength={128}
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+              placeholder={mode === "edit" ? "••••••••" : "set a password"}
             />
           </label>
           <label className="flex cursor-pointer items-center gap-2 text-[var(--wms-fg)]">

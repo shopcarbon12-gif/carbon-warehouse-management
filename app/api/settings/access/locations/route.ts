@@ -28,6 +28,8 @@ const postSchema = z.object({
   lightspeedShopId: z.number().int().positive().nullable().optional(),
   isActive: z.boolean().optional(),
   userIds: z.array(z.string().uuid()).default([]),
+  email: z.string().email().max(256).nullable().optional(),
+  password: z.string().min(4).max(128).nullable().optional(),
 });
 
 export async function POST(req: Request) {
@@ -56,6 +58,8 @@ export async function POST(req: Request) {
       lightspeed_shop_id: parsed.data.lightspeedShopId ?? null,
       is_active: parsed.data.isActive ?? true,
       userIds: parsed.data.userIds,
+      email: parsed.data.email ?? null,
+      password: parsed.data.password ?? null,
     });
     return NextResponse.json({ id }, { status: 201 });
   } catch (e) {
