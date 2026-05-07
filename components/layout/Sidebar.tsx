@@ -34,8 +34,11 @@ import {
   Tags,
   Upload,
   Users,
+  UserSearch,
   Warehouse,
   Webhook,
+  Star,
+  Gift,
   X,
 } from "lucide-react";
 import { LocationSwitcher } from "@/components/location-switcher";
@@ -116,6 +119,17 @@ const sections: NavSection[] = [
       { href: "/reports/replenishments", label: "Replenishments", icon: PackagePlus },
       { href: "/reports/bulk-imports", label: "Bulk imports", icon: FolderInput },
       { href: "/reports/external-systems", label: "External systems", icon: Webhook },
+    ],
+  },
+  {
+    id: "loyalty",
+    label: "Loyalty",
+    isActiveSection: (p) => p.startsWith("/loyalty"),
+    items: [
+      { href: "/loyalty", label: "Overview", icon: Star },
+      { href: "/loyalty/customers", label: "Members", icon: UserSearch },
+      { href: "/loyalty/ledger", label: "Ledger", icon: Activity },
+      { href: "/loyalty/rewards", label: "Rewards", icon: Gift },
     ],
   },
   {
