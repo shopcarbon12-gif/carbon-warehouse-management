@@ -748,7 +748,18 @@ export class MonsoonSupervisor {
       return;
     }
     const { spec } = slot;
-    const powerArg = Math.round(this.avgPower(spec) * 10);
+    // Multi-antenna mux mode: cap power at 30 dBm. Live-tested 2026-05-07
+    // against Transfer Bin (.16): at 30 dBm BOTH antennas read healthy
+    // (3151 + 4080 tags in 30s mux_test). At 33 dBm both fail with MAC
+    // error 316 (chip's regulatory/thermal backoff). The asymmetric
+    // dashboard pattern — ant#2 climbing, ant#1 stuck at 0 — was the
+    // chip cycling in/out of the 33 dBm backoff state and port 1
+    // happening to recover slower. 30 dBm avoids the backoff entirely.
+    // Single-antenna readers continue at the WMS-saved power (typically
+    // 33 dBm, verified safe on .18 / .22 / .77 / etc).
+    const muxMode = spec.antennas.filter((a) => a.enabled).length >= 2;
+    const requestedPower = Math.round(this.avgPower(spec) * 10);
+    const powerArg = muxMode ? Math.min(requestedPower, 300) : requestedPower;
 
     // Pick the current candidate serial port. The candidate list is
     // [configured, ...fallbacks] dedup'd. On every fresh spawn we use the
