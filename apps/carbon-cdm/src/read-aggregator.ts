@@ -16,6 +16,7 @@ const MAX_QUEUE_PER_READER = 20_000;
 
 type Pending = {
   epcHex: string;
+  antennaNumber?: number;
   rssi?: number;
   readAt: string;
 };
@@ -53,7 +54,12 @@ export class ReadAggregator {
     }
     const receivedAtIso = ev.receivedAt.toISOString();
     for (const r of ev.reads) {
-      q.push({ epcHex: r.epcHex, readAt: receivedAtIso });
+      q.push({
+        epcHex: r.epcHex,
+        antennaNumber: r.antennaNumber,
+        rssi: r.rssiDbm,
+        readAt: receivedAtIso,
+      });
     }
     if (q.length > MAX_QUEUE_PER_READER) {
       const overflow = q.length - MAX_QUEUE_PER_READER;
