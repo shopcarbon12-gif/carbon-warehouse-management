@@ -46,10 +46,18 @@ export async function getCommandCenterKpis(
      WHERE location_id = $1::uuid AND status = 'in-stock'`,
     [locationId],
   );
+  // Receiving concerns: inbound transfers headed to this location that
+  // haven't fully landed yet — actual receiving work, not exceptions.
+  // Previous query counted items.status='pending_visibility' and the
+  // tile linked to /alerts (dock-alarm workspace), which is irrelevant
+  // when no dock alarms are installed.
   const incomplete = await pool.query<{ c: string }>(
-    `SELECT count(*)::text AS c FROM items
-     WHERE location_id = $1::uuid AND status = 'pending_visibility'`,
-    [locationId],
+    `SELECT count(*)::text AS c
+     FROM transfer_records tr
+     WHERE tr.tenant_id = $1::uuid
+       AND tr.destination_location_id = $2::uuid
+       AND tr.state IN ('in-transit', 'partially_received')`,
+    [tenantId, locationId],
   );
   // Defective EPCs: same predicate as the modal — tag_killed and not yet
   // dismissed, OR re-scanned since the last dismissal so they re-appear

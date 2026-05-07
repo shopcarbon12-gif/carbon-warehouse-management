@@ -30,10 +30,20 @@ export async function GET(req: Request) {
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
-  /* For every Carbon-owned antenna on this tenant, count the distinct EPCs that
-   * (a) have been read on this antenna since the session started, AND
-   * (b) are currently 'in-stock' in items. The (b) filter keeps the sum
-   *     consistent with the aggregate counter in /state. */
+  /* For every Carbon-owned antenna on this tenant, count BOTH:
+   *  - unique_epcs: distinct EPCs the antenna has read since the session
+   *    started, regardless of catalog status. This answers the operator's
+   *    real question — "is this antenna actually picking up tags right
+   *    now?" — and stays >0 even for EPCs not in the live catalog (e.g.
+   *    mid-commission tags, killed tags, anything not yet `in-stock`).
+   *  - total_reads: raw read count for the same window, useful for
+   *    spotting an antenna that's "alive but barely seeing anything."
+   *
+   * The previous query joined items with `i.status = 'in-stock'` to keep
+   * the per-antenna sum consistent with the aggregate /state counter,
+   * but that hid genuine hardware activity whenever the tags read
+   * weren't yet live inventory — making the panel useless for "which
+   * reader is working?" diagnosis. */
   const r = await pool.query<{
     reader_id: string;
     reader_name: string;
@@ -42,6 +52,7 @@ export async function GET(req: Request) {
     antenna_number: number;
     network_address: string | null;
     unique_epcs: string;
+    total_reads: string;
   }>(
     `SELECT
        parent.id::text                 AS reader_id,
@@ -50,18 +61,19 @@ export async function GET(req: Request) {
        a.name                          AS antenna_name,
        (a.config->>'antenna_number')::int AS antenna_number,
        parent.network_address          AS network_address,
-       COALESCE(read_counts.n, 0)::text AS unique_epcs
+       COALESCE(read_counts.uniq, 0)::text AS unique_epcs,
+       COALESCE(read_counts.total, 0)::text AS total_reads
      FROM devices a
      INNER JOIN devices parent ON parent.id = a.parent_device_id
      INNER JOIN locations l    ON l.id = parent.location_id AND l.tenant_id = $1::uuid
      LEFT JOIN LATERAL (
-       SELECT COUNT(DISTINCT cr.epc_hex) AS n
+       SELECT
+         COUNT(DISTINCT cr.epc_hex) AS uniq,
+         COUNT(*) AS total
          FROM cdm_reads cr
-         INNER JOIN items i ON i.epc = cr.epc_hex
          WHERE cr.tenant_id = $1::uuid
            AND cr.antenna_id = a.id
            AND cr.read_at    >= $2::timestamptz
-           AND i.status      = 'in-stock'
      ) read_counts ON TRUE
      WHERE a.device_type = 'antenna'
      ORDER BY parent.name ASC, antenna_number ASC`,
@@ -80,6 +92,7 @@ export async function GET(req: Request) {
       antenna_number: row.antenna_number,
       network_address: row.network_address,
       unique_epcs: Number(row.unique_epcs),
+      total_reads: Number(row.total_reads),
     })),
   });
 }

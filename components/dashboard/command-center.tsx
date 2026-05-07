@@ -262,7 +262,10 @@ export function CommandCenter() {
       }
     };
     void tick();
-    const id = setInterval(tick, 1_000);
+    // 500 ms matches roughly 2 cycles of the agent's 250 ms aggregator
+    // flush, so the headline counter feels smooth instead of jumping
+    // once per second. Single small JSON response, not a load concern.
+    const id = setInterval(tick, 500);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -308,7 +311,13 @@ export function CommandCenter() {
       }
     };
     void tick();
-    const id = setInterval(tick, 2_000);
+    // 1 s polling on the per-antenna table (was 2 s) so an antenna's
+    // live count updates twice as often. The route LATERAL-joins one
+    // count per antenna, scaling linearly with antenna count; trivial
+    // load even at 50+ antennas. Applies to every antenna on every
+    // reader, including ones added in the future — the route SELECTs
+    // all antennas in `devices` for the tenant.
+    const id = setInterval(tick, 1_000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -389,7 +398,7 @@ export function CommandCenter() {
             <KpiTile
               title="Receiving concerns"
               value={kpis.receiving_concerns}
-              href="/alerts"
+              href="/operations/transfers/in"
               accent="amber"
             />
             <KpiTile

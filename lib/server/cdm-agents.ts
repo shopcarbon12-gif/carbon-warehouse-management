@@ -694,6 +694,19 @@ export async function ingestAgentReads(
   // look up `ls_system_id` in custom_skus, and write items with status
   // 'in-stock' on match or 'tag_killed' on miss. Replaces the old
   // AUTO-PENDING placeholder bucket.
+  //
+  // GATED on an active live-scan session. The agent's MonsoonReader
+  // children run continuously (per the `readers run continuously` lineage
+  // — 536dfe4 + 8613821), which means tags walk past the antennas 24/7
+  // even when nobody asked the system to scan. Letting every read mutate
+  // `items` quietly grew inventory in the background and surprised the
+  // operator: total active inventory ticks up while the dashboard's
+  // live-scan tile is off. Gate it: items only changes when an operator
+  // has explicitly started a live-scan session. cdm_reads still records
+  // every read (so per-antenna activity counters and reader online flags
+  // keep working), and other scan flows (cycle counts via handheld,
+  // explicit transfer scans) do their own ingestEpcs calls on their own
+  // ingestion paths — those are unaffected.
   const antennaIdMap = await getAntennaIdMap(client, body.readerId);
   const dedupedEpcs = Array.from(new Set(body.reads.map((r) => r.epcHex.toUpperCase())));
   // Map each unique EPC back to the antenna it was last seen on (best-effort
@@ -703,7 +716,8 @@ export async function ingestAgentReads(
   for (const r of body.reads) {
     lastAntennaForEpc.set(r.epcHex.toUpperCase(), r.antennaNumber);
   }
-  if (dedupedEpcs.length > 0) {
+  const liveScanActive = isLiveScanActive(auth.tenantId);
+  if (dedupedEpcs.length > 0 && liveScanActive) {
     await ingestEpcs(client, dedupedEpcs.map((epc) => {
       const antNum = lastAntennaForEpc.get(epc);
       const antLabel = antNum !== undefined ? `${readerName} · A${antNum}` : readerName;
