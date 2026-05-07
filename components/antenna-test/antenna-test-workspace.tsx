@@ -223,6 +223,11 @@ export function AntennaTestWorkspace() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // When start returns 409 the reader is already running another test
+  // (different operator, different tab, or stale session). The endpoint
+  // gives us the existing session id so we can offer a "take over"
+  // button: stop that session, then retry start.
+  const [conflictSessionId, setConflictSessionId] = useState<string | null>(null);
 
   // Run duration — wall-clock from "Start clicked" → "Stop clicked / session
   // ended". Tracked client-side so it survives the SSE stream lifecycle.
@@ -607,6 +612,7 @@ export function AntennaTestWorkspace() {
     if (!picked) return;
     setBusy(true);
     setError(null);
+    setConflictSessionId(null);
     try {
       const res = await fetch("/api/antenna-test/start", {
         method: "POST",
@@ -617,9 +623,19 @@ export function AntennaTestWorkspace() {
           sweep: sweepEnabled ? sweepCfg : null,
         }),
       });
-      const json = (await res.json()) as { sessionId?: string; error?: string };
+      const json = (await res.json()) as {
+        sessionId?: string;
+        error?: string;
+        existingSessionId?: string;
+      };
       if (!res.ok || !json.sessionId) {
         setError(json.error ?? `HTTP ${res.status}`);
+        // 409 from /start carries the existing sessionId so the operator
+        // can take it over without leaving the page or chasing whichever
+        // tab/operator started it.
+        if (res.status === 409 && json.existingSessionId) {
+          setConflictSessionId(json.existingSessionId);
+        }
         return;
       }
       setSessionId(json.sessionId);
@@ -629,6 +645,32 @@ export function AntennaTestWorkspace() {
     } finally {
       setBusy(false);
     }
+  };
+
+  // Stop whichever in-flight session is on this reader (from a 409 on
+  // /start) and immediately try to start ours. The /stop endpoint is
+  // tenant-scoped — it'll succeed even if the original session was
+  // started by another operator on this tenant. If /stop returns 404
+  // (session already ended in the meantime) we still try /start.
+  const takeoverAndStart = async () => {
+    if (!conflictSessionId) return;
+    setBusy(true);
+    try {
+      await fetch("/api/antenna-test/stop", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: conflictSessionId }),
+      }).catch(() => {
+        /* ignore — try to start anyway */
+      });
+      setConflictSessionId(null);
+    } finally {
+      setBusy(false);
+    }
+    // Brief pause so the supervisor sees the "ended" lifecycle and
+    // releases its slot before we ask it to enter test mode again.
+    await new Promise((r) => setTimeout(r, 250));
+    await startScan();
   };
 
   const stopScan = async () => {
@@ -1147,7 +1189,19 @@ export function AntennaTestWorkspace() {
             </span>
           )}
           {error && (
-            <span className="font-mono text-xs text-red-600">{error}</span>
+            <span className="flex items-center gap-2 font-mono text-xs text-red-600">
+              <span>{error}</span>
+              {conflictSessionId && (
+                <button
+                  type="button"
+                  onClick={() => void takeoverAndStart()}
+                  disabled={busy}
+                  className="rounded border border-red-600 px-2 py-0.5 font-mono text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Stop other & start here
+                </button>
+              )}
+            </span>
           )}
         </div>
 
