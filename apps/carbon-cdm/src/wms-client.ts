@@ -150,6 +150,16 @@ export async function postReads(
   return { inserted: r.inserted };
 }
 
+/**
+ * Tell the WMS that a reader's supervisor has a healthy byte stream from
+ * the chassis — used to flip `devices.status_online` true even when no
+ * tags are currently in the antenna's coverage. See the WMS-side route
+ * comment for the full rationale (chassis reachable != tags flowing).
+ */
+export async function postReaderOnline(env: AgentEnv, readerId: string): Promise<void> {
+  await request(env, "POST", "/api/cdm-agents/reader-online", { readerId });
+}
+
 export type WiznetDiscoveryBody = {
   discoveries: {
     mac: string;

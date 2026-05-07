@@ -266,6 +266,15 @@ export class MonsoonSupervisor {
      * back to the WMS.
      */
     private readonly onAntennaTestResult: AntennaTestCallback | null = null,
+    /**
+     * Optional: fires once per spawn the first time a child binary
+     * produces ANY byte on its stream/stdout — meaning the agent can
+     * talk to the chassis even if no tag reads have arrived yet. Wire
+     * this to wms-client.postReaderOnline so the dashboard reflects
+     * "chassis reachable" independent of "tags currently flowing."
+     * The supervisor calls this with the slot's reader id (UUID).
+     */
+    private readonly onReaderOnline: ((readerId: string) => void) | null = null,
   ) {
     if (this.onAntennaTestResult) {
       this.testSweepHandle = setInterval(
@@ -1017,7 +1026,17 @@ export class MonsoonSupervisor {
     child.stdout?.on("data", (chunk: Buffer) => {
       if (chunk.length === 0) return;
       slot.lastByteAt = Date.now();
-      if (!slot.bytesSinceSpawn) slot.bytesSinceSpawn = true;
+      if (!slot.bytesSinceSpawn) {
+        slot.bytesSinceSpawn = true;
+        // First byte on this spawn — chassis is reachable. Tell the WMS
+        // so the dashboard flips the reader online indicator even if
+        // tags aren't currently in the antenna's coverage range.
+        try {
+          this.onReaderOnline?.(spec.id);
+        } catch {
+          /* never let a callback exception kill the data pipeline */
+        }
+      }
       slot.consecutiveZeroByteKicks = 0;
 
       const result = parseConsoleChunk(chunk.toString("utf8"), slot.consoleParserState);
@@ -1138,7 +1157,16 @@ export class MonsoonSupervisor {
       // right one and on hang we should respawn (not rotate). Also resets
       // the unreachable-counter so a reader that recovers gets full
       // rotation budget back next time it goes silent.
-      if (!slot.bytesSinceSpawn) slot.bytesSinceSpawn = true;
+      if (!slot.bytesSinceSpawn) {
+        slot.bytesSinceSpawn = true;
+        // Chassis is reachable — tell the WMS the reader is online,
+        // even if no tag records have been parsed out of the stream yet.
+        try {
+          this.onReaderOnline?.(slot.spec.id);
+        } catch {
+          /* never let a callback exception kill the data pipeline */
+        }
+      }
       slot.consecutiveZeroByteKicks = 0;
     }
     // Append to slot buffer; cap growth to avoid unbounded memory.

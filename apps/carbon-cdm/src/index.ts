@@ -8,7 +8,7 @@ import { startHeartbeat } from "./heartbeat.js";
 import { ReadAggregator } from "./read-aggregator.js";
 import { MonsoonSupervisor } from "./monsoon-supervisor.js";
 import { AntennaTestController } from "./antenna-test-mode.js";
-import { postAntennaTestResult } from "./wms-client.js";
+import { postAntennaTestResult, postReaderOnline } from "./wms-client.js";
 import { startWiznetDiscovery } from "./wiznet-discovery.js";
 
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
@@ -64,6 +64,21 @@ async function main(): Promise<void> {
         log.warn("antenna test result post failed", {
           err: e instanceof Error ? e.message : String(e),
           antennaId: result.antennaId,
+        });
+      });
+    },
+    // Reader-online callback: fires once per spawn the first time the
+    // child binary produces ANY byte from the chassis. Tells the WMS the
+    // reader is reachable so its dashboard tile flips online — even
+    // before any tag reads land in the inventory pipeline. Per-spawn,
+    // de-duplication is implicit (slot.bytesSinceSpawn flips once per
+    // child process), so this fires at most a few times per minute even
+    // during a stuck-binary respawn cycle.
+    (readerId) => {
+      void postReaderOnline(env, readerId).catch((e) => {
+        log.debug("reader-online post failed (will retry on next spawn)", {
+          readerId,
+          err: e instanceof Error ? e.message : String(e),
         });
       });
     },
