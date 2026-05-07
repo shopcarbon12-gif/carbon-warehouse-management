@@ -16,6 +16,9 @@ const patchSchema = z.object({
     .string()
     .regex(/^\d{4}$/, "PIN must be 4 digits")
     .optional(),
+  /** POS-specific password reset. Writes only to pos_employees.pos_password_hash;
+   *  the user's WMS login (users.password_hash) is left alone. */
+  resetPassword: z.string().min(6).max(128).optional(),
 });
 
 /**
@@ -52,6 +55,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       posRoleId: parsed.data.posRoleId,
       isActive: parsed.data.isActive,
       resetPin: parsed.data.resetPin,
+      resetPassword: parsed.data.resetPassword,
     });
     if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ ok: true });

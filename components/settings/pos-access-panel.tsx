@@ -522,6 +522,7 @@ function PosUserEditModal({
   const [posRoleId, setPosRoleId] = useState<number | null>(user.pos_role_id);
   const [isActive, setIsActive] = useState(user.is_active);
   const [pin, setPin] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -531,6 +532,10 @@ function PosUserEditModal({
       setErr("PIN must be exactly 4 digits");
       return;
     }
+    if (password && password.length < 6) {
+      setErr("POS password must be at least 6 characters");
+      return;
+    }
     setBusy(true);
     try {
       const body: Record<string, unknown> = {
@@ -538,6 +543,7 @@ function PosUserEditModal({
         isActive: isActive,
       };
       if (pin) body.resetPin = pin;
+      if (password) body.resetPassword = password;
       const res = await fetch(`/api/settings/access/pos-users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -595,6 +601,22 @@ function PosUserEditModal({
               className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
               placeholder="leave blank to keep current"
             />
+          </label>
+          <label className="block text-[var(--wms-muted)]">
+            Reset POS password (min 6 chars, optional)
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type="password"
+              autoComplete="new-password"
+              minLength={6}
+              maxLength={128}
+              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+              placeholder={user.has_pos_password ? "leave blank to keep current" : "no POS password set"}
+            />
+            <span className="mt-1 block text-[0.6rem] text-[var(--wms-muted)]">
+              POS-only — does not affect this user&apos;s WMS login.
+            </span>
           </label>
           {err ? <p className="text-red-400/90">{err}</p> : null}
         </div>

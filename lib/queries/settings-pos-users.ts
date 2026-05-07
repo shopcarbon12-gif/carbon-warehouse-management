@@ -13,6 +13,10 @@ export type PosUserListRow = {
   legacy_role: string | null;
   is_active: boolean;
   has_pin: boolean;
+  /** True iff pos_employees.pos_password_hash is set — i.e. POS has its own
+   *  password independent of the WMS users.password_hash. False on legacy rows
+   *  whose POS auth still falls back to users.password_hash. */
+  has_pos_password: boolean;
   locations: { id: string; code: string; name: string }[];
 };
 
@@ -49,6 +53,23 @@ export async function listTenantPosUsers(
     : "";
   const posRoleNameSelect = hasPosRoleId.rows[0]?.exists ? "ur.name" : "NULL::text";
 
+  // Whether the pos_password_hash column has been added (migration 0058).
+  const hasPosPwd = await pool.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'pos_employees' AND column_name = 'pos_password_hash'
+     ) AS exists`,
+  );
+  const hasPosPwdSelect = hasPosPwd.rows[0]?.exists
+    ? "(pe.pos_password_hash IS NOT NULL AND length(pe.pos_password_hash) > 0) AS has_pos_password"
+    : "FALSE AS has_pos_password";
+  const groupExtras = [
+    hasPosRoleId.rows[0]?.exists ? "pe.pos_role_id, ur.name" : "",
+    hasPosPwd.rows[0]?.exists ? "pe.pos_password_hash" : "",
+  ]
+    .filter((s) => s.length > 0)
+    .join(", ");
+
   const r = await pool.query<{
     id: string;
     email: string;
@@ -58,6 +79,7 @@ export async function listTenantPosUsers(
     legacy_role: string | null;
     is_active: boolean;
     has_pin: boolean;
+    has_pos_password: boolean;
     locations: unknown;
   }>(
     `SELECT
@@ -69,6 +91,7 @@ export async function listTenantPosUsers(
        pe.role         AS legacy_role,
        pe.is_active,
        (pe.pin_hash IS NOT NULL AND length(pe.pin_hash) > 0) AS has_pin,
+       ${hasPosPwdSelect},
        COALESCE(
          json_agg(
            DISTINCT jsonb_build_object(
@@ -85,7 +108,7 @@ export async function listTenantPosUsers(
      ${posRoleJoin}
      LEFT JOIN user_locations ul ON ul.user_id = u.id
      LEFT JOIN locations l       ON l.id = ul.location_id AND l.tenant_id = $1::uuid
-     GROUP BY u.id, u.email, pe.id, ${hasPosRoleId.rows[0]?.exists ? "pe.pos_role_id, ur.name," : ""} pe.role, pe.is_active, pe.pin_hash
+     GROUP BY u.id, u.email, pe.id, ${groupExtras ? groupExtras + "," : ""} pe.role, pe.is_active, pe.pin_hash
      ORDER BY lower(u.email) ASC`,
     [tenantId],
   );
@@ -98,6 +121,7 @@ export async function listTenantPosUsers(
     legacy_role: row.legacy_role,
     is_active: row.is_active,
     has_pin: row.has_pin,
+    has_pos_password: row.has_pos_password,
     locations: Array.isArray(row.locations)
       ? (row.locations as { id: string; code: string; name: string }[])
       : [],
@@ -105,7 +129,13 @@ export async function listTenantPosUsers(
 }
 
 /**
- * Update a POS user's role and active flag. Optionally resets the PIN.
+ * Update a POS user's role and active flag. Optionally resets the PIN and/or
+ * the POS password.
+ *
+ * `resetPassword` writes ONLY to pos_employees.pos_password_hash. The user's
+ * WMS login (users.password_hash) is intentionally not touched — this is the
+ * whole point of the per-user POS password column added by migration 0058.
+ *
  * Returns false if the user has no pos_employees row in the shared DB.
  */
 export async function updateTenantPosUser(
@@ -116,6 +146,7 @@ export async function updateTenantPosUser(
     posRoleId: number | null;
     isActive: boolean;
     resetPin?: string;
+    resetPassword?: string;
   },
 ): Promise<boolean> {
   const exists = await pool.query<{ exists: boolean }>(
@@ -140,6 +171,12 @@ export async function updateTenantPosUser(
        WHERE table_name = 'pos_employees' AND column_name = 'pos_role_id'
      ) AS exists`,
   );
+  const hasPosPwd = await pool.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'pos_employees' AND column_name = 'pos_password_hash'
+     ) AS exists`,
+  );
 
   const fields: string[] = ["is_active = $2::boolean"];
   const params: unknown[] = [userId, input.isActive];
@@ -151,6 +188,15 @@ export async function updateTenantPosUser(
     const hash = await bcrypt.hash(input.resetPin, 10);
     params.push(hash);
     fields.push(`pin_hash = $${params.length}`);
+  }
+  if (
+    input.resetPassword &&
+    input.resetPassword.length >= 6 &&
+    hasPosPwd.rows[0]?.exists
+  ) {
+    const hash = await bcrypt.hash(input.resetPassword, 10);
+    params.push(hash);
+    fields.push(`pos_password_hash = $${params.length}`);
   }
 
   const r = await pool.query(
@@ -240,11 +286,29 @@ export async function createTenantPosManager(
       [uid, input.locationId],
     );
 
-    await client.query(
-      `INSERT INTO pos_employees (user_id, pin_hash, role, is_active, pos_role_id)
-       VALUES ($1::uuid, $2, 'manager', TRUE, $3::int)`,
-      [uid, pinHash, managerRoleId],
+    // Initialise BOTH columns to the same hash. users.password_hash continues
+    // to drive WMS login; pos_password_hash will drive POS login once the POS
+    // auth path has been flipped to read from it. After that point an admin
+    // can reset either one independently from the WMS UI.
+    const hasPosPwd = await client.query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+         WHERE table_name = 'pos_employees' AND column_name = 'pos_password_hash'
+       ) AS exists`,
     );
+    if (hasPosPwd.rows[0]?.exists) {
+      await client.query(
+        `INSERT INTO pos_employees (user_id, pin_hash, role, is_active, pos_role_id, pos_password_hash)
+         VALUES ($1::uuid, $2, 'manager', TRUE, $3::int, $4)`,
+        [uid, pinHash, managerRoleId, passwordHash],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO pos_employees (user_id, pin_hash, role, is_active, pos_role_id)
+         VALUES ($1::uuid, $2, 'manager', TRUE, $3::int)`,
+        [uid, pinHash, managerRoleId],
+      );
+    }
 
     await client.query("COMMIT");
     return { ok: true, id: uid };
