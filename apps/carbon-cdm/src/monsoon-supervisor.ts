@@ -297,6 +297,29 @@ export class MonsoonSupervisor {
     );
   }
 
+  /**
+   * Force-kill the slot's current child via the process group it was
+   * spawned into (detached:true at spawn time). Plain `child.kill("SIGTERM")`
+   * gets ignored by both `wiznet-cli` and `new_monsoonreader` — the
+   * binaries either catch SIGTERM or stay in a kernel UDP-retry loop that
+   * doesn't process signals. Live evidence 2026-05-07: orphaned binaries
+   * survive at 99% CPU for minutes-to-days. SIGKILL on the negative pid
+   * targets the whole group, which the kernel CAN'T ignore.
+   */
+  private killSlotChildHard(slot: ReaderSlot): void {
+    const pid = slot.child?.pid;
+    if (!pid) return;
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {
+      try {
+        slot.child?.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }
+  }
+
   private runStreamWatchdog(): void {
     const now = Date.now();
     for (const slot of this.slots.values()) {
@@ -348,7 +371,7 @@ export class MonsoonSupervisor {
         exhaustedAllPorts = false;
         // Force a respawn so the next child is fresh on the configured port.
         slot.lastByteAt = now;
-        slot.child?.kill("SIGTERM");
+        this.killSlotChildHard(slot);
         continue;
       }
 
@@ -396,7 +419,7 @@ export class MonsoonSupervisor {
           });
         }
         slot.lastByteAt = now;
-        slot.child?.kill("SIGTERM");
+        this.killSlotChildHard(slot);
       } else if (
         slot.lastRecordAt > 0 &&
         now - slot.lastRecordAt >= rateDropTimeout
@@ -411,7 +434,7 @@ export class MonsoonSupervisor {
         });
         slot.lastRecordAt = 0;
         slot.lastByteAt = now;
-        slot.child?.kill("SIGTERM");
+        this.killSlotChildHard(slot);
       } else if (silentMs >= silenceTimeout && exhaustedAllPorts) {
         // We've tried every candidate port at least once without bytes.
         // Bump lastByteAt so we don't spam this branch every 5s — but
@@ -517,7 +540,7 @@ export class MonsoonSupervisor {
           existing.bytesSinceSpawn = false;
           existing.consecutiveZeroByteKicks = 0;
           existing.lastExhaustionResetAt = Date.now();
-          if (existing.child && !existing.shuttingDown) existing.child.kill("SIGTERM");
+          if (existing.child && !existing.shuttingDown) this.killSlotChildHard(existing);
           continue;
         }
         // Update the stored spec so any later ops see fresh power/antennas/etc.
@@ -695,7 +718,7 @@ export class MonsoonSupervisor {
       readerId: spec.readerId,
       sessionId: spec.sessionId,
     });
-    if (slot.child && !slot.shuttingDown) slot.child.kill("SIGTERM");
+    if (slot.child && !slot.shuttingDown) this.killSlotChildHard(slot);
   }
 
   /** Leave TEST_MODE for the given reader; the on-exit respawn picks up
@@ -706,7 +729,7 @@ export class MonsoonSupervisor {
     if (!slot.testSession) return;
     log.info("supervisor: leaveTestMode — reverting to normal scan", { readerId });
     slot.testSession = null;
-    if (slot.child && !slot.shuttingDown) slot.child.kill("SIGTERM");
+    if (slot.child && !slot.shuttingDown) this.killSlotChildHard(slot);
   }
 
   shutdown(): void {
@@ -848,11 +871,36 @@ export class MonsoonSupervisor {
       serialPort,
     });
 
+    // detached:true puts the child in its own process group so the
+    // watchdog can SIGKILL the whole group on rotation/silence kicks.
+    // Without it, kill("SIGTERM") only signals the immediate child and
+    // the binary's main loop reliably ignores SIGTERM — leading to
+    // multi-minute orphans pinning 99% CPU on the wrong port. Live
+    // evidence 2026-05-07 with the .84 chassis showed exactly this.
     const child = spawn(this.binaries.stream, args, {
       stdio: ["ignore", "pipe", "pipe"],
       cwd: "/opt/legacy-rfid/runtime",
+      detached: true,
     });
     slot.child = child;
+
+    // Liveness-based online signal — see spawnReaderConsole for the
+    // rationale. Stream-driver binary's enumeration also exits in ~1 s
+    // on bridge/chip failure, stays alive otherwise. 5 s past spawn is
+    // a strong "reachable" indicator even before the first tag arrives.
+    const livenessTimer = setTimeout(() => {
+      if (slot.child === child && !slot.shuttingDown) {
+        try {
+          this.onReaderOnline?.(spec.id);
+        } catch {
+          /* swallow */
+        }
+      }
+    }, 5_000);
+    child.once("exit", () => {
+      clearTimeout(livenessTimer);
+    });
+
     // Grace window for startup — without this the watchdog would kick a
     // freshly-spawned MonsoonReader before its stream socket has even
     // produced its first byte.
@@ -1006,11 +1054,35 @@ export class MonsoonSupervisor {
     slot.bytesSinceSpawn = false;
     slot.lastByteAt = Date.now();
 
+    // See spawnReader's stream-binary spawn: detached:true gives the
+    // watchdog a process-group handle to SIGKILL on stuck cycles.
     const child = spawn(this.binaries.console, args, {
       stdio: ["ignore", "pipe", "pipe"],
       cwd: "/opt/legacy-rfid/runtime",
+      detached: true,
     });
     slot.child = child;
+
+    // Liveness-based online signal: when the binary fails to enumerate
+    // (bridge unreachable, chip not responding), it exits within ~1 s.
+    // When it successfully enumerates, it stays alive indefinitely. So
+    // a child that's still alive 5 s after spawn is a strong "reader
+    // reachable" signal, even when no tags happen to be in the antenna's
+    // coverage (those produce zero output bytes — the watchdog later
+    // kicks on silence, but online status is set first). Cancelled if
+    // the child exits before the timer fires.
+    const livenessTimer = setTimeout(() => {
+      if (slot.child === child && !slot.shuttingDown) {
+        try {
+          this.onReaderOnline?.(spec.id);
+        } catch {
+          /* swallow callback errors */
+        }
+      }
+    }, 5_000);
+    child.once("exit", () => {
+      clearTimeout(livenessTimer);
+    });
 
     child.stderr?.on("data", (chunk: Buffer) => {
       log.debug("supervisor: console reader stderr", {
