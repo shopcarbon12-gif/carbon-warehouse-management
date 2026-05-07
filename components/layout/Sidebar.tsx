@@ -39,6 +39,7 @@ import {
   Webhook,
   Star,
   Gift,
+  Share2,
   X,
 } from "lucide-react";
 import { LocationSwitcher } from "@/components/location-switcher";
@@ -129,6 +130,8 @@ const sections: NavSection[] = [
       { href: "/loyalty", label: "Overview", icon: Star },
       { href: "/loyalty/customers", label: "Members", icon: UserSearch },
       { href: "/loyalty/ledger", label: "Ledger", icon: Activity },
+      { href: "/loyalty/tiers", label: "Tiers", icon: Layers },
+      { href: "/loyalty/referrals", label: "Referrals", icon: Share2 },
       { href: "/loyalty/rewards", label: "Rewards", icon: Gift },
     ],
   },
