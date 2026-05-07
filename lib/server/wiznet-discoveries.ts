@@ -170,6 +170,12 @@ export async function ingestWiznetDiscoveries(
              port = EXCLUDED.port,
              dhcp_enabled = EXCLUDED.dhcp_enabled,
              raw = EXCLUDED.raw,
+             -- Reaching this branch means no device currently owns this MAC
+             -- (matched_known / IP-fallback paths handle the bound case). If
+             -- a previous adoption was undone by deleting the device, the row
+             -- still has adopted_at set from then; clear it so the bridge
+             -- reappears in the discovered panel as a new device.
+             adopted_at = NULL,
              last_seen_at = now()
        RETURNING (xmax = 0) AS inserted`,
       [
