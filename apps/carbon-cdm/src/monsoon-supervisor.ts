@@ -836,10 +836,25 @@ export class MonsoonSupervisor {
       // orchestrator just respawns on every exit. Treat code=0 as a healthy
       // completion (no backoff growth, immediate respawn). Non-zero exits or
       // signals are treated as faults — exponential backoff up to MAX.
+      //
+      // Multi-antenna mux mode: the legacy binary reliably SIGSEGVs after
+      // ~1-3 seconds in --cmux mode (boost thread deadlock during the mux
+      // cycle's antenna switch). Each crash IS the binary's normal end-of-
+      // cycle, not a fault. Bench-tested live 2026-05-07 against .16:
+      // 130 valid records produced per ~25s window before SIGSEGV. Treat
+      // these crashes like clean exits — no backoff growth, immediate
+      // respawn — so throughput approximates `cycle_length / startup_time`
+      // instead of decaying toward zero under exponential backoff.
       const cleanExit = code === 0 && !signal;
-      const delay = cleanExit ? 250 : slot.backoffMs;
+      const expectedMuxCrash = useMux && signal === "SIGSEGV";
+      const treatAsClean = cleanExit || expectedMuxCrash;
+      const delay = treatAsClean ? 250 : slot.backoffMs;
       if (cleanExit) {
         log.debug("supervisor: MonsoonReader cycle complete, respawning", {
+          readerId: spec.id,
+        });
+      } else if (expectedMuxCrash) {
+        log.debug("supervisor: MonsoonReader mux-mode SIGSEGV (expected), respawning", {
           readerId: spec.id,
         });
       } else {
@@ -853,7 +868,7 @@ export class MonsoonSupervisor {
       setTimeout(() => {
         void this.spawnReader(slot);
       }, delay);
-      slot.backoffMs = cleanExit ? 1000 : Math.min(slot.backoffMs * 2, MAX_BACKOFF_MS);
+      slot.backoffMs = treatAsClean ? 1000 : Math.min(slot.backoffMs * 2, MAX_BACKOFF_MS);
     });
 
     // Connect to the MonsoonReader's stream port to receive tag-read bytes.
