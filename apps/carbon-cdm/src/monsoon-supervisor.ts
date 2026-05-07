@@ -880,7 +880,13 @@ export class MonsoonSupervisor {
       // fall back to hardcoded normal-scan defaults when none set.
       const beh = stampAnt?.behaviour;
       cycleMode = beh?.cycle_mode === "oscillating" ? "oscillating" : "infinite";
-      readTimeMs = beh?.read_time_ms ?? 1000;
+      // 200ms inventory cycle (was 1000ms). The reader emits one burst of
+      // EPC lines per cycle; tighter cycles = smoother stdout cadence,
+      // which the read-aggregator then forwards via the 250ms flush. Net
+      // effect is the live-scan counter moves in ~5 small steps/sec
+      // instead of 1 big jump/sec. Below ~100ms protocol overhead starts
+      // eating into throughput; 200ms is the sweet spot.
+      readTimeMs = beh?.read_time_ms ?? 200;
       tagFocus = beh?.tag_focus === true;
     }
     slot.consoleStampAntenna = stampAntenna;

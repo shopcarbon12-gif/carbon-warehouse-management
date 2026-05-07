@@ -192,7 +192,11 @@ export function CommandCenter() {
   const { data, error, isLoading, isValidating } = useSWR(
     "/api/dashboard/command",
     fetcher,
-    { refreshInterval: 15_000, revalidateOnFocus: true },
+    // 3s refresh (was 15s) so KPI tiles (live_inventory, total_items,
+    // receiving_concerns, hardware counts) reflect floor activity within
+    // a few seconds instead of feeling stale during an active scan.
+    // /api/dashboard/command is a roll-up SELECT; cheap to call.
+    { refreshInterval: 3_000, revalidateOnFocus: true },
   );
 
   const kpis: Kpis =
@@ -233,11 +237,19 @@ export function CommandCenter() {
   const [liveScanRunning, setLiveScanRunning] = useState(false);
   const [liveScanCount, setLiveScanCount] = useState(0);
   const [liveScanBusy, setLiveScanBusy] = useState(false);
+  // Session-scoped Set of unique EPCs the SSE stream has delivered. The
+  // headline counter is the max of (this Set's size, the server's
+  // count-since-start). SSE drives smooth incremental ticks; the poll
+  // periodically reconciles to the server's count(DISTINCT) of decoded
+  // reads, never moving the counter backwards. Cleared on every
+  // start→stop transition.
+  const liveScanEpcsRef = useRef<Set<string>>(new Set());
 
-  // Poll /state every 1 s while running — updates the counter AND acts as
-  // the heartbeat that keeps the server-side session alive. When the tab
-  // closes or loses focus, the polling stops and the server session
-  // auto-expires within 60 s, telling the agent to idle the readers.
+  // Poll /state every 500 ms while running — updates the counter (via
+  // upward-only reconciliation) AND acts as the heartbeat that keeps the
+  // server-side session alive. When the tab closes or loses focus, the
+  // polling stops and the server session auto-expires within 60 s,
+  // telling the agent to idle the readers.
   useEffect(() => {
     if (!liveScanRunning) return;
     let cancelled = false;
@@ -254,21 +266,69 @@ export function CommandCenter() {
           // Session expired server-side (e.g. WMS restart). Drop back to IDLE.
           setLiveScanRunning(false);
           setLiveScanCount(0);
+          liveScanEpcsRef.current = new Set();
           return;
         }
-        setLiveScanCount(j.reads_since_start ?? 0);
+        const serverCount = j.reads_since_start ?? 0;
+        // Upward-only: never let the poll roll the counter back below
+        // what SSE has already shown. Server is authoritative for the
+        // true high-water mark (count(DISTINCT) of decoded reads); SSE
+        // can transiently be ahead during a burst before the DB query
+        // catches up, OR ahead by EPCs that didn't pass_formula.
+        setLiveScanCount((prev) => Math.max(prev, serverCount));
       } catch {
         /* transient; ignore */
       }
     };
     void tick();
-    // 500 ms matches roughly 2 cycles of the agent's 250 ms aggregator
-    // flush, so the headline counter feels smooth instead of jumping
-    // once per second. Single small JSON response, not a load concern.
     const id = setInterval(tick, 500);
     return () => {
       cancelled = true;
       clearInterval(id);
+    };
+  }, [liveScanRunning]);
+
+  // SSE-driven incremental counter. Subscribes to the same edge stream
+  // that powers LiveStreamHandler — this hub is fan-out from
+  // ingestAgentReads (fixed readers) and inventory-reconciler (handhelds).
+  // Filter to the TRANSFER scanContext that fixed-reader agent ingest
+  // publishes. Each event carries a deduped batch of EPCs; we accumulate
+  // session-unique EPCs in a ref-Set and update the headline counter
+  // with the new size. End-to-end latency from reader stdout to UI tick
+  // is ~250 ms (aggregator flush) vs ~500 ms via DB poll.
+  useEffect(() => {
+    if (!liveScanRunning) {
+      liveScanEpcsRef.current = new Set();
+      return;
+    }
+    const es = new EventSource("/api/edge/stream");
+    const onMessage = (ev: MessageEvent) => {
+      if (!ev.data || ev.data.startsWith(":")) return;
+      let parsed: { scanContext?: string; epcs?: string[] } | null = null;
+      try {
+        parsed = JSON.parse(ev.data) as { scanContext?: string; epcs?: string[] };
+      } catch {
+        return;
+      }
+      if (!parsed?.epcs?.length) return;
+      // Fixed-reader agent ingest publishes scanContext "TRANSFER".
+      // Handheld scans use other contexts; ignore them for the
+      // live-scan tile (it's the master toggle for FIXED readers).
+      if (parsed.scanContext && parsed.scanContext !== "TRANSFER") return;
+      const set = liveScanEpcsRef.current;
+      const beforeSize = set.size;
+      for (const e of parsed.epcs) {
+        if (typeof e === "string" && e.length > 0) set.add(e.toUpperCase());
+      }
+      if (set.size !== beforeSize) {
+        const newSize = set.size;
+        setLiveScanCount((prev) => (newSize > prev ? newSize : prev));
+      }
+    };
+    es.addEventListener("message", onMessage);
+    return () => {
+      es.removeEventListener("message", onMessage);
+      es.close();
     };
   }, [liveScanRunning]);
 
@@ -337,10 +397,12 @@ export function CommandCenter() {
         await fetch("/api/dashboard/live-scan/stop", { method: "POST" });
         setLiveScanRunning(false);
         setLiveScanCount(0);
+        liveScanEpcsRef.current = new Set();
       } else {
         const res = await fetch("/api/dashboard/live-scan/start", { method: "POST" });
         if (!res.ok) return;
         setLiveScanCount(0);
+        liveScanEpcsRef.current = new Set();
         setLiveScanRunning(true);
       }
     } finally {
@@ -363,7 +425,7 @@ export function CommandCenter() {
               Operations overview
             </h1>
             <p className="mt-1 max-w-xl font-mono text-sm text-[var(--wms-muted)]">
-              KPIs refresh every 15s. Live scan opens an SSE listener against every reader
+              KPIs refresh every 3s. Live scan opens an SSE listener against every reader
               and antenna at this location.
             </p>
           </div>

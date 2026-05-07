@@ -122,7 +122,7 @@ async function runWiznetDiscovery(): Promise<WiznetRecord[]> {
  * Carbon network and needs to be wiped back to a clean DHCP+SERVER+10002
  * baseline before we let the rest of the pipeline see it.
  *
- * Three triggers:
+ * Four triggers:
  *
  *   1. **IP collision** — two static bridges advertising the same IP.
  *      Whichever wins ARP at any given moment is non-deterministic, so
@@ -139,6 +139,13 @@ async function runWiznetDiscovery(): Promise<WiznetRecord[]> {
  *      MIXED/CLIENT modes don't, which is why the binary appears to
  *      "connect cleanly" then exit with zero records.
  *
+ *   4. **Wrong port** — bridge's NVRAM TCP port isn't 10002. Some
+ *      pre-flashed spares come back from a previous install with
+ *      port 1461 (WIZnet factory default) or other site-specific
+ *      values. The supervisor can fall back to 1461 in its candidate
+ *      list, but operationally we want every Carbon bridge speaking
+ *      10002 so config is uniform across the fleet.
+ *
  * Returns the trigger reason for logging, or null if the bridge is fine.
  */
 function bridgeNeedsReset(r: WiznetRecord, allRecords: WiznetRecord[]): string | null {
@@ -151,6 +158,7 @@ function bridgeNeedsReset(r: WiznetRecord, allRecords: WiznetRecord[]): string |
   const gw = r.raw.gateway;
   if (gw && gw !== EXPECTED_GATEWAY) return `wrong_gateway_${gw}`;
   if (r.mode && r.mode !== "SERVER") return `wrong_mode_${r.mode}`;
+  if (r.port && r.port !== EXPECTED_PORT) return `wrong_port_${r.port}`;
   return null;
 }
 
