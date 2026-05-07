@@ -23,6 +23,14 @@ const DEFAULT_INTERVAL_MS = 60_000;
 const WIZNET_CLI = "/opt/legacy-rfid/wiznet-cli";
 const SCAN_TIMEOUT_MS = 15_000;
 const LOCK_TIMEOUT_MS = 30_000;
+const RESET_TIMEOUT_MS = 30_000;
+/**
+ * Carbon network's expected gateway. Bridges with a different gateway in
+ * NVRAM came from a previous network/install and need their config wiped.
+ */
+const EXPECTED_GATEWAY = "192.168.1.1";
+/** Carbon network's expected control port for MonsoonReader. */
+const EXPECTED_PORT = 10002;
 /**
  * MACs we've already attempted to lock in this agent process. Prevents
  * re-issuing wiznet-cli against a bridge whose first lock attempt failed
@@ -31,12 +39,22 @@ const LOCK_TIMEOUT_MS = 30_000;
  * failure can recover after a systemd respawn.
  */
 const LOCK_ATTEMPTED = new Set<string>();
+/**
+ * MACs we've issued a "reset to fresh DHCP+SERVER+10002" command to in
+ * this process. Same one-shot semantics as LOCK_ATTEMPTED. After a
+ * successful reset the bridge reboots and reappears with new config —
+ * the next tick re-evaluates it (most likely DHCP=Y and the auto-lock
+ * pins it). Retried on failure (deleted from set on non-zero exit).
+ */
+const RESET_ATTEMPTED = new Set<string>();
 
 type WiznetRecord = {
   mac: string;
   ip: string;
   port: number;
   dhcp: boolean;
+  /** Operating mode reported by wiznet-cli: "SERVER", "MIXED", "CLIENT". */
+  mode: string;
   raw: Record<string, string>;
 };
 
@@ -44,18 +62,22 @@ function parseWiznetCliOutput(text: string): WiznetRecord[] {
   const out = new Map<string, WiznetRecord>();
   const lines = text.split(/\r?\n/);
   for (const line of lines) {
-    // Match a row like:
-    //   "  1. 0008DC1E1980  192.168.1.22  255.255.255.0  192.168.1.1  10002  N  ..."
+    // Match a row like (full layout: index, MAC, IP, netmask, gateway,
+    // port, DHCP, baud, framing, mode, inactivity, hasclient):
+    //   "  1. 0008DC1E1980  192.168.1.22  255.255.255.0  192.168.1.1  10002  N  115200  8N1  SERVER(2)  20  N"
     const m = line.trim().match(
-      /^\d+\.\s+([0-9A-Fa-f]{12})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d+)\s+([YN])\b/,
+      /^\d+\.\s+([0-9A-Fa-f]{12})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d+)\s+([YN])\s+\d+\s+\S+\s+(\w+)\b/,
     );
-    if (!m || m.length < 7) continue;
+    if (!m || m.length < 8) continue;
     const macUpper = m[1]!.toUpperCase();
     out.set(macUpper, {
       mac: macUpper,
       ip: m[2]!,
       port: Number(m[5]),
       dhcp: m[6] === "Y",
+      // Strip the trailing "(N)" parenthetical so callers can compare
+      // against the bare keyword: "SERVER", "MIXED", "CLIENT".
+      mode: m[7]!,
       raw: {
         netmask: m[3]!,
         gateway: m[4]!,
@@ -92,6 +114,105 @@ async function runWiznetDiscovery(): Promise<WiznetRecord[]> {
       child.kill("SIGTERM");
       finish([]);
     }, SCAN_TIMEOUT_MS);
+  });
+}
+
+/**
+ * Decide whether a bridge's NVRAM config is incompatible with this
+ * Carbon network and needs to be wiped back to a clean DHCP+SERVER+10002
+ * baseline before we let the rest of the pipeline see it.
+ *
+ * Three triggers:
+ *
+ *   1. **IP collision** — two static bridges advertising the same IP.
+ *      Whichever wins ARP at any given moment is non-deterministic, so
+ *      MonsoonReader can't reliably reach the right device. Reset both;
+ *      after they reboot, DHCP gives each a unique address.
+ *
+ *   2. **Wrong gateway** — bridge's gateway in NVRAM isn't this LAN's
+ *      gateway. That's the calling-card of a unit pre-flashed for a
+ *      different installation site or factory test bench. Whatever IP
+ *      it claims is meaningless to us.
+ *
+ *   3. **Wrong mode** — bridge isn't in SERVER mode. MonsoonReader
+ *      expects the bridge to push serial bytes over TCP on connect;
+ *      MIXED/CLIENT modes don't, which is why the binary appears to
+ *      "connect cleanly" then exit with zero records.
+ *
+ * Returns the trigger reason for logging, or null if the bridge is fine.
+ */
+function bridgeNeedsReset(r: WiznetRecord, allRecords: WiznetRecord[]): string | null {
+  if (!r.dhcp) {
+    const conflicting = allRecords.find(
+      (o) => o.ip === r.ip && o.mac !== r.mac && !o.dhcp,
+    );
+    if (conflicting) return `ip_collision_with_${conflicting.mac}`;
+  }
+  const gw = r.raw.gateway;
+  if (gw && gw !== EXPECTED_GATEWAY) return `wrong_gateway_${gw}`;
+  if (r.mode && r.mode !== "SERVER") return `wrong_mode_${r.mode}`;
+  return null;
+}
+
+/**
+ * Wipe a bridge's NVRAM back to a clean Carbon baseline:
+ *   --dhcp           (release the static IP)
+ *   --mode-server    (force SERVER mode for MonsoonReader)
+ *   --port 10002     (the canonical Carbon control port)
+ *
+ * Bridge reboots on config write. When it comes back ~10 s later it'll
+ * be on DHCP — the next discovery tick will see it again and the
+ * existing lockBridgeStatic() pins whatever fresh address it received.
+ *
+ * Symptom we're treating: a unit pre-configured by a previous installer
+ * (different gateway, MIXED mode, hardcoded to .248 from a prior site)
+ * stomps on the LAN. Operator plugs it in expecting normal behavior;
+ * gets ARP races and silent reader failures instead. Auto-resetting
+ * means the operator can take any spare bridge from the shelf, plug it
+ * in, and the agent will normalize it within one sweep cycle.
+ */
+async function resetBridgeBadConfig(record: WiznetRecord): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const args = [
+      "-n",
+      WIZNET_CLI,
+      "--ipconfig",
+      record.mac,
+      "--dhcp",
+      "--mode-server",
+      "--port",
+      String(EXPECTED_PORT),
+    ];
+    const child = spawn("sudo", args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      resolve(ok);
+    };
+    child.stderr.on("data", (b: Buffer) => { stderr += b.toString("utf8"); });
+    child.on("error", (e) => {
+      log.warn("wiznet-discovery: reset spawn failed", { mac: record.mac, err: e.message });
+      finish(false);
+    });
+    child.on("exit", (code) => {
+      if (code !== 0) {
+        log.warn("wiznet-discovery: reset returned non-zero", {
+          mac: record.mac,
+          ip: record.ip,
+          code,
+          stderr: stderr.trim().slice(0, 200),
+        });
+      }
+      finish(code === 0);
+    });
+    setTimeout(() => {
+      if (done) return;
+      log.warn("wiznet-discovery: reset timed out, killing child", { mac: record.mac });
+      child.kill("SIGTERM");
+      finish(false);
+    }, RESET_TIMEOUT_MS);
   });
 }
 
@@ -176,13 +297,52 @@ export function startWiznetDiscovery(env: AgentEnv): () => void {
       }
       log.info("wiznet-discovery", { count: records.length });
 
-      // Auto-lock any DHCP-enabled bridge to its current IP. Every Carbon
-      // reader should be on a static lease so a router reboot or DHCP
-      // pool recycle can't move it out from under us. We lock to whatever
-      // IP the bridge currently has — that's the address the operator
-      // already commissioned in the WMS. One-shot per MAC per agent
-      // process; retried on the next tick if the lock didn't take.
-      const dhcpBridges = records.filter((r) => r.dhcp && !LOCK_ATTEMPTED.has(r.mac));
+      // Pass 1: bad-config reset.
+      // Detect bridges whose NVRAM is incompatible with this Carbon LAN
+      // (IP collision with another bridge, gateway from a previous network,
+      // or non-SERVER mode that breaks MonsoonReader). Wipe them back to
+      // DHCP+SERVER+10002 so the router can hand them a fresh address and
+      // the next sweep brings them up cleanly.
+      const toReset = new Set<string>();
+      for (const r of records) {
+        if (RESET_ATTEMPTED.has(r.mac)) continue;
+        const reason = bridgeNeedsReset(r, records);
+        if (reason) {
+          RESET_ATTEMPTED.add(r.mac);
+          toReset.add(r.mac);
+          log.info("wiznet-discovery: bridge config invalid, resetting to DHCP+SERVER", {
+            mac: r.mac,
+            ip: r.ip,
+            mode: r.mode,
+            gateway: r.raw.gateway,
+            reason,
+          });
+          const ok = await resetBridgeBadConfig(r);
+          if (!ok) {
+            // Reset failed — drop from RESET_ATTEMPTED so the next tick
+            // can retry. Don't proceed with auto-lock for this bridge in
+            // this tick; it's still in a bad state.
+            RESET_ATTEMPTED.delete(r.mac);
+          } else {
+            // Reset succeeded — bridge is rebooting. When it reappears
+            // (next tick) it'll be on DHCP and the auto-lock pass below
+            // will pin its fresh IP. Clear LOCK_ATTEMPTED so we DO try
+            // to re-lock the new state, even if a previous lock attempt
+            // had already added this MAC.
+            LOCK_ATTEMPTED.delete(r.mac);
+          }
+        }
+      }
+
+      // Pass 2: auto-lock any DHCP-enabled bridge to its current IP. Every
+      // Carbon reader should be on a static lease so a router reboot or
+      // DHCP pool recycle can't move it out from under us. Skip bridges
+      // we just reset in pass 1 — they're rebooting and will reappear in
+      // the next tick. One-shot per MAC per agent process; retried on the
+      // next tick if the lock didn't take.
+      const dhcpBridges = records.filter(
+        (r) => r.dhcp && !LOCK_ATTEMPTED.has(r.mac) && !toReset.has(r.mac),
+      );
       for (const r of dhcpBridges) {
         LOCK_ATTEMPTED.add(r.mac);
         log.info("wiznet-discovery: auto-locking bridge to static", {
