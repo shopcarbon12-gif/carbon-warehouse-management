@@ -892,11 +892,20 @@ export async function ingestAgentReads(
     const locationId = readerInfo.rows[0].location_id;
     // Dedup within this batch to keep the SSE payload tight.
     const epcs = Array.from(new Set(body.reads.map((r) => r.epcHex)));
+    // Per-EPC antenna attribution so the dashboard can credit each tag to
+    // the antenna that detected it without re-querying. Last-write-wins
+    // when an EPC was seen on multiple antennas in the same batch (rare).
+    const epcAntennaMap: Record<string, string> = {};
+    for (let i = 0; i < body.reads.length; i++) {
+      const aId = antennaIds[i];
+      if (aId) epcAntennaMap[body.reads[i].epcHex.toUpperCase()] = aId;
+    }
     publishEdgeScanEvent(auth.tenantId, locationId, {
       deviceId: body.readerId,
       locationId,
       scanContext: "TRANSFER",
       epcs,
+      epcAntennaMap,
       timestamp: new Date().toISOString(),
       rowsAffected: result.rowCount ?? body.reads.length,
     });

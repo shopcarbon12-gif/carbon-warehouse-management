@@ -245,6 +245,12 @@ export function CommandCenter() {
   // start→stop transition.
   const liveScanEpcsRef = useRef<Set<string>>(new Set());
 
+  // Per-antenna session-scoped Set<EPC>. Same SSE stream as the headline,
+  // but partitioned by antenna_id so each row's count ticks instantly
+  // instead of waiting for the next 1-s poll. Reconciled upward against
+  // the server's per-antenna SQL on every poll cycle.
+  const perAntennaEpcsRef = useRef<Map<string, Set<string>>>(new Map());
+
   // Poll /state every 500 ms while running — updates the counter (via
   // upward-only reconciliation) AND acts as the heartbeat that keeps the
   // server-side session alive. When the tab closes or loses focus, the
@@ -299,14 +305,23 @@ export function CommandCenter() {
   useEffect(() => {
     if (!liveScanRunning) {
       liveScanEpcsRef.current = new Set();
+      perAntennaEpcsRef.current = new Map();
       return;
     }
     const es = new EventSource("/api/edge/stream");
     const onMessage = (ev: MessageEvent) => {
       if (!ev.data || ev.data.startsWith(":")) return;
-      let parsed: { scanContext?: string; epcs?: string[] } | null = null;
+      let parsed: {
+        scanContext?: string;
+        epcs?: string[];
+        epcAntennaMap?: Record<string, string>;
+      } | null = null;
       try {
-        parsed = JSON.parse(ev.data) as { scanContext?: string; epcs?: string[] };
+        parsed = JSON.parse(ev.data) as {
+          scanContext?: string;
+          epcs?: string[];
+          epcAntennaMap?: Record<string, string>;
+        };
       } catch {
         return;
       }
@@ -323,6 +338,34 @@ export function CommandCenter() {
       if (set.size !== beforeSize) {
         const newSize = set.size;
         setLiveScanCount((prev) => (newSize > prev ? newSize : prev));
+      }
+      // Per-antenna SSE accumulator — same stream, partitioned by antenna.
+      // Bumps each antenna's row count immediately, then the periodic poll
+      // reconciles upward to the server's authoritative count.
+      const map = parsed.epcAntennaMap;
+      if (map) {
+        const touched = new Set<string>();
+        for (const epc of Object.keys(map)) {
+          const antId = map[epc];
+          if (!antId) continue;
+          let s = perAntennaEpcsRef.current.get(antId);
+          if (!s) {
+            s = new Set<string>();
+            perAntennaEpcsRef.current.set(antId, s);
+          }
+          const before = s.size;
+          s.add(epc.toUpperCase());
+          if (s.size !== before) touched.add(antId);
+        }
+        if (touched.size > 0) {
+          setPerAntenna((prev) =>
+            prev.map((row) => {
+              if (!touched.has(row.antenna_id)) return row;
+              const sseCount = perAntennaEpcsRef.current.get(row.antenna_id)?.size ?? 0;
+              return sseCount > row.unique_epcs ? { ...row, unique_epcs: sseCount } : row;
+            }),
+          );
+        }
       }
     };
     es.addEventListener("message", onMessage);
@@ -365,7 +408,19 @@ export function CommandCenter() {
           setPerAntenna([]);
           return;
         }
-        setPerAntenna(j.antennas ?? []);
+        // Upward-only merge with the SSE accumulator — the SSE stream may
+        // be transiently ahead of the DB poll during a burst, so prefer
+        // whichever number is higher. Same pattern the headline counter
+        // uses against /state.
+        const fromApi = j.antennas ?? [];
+        setPerAntenna(
+          fromApi.map((row) => {
+            const sseCount = perAntennaEpcsRef.current.get(row.antenna_id)?.size ?? 0;
+            return sseCount > row.unique_epcs
+              ? { ...row, unique_epcs: sseCount }
+              : row;
+          }),
+        );
       } catch {
         /* transient; ignore */
       }

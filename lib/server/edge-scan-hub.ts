@@ -8,6 +8,13 @@ export type EdgeScanStreamPayload = {
   locationId: string;
   scanContext: string;
   epcs: string[];
+  /**
+   * Optional map of EPC (uppercased hex) → antenna UUID, populated by the
+   * fixed-reader ingest path so the dashboard can credit each EPC to the
+   * specific antenna that detected it. Keyed by EPC (one entry per unique
+   * EPC in this batch). Subscribers that don't care can ignore it.
+   */
+  epcAntennaMap?: Record<string, string>;
   timestamp?: string;
   rowsAffected?: number;
 };
