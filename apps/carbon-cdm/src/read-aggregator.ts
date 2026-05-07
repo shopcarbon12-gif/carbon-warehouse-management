@@ -57,7 +57,6 @@ export class ReadAggregator {
       q.push({
         epcHex: r.epcHex,
         antennaNumber: r.antennaNumber,
-        rssi: r.rssiDbm,
         readAt: receivedAtIso,
       });
     }
