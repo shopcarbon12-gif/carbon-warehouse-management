@@ -53,6 +53,23 @@ export async function ingestWiznetDiscoveries(
   let ipUpdated = 0;
   let newDiscoveries = 0;
 
+  // Janitor: physically purge cdm_agent_discoveries rows for this agent
+  // whose bridges have been off the LAN longer than the panel staleness
+  // window. The list query already filters them out by last_seen_at, but
+  // the row is reused via UPSERT when the bridge eventually reappears,
+  // which carries forward stale metadata. Operators who unplug a bridge
+  // expect the system to truly forget it — so on each sweep, remove any
+  // row that's effectively dead. Adopted and ignored rows are kept since
+  // their state was set deliberately by an operator action.
+  await client.query(
+    `DELETE FROM cdm_agent_discoveries
+       WHERE cdm_agent_id = $1::uuid
+         AND adopted_at IS NULL
+         AND ignored_at IS NULL
+         AND last_seen_at < now() - interval '10 minutes'`,
+    [agentId],
+  );
+
   for (const d of body.discoveries) {
     const macLower = d.mac.toLowerCase();
 
