@@ -145,23 +145,27 @@ export function LocationsSettingsWorkspace() {
               </tr>
             ) : (
               locations.map((row) => (
-                <tr key={row.id} className="text-[var(--wms-fg)]">
-                  <td className="px-3 py-2.5 font-medium text-[var(--wms-fg)]">{row.name}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]">{row.code}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs font-medium text-[var(--wms-accent)]">
+                <tr key={row.id} className="align-top text-[var(--wms-fg)]">
+                  <td className="px-3 py-2.5 font-medium text-[var(--wms-fg)] break-words">
+                    {row.name}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]">
+                    {row.code}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs font-medium text-[var(--wms-accent)]">
                     {row.lightspeed_shop_id ?? "—"}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                  <td className="px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)] break-all">
                     {row.email ?? "—"}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-[0.65rem]">
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[0.65rem]">
                     {row.has_password ? (
                       <span className="text-emerald-500/85">●●●●●●●●</span>
                     ) : (
                       <span className="text-[var(--wms-muted)]">not set</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="whitespace-nowrap px-3 py-2.5">
                     <button
                       type="button"
                       onClick={() => void toggleActive(row)}
@@ -174,10 +178,10 @@ export function LocationsSettingsWorkspace() {
                       {row.is_active ? "Active" : "Disabled"}
                     </button>
                   </td>
-                  <td className="max-w-[220px] px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                  <td className="max-w-[220px] px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)] break-all">
                     {row.users.length ? row.users.map((u) => u.email).join(", ") : "—"}
                   </td>
-                  <td className="px-3 py-2.5 text-right font-mono text-xs">
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs">
                     <button
                       type="button"
                       onClick={() => setModal({ mode: "edit", row })}
