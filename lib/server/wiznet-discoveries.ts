@@ -181,8 +181,16 @@ export async function ingestWiznetDiscoveries(
              -- For rows that have been continuously pending (never adopted),
              -- preserve the original first_seen_at.
              adopted_at = NULL,
+             -- Treat the bridge as a genuine fresh discovery whenever there
+             -- was a "gap" between observations: either the row was bound
+             -- to a now-deleted device (adopted_at was set), or the bridge
+             -- was off the LAN long enough to have aged out of the panel
+             -- (last_seen_at older than the staleness window — same 10 min
+             -- as the listPending... query). Otherwise (continuously
+             -- pending), keep the original first_seen_at.
              first_seen_at = CASE
                WHEN cdm_agent_discoveries.adopted_at IS NOT NULL THEN now()
+               WHEN cdm_agent_discoveries.last_seen_at < now() - interval '10 minutes' THEN now()
                ELSE cdm_agent_discoveries.first_seen_at
              END,
              last_seen_at = now()
