@@ -191,13 +191,27 @@ async function resetBridgeBadConfig(record: WiznetRecord): Promise<boolean> {
       "--port",
       String(EXPECTED_PORT),
     ];
-    const child = spawn("sudo", args, { stdio: ["ignore", "pipe", "pipe"] });
+    // detached:true puts sudo + wiznet-cli in their own process group so
+    // we can SIGKILL the whole group on timeout. Without this, killing
+    // sudo leaves wiznet-cli orphaned (sudo doesn't reliably forward
+    // SIGTERM/SIGKILL to its child for non-interactive sessions, and
+    // wiznet-cli's UDP retry loop ignores SIGTERM anyway). Live evidence
+    // 2026-05-07: orphaned wiznet-cli processes survived 4+ days with
+    // 72% CPU each, blocking subsequent bridge config attempts.
+    const child = spawn("sudo", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
     let stderr = "";
     let done = false;
     const finish = (ok: boolean) => {
       if (done) return;
       done = true;
       resolve(ok);
+    };
+    const groupKill = () => {
+      if (!child.pid) return;
+      try { process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
     };
     child.stderr.on("data", (b: Buffer) => { stderr += b.toString("utf8"); });
     child.on("error", (e) => {
@@ -217,8 +231,8 @@ async function resetBridgeBadConfig(record: WiznetRecord): Promise<boolean> {
     });
     setTimeout(() => {
       if (done) return;
-      log.warn("wiznet-discovery: reset timed out, killing child", { mac: record.mac });
-      child.kill("SIGTERM");
+      log.warn("wiznet-discovery: reset timed out, group-killing", { mac: record.mac });
+      groupKill();
       finish(false);
     }, RESET_TIMEOUT_MS);
   });
@@ -255,13 +269,24 @@ async function lockBridgeStatic(record: WiznetRecord): Promise<boolean> {
       "--port",
       String(record.port),
     ];
-    const child = spawn("sudo", args, { stdio: ["ignore", "pipe", "pipe"] });
+    // See resetBridgeBadConfig for why we need detached + group-kill: sudo
+    // doesn't forward SIGTERM to wiznet-cli, so a stuck UDP retry loop
+    // turns into a multi-day orphan that holds the bridge in mid-config
+    // mode and blocks reader connections.
+    const child = spawn("sudo", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
     let stderr = "";
     let done = false;
     const finish = (ok: boolean) => {
       if (done) return;
       done = true;
       resolve(ok);
+    };
+    const groupKill = () => {
+      if (!child.pid) return;
+      try { process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
     };
     child.stderr.on("data", (b: Buffer) => { stderr += b.toString("utf8"); });
     child.on("error", (e) => {
@@ -281,8 +306,8 @@ async function lockBridgeStatic(record: WiznetRecord): Promise<boolean> {
     });
     setTimeout(() => {
       if (done) return;
-      log.warn("wiznet-discovery: lock timed out, killing child", { mac: record.mac });
-      child.kill("SIGTERM");
+      log.warn("wiznet-discovery: lock timed out, group-killing", { mac: record.mac });
+      groupKill();
       finish(false);
     }, LOCK_TIMEOUT_MS);
   });
