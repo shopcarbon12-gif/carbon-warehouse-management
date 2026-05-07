@@ -4,6 +4,8 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+**Agent credentials & access:** Before doing anything that needs a credential, SSH access, or production endpoint, read **`AGENT_CREDENTIALS.md`** at the repo root. It indexes every credential available on this machine (env files, SSH keys, prod DB, Coolify, third-party APIs) and the verified `ssh shopcarbon@192.168.1.219` path into the warehouse CDM agent VM. The local consolidated values live in the gitignored `.env.agent-secrets`.
+
 **Carbon WMS release APK (all agents):** After a release build, the canonical APK path is `~/CarbonWmsRelease/CarbonWMS V{pubspec version}.apk` (version from `mobile/carbon_wms/pubspec.yaml`). Build with:
 ```bash
 bash mobile/carbon_wms/scripts/build-release.sh
