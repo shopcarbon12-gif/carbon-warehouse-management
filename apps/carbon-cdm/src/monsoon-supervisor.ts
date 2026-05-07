@@ -461,8 +461,13 @@ export class MonsoonSupervisor {
         // for this supervisor.
         continue;
       }
+      // Multi-antenna readers must run on the stream driver regardless of
+      // the saved monsoon_driver — the console binary's text output omits
+      // per-tag antenna numbers and would mis-attribute every read on a 2-
+      // or 4-antenna reader. Mirror the override that lives in spawnReader.
+      const enabledCount = spec.antennas.filter((a) => a.enabled).length;
       const desiredDriver: "stream" | "console" =
-        spec.monsoon_driver === "console" ? "console" : "stream";
+        enabledCount >= 2 ? "stream" : spec.monsoon_driver === "console" ? "console" : "stream";
       const existing = this.slots.get(spec.id);
       if (existing) {
         // If operator changed the configured serial port in WMS, rebuild
@@ -707,12 +712,25 @@ export class MonsoonSupervisor {
     // alive-but-stuck behaviour would defeat the live-feedback UX of the
     // /antenna-test page. The new_monsoonreader is on the VM regardless
     // of the reader's saved monsoon_driver.
+    //
+    // Multi-antenna readers ALSO force the stream driver, regardless of
+    // the WMS-saved preference. The console binary's text output doesn't
+    // include per-tag antenna numbers (every record would be stamped with
+    // a single antennaNumber), so all reads on a 2-antenna reader would
+    // credit only one antenna in the per-antenna dashboard panel. The
+    // stream binary's 50-byte record format includes the antenna at byte 9
+    // and the parser already routes it through; combined with `--cmux
+    // --mxa N1,N2,...` the binary's hardware mux cycles through every
+    // enabled port, giving correct attribution per tag.
+    const enabledAntennaCount = slot.spec.antennas.filter((a) => a.enabled).length;
     const desired: "stream" | "console" =
       slot.testSession !== null
         ? "console"
-        : slot.spec.monsoon_driver === "console"
-          ? "console"
-          : "stream";
+        : enabledAntennaCount >= 2
+          ? "stream"
+          : slot.spec.monsoon_driver === "console"
+            ? "console"
+            : "stream";
     slot.currentDriver = desired;
     if (desired === "console") {
       this.spawnReaderConsole(slot);
@@ -735,17 +753,28 @@ export class MonsoonSupervisor {
       slot.candidatePorts[0] ??
       Number(spec.monsoon_serial_port);
     slot.bytesSinceSpawn = false;
-    // MonsoonReader's `--num` is the reader INDEX (default 1), and `-a` takes
-    // a SINGLE antenna number — using two `-a` flags makes the binary thread-
-    // resource-throw because last-wins semantics combine with `--num` as
-    // count-of-readers. So one process per reader, antenna 1 only by default;
-    // explicit antenna number only when the operator configured exactly one
-    // and it isn't 1. Multi-antenna readers will be handled by spawning one
-    // child process per antenna in a future change (each with its own
-    // stream / control port pair).
+    // Antenna selection. The legacy MonsoonReader has three distinct modes:
+    //   1. Single antenna (port 1): omit `-a` and `--cmux` entirely. Binary
+    //      defaults to antenna 1.
+    //   2. Single antenna (port 2-N): pass `-a N`. Binary scans only that port.
+    //   3. Multiple antennas: pass `--cmux --mxa N1,N2,...`. Binary's hardware
+    //      multiplexer cycles through every listed port and stamps each tag
+    //      with its source antenna in the 50-byte stream record (byte 9). The
+    //      stream parser surfaces this as `rec.antennaNumber`, which the
+    //      consumer routes to the matching dashboard tile.
+    //
+    // `--cmux` is "Enable mux via the reader GPIO pins" per the binary's
+    // own --help. `--mux_cycles` defaults to -1 (infinite), which pairs
+    // correctly with our `--infinite` cycle mode.
     const enabledAntennas = spec.antennas.filter((a) => a.enabled);
     const antennaArgs: string[] = [];
-    if (enabledAntennas.length === 1 && enabledAntennas[0]!.antenna_number !== 1) {
+    if (enabledAntennas.length >= 2) {
+      antennaArgs.push(
+        "--cmux",
+        "--mxa",
+        enabledAntennas.map((a) => a.antenna_number).join(","),
+      );
+    } else if (enabledAntennas.length === 1 && enabledAntennas[0]!.antenna_number !== 1) {
       antennaArgs.push("-a", String(enabledAntennas[0]!.antenna_number));
     }
     const args = [
@@ -786,7 +815,12 @@ export class MonsoonSupervisor {
       readerId: spec.id,
       readerName: spec.name,
       antennas: enabledAntennas.map((a) => a.antenna_number),
-      antennaScanned: antennaArgs.length > 0 ? Number(antennaArgs[1]) : 1,
+      mode:
+        enabledAntennas.length >= 2
+          ? `mux:${enabledAntennas.map((a) => a.antenna_number).join(",")}`
+          : enabledAntennas.length === 1
+            ? `single:${enabledAntennas[0]!.antenna_number}`
+            : "default:1",
       power: powerArg,
       serialPort,
     });
