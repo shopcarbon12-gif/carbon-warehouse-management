@@ -174,8 +174,17 @@ export async function ingestWiznetDiscoveries(
              -- (matched_known / IP-fallback paths handle the bound case). If
              -- a previous adoption was undone by deleting the device, the row
              -- still has adopted_at set from then; clear it so the bridge
-             -- reappears in the discovered panel as a new device.
+             -- reappears in the discovered panel as a new device. Also
+             -- reset first_seen_at on re-emergence (operator deleted the
+             -- device, then bridge reappears) so the panel timestamps look
+             -- like a genuine fresh discovery rather than a zombie row.
+             -- For rows that have been continuously pending (never adopted),
+             -- preserve the original first_seen_at.
              adopted_at = NULL,
+             first_seen_at = CASE
+               WHEN cdm_agent_discoveries.adopted_at IS NOT NULL THEN now()
+               ELSE cdm_agent_discoveries.first_seen_at
+             END,
              last_seen_at = now()
        RETURNING (xmax = 0) AS inserted`,
       [
@@ -232,7 +241,13 @@ export async function listPendingWiznetDiscoveries(
      WHERE a.tenant_id = $1::uuid
        AND wd.adopted_at IS NULL
        AND wd.ignored_at IS NULL
-       AND wd.last_seen_at > now() - interval '24 hours'
+       -- Live-only window: agent sweeps every 5 min, so a row whose
+       -- last_seen_at is older than 10 min means the bridge wasn't on the
+       -- LAN during the last sweep — i.e. disconnected. Drop it from the
+       -- panel so the operator sees the actual current state, not a
+       -- 24-hour graveyard. Tolerance is 2× sweep interval so a single
+       -- missed/late sweep won't flap a still-online bridge off the panel.
+       AND wd.last_seen_at > now() - interval '10 minutes'
      ORDER BY wd.last_seen_at DESC`,
     [tenantId],
   );
