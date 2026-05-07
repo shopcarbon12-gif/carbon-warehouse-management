@@ -636,14 +636,23 @@ export const ingestReadsSchema = z.object({
 
 export type IngestReadsBody = z.infer<typeof ingestReadsSchema>;
 
-const ANTENNA_CACHE = new Map<string, Map<number, string>>();
+// Per-reader antenna_number → antenna UUID lookup. The previous version of
+// this cache had no expiry, which meant a reader whose first read landed
+// before its antenna devices were configured would cache an empty map
+// forever — every subsequent read got antenna_id=NULL, the per-antenna
+// panel showed 0 across the board even while the headline counter climbed.
+// A 60-s TTL self-heals out-of-order commissioning at the cost of one
+// indexed lookup per reader per minute.
+const ANTENNA_CACHE_TTL_MS = 60_000;
+const ANTENNA_CACHE = new Map<string, { map: Map<number, string>; expiresAt: number }>();
 
 async function getAntennaIdMap(
   client: PoolClient,
   readerId: string,
 ): Promise<Map<number, string>> {
+  const now = Date.now();
   const cached = ANTENNA_CACHE.get(readerId);
-  if (cached) return cached;
+  if (cached && cached.expiresAt > now) return cached.map;
   const r = await client.query<{ id: string; antenna_number: string }>(
     `SELECT id::text, (config->>'antenna_number') AS antenna_number
        FROM devices
@@ -655,7 +664,7 @@ async function getAntennaIdMap(
     const num = Number(row.antenna_number);
     if (!Number.isNaN(num)) map.set(num, row.id);
   }
-  ANTENNA_CACHE.set(readerId, map);
+  ANTENNA_CACHE.set(readerId, { map, expiresAt: now + ANTENNA_CACHE_TTL_MS });
   return map;
 }
 
