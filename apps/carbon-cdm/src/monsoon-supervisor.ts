@@ -343,10 +343,27 @@ export class MonsoonSupervisor {
         continue;
       }
 
+      // Multi-antenna mux mode: the legacy binary produces records in
+      // ~15-25 second bursts then goes silent (boost-thread state quirk).
+      // Use a tighter watchdog window so respawn happens fast — gets us
+      // back to productive scanning instead of waiting 60 s per cycle.
+      // Startup latency for mux mode is ~7-10 s (radio enumerate + first
+      // mux cycle); 15 s silence threshold leaves headroom while keeping
+      // dead-cycle waste minimal.
+      const muxSlot = slot.spec.antennas.filter((a) => a.enabled).length >= 2;
+      const silenceTimeout = muxSlot ? 15_000 : STREAM_SILENCE_TIMEOUT_MS;
+      const rateDropTimeout = muxSlot ? 12_000 : READ_RATE_DROP_TIMEOUT_MS;
+
+      // For mux readers, suppress the "rotate ports on zero-bytes" branch.
+      // Mux startup naturally has zero bytes for ~7-10 s — port rotation
+      // would flip-flop between ports unnecessarily and waste recovery time.
+      // We still rotate non-mux readers (the original behavior).
       const silentMs = now - slot.lastByteAt;
-      if (silentMs >= STREAM_SILENCE_TIMEOUT_MS && !exhaustedAllPorts) {
-        if (!slot.bytesSinceSpawn) {
+      if (silentMs >= silenceTimeout && !exhaustedAllPorts) {
+        if (!slot.bytesSinceSpawn && !muxSlot) {
           // Zero-byte kick: rotate to next candidate port if we have one.
+          // Skipped for mux readers — mux startup is naturally slow and
+          // rotating would flip-flop between working/factory ports.
           slot.consecutiveZeroByteKicks += 1;
           if (slot.candidatePorts.length > 1) {
             const prevIdx = slot.candidatePortIdx;
@@ -373,7 +390,7 @@ export class MonsoonSupervisor {
         slot.child?.kill("SIGTERM");
       } else if (
         slot.lastRecordAt > 0 &&
-        now - slot.lastRecordAt >= READ_RATE_DROP_TIMEOUT_MS
+        now - slot.lastRecordAt >= rateDropTimeout
       ) {
         // Rate-drop: produced records earlier, none in the last window. The
         // binary went catatonic. Kick it; the on-exit handler respawns.
@@ -386,7 +403,7 @@ export class MonsoonSupervisor {
         slot.lastRecordAt = 0;
         slot.lastByteAt = now;
         slot.child?.kill("SIGTERM");
-      } else if (silentMs >= STREAM_SILENCE_TIMEOUT_MS && exhaustedAllPorts) {
+      } else if (silentMs >= silenceTimeout && exhaustedAllPorts) {
         // We've tried every candidate port at least once without bytes.
         // Bump lastByteAt so we don't spam this branch every 5s — but
         // leave the child running and rely on on-exit respawn cycles
@@ -846,7 +863,11 @@ export class MonsoonSupervisor {
       // respawn — so throughput approximates `cycle_length / startup_time`
       // instead of decaying toward zero under exponential backoff.
       const cleanExit = code === 0 && !signal;
-      const expectedMuxCrash = useMux && signal === "SIGSEGV";
+      // Multi-antenna mux mode reliably crashes with the binary's boost-thread
+      // sequence at the antenna switch — observed both SIGSEGV and SIGABRT
+      // depending on which thread races first. Treat any signal exit in mux
+      // mode as expected (no backoff growth) so the next respawn is fast.
+      const expectedMuxCrash = useMux && signal !== null;
       const treatAsClean = cleanExit || expectedMuxCrash;
       const delay = treatAsClean ? 250 : slot.backoffMs;
       if (cleanExit) {
