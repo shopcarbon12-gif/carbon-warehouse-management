@@ -19,7 +19,7 @@ import { postWiznetDiscoveries } from "./wms-client.js";
  * We dedupe by MAC and keep the most recent IP for each.
  */
 
-const DEFAULT_INTERVAL_MS = 5 * 60_000;
+const DEFAULT_INTERVAL_MS = 60_000;
 const WIZNET_CLI = "/opt/legacy-rfid/wiznet-cli";
 const SCAN_TIMEOUT_MS = 15_000;
 const LOCK_TIMEOUT_MS = 30_000;

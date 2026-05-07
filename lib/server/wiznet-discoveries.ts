@@ -5,7 +5,7 @@ import { z } from "zod";
  * Auto-IP-tracking + WIZnet discovery for the Carbon CDM agent.
  *
  * Flow:
- *   1. Agent runs `wiznet-cli -d` every 5 minutes; parses each row into
+ *   1. Agent runs `wiznet-cli -d` every 1 minute; parses each row into
  *      `{ mac, ip, port, dhcp, ... }` and POSTs the full list here.
  *   2. For every discovered MAC, we look up `devices.mac_address`:
  *       - HIT  → if `devices.network_address` differs from the discovered
@@ -66,7 +66,7 @@ export async function ingestWiznetDiscoveries(
        WHERE cdm_agent_id = $1::uuid
          AND adopted_at IS NULL
          AND ignored_at IS NULL
-         AND last_seen_at < now() - interval '10 minutes'`,
+         AND last_seen_at < now() - interval '3 minutes'`,
     [agentId],
   );
 
@@ -202,12 +202,12 @@ export async function ingestWiznetDiscoveries(
              -- was a "gap" between observations: either the row was bound
              -- to a now-deleted device (adopted_at was set), or the bridge
              -- was off the LAN long enough to have aged out of the panel
-             -- (last_seen_at older than the staleness window — same 10 min
+             -- (last_seen_at older than the staleness window — same 3 min
              -- as the listPending... query). Otherwise (continuously
              -- pending), keep the original first_seen_at.
              first_seen_at = CASE
                WHEN cdm_agent_discoveries.adopted_at IS NOT NULL THEN now()
-               WHEN cdm_agent_discoveries.last_seen_at < now() - interval '10 minutes' THEN now()
+               WHEN cdm_agent_discoveries.last_seen_at < now() - interval '3 minutes' THEN now()
                ELSE cdm_agent_discoveries.first_seen_at
              END,
              last_seen_at = now()
@@ -266,13 +266,13 @@ export async function listPendingWiznetDiscoveries(
      WHERE a.tenant_id = $1::uuid
        AND wd.adopted_at IS NULL
        AND wd.ignored_at IS NULL
-       -- Live-only window: agent sweeps every 5 min, so a row whose
-       -- last_seen_at is older than 10 min means the bridge wasn't on the
-       -- LAN during the last sweep — i.e. disconnected. Drop it from the
-       -- panel so the operator sees the actual current state, not a
-       -- 24-hour graveyard. Tolerance is 2× sweep interval so a single
-       -- missed/late sweep won't flap a still-online bridge off the panel.
-       AND wd.last_seen_at > now() - interval '10 minutes'
+       -- Live-only window: agent sweeps every 1 min, so a row whose
+       -- last_seen_at is older than 3 min means the bridge missed at
+       -- least 2 sweeps — i.e. disconnected. Drop it from the panel so
+       -- the operator sees the actual current state. Tolerance is 3×
+       -- sweep interval so brief network/agent hiccups won't flap a
+       -- still-online bridge off the panel.
+       AND wd.last_seen_at > now() - interval '3 minutes'
      ORDER BY wd.last_seen_at DESC`,
     [tenantId],
   );
