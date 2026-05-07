@@ -41,6 +41,16 @@ export type WiznetSyncResult = {
   matched_known: number;
   ip_updated: number;
   new_discoveries: number;
+  /**
+   * MACs (lowercase, no separators) the agent should reset to
+   * DHCP+SERVER+10002. Populated when a bridge is static-unbound across
+   * multiple sweeps — its NVRAM was pre-flashed at an IP nobody is using
+   * and the operator hasn't adopted the MAC, so the IP is operationally
+   * stale even if the config looks structurally valid (right gateway,
+   * SERVER mode, etc.). Catches the "spare from a previous install
+   * keeps stomping on .248" pattern that local agent-side rules miss.
+   */
+  reset_recommended: string[];
 };
 
 export async function ingestWiznetDiscoveries(
@@ -52,6 +62,7 @@ export async function ingestWiznetDiscoveries(
   let matchedKnown = 0;
   let ipUpdated = 0;
   let newDiscoveries = 0;
+  const resetRecommended: string[] = [];
 
   // Janitor: physically purge cdm_agent_discoveries rows for this agent
   // whose bridges have been off the LAN longer than the panel staleness
@@ -178,7 +189,24 @@ export async function ingestWiznetDiscoveries(
     }
 
     // Step 2: unknown — upsert into cdm_agent_discoveries.
-    const upsert = await client.query<{ inserted: boolean }>(
+    //
+    // We also compute `recommend_reset` in the same RETURNING: true when
+    // this is NOT a fresh insert AND the bridge has been static both
+    // before AND now, AND it's not "freshly auto-locked" (we infer that
+    // by checking last_seen_at — if the previous sweep was within the
+    // staleness window, we're seeing this bridge for the second time
+    // unbound, which means the agent's auto-lock is responsible for it
+    // being static, NOT a stale legacy config). Only when the bridge has
+    // been static across the gap (last_seen aged out, or wasn't recently
+    // observed), and is still unbound, do we ask the agent to reset.
+    //
+    // For the operator's reported pattern — spare bridges pre-flashed at
+    // .248 from a previous install — this fires on the second sweep
+    // they're seen, because their NVRAM is "static and was already
+    // static last sweep, no auto-lock involved." Bridge resets to DHCP,
+    // gets a fresh IP, agent's auto-lock pins it, all without operator
+    // action.
+    const upsert = await client.query<{ inserted: boolean; recommend_reset: boolean }>(
       `INSERT INTO cdm_agent_discoveries
          (cdm_agent_id, mac_address, current_ip, port, dhcp_enabled, raw, first_seen_at, last_seen_at)
        VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, now(), now())
@@ -211,7 +239,23 @@ export async function ingestWiznetDiscoveries(
                ELSE cdm_agent_discoveries.first_seen_at
              END,
              last_seen_at = now()
-       RETURNING (xmax = 0) AS inserted`,
+       RETURNING (xmax = 0) AS inserted,
+         -- recommend_reset is true when:
+         --   - this is NOT a fresh INSERT (xmax != 0; we have prior state), AND
+         --   - new dhcp is N (still static) AND old dhcp was N (was static
+         --     last sweep too — i.e. NOT a freshly auto-locked bridge
+         --     transitioning from DHCP→static), AND
+         --   - the previous last_seen_at is recent enough that we're
+         --     confident the prior dhcp_enabled value is meaningful (not
+         --     a stale row from days ago). 3-min window matches the
+         --     panel staleness so a bridge that just reappeared after a
+         --     long absence gets one sweep of grace.
+         (
+           xmax <> 0
+           AND EXCLUDED.dhcp_enabled = false
+           AND COALESCE(cdm_agent_discoveries.dhcp_enabled, true) = false
+           AND cdm_agent_discoveries.last_seen_at > now() - interval '3 minutes'
+         ) AS recommend_reset`,
       [
         agentId,
         macLower,
@@ -222,12 +266,14 @@ export async function ingestWiznetDiscoveries(
       ],
     );
     if (upsert.rows[0]?.inserted) newDiscoveries += 1;
+    if (upsert.rows[0]?.recommend_reset) resetRecommended.push(macLower);
   }
 
   return {
     matched_known: matchedKnown,
     ip_updated: ipUpdated,
     new_discoveries: newDiscoveries,
+    reset_recommended: resetRecommended,
   };
 }
 

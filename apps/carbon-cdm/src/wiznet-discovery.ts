@@ -370,6 +370,32 @@ export function startWiznetDiscovery(env: AgentEnv): () => void {
       if (result.ip_updated > 0 || result.new_discoveries > 0) {
         log.info("wiznet-discovery: server response", result);
       }
+
+      // Pass 3: server-recommended resets. Server flags bridges that
+      // have been static-unbound across sweeps — pre-flashed NVRAM
+      // from a prior install that local rules can't catch (the config
+      // is structurally valid, just operationally stale). Issue the
+      // same DHCP+SERVER+10002 reset we use for locally-detected bad
+      // config; the bridge reboots, comes back DHCP, and the next
+      // sweep's auto-lock pins it at a clean address.
+      const recommended = result.reset_recommended ?? [];
+      for (const macLower of recommended) {
+        const macUpper = macLower.toUpperCase();
+        if (RESET_ATTEMPTED.has(macUpper)) continue;
+        const r = records.find((x) => x.mac === macUpper);
+        if (!r) continue;
+        RESET_ATTEMPTED.add(macUpper);
+        log.info("wiznet-discovery: server-recommended reset (stale unbound)", {
+          mac: r.mac,
+          ip: r.ip,
+        });
+        const ok = await resetBridgeBadConfig(r);
+        if (!ok) {
+          RESET_ATTEMPTED.delete(macUpper);
+        } else {
+          LOCK_ATTEMPTED.delete(macUpper);
+        }
+      }
     } catch (e) {
       log.warn("wiznet-discovery: tick failed", {
         err: e instanceof Error ? e.message : String(e),

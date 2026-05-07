@@ -165,6 +165,14 @@ export type WiznetDiscoveryResponse = {
   matched_known: number;
   ip_updated: number;
   new_discoveries: number;
+  /**
+   * Lowercased MACs the server is asking the agent to reset to
+   * DHCP+SERVER+10002. Server emits these for static-unbound bridges
+   * that have been stale across multiple sweeps — the equivalent of
+   * "this NVRAM config is left over from somewhere else, normalize it."
+   * Optional for forward-compat with older WMS deployments.
+   */
+  reset_recommended?: string[];
 };
 
 export async function postWiznetDiscoveries(

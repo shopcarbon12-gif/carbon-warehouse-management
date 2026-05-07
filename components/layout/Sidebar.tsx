@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -162,8 +162,26 @@ function NavAccordion({
   pathname: string;
   onNavigate: () => void;
 }) {
+  const router = useRouter();
   const activeInSection = section.isActiveSection(pathname);
   const [open, setOpen] = useState(activeInSection);
+
+  // Click handler for nav items: if the operator clicks the menu entry
+  // for the page they're already on, Next's <Link> normally no-ops.
+  // The operator expects clicking a nav item to *always* do something —
+  // either move there, or reload the current view to refresh data.
+  // Detect the same-route case, swallow the default navigation, and
+  // trigger a Server Components refetch via router.refresh().
+  const handleNavClick = useCallback(
+    (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+      onNavigate();
+      if (href === pathname) {
+        e.preventDefault();
+        router.refresh();
+      }
+    },
+    [pathname, router, onNavigate],
+  );
 
   /* Expand drawer when route enters this section (nav UX). */
   useEffect(() => {
@@ -201,7 +219,7 @@ function NavAccordion({
                       ? "bg-[var(--wms-surface-elevated)] text-[var(--wms-accent)] ring-1 ring-[var(--wms-border)]"
                       : "text-[var(--wms-fg)]/85 hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
                   }`}
-                  onClick={onNavigate}
+                  onClick={handleNavClick(item.href)}
                 >
                   <span className="relative shrink-0">
                     <Icon
@@ -239,9 +257,25 @@ export function Sidebar({
   onMobileOpenChange: (open: boolean) => void;
 }) {
   const pathname = usePathname() ?? "";
+  const router = useRouter();
   const onNavigate = useCallback(() => {
     onMobileOpenChange(false);
   }, [onMobileOpenChange]);
+
+  // Same-route refresh: clicking a menu entry for the page you're
+  // already on should reload that page's server data, not no-op.
+  // (See NavAccordion's handleNavClick for the rationale; mirroring
+  // the same behavior on the top-level Dashboard / brand links.)
+  const handleSameRouteRefresh = useCallback(
+    (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+      onNavigate();
+      if (href === pathname) {
+        e.preventDefault();
+        router.refresh();
+      }
+    },
+    [pathname, router, onNavigate],
+  );
 
   useEffect(() => {
     onMobileOpenChange(false);
@@ -271,7 +305,11 @@ export function Sidebar({
         }`}
       >
         <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-4">
-          <Link href="/dashboard" className="min-w-0" onClick={onNavigate}>
+          <Link
+            href="/dashboard"
+            className="min-w-0"
+            onClick={handleSameRouteRefresh("/dashboard")}
+          >
             <span className="font-mono text-sm font-medium uppercase tracking-[0.18em] text-[var(--wms-accent)]">
               WMS
             </span>
@@ -298,7 +336,7 @@ export function Sidebar({
           <div className="px-2 pb-2">
             <Link
               href="/dashboard"
-              onClick={onNavigate}
+              onClick={handleSameRouteRefresh("/dashboard")}
               className={`flex items-center gap-3 rounded-lg px-3 py-3 text-lg font-medium leading-snug transition-colors ${
                 dashActive
                   ? "bg-[var(--wms-surface-elevated)] text-[var(--wms-accent)] ring-1 ring-[var(--wms-border)]"
