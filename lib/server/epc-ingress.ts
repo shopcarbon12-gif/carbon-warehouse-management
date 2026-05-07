@@ -66,7 +66,7 @@ type CachedConfig = { config: EpcConfig; expiresAt: number };
 const CONFIG_CACHE: Map<string, CachedConfig> = new Map();
 const CONFIG_TTL_MS = 60_000;
 
-async function loadEpcConfig(client: PoolClient, tenantId: string): Promise<EpcConfig | null> {
+export async function loadEpcConfig(client: PoolClient, tenantId: string): Promise<EpcConfig | null> {
   const cached = CONFIG_CACHE.get(tenantId);
   const now = Date.now();
   if (cached && cached.expiresAt > now) return cached.config;

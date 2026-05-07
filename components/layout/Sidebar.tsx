@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -162,25 +162,26 @@ function NavAccordion({
   pathname: string;
   onNavigate: () => void;
 }) {
-  const router = useRouter();
   const activeInSection = section.isActiveSection(pathname);
   const [open, setOpen] = useState(activeInSection);
 
   // Click handler for nav items: if the operator clicks the menu entry
   // for the page they're already on, Next's <Link> normally no-ops.
   // The operator expects clicking a nav item to *always* do something —
-  // either move there, or reload the current view to refresh data.
-  // Detect the same-route case, swallow the default navigation, and
-  // trigger a Server Components refetch via router.refresh().
+  // either move there, or fully reload the current page. We use
+  // `window.location.reload()` (not `router.refresh()`) because RSC
+  // refresh leaves client state mounted, so on client-heavy pages
+  // (Antenna Test, Hardware Config workspace) the reload looks like a
+  // no-op. A real reload tears down React state and reruns the page.
   const handleNavClick = useCallback(
     (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
       onNavigate();
       if (href === pathname) {
         e.preventDefault();
-        router.refresh();
+        window.location.reload();
       }
     },
-    [pathname, router, onNavigate],
+    [pathname, onNavigate],
   );
 
   /* Expand drawer when route enters this section (nav UX). */
@@ -257,24 +258,24 @@ export function Sidebar({
   onMobileOpenChange: (open: boolean) => void;
 }) {
   const pathname = usePathname() ?? "";
-  const router = useRouter();
   const onNavigate = useCallback(() => {
     onMobileOpenChange(false);
   }, [onMobileOpenChange]);
 
   // Same-route refresh: clicking a menu entry for the page you're
-  // already on should reload that page's server data, not no-op.
-  // (See NavAccordion's handleNavClick for the rationale; mirroring
-  // the same behavior on the top-level Dashboard / brand links.)
+  // already on should fully reload it (window.location.reload), not a
+  // soft RSC refresh — RSC leaves client state mounted, so client-heavy
+  // pages look like the click did nothing. Mirrors NavAccordion's
+  // handleNavClick on the top-level Dashboard / brand links.
   const handleSameRouteRefresh = useCallback(
     (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
       onNavigate();
       if (href === pathname) {
         e.preventDefault();
-        router.refresh();
+        window.location.reload();
       }
     },
-    [pathname, router, onNavigate],
+    [pathname, onNavigate],
   );
 
   useEffect(() => {

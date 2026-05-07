@@ -31,19 +31,18 @@ export async function GET(req: Request) {
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
   /* For every Carbon-owned antenna on this tenant, count BOTH:
-   *  - unique_epcs: distinct EPCs the antenna has read since the session
-   *    started, regardless of catalog status. This answers the operator's
-   *    real question — "is this antenna actually picking up tags right
-   *    now?" — and stays >0 even for EPCs not in the live catalog (e.g.
-   *    mid-commission tags, killed tags, anything not yet `in-stock`).
-   *  - total_reads: raw read count for the same window, useful for
-   *    spotting an antenna that's "alive but barely seeing anything."
+   *  - unique_epcs: distinct EPCs that PASSED THE FORMULA and were read
+   *    by this antenna since the session started. Mirrors the headline
+   *    /state counter's filter so each tile sums consistently.
+   *  - total_reads: raw read count from this antenna in the same window
+   *    (regardless of formula). Useful for "is this antenna alive?"
+   *    diagnosis — if total_reads is climbing but unique_epcs is 0,
+   *    the antenna is hearing noise that doesn't decode.
    *
-   * The previous query joined items with `i.status = 'in-stock'` to keep
-   * the per-antenna sum consistent with the aggregate /state counter,
-   * but that hid genuine hardware activity whenever the tags read
-   * weren't yet live inventory — making the panel useless for "which
-   * reader is working?" diagnosis. */
+   * No items join, no last_seen_at dependency — the cdm_reads.passes_formula
+   * column is stamped at insert time by ingestAgentReads, so a fast
+   * partial index can serve this query.
+   */
   const r = await pool.query<{
     reader_id: string;
     reader_name: string;
@@ -68,7 +67,7 @@ export async function GET(req: Request) {
      INNER JOIN locations l    ON l.id = parent.location_id AND l.tenant_id = $1::uuid
      LEFT JOIN LATERAL (
        SELECT
-         COUNT(DISTINCT cr.epc_hex) AS uniq,
+         COUNT(DISTINCT cr.epc_hex) FILTER (WHERE cr.passes_formula) AS uniq,
          COUNT(*) AS total
          FROM cdm_reads cr
          WHERE cr.tenant_id = $1::uuid

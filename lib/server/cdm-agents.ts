@@ -2,7 +2,8 @@ import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { createHash, randomBytes } from "node:crypto";
 import { publishEdgeScanEvent } from "@/lib/server/edge-scan-hub";
-import { ingestEpcs } from "@/lib/server/epc-ingress";
+import { decodeEpc } from "@/lib/server/epc-decode";
+import { loadEpcConfig } from "@/lib/server/epc-ingress";
 import { isLiveScanActive } from "@/lib/server/live-scan-sessions";
 import {
   isReaderEffectivelyPaused,
@@ -686,50 +687,44 @@ export async function ingestAgentReads(
   if (ownership.rowCount === 0) {
     throw new Error("BAD_REQUEST:Reader not found or not owned by this agent");
   }
-  const readerLocationId = ownership.rows[0].location_id;
   const readerName = ownership.rows[0].name;
 
-  // ── Unified EPC ingress ──
-  // Every EPC goes through epc-ingress: decode against tenant_epc_config,
-  // look up `ls_system_id` in custom_skus, and write items with status
-  // 'in-stock' on match or 'tag_killed' on miss. Replaces the old
-  // AUTO-PENDING placeholder bucket.
+  // ── Live-scan formula evaluation (no items mutation) ──
+  // Background reads from fixed readers must NEVER write to the items
+  // table. The operator's expectation is that live scan is purely an
+  // observation tool: see what your antennas are picking up right now,
+  // don't silently grow inventory or the defective bin. The actual
+  // status-flipping ("this EPC is now `in-stock`" / "this EPC is now
+  // `tag_killed`") happens only when an operator explicitly resumes a
+  // cycle count or scan-finalize flow on those dedicated pages — those
+  // call `ingestEpcs` from their own ingestion paths and are unaffected
+  // by what's removed here.
   //
-  // GATED on an active live-scan session. The agent's MonsoonReader
-  // children run continuously (per the `readers run continuously` lineage
-  // — 536dfe4 + 8613821), which means tags walk past the antennas 24/7
-  // even when nobody asked the system to scan. Letting every read mutate
-  // `items` quietly grew inventory in the background and surprised the
-  // operator: total active inventory ticks up while the dashboard's
-  // live-scan tile is off. Gate it: items only changes when an operator
-  // has explicitly started a live-scan session. cdm_reads still records
-  // every read (so per-antenna activity counters and reader online flags
-  // keep working), and other scan flows (cycle counts via handheld,
-  // explicit transfer scans) do their own ingestEpcs calls on their own
-  // ingestion paths — those are unaffected.
+  // Live scan's "real EPC" view still requires the decoder to run, so
+  // garbage reads (non-Carbon, malformed) don't inflate the counter.
+  // We run the decoder per unique EPC in this batch and stamp a
+  // `passes_formula` boolean on each cdm_reads row. The /state and
+  // /per-antenna queries then filter on `passes_formula = true` to show
+  // only structurally-valid Carbon tags.
+  //
+  // Decoder is pure (no DB calls) so calling it per EPC is cheap; the
+  // tenant config is loaded once per request and cached for the lifetime
+  // of the cache TTL inside epc-ingress.
   const antennaIdMap = await getAntennaIdMap(client, body.readerId);
   const dedupedEpcs = Array.from(new Set(body.reads.map((r) => r.epcHex.toUpperCase())));
-  // Map each unique EPC back to the antenna it was last seen on (best-effort
-  // device label). If the same EPC came from multiple antennas in this batch,
-  // the last one wins — fine for source attribution, doesn't affect status.
-  const lastAntennaForEpc = new Map<string, number | undefined>();
-  for (const r of body.reads) {
-    lastAntennaForEpc.set(r.epcHex.toUpperCase(), r.antennaNumber);
-  }
-  const liveScanActive = isLiveScanActive(auth.tenantId);
-  if (dedupedEpcs.length > 0 && liveScanActive) {
-    await ingestEpcs(client, dedupedEpcs.map((epc) => {
-      const antNum = lastAntennaForEpc.get(epc);
-      const antLabel = antNum !== undefined ? `${readerName} · A${antNum}` : readerName;
-      return {
-        tenantId: auth.tenantId,
-        epc,
-        source: "fixed_reader" as const,
-        sourceDeviceLabel: antLabel,
-        locationId: readerLocationId,
-        receivedAt: new Date(),
-      };
-    }));
+  const passesFormulaByEpc = new Map<string, boolean>();
+  if (dedupedEpcs.length > 0) {
+    const epcConfig = await loadEpcConfig(client, auth.tenantId);
+    if (epcConfig) {
+      for (const epc of dedupedEpcs) {
+        passesFormulaByEpc.set(epc, decodeEpc(epc, epcConfig).valid);
+      }
+    } else {
+      // Tenant has no epc-config row (should not happen post-migration
+      // 032). Without a decoder we can't say which reads pass; mark all
+      // as failing so live scan doesn't show garbage.
+      for (const epc of dedupedEpcs) passesFormulaByEpc.set(epc, false);
+    }
   }
   // Antenna lookup map is needed below for the cdm_reads insert too — already loaded above.
   if (body.reads.length === 0) return { inserted: 0 };
@@ -741,6 +736,7 @@ export async function ingestAgentReads(
   const epcs: string[] = [];
   const rssis: (number | null)[] = [];
   const readAts: string[] = [];
+  const passesFormulas: boolean[] = [];
   const now = new Date().toISOString();
 
   for (const r of body.reads) {
@@ -753,11 +749,16 @@ export async function ingestAgentReads(
     epcs.push(r.epcHex);
     rssis.push(r.rssi ?? null);
     readAts.push(r.readAt ?? now);
+    // Stamp per-row whether the EPC passed the tenant's decoder. Live
+    // scan filters by this so non-Carbon / malformed reads don't inflate
+    // the operator's "real EPCs in this session" count. Lookup is by
+    // uppercase EPC because the dedupe set above was uppercased.
+    passesFormulas.push(passesFormulaByEpc.get(r.epcHex.toUpperCase()) ?? false);
   }
 
   const result = await client.query(
     `INSERT INTO cdm_reads
-        (tenant_id, cdm_agent_id, reader_id, antenna_id, epc_hex, rssi, read_at)
+        (tenant_id, cdm_agent_id, reader_id, antenna_id, epc_hex, rssi, read_at, passes_formula)
      SELECT
         unnest($1::uuid[]),
         unnest($2::uuid[]),
@@ -765,7 +766,8 @@ export async function ingestAgentReads(
         NULLIF(unnest($4::text[]), '')::uuid,
         unnest($5::text[]),
         NULLIF(unnest($6::text[]), '')::int,
-        unnest($7::timestamptz[])`,
+        unnest($7::timestamptz[]),
+        unnest($8::boolean[])`,
     [
       tenantIds,
       agentIds,
@@ -774,6 +776,7 @@ export async function ingestAgentReads(
       epcs,
       rssis.map((x) => (x === null ? "" : String(x))),
       readAts,
+      passesFormulas,
     ],
   );
 
