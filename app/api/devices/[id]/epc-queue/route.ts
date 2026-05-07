@@ -55,19 +55,20 @@ export async function POST(
     );
   }
 
-  /* Tenant-scope check: the device must belong to this tenant + be authorized + handheld. */
+  /* Tenant + active-location guard. */
   const dev = await pool.query<{ ok: boolean }>(
     `SELECT TRUE AS ok FROM devices
      WHERE id = $1::uuid
        AND tenant_id = $2::uuid
        AND device_type = 'handheld_reader'
        AND COALESCE(is_authorized, FALSE) = TRUE
+       AND ($3::uuid IS NULL OR location_id = $3::uuid)
      LIMIT 1`,
-    [deviceId, session.tid],
+    [deviceId, session.tid, session.lid ?? null],
   );
   if (!dev.rows[0]) {
     return NextResponse.json(
-      { error: "Device not found or not an authorized handheld for this tenant" },
+      { error: "Device not found or not an authorized handheld for this location" },
       { status: 404 },
     );
   }

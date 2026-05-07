@@ -51,14 +51,18 @@ export async function POST(req: Request, { params }: Ctx) {
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
-  // Tenant ownership: antenna → reader → location → tenant.
+  // Tenant ownership: antenna → reader → location → tenant. Also enforce the
+  // active-location guard so a user signed into FL Mall can't tune Orlando's
+  // antennas.
   const owns = await pool.query<{ ok: boolean }>(
     `SELECT TRUE AS ok
        FROM devices a
        INNER JOIN devices r ON r.id = a.parent_device_id
        INNER JOIN locations l ON l.id = r.location_id AND l.tenant_id = $1::uuid
-       WHERE a.id = $2::uuid AND a.device_type = 'antenna'`,
-    [session.tid, id],
+       WHERE a.id = $2::uuid
+         AND a.device_type = 'antenna'
+         AND ($3::uuid IS NULL OR r.location_id = $3::uuid)`,
+    [session.tid, id, session.lid ?? null],
   );
   if (owns.rowCount === 0) {
     return NextResponse.json({ error: "Antenna not in tenant" }, { status: 404 });

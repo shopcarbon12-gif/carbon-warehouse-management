@@ -3,6 +3,7 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
+import { assertRowLocation } from "@/lib/server/assert-row-location";
 import { cleanBinContents } from "@/lib/queries/clean-bin";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,13 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
+
+  // Active-location guard.
+  const guard = await assertRowLocation(pool, "bins", id, session.tid, session.lid);
+  if (guard === "not_found")
+    return NextResponse.json({ error: "Bin not found" }, { status: 404 });
+  if (guard === "wrong_location")
+    return NextResponse.json({ error: "Wrong location for this bin" }, { status: 403 });
 
   const client = await pool.connect();
   try {

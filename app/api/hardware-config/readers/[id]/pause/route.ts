@@ -19,6 +19,9 @@ export async function POST(
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
+  // Active-location guard: only mutate when the reader belongs to the
+  // caller's current location. Without this, a user signed into FL Mall
+  // could pause an Orlando reader.
   const r = await pool.query<{ id: string }>(
     `UPDATE devices d
         SET scan_paused_at = now(),
@@ -28,9 +31,10 @@ export async function POST(
       WHERE d.id = $1::uuid
         AND d.location_id = l.id
         AND l.tenant_id = $2::uuid
+        AND ($4::uuid IS NULL OR d.location_id = $4::uuid)
         AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
       RETURNING d.id::text`,
-    [id, session.tid, session.sub],
+    [id, session.tid, session.sub, session.lid ?? null],
   );
   if (r.rowCount === 0) {
     return NextResponse.json({ error: "Reader not found" }, { status: 404 });

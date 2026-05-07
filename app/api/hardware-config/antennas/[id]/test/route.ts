@@ -33,14 +33,15 @@ export async function POST(req: Request, { params }: Ctx) {
 
   const { id } = await params;
 
-  // Tenant-scoped: confirm the antenna exists and belongs to this tenant
-  // (via location.tenant_id on the parent reader).
+  // Tenant + active-location scoped.
   const r = await pool.query<{ id: string; device_type: string }>(
     `SELECT a.id::text, a.device_type
        FROM devices a
        INNER JOIN locations l ON l.id = a.location_id AND l.tenant_id = $1::uuid
-      WHERE a.id = $2::uuid AND a.device_type = 'antenna'`,
-    [session.tid, id],
+      WHERE a.id = $2::uuid
+        AND a.device_type = 'antenna'
+        AND ($3::uuid IS NULL OR a.location_id = $3::uuid)`,
+    [session.tid, id, session.lid ?? null],
   );
   if (r.rowCount === 0) {
     return NextResponse.json({ error: "Antenna not found" }, { status: 404 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
+import { assertRowLocation } from "@/lib/server/assert-row-location";
 import { archiveBin } from "@/lib/server/overview-locations";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -20,6 +21,13 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
+
+  // Active-location guard.
+  const guard = await assertRowLocation(pool, "bins", id, session.tid, session.lid);
+  if (guard === "not_found")
+    return NextResponse.json({ error: "Bin not found" }, { status: 404 });
+  if (guard === "wrong_location")
+    return NextResponse.json({ error: "Wrong location for this bin" }, { status: 403 });
 
   const client = await pool.connect();
   try {

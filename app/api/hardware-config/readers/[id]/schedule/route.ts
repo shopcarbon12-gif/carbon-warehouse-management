@@ -48,6 +48,7 @@ export async function PATCH(
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
+  // Active-location guard.
   const r = await pool.query<{ id: string }>(
     `UPDATE devices d
         SET scan_schedule = $3::jsonb,
@@ -56,9 +57,10 @@ export async function PATCH(
       WHERE d.id = $1::uuid
         AND d.location_id = l.id
         AND l.tenant_id = $2::uuid
+        AND ($4::uuid IS NULL OR d.location_id = $4::uuid)
         AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
       RETURNING d.id::text`,
-    [id, session.tid, nextValue],
+    [id, session.tid, nextValue, session.lid ?? null],
   );
   if (r.rowCount === 0) {
     return NextResponse.json({ error: "Reader not found" }, { status: 404 });

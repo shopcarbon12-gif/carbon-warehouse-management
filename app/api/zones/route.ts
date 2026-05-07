@@ -55,6 +55,18 @@ export async function POST(req: Request) {
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
 
+  // body.locationId must match the active location on the session.
+  if (
+    session.lid &&
+    parsed.data.locationId &&
+    parsed.data.locationId !== session.lid
+  ) {
+    return NextResponse.json(
+      { error: "locationId must match your active location" },
+      { status: 403 },
+    );
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

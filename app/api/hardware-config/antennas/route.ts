@@ -35,6 +35,23 @@ export async function POST(req: Request) {
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
 
+  // Active-location guard: the parent reader must belong to the caller's
+  // active location.
+  if (session.lid && parsed.data.parentDeviceId) {
+    const r = await pool.query<{ location_id: string }>(
+      `SELECT location_id::text FROM devices
+        WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+      [parsed.data.parentDeviceId, session.tid],
+    );
+    if (r.rowCount === 0)
+      return NextResponse.json({ error: "Parent reader not found" }, { status: 404 });
+    if (r.rows[0].location_id !== session.lid)
+      return NextResponse.json(
+        { error: "Parent reader is at a different location" },
+        { status: 403 },
+      );
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

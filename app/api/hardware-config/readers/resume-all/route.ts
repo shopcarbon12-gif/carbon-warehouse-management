@@ -15,6 +15,7 @@ export async function POST(req: Request) {
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
+  // Scoped to the active location.
   const r = await pool.query<{ id: string }>(
     `UPDATE devices d
         SET scan_paused_at = NULL,
@@ -23,10 +24,11 @@ export async function POST(req: Request) {
        FROM locations l
       WHERE d.location_id = l.id
         AND l.tenant_id = $1::uuid
+        AND ($2::uuid IS NULL OR d.location_id = $2::uuid)
         AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
         AND d.scan_paused_at IS NOT NULL
       RETURNING d.id::text`,
-    [session.tid],
+    [session.tid, session.lid ?? null],
   );
   await pool.query(
     `INSERT INTO audit_log (tenant_id, user_id, action, entity, metadata)

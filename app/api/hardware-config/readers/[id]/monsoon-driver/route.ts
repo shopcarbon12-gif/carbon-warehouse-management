@@ -36,6 +36,7 @@ export async function POST(
     );
   }
 
+  // Active-location guard.
   const r = await pool.query<{ id: string }>(
     `UPDATE devices d
         SET config = jsonb_set(COALESCE(d.config, '{}'::jsonb), '{monsoon_driver}', to_jsonb($3::text), true),
@@ -44,9 +45,10 @@ export async function POST(
       WHERE d.id = $1::uuid
         AND d.location_id = l.id
         AND l.tenant_id = $2::uuid
+        AND ($4::uuid IS NULL OR d.location_id = $4::uuid)
         AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
       RETURNING d.id::text`,
-    [id, session.tid, parsed.data.driver],
+    [id, session.tid, parsed.data.driver, session.lid ?? null],
   );
   if (r.rowCount === 0) {
     return NextResponse.json({ error: "Reader not found" }, { status: 404 });

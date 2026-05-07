@@ -29,14 +29,18 @@ export async function POST(req: Request) {
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
+  // Scoped to the active location so a hard-reset clicked on FL Mall doesn't
+  // signal Orlando's agents to exit. Falls back to tenant-wide when no
+  // active location is set on the session.
   const r = await pool.query<{ id: string; name: string }>(
     `UPDATE cdm_agents
         SET recover_requested_at = now(),
             recover_requested_by = $2::uuid,
             updated_at = now()
        WHERE tenant_id = $1::uuid
+         AND ($3::uuid IS NULL OR location_id = $3::uuid)
        RETURNING id::text, name`,
-    [session.tid, session.sub],
+    [session.tid, session.sub, session.lid ?? null],
   );
 
   endSession(session.tid);

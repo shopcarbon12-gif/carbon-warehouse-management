@@ -35,6 +35,38 @@ export async function POST(req: Request) {
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
 
+  // Active-location guard: when creating, the supplied zone must belong to
+  // the caller's active location; when updating, the existing device must.
+  if (session.lid) {
+    if (parsed.data.zoneId) {
+      const z = await pool.query<{ location_id: string }>(
+        `SELECT location_id::text FROM zones
+          WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+        [parsed.data.zoneId, session.tid],
+      );
+      if (z.rowCount === 0)
+        return NextResponse.json({ error: "Zone not found" }, { status: 404 });
+      if (z.rows[0].location_id !== session.lid)
+        return NextResponse.json(
+          { error: "Zone is at a different location than your active one" },
+          { status: 403 },
+        );
+    } else if (parsed.data.id) {
+      const d = await pool.query<{ location_id: string }>(
+        `SELECT location_id::text FROM devices
+          WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+        [parsed.data.id, session.tid],
+      );
+      if (d.rowCount === 0)
+        return NextResponse.json({ error: "Reader not found" }, { status: 404 });
+      if (d.rows[0].location_id !== session.lid)
+        return NextResponse.json(
+          { error: "Wrong location for this resource" },
+          { status: 403 },
+        );
+    }
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
