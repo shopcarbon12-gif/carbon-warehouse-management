@@ -137,6 +137,17 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
     selectedReadersRef.current = selectedReaders;
   }, [selectedReaders]);
 
+  // Active scan-session id. Set when "Start scan" successfully wakes the
+  // reader via /api/scan-sessions/start; cleared on stop / commit / unmount /
+  // server-side expiry. While set, the workspace heartbeats /touch every 25s
+  // so the 60s idle expiry doesn't auto-drop the session under an active
+  // operator.
+  const [scanSessionId, setScanSessionId] = useState<string | null>(null);
+  const scanSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    scanSessionIdRef.current = scanSessionId;
+  }, [scanSessionId]);
+
   // Staged: keyed by custom_sku_id. Conflict rules enforced on every mutation.
   const [staged, setStaged] = useState<Map<string, StagedSku>>(() => new Map());
   const stagedRef = useRef(staged);
@@ -289,17 +300,114 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
     });
   }, []);
 
+  // Helpers to start/stop the scan-session that wakes the Transfer Bin
+  // reader. Default state is "every reader paused"; this is the only way
+  // a Transfer Out operator brings the reader online for their session.
+  const startScanSession = useCallback(async () => {
+    const ids = [...selectedReadersRef.current];
+    if (ids.length === 0) {
+      showToast("Pick a reader before starting a scan.");
+      return false;
+    }
+    // Workflow scan-session is per-reader. Transfer Out wakes the first
+    // selected reader; UI doesn't currently allow multi-reader Transfer
+    // Out (Transfer Bin is a single reader). Filtering would happen here
+    // if that ever changes.
+    try {
+      const res = await fetch("/api/scan-sessions/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ readerId: ids[0], kind: "transfer-out" }),
+      });
+      const j = (await res.json()) as { ok?: boolean; sessionId?: string; reason?: string };
+      if (!res.ok || !j.ok || !j.sessionId) {
+        if (j.reason === "reader_busy") {
+          showToast("Reader is busy with another workflow. Wait or stop the other session.");
+        } else {
+          showToast("Couldn't wake the reader. Try again.");
+        }
+        return false;
+      }
+      setScanSessionId(j.sessionId);
+      return true;
+    } catch {
+      showToast("Network error waking the reader.");
+      return false;
+    }
+  }, [showToast]);
+
+  const endScanSession = useCallback(async () => {
+    const id = scanSessionIdRef.current;
+    if (!id) return;
+    setScanSessionId(null);
+    try {
+      await fetch("/api/scan-sessions/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: id }),
+      });
+    } catch {
+      /* server-side idle expiry will release within 60s anyway */
+    }
+  }, []);
+
+  // 25s heartbeat keeps the session alive while the page is open & scanning.
+  useEffect(() => {
+    if (!scanSessionId) return;
+    const t = setInterval(() => {
+      void fetch("/api/scan-sessions/touch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: scanSessionId }),
+      }).catch(() => {});
+    }, 25_000);
+    return () => clearInterval(t);
+  }, [scanSessionId]);
+
+  // On unmount: end any active session so the reader doesn't stay woken
+  // for 60s of idle expiry after the operator navigates away.
+  useEffect(() => {
+    return () => {
+      const id = scanSessionIdRef.current;
+      if (id) {
+        // fire-and-forget; navigator.sendBeacon would be more reliable but
+        // requires a different signature. Best-effort fetch is enough.
+        void fetch("/api/scan-sessions/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: id }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+  }, []);
+
+  const toggleScan = useCallback(() => {
+    if (scanning) {
+      // Pause: end the scan-session, reader returns to default-paused.
+      setScanning(false);
+      void endScanSession();
+    } else {
+      // Start: wake the reader via scan-session, then flip scanning gate.
+      void (async () => {
+        const ok = await startScanSession();
+        if (ok) setScanning(true);
+      })();
+    }
+  }, [scanning, startScanSession, endScanSession]);
+
   const clearStaged = useCallback(() => {
     // Always restarts a session — both during an active session AND after a
     // commit (when the page is locked as a receipt). Either way, blank slate.
     setStaged(new Map());
     setScanning(false);
+    void endScanSession();
     setCommittedSlip(null);
     setSearchQ("");
     setSearchOpen(false);
     setSearchResults([]);
     setEpcsModalSku(null);
-  }, []);
+  }, [endScanSession]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // SSE — gated by scanningRef + selectedReadersRef
@@ -456,6 +564,10 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
       // in a new tab. Cleared by pressing Clear staged.
       setCommittedSlip({ id: data.transferId ?? "", slipNumber: slipNum });
       setScanning(false);
+      // Re-pause the reader the instant the operator commits — per the
+      // user-locked spec: antennas off when the action is done, no waiting
+      // for navigation.
+      void endScanSession();
       if (data.transferId) {
         try {
           window.open(
@@ -545,7 +657,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
           <button
             type="button"
             disabled={isLocked}
-            onClick={() => setScanning((s) => !s)}
+            onClick={() => toggleScan()}
             className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors disabled:opacity-40 ${
               scanning
                 ? "border-amber-500/60 bg-amber-950/40 text-amber-100"
