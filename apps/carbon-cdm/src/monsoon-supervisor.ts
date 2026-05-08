@@ -997,6 +997,13 @@ export class MonsoonSupervisor {
           backoffMs: slot.backoffMs,
         });
       }
+      // Rapid-respawn pattern (child exits without producing any bytes —
+      // typically TCP-refuse from a dead bridge or wrong port): silence
+      // watchdog can't fire because each spawn resets `lastByteAt`. Push
+      // offline here so the WMS reflects truth. Throttled to ~once/min.
+      if (!slot.bytesSinceSpawn) {
+        this.pushReaderOfflineIfDue(slot, Date.now());
+      }
       setTimeout(() => {
         void this.spawnReader(slot);
       }, delay);
@@ -1194,6 +1201,15 @@ export class MonsoonSupervisor {
         malformed: totalMal,
         cleanExit,
       });
+      // Rapid-respawn pattern (cleanExit:true, totalRecords:0, child exited
+      // without ever producing a byte) means the chip is silent — typically
+      // bridge port mismatch or the chassis isn't running its RFID firmware.
+      // Each spawn resets `lastByteAt` so the silence watchdog never fires
+      // on this pattern; without an explicit on-exit offline push the WMS
+      // would keep showing the reader online indefinitely.
+      if (!slot.bytesSinceSpawn) {
+        this.pushReaderOfflineIfDue(slot, Date.now());
+      }
       setTimeout(() => {
         void this.spawnReader(slot);
       }, delay);
