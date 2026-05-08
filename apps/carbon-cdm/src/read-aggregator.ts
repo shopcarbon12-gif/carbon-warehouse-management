@@ -48,6 +48,7 @@ export class ReadAggregator {
 
   enqueue(ev: ReadEvent): void {
     let q = this.queues.get(ev.readerId);
+    const wasEmpty = !q || q.length === 0;
     if (!q) {
       q = [];
       this.queues.set(ev.readerId, q);
@@ -69,6 +70,15 @@ export class ReadAggregator {
         dropped: overflow,
         queue_size_after: q.length,
       });
+    }
+    // First-byte fast-path: when a queue goes from empty → has-reads, fire
+    // an immediate flush instead of waiting up to 250ms for the next tick.
+    // Click-to-first-EPC cold-path was ~3-7s pre-fix; this saves the
+    // tail 250ms (one tick) on the first read after a reader spawns.
+    // Subsequent reads keep the 250ms buffer (avoids flooding the WMS
+    // POST endpoint at high read rates).
+    if (wasEmpty && ev.reads.length > 0 && !this.flushing) {
+      void this.flush();
     }
   }
 

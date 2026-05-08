@@ -2,20 +2,27 @@ import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { authenticateAgentToken } from "@/lib/server/cdm-agents";
 import { listActiveSessionsForLocation } from "@/lib/server/antenna-test-sessions";
+import { listActiveSessionsForLocation as listScanSessionsForLocation } from "@/lib/server/scan-sessions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Agent fast-poll for active antenna-test sessions at its location.
+ * Agent fast-poll for active sessions at its location.
  * Bearer-authenticated by the agent's API token. Returns only sessions for
  * the agent's own location (by joining via cdm_agents row).
  *
- * Response: { sessions: [{ id, readerId, antennaId, antennaNumber, flags,
- *   startedAt }, ...] }
+ * Two session families:
+ *   - sessions     — antenna-test sessions (TEST_MODE: preempts the reader,
+ *                    reads go to /api/antenna-test/ingest, no DB writes)
+ *   - scanSessions — workflow wakes from Transfer Out / Cycle Counts /
+ *                    Print-Commission. Supervisor treats the reader as
+ *                    un-paused while a session is active, overriding any
+ *                    persisted scan_paused_at. Reads flow through the normal
+ *                    /api/cdm-agents/reads pipeline.
  *
- * Empty array = no test active anywhere; agent reverts everything to
- * normal scan.
+ * Empty arrays = no workflow active; supervisor reverts to baseline (which
+ * is "paused" by default in the new model).
  */
 
 export async function GET(req: Request) {
@@ -39,5 +46,15 @@ export async function GET(req: Request) {
     startedAt: new Date(s.startedAt).toISOString(),
   }));
 
-  return NextResponse.json({ sessions }, { headers: { "Cache-Control": "no-store" } });
+  const scanSessions = listScanSessionsForLocation(a.locationId).map((s) => ({
+    id: s.id,
+    readerId: s.readerId,
+    kind: s.kind,
+    startedAt: new Date(s.startedAt).toISOString(),
+  }));
+
+  return NextResponse.json(
+    { sessions, scanSessions },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

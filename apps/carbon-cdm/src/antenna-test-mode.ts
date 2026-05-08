@@ -1,9 +1,10 @@
 import type { AgentEnv } from "./config.js";
 import { log } from "./log.js";
 import {
-  fetchActiveAntennaTestSessions,
+  fetchActiveSessions,
   postAntennaTestReads,
   type ActiveAntennaTestSession,
+  type ActiveScanSession,
   type AntennaTestIngestRead,
 } from "./wms-client.js";
 
@@ -32,8 +33,14 @@ import {
  *  which the WMS fans out via SSE — does NOT write to cdm_reads.
  */
 
-/** WMS poll cadence — fast enough for click-to-spawn under ~1.5 s. */
-const POLL_INTERVAL_MS = 1_000;
+/** WMS poll cadence — drives BOTH antenna-test session pickup AND
+ *  scan-session wake (transfer-out / cycle-count / print-commission). 250 ms
+ *  was chosen because the scan-session model defaults readers to PAUSED:
+ *  the click-to-first-EPC cold-path cost is dominated by this interval.
+ *  At 1 s we measured up to ~8 s cold-path; at 250 ms it's ~2-3 s, with
+ *  the remainder being hardware floor (chip mux init + first-tag detect).
+ *  Cost: 4× more poll requests, each ~50 ms server-side. Negligible load. */
+const POLL_INTERVAL_MS = 250;
 /** Micro-batcher: ship reads at least this often. */
 const FLUSH_INTERVAL_MS = 100;
 /** Micro-batcher: or earlier if we hit this many. */
@@ -77,6 +84,13 @@ export type AntennaTestSupervisorHooks = {
   /** Tell the supervisor to leave TEST_MODE for the reader; normal scan
    *  flags resume on next reconcile cycle. */
   leaveTestMode: (readerId: string) => void;
+  /** Update the set of reader IDs that have an ACTIVE workflow scan-session
+   *  (Transfer Out / Cycle Counts / Print-Commission). The supervisor's
+   *  reconcile treats these readers as un-paused regardless of their
+   *  persisted scan_paused_at. Default state in the new model is paused;
+   *  this is the only mechanism (besides Hardware Config admin Resume) that
+   *  brings a reader to active scan. */
+  setActiveScanSessionReaders: (readerIds: Set<string>) => void;
 };
 
 type Pending = {
@@ -176,8 +190,9 @@ export class AntennaTestController {
     if (this.polling) return; // simple in-flight guard
     this.polling = true;
     try {
-      const sessions = await fetchActiveAntennaTestSessions(this.env);
-      this.reconcile(sessions);
+      const { antennaTestSessions, scanSessions } = await fetchActiveSessions(this.env);
+      this.reconcile(antennaTestSessions);
+      this.reconcileScanSessions(scanSessions);
     } catch (e) {
       // Don't spam — log at debug. Real operator-visible errors will
       // surface via the SSE channel anyway when reads stop flowing.
@@ -187,6 +202,14 @@ export class AntennaTestController {
     } finally {
       this.polling = false;
     }
+  }
+
+  /** Forward the current scan-session reader set to the supervisor.
+   *  Cheap to call every poll (the supervisor diffs internally). */
+  private reconcileScanSessions(scanSessions: ActiveScanSession[]): void {
+    if (!this.hooks) return;
+    const readerIds = new Set<string>(scanSessions.map((s) => s.readerId));
+    this.hooks.setActiveScanSessionReaders(readerIds);
   }
 
   private reconcile(sessions: ActiveAntennaTestSession[]): void {

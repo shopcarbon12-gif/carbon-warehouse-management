@@ -262,6 +262,29 @@ export async function fetchActiveAntennaTestSessions(
   return r.sessions ?? [];
 }
 
+/** Workflow scan-sessions that wake an otherwise-paused reader. The supervisor
+ *  treats listed readerIds as un-paused while a session is active. */
+export type ActiveScanSession = {
+  id: string;
+  readerId: string;
+  kind: "transfer-out" | "cycle-count" | "print-commission";
+  startedAt: string;
+};
+
+export async function fetchActiveSessions(env: AgentEnv): Promise<{
+  antennaTestSessions: ActiveAntennaTestSession[];
+  scanSessions: ActiveScanSession[];
+}> {
+  const r = await request<{
+    sessions?: ActiveAntennaTestSession[];
+    scanSessions?: ActiveScanSession[];
+  }>(env, "GET", "/api/cdm-agents/active-sessions");
+  return {
+    antennaTestSessions: r.sessions ?? [],
+    scanSessions: r.scanSessions ?? [],
+  };
+}
+
 export type AntennaTestIngestRead = {
   epcHex: string;
   rssiDbm: number;

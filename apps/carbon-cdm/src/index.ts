@@ -116,6 +116,8 @@ async function main(): Promise<void> {
       });
     },
     leaveTestMode: (readerId) => supervisor.leaveTestMode(readerId),
+    setActiveScanSessionReaders: (readerIds) =>
+      supervisor.setActiveScanSessionReaders(readerIds),
   });
   antennaTest.start();
 

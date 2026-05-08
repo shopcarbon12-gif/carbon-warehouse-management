@@ -270,6 +270,15 @@ export class MonsoonSupervisor {
   private streamWatchdogHandle: NodeJS.Timeout | null = null;
   /** Set of antenna IDs we've already started a test for (one-shot per pending). */
   private testedAntennas = new Set<string>();
+  /** Reader IDs that have an ACTIVE workflow scan-session (Transfer Out /
+   *  Cycle Counts / Print-Commission). Reconcile treats these as un-paused
+   *  even when bundle.effective_paused = true. Updated every ~250ms by the
+   *  agent's active-sessions poll handler. Default state in the new model
+   *  is "every reader paused"; this set is the wake mechanism. */
+  private activeScanSessionReaders = new Set<string>();
+  /** Last-bundle reference so setActiveScanSessionReaders can reconcile
+   *  immediately on session change without waiting for the next config-pull. */
+  private lastBundle: AgentConfigBundle | null = null;
 
   /** Optional callback for routing TEST_MODE reads to the antenna-test
    *  controller. Set via attachTestModeHandler() after construction. */
@@ -346,6 +355,28 @@ export class MonsoonSupervisor {
     } catch {
       /* never let a callback exception kill the watchdog loop */
     }
+  }
+
+  /**
+   * Update the set of reader IDs that have an active workflow scan-session.
+   * Called from the agent's active-sessions poll handler ~every 250 ms.
+   * Triggers an immediate reconcile only if the set actually changed —
+   * avoids spinning every poll tick when nothing changed.
+   */
+  setActiveScanSessionReaders(readerIds: Set<string>): void {
+    const prev = this.activeScanSessionReaders;
+    if (prev.size === readerIds.size) {
+      let same = true;
+      for (const id of prev) {
+        if (!readerIds.has(id)) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
+    this.activeScanSessionReaders = new Set(readerIds);
+    if (this.lastBundle) this.reconcile(this.lastBundle);
   }
 
   /**
@@ -526,18 +557,27 @@ export class MonsoonSupervisor {
    */
   reconcile(bundle: AgentConfigBundle): void {
     this.bundleVersion += 1;
+    this.lastBundle = bundle;
 
-    // Readers run continuously unless explicitly paused. The previous
-    // design gated this on `bundle.live_scan_active`, which was driven by
-    // the dashboard tile's 60-second session prune — meaning an idle
-    // dashboard tab silently killed every reader and broke antenna tests.
-    // Operator-driven OFF switches still work: per-reader pause + the
-    // weekly schedule both flip `effective_paused`, and the tenant-wide
-    // Pause-all + Hard-reset buttons cover bulk control. The dashboard
-    // tile is now informational, not a kill switch.
+    // Default-paused-readers model: a reader is desired (= spawn a child)
+    // only when ONE of these is true:
+    //   1. bundle.effective_paused is FALSE — the operator manually un-paused
+    //      it from Hardware Config, or the schedule says it's a scan window.
+    //   2. activeScanSessionReaders.has(reader.id) — a workflow page
+    //      (Transfer Out / Cycle Counts / Print-Commission) has an open
+    //      scan-session for this reader. The session-end POST will revert.
+    //
+    // Previously this filter only checked effective_paused. The new wake-
+    // for-workflow path overrides paused state for the duration of the
+    // session, then default-paused readers stop scanning the moment the
+    // operator commits or navigates away.
     const desiredById = new Map(
       bundle.readers
-        .filter((r) => !(r.effective_paused ?? false))
+        .filter(
+          (r) =>
+            !(r.effective_paused ?? false) ||
+            this.activeScanSessionReaders.has(r.id),
+        )
         .map((r) => [r.id, r] as const),
     );
 
