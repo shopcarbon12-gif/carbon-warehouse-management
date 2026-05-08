@@ -34,10 +34,22 @@ export default async function CustomerDetail({
         birthday: string | null;
         shopify_customer_gid: string | null;
         shopify_linked_at: string | null;
+        created_at: string;
+        created_via: string | null;
+        created_at_geo: string | null;
+        pos_location_name: string | null;
+        created_by_email: string | null;
       }>(
-        `SELECT id, first_name, last_name, email, mobile_phone, phone,
-                birthday::text, shopify_customer_gid, shopify_linked_at::text
-           FROM pos_customers WHERE id = $1`,
+        `SELECT pc.id, pc.first_name, pc.last_name, pc.email, pc.mobile_phone, pc.phone,
+                pc.birthday::text, pc.shopify_customer_gid, pc.shopify_linked_at::text,
+                pc.created_at::text,
+                pc.created_via, pc.created_at_geo,
+                pl.name AS pos_location_name,
+                u.email AS created_by_email
+           FROM pos_customers pc
+           LEFT JOIN pos_locations pl ON pl.id = pc.pos_location_id
+           LEFT JOIN users         u  ON u.id  = pc.created_by_user_id
+          WHERE pc.id = $1`,
         [customerId],
       );
       if (c.rowCount === 0) return null;
@@ -75,6 +87,18 @@ export default async function CustomerDetail({
   if (!data) notFound();
   const c = data.customer;
 
+  function provenanceLabel(via: string | null | undefined): string {
+    switch (via) {
+      case "pos":        return "Store register";
+      case "shopify":    return "Online (Shopify)";
+      case "wms_manual": return "WMS · Manual add";
+      case "wms_csv":    return "WMS · Bulk CSV";
+      case "admin":      return "Admin";
+      case "legacy":     return "Legacy (pre-tracking)";
+      default:           return "—";
+    }
+  }
+
   async function adjust(formData: FormData) {
     "use server";
     const session = await getSession();
@@ -108,6 +132,24 @@ export default async function CustomerDetail({
           {c.mobile_phone || c.phone ? ` · ${c.mobile_phone ?? c.phone}` : ""}
           {c.birthday ? ` · 🎂 ${c.birthday}` : ""}
         </p>
+        <div className="mt-3 inline-flex items-center gap-3 px-3 py-2 border border-border bg-muted/40 text-xs text-muted-foreground">
+          <span>
+            <b className="text-foreground">Source:</b> {provenanceLabel(c.created_via)}
+          </span>
+          <span aria-hidden>·</span>
+          <span>
+            <b className="text-foreground">Where added:</b>{" "}
+            {c.pos_location_name ?? c.created_at_geo ?? "—"}
+          </span>
+          <span aria-hidden>·</span>
+          <span>
+            <b className="text-foreground">By:</b> {c.created_by_email ?? "—"}
+          </span>
+          <span aria-hidden>·</span>
+          <span>
+            <b className="text-foreground">When:</b> {new Date(c.created_at).toLocaleString()}
+          </span>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
