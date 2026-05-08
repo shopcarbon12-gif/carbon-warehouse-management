@@ -43,10 +43,9 @@ const bodySchema = z.object({
     .optional(),
 });
 
-// Default printer line uses raw TCP / JetDirect (port 9100) to match the
-// mobile app. Memory line 36: HTTP /pstprnt 200's on Samsung but doesn't
-// reliably print. 9100 is reliable from both transports.
-const DEFAULT_PRINTER_LINE = "192.168.1.3:9100 / RAW";
+// Default printer line: 80/PSTPRNT for desktop-browser callers (browsers
+// can't open raw TCP). Mobile callers explicitly pass 9100 in their body.
+const DEFAULT_PRINTER_LINE = "192.168.1.3:80 / PSTPRNT";
 
 export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -98,8 +97,7 @@ export async function POST(req: Request) {
     printerUri = p.uri;
   } else if (parsed.data.printerIp) {
     printerHost = parsed.data.printerIp;
-    // Default to raw TCP / JetDirect (port 9100) to match the mobile app.
-    printerPort = parsed.data.printerPort ?? 9100;
+    printerPort = parsed.data.printerPort ?? 80;
     printerUri = parsed.data.printerUri ?? "PSTPRNT";
   } else {
     const p = parsePrinterLine(DEFAULT_PRINTER_LINE);

@@ -16,6 +16,10 @@ export const DEFAULT_RFID_COMMISSION_SETTINGS: RfidCommissionSettings = {
   companyPrefix: 1_044_991,
   itemRefBits: 40,
   serialBits: 36,
+  // Default 80/PSTPRNT — browsers can't open raw TCP, so desktop-browser
+  // direct print uses HTTP /pstprnt. Mobile (Flutter) hardcodes 9100 in
+  // its own client (lan_zpl_printer.dart), and that works fine in
+  // parallel because the printer accepts both transports.
   printerLine: "192.168.1.3:80 / PSTPRNT",
   labelWidthDots: 812,
   labelHeightDots: 594,

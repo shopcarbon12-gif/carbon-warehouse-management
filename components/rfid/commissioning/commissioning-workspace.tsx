@@ -187,9 +187,17 @@ export function CommissioningWorkspace() {
     setElapsedMs(0);
 
     try {
+      // Tell the server to skip its own print attempt — the cloud WMS at
+      // Coolify can't reach LAN-only printers (192.168.1.3 is RFC1918,
+      // not routable from Hetzner). Browser fires the print directly to
+      // the printer's HTTP /pstprnt after we get the ZPL back. Same shape
+      // as the mobile flow (Flutter handheld also direct-prints).
       const res = await fetch("/api/rfid/commission", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Carbon-Client-Print": "1",
+        },
         body: JSON.stringify({
           customSkuId: selected.id,
           qty,
@@ -212,6 +220,10 @@ export function CommissioningWorkspace() {
         printer_ok?: boolean;
         printer_error?: string | null;
         printer_url?: string;
+        zpl?: string;
+        printer_host?: string;
+        printer_port?: number;
+        printer_uri?: string;
       };
       if (!res.ok) {
         stopTimerFreeze();
@@ -220,17 +232,48 @@ export function CommissioningWorkspace() {
         return;
       }
 
+      // Browser-direct print: server returned ZPL + printer endpoint;
+      // we POST the ZPL to the printer ourselves (browser is on the LAN
+      // with the printer; cloud WMS isn't). Browsers can't open raw TCP
+      // (port 9100), so this only works against the printer's HTTP
+      // /pstprnt endpoint at port 80 — which is the desktop default.
       setPhase("PRINTING");
+      let printerOk = false;
+      let printerError: string | null = null;
+      const printerUrl = `http://${data.printer_host ?? host}:${data.printer_port ?? port}/${(data.printer_uri ?? uri).toLowerCase()}`;
+      if (data.zpl) {
+        try {
+          const printRes = await fetch(printerUrl, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+            body: data.zpl,
+            // Many warehouse printers don't return CORS headers; mode
+            // "no-cors" lets the request fire even though we can't read
+            // the response. The printer prints either way.
+            mode: "no-cors",
+            signal: AbortSignal.timeout(10_000),
+          });
+          // In no-cors mode we get an opaque response — assume success
+          // if no exception was thrown.
+          printerOk = true;
+          // Suppress unused-var warning; printRes is opaque in no-cors
+          void printRes;
+        } catch (e) {
+          printerOk = false;
+          printerError = e instanceof Error ? e.message : "Printer fetch failed";
+        }
+      } else {
+        printerError = "No ZPL returned from server";
+      }
       await new Promise((r) => window.setTimeout(r, PRINTING_SETTLE_MS));
 
       stopTimerFreeze();
       setPhase("SUCCESS");
       const n = data.inserted?.length ?? 0;
       const stock = data.status_final ?? "—";
-      const printerLine =
-        data.printer_ok === false
-          ? ` Printer unreachable (${data.printer_url ?? "—"}): ${data.printer_error ?? "error"}. Items saved; audit logged.`
-          : ` Sent ${n} job(s) to ${data.printer_url ?? "printer"}.`;
+      const printerLine = printerOk
+        ? ` Sent ${n} job(s) to ${printerUrl}.`
+        : ` Printer unreachable (${printerUrl}): ${printerError ?? "error"}. Items saved; audit logged.`;
       setMessage(
         `Created ${n} item(s) — ${stock}.${printerLine} Audit: rfid_print.`,
       );

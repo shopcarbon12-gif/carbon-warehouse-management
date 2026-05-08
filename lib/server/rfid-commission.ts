@@ -224,7 +224,7 @@ export async function rfidCommissionPrepare(
     item_ref_bits: 40,
     serial_bits: 36,
     printer_ip: printerIp ?? "192.168.1.3",
-    printer_port: printerPort ?? 9100,
+    printer_port: printerPort ?? 80,
     printer_uri: printerUri ?? "PSTPRNT",
     label_dimensions: { w: pw, h: ll },
     bin_id: binId ?? null,
@@ -316,8 +316,14 @@ export async function rfidCommissionPrintAndAudit(
   let http_status: number | null = null;
   let printer_error: string | null = null;
 
+  // Server-side print path: works ONLY when the WMS has direct LAN
+  // reachability to the printer (on-prem deploy, dev workstation on the
+  // warehouse Wi-Fi). The cloud Coolify WMS cannot reach 192.168.1.3 —
+  // for that, callers should send `X-Carbon-Client-Print: 1` so the
+  // route returns the ZPL and the browser fires the print itself
+  // (browser is on the LAN; printer is on the LAN; HTTP /pstprnt works).
+  // Routes by port: 9100 → raw TCP, anything else → HTTP /pstprnt.
   if (parsed.printerPort === 9100) {
-    // Raw TCP / JetDirect — preferred path, matches mobile-app behavior.
     const rawErr = await sendZplViaTcp(parsed.printerHost, parsed.printerPort, parsed.zpl);
     printer_ok = rawErr === null;
     printer_error = rawErr;

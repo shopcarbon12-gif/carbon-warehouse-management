@@ -39,22 +39,23 @@ export async function POST(req: Request) {
   }
 
   const host = parsed.data.printerIp ?? "192.168.1.3";
-  // Default to raw TCP / JetDirect (port 9100). Mobile app uses 9100;
-  // desktop server-side now matches via sendZplViaTcp in
-  // rfid-commission.ts. Memory line 36: HTTP /pstprnt 200's but doesn't
-  // print on Samsung mobile. 9100 raw is the reliable transport.
-  const port = parsed.data.printerPort ?? 9100;
+  // Mobile app prints via raw TCP 9100 from-device (lan_zpl_printer.dart);
+  // browser-side desktop print uses HTTP /pstprnt at port 80 (browsers
+  // can't open raw TCP). Default to 80/PSTPRNT to match what a browser
+  // can actually do; mobile callers explicitly pass 9100.
+  const port = parsed.data.printerPort ?? 80;
   const uri = parsed.data.printerUri ?? "PSTPRNT";
-  // When the request comes from the handheld (X-Carbon-Mobile: 1) we
-  // skip the server-side print attempt entirely. The cloud WMS can't
-  // route to LAN-only printers (192.168.1.3:* lives on the warehouse
-  // network, blocked from Hetzner egress); the prior request hung on
-  // its outbound POST to the printer until Coolify's request timeout
-  // closed the connection, surfacing as "Print fetch failed" on the
-  // handheld. The handheld is on the same LAN as the printer, so it
-  // sends ZPL directly via TCP after this response returns.
+  // Skip the server-side print attempt entirely when the caller is going
+  // to print from-device (mobile handheld OR desktop browser on the LAN).
+  // Cloud WMS at Coolify can't reach 192.168.1.3 anyway; trying just
+  // wastes 12s of timeout. Both client paths receive the ZPL in the
+  // response and fire the print themselves.
+  //   X-Carbon-Mobile: 1        — Flutter handheld
+  //   X-Carbon-Client-Print: 1  — desktop browser on the LAN
+  //   printerIp === "skip"      — explicit opt-out for any caller
   const skipServerPrint =
     req.headers.get("x-carbon-mobile") === "1" ||
+    req.headers.get("x-carbon-client-print") === "1" ||
     parsed.data.printerIp === "skip";
 
   const client = await pool.connect();
