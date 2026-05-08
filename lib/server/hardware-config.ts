@@ -18,6 +18,14 @@ export type HardwareReaderRow = {
   mac_address: string | null;
   device_type: string;
   status_online: boolean;
+  /** Tri-state Hardware Config dot; derived server-side. Distinguishes the
+   *  ambiguous case where the chassis is on the LAN (bridge responding to
+   *  agent's wiznet-cli sweep) but the chip isn't producing valid tag-read
+   *  bytes — chassis firmware fault rather than network/cable fault.
+   *    "online"    — chip producing valid output (status_online = true)
+   *    "reachable" — bridge seen on LAN within freshness window, no reads
+   *    "offline"   — bridge missed last few sweeps OR no MAC bound */
+  bridge_state: "online" | "reachable" | "offline";
   config: Record<string, unknown>;
   cdm_agent_id: string | null;
   cdm_agent_name: string | null;
@@ -72,6 +80,11 @@ type RawDevice = {
    *  Used here (with a 60s freshness threshold) to derive the antenna's
    *  status_online dot. Reader rows ignore this field. */
   last_read_at: string | null;
+  /** Bumped by ingestWiznetDiscoveries on every MAC match in the agent's
+   *  LAN sweep. Used here (with a ~3 min freshness window matching the
+   *  agent's stale-row purge cutoff) to derive the reader's tri-state
+   *  bridge_state. Antenna rows ignore this field. */
+  bridge_seen_at: string | null;
 };
 
 /**
@@ -81,6 +94,12 @@ type RawDevice = {
  * for not reading when the operator deliberately turned the reader off).
  */
 const ANTENNA_FRESHNESS_MS = 60_000;
+/**
+ * Bridge-reachability freshness window. Agent runs `wiznet-cli -d` every
+ * minute; ~3 missed sweeps = solid signal that the bridge is off the LAN.
+ * Matches the existing wiznet-discoveries.ts purge cutoff for orphan rows.
+ */
+const BRIDGE_REACHABLE_MS = 3 * 60_000;
 
 export async function buildHardwareConfigTree(
   pool: Pool,
@@ -139,7 +158,8 @@ export async function buildHardwareConfigTree(
          d.location_id::text AS location_id,
          d.scan_paused_at::text AS scan_paused_at,
          d.scan_schedule,
-         d.last_read_at::text AS last_read_at
+         d.last_read_at::text AS last_read_at,
+         d.bridge_seen_at::text AS bridge_seen_at
        FROM devices d
        LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
        WHERE d.tenant_id = $1::uuid
@@ -195,6 +215,18 @@ export async function buildHardwareConfigTree(
   const readersByLocationUnzoned = new Map<string, HardwareReaderRow[]>();
   for (const d of devices.rows) {
     if (!READER_TYPES.has(d.device_type)) continue;
+    // Tri-state derivation: chip producing valid reads beats everything;
+    // otherwise fall back to "is the bridge on the LAN" via bridge_seen_at.
+    // Operators reading the dot get an actionable signal — yellow means
+    // "look at the chassis firmware/state, not the network/cable."
+    const bridgeFresh =
+      d.bridge_seen_at !== null &&
+      nowMs - new Date(d.bridge_seen_at).getTime() <= BRIDGE_REACHABLE_MS;
+    const bridgeState: "online" | "reachable" | "offline" = d.status_online
+      ? "online"
+      : bridgeFresh
+        ? "reachable"
+        : "offline";
     const reader: HardwareReaderRow = {
       id: d.id,
       name: d.name,
@@ -202,6 +234,7 @@ export async function buildHardwareConfigTree(
       mac_address: d.mac_address,
       device_type: d.device_type,
       status_online: d.status_online,
+      bridge_state: bridgeState,
       config: (d.config ?? {}) as Record<string, unknown>,
       cdm_agent_id: d.cdm_agent_id,
       cdm_agent_name: d.cdm_agent_name,

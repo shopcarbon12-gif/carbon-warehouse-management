@@ -98,9 +98,15 @@ export async function ingestWiznetDiscoveries(
     if (known.rowCount && known.rows[0]) {
       matchedKnown += 1;
       const row = known.rows[0];
+      // Always bump bridge_seen_at — this is the per-device LAN-reachability
+      // heartbeat that powers the Hardware Config tri-state dot. We update
+      // it whether or not the IP changed: the signal we're surfacing is
+      // "agent's discovery sweep saw your bridge in the last N seconds,"
+      // not "we changed your IP." Only writes the column for bound readers,
+      // unbound bridges keep their state in cdm_agent_discoveries.last_seen_at.
       if (row.network_address !== d.ip) {
         await client.query(
-          `UPDATE devices SET network_address = $1, updated_at = now() WHERE id = $2::uuid`,
+          `UPDATE devices SET network_address = $1, bridge_seen_at = now(), updated_at = now() WHERE id = $2::uuid`,
           [d.ip, row.id],
         );
         ipUpdated += 1;
@@ -117,6 +123,11 @@ export async function ingestWiznetDiscoveries(
               source: "wiznet_discovery",
             }),
           ],
+        );
+      } else {
+        await client.query(
+          `UPDATE devices SET bridge_seen_at = now() WHERE id = $1::uuid`,
+          [row.id],
         );
       }
       // The bridge is now bound to a device — clear any pending discovery
@@ -157,7 +168,7 @@ export async function ingestWiznetDiscoveries(
       const deviceId = byIp.rows[0].id;
       await client.query(
         `UPDATE devices
-            SET mac_address = $1, updated_at = now()
+            SET mac_address = $1, bridge_seen_at = now(), updated_at = now()
           WHERE id = $2::uuid`,
         [macLower, deviceId],
       );

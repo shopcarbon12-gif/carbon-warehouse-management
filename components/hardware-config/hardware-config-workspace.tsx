@@ -452,14 +452,30 @@ function CdmAgentsSection({
   );
 }
 
-function StatusPill({ status }: { status: "online" | "offline" | "degraded" }) {
+function StatusPill({
+  status,
+}: {
+  status: "online" | "offline" | "degraded" | "reachable";
+}) {
+  // "reachable" = reader's WIZnet bridge was seen on the LAN within the
+  // freshness window, but the chip isn't producing valid tag-read bytes.
+  // Renders amber so operators can distinguish chassis-firmware faults
+  // (yellow) from cable/network/bridge faults (gray "offline").
   const map: Record<typeof status, string> = {
     online: "bg-green-500/15 text-green-400 border-green-500/40",
     offline: "bg-zinc-500/15 text-zinc-400 border-zinc-500/40",
     degraded: "bg-yellow-500/15 text-yellow-400 border-yellow-500/40",
+    reachable: "bg-amber-500/15 text-amber-400 border-amber-500/40",
   };
+  // Tooltip on the amber state; aimed squarely at the operator who'll see
+  // ".82 reachable" and want to know what to check.
+  const title =
+    status === "reachable"
+      ? "Bridge on the LAN, but the chip is not producing valid tag reads. Check chassis power and firmware."
+      : undefined;
   return (
     <span
+      title={title}
       className={`inline-block rounded border px-1.5 py-0.5 font-mono text-[0.6rem] uppercase ${map[status]}`}
     >
       {status}
@@ -682,7 +698,7 @@ function ReaderCard({
         ) : (
           <span className="font-mono text-[0.6rem] text-yellow-400/70">unmanaged</span>
         )}
-        <StatusPill status={reader.status_online ? "online" : "offline"} />
+        <StatusPill status={reader.bridge_state} />
         {isManualPaused ? (
           <span className="rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300">
             stopped
