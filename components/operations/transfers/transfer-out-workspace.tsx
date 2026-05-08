@@ -163,6 +163,12 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
     }, 3500);
   }, []);
 
+  // Reader-busy conflict state (409 from /api/scan-sessions/start). Stores
+  // the OTHER workflow's session id so the operator can choose to stop it
+  // and take the reader. Mirrors the antenna-test takeover pattern.
+  const [conflictSessionId, setConflictSessionId] = useState<string | null>(null);
+  const [conflictKind, setConflictKind] = useState<string | null>(null);
+
   // Non-RFID search.
   const [searchQ, setSearchQ] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -319,22 +325,55 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ readerId: ids[0], kind: "transfer-out" }),
       });
-      const j = (await res.json()) as { ok?: boolean; sessionId?: string; reason?: string };
+      const j = (await res.json()) as {
+        ok?: boolean;
+        sessionId?: string;
+        reason?: string;
+        existing?: { id: string; kind: string };
+      };
       if (!res.ok || !j.ok || !j.sessionId) {
-        if (j.reason === "reader_busy") {
-          showToast("Reader is busy with another workflow. Wait or stop the other session.");
+        if (j.reason === "reader_busy" && j.existing?.id) {
+          setConflictSessionId(j.existing.id);
+          setConflictKind(j.existing.kind);
+          showToast(
+            `Reader is busy with another ${j.existing.kind} workflow. Click "Stop other & start here" to take it over.`,
+          );
         } else {
           showToast("Couldn't wake the reader. Try again.");
         }
         return false;
       }
       setScanSessionId(j.sessionId);
+      setConflictSessionId(null);
+      setConflictKind(null);
       return true;
     } catch {
       showToast("Network error waking the reader.");
       return false;
     }
   }, [showToast]);
+
+  // Stop whichever workflow currently owns the reader and take it over.
+  // Mirrors the antenna-test takeover pattern (Stop other & start here).
+  // Same-tenant scope means /scan-sessions/end accepts another operator's
+  // session id; we then briefly pause so the agent observes the release
+  // before we ask it to wake the reader again.
+  const takeoverAndStart = useCallback(async () => {
+    if (!conflictSessionId) return;
+    try {
+      await fetch("/api/scan-sessions/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: conflictSessionId }),
+      }).catch(() => {});
+    } finally {
+      setConflictSessionId(null);
+      setConflictKind(null);
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    const ok = await startScanSession();
+    if (ok) setScanning(true);
+  }, [conflictSessionId, startScanSession]);
 
   const endScanSession = useCallback(async () => {
     const id = scanSessionIdRef.current;
@@ -685,6 +724,17 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
             <ScanLine className="h-4 w-4" />
             Clear staged
           </button>
+          {conflictSessionId ? (
+            <button
+              type="button"
+              onClick={() => void takeoverAndStart()}
+              className="inline-flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-950/40 px-4 py-2.5 font-mono text-xs font-semibold text-amber-100 hover:bg-amber-900/40"
+              title={`Stop the in-progress ${conflictKind ?? "workflow"} session and take this reader.`}
+            >
+              <Radio className="h-4 w-4 text-amber-300" />
+              Stop other & start here
+            </button>
+          ) : null}
         </div>
 
         {/* Non-RFID typeahead */}

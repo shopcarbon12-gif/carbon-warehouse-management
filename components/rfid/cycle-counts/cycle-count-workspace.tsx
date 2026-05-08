@@ -493,6 +493,14 @@ function ActiveSessionView({
   // scan-session API is per-reader.
   const scanSessionIdsRef = useRef<Map<string, string>>(new Map());
 
+  // Reader-busy conflicts (409 from /api/scan-sessions/start). Maps
+  // readerId → conflicting session id (the OTHER workflow's session). The
+  // operator can take any of them over via the busy banner. The map
+  // updates whenever a multi-reader pickup encounters a busy reader.
+  const [conflicts, setConflicts] = useState<Map<string, { sessionId: string; kind: string }>>(
+    () => new Map(),
+  );
+
   const startScanSessionsForSelectedReaders = useCallback(async () => {
     const readerIds = [...selectedReadersRef.current];
     if (readerIds.length === 0) return;
@@ -504,15 +512,56 @@ function ActiveSessionView({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ readerId: rid, kind: "cycle-count" }),
         });
-        const j = (await r.json()) as { ok?: boolean; sessionId?: string };
+        const j = (await r.json()) as {
+          ok?: boolean;
+          sessionId?: string;
+          reason?: string;
+          existing?: { id: string; kind: string };
+        };
         if (r.ok && j.ok && j.sessionId) {
           scanSessionIdsRef.current.set(rid, j.sessionId);
+          setConflicts((prev) => {
+            if (!prev.has(rid)) return prev;
+            const next = new Map(prev);
+            next.delete(rid);
+            return next;
+          });
+        } else if (j.reason === "reader_busy" && j.existing?.id) {
+          setConflicts((prev) => {
+            const next = new Map(prev);
+            next.set(rid, { sessionId: j.existing!.id, kind: j.existing!.kind });
+            return next;
+          });
         }
       } catch {
         /* server-side idle expiry will release within 60s */
       }
     }
   }, []);
+
+  // Stop the workflow that currently owns a specific reader, then claim it.
+  const takeoverReader = useCallback(
+    async (readerId: string) => {
+      const c = conflicts.get(readerId);
+      if (!c) return;
+      try {
+        await fetch("/api/scan-sessions/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: c.sessionId }),
+        }).catch(() => {});
+      } finally {
+        setConflicts((prev) => {
+          const next = new Map(prev);
+          next.delete(readerId);
+          return next;
+        });
+      }
+      await new Promise((r) => setTimeout(r, 300));
+      void startScanSessionsForSelectedReaders();
+    },
+    [conflicts, startScanSessionsForSelectedReaders],
+  );
 
   const endAllScanSessions = useCallback(async () => {
     const entries = [...scanSessionIdsRef.current.entries()];
@@ -735,6 +784,18 @@ function ActiveSessionView({
             >
               <ScanLine className="h-4 w-4" /> Clear scans
             </button>
+            {[...conflicts.entries()].map(([rid, c]) => (
+              <button
+                key={rid}
+                type="button"
+                onClick={() => void takeoverReader(rid)}
+                title={`Reader ${rid.slice(0, 8)}… is busy with a ${c.kind} workflow. Click to stop it and take this reader.`}
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-950/40 px-3 py-2 font-mono text-xs font-semibold text-amber-100 hover:bg-amber-900/40"
+              >
+                <Radio className="h-3.5 w-3.5 text-amber-300" />
+                Stop other & take {rid.slice(0, 6)}
+              </button>
+            ))}
           </>
         ) : null}
 
