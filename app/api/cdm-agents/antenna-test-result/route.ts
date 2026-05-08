@@ -78,12 +78,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Antenna not owned by this agent" }, { status: 404 });
   }
 
+  // last_read_at: when the test passed (foundAnyEpc=true), stamp it to
+  // testEndedAt so the Hardware Config tri-state derivation (which checks
+  // last_read_at < 60s) reflects "this antenna proved it can see tags X
+  // seconds ago" instead of waiting for the next normal-scan tick. On a
+  // failed test we leave last_read_at alone — old freshness still applies
+  // until it ages out naturally. status_online (sticky boolean) stays in
+  // place for callers other than Hardware Config (Catalog modal, Reader
+  // Picker, etc.) that haven't been migrated to the freshness rule.
   await pool.query(
     `UPDATE devices SET
        status_online        = $1::boolean,
        last_test_at         = $2::timestamptz,
        last_test_passed     = $1::boolean,
        last_test_epc_count  = $3::int,
+       last_read_at         = CASE WHEN $1::boolean THEN $2::timestamptz ELSE last_read_at END,
        test_pending_at      = NULL,
        updated_at           = now()
        WHERE id = $4::uuid`,

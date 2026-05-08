@@ -95,6 +95,19 @@ export async function POST(req: Request) {
   // Mark the session alive so it doesn't auto-expire while reads are flowing.
   touchSession(s.id);
 
+  // Bump the antenna's last_read_at on every batch with reads. Hardware
+  // Config derives the antenna online dot from this timestamp + a 60s
+  // freshness window, so a running test makes the dot turn green within
+  // ~60s and stay green while reads keep flowing. Operator running a test
+  // and seeing reads on screen but a stale offline pill is the bug this
+  // patches — pre-fix, only normal-scan reads bumped the timestamp.
+  if (parsed.data.reads.length > 0) {
+    await pool.query(
+      `UPDATE devices SET last_read_at = now(), updated_at = now() WHERE id = $1::uuid`,
+      [s.antennaId],
+    );
+  }
+
   for (const r of parsed.data.reads) {
     publishAntennaTestRead(s.id, {
       epcHex: r.epcHex.toUpperCase(),
