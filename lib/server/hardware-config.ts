@@ -76,10 +76,16 @@ type RawDevice = {
   location_id: string;
   scan_paused_at: string | null;
   scan_schedule: unknown | null;
-  /** Bumped by ingestAgentReads on every antenna that produces a tag read.
-   *  Used here (with a 60s freshness threshold) to derive the antenna's
-   *  status_online dot. Reader rows ignore this field. */
+  /** Bumped by ingestAgentReads on every antenna that produces a tag read,
+   *  and by /api/antenna-test/* endpoints during operator-driven tests.
+   *  Used here (with a 15-minute freshness threshold) to derive the
+   *  antenna's status_online dot. Reader rows ignore this field. */
   last_read_at: string | null;
+  /** When the most recent antenna-test result was reported. Pairs with
+   *  last_test_passed in the antenna freshness derivation: a passed test
+   *  within 24 h keeps the dot green even when no scan reads followed. */
+  last_test_at: string | null;
+  last_test_passed: boolean | null;
   /** Bumped by ingestWiznetDiscoveries on every MAC match in the agent's
    *  LAN sweep. Used here (with a ~3 min freshness window matching the
    *  agent's stale-row purge cutoff) to derive the reader's tri-state
@@ -92,8 +98,23 @@ type RawDevice = {
  * relative to now() shows online, unless its parent reader is paused/stopped
  * (which short-circuits to online regardless — we don't punish an antenna
  * for not reading when the operator deliberately turned the reader off).
+ *
+ * 15 minutes (was 60 s). Live evidence on .16 (Senitron Transfer Bin) and
+ * other transactional readers: tag reads come in bursts every 60-180 s,
+ * not continuously. A 60 s window made those antennas flap between online
+ * and offline every cycle even though they were verifiably reading. 15 min
+ * keeps the dot honest for genuine outages while letting transactional and
+ * test-driven readers stay green between bursts.
  */
-const ANTENNA_FRESHNESS_MS = 60_000;
+const ANTENNA_FRESHNESS_MS = 15 * 60_000;
+/**
+ * Test-passed window. An antenna whose most recent test passed within this
+ * window also shows green — captures the operator's "I tested it, it works"
+ * signal even when no normal-scan reads have followed. 24 hours is long
+ * enough that a morning test stays green through the workday; after that
+ * the antenna ages out and needs fresh reads or a fresh test to stay green.
+ */
+const ANTENNA_TEST_PASSED_MS = 24 * 60 * 60_000;
 /**
  * Bridge-reachability freshness window. Agent runs `wiznet-cli -d` every
  * minute; ~3 missed sweeps = solid signal that the bridge is off the LAN.
@@ -159,6 +180,8 @@ export async function buildHardwareConfigTree(
          d.scan_paused_at::text AS scan_paused_at,
          d.scan_schedule,
          d.last_read_at::text AS last_read_at,
+         d.last_test_at::text AS last_test_at,
+         d.last_test_passed,
          d.bridge_seen_at::text AS bridge_seen_at
        FROM devices d
        LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
@@ -198,14 +221,18 @@ export async function buildHardwareConfigTree(
     const fresh =
       d.last_read_at !== null &&
       nowMs - new Date(d.last_read_at).getTime() <= ANTENNA_FRESHNESS_MS;
+    const recentlyTestedOk =
+      d.last_test_passed === true &&
+      d.last_test_at !== null &&
+      nowMs - new Date(d.last_test_at).getTime() <= ANTENNA_TEST_PASSED_MS;
     const parentIsPaused = parentPaused.get(d.parent_device_id) ?? false;
     arr.push({
       id: d.id,
       name: d.name,
-      // Derived: paused parent OR fresh read in the last 60s. The stored
-      // `status_online` column is intentionally ignored for antennas — see
+      // Derived: paused parent OR fresh read (15min) OR passed test (24h).
+      // The stored `status_online` column is intentionally ignored — see
       // migration 0060_devices_last_read_at and lib/server/cdm-agents.ts.
-      status_online: parentIsPaused || fresh,
+      status_online: parentIsPaused || fresh || recentlyTestedOk,
       config: (d.config ?? {}) as Record<string, unknown>,
     });
     antennasByParent.set(d.parent_device_id, arr);
