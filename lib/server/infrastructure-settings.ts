@@ -99,7 +99,7 @@ export async function getInfrastructureSettings(
     item_bits: Number(rfidStored.item_bits ?? 40),
     serial_bits: Number(rfidStored.serial_bits ?? 36),
     printer_default: String(
-      rfidStored.printer_default ?? "192.168.1.3:80 / PSTPRNT",
+      rfidStored.printer_default ?? "192.168.1.3:9100 / RAW",
     ),
   };
 

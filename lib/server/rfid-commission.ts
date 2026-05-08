@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from "pg";
+import * as net from "node:net";
 import { z } from "zod";
 import { generateSGTIN96 } from "@/lib/epc";
 import {
@@ -223,7 +224,7 @@ export async function rfidCommissionPrepare(
     item_ref_bits: 40,
     serial_bits: 36,
     printer_ip: printerIp ?? "192.168.1.3",
-    printer_port: printerPort ?? 80,
+    printer_port: printerPort ?? 9100,
     printer_uri: printerUri ?? "PSTPRNT",
     label_dimensions: { w: pw, h: ll },
     bin_id: binId ?? null,
@@ -252,6 +253,53 @@ export type PrintOutcome = {
 
 const DEFAULT_PRINT_TIMEOUT_MS = 12_000;
 
+/**
+ * Raw TCP / JetDirect ZPL send. Mirrors the mobile app's _sendRawTcp in
+ * lan_zpl_printer.dart. Memory line 36: ZD500R prints reliably on raw
+ * TCP 9100 from the Samsung handheld; HTTP /pstprnt 200's but doesn't
+ * print. For desktop we keep BOTH transports and route by port — port
+ * 9100 → raw TCP, anything else → HTTP /pstprnt.
+ *
+ * Connect, write ZPL, close. Most Zebra firmware doesn't echo; the
+ * absence of a connection error is "ok." Returns null on success or
+ * a short reason string on failure.
+ */
+async function sendZplViaTcp(host: string, port: number, zpl: string): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const sock = net.createConnection({ host, port });
+    const finish = (result: string | null) => {
+      if (settled) return;
+      settled = true;
+      try {
+        sock.destroy();
+      } catch {
+        /* swallow */
+      }
+      resolve(result);
+    };
+    const t = setTimeout(() => finish("TCP timeout"), DEFAULT_PRINT_TIMEOUT_MS);
+    sock.once("connect", () => {
+      sock.write(Buffer.from(zpl, "utf8"), (err) => {
+        if (err) {
+          clearTimeout(t);
+          finish(err.message);
+          return;
+        }
+        // 250ms grace: let the printer ingest the bytes before we tear down.
+        setTimeout(() => {
+          clearTimeout(t);
+          finish(null);
+        }, 250);
+      });
+    });
+    sock.once("error", (err) => {
+      clearTimeout(t);
+      finish(err.message);
+    });
+  });
+}
+
 export async function rfidCommissionPrintAndAudit(
   pool: Pool,
   session: SessionPayload,
@@ -268,25 +316,32 @@ export async function rfidCommissionPrintAndAudit(
   let http_status: number | null = null;
   let printer_error: string | null = null;
 
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        Accept: "text/plain, */*",
-      },
-      body: parsed.zpl,
-      signal: AbortSignal.timeout(DEFAULT_PRINT_TIMEOUT_MS),
-    });
-    http_status = res.status;
-    printer_ok = res.ok;
-    if (!res.ok) {
-      printer_error = `HTTP ${res.status}`;
+  if (parsed.printerPort === 9100) {
+    // Raw TCP / JetDirect — preferred path, matches mobile-app behavior.
+    const rawErr = await sendZplViaTcp(parsed.printerHost, parsed.printerPort, parsed.zpl);
+    printer_ok = rawErr === null;
+    printer_error = rawErr;
+  } else {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          Accept: "text/plain, */*",
+        },
+        body: parsed.zpl,
+        signal: AbortSignal.timeout(DEFAULT_PRINT_TIMEOUT_MS),
+      });
+      http_status = res.status;
+      printer_ok = res.ok;
+      if (!res.ok) {
+        printer_error = `HTTP ${res.status}`;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Network error";
+      printer_error = msg.includes("aborted") ? "Printer timeout" : msg;
+      printer_ok = false;
     }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Network error";
-    printer_error = msg.includes("aborted") ? "Printer timeout" : msg;
-    printer_ok = false;
   }
 
   const baseMeta =

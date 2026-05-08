@@ -39,7 +39,11 @@ export async function POST(req: Request) {
   }
 
   const host = parsed.data.printerIp ?? "192.168.1.3";
-  const port = parsed.data.printerPort ?? 80;
+  // Default to raw TCP / JetDirect (port 9100). Mobile app uses 9100;
+  // desktop server-side now matches via sendZplViaTcp in
+  // rfid-commission.ts. Memory line 36: HTTP /pstprnt 200's but doesn't
+  // print on Samsung mobile. 9100 raw is the reliable transport.
+  const port = parsed.data.printerPort ?? 9100;
   const uri = parsed.data.printerUri ?? "PSTPRNT";
   // When the request comes from the handheld (X-Carbon-Mobile: 1) we
   // skip the server-side print attempt entirely. The cloud WMS can't
