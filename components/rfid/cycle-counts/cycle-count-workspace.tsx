@@ -488,6 +488,108 @@ function ActiveSessionView({
 
   const closed = detail.status === "committed" || detail.status === "canceled";
 
+  // Track scan-session ids per reader so we can release them on status flip.
+  // Keyed by reader id since cycle counts may use multiple readers and the
+  // scan-session API is per-reader.
+  const scanSessionIdsRef = useRef<Map<string, string>>(new Map());
+
+  const startScanSessionsForSelectedReaders = useCallback(async () => {
+    const readerIds = [...selectedReadersRef.current];
+    if (readerIds.length === 0) return;
+    for (const rid of readerIds) {
+      if (scanSessionIdsRef.current.has(rid)) continue;
+      try {
+        const r = await fetch("/api/scan-sessions/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ readerId: rid, kind: "cycle-count" }),
+        });
+        const j = (await r.json()) as { ok?: boolean; sessionId?: string };
+        if (r.ok && j.ok && j.sessionId) {
+          scanSessionIdsRef.current.set(rid, j.sessionId);
+        }
+      } catch {
+        /* server-side idle expiry will release within 60s */
+      }
+    }
+  }, []);
+
+  const endAllScanSessions = useCallback(async () => {
+    const entries = [...scanSessionIdsRef.current.entries()];
+    scanSessionIdsRef.current.clear();
+    for (const [, sid] of entries) {
+      try {
+        await fetch("/api/scan-sessions/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: sid }),
+        });
+      } catch {
+        /* idle expiry handles it */
+      }
+    }
+  }, []);
+
+  // Heartbeat /touch every 25s for any active scan-session so 60s idle
+  // expiry doesn't auto-drop while the operator is actively counting.
+  useEffect(() => {
+    if (detail.status !== "active") return;
+    const t = setInterval(() => {
+      for (const [, sid] of scanSessionIdsRef.current.entries()) {
+        void fetch("/api/scan-sessions/touch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: sid }),
+        }).catch(() => {});
+      }
+    }, 25_000);
+    return () => clearInterval(t);
+  }, [detail.status]);
+
+  // On unmount: end all sessions so readers don't stay woken for 60s.
+  useEffect(() => {
+    return () => {
+      for (const [, sid] of scanSessionIdsRef.current.entries()) {
+        void fetch("/api/scan-sessions/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: sid }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+      scanSessionIdsRef.current.clear();
+    };
+  }, []);
+
+  // When the count goes active, wake selected readers. When it goes
+  // paused/canceled (or committed elsewhere), release them.
+  useEffect(() => {
+    if (detail.status === "active") {
+      void startScanSessionsForSelectedReaders();
+    } else {
+      void endAllScanSessions();
+    }
+  }, [detail.status, startScanSessionsForSelectedReaders, endAllScanSessions]);
+
+  // If the operator changes selected readers mid-count, re-sync sessions.
+  useEffect(() => {
+    if (detail.status !== "active") return;
+    const wantIds = selectedReaders;
+    // Release any session for a reader no longer selected.
+    for (const [rid, sid] of [...scanSessionIdsRef.current.entries()]) {
+      if (!wantIds.has(rid)) {
+        scanSessionIdsRef.current.delete(rid);
+        void fetch("/api/scan-sessions/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: sid }),
+        }).catch(() => {});
+      }
+    }
+    // Wake any newly-selected readers.
+    void startScanSessionsForSelectedReaders();
+  }, [selectedReaders, detail.status, startScanSessionsForSelectedReaders]);
+
   const setStatus = async (next: "active" | "paused" | "canceled") => {
     if (next === "canceled" && !confirm("Cancel this count? No inventory changes will be applied.")) {
       return;
@@ -501,6 +603,11 @@ function ActiveSessionView({
         body: JSON.stringify({ scannedEpcs: [...localScanned], status: next }),
       });
       await mutate();
+      // Release readers immediately on pause/cancel — don't wait for
+      // the next reconcile tick. (active path handled by useEffect above.)
+      if (next !== "active") {
+        await endAllScanSessions();
+      }
       setToast(`Session ${next}`);
     } finally {
       setBusyAction(null);
@@ -529,6 +636,9 @@ function ActiveSessionView({
     );
     const j = (await res.json()) as { error?: string };
     if (!res.ok) throw new Error(j.error ?? "Commit failed");
+    // Release all readers immediately on commit — antennas off the moment
+    // the action is done, per the spec.
+    await endAllScanSessions();
     await mutate();
     setToast("Cycle count committed");
   };
