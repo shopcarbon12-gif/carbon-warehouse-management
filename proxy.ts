@@ -32,6 +32,7 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/cdm-agents/set-monsoon-driver") return true;
   if (pathname === "/api/cdm-agents/active-sessions") return true;
   if (pathname === "/api/cdm-agents/reader-online") return true;
+  if (pathname === "/api/cdm-agents/reader-offline") return true;
   /* Agent POSTs WIZnet LAN-discovery results here (Bearer-authed inside route).
    * Same path responds to admin GET (session-authed) — that branch goes through
    * isAdminOnlyPath instead of this allowlist. */

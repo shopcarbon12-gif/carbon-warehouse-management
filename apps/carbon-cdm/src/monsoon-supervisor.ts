@@ -139,6 +139,16 @@ type ReaderSlot = {
    *  (status / heartbeat lines) while producing zero tag reads — the silence
    *  watchdog won't fire but rate-drop will. 0 = no records ever seen. */
   lastRecordAt: number;
+  /** ms timestamp of the most recent push to /api/cdm-agents/reader-offline.
+   *  Throttle so a chronically-silent reader posts offline once per minute,
+   *  not on every watchdog tick. Reset to 0 on first-byte (online) so the
+   *  next silence period gets an immediate offline push. */
+  lastOfflinePushAt: number;
+  /** Mirror of the WMS-side status_online state from THIS agent's perspective.
+   *  Flips true on the first byte from the chip; flips false when the silence
+   *  watchdog fires an offline push. Used to gate the on-transition callbacks
+   *  so we don't re-push the same state. */
+  lastReportedOnline: boolean;
   /**
    * Active antenna-test windows for THIS reader, keyed by antenna_id (the
    * WMS-side UUID). Counts are incremented only for stream records whose
@@ -220,6 +230,14 @@ const TEST_SWEEP_INTERVAL_MS = 1_000;
 const STREAM_SILENCE_TIMEOUT_MS = 60_000;
 const WATCHDOG_INTERVAL_MS = 5_000;
 /**
+ * Throttle for /api/cdm-agents/reader-offline pushes. A reader sitting
+ * unplugged for hours triggers the silence watchdog every 5 s; without a
+ * throttle we'd hammer the WMS endpoint. 60 s is generous — once per minute
+ * is enough to self-heal a stuck server-side status row, while imposing
+ * negligible request load.
+ */
+const OFFLINE_PUSH_THROTTLE_MS = 60_000;
+/**
  * Rate-drop watchdog. Catches the "alive but barely producing reads"
  * stuck state where the binary keeps the TCP socket up, occasionally
  * dribbles a status byte (so the silence watchdog never fires), but stops
@@ -267,14 +285,27 @@ export class MonsoonSupervisor {
      */
     private readonly onAntennaTestResult: AntennaTestCallback | null = null,
     /**
-     * Optional: fires once per spawn the first time a child binary
-     * produces ANY byte on its stream/stdout — meaning the agent can
-     * talk to the chassis even if no tag reads have arrived yet. Wire
-     * this to wms-client.postReaderOnline so the dashboard reflects
-     * "chassis reachable" independent of "tags currently flowing."
-     * The supervisor calls this with the slot's reader id (UUID).
+     * Optional: fires the first time a child binary produces ANY byte on
+     * its stream/stdout AFTER the slot has been in offline state — the
+     * agent can talk to the chassis even before any tag reads arrive.
+     * Wire this to wms-client.postReaderOnline so the dashboard reflects
+     * "chassis reachable" independent of "tags currently flowing." Fires
+     * only on offline→online transitions so stuck-binary respawn cycles
+     * don't spam the WMS.
      */
     private readonly onReaderOnline: ((readerId: string) => void) | null = null,
+    /**
+     * Optional: fires when the silence watchdog detects the chip has
+     * gone silent (>=60s zero bytes from the chassis). Wire this to
+     * wms-client.postReaderOffline so the WMS flips status_online=false
+     * promptly when a reader drops off the network. Throttled to ~once
+     * per minute per slot to avoid spamming the WMS while a reader is
+     * chronically unreachable (e.g., unplugged for hours). Will fire
+     * on online→offline transitions AND periodically while offline,
+     * so a server-side row stuck at status_online=true (e.g., from a
+     * prior agent run that crashed before reporting offline) self-heals.
+     */
+    private readonly onReaderOffline: ((readerId: string) => void) | null = null,
   ) {
     if (this.onAntennaTestResult) {
       this.testSweepHandle = setInterval(
@@ -295,6 +326,26 @@ export class MonsoonSupervisor {
       () => this.runStreamWatchdog(),
       WATCHDOG_INTERVAL_MS,
     );
+  }
+
+  /**
+   * Tell the WMS this reader is currently offline (chip silent past the
+   * watchdog threshold). Throttled per-slot via OFFLINE_PUSH_THROTTLE_MS so
+   * a chronically-silent reader posts at most once per minute. Flips the
+   * slot's lastReportedOnline mirror to false on the first push of a
+   * silence period. Subsequent throttled re-pushes self-heal a server-side
+   * status row stuck at true (e.g., from a prior agent run that crashed
+   * before reporting offline).
+   */
+  private pushReaderOfflineIfDue(slot: ReaderSlot, now: number): void {
+    if (now - slot.lastOfflinePushAt < OFFLINE_PUSH_THROTTLE_MS) return;
+    slot.lastOfflinePushAt = now;
+    slot.lastReportedOnline = false;
+    try {
+      this.onReaderOffline?.(slot.spec.id);
+    } catch {
+      /* never let a callback exception kill the watchdog loop */
+    }
   }
 
   /**
@@ -391,6 +442,13 @@ export class MonsoonSupervisor {
       // would flip-flop between ports unnecessarily and waste recovery time.
       // We still rotate non-mux readers (the original behavior).
       const silentMs = now - slot.lastByteAt;
+      // Tell the WMS this reader is offline as soon as silence persists
+      // past the watchdog threshold. Throttled so a long-silent reader
+      // doesn't hammer the endpoint. Fires regardless of which recovery
+      // branch (rotate / kick / exhaustion) we take below.
+      if (silentMs >= silenceTimeout) {
+        this.pushReaderOfflineIfDue(slot, now);
+      }
       if (silentMs >= silenceTimeout && !exhaustedAllPorts) {
         if (!slot.bytesSinceSpawn && !muxSlot) {
           // Zero-byte kick: rotate to next candidate port if we have one.
@@ -570,6 +628,8 @@ export class MonsoonSupervisor {
         consecutiveZeroByteKicks: 0,
         lastExhaustionResetAt: 0,
         lastRecordAt: 0,
+        lastOfflinePushAt: 0,
+        lastReportedOnline: false,
         currentDriver: desiredDriver,
         consoleParserState: newConsoleParserState(),
         consoleStampAntenna: enabledForStamp?.antenna_number ?? 1,
@@ -884,23 +944,6 @@ export class MonsoonSupervisor {
     });
     slot.child = child;
 
-    // Liveness-based online signal — see spawnReaderConsole for the
-    // rationale. Stream-driver binary's enumeration also exits in ~1 s
-    // on bridge/chip failure, stays alive otherwise. 5 s past spawn is
-    // a strong "reachable" indicator even before the first tag arrives.
-    const livenessTimer = setTimeout(() => {
-      if (slot.child === child && !slot.shuttingDown) {
-        try {
-          this.onReaderOnline?.(spec.id);
-        } catch {
-          /* swallow */
-        }
-      }
-    }, 5_000);
-    child.once("exit", () => {
-      clearTimeout(livenessTimer);
-    });
-
     // Grace window for startup — without this the watchdog would kick a
     // freshly-spawned MonsoonReader before its stream socket has even
     // produced its first byte.
@@ -1063,27 +1106,6 @@ export class MonsoonSupervisor {
     });
     slot.child = child;
 
-    // Liveness-based online signal: when the binary fails to enumerate
-    // (bridge unreachable, chip not responding), it exits within ~1 s.
-    // When it successfully enumerates, it stays alive indefinitely. So
-    // a child that's still alive 5 s after spawn is a strong "reader
-    // reachable" signal, even when no tags happen to be in the antenna's
-    // coverage (those produce zero output bytes — the watchdog later
-    // kicks on silence, but online status is set first). Cancelled if
-    // the child exits before the timer fires.
-    const livenessTimer = setTimeout(() => {
-      if (slot.child === child && !slot.shuttingDown) {
-        try {
-          this.onReaderOnline?.(spec.id);
-        } catch {
-          /* swallow callback errors */
-        }
-      }
-    }, 5_000);
-    child.once("exit", () => {
-      clearTimeout(livenessTimer);
-    });
-
     child.stderr?.on("data", (chunk: Buffer) => {
       log.debug("supervisor: console reader stderr", {
         readerId: spec.id,
@@ -1102,11 +1124,17 @@ export class MonsoonSupervisor {
         slot.bytesSinceSpawn = true;
         // First byte on this spawn — chassis is reachable. Tell the WMS
         // so the dashboard flips the reader online indicator even if
-        // tags aren't currently in the antenna's coverage range.
-        try {
-          this.onReaderOnline?.(spec.id);
-        } catch {
-          /* never let a callback exception kill the data pipeline */
+        // tags aren't currently in the antenna's coverage range. Gated
+        // on offline→online transition so back-to-back respawns don't
+        // re-push the same state.
+        if (!slot.lastReportedOnline) {
+          slot.lastReportedOnline = true;
+          slot.lastOfflinePushAt = 0;
+          try {
+            this.onReaderOnline?.(spec.id);
+          } catch {
+            /* never let a callback exception kill the data pipeline */
+          }
         }
       }
       slot.consecutiveZeroByteKicks = 0;
@@ -1233,10 +1261,16 @@ export class MonsoonSupervisor {
         slot.bytesSinceSpawn = true;
         // Chassis is reachable — tell the WMS the reader is online,
         // even if no tag records have been parsed out of the stream yet.
-        try {
-          this.onReaderOnline?.(slot.spec.id);
-        } catch {
-          /* never let a callback exception kill the data pipeline */
+        // Gated on offline→online transition so back-to-back respawns
+        // don't re-push the same state.
+        if (!slot.lastReportedOnline) {
+          slot.lastReportedOnline = true;
+          slot.lastOfflinePushAt = 0;
+          try {
+            this.onReaderOnline?.(slot.spec.id);
+          } catch {
+            /* never let a callback exception kill the data pipeline */
+          }
         }
       }
       slot.consecutiveZeroByteKicks = 0;

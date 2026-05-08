@@ -160,6 +160,16 @@ export async function postReaderOnline(env: AgentEnv, readerId: string): Promise
   await request(env, "POST", "/api/cdm-agents/reader-online", { readerId });
 }
 
+/**
+ * Tell the WMS the reader's chassis has gone silent — used to flip
+ * `devices.status_online` false promptly when the supervisor's watchdog
+ * detects the chip has stopped emitting bytes. Throttled on the agent
+ * side so a chronically-silent reader posts at most ~once per minute.
+ */
+export async function postReaderOffline(env: AgentEnv, readerId: string): Promise<void> {
+  await request(env, "POST", "/api/cdm-agents/reader-offline", { readerId });
+}
+
 export type WiznetDiscoveryBody = {
   discoveries: {
     mac: string;

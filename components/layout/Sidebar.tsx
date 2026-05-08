@@ -88,6 +88,9 @@ const sections: NavSection[] = [
       p.startsWith("/operations/exceptions") ||
       p.startsWith("/infrastructure/devices") ||
       p.startsWith("/hardware_config") ||
+      // Antenna Test page is no longer linked from the sidebar — operators
+      // reach it via the per-antenna "Test" button in /hardware_config.
+      // Section still highlights when an /antenna_test deep-link is open.
       p.startsWith("/antenna_test"),
     items: [
       { href: "/rfid/epc-tracker", label: "EPC Tracker", icon: Search },
@@ -100,7 +103,6 @@ const sections: NavSection[] = [
       },
       { href: "/infrastructure/devices", label: "Devices", icon: Router },
       { href: "/hardware_config", label: "Hardware Config", icon: Cpu },
-      { href: "/antenna_test", label: "Antenna Test", icon: Radio },
     ],
   },
   {

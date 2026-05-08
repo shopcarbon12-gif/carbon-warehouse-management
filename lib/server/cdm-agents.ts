@@ -866,10 +866,13 @@ export async function ingestAgentReads(
     }
   }
 
-  // Mark every antenna that produced a read in this batch as online too.
-  // Hardware Config has separate online dots for the reader and each
-  // antenna; without this update only the reader flips green even when
-  // tags are streaming through specific antennas.
+  // Bump `last_read_at` on every antenna that produced a read in this batch.
+  // Hardware Config derives the antenna online dot from `last_read_at` (with
+  // a 60s freshness threshold) joined with the parent reader's pause state,
+  // so an antenna whose coax goes loose stops showing green within a minute
+  // of the last read — instead of the legacy sticky-true behavior where one
+  // historic tag kept it green forever. We do NOT touch `status_online` here
+  // anymore for antennas; that column is now ignored for antenna rows.
   const seenAntennaIds = new Set<string>();
   for (const r of body.reads) {
     if (r.antennaNumber === undefined) continue;
@@ -878,7 +881,7 @@ export async function ingestAgentReads(
   }
   if (seenAntennaIds.size > 0) {
     await client.query(
-      `UPDATE devices SET status_online = true, updated_at = now()
+      `UPDATE devices SET last_read_at = now(), updated_at = now()
          WHERE id = ANY($1::uuid[])`,
       [Array.from(seenAntennaIds)],
     );

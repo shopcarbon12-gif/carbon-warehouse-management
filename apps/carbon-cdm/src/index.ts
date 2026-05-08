@@ -8,7 +8,7 @@ import { startHeartbeat } from "./heartbeat.js";
 import { ReadAggregator } from "./read-aggregator.js";
 import { MonsoonSupervisor } from "./monsoon-supervisor.js";
 import { AntennaTestController } from "./antenna-test-mode.js";
-import { postAntennaTestResult, postReaderOnline } from "./wms-client.js";
+import { postAntennaTestResult, postReaderOnline, postReaderOffline } from "./wms-client.js";
 import { startWiznetDiscovery } from "./wiznet-discovery.js";
 
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
@@ -67,16 +67,29 @@ async function main(): Promise<void> {
         });
       });
     },
-    // Reader-online callback: fires once per spawn the first time the
-    // child binary produces ANY byte from the chassis. Tells the WMS the
-    // reader is reachable so its dashboard tile flips online — even
-    // before any tag reads land in the inventory pipeline. Per-spawn,
-    // de-duplication is implicit (slot.bytesSinceSpawn flips once per
-    // child process), so this fires at most a few times per minute even
-    // during a stuck-binary respawn cycle.
+    // Reader-online callback: fires the first time a child binary
+    // produces ANY byte from the chassis after the slot has been in
+    // offline state. Tells the WMS the reader is reachable so its
+    // dashboard tile flips online — even before any tag reads land in
+    // the inventory pipeline. Gated to fire only on offline→online
+    // transitions, so back-to-back respawns don't re-push the same state.
     (readerId) => {
       void postReaderOnline(env, readerId).catch((e) => {
         log.debug("reader-online post failed (will retry on next spawn)", {
+          readerId,
+          err: e instanceof Error ? e.message : String(e),
+        });
+      });
+    },
+    // Reader-offline callback: fires when the silence watchdog detects
+    // the chip has gone silent (>=60 s zero bytes). Tells the WMS to
+    // flip status_online=false promptly. Agent-side throttle (~once per
+    // minute per slot) prevents endpoint hammering on chronically-silent
+    // readers; the periodic re-push self-heals stuck server-side rows
+    // even if a previous agent run crashed before reporting offline.
+    (readerId) => {
+      void postReaderOffline(env, readerId).catch((e) => {
+        log.debug("reader-offline post failed (will retry on next watchdog tick)", {
           readerId,
           err: e instanceof Error ? e.message : String(e),
         });

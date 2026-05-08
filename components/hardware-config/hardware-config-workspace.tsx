@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import {
   Antenna as AntennaIcon,
@@ -845,15 +846,12 @@ function AntennaLine({
 }
 
 /**
- * One-shot connection test for an antenna. Click → POSTs to the WMS to
- * queue a test → shows "Testing…" with a spinner for up to ~90 s while
- * the agent picks up the flag and runs a 30-sec listen window. Triggers
- * a tree mutate when the test completes so the new status pill renders.
- *
- * Caveat: the agent listens to the parent reader's WHOLE binary stream;
- * it can't currently distinguish per-antenna in the protocol. So if the
- * reader has 2 antennas wired and only one is plugged in, both will pass
- * the test. Tooltip notes this.
+ * Navigates to the dedicated /antenna_test page with this antenna pre-
+ * selected as the default. The page's antenna picker stays unlocked so the
+ * operator can still pick a different antenna once they're there. Replaces
+ * the earlier inline "queue a 30s connection test" flow — the dedicated
+ * page exposes the full operator-tunable test UI (power slider, sweep,
+ * reference EPCs, calibration, etc.) which the inline button could not.
  */
 function AntennaTestButton({
   antennaId,
@@ -862,45 +860,14 @@ function AntennaTestButton({
   antennaId: string;
   antennaName: string;
 }) {
-  const [busy, setBusy] = useState(false);
-  const click = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/hardware-config/antennas/${antennaId}/test`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        alert(`Test queue failed: ${data.error ?? res.statusText}`);
-        setBusy(false);
-        return;
-      }
-      // Hold the spinner for up to 90 s while the agent runs the test.
-      // The status pill will be re-rendered by SWR's auto-refetch on focus
-      // / interval. We just keep the button locked so the operator doesn't
-      // double-trigger. After the window we release regardless.
-      await new Promise((r) => setTimeout(r, 90_000));
-    } catch (e) {
-      alert(`Test failed: ${e instanceof Error ? e.message : "unknown"}`);
-    } finally {
-      setBusy(false);
-    }
-  };
   return (
-    <button
-      type="button"
-      onClick={() => void click()}
-      disabled={busy}
-      title={`Run a 30 s connection test for ${antennaName}. Listens for ANY tag on the parent reader.`}
-      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wider ${
-        busy
-          ? "cursor-not-allowed border-amber-400/40 bg-amber-400/10 text-amber-300"
-          : "border-red-400/40 bg-red-400/10 text-red-300 hover:bg-red-400/20"
-      }`}
+    <Link
+      href={`/antenna_test?antennaId=${encodeURIComponent(antennaId)}`}
+      title={`Open the Antenna Test page with ${antennaName} pre-selected.`}
+      className="inline-flex items-center gap-1 rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wider text-red-300 hover:bg-red-400/20"
     >
       <Zap className="h-2.5 w-2.5" />
-      {busy ? "Testing…" : "Test"}
-    </button>
+      Test
+    </Link>
   );
 }

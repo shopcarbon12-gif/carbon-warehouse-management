@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
   useAntennaTestStream,
@@ -215,8 +216,27 @@ function buildPickList(tree: unknown): AntennaPickEntry[] {
 export function AntennaTestWorkspace() {
   const tree = useSWR("/api/hardware-config", fetcher, { refreshInterval: 0 });
   const picks = useMemo(() => buildPickList(tree.data), [tree.data]);
+  // When the user clicks "Test" on an antenna in /hardware_config, we
+  // navigate here with `?antennaId=<uuid>` so the dropdown pre-selects
+  // that antenna. Picker stays unlocked — the operator can still pick a
+  // different antenna once on the page; we only set the default.
+  const searchParams = useSearchParams();
+  const initialAntennaIdFromUrl = searchParams?.get("antennaId") ?? "";
 
   const [pickedAntennaId, setPickedAntennaId] = useState<string>("");
+  // Apply the URL hint once the picks list has loaded, but only if the
+  // user hasn't already touched the dropdown (pickedAntennaId still empty).
+  // Guarded by a ref so we don't re-apply on every picks reshuffle.
+  const appliedUrlHint = useRef(false);
+  useEffect(() => {
+    if (appliedUrlHint.current) return;
+    if (!initialAntennaIdFromUrl) return;
+    if (picks.length === 0) return;
+    if (picks.some((p) => p.antennaId === initialAntennaIdFromUrl)) {
+      setPickedAntennaId(initialAntennaIdFromUrl);
+      appliedUrlHint.current = true;
+    }
+  }, [initialAntennaIdFromUrl, picks]);
   const [flags, setFlags] = useState<Flags>(DEFAULT_FLAGS);
   const [sweepEnabled, setSweepEnabled] = useState(false);
   const [sweepCfg, setSweepCfg] = useState<SweepConfig>(DEFAULT_SWEEP);

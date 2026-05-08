@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { isReaderEffectivelyPaused, type ScanSchedule } from "./scan-schedule";
 
 export type HardwareAntennaRow = {
   id: string;
@@ -67,7 +68,19 @@ type RawDevice = {
   location_id: string;
   scan_paused_at: string | null;
   scan_schedule: unknown | null;
+  /** Bumped by ingestAgentReads on every antenna that produces a tag read.
+   *  Used here (with a 60s freshness threshold) to derive the antenna's
+   *  status_online dot. Reader rows ignore this field. */
+  last_read_at: string | null;
 };
+
+/**
+ * Antenna freshness window. An antenna with `last_read_at` newer than this
+ * relative to now() shows online, unless its parent reader is paused/stopped
+ * (which short-circuits to online regardless — we don't punish an antenna
+ * for not reading when the operator deliberately turned the reader off).
+ */
+const ANTENNA_FRESHNESS_MS = 60_000;
 
 export async function buildHardwareConfigTree(
   pool: Pool,
@@ -125,7 +138,8 @@ export async function buildHardwareConfigTree(
          a.name AS cdm_agent_name,
          d.location_id::text AS location_id,
          d.scan_paused_at::text AS scan_paused_at,
-         d.scan_schedule
+         d.scan_schedule,
+         d.last_read_at::text AS last_read_at
        FROM devices d
        LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
        WHERE d.tenant_id = $1::uuid
@@ -136,14 +150,42 @@ export async function buildHardwareConfigTree(
     ),
   ]);
 
+  // Build a parent→effectively-paused lookup so we can short-circuit
+  // antenna online to TRUE when the parent reader is paused or stopped.
+  // This matches the operator UX expectation: "I turned this reader off
+  // on purpose; don't punish its antennas with red dots." The freshness
+  // path (last_read_at within ANTENNA_FRESHNESS_MS) only kicks in when
+  // the parent is NOT paused.
+  const now = new Date();
+  const nowMs = now.getTime();
+  const parentPaused = new Map<string, boolean>();
+  for (const d of devices.rows) {
+    if (!READER_TYPES.has(d.device_type)) continue;
+    parentPaused.set(
+      d.id,
+      isReaderEffectivelyPaused(
+        d.scan_paused_at,
+        (d.scan_schedule as ScanSchedule | null) ?? null,
+        now,
+      ),
+    );
+  }
+
   const antennasByParent = new Map<string, HardwareAntennaRow[]>();
   for (const d of devices.rows) {
     if (d.device_type !== "antenna" || !d.parent_device_id) continue;
     const arr = antennasByParent.get(d.parent_device_id) ?? [];
+    const fresh =
+      d.last_read_at !== null &&
+      nowMs - new Date(d.last_read_at).getTime() <= ANTENNA_FRESHNESS_MS;
+    const parentIsPaused = parentPaused.get(d.parent_device_id) ?? false;
     arr.push({
       id: d.id,
       name: d.name,
-      status_online: d.status_online,
+      // Derived: paused parent OR fresh read in the last 60s. The stored
+      // `status_online` column is intentionally ignored for antennas — see
+      // migration 0060_devices_last_read_at and lib/server/cdm-agents.ts.
+      status_online: parentIsPaused || fresh,
       config: (d.config ?? {}) as Record<string, unknown>,
     });
     antennasByParent.set(d.parent_device_id, arr);
