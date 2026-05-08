@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 shopcarbon@192.168.1.219 \"sudo journalctl -u carbon-cdm-agent.service -f --no-pager -o cat 2>&1\")"
+    ]
+  }
+}

@@ -107,14 +107,12 @@ type RawDevice = {
  * test-driven readers stay green between bursts.
  */
 const ANTENNA_FRESHNESS_MS = 15 * 60_000;
-/**
- * Test-passed window. An antenna whose most recent test passed within this
- * window also shows green — captures the operator's "I tested it, it works"
- * signal even when no normal-scan reads have followed. 24 hours is long
- * enough that a morning test stays green through the workday; after that
- * the antenna ages out and needs fresh reads or a fresh test to stay green.
- */
-const ANTENNA_TEST_PASSED_MS = 24 * 60 * 60_000;
+// Test-passed bypass has NO time limit. Once an antenna's last_test_passed
+// flips true (operator ran a test, reads came in), the dot stays green
+// until a subsequent test FAILS (last_test_passed flips false) or the
+// reader is removed. This matches the operator's stated expectation:
+// "I tested it, it works — don't make me re-test every 24h."
+// /api/antenna-test/stop persists pass/fail based on session.totalReadsCount.
 /**
  * Bridge-reachability freshness window. Agent runs `wiznet-cli -d` every
  * minute; ~3 missed sweeps = solid signal that the bridge is off the LAN.
@@ -221,18 +219,16 @@ export async function buildHardwareConfigTree(
     const fresh =
       d.last_read_at !== null &&
       nowMs - new Date(d.last_read_at).getTime() <= ANTENNA_FRESHNESS_MS;
-    const recentlyTestedOk =
-      d.last_test_passed === true &&
-      d.last_test_at !== null &&
-      nowMs - new Date(d.last_test_at).getTime() <= ANTENNA_TEST_PASSED_MS;
+    // Test-passed signal has no time decay — green sticks until a test fails.
+    const testedOk = d.last_test_passed === true;
     const parentIsPaused = parentPaused.get(d.parent_device_id) ?? false;
     arr.push({
       id: d.id,
       name: d.name,
-      // Derived: paused parent OR fresh read (15min) OR passed test (24h).
-      // The stored `status_online` column is intentionally ignored — see
-      // migration 0060_devices_last_read_at and lib/server/cdm-agents.ts.
-      status_online: parentIsPaused || fresh || recentlyTestedOk,
+      // Derived: paused parent OR fresh read (15min) OR last test passed
+      // (sticky, no time limit). The stored `status_online` column is
+      // intentionally ignored — see migration 0060_devices_last_read_at.
+      status_online: parentIsPaused || fresh || testedOk,
       config: (d.config ?? {}) as Record<string, unknown>,
     });
     antennasByParent.set(d.parent_device_id, arr);

@@ -4,6 +4,7 @@ import { getPool } from "@/lib/db";
 import { authenticateAgentToken } from "@/lib/server/cdm-agents";
 import {
   getSession,
+  recordSessionReads,
   touchSession,
 } from "@/lib/server/antenna-test-sessions";
 import {
@@ -106,6 +107,8 @@ export async function POST(req: Request) {
       `UPDATE devices SET last_read_at = now(), updated_at = now() WHERE id = $1::uuid`,
       [s.antennaId],
     );
+    // Track lifetime reads on the session so /stop can decide pass/fail.
+    recordSessionReads(s.id, parsed.data.reads.length);
   }
 
   for (const r of parsed.data.reads) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
+import { getPool } from "@/lib/db";
 import {
   endSession,
   getSession,
@@ -40,7 +41,33 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Persist test outcome to the antenna row. Pass = any reads captured;
+  // Fail = zero reads. Hardware Config's antenna-online derivation honors
+  // last_test_passed permanently (no time cap), so a passing test sticks
+  // the dot green until a subsequent test fails or the operator re-tests.
+  // This is the operator's "I tested it, it works" signal — wired here from
+  // the operator-driven /antenna-test page (the agent's own auto-test
+  // result endpoint was the only writer before; now both paths persist).
+  const passed = s.totalReadsCount > 0;
+  const pool = getPool();
+  if (pool) {
+    try {
+      await pool.query(
+        `UPDATE devices SET
+            last_test_at         = now(),
+            last_test_passed     = $1::boolean,
+            last_test_epc_count  = $2::int,
+            test_pending_at      = NULL,
+            updated_at           = now()
+          WHERE id = $3::uuid`,
+        [passed, s.totalReadsCount, s.antennaId],
+      );
+    } catch (e) {
+      console.warn("[antenna-test/stop] failed to persist test outcome", e);
+    }
+  }
+
   endSession(s.id);
   publishAntennaTestLifecycle(s.id, "ended", "stopped_by_operator");
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, passed, observedEpcCount: s.totalReadsCount });
 }

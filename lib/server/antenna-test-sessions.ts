@@ -74,6 +74,11 @@ export type AntennaTestSession = {
   startedAt: number;
   /** ms-since-epoch of the last heartbeat (SSE ping or /update). */
   lastSeenAt: number;
+  /** Total reads ingested across the session lifetime. /api/antenna-test/stop
+   *  reads this to decide whether the test passed (>0) or failed (=0) and
+   *  persists last_test_passed to the antenna row, so a passing test sticks
+   *  the antenna green permanently per the Hardware Config rule. */
+  totalReadsCount: number;
 };
 
 /**
@@ -134,6 +139,7 @@ export function createSession(input: {
     startedBy: input.startedBy,
     startedAt: now,
     lastSeenAt: now,
+    totalReadsCount: 0,
   };
   byId.set(session.id, session);
   byReader.set(session.readerId, session);
@@ -161,6 +167,14 @@ export function touchSession(id: string): boolean {
   if (!s) return false;
   s.lastSeenAt = Date.now();
   return true;
+}
+
+/** Increment the reads-counted total. Called from /api/antenna-test/ingest
+ *  on every batch. /stop reads the accumulated count to decide pass/fail. */
+export function recordSessionReads(id: string, n: number): void {
+  const s = byId.get(id);
+  if (!s) return;
+  s.totalReadsCount += n;
 }
 
 export function endSession(id: string): boolean {
