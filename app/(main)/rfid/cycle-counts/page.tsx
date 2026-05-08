@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { CycleCountWorkspace } from "@/components/rfid/cycle-counts/cycle-count-workspace";
 import { getSession } from "@/lib/get-session";
 import { isAdminRole } from "@/lib/auth/dashboard-rbac";
@@ -6,7 +7,8 @@ export const dynamic = "force-dynamic";
 
 export default async function CycleCountsPage() {
   const session = await getSession();
-  const isAdmin = isAdminRole(session?.role ?? "");
+  if (!session) redirect("/login");
+  const isAdmin = isAdminRole(session.role);
   return (
     <div className="space-y-6">
       <div>

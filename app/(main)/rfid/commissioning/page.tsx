@@ -1,8 +1,12 @@
+import { redirect } from "next/navigation";
 import { CommissioningWorkspace } from "@/components/rfid/commissioning/commissioning-workspace";
+import { getSession } from "@/lib/get-session";
 
 export const dynamic = "force-dynamic";
 
-export default function CommissioningPage() {
+export default async function CommissioningPage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
   return (
     <div className="space-y-6">
       <div>
