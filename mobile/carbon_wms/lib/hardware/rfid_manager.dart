@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
 
 import 'package:carbon_wms/hardware/chainway_scanner.dart';
@@ -375,6 +377,14 @@ class RfidManager extends ChangeNotifier {
     if (!_unifiedReads.isClosed) _unifiedReads.add(read);
 
     if (_scanContext == 'GEIGER_FIND') {
+      // Diagnostic trace: every tag read, with EPC + RSSI, while in
+      // Geiger mode. Visible via `adb logcat -s LOCATE_RFID:*`.
+      // Helps diagnose "% stuck at 0" — if these log lines appear but
+      // proximity stays at 0, the issue is target-match, not radio.
+      developer.log(
+        'tagRead epc=$u rssi=${read.rssi} ctx=$_scanContext geigerClosed=${_geigerReads.isClosed}',
+        name: 'LOCATE_RFID',
+      );
       if (!_geigerReads.isClosed) _geigerReads.add(read);
       return;
     }

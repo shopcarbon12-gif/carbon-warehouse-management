@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:audioplayers/audioplayers.dart';
@@ -110,6 +111,13 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   int _otherReads = 0;
   int _nullRssiReads = 0;
 
+  /// Last 3 EPCs heard, in order (newest first). Used by the on-screen
+  /// diagnostic banner so the operator can see "is the radio hearing
+  /// anything" and "does the target's EPC actually match what's coming
+  /// off the air" without leaving the screen for logcat.
+  final List<String> _lastSeenEpcs = <String>[];
+  int? _lastSeenRssi;
+
   // Diagnostic: strongest non-target EPC + RSSI we've seen this session.
   // Surfaces a "WE SEE ANOTHER TAG" hint so the operator can tell the radio
   // is alive and the issue is "wrong tag in range" not "scanner broken".
@@ -218,6 +226,8 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       _targetReads = 0;
       _otherReads = 0;
       _nullRssiReads = 0;
+      _lastSeenEpcs.clear();
+      _lastSeenRssi = null;
     });
     _sweep
       ..reset()
@@ -271,7 +281,30 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     if (!_scanning) return;
     if (!mounted) return;
     final epc = read.epcHex24.toUpperCase();
-    if (_matchesTarget(epc)) {
+    final matched = _matchesTarget(epc);
+    // Logcat trace for every read seen by this screen — survives release
+    // builds (developer.log writes to platform logging, unlike print()).
+    // Pair with LOCATE_RFID logs from rfid_manager; together they reveal
+    // whether reads arrive at all AND whether the match logic accepts
+    // them. Filter on device: `adb logcat -s flutter:*`.
+    developer.log(
+      'epc=$epc target=$_epcUpper match=$matched rssi=${read.rssi}',
+      name: 'LOCATE_SCREEN',
+    );
+    // Maintain a rolling 3-deep buffer of EPCs heard (any tag) so the
+    // on-screen diagnostic banner can show whether reads are arriving
+    // at all. The previous "stuck at 0%" reports were impossible to
+    // diagnose without this — operator couldn't tell whether the radio
+    // was silent or whether the target match was failing.
+    final readRssi = read.rssi;
+    setState(() {
+      if (readRssi != null) _lastSeenRssi = readRssi;
+      if (_lastSeenEpcs.isEmpty || _lastSeenEpcs.first != epc) {
+        _lastSeenEpcs.insert(0, epc);
+        if (_lastSeenEpcs.length > 3) _lastSeenEpcs.removeLast();
+      }
+    });
+    if (matched) {
       // RSSI fallback: some Zebra firmware streams matches with rssi=null
       // for a few ticks before settling. Pre-fix, that meant the % stayed
       // at 0 even though the tag was clearly in range. We now treat
@@ -421,19 +454,14 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                 otherSeenAt: _otherSeenAt,
               ),
               if (_scanning)
-                Padding(
-                  padding: EdgeInsets.only(top: 4.h),
-                  child: Text(
-                    'TARGET $_targetReads · OTHERS $_otherReads'
-                    '${_nullRssiReads > 0 ? ' · NO-RSSI $_nullRssiReads' : ''}',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.2,
-                      color: const Color(0xFF8A9595),
-                    ),
-                  ),
+                _LiveDiagnosticBanner(
+                  targetReads: _targetReads,
+                  otherReads: _otherReads,
+                  nullRssiReads: _nullRssiReads,
+                  lastSeenEpcs: _lastSeenEpcs,
+                  lastSeenRssi: _lastSeenRssi,
+                  targetEpc: _epcUpper,
+                  liveProximity01: _proximity01,
                 ),
               SizedBox(height: 12.h),
               _ToggleScanButton(
@@ -1040,6 +1068,112 @@ class _ToggleScanButton extends StatelessWidget {
               color: Colors.white,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Live diagnostic banner — visible only while scanning. Shows the data
+/// that lets the operator (and the dev) see exactly why the % is or
+/// isn't climbing:
+///   * counts: target / others / no-RSSI
+///   * last seen EPC + RSSI (any tag)
+///   * computed proximity %
+/// If TARGET stays at 0 while OTHERS climbs, the radio hears tags but
+/// the EPC match is failing — operator should compare LAST SEEN against
+/// TARGET to spot a format mismatch. If both stay at 0, the radio isn't
+/// hearing anything.
+class _LiveDiagnosticBanner extends StatelessWidget {
+  const _LiveDiagnosticBanner({
+    required this.targetReads,
+    required this.otherReads,
+    required this.nullRssiReads,
+    required this.lastSeenEpcs,
+    required this.lastSeenRssi,
+    required this.targetEpc,
+    required this.liveProximity01,
+  });
+
+  final int targetReads;
+  final int otherReads;
+  final int nullRssiReads;
+  final List<String> lastSeenEpcs;
+  final int? lastSeenRssi;
+  final String targetEpc;
+  final double liveProximity01;
+
+  @override
+  Widget build(BuildContext context) {
+    final pctNum = (liveProximity01 * 100).clamp(0, 100).toStringAsFixed(0);
+    final tone = targetReads > 0
+        ? const Color(0xFF1B7F4F)            // green — match found
+        : (otherReads > 0
+            ? const Color(0xFFB87A00)         // amber — radio alive, no match
+            : const Color(0xFFB23A3A));       // red — radio silent
+    return Container(
+      margin: EdgeInsets.only(top: 8.h),
+      padding: EdgeInsets.fromLTRB(12.w, 10.h, 12.w, 10.h),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: 0.06),
+        border: Border.all(color: tone.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                color: tone,
+                child: Text(
+                  targetReads > 0
+                      ? 'MATCH $pctNum%'
+                      : (otherReads > 0 ? 'NO MATCH' : 'NO READS'),
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.4,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              SizedBox(width: 8.w),
+              Text(
+                'TGT $targetReads · OTH $otherReads'
+                '${nullRssiReads > 0 ? ' · NULL-RSSI $nullRssiReads' : ''}'
+                '${lastSeenRssi != null ? ' · ${lastSeenRssi}dBm' : ''}',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: const Color(0xFF333333),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 4.h),
+          Text(
+            'TGT  $targetEpc',
+            style: GoogleFonts.firaCode(
+              fontSize: 9.sp,
+              color: const Color(0xFF555555),
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (lastSeenEpcs.isNotEmpty)
+            ...lastSeenEpcs.map(
+              (e) => Text(
+                'SEEN $e',
+                style: GoogleFonts.firaCode(
+                  fontSize: 9.sp,
+                  color: e == targetEpc
+                      ? const Color(0xFF1B7F4F)
+                      : const Color(0xFF555555),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
         ],
       ),
     );
