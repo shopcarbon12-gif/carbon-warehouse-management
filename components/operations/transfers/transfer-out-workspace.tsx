@@ -386,25 +386,13 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
         body: JSON.stringify({ sessionId: id }),
       });
     } catch {
-      /* server-side idle expiry will release within 60s anyway */
+      /* network blip — operator can re-pause from Hardware Config if needed */
     }
   }, []);
 
-  // 25s heartbeat keeps the session alive while the page is open & scanning.
-  useEffect(() => {
-    if (!scanSessionId) return;
-    const t = setInterval(() => {
-      void fetch("/api/scan-sessions/touch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: scanSessionId }),
-      }).catch(() => {});
-    }, 25_000);
-    return () => clearInterval(t);
-  }, [scanSessionId]);
-
-  // On unmount: end any active session so the reader doesn't stay woken
-  // for 60s of idle expiry after the operator navigates away.
+  // On unmount: end any active session so the reader returns to paused
+  // state when the operator navigates away. There is NO server-side idle
+  // expiry — sessions only end on explicit click or this unmount keepalive.
   useEffect(() => {
     return () => {
       const id = scanSessionIdRef.current;

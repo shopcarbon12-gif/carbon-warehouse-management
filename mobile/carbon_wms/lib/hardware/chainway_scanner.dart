@@ -25,20 +25,25 @@ class ChainwayScanner implements RfidScanner {
   Future<void> applyHandheldRuntimeSettings(
     HandheldRuntimeConfig config, {
     String scanContext = 'TRANSFER',
+    int? powerOverrideDbm,
   }) async {
     _runtime = config;
     final useOut =
         config.transferOutPowerLock && scanContext.toUpperCase().contains('TRANSFER');
-    final power =
+    final configPower =
         normalizeAntennaPowerDbm(useOut ? config.transferOutAntennaPower : config.transferInAntennaPower);
+    final power = powerOverrideDbm != null
+        ? normalizeAntennaPowerDbm(powerOverrideDbm)
+        : configPower;
     if (_nativeLinked) {
       unawaited(RfidVendorChannel.setAntennaPowerDbm(power));
     }
     if (kDebugMode) {
       // ignore: avoid_print
       print(
-        '[ChainwayScanner] ctx=$scanContext power=${power}dBm (outLock=${config.transferOutPowerLock}) '
-        'hold=${config.triggerModeHoldRelease}',
+        '[ChainwayScanner] ctx=$scanContext power=${power}dBm '
+        '(override=${powerOverrideDbm != null} configPower=${configPower}dBm '
+        'outLock=${config.transferOutPowerLock} hold=${config.triggerModeHoldRelease})',
       );
     }
   }

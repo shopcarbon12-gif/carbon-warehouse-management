@@ -11,8 +11,8 @@
  * When a session is active for a reader, the agent's supervisor TREATS the
  * reader as un-paused (overriding any persisted scan_paused_at). The reader
  * spawns a child, scans, ingests reads through the normal /api/cdm-agents/reads
- * pipeline. When the operator commits or the session expires (60s idle),
- * the reader returns to its default-paused state.
+ * pipeline. When the operator commits / pauses / closes the page, the reader
+ * returns to its default-paused state.
  *
  * NOT persisted — sessions evaporate on WMS restart. That's deliberate
  * (operator-driven workflow, fire-and-forget; if WMS restarts mid-flow,
@@ -23,7 +23,7 @@
  * an active scan-session OR a manual scan_paused_at = NULL set in the
  * Hardware Config UI, readers stay off.
  *
- * Lifecycle:
+ * Lifecycle (operator-driven, no idle expiry):
  *   - POST /api/scan-sessions/start → createSession() → returns sessionId.
  *     Session is keyed by readerId — only ONE workflow can wake a reader
  *     at a time (single-client WIZnet bridge constraint).
@@ -31,10 +31,17 @@
  *     bundle includes scan-sessions for the agent's location.
  *   - POST /api/scan-sessions/end → endSession(); agent observes empty list
  *     on next poll and the supervisor stops spawning the reader's child.
- *   - Auto-expire: any session with `lastSeenAt` older than SESSION_MAX_IDLE_MS
- *     gets dropped on the next read or sweep — covers "operator closed the
- *     tab without committing." The browser side refreshes lastSeenAt on
- *     every SSE ping (every 25s) so an active workflow stays alive.
+ *
+ * Sessions ONLY end via:
+ *   1. Explicit operator click (Stop scan / Pause / Commit)
+ *   2. Page-unmount keepalive POST from the workspace (navigation away)
+ *   3. Hardware Config Pause (force-end via endSessionForReader)
+ *
+ * There is NO idle timeout. If the browser tab is killed (crash, force-quit)
+ * before unmount fires, the reader stays woken until an operator returns
+ * and clicks Stop, OR an admin pauses the reader from Hardware Config. This
+ * is deliberate per operator preference: "antennas off when *I* decide,
+ * not when an agent thinks I went idle."
  */
 
 import { randomUUID } from "node:crypto";
@@ -61,28 +68,10 @@ export type ScanSession = {
   startedBy: string | null;
   /** ms-since-epoch of session creation. */
   startedAt: number;
-  /** ms-since-epoch of the last heartbeat (SSE ping or /touch). */
-  lastSeenAt: number;
 };
-
-/**
- * Idle longer than this and the session is auto-dropped. Mirrors the
- * antenna-test 60s window — same operator-driven dynamics, same risk
- * profile (closed tab leaves reader running otherwise).
- */
-const SESSION_MAX_IDLE_MS = 60_000;
 
 const byReader = new Map<string, ScanSession>();
 const byId = new Map<string, ScanSession>();
-
-function pruneStale(now: number): void {
-  for (const s of byId.values()) {
-    if (now - s.lastSeenAt > SESSION_MAX_IDLE_MS) {
-      byId.delete(s.id);
-      byReader.delete(s.readerId);
-    }
-  }
-}
 
 export function createSession(input: {
   tenantId: string;
@@ -94,8 +83,6 @@ export function createSession(input: {
 }):
   | { ok: true; session: ScanSession }
   | { ok: false; reason: "reader_busy"; existing: ScanSession } {
-  const now = Date.now();
-  pruneStale(now);
   const existing = byReader.get(input.readerId);
   if (existing) return { ok: false, reason: "reader_busy", existing };
   const session: ScanSession = {
@@ -106,8 +93,7 @@ export function createSession(input: {
     kind: input.kind,
     context: input.context ?? {},
     startedBy: input.startedBy,
-    startedAt: now,
-    lastSeenAt: now,
+    startedAt: Date.now(),
   };
   byId.set(session.id, session);
   byReader.set(session.readerId, session);
@@ -115,15 +101,7 @@ export function createSession(input: {
 }
 
 export function getSession(id: string): ScanSession | null {
-  pruneStale(Date.now());
   return byId.get(id) ?? null;
-}
-
-export function touchSession(id: string): boolean {
-  const s = byId.get(id);
-  if (!s) return false;
-  s.lastSeenAt = Date.now();
-  return true;
 }
 
 export function endSession(id: string): boolean {
@@ -143,12 +121,10 @@ export function endSessionForReader(readerId: string): boolean {
 
 /** List active sessions for a given location (agent filter). */
 export function listActiveSessionsForLocation(locationId: string): ScanSession[] {
-  pruneStale(Date.now());
   return Array.from(byId.values()).filter((s) => s.locationId === locationId);
 }
 
 /** Is a reader currently woken by any scan-session? */
 export function isReaderActivelyScanning(readerId: string): boolean {
-  pruneStale(Date.now());
   return byReader.has(readerId);
 }

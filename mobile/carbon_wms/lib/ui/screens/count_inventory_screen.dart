@@ -204,7 +204,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       rfid.suppressEdgeStreaming = false;
       rfid.scanContext = _previousScanContext ?? 'TRANSFER';
       unawaited(rfid.pauseScanning());
-      unawaited(rfid.reapplyHandheldHardwareSettings());
+      // Clear the count-session power override so subsequent screens
+      // pick up handheld-config power on their next reapply. The clear
+      // itself triggers a reapply via setSessionPowerOverrideDbm(null).
+      unawaited(rfid.setSessionPowerOverrideDbm(null));
     }
     // Reopen the 2D engine for any 2D-only successor screen, but do NOT
     // re-enable the trigger relay here — that would race with whatever
@@ -353,6 +356,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       await RfidVendorChannel.setZebraTriggerModeRfid();
 
       // Count gear settings override global settings while inside Count.
+      // The override survives any reapplyHandheldHardwareSettings() call so
+      // mobile-sync / scan-context flips can't silently reset to the
+      // handheld-config power. Cleared on dispose.
+      await rfid.setSessionPowerOverrideDbm(_moduleSettings.rfidPowerDbm);
       await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
 
       // Use only the direct vendor stream — RfidManager unified stream duplicates the same tags.
@@ -408,7 +415,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (next == null) return;
     setState(() => _moduleSettings = next);
     await _saveModuleSettings();
-    // Count gear settings are authoritative while inside Count.
+    // Count gear settings are authoritative while inside Count. Push the
+    // override so any reapplyHandheldHardwareSettings() (e.g. on settings
+    // change, scan-context flip) keeps using the gear value, not config.
+    if (mounted) {
+      final rfid = context.read<RfidManager>();
+      await rfid.setSessionPowerOverrideDbm(_moduleSettings.rfidPowerDbm);
+    }
     await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
   }
 
@@ -2404,10 +2417,15 @@ class _CountInventorySettingsScreenState
   void _schedulePowerApply() {
     _powerApplyTimer?.cancel();
     _powerApplyTimer = Timer(const Duration(milliseconds: 180), () async {
-      await RfidVendorChannel.setAntennaPowerDbm(_power);
       if (!mounted) return;
       final rfid = context.read<RfidManager>();
-      await rfid.reapplyHandheldHardwareSettings();
+      // Set the override FIRST so the subsequent reapply uses the gear
+      // value instead of the handheld-config power. This is the actual
+      // fix for "gear slider has no effect on RFD-8500" — the prior order
+      // (setAntennaPowerDbm → reapply) let reapply clobber the slider's
+      // direct write because reapply re-derived power from config.
+      await rfid.setSessionPowerOverrideDbm(_power);
+      await RfidVendorChannel.setAntennaPowerDbm(_power);
       if (mounted) {
         setState(() {});
       }
@@ -2436,6 +2454,9 @@ class _CountInventorySettingsScreenState
     setState(() => _busy = true);
     final rfid = context.read<RfidManager>();
     await rfid.autoDetectHardware();
+    // Re-assert the gear power as the session override so the post-reattach
+    // reapply doesn't snap power back to handheld-config defaults.
+    await rfid.setSessionPowerOverrideDbm(_power);
     await rfid.reapplyHandheldHardwareSettings();
     await RfidVendorChannel.setAntennaPowerDbm(_power);
     await _refreshDiagnostics();

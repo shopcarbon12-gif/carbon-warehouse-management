@@ -25,9 +25,13 @@ abstract class RfidScanner {
 
   /// Apply power / trigger hints from tenant handheld settings (native stack when wired).
   /// [scanContext] matches `RfidManager.scanContext` (e.g. `TRANSFER` uses transfer-out power when locked).
+  /// [powerOverrideDbm], when non-null, takes precedence over the config-derived
+  /// power — used by per-session screens (Count, Transfer In) whose gear is
+  /// authoritative for the duration of the session. Cleared on screen dispose.
   Future<void> applyHandheldRuntimeSettings(
     HandheldRuntimeConfig config, {
     String scanContext = 'TRANSFER',
+    int? powerOverrideDbm,
   });
 
   /// Stop active inventory but keep the reader initialized.

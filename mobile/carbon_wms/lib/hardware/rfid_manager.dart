@@ -213,7 +213,11 @@ class RfidManager extends ChangeNotifier {
     _active = next;
     await _active!.connect();
     _epcSub = _active!.tagReadStream.listen(_handleTagRead, onError: (_) {});
-    await _active!.applyHandheldRuntimeSettings(_settings.config, scanContext: _scanContext);
+    await _active!.applyHandheldRuntimeSettings(
+      _settings.config,
+      scanContext: _scanContext,
+      powerOverrideDbm: _sessionPowerOverrideDbm,
+    );
     // Always merge OEM scan broadcasts: some devices report UHF only via rscja intents while
     // native SDK is linked to a dead path, or sled + built-in overlap.
     _fallbackBarcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen(
@@ -276,11 +280,47 @@ class RfidManager extends ChangeNotifier {
     }
   }
 
+  /// Per-screen power override. When non-null, takes precedence over the
+  /// handheld-config power that `reapplyHandheldHardwareSettings` would
+  /// otherwise apply. Set by screens whose own gear is authoritative for
+  /// the duration of the session (Count, Transfer In). Cleared on dispose.
+  ///
+  /// Without this, the prior bug pattern was: screen calls
+  /// `setAntennaPowerDbm(gearPower)` directly, then any subsequent
+  /// `reapplyHandheldHardwareSettings()` (after mobile-sync, scan-context
+  /// change, etc.) silently overwrites with the handheld-config power and
+  /// the gear slider appears to do nothing on the radio.
+  int? _sessionPowerOverrideDbm;
+
+  int? get sessionPowerOverrideDbm => _sessionPowerOverrideDbm;
+
+  /// Set or clear the per-session power override and immediately push it
+  /// to the active scanner so the radio reflects the new value. Pass
+  /// `null` to clear (returns control to handheld-config power).
+  Future<void> setSessionPowerOverrideDbm(int? dbm) async {
+    if (_sessionPowerOverrideDbm == dbm) return;
+    _sessionPowerOverrideDbm = dbm;
+    final s = _active;
+    if (s != null) {
+      await s.applyHandheldRuntimeSettings(
+        _settings.config,
+        scanContext: _scanContext,
+        powerOverrideDbm: dbm,
+      );
+    }
+    notifyListeners();
+  }
+
   /// Re-apply antenna power / trigger hints after mobile-sync or prefs load.
+  /// Honours [sessionPowerOverrideDbm] when set.
   Future<void> reapplyHandheldHardwareSettings() async {
     final s = _active;
     if (s == null) return;
-    await s.applyHandheldRuntimeSettings(_settings.config, scanContext: _scanContext);
+    await s.applyHandheldRuntimeSettings(
+      _settings.config,
+      scanContext: _scanContext,
+      powerOverrideDbm: _sessionPowerOverrideDbm,
+    );
     notifyListeners();
   }
 

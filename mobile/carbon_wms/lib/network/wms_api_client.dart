@@ -974,6 +974,85 @@ class WmsApiClient {
     return <String, dynamic>{};
   }
 
+  // --- Operations / Transfers (in flow on mobile) -----------------------
+  // Server endpoints live under /api/operations/transfers/*. The mobile
+  // Transfer In screen pulls pending slips for the operator's location,
+  // opens one to view its expected EPCs, scans against it, and commits.
+
+  /// `GET /api/operations/transfers/pending` — slips with state in-transit
+  /// or partially_received whose destination is the operator's location.
+  /// Returns a list of `{id, slip_number, source_location_*, rfid_pending,
+  /// manual_pending, created_at, ...}` rows.
+  Future<List<Map<String, dynamic>>> fetchPendingIncomingTransfers() async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/operations/transfers/pending');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      final rows = decoded['rows'];
+      if (rows is List) {
+        return rows
+            .whereType<Map>()
+            .map((r) => Map<String, dynamic>.from(r))
+            .toList(growable: false);
+      }
+    }
+    return const <Map<String, dynamic>>[];
+  }
+
+  /// `GET /api/operations/transfers/<uuid>` — full RFID + manual contents
+  /// of a single slip, including which EPCs are still in-transit (received
+  /// flag false) vs already received (true).
+  Future<Map<String, dynamic>> fetchTransferDetail(String transferId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/operations/transfers/$transferId');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  /// `POST /api/operations/transfers/receive` — flip RFID items to in-stock
+  /// and settle named manual destination-side adjustments. Returns
+  /// `{ok, transferId, rfidReceived, manualReceived, state}`. The new
+  /// state is `received` if everything matched, `partially_received`
+  /// otherwise.
+  Future<Map<String, dynamic>> commitTransferReceive({
+    required String transferId,
+    required List<String> epcs,
+    List<String> manualAdjustmentIds = const [],
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/operations/transfers/receive');
+    final body = <String, dynamic>{
+      'transferId': transferId,
+      'epcs': epcs,
+      if (manualAdjustmentIds.isNotEmpty)
+        'manualConfirms':
+            manualAdjustmentIds.map((id) => {'adjustmentId': id}).toList(),
+    };
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> postCleanBinByCode(String binCode) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/mobile/clean-bin');

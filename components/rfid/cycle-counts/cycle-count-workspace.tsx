@@ -574,28 +574,14 @@ function ActiveSessionView({
           body: JSON.stringify({ sessionId: sid }),
         });
       } catch {
-        /* idle expiry handles it */
+        /* network blip — operator can re-pause from Hardware Config if needed */
       }
     }
   }, []);
 
-  // Heartbeat /touch every 25s for any active scan-session so 60s idle
-  // expiry doesn't auto-drop while the operator is actively counting.
-  useEffect(() => {
-    if (detail.status !== "active") return;
-    const t = setInterval(() => {
-      for (const [, sid] of scanSessionIdsRef.current.entries()) {
-        void fetch("/api/scan-sessions/touch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: sid }),
-        }).catch(() => {});
-      }
-    }, 25_000);
-    return () => clearInterval(t);
-  }, [detail.status]);
-
-  // On unmount: end all sessions so readers don't stay woken for 60s.
+  // On unmount: end all sessions so readers return to paused state when the
+  // operator navigates away. There is NO server-side idle expiry — sessions
+  // only end on explicit click or this unmount keepalive.
   useEffect(() => {
     return () => {
       for (const [, sid] of scanSessionIdsRef.current.entries()) {

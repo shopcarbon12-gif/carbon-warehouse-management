@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import 'package:carbon_wms/theme/app_theme.dart';
-import 'package:carbon_wms/ui/screens/transfer_in_reports_screen.dart';
+import 'package:carbon_wms/ui/screens/transfer_in_pending_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_out_reports_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -53,7 +53,7 @@ class TransferReportsHubScreen extends StatelessWidget {
                         direction: _LaneDirection.inbound,
                         onTap: () => Navigator.of(context).push<void>(
                           MaterialPageRoute<void>(
-                            builder: (_) => const TransferInReportsScreen(),
+                            builder: (_) => const TransferInPendingScreen(),
                           ),
                         ),
                       ),
