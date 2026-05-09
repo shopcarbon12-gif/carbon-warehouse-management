@@ -49,9 +49,18 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# Operator is in US Eastern. Install tzdata + set TZ so server-side date
+# rendering (Node Date.toLocaleString, log timestamps, server actions
+# returning formatted strings) shows EDT/EST instead of UTC. The Postgres
+# columns are TIMESTAMPTZ so storage stays UTC; only the display layer
+# changes. Override per-deploy via Coolify env if a future operator is
+# elsewhere — this is the project default, not a hard pin.
+ENV TZ=America/New_York
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs \
-  && apk add --no-cache libc6-compat postgresql-client su-exec
+  && apk add --no-cache libc6-compat postgresql-client su-exec tzdata \
+  && cp /usr/share/zoneinfo/America/New_York /etc/localtime \
+  && echo "America/New_York" > /etc/timezone
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
