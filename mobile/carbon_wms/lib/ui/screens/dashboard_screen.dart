@@ -83,7 +83,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // locations
   List<Map<String, String>> _locations = [];
   String? _currentLocationId;
-  String _currentLocationName = 'Orlando Warehouse';
+  // Empty until /api/auth/session-locations resolves — we deliberately
+  // do NOT default to a real warehouse name (was 'Orlando Warehouse'),
+  // which would mislead an operator who logged into a different site
+  // before the location list arrived.
+  String _currentLocationName = '';
 
   @override
   void initState() {

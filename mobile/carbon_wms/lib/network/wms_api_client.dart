@@ -1759,6 +1759,10 @@ class WmsApiClient {
 
   /// Unified SAVE/UPLOAD finalisation. [intent] is 'save' or 'upload';
   /// [screen] is 'count_inventory' / 'count_inventory_override' / 'add_on_count'.
+  /// [clientFilename] when non-null overrides the server's auto-named CSV
+  /// filename — used by the count screen so the operator-visible name on
+  /// the web reports page matches what the operator saw at commit time
+  /// (`count-MMDD-HMM-FirstName.csv`).
   Future<Map<String, dynamic>> postScanFinalize({
     required String intent,
     required String screen,
@@ -1767,6 +1771,7 @@ class WmsApiClient {
     String? addOnSourceType,
     String? addOnSourceId,
     String? addOnSessionId,
+    String? clientFilename,
   }) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
@@ -1780,6 +1785,8 @@ class WmsApiClient {
       if (addOnSourceType != null) 'addOnSourceType': addOnSourceType,
       if (addOnSourceId != null) 'addOnSourceId': addOnSourceId,
       if (addOnSessionId != null) 'addOnSessionId': addOnSessionId,
+      if (clientFilename != null && clientFilename.isNotEmpty)
+        'clientFilename': clientFilename,
     });
     final headers = <String, String>{
       'Content-Type': 'application/json',

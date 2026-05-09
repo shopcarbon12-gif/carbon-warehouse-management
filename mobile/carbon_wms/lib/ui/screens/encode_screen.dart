@@ -48,7 +48,6 @@ class EncodeScreen extends StatefulWidget {
 class _EncodeScreenState extends State<EncodeScreen> {
   static const Duration _searchDebounce = Duration(milliseconds: 300);
   static const int _minQueryLen = 2;
-  static const int _kReadWindowMs = 1500;
 
   final TextEditingController _searchCtrl = TextEditingController();
   Timer? _debounce;
@@ -244,23 +243,68 @@ class _EncodeScreenState extends State<EncodeScreen> {
     _activate2DMode();
   }
 
-  /// Read a single EPC off whatever tag is in front of the gun. Returns
-  /// the 24-hex EPC, or null after [_kReadWindowMs] of silence.
+  /// Minimum RSSI (dBm) for an EPC to qualify as "the operator's tag."
+  /// Tighter than the locate-screen threshold because encode WRITES to
+  /// the chip — a wrong-tag pickup is non-recoverable until the operator
+  /// finds the mis-encoded tag and re-encodes it. Requires the tag to
+  /// be effectively touching the antenna.
+  ///
+  /// Bug context: prior to this gate, _readOneTag accepted the FIRST
+  /// EPC seen. At 22+ dBm the radio reaches a metre or more, which
+  /// meant the gun would gleefully encode neighbouring-rack tags the
+  /// operator had no idea were even in range. Slider felt "broken"
+  /// because raising power past ~21 dBm crossed the threshold where
+  /// the next-rack tag returns a louder ping than the one in hand.
+  static const int _kEncodeMinRssiDbm = -45;
+  static const int _kEncodeReadCollectMs = 350;
+
+  /// Read tags off whatever is in front of the gun for ~350ms, pick the
+  /// strongest RSSI candidate, and only accept it if its RSSI is above
+  /// [_kEncodeMinRssiDbm] (close-contact). Returns the 24-hex EPC, or
+  /// null when the window expires with no in-range tag — the caller
+  /// surfaces "No tag detected — get closer" to the operator.
+  ///
+  /// Why a window instead of first-read: at high power a single radio
+  /// burst returns 5–10 EPCs in <50ms, mostly from the rack behind the
+  /// operator. Picking the strongest RSSI in a short window is the
+  /// only reliable way to identify "the tag I'm holding."
   Future<String?> _readOneTag(RfidManager rfid) async {
-    final completer = Completer<String?>();
+    String? bestEpc;
+    int? bestRssi;
+    int? sawAnyRssi;
     final sub = rfid.geigerTagReads.listen((read) {
       final epc = read.epcHex24.toUpperCase();
       if (epc.isEmpty) return;
-      if (!completer.isCompleted) completer.complete(epc);
-    }, onError: (_) {
-      if (!completer.isCompleted) completer.complete(null);
-    });
+      final r = read.rssi;
+      if (r == null) {
+        // Track that we heard SOMETHING even without RSSI — surfaced
+        // diagnostically by callers via timeout-with-no-best.
+        sawAnyRssi ??= -200;
+        return;
+      }
+      if (bestRssi == null || r > bestRssi!) {
+        bestEpc = epc;
+        bestRssi = r;
+      }
+    }, onError: (_) {});
     unawaited(rfid.startLocateScanning());
     try {
-      return await completer.future.timeout(
-        const Duration(milliseconds: _kReadWindowMs),
-        onTimeout: () => null,
+      // Collect for the short read window — long enough for ~3-5 radio
+      // sweeps on Chainway / Zebra, short enough that the operator
+      // doesn't perceive lag between trigger pull and result.
+      await Future<void>.delayed(
+        const Duration(milliseconds: _kEncodeReadCollectMs),
       );
+      final epc = bestEpc;
+      final rssi = bestRssi;
+      if (epc == null || rssi == null) return null;
+      if (rssi < _kEncodeMinRssiDbm) {
+        // Tag is in range but not close enough — surface as null so
+        // the caller's "get closer" message fires. This is the gate
+        // that prevents neighbouring-rack pickup at high power.
+        return null;
+      }
+      return epc;
     } finally {
       await sub.cancel();
       unawaited(rfid.stopLocateScanning());

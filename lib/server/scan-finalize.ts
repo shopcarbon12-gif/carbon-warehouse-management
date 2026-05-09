@@ -76,6 +76,14 @@ export type ScanFinalizeInput = {
   addOnSourceId?: string;
   /** When screen='add_on_count', the session that produced this. */
   addOnSessionId?: string;
+  /** Operator-visible filename suggested by the mobile client, e.g.
+   *  `count-0508-851-Elior.csv`. When provided, this is what gets stamped
+   *  onto inventory_reports.filename so the web reports page shows the
+   *  same name the operator saw on the handheld at commit time.
+   *  Falls back to the legacy auto-generated name when null/empty.
+   *  Defective filenames (the secondary attachment) are not affected —
+   *  they keep the `<filename>.defective.csv` suffix derived from this. */
+  clientFilename?: string;
 };
 
 export type ScanFinalizeResult = {
@@ -189,7 +197,17 @@ export async function finalizeScanSession(
 ): Promise<ScanFinalizeResult> {
   const now = new Date();
   const csv = buildAuditCsv(input.rows);
-  const filename = buildFilename(input.screen, now);
+  // Honour client-supplied filename (operator-visible name from mobile)
+  // when provided; otherwise fall back to the screen+timestamp name.
+  // Strip any path separators / control chars defensively — this string
+  // ends up in inventory_reports.filename and may be rendered as-is.
+  const sanitizedClientName = (input.clientFilename ?? "")
+    .replace(/[\\/\r\n\t]+/g, "")
+    .trim()
+    .slice(0, 200);
+  const filename = sanitizedClientName.length > 0
+    ? sanitizedClientName
+    : buildFilename(input.screen, now);
   const activity = activityForScreen(input.screen);
 
   const client = await pool.connect();

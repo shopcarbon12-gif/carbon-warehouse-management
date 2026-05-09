@@ -172,6 +172,42 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   int _displaySkuCount = 0;
   String? _previousScanContext;
 
+  /// Saved login email — used to derive the operator's first name for
+  /// the auto-generated CSV filename on the Continue screen. Loaded
+  /// once on screen entry; null until then. Mirrors the same pattern
+  /// fast_putaway_screen uses for its drawer header.
+  String? _userEmail;
+
+  Future<void> _loadUserEmail() async {
+    final api = context.read<WmsApiClient>();
+    final email = await api.getSavedLoginEmail();
+    if (mounted) setState(() => _userEmail = email);
+  }
+
+  /// Build the operator-visible CSV filename for this commit:
+  /// `count-MMDD-HMM-FirstName.csv`. Same recipe used in the
+  /// continue-screen header, hoisted here so the upload + archive
+  /// callbacks can pass it to the server (which then stamps the
+  /// inventory_reports row with the same name — what the operator
+  /// sees on the web reports page).
+  String _autoReportFilename() {
+    final now = DateTime.now();
+    final mm = now.month.toString().padLeft(2, '0');
+    final dd = now.day.toString().padLeft(2, '0');
+    final hStr = now.hour.toString();
+    final mmStr = now.minute.toString().padLeft(2, '0');
+    final email = (_userEmail ?? '').trim();
+    final emailLocal =
+        email.contains('@') ? email.split('@').first : email;
+    final firstNameRaw = emailLocal
+        .split(RegExp(r'[._\-+]'))
+        .firstWhere((s) => s.isNotEmpty, orElse: () => '');
+    final firstName = firstNameRaw.isEmpty
+        ? 'Operator'
+        : '${firstNameRaw[0].toUpperCase()}${firstNameRaw.substring(1).toLowerCase()}';
+    return 'count-$mm$dd-$hStr$mmStr-$firstName.csv';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -179,6 +215,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     unawaited(ScanSounds.instance.init());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initModule());
+      unawaited(_loadUserEmail());
     });
   }
 
@@ -887,6 +924,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       screen: overrideCatalog ? 'count_inventory_override' : 'count_inventory',
       rows: rows,
       overrideCatalog: overrideCatalog,
+      clientFilename: _autoReportFilename(),
     );
     final valid = result['rowsValid'] ?? 0;
     final failed = result['rowsFailed'] ?? 0;
@@ -916,6 +954,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       screen: 'count_inventory',
       rows: rows,
       overrideCatalog: false,
+      clientFilename: _autoReportFilename(),
     );
   }
 
@@ -927,6 +966,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         builder: (_) => _CountInventoryContinueScreen(
           groupedRows: groups,
           locationName: _currentLocationName,
+          userEmail: _userEmail,
           onSaveCsv: _saveSessionCsvToDevice,
           buildBackendPreviewPayload: () => _buildBackendPreviewPayload(groups),
           onUploadReport: _uploadCountReport,
@@ -1845,6 +1885,7 @@ class _CountInventoryContinueScreen extends StatefulWidget {
   const _CountInventoryContinueScreen({
     required this.groupedRows,
     required this.locationName,
+    required this.userEmail,
     required this.onSaveCsv,
     required this.buildBackendPreviewPayload,
     required this.onUploadReport,
@@ -1853,6 +1894,14 @@ class _CountInventoryContinueScreen extends StatefulWidget {
 
   final List<_GroupedRow> groupedRows;
   final String locationName;
+
+  /// Saved login email for the operator. Used to derive the first-name
+  /// segment of the auto-generated CSV filename
+  /// (`count-MMDD-HMM-FirstName.csv`). Null when the email isn't yet
+  /// loaded from the API client — the filename falls back to a
+  /// generic "operator" segment in that case.
+  final String? userEmail;
+
   final Future<String?> Function() onSaveCsv;
   final Map<String, dynamic> Function() buildBackendPreviewPayload;
   // UPLOAD: 2-step pipeline — archive then apply to inventory. Both must
@@ -1960,9 +2009,41 @@ class _CountInventoryContinueScreenState
   Widget build(BuildContext context) {
     final totalItems =
         widget.groupedRows.fold<int>(0, (sum, row) => sum + row.qty);
+
+    // VALID-only EPC count: rows whose EPC decoded successfully against
+    // the company prefix AND resolved to a real custom_sku/system_id.
+    // The defective tags (epcInvalid OR catalogMissing) still ride along
+    // in the CSV upload — server splits them into the defective_epcs
+    // table — but they are NOT shown in the operator-facing total.
+    final validEpcs = widget.groupedRows
+        .where((g) => !g.epcInvalid && !g.catalogMissing)
+        .fold<int>(0, (sum, row) => sum + row.qty);
+    final defectiveEpcs = totalItems - validEpcs;
+
     final canUpload = totalItems > 0;
-    const fileNameValue = '';
-    const fileStatusValue = 'N/A';
+
+    // Auto-generated filename: count-MMDD-HMM-FirstName.csv
+    // - MMDD: 2-digit month + 2-digit day
+    // - HMM: hour (no leading zero) + 2-digit minute (matches the
+    //   user's example "0508-851" for May 8 at 8:51)
+    // - FirstName: the email's local-part first token, capitalised.
+    //   Falls back to "Operator" if the email hasn't loaded yet.
+    final now = DateTime.now();
+    final mm = now.month.toString().padLeft(2, '0');
+    final dd = now.day.toString().padLeft(2, '0');
+    final hStr = now.hour.toString();
+    final mmStr = now.minute.toString().padLeft(2, '0');
+    final email = (widget.userEmail ?? '').trim();
+    final emailLocal =
+        email.contains('@') ? email.split('@').first : email;
+    final firstNameRaw = emailLocal
+        .split(RegExp(r'[._\-+]'))
+        .firstWhere((s) => s.isNotEmpty, orElse: () => '');
+    final firstName = firstNameRaw.isEmpty
+        ? 'Operator'
+        : '${firstNameRaw[0].toUpperCase()}${firstNameRaw.substring(1).toLowerCase()}';
+    final fileNameValue = 'count-$mm$dd-$hStr$mmStr-$firstName.csv';
+    final fileStatusValue = canUpload ? 'READY' : 'NO ITEMS';
 
     return CarbonScaffold(
       pageTitle: 'commit',
@@ -2185,15 +2266,29 @@ class _CountInventoryContinueScreenState
                           ),
                           SizedBox(height: 8.h),
                           Text(
-                            'NO ITEMS SCANNED',
+                            validEpcs == 0
+                                ? 'NO VALID EPCs SCANNED'
+                                : '$validEpcs VALID EPC${validEpcs == 1 ? "" : "s"}',
                             style: GoogleFonts.spaceGrotesk(
-                              fontSize: 14.sp,
+                              fontSize: 18.sp,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 2.2,
                               color: const Color(0xFF009496),
                               height: 1.0.h,
                             ),
                           ),
+                          if (defectiveEpcs > 0) ...[
+                            SizedBox(height: 4.h),
+                            Text(
+                              '+ $defectiveEpcs DEFECTIVE (uploaded separately)',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 11.sp,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.6,
+                                color: const Color(0xFFB87A00),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
