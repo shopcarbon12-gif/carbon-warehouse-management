@@ -82,6 +82,7 @@ export async function POST(req: Request) {
     location_id: string;
     tenant_id: string;
     reader_online: boolean;
+    reader_quarantine_reason: string | null;
   }>(
     `SELECT
        a.id::text         AS antenna_id,
@@ -89,7 +90,8 @@ export async function POST(req: Request) {
        r.id::text         AS reader_id,
        r.location_id::text AS location_id,
        l.tenant_id::text  AS tenant_id,
-       r.status_online    AS reader_online
+       r.status_online    AS reader_online,
+       r.quarantine_reason AS reader_quarantine_reason
      FROM devices a
      INNER JOIN devices r ON r.id = a.parent_device_id
      INNER JOIN locations l ON l.id = r.location_id
@@ -102,6 +104,19 @@ export async function POST(req: Request) {
   const row = r.rows[0]!;
   if (row.tenant_id !== session.tid) {
     return NextResponse.json({ error: "Antenna belongs to another tenant" }, { status: 403 });
+  }
+  // Antenna tests on a quarantined reader can never produce reads —
+  // chassis hardware is dead. Refuse early so the operator gets a real
+  // reason instead of staring at a never-arming test.
+  if (row.reader_quarantine_reason) {
+    return NextResponse.json(
+      {
+        error: `Reader is quarantined: ${row.reader_quarantine_reason}`,
+        reason: "reader_quarantined",
+        quarantine_reason: row.reader_quarantine_reason,
+      },
+      { status: 409 },
+    );
   }
 
   // When sweep is requested, override the initial flags.powerArg with the
