@@ -279,6 +279,10 @@ export class MonsoonSupervisor {
   /** Last-bundle reference so setActiveScanSessionReaders can reconcile
    *  immediately on session change without waiting for the next config-pull. */
   private lastBundle: AgentConfigBundle | null = null;
+  /** Reader IDs we've already logged "skipping quarantined" for. Cleared
+   *  when a reader's quarantine status changes, so the log fires exactly
+   *  once on transition (and on agent boot) instead of every 5 s tick. */
+  private loggedQuarantined = new Map<string, string>();
 
   /** Optional callback for routing TEST_MODE reads to the antenna-test
    *  controller. Set via attachTestModeHandler() after construction. */
@@ -571,12 +575,45 @@ export class MonsoonSupervisor {
     // for-workflow path overrides paused state for the duration of the
     // session, then default-paused readers stop scanning the moment the
     // operator commits or navigates away.
+    //
+    // QUARANTINE OVERRIDE: a reader with `quarantine_reason` non-null is
+    // hardware-broken at the chassis level — UART break loop, dead MCU,
+    // failed regulator, etc. Software cannot make its silicon work. We
+    // skip reconcile for it unconditionally, even if a scan-session is
+    // somehow open (the start-session endpoint refuses these, but defense
+    // in depth costs nothing). Logged once on transition (boot OR reason
+    // changed OR reader newly quarantined) so an SSH-tail shows the
+    // inventory of broken hardware without grepping the DB or spamming
+    // every 5-second config tick.
+    const quarantinedNow = new Set<string>();
+    for (const r of bundle.readers) {
+      if (r.quarantine_reason) {
+        quarantinedNow.add(r.id);
+        const prev = this.loggedQuarantined.get(r.id);
+        if (prev !== r.quarantine_reason) {
+          log.info("supervisor: skipping quarantined reader", {
+            readerId: r.id,
+            name: r.name,
+            host: r.network_address,
+            reason: r.quarantine_reason,
+          });
+          this.loggedQuarantined.set(r.id, r.quarantine_reason);
+        }
+      }
+    }
+    for (const id of this.loggedQuarantined.keys()) {
+      if (!quarantinedNow.has(id)) {
+        log.info("supervisor: reader un-quarantined", { readerId: id });
+        this.loggedQuarantined.delete(id);
+      }
+    }
     const desiredById = new Map(
       bundle.readers
         .filter(
           (r) =>
-            !(r.effective_paused ?? false) ||
-            this.activeScanSessionReaders.has(r.id),
+            !r.quarantine_reason &&
+            (!(r.effective_paused ?? false) ||
+              this.activeScanSessionReaders.has(r.id)),
         )
         .map((r) => [r.id, r] as const),
     );

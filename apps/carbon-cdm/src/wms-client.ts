@@ -41,10 +41,18 @@ export type AgentConfigReader = {
   zone_name: string | null;
   antennas: AgentConfigAntenna[];
   /** Per-reader pause flag computed server-side (manual pause OR
-   *  schedule window). True → supervisor treats this reader as if it
-   *  were absent from the bundle (kills child, no spawn). Older WMS
-   *  bundles may omit; treat missing as false (not paused). */
+   *  schedule window OR quarantine_reason set). True → supervisor
+   *  treats this reader as if it were absent from the bundle (kills
+   *  child, no spawn). Older WMS bundles may omit; treat missing as
+   *  false (not paused). */
   effective_paused?: boolean;
+  /** When non-null, an admin has marked this reader as broken at the
+   *  chassis level (firmware fault / dead MCU / failed regulator —
+   *  software cannot recover it; only a power-cycle / reflash / swap
+   *  fixes it). The supervisor MUST skip reconcile entirely for
+   *  quarantined readers, regardless of any active scan-session push.
+   *  See migration 0062_devices_quarantine_reason.sql. */
+  quarantine_reason?: string | null;
 };
 
 export type AgentConfigBundle = {
