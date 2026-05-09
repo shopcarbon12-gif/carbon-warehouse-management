@@ -298,8 +298,15 @@ export async function getAgentDiagnosis(
     monsoon_driver: string;
     is_authorized: boolean;
   }>(
+    // Default null monsoon_driver to 'console', NOT 'stream'. The agent
+    // bundle builder (line ~590, `cfg.monsoon_driver === "stream" ? "stream" :
+    // "console"`) treats anything-not-stream as console at runtime, so the
+    // diagnosis snapshot must mirror that or the Recover modal misleads
+    // operators into thinking a reader is on stream when the supervisor is
+    // actually running new_monsoonreader (console binary). The console driver
+    // is the project-wide default — see project_console_driver_preferred memo.
     `SELECT d.id::text, d.name, d.network_address,
-            COALESCE(d.config->>'monsoon_driver', 'stream') AS monsoon_driver,
+            COALESCE(d.config->>'monsoon_driver', 'console') AS monsoon_driver,
             d.is_authorized
        FROM devices d
       WHERE d.cdm_agent_id = $1::uuid
