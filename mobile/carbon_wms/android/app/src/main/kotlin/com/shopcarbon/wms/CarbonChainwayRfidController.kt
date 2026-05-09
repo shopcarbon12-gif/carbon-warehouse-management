@@ -840,13 +840,19 @@ class CarbonChainwayRfidController(private val context: Context) {
         return false
       }
 
-      // Re-assert user-configured power before write. initUhfReaderDirect now sets 30 dBm
-      // for scanning; writes need more link budget than reads, and the user-configured value
-      // (typically 30) must actually be in effect on the radio at write time.
-      val reqPower = requestedPowerDbm.get().coerceIn(5, 23)
+      // Boost to MAX (23 dBm — the C72E thermal cap) for the write window
+      // regardless of the slider. Writes need materially more link-budget
+      // than reads — at the slider's dBm the radio could hear the tag
+      // (read OK) but the tag's EEPROM charge pump couldn't gather enough
+      // energy to commit, producing the "writeData=true but EPC didn't
+      // change" silent failure. The slider's value is restored after the
+      // post-write power cycle so subsequent inventory honours the
+      // operator's setting.
+      val sliderPower = requestedPowerDbm.get().coerceIn(5, 23)
+      val writePower = 23  // C72E max — never exceed thermal cap
       val curPower = runCatching { reader.getPower() }.getOrDefault(-1)
-      val pwrSetOk = runCatching { reader.setPower(reqPower) }.getOrDefault(false)
-      Log.d(TAG, "pre-write power: getPower()=$curPower requested=$reqPower setPower($reqPower)=$pwrSetOk")
+      val pwrSetOk = runCatching { reader.setPower(writePower) }.getOrDefault(false)
+      Log.d(TAG, "pre-write power: getPower()=$curPower slider=$sliderPower writePower=$writePower setPower=$pwrSetOk")
 
       var writeOk = false
       var writeBranch = "none"
@@ -892,8 +898,12 @@ class CarbonChainwayRfidController(private val context: Context) {
       Log.d(TAG, "power-cycle: stopInventory()+setCW(0)=$cwOffOk setPower(5)=$lowPwrOk; sleeping 600ms")
       android.os.SystemClock.sleep(600)
       val cwOnOk = runCatching { reader.setCW(1) }.getOrDefault(false)
-      val restoreOk = runCatching { reader.setPower(reqPower) }.getOrDefault(false)
-      Log.d(TAG, "power-cycle: setCW(1)=$cwOnOk setPower($reqPower)=$restoreOk; tag should have rebooted from EEPROM")
+      // Restore the operator's slider power (NOT the boosted writePower).
+      // After encode the radio returns to whatever the slider had before
+      // the boost — verify scans the tag at that level, and any
+      // subsequent inventory honours the operator's setting.
+      val restoreOk = runCatching { reader.setPower(sliderPower) }.getOrDefault(false)
+      Log.d(TAG, "power-cycle: setCW(1)=$cwOnOk restored to slider=$sliderPower (was boosted=$writePower)=$restoreOk; tag should have rebooted from EEPROM")
 
       // Verify: multi-sighting scan AFTER power cycle. A tag that genuinely committed newEpc
       // to EEPROM will broadcast newEpc repeatedly. A tag that didn't commit will broadcast

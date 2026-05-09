@@ -29,25 +29,18 @@ function compareBinCode(a: string, b: string): number {
   return sideOrder(ua.slice(-1)) - sideOrder(ub.slice(-1));
 }
 
-/** Sanitize bin search input. First char must be a digit; second char (if
- *  present) must be a letter. Beyond that we accept any alphanumerics and
- *  uppercase the whole thing — bin codes are stored uppercase. */
+/** Sanitize bin search input. We accept any case (lowercase typing is fine)
+ *  and any alphanumeric character; non-alnum chars are stripped. Output is
+ *  always uppercase — that's what the bin codes are stored as.
+ *
+ *  No position-based rejection here. The previous version refused to add a
+ *  letter as the first character, which made lowercase-typing-with-letter-
+ *  prefix feel like the input was broken (operator types "a", nothing
+ *  appears). The actual "digit then letter" pattern is enforced naturally
+ *  by the match filter — type "99x" and you'll see no matches because no
+ *  bin starts that way, which is the right UX. */
 function sanitizeBinSearch(raw: string): string {
-  const up = raw.toUpperCase();
-  let out = "";
-  for (let i = 0; i < up.length; i += 1) {
-    const ch = up[i]!;
-    if (i === 0) {
-      if (/[0-9]/.test(ch)) out += ch;
-      continue;
-    }
-    if (i === 1) {
-      if (/[A-Z]/.test(ch)) out += ch;
-      continue;
-    }
-    if (/[A-Z0-9]/.test(ch)) out += ch;
-  }
-  return out;
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
 type BinEpcRow = {
@@ -359,7 +352,7 @@ export function LocationsManager({
                   spellCheck={false}
                   value={binSearch}
                   onChange={(e) => setBinSearch(sanitizeBinSearch(e.target.value))}
-                  placeholder="Search bin (e.g. 5A01) — number then letter"
+                  placeholder="Search bin (e.g. 5A01 / 5a01) — auto-uppercased"
                   className="flex-1 bg-transparent font-mono text-sm text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70"
                   aria-label="Search bin"
                 />
@@ -376,8 +369,8 @@ export function LocationsManager({
                 ) : null}
               </label>
               <p className="mt-1 px-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                Type the digit + letter prefix; first {DEFAULT_VISIBLE_BINS} matches show below
-                (L → C → R within the same row).
+                Type the bin prefix in any case (it'll uppercase as you type); first{" "}
+                {DEFAULT_VISIBLE_BINS} matches show below (L → C → R within the same row).
               </p>
             </div>
           ) : null}

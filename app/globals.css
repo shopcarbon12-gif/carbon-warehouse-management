@@ -364,7 +364,6 @@ html[data-theme="light"] .wms-table-row-action {
   border: 1px solid var(--wms-table-clean-border);
   color: var(--wms-table-clean-fg);
   background: var(--wms-table-clean-bg);
-  font-weight: 600;
 }
 
 .wms-table-btn-clean:hover:not(:disabled) {

@@ -513,28 +513,62 @@ class CarbonZebraRfidController(
     } catch (_: Exception) {
       false
     }
+
+    // Capture pre-write power index so we can boost-then-restore around the
+    // writeWait call. Write requires materially more link-budget than read
+    // — at the slider's dBm the radio could hear the tag (read OK) but the
+    // tag's EEPROM charge pump couldn't gather enough energy to actually
+    // commit the new EPC, so writeWait returned without exception while
+    // the silicon rejected the write. 50+ "defective" tags traced back to
+    // this. Force max power for the write window, restore afterwards.
+    val levels = r.ReaderCapabilities.transmitPowerLevelValues
+    val prevPowerIdx = runCatching {
+      r.Config.Antennas.getAntennaRfConfig(1).getTransmitPowerIndex()
+    }.getOrDefault(-1)
+    val maxPowerIdx = (levels?.size ?: 1) - 1
+    runCatching {
+      if (levels != null && maxPowerIdx >= 0 && prevPowerIdx != maxPowerIdx) {
+        val cfg = r.Config.Antennas.getAntennaRfConfig(1)
+        cfg.setTransmitPowerIndex(maxPowerIdx)
+        r.Config.Antennas.setAntennaRfConfig(1, cfg)
+        Log.d(TAG, "performWriteEpc: boosted power idx $prevPowerIdx -> $maxPowerIdx for write")
+      }
+    }.onFailure { Log.w(TAG, "performWriteEpc: power boost failed: ${it.message}") }
+
+    // Allow the SDK more time on synchronous tag-access calls. The default
+    // is short on some firmware revisions and a slow tag → spurious
+    // OperationFailureException → false. Per the Zebra Tag Write Guide,
+    // setAccessOperationWaitTimeout should be raised before writeWait.
+    runCatching { r.Config.setAccessOperationWaitTimeout(3000) }
+      .onFailure { Log.w(TAG, "setAccessOperationWaitTimeout failed (older SDK?): ${it.message}") }
+
     try {
-      // Log pre-write transmit power so write attempts are auditable against the radio state.
+      // Log effective transmit power so write attempts are auditable.
       runCatching {
         val idx = r.Config.Antennas.getAntennaRfConfig(1).getTransmitPowerIndex()
-        val levels = r.ReaderCapabilities.transmitPowerLevelValues
         val rawDbm = if (levels != null && idx in levels.indices) levels[idx] else -1
-        Log.d(TAG, "pre-write power: antenna=1 idx=$idx rawLevel=$rawDbm (requested=${requestedPowerDbm.get()} dBm)")
+        Log.d(TAG, "pre-write power: antenna=1 idx=$idx rawLevel=$rawDbm (requested=${requestedPowerDbm.get()} dBm) prevIdx=$prevPowerIdx")
       }
 
       val params = r.Actions.TagAccess.WriteAccessParams()
       params.accessPassword = 0L
       params.memoryBank = com.zebra.rfid.api3.MEMORY_BANK.MEMORY_BANK_EPC
       params.offset = 2                       // skip CRC (word 0) + PC (word 1)
-      params.writeDataLength = 6              // 6 words × 16 bits = 96 bits
-      params.writeRetries = 1
+      params.writeDataLength = newEpc.length / 4  // hex chars / 4 = words. 24/4 = 6 for 96-bit EPC.
+      params.writeRetries = 3                 // partial-write recovery (Zebra recommends ≥3 with prefilter)
       params.setWriteData(newEpc)             // hex string — SDK converts to bytes
 
-      // writeWait is void — a successful return doesn't confirm the silicon accepted
-      // the write. It only throws when the SDK knows it failed. Some radio-level
-      // failures (weak signal, tag moved) produce neither exception nor success.
-      r.Actions.TagAccess.writeWait(targetEpc, params, null, null)
-      Log.d(TAG, "writeWait(target=$targetEpc, new=$newEpc) returned without exception")
+      // 6-param writeWait with bPrefilter=true. The SDK then applies the
+      // tagID as a SELECT prefilter so the write packet only addresses
+      // the target tag — critical when the radio hears 5+ tags from
+      // adjacent racks at write power. Without prefilter, the write
+      // could go to the wrong tag (or none). bTIDPrefilter=false on the
+      // first attempt — TID prefilter doubles write latency and isn't
+      // needed for unique EPCs. The 4-param version we previously used
+      // had no prefilter at all and is what the Zebra Pre-Filter
+      // Configurations Tutorial explicitly warns against for EPC writes.
+      r.Actions.TagAccess.writeWait(targetEpc, params, null, null, true, false)
+      Log.d(TAG, "writeWait(target=$targetEpc, new=$newEpc, prefilter=true) returned without exception")
 
       // Settle before the power cycle so the tag's charge pump has a moment to finish its
       // (attempted) EEPROM write before we kill RF.
@@ -550,23 +584,28 @@ class CarbonZebraRfidController(
       // This is the fix for the bug where Chainway (via the symmetric controller) claimed
       // ENCODED on a tag that Samsung then read back as the legacy C1... EPC — Samsung was
       // effectively doing the power-cycle that the verifier should have done itself.
-      val levels = r.ReaderCapabilities.transmitPowerLevelValues
-      val prevIdx = runCatching { r.Config.Antennas.getAntennaRfConfig(1).getTransmitPowerIndex() }
-        .getOrDefault(-1)
+      // (`levels` was captured at the top of the function — reuse it here.)
       val minIdx = 0
       runCatching {
         val cfg = r.Config.Antennas.getAntennaRfConfig(1)
         cfg.setTransmitPowerIndex(minIdx)
         r.Config.Antennas.setAntennaRfConfig(1, cfg)
       }.onFailure { Log.w(TAG, "power-cycle: setTransmitPowerIndex($minIdx) failed: ${it.message}") }
-      Log.d(TAG, "power-cycle: prevIdx=$prevIdx dropped to idx=$minIdx (levels.size=${levels?.size ?: -1}); sleeping 600ms")
+      Log.d(TAG, "power-cycle: dropped from boosted idx=$maxPowerIdx to idx=$minIdx (levels.size=${levels?.size ?: -1}); sleeping 600ms")
       Thread.sleep(600)
+      // Restore to the operator's pre-boost power, NOT the boosted max we
+      // were at right before this drop. That way encode returns the radio
+      // to whatever the slider had — verify scans the tag at the user's
+      // chosen power, and the next read after encode behaves like the
+      // operator expected.
+      val restoreIdx = if (prevPowerIdx >= 0) prevPowerIdx
+        else indexClosestToDbm(levels ?: IntArray(0), requestedPowerDbm.get())
       runCatching {
         val cfg = r.Config.Antennas.getAntennaRfConfig(1)
-        cfg.setTransmitPowerIndex(if (prevIdx >= 0) prevIdx else indexClosestToDbm(levels ?: IntArray(0), requestedPowerDbm.get()))
+        cfg.setTransmitPowerIndex(restoreIdx)
         r.Config.Antennas.setAntennaRfConfig(1, cfg)
       }.onFailure { Log.w(TAG, "power-cycle: restore setTransmitPowerIndex failed: ${it.message}") }
-      Log.d(TAG, "power-cycle: restored to prevIdx=$prevIdx; tag should have rebooted from EEPROM")
+      Log.d(TAG, "power-cycle: restored to operator's idx=$restoreIdx (was $prevPowerIdx pre-boost); tag should have rebooted from EEPROM")
 
       // Multi-sighting verify after power cycle. Additionally requires oldSightings==0 —
       // see verifyEpcWrite for rationale.
@@ -609,6 +648,19 @@ class CarbonZebraRfidController(
       lastError = e.message ?: e.javaClass.simpleName
       return false
     } finally {
+      // If we exited via exception before the post-write power cycle ran,
+      // the radio is still at the boosted max. Restore the operator's
+      // power so subsequent inventory uses the slider value.
+      if (prevPowerIdx >= 0 && levels != null) {
+        runCatching {
+          val cfg = r.Config.Antennas.getAntennaRfConfig(1)
+          if (cfg.getTransmitPowerIndex() != prevPowerIdx) {
+            cfg.setTransmitPowerIndex(prevPowerIdx)
+            r.Config.Antennas.setAntennaRfConfig(1, cfg)
+            Log.d(TAG, "performWriteEpc finally: restored power idx=$prevPowerIdx after early exit")
+          }
+        }.onFailure { Log.w(TAG, "performWriteEpc finally: restore power failed: ${it.message}") }
+      }
       if (wasRunning) {
         try { r.Actions.Inventory.perform() } catch (_: Exception) { /* ignore */ }
       }
