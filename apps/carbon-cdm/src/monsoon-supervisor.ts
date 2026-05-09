@@ -43,6 +43,22 @@ const STREAM_PORT_BASE = 30100;   // MonsoonReader --stream port for reader 0; +
 const CONTROL_PORT_BASE = 20100;  // MonsoonReader --control port; +N per extra reader
 const MIN_BACKOFF_MS = 2_000;
 const MAX_BACKOFF_MS = 60_000;
+
+/**
+ * Auto-sweep recovery: when port rotation alone fails to recover a stuck
+ * radio (the "chassis-power-cycle wall" pattern — clean TCP, zero bytes),
+ * walk the transmit power across these steps. A power-level CHANGE forces
+ * the chassis RF stage to reconfigure (PLL relock + calibration), which
+ * incidentally clears firmware-level stuck inventory states. Verified
+ * 2026-05-09 via manual Antenna-Test Sweep mode on .22 and .82 — both
+ * recovered without a physical PoE cycle. See
+ * project_sweep_mode_unsticks_radio_2026_05_09 in agent memory.
+ *
+ * Powers are the `--power` arg in tenths of a dBm: 100 = 10 dBm, 330 = 33 dBm.
+ */
+const SWEEP_POWERS: readonly number[] = [100, 200, 330];
+/** Cooldown so a permanently-broken reader doesn't sweep-thrash forever. */
+const SWEEP_RETRY_COOLDOWN_MS = 30 * 60 * 1000;
 /**
  * Candidate Monsoon-over-Ethernet ports. The first time a reader spawns
  * we use the operator-configured port; if the resulting child stays silent
@@ -188,6 +204,20 @@ type ReaderSlot = {
    * Reset to false after the on-exit handler consumes it.
    */
   intendedKill: boolean;
+  /**
+   * When non-null, the next spawn(s) override the configured transmit power
+   * with this value. Used by the auto-sweep recovery state machine to walk
+   * a stuck radio through SWEEP_POWERS until something un-sticks it. Cleared
+   * on first-byte (recovery succeeded) or after the sweep exhausts all
+   * power steps (recovery failed). See SWEEP_POWERS comment for context.
+   */
+  sweepPowerOverrideArg: number | null;
+  /**
+   * ms timestamp of the last completed sweep recovery attempt (success OR
+   * failure). Throttled to once per SWEEP_RETRY_COOLDOWN_MS so a permanently
+   * broken reader doesn't sweep-thrash indefinitely. 0 = never attempted.
+   */
+  lastSweepAttemptAt: number;
 };
 
 /** Operator-tunable knobs an active /antenna-test session imposes on a reader. */
@@ -490,6 +520,35 @@ export class MonsoonSupervisor {
       if (silentMs >= silenceTimeout) {
         this.pushReaderOfflineIfDue(slot, now);
       }
+      // Auto-sweep recovery — when active, every silent kick advances the
+      // power step. If a step produces bytes, the byte-arrival site clears
+      // the override (recovery succeeded). If all steps go silent, give up
+      // and fall through to normal exhaustion behavior.
+      if (silentMs >= silenceTimeout && slot.sweepPowerOverrideArg !== null) {
+        const idx = SWEEP_POWERS.indexOf(slot.sweepPowerOverrideArg);
+        if (idx >= 0 && idx + 1 < SWEEP_POWERS.length) {
+          const nextPower = SWEEP_POWERS[idx + 1];
+          slot.sweepPowerOverrideArg = nextPower ?? null;
+          log.info("supervisor: sweep step silent — advancing power", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            prevPower: SWEEP_POWERS[idx],
+            nextPower,
+          });
+        } else {
+          log.warn("supervisor: sweep recovery failed — chassis silent at all power steps", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            triedPowers: [...SWEEP_POWERS],
+          });
+          slot.sweepPowerOverrideArg = null;
+          slot.lastSweepAttemptAt = now;
+        }
+        slot.lastByteAt = now;
+        this.killSlotChildHard(slot);
+        continue;
+      }
+
       if (silentMs >= silenceTimeout && !exhaustedAllPorts) {
         if (!slot.bytesSinceSpawn && !muxSlot) {
           // Zero-byte kick: rotate to next candidate port if we have one.
@@ -536,6 +595,33 @@ export class MonsoonSupervisor {
         this.killSlotChildHard(slot);
       } else if (silentMs >= silenceTimeout && exhaustedAllPorts) {
         // We've tried every candidate port at least once without bytes.
+        // Before declaring the chassis broken and waiting in cooldown, try
+        // an auto-sweep: walk the transmit power across SWEEP_POWERS. A
+        // power-level CHANGE forces the radio's RF stage to reconfigure
+        // (PLL relock + calibration), which clears firmware-level stuck
+        // inventory states that "Stop / Start inventory" alone can't.
+        // Skip mux readers — their startup latency makes the sweep timing
+        // unreliable; rely on the existing mux watchdog instead.
+        if (
+          !muxSlot &&
+          slot.sweepPowerOverrideArg === null &&
+          now - slot.lastSweepAttemptAt >= SWEEP_RETRY_COOLDOWN_MS
+        ) {
+          slot.sweepPowerOverrideArg = SWEEP_POWERS[0] ?? null;
+          slot.consecutiveZeroByteKicks = 0;
+          slot.lastExhaustionResetAt = 0;
+          slot.bytesSinceSpawn = false;
+          slot.lastByteAt = now;
+          log.info("supervisor: starting auto-sweep recovery", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            host: slot.spec.network_address,
+            firstSweepPower: slot.sweepPowerOverrideArg,
+          });
+          this.killSlotChildHard(slot);
+          continue;
+        }
+
         // Bump lastByteAt so we don't spam this branch every 5s — but
         // leave the child running and rely on on-exit respawn cycles
         // (which themselves are throttled by backoffMs). The periodic
@@ -685,6 +771,8 @@ export class MonsoonSupervisor {
         consoleStampAntenna: enabledForStamp?.antenna_number ?? 1,
         testSession: null,
         intendedKill: false,
+        sweepPowerOverrideArg: null,
+        lastSweepAttemptAt: 0,
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -908,7 +996,10 @@ export class MonsoonSupervisor {
     // 33 dBm, verified safe on .18 / .22 / .77 / etc).
     const muxMode = spec.antennas.filter((a) => a.enabled).length >= 2;
     const requestedPower = Math.round(this.avgPower(spec) * 10);
-    const powerArg = muxMode ? Math.min(requestedPower, 300) : requestedPower;
+    // Sweep override (when set by the auto-recovery state machine) wins over
+    // the configured power. Mux clamp still applies on top.
+    const basePower = slot.sweepPowerOverrideArg ?? requestedPower;
+    const powerArg = muxMode ? Math.min(basePower, 300) : basePower;
 
     // Pick the current candidate serial port. The candidate list is
     // [configured, ...fallbacks] dedup'd. On every fresh spawn we use the
@@ -1108,7 +1199,10 @@ export class MonsoonSupervisor {
       readTimeMs = testSession.readTimeMs;
       tagFocus = testSession.tagFocus;
     } else {
-      powerArg = Math.round(this.avgPower(spec) * 10);
+      // Sweep override (set by the auto-recovery state machine) wins over
+      // the configured power. Test-mode is unaffected — sweep recovery only
+      // runs in normal scan after exhaustion, never during /antenna-test.
+      powerArg = slot.sweepPowerOverrideArg ?? Math.round(this.avgPower(spec) * 10);
       const enabled = spec.antennas.filter((a) => a.enabled);
       const stampAnt = enabled[0];
       stampAntenna = stampAnt?.antenna_number ?? 1;
@@ -1191,6 +1285,19 @@ export class MonsoonSupervisor {
       slot.lastByteAt = Date.now();
       if (!slot.bytesSinceSpawn) {
         slot.bytesSinceSpawn = true;
+        // Auto-sweep recovery succeeded — bytes arrived during a sweep
+        // attempt, so the radio un-stuck. Clear the override so the next
+        // spawn returns to configured power. Stamp lastSweepAttemptAt so
+        // the cooldown gate applies (counts as a completed attempt).
+        if (slot.sweepPowerOverrideArg !== null) {
+          log.info("supervisor: sweep recovery succeeded — chassis producing bytes", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            recoveredAtPower: slot.sweepPowerOverrideArg,
+          });
+          slot.sweepPowerOverrideArg = null;
+          slot.lastSweepAttemptAt = Date.now();
+        }
         // First byte on this spawn — chassis is reachable. Tell the WMS
         // so the dashboard flips the reader online indicator even if
         // tags aren't currently in the antenna's coverage range. Gated
@@ -1344,6 +1451,17 @@ export class MonsoonSupervisor {
       // rotation budget back next time it goes silent.
       if (!slot.bytesSinceSpawn) {
         slot.bytesSinceSpawn = true;
+        // Auto-sweep recovery succeeded — bytes arrived during a sweep
+        // attempt. Clear the override and stamp the cooldown timestamp.
+        if (slot.sweepPowerOverrideArg !== null) {
+          log.info("supervisor: sweep recovery succeeded — chassis producing bytes", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            recoveredAtPower: slot.sweepPowerOverrideArg,
+          });
+          slot.sweepPowerOverrideArg = null;
+          slot.lastSweepAttemptAt = Date.now();
+        }
         // Chassis is reachable — tell the WMS the reader is online,
         // even if no tag records have been parsed out of the stream yet.
         // Gated on offline→online transition so back-to-back respawns
