@@ -15,6 +15,7 @@ import {
   Radio,
   RefreshCw,
   Server,
+  Skull,
   Trash2,
   Zap,
 } from "lucide-react";
@@ -178,6 +179,60 @@ export function HardwareConfigWorkspace() {
       window.alert(e instanceof Error ? e.message : "Hard reset failed");
     }
   };
+  const quarantineReader = async (id: string, name: string) => {
+    const reason = window.prompt(
+      `Mark "${name}" as broken — do not probe?\n\n` +
+        "Use this when the chassis itself is dead (UART break loop, dead MCU, " +
+        "failed regulator). Software cannot recover the radio; the supervisor " +
+        "thrashes forever trying. Quarantine kills that thrash and leaves a " +
+        "skull on the reader card so ops know to swap or reflash it.\n\n" +
+        "Reason (saved with the quarantine):",
+      "chassis firmware fault — UART break loop",
+    );
+    if (reason === null) return;
+    const trimmed = reason.trim();
+    if (trimmed.length < 3) {
+      window.alert("Reason must be at least 3 characters.");
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/hardware-config/readers/${encodeURIComponent(id)}/quarantine`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ reason: trimmed }),
+        },
+      );
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? "Quarantine failed");
+      await reload();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Quarantine failed");
+    }
+  };
+  const unquarantineReader = async (id: string, name: string) => {
+    if (
+      !window.confirm(
+        `Un-quarantine "${name}"?\n\n` +
+          "The supervisor will start probing this reader again on the next " +
+          "config-pull (~5 s). Only do this after the chassis was actually " +
+          "fixed (power-cycled / reflashed / swapped).",
+      )
+    )
+      return;
+    try {
+      const res = await fetch(
+        `/api/hardware-config/readers/${encodeURIComponent(id)}/quarantine`,
+        { method: "DELETE" },
+      );
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? "Un-quarantine failed");
+      await reload();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Un-quarantine failed");
+    }
+  };
   const setMonsoonDriver = async (id: string, driver: "stream" | "console") => {
     try {
       const res = await fetch(
@@ -271,6 +326,8 @@ export function HardwareConfigWorkspace() {
         onDeleteAntenna={removeAntenna}
         onPauseReader={pauseReader}
         onResumeReader={resumeReader}
+        onQuarantineReader={quarantineReader}
+        onUnquarantineReader={unquarantineReader}
         onSetMonsoonDriver={setMonsoonDriver}
         onPauseAllReaders={pauseAllReaders}
         onResumeAllReaders={resumeAllReaders}
@@ -499,6 +556,8 @@ type TreeProps = {
   onDeleteAntenna: (id: string, name: string) => void;
   onPauseReader: (id: string) => void;
   onResumeReader: (id: string) => void;
+  onQuarantineReader: (id: string, name: string) => void;
+  onUnquarantineReader: (id: string, name: string) => void;
   onSetMonsoonDriver: (id: string, driver: "stream" | "console") => void;
   onPauseAllReaders: () => void;
   onResumeAllReaders: () => void;
@@ -666,26 +725,47 @@ function ReaderCard({
   onDeleteAntenna,
   onPauseReader,
   onResumeReader,
+  onQuarantineReader,
+  onUnquarantineReader,
   onSetMonsoonDriver,
   onOpenSchedule,
 }: {
   reader: HardwareReaderRow;
   onPauseReader: (id: string) => void;
   onResumeReader: (id: string) => void;
+  onQuarantineReader: (id: string, name: string) => void;
+  onUnquarantineReader: (id: string, name: string) => void;
   onSetMonsoonDriver: (id: string, driver: "stream" | "console") => void;
   onOpenSchedule: (reader: HardwareReaderRow) => void;
 } & TreeProps) {
   const isManualPaused = !!reader.scan_paused_at;
   const hasSchedule = !!reader.scan_schedule;
+  const isQuarantined = !!reader.quarantine_reason;
   const driver: "stream" | "console" =
     (reader.config as { monsoon_driver?: string }).monsoon_driver === "stream"
       ? "stream"
       : "console";
   return (
-    <div className="rounded border border-[var(--wms-border)]/40 bg-[var(--wms-surface)]/30 p-2">
+    <div
+      className={`rounded border p-2 ${
+        isQuarantined
+          ? "border-red-500/50 bg-red-950/20"
+          : "border-[var(--wms-border)]/40 bg-[var(--wms-surface)]/30"
+      }`}
+    >
       <div className="flex flex-wrap items-center gap-2">
-        <Radio className="h-3.5 w-3.5 text-[var(--wms-accent)]" />
-        <span className="font-mono text-xs text-[var(--wms-fg)]">{reader.name}</span>
+        <Radio
+          className={`h-3.5 w-3.5 ${
+            isQuarantined ? "text-red-400/60" : "text-[var(--wms-accent)]"
+          }`}
+        />
+        <span
+          className={`font-mono text-xs ${
+            isQuarantined ? "text-red-300/80 line-through" : "text-[var(--wms-fg)]"
+          }`}
+        >
+          {reader.name}
+        </span>
         {reader.network_address ? (
           <span className="rounded bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">
             {reader.network_address}
@@ -699,12 +779,20 @@ function ReaderCard({
           <span className="font-mono text-[0.6rem] text-yellow-400/70">unmanaged</span>
         )}
         <StatusPill status={reader.bridge_state} />
-        {isManualPaused ? (
+        {isQuarantined ? (
+          <span
+            title={reader.quarantine_reason ?? ""}
+            className="inline-flex items-center gap-1 rounded border border-red-500/60 bg-red-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-red-300"
+          >
+            <Skull className="h-2.5 w-2.5" /> quarantined
+          </span>
+        ) : null}
+        {isManualPaused && !isQuarantined ? (
           <span className="rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300">
             stopped
           </span>
         ) : null}
-        {hasSchedule ? (
+        {hasSchedule && !isQuarantined ? (
           <span
             title="Schedule configured"
             className="rounded border border-blue-400/40 bg-blue-500/10 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-blue-300"
@@ -714,7 +802,16 @@ function ReaderCard({
         ) : null}
 
         <div className="ml-auto flex items-center gap-1">
-          {isManualPaused ? (
+          {isQuarantined ? (
+            <button
+              type="button"
+              onClick={() => onUnquarantineReader(reader.id, reader.name)}
+              title="Un-quarantine — only after the chassis was actually fixed"
+              className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15"
+            >
+              Un-quarantine
+            </button>
+          ) : isManualPaused ? (
             <button
               type="button"
               onClick={() => onResumeReader(reader.id)}
@@ -733,6 +830,16 @@ function ReaderCard({
               <Square className="h-2.5 w-2.5" /> Stop
             </button>
           )}
+          {!isQuarantined ? (
+            <button
+              type="button"
+              onClick={() => onQuarantineReader(reader.id, reader.name)}
+              title="Mark as broken — chassis-level hardware fault. Stops supervisor thrash."
+              className="inline-flex items-center gap-0.5 rounded border border-red-500/40 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-red-300/80 hover:bg-red-500/15"
+            >
+              <Skull className="h-2.5 w-2.5" />
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() =>
@@ -781,6 +888,12 @@ function ReaderCard({
           </button>
         </div>
       </div>
+      {isQuarantined ? (
+        <p className="ml-5 mt-1 font-mono text-[0.6rem] text-red-300/90">
+          <Skull className="mr-1 inline h-2.5 w-2.5" />
+          {reader.quarantine_reason}
+        </p>
+      ) : null}
       {reader.antennas.length > 0 ? (
         <div className="ml-5 mt-2 space-y-1">
           {reader.antennas.map((a) => (
