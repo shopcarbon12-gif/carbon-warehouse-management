@@ -249,7 +249,21 @@ export function CommandCenter() {
   // but partitioned by antenna_id so each row's count ticks instantly
   // instead of waiting for the next 1-s poll. Reconciled upward against
   // the server's per-antenna SQL on every poll cycle.
+  //
+  // FIRST-ANTENNA ATTRIBUTION: each EPC is added to AT MOST ONE antenna's
+  // set — the first antenna that the SSE stream tells us decoded it this
+  // session. Mirrors the server-side WITH first_attribution CTE in
+  // /api/dashboard/live-scan/per-antenna so the SSE-driven ticks and the
+  // 1-s poll never disagree on which antenna owns an EPC. Without this,
+  // multi-antenna readers (e.g. Transfer Bin's supervisor mux) would have
+  // each antenna's tile climb toward the headline total once both
+  // antennas had seen the same tags — which violates the "sum of per-
+  // antenna = total unique" expectation operators have on the dashboard.
   const perAntennaEpcsRef = useRef<Map<string, Set<string>>>(new Map());
+  // EPC → antenna_id of first SSE sighting this session. Cleared with the
+  // session sets on every start→stop transition. Lookup avoids touching
+  // perAntennaEpcsRef when we already know the EPC is attributed.
+  const epcFirstAntennaRef = useRef<Map<string, string>>(new Map());
 
   // Poll /state every 500 ms while running — updates the counter (via
   // upward-only reconciliation) AND acts as the heartbeat that keeps the
@@ -306,6 +320,7 @@ export function CommandCenter() {
     if (!liveScanRunning) {
       liveScanEpcsRef.current = new Set();
       perAntennaEpcsRef.current = new Map();
+      epcFirstAntennaRef.current = new Map();
       return;
     }
     const es = new EventSource("/api/edge/stream");
@@ -340,21 +355,26 @@ export function CommandCenter() {
         setLiveScanCount((prev) => (newSize > prev ? newSize : prev));
       }
       // Per-antenna SSE accumulator — same stream, partitioned by antenna.
-      // Bumps each antenna's row count immediately, then the periodic poll
-      // reconciles upward to the server's authoritative count.
+      // First-antenna attribution: each EPC is added to AT MOST ONE
+      // antenna's set, the first one we see for it this session.
+      // Subsequent sightings on other antennas do not increment any tile.
+      // Mirrors the server CTE so SSE ticks and 1-s poll never disagree.
       const map = parsed.epcAntennaMap;
       if (map) {
         const touched = new Set<string>();
-        for (const epc of Object.keys(map)) {
-          const antId = map[epc];
+        for (const epcRaw of Object.keys(map)) {
+          const antId = map[epcRaw];
           if (!antId) continue;
+          const epc = epcRaw.toUpperCase();
+          if (epcFirstAntennaRef.current.has(epc)) continue; // already attributed
+          epcFirstAntennaRef.current.set(epc, antId);
           let s = perAntennaEpcsRef.current.get(antId);
           if (!s) {
             s = new Set<string>();
             perAntennaEpcsRef.current.set(antId, s);
           }
           const before = s.size;
-          s.add(epc.toUpperCase());
+          s.add(epc);
           if (s.size !== before) touched.add(antId);
         }
         if (touched.size > 0) {

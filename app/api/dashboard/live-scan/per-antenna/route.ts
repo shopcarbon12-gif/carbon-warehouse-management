@@ -31,17 +31,24 @@ export async function GET(req: Request) {
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
   /* For every Carbon-owned antenna on this tenant, count BOTH:
-   *  - unique_epcs: distinct EPCs that PASSED THE FORMULA and were read
-   *    by this antenna since the session started. Mirrors the headline
-   *    /state counter's filter so each tile sums consistently.
-   *  - total_reads: raw read count from this antenna in the same window
+   *  - unique_epcs: distinct EPCs ATTRIBUTED to this antenna. Each EPC is
+   *    attributed to the FIRST antenna that decoded it in this session, so
+   *    summing unique_epcs across antennas equals the headline live-scan
+   *    unique. Without first-antenna attribution, multi-antenna readers
+   *    (e.g. Transfer Bin with the supervisor mux) would have each antenna
+   *    showing nearly the full session count once tags are seen by both —
+   *    operator wants to see which antenna picked which tag, not "both
+   *    saw the same tag".
+   *  - total_reads: raw read count from this antenna in the session window
    *    (regardless of formula). Useful for "is this antenna alive?"
    *    diagnosis — if total_reads is climbing but unique_epcs is 0,
-   *    the antenna is hearing noise that doesn't decode.
+   *    the antenna is hearing noise that doesn't decode OR its tags were
+   *    already attributed to another antenna.
    *
-   * No items join, no last_seen_at dependency — the cdm_reads.passes_formula
-   * column is stamped at insert time by ingestAgentReads, so a fast
-   * partial index can serve this query.
+   * Excluded by design: antenna-test sessions and settings flows want
+   * per-antenna RAW counts (they ARE the diagnostic). They use a separate
+   * code path; this attribution rule applies only to live-scan dashboards
+   * and workflow scan-sessions where the operator cares about coverage.
    */
   const r = await pool.query<{
     reader_id: string;
@@ -53,27 +60,41 @@ export async function GET(req: Request) {
     unique_epcs: string;
     total_reads: string;
   }>(
-    `SELECT
+    `WITH first_attribution AS (
+       SELECT DISTINCT ON (cr.epc_hex)
+         cr.epc_hex,
+         cr.antenna_id
+       FROM cdm_reads cr
+       WHERE cr.tenant_id = $1::uuid
+         AND cr.read_at   >= $2::timestamptz
+         AND cr.passes_formula
+       ORDER BY cr.epc_hex, cr.read_at ASC
+     ),
+     attribution_counts AS (
+       SELECT antenna_id, COUNT(*)::int AS uniq
+       FROM first_attribution
+       GROUP BY antenna_id
+     ),
+     read_totals AS (
+       SELECT cr.antenna_id, COUNT(*)::int AS total
+       FROM cdm_reads cr
+       WHERE cr.tenant_id = $1::uuid AND cr.read_at >= $2::timestamptz
+       GROUP BY cr.antenna_id
+     )
+     SELECT
        parent.id::text                 AS reader_id,
        parent.name                     AS reader_name,
        a.id::text                      AS antenna_id,
        a.name                          AS antenna_name,
        (a.config->>'antenna_number')::int AS antenna_number,
        parent.network_address          AS network_address,
-       COALESCE(read_counts.uniq, 0)::text AS unique_epcs,
-       COALESCE(read_counts.total, 0)::text AS total_reads
+       COALESCE(ac.uniq, 0)::text      AS unique_epcs,
+       COALESCE(rt.total, 0)::text     AS total_reads
      FROM devices a
      INNER JOIN devices parent ON parent.id = a.parent_device_id
      INNER JOIN locations l    ON l.id = parent.location_id AND l.tenant_id = $1::uuid
-     LEFT JOIN LATERAL (
-       SELECT
-         COUNT(DISTINCT cr.epc_hex) FILTER (WHERE cr.passes_formula) AS uniq,
-         COUNT(*) AS total
-         FROM cdm_reads cr
-         WHERE cr.tenant_id = $1::uuid
-           AND cr.antenna_id = a.id
-           AND cr.read_at    >= $2::timestamptz
-     ) read_counts ON TRUE
+     LEFT JOIN attribution_counts ac ON ac.antenna_id = a.id
+     LEFT JOIN read_totals       rt ON rt.antenna_id = a.id
      WHERE a.device_type = 'antenna'
      ORDER BY parent.name ASC, antenna_number ASC`,
     [session.tid, new Date(s.startedAt).toISOString()],
