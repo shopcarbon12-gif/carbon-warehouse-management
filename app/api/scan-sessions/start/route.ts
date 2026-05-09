@@ -16,8 +16,11 @@ export const dynamic = "force-dynamic";
  *
  * Side effect: the agent's next active-sessions poll (250ms cadence) will
  * see this session and the supervisor will spawn a child for the reader,
- * overriding any persisted scan_paused_at. When the workflow commits or
- * the session expires (60s idle), the reader returns to its default state.
+ * overriding any persisted scan_paused_at. When the workflow commits
+ * (POST /api/scan-sessions/end) or an admin pauses the reader from
+ * Hardware Config, the reader returns to its default state. There is NO
+ * idle timeout — sessions persist until explicitly ended (by design;
+ * see lib/server/scan-sessions.ts).
  *
  * Body: { readerId, kind, context? }
  *  - kind: "transfer-out" | "cycle-count" | "print-commission"

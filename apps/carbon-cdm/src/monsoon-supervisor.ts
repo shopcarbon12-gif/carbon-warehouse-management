@@ -339,6 +339,32 @@ const EXHAUSTION_RECOVERY_INTERVAL_MS = 5 * 60_000;
 export class MonsoonSupervisor {
   private slots = new Map<string, ReaderSlot>();
   private bundleVersion = 0;
+  /**
+   * Lowest-free slot-index allocator. Each running reader owns a unique
+   * `index` in [0, ∞) used to derive its TCP listen ports
+   * (`STREAM_PORT_BASE + index`, `CONTROL_PORT_BASE + index`). When a slot
+   * is removed (pause / scan-session end / reader unconfigured), its index
+   * is freed back here for reuse — instead of being effectively reclaimed
+   * by `nextIndex = this.slots.size` which produced collisions any time a
+   * NON-LAST slot was removed and then re-added (the new slot got the
+   * size-based index, which collided with a still-running higher-index
+   * slot's stream port). Live-evidence 2026-05-09 prod journal showed
+   * recurring `streamPort:30107` reuse across the .18→.81→.22→.18 churn
+   * pattern. With this allocator the next freed index is reused, so the
+   * total port range stays small and unique.
+   */
+  private usedIndexes = new Set<number>();
+  private allocateSlotIndex(): number {
+    for (let i = 0; ; i++) {
+      if (!this.usedIndexes.has(i)) {
+        this.usedIndexes.add(i);
+        return i;
+      }
+    }
+  }
+  private freeSlotIndex(idx: number): void {
+    this.usedIndexes.delete(idx);
+  }
   private testSweepHandle: NodeJS.Timeout | null = null;
   private streamWatchdogHandle: NodeJS.Timeout | null = null;
   /** Set of antenna IDs we've already started a test for (one-shot per pending). */
@@ -749,6 +775,7 @@ export class MonsoonSupervisor {
         });
         this.stopSlot(slot);
         this.slots.delete(id);
+        this.freeSlotIndex(slot.index);
       }
     }
 
@@ -758,7 +785,6 @@ export class MonsoonSupervisor {
     // then this loop respawned every reader because it ignored the filter.
     // desiredById already excludes paused readers and (when live_scan is
     // inactive) is empty.
-    let nextIndex = this.slots.size;
     for (const spec of desiredById.values()) {
       const isMonsoon = !((spec.model ?? "").toLowerCase().includes("zebra"));
       if (!isMonsoon) {
@@ -808,7 +834,7 @@ export class MonsoonSupervisor {
         // If subprocess is dead, restart cycle will pick it up.
         continue;
       }
-      const idx = nextIndex++;
+      const idx = this.allocateSlotIndex();
       const enabledForStamp = spec.antennas.find((a) => a.enabled);
       const slot: ReaderSlot = {
         spec,
@@ -1023,6 +1049,7 @@ export class MonsoonSupervisor {
       this.stopSlot(slot);
     }
     this.slots.clear();
+    this.usedIndexes.clear();
   }
 
   private avgPower(spec: AgentConfigReader): number {
@@ -1683,15 +1710,29 @@ export class MonsoonSupervisor {
    * which is exactly what we want. Tolerant of failure (segfault on the
    * binary itself, network unreach, etc.) — radio stays at whatever
    * state it was in before, which is the same as before this call.
+   *
+   * The local TCP `--stream` / `--control` ports were previously hardcoded
+   * to 39999/29999. With Stop-All firing 11 stopSlot calls within ~30 ms,
+   * eleven parallel ensureRadioStopped binaries spawn ~11 s later and all
+   * try to bind the same pair — at most one wins, the rest bail out
+   * before sending the radio abort. Use `ensureRadioPortBase + counter`
+   * so every concurrent abort gets its own port pair.
    */
+  private ensureRadioPortCounter = 0;
   private ensureRadioStopped(spec: AgentConfigReader): void {
     const host = String(spec.network_address ?? "");
     if (!host) return;
     const port = Number(spec.monsoon_serial_port ?? 10002);
+    // Step the local-binding ports per call so parallel aborts don't
+    // collide on bind. 39999/29999 was the original single value; we now
+    // use that as the base and bump by a 256-cell ring.
+    const offset = this.ensureRadioPortCounter++ & 0xff;
+    const localStream = 39999 - offset;
+    const localControl = 29999 - offset;
     const args = [
       "--num", "1",
-      "--stream", "39999",   // ephemeral, never connected
-      "--control", "29999",
+      "--stream", String(localStream),
+      "--control", String(localControl),
       "--read_time_ms", "1000",
       "--power", "100",       // low — we don't actually want a long cycle
       "--serial_host", host,
