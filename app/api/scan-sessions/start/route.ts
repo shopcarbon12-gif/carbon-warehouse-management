@@ -56,12 +56,8 @@ export async function POST(req: Request) {
 
   // Verify the reader belongs to the caller's tenant + location, and grab
   // its location_id for the session record.
-  const r = await pool.query<{
-    id: string;
-    location_id: string;
-    quarantine_reason: string | null;
-  }>(
-    `SELECT id::text, location_id::text, quarantine_reason
+  const r = await pool.query<{ id: string; location_id: string }>(
+    `SELECT id::text, location_id::text
        FROM devices
       WHERE id = $1::uuid
         AND tenant_id = $2::uuid
@@ -76,20 +72,6 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Reader belongs to another location" },
       { status: 403 },
-    );
-  }
-  // Quarantined readers cannot be woken — chassis hardware is broken,
-  // any spawn attempt would just thrash the supervisor. Return 409 so
-  // the workspace shows a real reason instead of a silent no-op (the
-  // device card still spins waiting for first read otherwise).
-  if (reader.quarantine_reason) {
-    return NextResponse.json(
-      {
-        ok: false,
-        reason: "reader_quarantined",
-        quarantine_reason: reader.quarantine_reason,
-      },
-      { status: 409 },
     );
   }
 

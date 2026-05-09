@@ -452,17 +452,8 @@ export type AgentConfigReader = {
   /** Effective pause state (per-reader manual + per-reader schedule).
    *  Computed server-side on every bundle response so the agent doesn't
    *  redo schedule math. When true, the supervisor skips this reader
-   *  entirely (kills any running child, doesn't spawn).
-   *
-   *  When `quarantine_reason` is non-null, this is forced to true and
-   *  no scan-session can wake it — see migration
-   *  0062_devices_quarantine_reason.sql. */
+   *  entirely (kills any running child, doesn't spawn). */
   effective_paused: boolean;
-  /** Operator-set "this reader's chassis is broken — do not probe."
-   *  Non-null = quarantined. The supervisor logs and skips reconcile;
-   *  the workflow scan-session start endpoints refuse for this reader.
-   *  Nullable so absence on older bundles is the expected default. */
-  quarantine_reason: string | null;
 };
 
 export type AgentConfigBundle = {
@@ -510,7 +501,6 @@ export async function getAgentConfigBundle(
     test_pending_at: string | null;
     scan_paused_at: string | null;
     scan_schedule: ScanSchedule | null;
-    quarantine_reason: string | null;
   }>(
     `SELECT
        d.id::text,
@@ -523,8 +513,7 @@ export async function getAgentConfigBundle(
        z.name AS zone_name,
        d.test_pending_at,
        d.scan_paused_at::text AS scan_paused_at,
-       d.scan_schedule,
-       d.quarantine_reason
+       d.scan_schedule
      FROM devices d
      LEFT JOIN zones z ON z.id = d.zone_id
      WHERE d.cdm_agent_id = $1::uuid
@@ -602,14 +591,10 @@ export async function getAgentConfigBundle(
       zone_id: d.zone_id,
       zone_name: d.zone_name,
       antennas: list,
-      // Quarantined readers are always effectively paused. The agent's
-      // supervisor double-checks `quarantine_reason` directly so a
-      // mid-flight scan-session push cannot wake one, but this keeps
-      // the contract simple: effective_paused = "do not probe."
-      effective_paused:
-        d.quarantine_reason !== null ||
-        isReaderEffectivelyPaused(d.scan_paused_at, d.scan_schedule),
-      quarantine_reason: d.quarantine_reason,
+      effective_paused: isReaderEffectivelyPaused(
+        d.scan_paused_at,
+        d.scan_schedule,
+      ),
     });
   }
 

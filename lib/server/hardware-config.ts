@@ -37,12 +37,6 @@ export type HardwareReaderRow = {
   /** Surfaced so the hardware-config UI can render pause state + schedule. */
   scan_paused_at: string | null;
   scan_schedule: unknown | null;
-  /** Operator-set "this reader's chassis is broken" flag. Non-null means
-   *  the supervisor will skip it forever and no scan-session may wake
-   *  it. UI shows a skull icon + the reason text. See migration
-   *  0062_devices_quarantine_reason.sql. */
-  quarantine_reason: string | null;
-  quarantined_at: string | null;
   antennas: HardwareAntennaRow[];
 };
 
@@ -97,11 +91,6 @@ type RawDevice = {
    *  agent's stale-row purge cutoff) to derive the reader's tri-state
    *  bridge_state. Antenna rows ignore this field. */
   bridge_seen_at: string | null;
-  /** Set when an admin marks the reader as chassis-broken — see
-   *  migration 0062_devices_quarantine_reason.sql. The hardware-config
-   *  workspace surfaces this with a skull icon and the reason. */
-  quarantine_reason: string | null;
-  quarantined_at: string | null;
 };
 
 /**
@@ -191,9 +180,7 @@ export async function buildHardwareConfigTree(
          d.last_read_at::text AS last_read_at,
          d.last_test_at::text AS last_test_at,
          d.last_test_passed,
-         d.bridge_seen_at::text AS bridge_seen_at,
-         d.quarantine_reason,
-         d.quarantined_at::text AS quarantined_at
+         d.bridge_seen_at::text AS bridge_seen_at
        FROM devices d
        LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
        WHERE d.tenant_id = $1::uuid
@@ -277,8 +264,6 @@ export async function buildHardwareConfigTree(
       zone_id: d.zone_id,
       scan_paused_at: d.scan_paused_at,
       scan_schedule: d.scan_schedule,
-      quarantine_reason: d.quarantine_reason,
-      quarantined_at: d.quarantined_at,
       antennas: antennasByParent.get(d.id) ?? [],
     };
     if (d.zone_id) {
