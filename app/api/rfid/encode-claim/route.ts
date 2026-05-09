@@ -73,19 +73,28 @@ export async function POST(req: Request) {
   try {
     await client.query("BEGIN");
 
-    // Resolve the SKU + its ls_system_id (the asset field of the EPC) and
-    // make sure it actually belongs to this tenant.
+    // Resolve the SKU + its ls_system_id (the asset field of the EPC).
+    //
+    // Note: custom_skus has NO tenant_id column on this deployment — tenant
+    // scope flows through matrices / catalog at higher layers. Filtering
+    // here on tenant_id was producing `column "tenant_id" does not exist`
+    // (PG 42703) on EVERY encode-claim, which the handheld swallowed as a
+    // generic error and surfaced to the operator as "tag issue / write
+    // failed." It's how 1891 reads produced 0 written tags. Single-tenant
+    // deployment + `customSkuId` is a server-issued UUID that the device
+    // received from /api/v1/catalog/items in the immediately preceding
+    // step, so the previous catalog lookup IS the tenant scope.
     const sku = await client.query<{ id: string; ls_system_id: string | null }>(
       `SELECT id::text, ls_system_id::text
          FROM custom_skus
-         WHERE id = $1::uuid AND tenant_id = $2::uuid
+         WHERE id = $1::uuid
          LIMIT 1`,
-      [customSkuId, session.tid],
+      [customSkuId],
     );
     if (!sku.rows[0]) {
       await client.query("ROLLBACK");
       return NextResponse.json(
-        { error: "SKU not found in this tenant", code: "SKU_NOT_FOUND" },
+        { error: "SKU not found", code: "SKU_NOT_FOUND" },
         { status: 404 },
       );
     }
