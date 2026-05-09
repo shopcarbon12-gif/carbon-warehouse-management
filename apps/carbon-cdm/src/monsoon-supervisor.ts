@@ -178,6 +178,16 @@ type ReaderSlot = {
    * Reverts to normal scan when set back to null.
    */
   testSession: TestModeSpec | null;
+  /**
+   * Set to true when the supervisor itself initiates a kill (enterTestMode
+   * or leaveTestMode) so the on-exit handler knows to respawn fast (~250ms)
+   * and not grow backoff. Without this, a deliberate kill looks identical
+   * to a SIGKILL fault and the on-exit handler waits up to MAX_BACKOFF_MS
+   * (60s) before respawning — the test child never warms up before the
+   * /antenna-test session ends, and the operator sees zero EPCs in the UI.
+   * Reset to false after the on-exit handler consumes it.
+   */
+  intendedKill: boolean;
 };
 
 /** Operator-tunable knobs an active /antenna-test session imposes on a reader. */
@@ -674,6 +684,7 @@ export class MonsoonSupervisor {
         consoleParserState: newConsoleParserState(),
         consoleStampAntenna: enabledForStamp?.antenna_number ?? 1,
         testSession: null,
+        intendedKill: false,
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -818,7 +829,10 @@ export class MonsoonSupervisor {
       readerId: spec.readerId,
       sessionId: spec.sessionId,
     });
-    if (slot.child && !slot.shuttingDown) this.killSlotChildHard(slot);
+    if (slot.child && !slot.shuttingDown) {
+      slot.intendedKill = true;
+      this.killSlotChildHard(slot);
+    }
   }
 
   /** Leave TEST_MODE for the given reader; the on-exit respawn picks up
@@ -829,7 +843,10 @@ export class MonsoonSupervisor {
     if (!slot.testSession) return;
     log.info("supervisor: leaveTestMode — reverting to normal scan", { readerId });
     slot.testSession = null;
-    if (slot.child && !slot.shuttingDown) this.killSlotChildHard(slot);
+    if (slot.child && !slot.shuttingDown) {
+      slot.intendedKill = true;
+      this.killSlotChildHard(slot);
+    }
   }
 
   shutdown(): void {
@@ -1019,7 +1036,12 @@ export class MonsoonSupervisor {
       // depending on which thread races first. Treat any signal exit in mux
       // mode as expected (no backoff growth) so the next respawn is fast.
       const expectedMuxCrash = useMux && signal !== null;
-      const treatAsClean = cleanExit || expectedMuxCrash;
+      // Supervisor-initiated kill (enterTestMode/leaveTestMode): not a fault,
+      // respawn fast. Otherwise the test child shows up 60s after the click,
+      // which is well past when the /antenna-test session has already ended.
+      const wasIntendedKill = slot.intendedKill;
+      slot.intendedKill = false;
+      const treatAsClean = cleanExit || expectedMuxCrash || wasIntendedKill;
       const delay = treatAsClean ? 250 : slot.backoffMs;
       if (cleanExit) {
         log.debug("supervisor: MonsoonReader cycle complete, respawning", {
@@ -1231,7 +1253,13 @@ export class MonsoonSupervisor {
       slot.child = null;
       if (slot.shuttingDown) return;
       const cleanExit = code === 0 && !signal;
-      const delay = cleanExit ? 250 : slot.backoffMs;
+      // Supervisor-initiated kill (enterTestMode/leaveTestMode): not a fault,
+      // respawn fast. See ReaderSlot.intendedKill comment for why this
+      // matters to the /antenna-test UX.
+      const wasIntendedKill = slot.intendedKill;
+      slot.intendedKill = false;
+      const treatAsClean = cleanExit || wasIntendedKill;
+      const delay = treatAsClean ? 250 : slot.backoffMs;
       log.info("supervisor: new_monsoonreader exited", {
         readerId: spec.id,
         code,
@@ -1240,6 +1268,7 @@ export class MonsoonSupervisor {
         droppedBadCrc: totalBad,
         malformed: totalMal,
         cleanExit,
+        wasIntendedKill,
       });
       // Rapid-respawn pattern (cleanExit:true, totalRecords:0, child exited
       // without ever producing a byte) means the chip is silent — typically
@@ -1253,7 +1282,7 @@ export class MonsoonSupervisor {
       setTimeout(() => {
         void this.spawnReader(slot);
       }, delay);
-      slot.backoffMs = cleanExit ? 1000 : Math.min(slot.backoffMs * 2, MAX_BACKOFF_MS);
+      slot.backoffMs = treatAsClean ? 1000 : Math.min(slot.backoffMs * 2, MAX_BACKOFF_MS);
     });
   }
 
