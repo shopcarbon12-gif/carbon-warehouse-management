@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { assertRowLocation } from "@/lib/server/assert-row-location";
-import { archiveBin } from "@/lib/server/overview-locations";
+import { deleteBin } from "@/lib/server/overview-locations";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -32,16 +32,16 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await archiveBin(client, session.tid, id);
+    const result = await deleteBin(client, session.tid, id);
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, orphaned: result.orphaned });
   } catch (e) {
     try {
       await client.query("ROLLBACK");
     } catch {
       /* ignore */
     }
-    const msg = e instanceof Error ? e.message : "Archive failed";
+    const msg = e instanceof Error ? e.message : "Delete failed";
     if (msg.startsWith("BAD_REQUEST:")) {
       return NextResponse.json({ error: msg.slice(12) }, { status: 400 });
     }

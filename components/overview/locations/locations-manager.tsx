@@ -2,8 +2,53 @@
 
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { MapPin, PackagePlus, Pencil, Trash2, X } from "lucide-react";
+import { MapPin, PackagePlus, Pencil, Search, Trash2, X } from "lucide-react";
 import { BinEditorDrawer, type BinRow } from "./bin-editor-drawer";
+
+/** Default rows to show when no search is active. */
+const DEFAULT_VISIBLE_BINS = 3;
+
+/**
+ * Carbon bin codes follow `<digit><letter>...` (e.g. `5A01L`). The trailing
+ * char encodes side: L=LEFT, C=CENTER, R=RIGHT. The operator's mental
+ * model walks left-to-right physically, so we sort L→C→R within a prefix.
+ *
+ * Returns a comparator that:
+ *   1. groups by everything except the last char (so 5A01* stays together);
+ *   2. within a group, orders by L < C < R < other (alpha-fallback);
+ *   3. across groups, lexicographic on the prefix (numeric-first sort
+ *      naturally puts 5A01 before 5A02 etc.).
+ */
+function compareBinCode(a: string, b: string): number {
+  const ua = a.toUpperCase();
+  const ub = b.toUpperCase();
+  const sideOrder = (c: string) => (c === "L" ? 0 : c === "C" ? 1 : c === "R" ? 2 : 3);
+  const prefixA = ua.slice(0, -1);
+  const prefixB = ub.slice(0, -1);
+  if (prefixA !== prefixB) return prefixA.localeCompare(prefixB, "en", { numeric: true });
+  return sideOrder(ua.slice(-1)) - sideOrder(ub.slice(-1));
+}
+
+/** Sanitize bin search input. First char must be a digit; second char (if
+ *  present) must be a letter. Beyond that we accept any alphanumerics and
+ *  uppercase the whole thing — bin codes are stored uppercase. */
+function sanitizeBinSearch(raw: string): string {
+  const up = raw.toUpperCase();
+  let out = "";
+  for (let i = 0; i < up.length; i += 1) {
+    const ch = up[i]!;
+    if (i === 0) {
+      if (/[0-9]/.test(ch)) out += ch;
+      continue;
+    }
+    if (i === 1) {
+      if (/[A-Z]/.test(ch)) out += ch;
+      continue;
+    }
+    if (/[A-Z0-9]/.test(ch)) out += ch;
+  }
+  return out;
+}
 
 type BinEpcRow = {
   epc: string;
@@ -108,6 +153,31 @@ export function LocationsManager({
   const selected = useMemo(
     () => locations.find((l) => l.id === selectedId) ?? null,
     [locations, selectedId],
+  );
+
+  // Bin search: enforce digit-then-letter pattern; default-empty shows
+  // the first DEFAULT_VISIBLE_BINS sorted (L→C→R per group). Reset
+  // whenever the operator picks a different location so the new pane
+  // doesn't carry over the previous query.
+  const [binSearch, setBinSearch] = useState("");
+  useEffect(() => {
+    setBinSearch("");
+  }, [selectedId]);
+
+  const sortedBins = useMemo(() => {
+    if (!selected) return [] as BinRow[];
+    return [...selected.bins].sort((a, b) => compareBinCode(a.code, b.code));
+  }, [selected]);
+
+  const matchedBins = useMemo(() => {
+    const q = binSearch.trim();
+    if (!q) return sortedBins;
+    return sortedBins.filter((b) => b.code.toUpperCase().startsWith(q));
+  }, [sortedBins, binSearch]);
+
+  const visibleBins = useMemo(
+    () => matchedBins.slice(0, DEFAULT_VISIBLE_BINS),
+    [matchedBins],
   );
 
   const openAdd = () => {
@@ -258,7 +328,10 @@ export function LocationsManager({
               <h3 className="text-base font-semibold text-[var(--wms-fg)]">Bins</h3>
               {selected ? (
                 <p className="font-mono text-xs text-[var(--wms-muted)]">
-                  {selected.code} · {selected.name}
+                  {selected.code} · {selected.name} ·{" "}
+                  {binSearch
+                    ? `${matchedBins.length} match${matchedBins.length === 1 ? "" : "es"}`
+                    : `${selected.bins.length} bin${selected.bins.length === 1 ? "" : "s"} · showing first ${Math.min(DEFAULT_VISIBLE_BINS, selected.bins.length)}`}
                 </p>
               ) : (
                 <p className="font-mono text-xs text-[var(--wms-muted)]">Select a location</p>
@@ -275,6 +348,40 @@ export function LocationsManager({
             </button>
           </div>
 
+          {selected && selected.bins.length > 0 ? (
+            <div className="border-b border-[var(--wms-border)] px-4 py-3">
+              <label className="flex items-center gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/60 px-2 py-1.5 focus-within:border-[var(--wms-accent)]/60">
+                <Search className="h-4 w-4 shrink-0 text-[var(--wms-muted)]" strokeWidth={2} />
+                <input
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={binSearch}
+                  onChange={(e) => setBinSearch(sanitizeBinSearch(e.target.value))}
+                  placeholder="Search bin (e.g. 5A01) — number then letter"
+                  className="flex-1 bg-transparent font-mono text-sm text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70"
+                  aria-label="Search bin"
+                />
+                {binSearch ? (
+                  <button
+                    type="button"
+                    onClick={() => setBinSearch("")}
+                    className="rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                    aria-label="Clear search"
+                    title="Clear search"
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={2} />
+                  </button>
+                ) : null}
+              </label>
+              <p className="mt-1 px-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                Type the digit + letter prefix; first {DEFAULT_VISIBLE_BINS} matches show below
+                (L → C → R within the same row).
+              </p>
+            </div>
+          ) : null}
+
           <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
             {!selected ? (
               <div className="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center">
@@ -285,8 +392,21 @@ export function LocationsManager({
                 <p className="font-mono text-sm text-[var(--wms-muted)]">No bins at this site yet.</p>
                 <p className="mt-2 max-w-sm font-mono text-xs text-[var(--wms-muted)]">
                   Use <strong className="text-[var(--wms-fg)]">Add new bin</strong> to create receiving or
-                  floor positions. Archive is blocked while in-stock EPCs reference a bin.
+                  floor positions. Delete unassigns any items first, then removes the bin.
                 </p>
+              </div>
+            ) : matchedBins.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+                <p className="font-mono text-sm text-[var(--wms-muted)]">
+                  No bins match <span className="text-[var(--wms-fg)]">{binSearch}</span>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setBinSearch("")}
+                  className="mt-2 font-mono text-xs text-[var(--wms-accent)] hover:underline"
+                >
+                  Clear search
+                </button>
               </div>
             ) : (
               <table className="w-full min-w-[640px] border-collapse text-left">
@@ -300,7 +420,7 @@ export function LocationsManager({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
-                  {selected.bins.map((b) => (
+                  {visibleBins.map((b) => (
                     <tr key={b.id} className="hover:bg-[var(--wms-surface-elevated)]/50">
                       <td className="px-3 py-2 text-[var(--wms-fg)]">{b.code}</td>
                       <td className="px-3 py-2">

@@ -72,7 +72,7 @@ const sections: NavSection[] = [
       p.startsWith("/operations/transfers"),
     items: [
       { href: "/inventory/catalog", label: "Catalog", icon: Package },
-      { href: "/overview/locations", label: "Locations & Bins", icon: Map },
+      { href: "/overview/locations", label: "Bin Locations", icon: Map },
       { href: "/rfid/cycle-counts", label: "Cycle Counts", icon: ScanLine },
       { href: "/operations/transfers/out", label: "Transfer Out", icon: ArrowRightLeft },
       { href: "/operations/transfers/in", label: "Transfer In", icon: FolderInput },

@@ -5,18 +5,19 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:carbon_wms/services/bin_assign_session.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
-/// Pref keys
-const _kManualMode      = 'bin_assign_manual_mode';
-const _kManualBin       = 'bin_assign_manual_bin';
-const _kManualAddItem   = 'bin_assign_manual_add_item';
-const _kExternalScanner = 'bin_assign_external_scanner';
-const _kCameraEnabled   = 'bin_assign_camera_enabled';
-const _kScannerSource   = 'wms_scanner_source_v1';
+/// Pref keys that legitimately persist across cold starts — the camera
+/// toggle is a hardware preference (default ON for plain Android, OFF on
+/// rugged RFID handhelds), and the scanner-source key is read from
+/// fast_putaway_screen to decide which input method is active.
+const _kCameraEnabled = 'bin_assign_camera_enabled';
+const _kScannerSource = 'wms_scanner_source_v1';
 
-/// Settings for the Bin Assign screen.
+/// Settings for the Bin Assign screen. Manual-mode flags live in
+/// [BinAssignSession] (in-memory, resets on app kill).
 class BinAssignSettingsScreen extends StatefulWidget {
   const BinAssignSettingsScreen({super.key});
 
@@ -25,33 +26,37 @@ class BinAssignSettingsScreen extends StatefulWidget {
 }
 
 class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
-  bool _manualMode      = false;
-  bool _manualBin       = false;
-  bool _manualAddItem   = false;
+  bool _manualMode = false;
+  bool _manualBin = false;
+  bool _manualAddItem = false;
   bool _externalScanner = false;
-  bool _cameraEnabled   = true;
+  bool _cameraEnabled = true;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _loadFromSession();
+    _loadCameraPref();
   }
 
-  Future<void> _load() async {
+  void _loadFromSession() {
+    _manualMode = BinAssignSession.manualModeEnabled;
+    _manualBin = BinAssignSession.manualBin;
+    _manualAddItem = BinAssignSession.manualAddItem;
+    _externalScanner = BinAssignSession.externalScanner;
+  }
+
+  Future<void> _loadCameraPref() async {
     final p = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _manualMode      = p.getBool(_kManualMode)      ?? false;
-      _manualBin       = p.getBool(_kManualBin)        ?? false;
-      _manualAddItem   = p.getBool(_kManualAddItem)    ?? false;
-      _externalScanner = p.getBool(_kExternalScanner)  ?? false;
-      _cameraEnabled   = p.getBool(_kCameraEnabled)    ?? true;
+      _cameraEnabled = p.getBool(_kCameraEnabled) ?? true;
     });
   }
 
-  Future<void> _save(String key, bool value) async {
+  Future<void> _saveCamera(bool value) async {
     final p = await SharedPreferences.getInstance();
-    await p.setBool(key, value);
+    await p.setBool(_kCameraEnabled, value);
   }
 
   Future<void> _saveScannerSource(String value) async {
@@ -60,44 +65,29 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
   }
 
   void _setManualMode(bool v) {
-    setState(() => _manualMode = v);
-    unawaited(_save(_kManualMode, v));
-    if (v) {
-      setState(() {
-        _manualBin = true;
-        _manualAddItem = true;
-      });
-      unawaited(_save(_kManualBin, true));
-      unawaited(_save(_kManualAddItem, true));
-      // When manual mode is on, scanner source is 'manual'
-      unawaited(_saveScannerSource('manual'));
-    } else {
-      // Reset sub-options
-      setState(() {
-        _manualBin       = false;
-        _manualAddItem   = false;
-        _externalScanner = false;
-      });
-      unawaited(_save(_kManualBin, false));
-      unawaited(_save(_kManualAddItem, false));
-      unawaited(_save(_kExternalScanner, false));
-      unawaited(_saveScannerSource('hardware'));
-    }
+    BinAssignSession.setManualMode(v);
+    setState(() {
+      _manualMode = BinAssignSession.manualModeEnabled;
+      _manualBin = BinAssignSession.manualBin;
+      _manualAddItem = BinAssignSession.manualAddItem;
+      _externalScanner = BinAssignSession.externalScanner;
+    });
+    unawaited(_saveScannerSource(v ? 'manual' : 'hardware'));
   }
 
   void _setManualBin(bool v) {
+    BinAssignSession.setManualBin(v);
     setState(() => _manualBin = v);
-    unawaited(_save(_kManualBin, v));
   }
 
   void _setManualAddItem(bool v) {
+    BinAssignSession.setManualAddItem(v);
     setState(() => _manualAddItem = v);
-    unawaited(_save(_kManualAddItem, v));
   }
 
   void _setExternalScanner(bool v) {
+    BinAssignSession.setExternalScanner(v);
     setState(() => _externalScanner = v);
-    unawaited(_save(_kExternalScanner, v));
     if (v) {
       unawaited(_saveScannerSource('hardware'));
     }
@@ -105,7 +95,7 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
 
   void _setCameraEnabled(bool v) {
     setState(() => _cameraEnabled = v);
-    unawaited(_save(_kCameraEnabled, v));
+    unawaited(_saveCamera(v));
     if (v) {
       unawaited(_saveScannerSource('camera'));
     } else {
@@ -115,11 +105,21 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark     = Theme.of(context).brightness == Brightness.dark;
-    final cardColor  = isDark ? const Color(0xFF1C2828) : Colors.white;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1C2828) : Colors.white;
     final mutedColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
-    final mainColor  = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
-    final divColor   = isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.07);
+    final mainColor = isDark ? const Color(0xFFE0ECEC) : AppColors.textMain;
+    final divColor = isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.07);
+
+    // Title flips with the toggle: "Enable …" when off, "Disable …" when
+    // on. Flipping the title (and not just the switch) makes the action
+    // unambiguous — the operator was confused by a static "Enable" label
+    // sitting next to an already-on switch.
+    final manualToggleTitle =
+        _manualMode ? 'Disable Manual Mode' : 'Enable Manual Mode';
+    final manualToggleSubtitle = _manualMode
+        ? 'Manual mode is active for this session — turning off resets the bin assign screen.'
+        : 'Enter bin codes and SKUs manually instead of via scanner.';
 
     return CarbonScaffold(
       body: ListView(
@@ -133,11 +133,20 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
             child: Column(
               children: [
                 SwitchListTile(
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
-                  title: Text('Enable Manual Mode',
-                    style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700, color: mainColor)),
-                  subtitle: Text('Enter bin codes and SKUs manually',
-                    style: TextStyle(color: mutedColor, fontSize: 12.sp)),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
+                  title: Text(
+                    manualToggleTitle,
+                    style: GoogleFonts.manrope(
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w700,
+                      color: mainColor,
+                    ),
+                  ),
+                  subtitle: Text(
+                    manualToggleSubtitle,
+                    style: TextStyle(color: mutedColor, fontSize: 12.sp),
+                  ),
                   value: _manualMode,
                   activeThumbColor: AppColors.primary,
                   onChanged: _setManualMode,
@@ -147,11 +156,20 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
 
                   // ── Bin Location checkbox ─────────────────────────────
                   CheckboxListTile(
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 2.h),
-                    title: Text('Bin Location',
-                      style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w600, color: mainColor)),
-                    subtitle: Text('Type bin code manually. A verify button will appear in the bin box.',
-                      style: TextStyle(color: mutedColor, fontSize: 12.sp)),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 16.w, vertical: 2.h),
+                    title: Text(
+                      'Bin Location',
+                      style: GoogleFonts.manrope(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: mainColor,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Type bin code manually. A verify button will appear in the bin box.',
+                      style: TextStyle(color: mutedColor, fontSize: 12.sp),
+                    ),
                     value: _manualBin,
                     activeColor: AppColors.primary,
                     onChanged: (v) => _setManualBin(v ?? false),
@@ -161,14 +179,22 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
 
                   // ── Enable Add Item checkbox ──────────────────────────
                   CheckboxListTile(
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 2.h),
-                    title: Text('Enable Add Item',
-                      style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w600, color: mainColor)),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 16.w, vertical: 2.h),
+                    title: Text(
+                      'Enable Add Item',
+                      style: GoogleFonts.manrope(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: mainColor,
+                      ),
+                    ),
                     subtitle: Text(
                       'Type SKU to search. Full SKU → assign. '
                       'Base+Color → assign. Base only → pick colors. '
                       'Partial/name → catalog search.',
-                      style: TextStyle(color: mutedColor, fontSize: 12.sp)),
+                      style: TextStyle(color: mutedColor, fontSize: 12.sp),
+                    ),
                     value: _manualAddItem,
                     activeColor: AppColors.primary,
                     onChanged: (v) => _setManualAddItem(v ?? false),
@@ -178,11 +204,20 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
 
                   // ── External Scanner toggle ───────────────────────────
                   SwitchListTile(
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
-                    title: Text('External Scanner',
-                      style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w600, color: mainColor)),
-                    subtitle: Text('Bluetooth 2D scanner (keyboard mode). Auto-jumps from bin → item after each scan.',
-                      style: TextStyle(color: mutedColor, fontSize: 12.sp)),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
+                    title: Text(
+                      'External Scanner',
+                      style: GoogleFonts.manrope(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: mainColor,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Bluetooth 2D scanner (keyboard mode). Auto-jumps from bin → item after each scan.',
+                      style: TextStyle(color: mutedColor, fontSize: 12.sp),
+                    ),
                     value: _externalScanner,
                     activeThumbColor: AppColors.primary,
                     onChanged: _setExternalScanner,
@@ -200,13 +235,21 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
           _Card(
             color: cardColor,
             child: SwitchListTile(
-              contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
-              title: Text('Enable Camera',
-                style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700, color: mainColor)),
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
+              title: Text(
+                'Enable Camera',
+                style: GoogleFonts.manrope(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w700,
+                  color: mainColor,
+                ),
+              ),
               subtitle: Text(
                 'Scan 2D barcodes (bin & items) using phone camera. '
                 'Default OFF on RFID devices, ON for regular Android.',
-                style: TextStyle(color: mutedColor, fontSize: 12.sp)),
+                style: TextStyle(color: mutedColor, fontSize: 12.sp),
+              ),
               value: _cameraEnabled,
               activeThumbColor: AppColors.primary,
               onChanged: _setCameraEnabled,
@@ -225,7 +268,7 @@ class _BinAssignSettingsScreenState extends State<BinAssignSettingsScreen> {
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text, this.color);
   final String text;
-  final Color  color;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -243,7 +286,7 @@ class _SectionLabel extends StatelessWidget {
 
 class _Card extends StatelessWidget {
   const _Card({required this.color, required this.child});
-  final Color  color;
+  final Color color;
   final Widget child;
 
   @override

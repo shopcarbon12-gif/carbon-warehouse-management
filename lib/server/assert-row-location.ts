@@ -35,13 +35,28 @@ export async function assertRowLocation(
     throw new Error(`assertRowLocation: refusing unknown table ${table}`);
   }
 
-  const r = await client.query<{ location_id: string | null }>(
-    `SELECT location_id::text AS location_id
-       FROM ${table}
-      WHERE id = $1::uuid AND tenant_id = $2::uuid
-      LIMIT 1`,
-    [rowId, tenantId],
-  );
+  // The `bins` table has NO direct tenant_id column — only location_id.
+  // Tenant scoping happens through the parent `locations` row. Without
+  // this special case the SELECT throws (column "tenant_id" does not
+  // exist), the bin clean / delete routes 500, and the UI surfaces
+  // a generic "Clean failed". Other whitelisted tables have a direct
+  // tenant_id and use the simple form below.
+  const r = table === "bins"
+    ? await client.query<{ location_id: string | null }>(
+        `SELECT b.location_id::text AS location_id
+           FROM bins b
+           INNER JOIN locations l ON l.id = b.location_id
+          WHERE b.id = $1::uuid AND l.tenant_id = $2::uuid
+          LIMIT 1`,
+        [rowId, tenantId],
+      )
+    : await client.query<{ location_id: string | null }>(
+        `SELECT location_id::text AS location_id
+           FROM ${table}
+          WHERE id = $1::uuid AND tenant_id = $2::uuid
+          LIMIT 1`,
+        [rowId, tenantId],
+      );
   if (!r.rows[0]) return "not_found";
   if (locationId && r.rows[0].location_id !== locationId) return "wrong_location";
   return "ok";

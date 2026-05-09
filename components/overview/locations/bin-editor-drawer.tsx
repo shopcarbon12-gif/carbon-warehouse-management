@@ -110,13 +110,13 @@ export function BinEditorDrawer({
     }
   };
 
-  const archiveBin = async () => {
+  const deleteBin = async () => {
     if (!editingBin) return;
-    if (editingBin.in_stock_count > 0) {
-      setErr("Cannot archive: this bin has in-stock EPCs.");
-      return;
-    }
-    if (!window.confirm(`Archive bin “${editingBin.code}”?`)) return;
+    const stockCount = editingBin.in_stock_count;
+    const msg = stockCount > 0
+      ? `Delete bin "${editingBin.code}"? ${stockCount} in-stock EPC${stockCount === 1 ? "" : "s"} will be unassigned (bin_id → null) and stay live at this location.`
+      : `Delete bin "${editingBin.code}"?`;
+    if (!window.confirm(msg)) return;
     setBusy(true);
     setErr(null);
     try {
@@ -124,12 +124,12 @@ export function BinEditorDrawer({
         method: "DELETE",
         credentials: "same-origin",
       });
-      const j = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(j.error ?? "Archive failed");
+      const j = (await res.json()) as { error?: string; orphaned?: number };
+      if (!res.ok) throw new Error(j.error ?? "Delete failed");
       onSaved();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Archive failed");
+      setErr(e instanceof Error ? e.message : "Delete failed");
     } finally {
       setBusy(false);
     }
@@ -217,16 +217,16 @@ export function BinEditorDrawer({
             {mode === "edit" && editingBin ? (
               <button
                 type="button"
-                disabled={busy || editingBin.in_stock_count > 0}
+                disabled={busy}
                 title={
                   editingBin.in_stock_count > 0
-                    ? "Move in-stock EPCs before archiving"
+                    ? `Will unassign ${editingBin.in_stock_count} in-stock EPC${editingBin.in_stock_count === 1 ? "" : "s"} (bin_id → null) before deleting.`
                     : undefined
                 }
-                onClick={() => void archiveBin()}
+                onClick={() => void deleteBin()}
                 className="wms-btn-danger w-full font-mono"
               >
-                Archive bin
+                Delete bin
               </button>
             ) : null}
           </div>

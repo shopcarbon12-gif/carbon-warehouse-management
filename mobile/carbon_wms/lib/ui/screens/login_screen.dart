@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/bin_assign_session.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
 import 'package:carbon_wms/services/handheld_client_info.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
@@ -459,6 +460,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
 
       _password.clear();
       await _refreshVaultUi();
+      // Login is the moment we wipe the previous operator's per-session
+      // mobile state — manual mode never carries across users.
+      BinAssignSession.resetForLogin();
       if (mounted) ScaffoldMessenger.of(context).clearSnackBars();
       await widget.onSuccess();
     } on TimeoutException {
@@ -511,6 +515,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
       }
       await api.setBaseUrl(WmsApiClient.lockedServerUrl);
       await api.setSessionToken(token);
+      // Biometric resume is also a "fresh login" boundary for the
+      // per-session manual-mode flag.
+      BinAssignSession.resetForLogin();
       if (!mounted) return;
       await widget.onSuccess();
     } on Object catch (e) {

@@ -24,9 +24,10 @@
   --wms-status-success-fg: #6ee7b7;
   --wms-status-warning-fg: #fcd34d;
   --wms-table-accent-num: #5eead4;
-  --wms-table-clean-fg: #fde68a;
-  --wms-table-clean-border: rgba(245, 158, 11, 0.42);
-  --wms-table-clean-bg-hover: rgba(120, 53, 15, 0.35);
+  --wms-table-clean-fg: #fcd34d;
+  --wms-table-clean-border: rgba(251, 191, 36, 0.65);
+  --wms-table-clean-bg: rgba(251, 191, 36, 0.16);
+  --wms-table-clean-bg-hover: rgba(251, 191, 36, 0.32);
   --wms-status-danger-fg: #f87171;
   --wms-status-info-fg: #60a5fa;
   --wms-status-orange-fg: #fb923c;
@@ -54,9 +55,10 @@ html[data-theme="light"] {
   --wms-status-success-fg: #065f46;
   --wms-status-warning-fg: #b45309;
   --wms-table-accent-num: #0b9597;
-  --wms-table-clean-fg: #92400e;
-  --wms-table-clean-border: rgba(180, 83, 9, 0.5);
-  --wms-table-clean-bg-hover: rgba(254, 243, 199, 0.9);
+  --wms-table-clean-fg: #b45309;
+  --wms-table-clean-border: rgba(217, 119, 6, 0.7);
+  --wms-table-clean-bg: rgba(254, 243, 199, 0.7);
+  --wms-table-clean-bg-hover: rgba(252, 211, 77, 0.55);
   --wms-status-danger-fg: #b91c1c;
   --wms-status-info-fg: #1d4ed8;
   --wms-status-orange-fg: #c2410c;
@@ -361,11 +363,13 @@ html[data-theme="light"] .wms-table-row-action {
 .wms-table-btn-clean {
   border: 1px solid var(--wms-table-clean-border);
   color: var(--wms-table-clean-fg);
-  background: transparent;
+  background: var(--wms-table-clean-bg);
+  font-weight: 600;
 }
 
 .wms-table-btn-clean:hover:not(:disabled) {
   background: var(--wms-table-clean-bg-hover);
+  border-color: var(--wms-table-clean-fg);
 }
 
 /* Location picker active row — no pale teal on white. */

@@ -17,6 +17,7 @@ import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
+import 'package:carbon_wms/services/bin_assign_session.dart';
 import 'package:carbon_wms/ui/screens/bin_assign_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/epc_detail_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
@@ -347,9 +348,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (!mounted) return;
     setState(() {
       _scannerSource = p.getString('wms_scanner_source_v1') ?? 'hardware';
-      _manualBin = p.getBool('bin_assign_manual_bin') ?? false;
-      _manualAddItem = p.getBool('bin_assign_manual_add_item') ?? false;
-      _externalScanner = p.getBool('bin_assign_external_scanner') ?? false;
+      // Manual-mode flags are now in-memory (BinAssignSession) — they
+      // survive navigation but reset on app kill, so a fresh login
+      // never inherits the previous operator's manual state.
+      _manualBin = BinAssignSession.manualBin;
+      _manualAddItem = BinAssignSession.manualAddItem;
+      _externalScanner = BinAssignSession.externalScanner;
       _cameraEnabled = p.getBool('bin_assign_camera_enabled') ?? true;
     });
     _syncHardwareBarcodeStream();
@@ -415,6 +419,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   @override
   void initState() {
     super.initState();
+    // Operator-asked behaviour: when manual mode is toggled OFF in the
+    // settings screen, the bin assign screen should come back fresh
+    // (no leftover bin code or staged items). BinAssignSession bumps
+    // resetVersion on every disable; we listen and re-run the reset.
+    BinAssignSession.resetVersion.addListener(_onManualModeReset);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _load();
       _loadUserEmail();
@@ -422,8 +431,22 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     });
   }
 
+  void _onManualModeReset() {
+    if (!mounted) return;
+    // Re-pull the manual flags from session AND wipe any in-progress
+    // bin / staged items. Same path as the screen's own "Refresh
+    // session" button — operator gets a clean slate.
+    setState(() {
+      _manualBin = BinAssignSession.manualBin;
+      _manualAddItem = BinAssignSession.manualAddItem;
+      _externalScanner = BinAssignSession.externalScanner;
+    });
+    _resetForNextEntry();
+  }
+
   @override
   void dispose() {
+    BinAssignSession.resetVersion.removeListener(_onManualModeReset);
     _flashTimer?.cancel();
     _flashTimer = null;
     _hardwareBarcodeSub?.cancel();

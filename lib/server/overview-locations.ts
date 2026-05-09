@@ -107,29 +107,68 @@ export async function upsertBin(
 }
 
 /**
- * Soft-archive a bin. Call inside a DB transaction with `DELETE` route:
- * counts `items` with this `bin_id` and `status = 'in-stock'` before updating `archived_at`.
+ * Delete a bin. NULLs out any items.bin_id pointing at it (so existing EPCs
+ * stay in-stock at the location but lose their bin assignment), writes one
+ * `clean_bin` audit row per moved EPC, then soft-archives the bin. The
+ * bin code is suffixed with `·arch·<rand>` so the unique constraint on
+ * (location_id, code) doesn't block re-creating a bin with the same name.
+ *
+ * The previous `archiveBin` behaviour blocked deletion when the bin had
+ * any in-stock items. That left orphaned bins on the screen with no path
+ * to remove them short of clean-bin. The new policy: delete is one-click;
+ * items are auto-orphaned to bin_id NULL (operator can later re-assign).
  */
-export async function archiveBin(
+export async function deleteBin(
   client: PoolClient,
   tenantId: string,
   binId: string,
-): Promise<void> {
-  const stock = await client.query<{ c: string }>(
-    `SELECT COUNT(*)::text AS c
-     FROM items i
-     INNER JOIN bins b ON b.id = i.bin_id
-     INNER JOIN locations l ON l.id = b.location_id
-     WHERE i.bin_id = $1::uuid
-       AND l.tenant_id = $2::uuid
-       AND i.status = 'in-stock'`,
+): Promise<{ orphaned: number }> {
+  const bin = await client.query<{ code: string }>(
+    `SELECT b.code
+       FROM bins b
+       INNER JOIN locations l ON l.id = b.location_id
+      WHERE b.id = $1::uuid
+        AND l.tenant_id = $2::uuid
+        AND b.archived_at IS NULL
+      LIMIT 1`,
     [binId, tenantId],
   );
-  const n = Number(stock.rows[0]?.c ?? 0);
-  if (n > 0) {
-    throw new Error("BAD_REQUEST:Bin has in-stock EPCs — move inventory before archiving");
+  const binCode = bin.rows[0]?.code;
+  if (!binCode) {
+    throw new Error("BAD_REQUEST:Bin not found or already archived");
   }
 
+  // 1. Orphan items: NULL out bin_id for everything pointing at this bin
+  // (regardless of status — operator has decided to remove the bin).
+  const orphaned = await client.query<{ epc: string }>(
+    `UPDATE items i
+     SET bin_id = NULL
+     FROM bins b
+     INNER JOIN locations l ON l.id = b.location_id
+     WHERE i.bin_id = b.id
+       AND b.id = $1::uuid
+       AND l.tenant_id = $2::uuid
+     RETURNING i.epc`,
+    [binId, tenantId],
+  );
+
+  // 2. Audit each orphaned EPC with reason 'clean_bin' (mirrors the path
+  // taken by the manual Clean flow — same downstream effect on the EPC).
+  for (const row of orphaned.rows) {
+    await client.query(
+      `INSERT INTO inventory_audit_logs (
+         tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id
+       )
+       VALUES (
+         $1::uuid, 'ADJUSTMENT', 'EPC', $2, $3, NULL, 'clean_bin', NULL
+       )`,
+      [tenantId, row.epc, binCode],
+    );
+  }
+
+  // 3. Soft-archive: keep the row + suffix the code so the unique
+  // (location_id, code) constraint allows the operator to re-create a
+  // bin with the same name afterwards.
   const u = await client.query(
     `UPDATE bins b
      SET archived_at = now(),
@@ -144,4 +183,15 @@ export async function archiveBin(
   if ((u.rowCount ?? 0) === 0) {
     throw new Error("BAD_REQUEST:Bin not found or already archived");
   }
+  return { orphaned: orphaned.rowCount ?? 0 };
+}
+
+/** @deprecated retained for legacy callers — forwards to deleteBin which
+ *  no longer blocks on in-stock items. */
+export async function archiveBin(
+  client: PoolClient,
+  tenantId: string,
+  binId: string,
+): Promise<void> {
+  await deleteBin(client, tenantId, binId);
 }

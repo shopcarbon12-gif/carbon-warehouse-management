@@ -17,13 +17,20 @@ import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 
-/// Map RSSI (dBm) to 0–1 proximity. Typical UHF range:
-///   -90 dBm → far edge (0.0)
-///   -30 dBm → on top of the tag (1.0)
+/// Map RSSI (dBm) to 0–1 proximity, calibrated to the actual values the
+/// SA-2000 + Chainway/Zebra UHF reads in this warehouse. The previous
+/// theoretical range (-90 → -30) made the bar feel dead because real
+/// "close" reads sit around -50 to -55 dBm, not -30. With the new
+/// window:
+///   -80 dBm → 0%   (radio can hear it but the operator is far)
+///   -45 dBm → 100% (right on top of the tag — saturates at 100)
+/// Linear in between. Everything tighter than -45 still maps to 100,
+/// which is what the operator wants — "I'm there" — instead of capping
+/// at 50% because the room never gets closer to the theoretical -30.
 double rssiToProximity01(int? rssi) {
   if (rssi == null) return 0;
-  const weak = -90.0;
-  const strong = -30.0;
+  const weak = -80.0;
+  const strong = -45.0;
   return ((rssi - weak) / (strong - weak)).clamp(0.0, 1.0);
 }
 
@@ -247,19 +254,32 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     });
   }
 
+  /// Match the live read EPC against the target. Exact equality first;
+  /// if that fails, fall back to a suffix match on the last 16 hex
+  /// chars (item + serial bits — the company-prefix bits sometimes
+  /// arrive padded or shifted on different SDK versions, which is what
+  /// kept biting earlier "% stays at 0" attempts). Both forms are
+  /// uppercase + alphanumeric only.
+  bool _matchesTarget(String observed) {
+    if (observed == _epcUpper) return true;
+    if (_epcUpper.length < 16 || observed.length < 16) return false;
+    return observed.substring(observed.length - 16) ==
+        _epcUpper.substring(_epcUpper.length - 16);
+  }
+
   void _onGeigerRead(RfidTagRead read) {
     if (!_scanning) return;
     if (!mounted) return;
     final epc = read.epcHex24.toUpperCase();
-    if (epc == _epcUpper) {
+    if (_matchesTarget(epc)) {
       // RSSI fallback: some Zebra firmware streams matches with rssi=null
       // for a few ticks before settling. Pre-fix, that meant the % stayed
       // at 0 even though the tag was clearly in range. We now treat
-      // "matched EPC but rssi unknown" as a weak-but-positive signal
-      // (~-75 dBm → ~25%) so the operator gets feedback that the radio
-      // has heard the target — and the value updates as soon as a real
-      // RSSI arrives.
-      const fallbackRssiOnNull = -75;
+      // "matched EPC but rssi unknown" as a mid-strength signal
+      // (~-65 dBm → ~43%) so the operator gets immediate feedback that
+      // the radio has heard the target — and the value updates as soon
+      // as a real RSSI arrives.
+      const fallbackRssiOnNull = -65;
       final effectiveRssi = read.rssi ?? _liveRssi ?? fallbackRssiOnNull;
       setState(() {
         _liveRssi = effectiveRssi;

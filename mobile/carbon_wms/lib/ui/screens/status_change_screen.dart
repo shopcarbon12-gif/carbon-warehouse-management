@@ -13,7 +13,6 @@ import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
-import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 
 /// Status Change — RFID-only handheld flow.
 ///
@@ -106,24 +105,61 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
 
   // ── trigger / scanner subscriptions ──────────────────────────────────
   StreamSubscription<RfidTagRead>? _uhfSub;
+  StreamSubscription<String>? _triggerSub;
+
+  /// Single-pull-toggle scan state. First trigger pull starts inventory,
+  /// second pull stops it (no hold-to-scan). Operator-asked behaviour:
+  /// status change is a long sweep, not a tap-and-release task.
+  bool _scanning = false;
+
+  /// Live antenna power for this screen. Default 10 dBm per spec —
+  /// status change is typically up-close work where high power picks up
+  /// foreign tags from the rack behind.
+  static const int _defaultPowerDbm = 10;
+  int _powerDbm = _defaultPowerDbm;
+
+  RfidManager? _rfid;
 
   @override
   void initState() {
     super.initState();
     unawaited(ScanSounds.instance.init());
-    // RFID-only: keep the UHF radio armed, suppress 2D so a stray
-    // imager pull doesn't try to fill a search box that no longer
-    // exists.
+    // RFID-only: arm UHF, kill the 2D imager so a stray imager pull
+    // can't trigger a screen this flow doesn't expose anymore.
+    unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(RfidVendorChannel.close2dBarcode());
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      // Route UHF reads through the Geiger sink so they reach _onUhfRead
-      // without competing with Count's session-EPC accumulation.
-      context.read<RfidManager>().scanContext = 'GEIGER_FIND';
       final rfid = context.read<RfidManager>();
+      _rfid = rfid;
+      // Route reads through the Geiger sink — the Count session-EPC
+      // accumulator must not capture status-change scans.
+      rfid.scanContext = 'GEIGER_FIND';
       _uhfSub = rfid.geigerTagReads.listen(_onUhfRead, onError: (_) {});
+
+      // Default power 10 dBm + session override so reapply paths
+      // (mobile-sync, scan-context flip) can't quietly snap back to
+      // handheld-config power while the operator is mid-sweep.
+      await rfid.setSessionPowerOverrideDbm(_powerDbm);
+      try {
+        await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
+      } catch (_) {}
+
+      // Hardware trigger → single-pull start / second-pull stop.
+      _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+        if (!mounted) return;
+        if (event == 'down') {
+          if (_scanning) {
+            unawaited(_stopScan());
+          } else {
+            unawaited(_startScan());
+          }
+        }
+      }, onError: (_) {});
+
       unawaited(_loadStatusLabels());
     });
   }
@@ -131,10 +167,60 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   @override
   void dispose() {
     unawaited(_uhfSub?.cancel());
+    unawaited(_triggerSub?.cancel());
+    // Stop inventory before leaving so a pending UHF stream doesn't
+    // bleed reads into the next screen's accumulator.
+    unawaited(RfidVendorChannel.stopChainwayInventory());
+    unawaited(RfidVendorChannel.stopZebraInventory());
+    final rfid = _rfid;
+    if (rfid != null) {
+      unawaited(rfid.setSessionPowerOverrideDbm(null));
+    }
     // Other screens that want a specific mode will re-assert on entry;
     // we just make sure we don't leave the device in a half-state.
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     super.dispose();
+  }
+
+  Future<void> _startScan() async {
+    if (_scanning) return;
+    setState(() => _scanning = true);
+    try {
+      ScanSounds.instance.play(ScanCue.start);
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.startZebraInventory();
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.startChainwayInventory();
+    } catch (_) {}
+  }
+
+  Future<void> _stopScan() async {
+    if (!_scanning) return;
+    setState(() => _scanning = false);
+    try {
+      ScanSounds.instance.play(ScanCue.stop);
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.stopZebraInventory();
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.stopChainwayInventory();
+    } catch (_) {}
+  }
+
+  Future<void> _setPower(int dbm) async {
+    final clamped = dbm.clamp(1, 30);
+    if (clamped == _powerDbm) return;
+    setState(() => _powerDbm = clamped);
+    final rfid = _rfid;
+    if (rfid != null) {
+      await rfid.setSessionPowerOverrideDbm(clamped);
+    }
+    try {
+      await RfidVendorChannel.setAntennaPowerDbm(clamped);
+    } catch (_) {}
   }
 
   // ── status-label load ────────────────────────────────────────────────
@@ -317,7 +403,11 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
                   ? _buildScanList()
                   : _buildStatusPick(),
             ),
-            const RfidPowerSlider(),
+            _StatusChangePowerSlider(
+              powerDbm: _powerDbm,
+              scanning: _scanning,
+              onChanged: (v) => unawaited(_setPower(v)),
+            ),
           ],
         ),
       ),
@@ -825,6 +915,104 @@ class _CommitButton extends StatelessWidget {
                   ),
                 ),
         ),
+      ),
+    );
+  }
+}
+
+/// Bottom-bar power slider for Status Change. Mirrors the count gear's
+/// session-override pattern: drag = immediate radio change, no save
+/// button. The "scanning" pill on the left flips so the operator can
+/// see at a glance whether the radio is hot.
+class _StatusChangePowerSlider extends StatelessWidget {
+  const _StatusChangePowerSlider({
+    required this.powerDbm,
+    required this.scanning,
+    required this.onChanged,
+  });
+
+  final int powerDbm;
+  final bool scanning;
+  final ValueChanged<int> onChanged;
+
+  static const int _minDbm = 1;
+  static const int _maxDbm = 30;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFF0F5F4),
+        border: Border(top: BorderSide(color: Color(0xFFCDD7D7), width: 1)),
+      ),
+      padding: EdgeInsets.fromLTRB(14.w, 8.h, 14.w, 8.h),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+            color: scanning
+                ? const Color(0x33B23A3A)
+                : const Color(0x33334466),
+            child: Text(
+              scanning ? 'SCANNING' : 'IDLE',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 10.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.4,
+                color: scanning
+                    ? const Color(0xFFB23A3A)
+                    : const Color(0xFF334466),
+              ),
+            ),
+          ),
+          SizedBox(width: 10.w),
+          Text(
+            'PWR',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
+              color: const Color(0xFF6D7979),
+            ),
+          ),
+          SizedBox(width: 6.w),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                activeTrackColor: AppColors.primary,
+                inactiveTrackColor: const Color(0xFFCDD7D7),
+                thumbColor: AppColors.primary,
+                overlayColor: AppColors.primary.withValues(alpha: 0.10),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+              ),
+              child: Slider(
+                value: powerDbm.toDouble().clamp(
+                      _minDbm.toDouble(),
+                      _maxDbm.toDouble(),
+                    ),
+                min: _minDbm.toDouble(),
+                max: _maxDbm.toDouble(),
+                divisions: _maxDbm - _minDbm,
+                onChanged: (v) => onChanged(v.round()),
+              ),
+            ),
+          ),
+          SizedBox(width: 8.w),
+          SizedBox(
+            width: 56.w,
+            child: Text(
+              '$powerDbm dBm',
+              textAlign: TextAlign.right,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textMain,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
