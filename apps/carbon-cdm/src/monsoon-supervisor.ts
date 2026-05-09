@@ -59,6 +59,24 @@ const MAX_BACKOFF_MS = 60_000;
 const SWEEP_POWERS: readonly number[] = [100, 200, 330];
 /** Cooldown so a permanently-broken reader doesn't sweep-thrash forever. */
 const SWEEP_RETRY_COOLDOWN_MS = 30 * 60 * 1000;
+
+/**
+ * Supervisor-managed antenna multiplexing for multi-antenna readers.
+ * Replaces the chassis-side `--cmux --mxa N1,N2 --mux_cycles -1` invocation,
+ * which on at least one production chassis (.16, Transfer Bin) never produced
+ * reads from antenna 1 in mux mode while standalone single-antenna tests
+ * worked on both antennas. Verified 2026-05-09: 1,811 reads from antenna 2,
+ * zero from antenna 1 in chassis-cmux mode.
+ *
+ * Replacement: the supervisor itself rotates antennas. For each enabled
+ * antenna in turn we spawn a single-antenna console-driver child for
+ * SUPERVISOR_MUX_INTERVAL_MS, then kill+respawn for the next antenna.
+ * Each antenna gets focused-scan throughput at the chassis level (no
+ * mux switching inside the chassis at all). Cross-antenna dedup on the
+ * EPC side prevents the same tag from counting twice when sighted on
+ * both antennas within a swap cycle.
+ */
+const SUPERVISOR_MUX_INTERVAL_MS = 5_000;
 /**
  * Candidate Monsoon-over-Ethernet ports. The first time a reader spawns
  * we use the operator-configured port; if the resulting child stays silent
@@ -218,6 +236,21 @@ type ReaderSlot = {
    * broken reader doesn't sweep-thrash indefinitely. 0 = never attempted.
    */
   lastSweepAttemptAt: number;
+  /**
+   * Supervisor-managed antenna mux. When `length >= 2`, we rotate through
+   * these antenna numbers (one console-driver child per antenna) in place
+   * of relying on the chassis's --cmux mode. Empty/length=1 means no
+   * supervisor mux (single-antenna reader uses its enabled antenna directly).
+   * Built once at slot init from the spec's enabled antennas.
+   */
+  muxAntennaSequence: number[];
+  /** Current position in muxAntennaSequence (0-indexed). The active console
+   *  spawn stamps reads with `muxAntennaSequence[muxCurrentIdx]`. */
+  muxCurrentIdx: number;
+  /** ms timestamp at which the current antenna's window expires and the
+   *  watchdog should rotate to the next antenna. Set to now+interval on each
+   *  rotation; the watchdog tick checks this and triggers the swap. */
+  muxSwapAtMs: number;
 };
 
 /** Operator-tunable knobs an active /antenna-test session imposes on a reader. */
@@ -520,6 +553,35 @@ export class MonsoonSupervisor {
       if (silentMs >= silenceTimeout) {
         this.pushReaderOfflineIfDue(slot, now);
       }
+      // Supervisor-managed antenna mux: rotate antennas on the configured
+      // interval. Skipped during TEST_MODE (the antenna-test endpoint owns
+      // the antenna selection while a session is open) and during sweep
+      // recovery (we want power-step focus, not antenna-step focus).
+      if (
+        slot.muxAntennaSequence.length >= 2 &&
+        !slot.shuttingDown &&
+        slot.testSession === null &&
+        slot.sweepPowerOverrideArg === null &&
+        now >= slot.muxSwapAtMs
+      ) {
+        const prevAntenna = slot.muxAntennaSequence[slot.muxCurrentIdx];
+        slot.muxCurrentIdx = (slot.muxCurrentIdx + 1) % slot.muxAntennaSequence.length;
+        const nextAntenna = slot.muxAntennaSequence[slot.muxCurrentIdx];
+        slot.muxSwapAtMs = now + SUPERVISOR_MUX_INTERVAL_MS;
+        log.info("supervisor: mux swap — rotating to next antenna", {
+          readerId: slot.spec.id,
+          readerName: slot.spec.name,
+          prevAntenna,
+          nextAntenna,
+          swapIntervalMs: SUPERVISOR_MUX_INTERVAL_MS,
+        });
+        if (slot.child) {
+          slot.intendedKill = true;
+          this.killSlotChildHard(slot);
+        }
+        continue;
+      }
+
       // Auto-sweep recovery — when active, every silent kick advances the
       // power step. If a step produces bytes, the byte-arrival site clears
       // the override (recovery succeeded). If all steps go silent, give up
@@ -704,12 +766,16 @@ export class MonsoonSupervisor {
         // for this supervisor.
         continue;
       }
-      // Multi-antenna readers must run on the stream driver regardless of
-      // the saved monsoon_driver — the console binary's text output omits
-      // per-tag antenna numbers and would mis-attribute every read.
+      // Multi-antenna readers run on the console driver, one antenna at a
+      // time, with the supervisor itself rotating antennas on the
+      // SUPERVISOR_MUX_INTERVAL_MS schedule. The previous "multi-antenna ⇒
+      // stream + --cmux" path was observed to under-utilize antenna 1 on
+      // at least one production chassis. The driver selection here MUST
+      // match the one in spawnReader (line ~1015) or reconcile and
+      // spawnReader will infinite-loop on driver flips.
       const enabledCount = spec.antennas.filter((a) => a.enabled).length;
       const desiredDriver: "stream" | "console" =
-        enabledCount >= 2 ? "stream" : spec.monsoon_driver === "console" ? "console" : "stream";
+        enabledCount >= 2 ? "console" : spec.monsoon_driver === "console" ? "console" : "stream";
       const existing = this.slots.get(spec.id);
       if (existing) {
         // If operator changed the configured serial port in WMS, rebuild
@@ -773,6 +839,12 @@ export class MonsoonSupervisor {
         intendedKill: false,
         sweepPowerOverrideArg: null,
         lastSweepAttemptAt: 0,
+        muxAntennaSequence: spec.antennas
+          .filter((a) => a.enabled)
+          .map((a) => a.antenna_number)
+          .sort((a, b) => a - b),
+        muxCurrentIdx: 0,
+        muxSwapAtMs: Date.now() + SUPERVISOR_MUX_INTERVAL_MS,
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -966,16 +1038,18 @@ export class MonsoonSupervisor {
     // /antenna-test page. The new_monsoonreader is on the VM regardless
     // of the reader's saved monsoon_driver.
     //
-    // Multi-antenna readers (≥2 enabled antennas) force the stream
-    // driver too, so per-tag antenna numbers come through (the console
-    // binary's text output omits them). See spawnReader's args block
-    // below for the matching --cmux --mxa --mux_cycles invocation.
-    const enabledAntennaCount = slot.spec.antennas.filter((a) => a.enabled).length;
+    // Multi-antenna readers (≥2 enabled antennas) ALSO force console driver
+    // now, but for a different reason: the supervisor itself rotates
+    // antennas (see SUPERVISOR_MUX_INTERVAL_MS comment) by spawning a
+    // single-antenna console child per antenna. Chassis-side --cmux mode
+    // was observed to under-utilize antenna 1 on at least one production
+    // unit (.16 Transfer Bin: 1811 reads on antenna 2, 0 on antenna 1).
+    // Supervisor mux gives both antennas full chassis throughput in turn.
     const desired: "stream" | "console" =
       slot.testSession !== null
         ? "console"
-        : enabledAntennaCount >= 2
-          ? "stream"
+        : slot.muxAntennaSequence.length >= 2
+          ? "console"
           : slot.spec.monsoon_driver === "console"
             ? "console"
             : "stream";
@@ -1204,8 +1278,18 @@ export class MonsoonSupervisor {
       // runs in normal scan after exhaustion, never during /antenna-test.
       powerArg = slot.sweepPowerOverrideArg ?? Math.round(this.avgPower(spec) * 10);
       const enabled = spec.antennas.filter((a) => a.enabled);
-      const stampAnt = enabled[0];
-      stampAntenna = stampAnt?.antenna_number ?? 1;
+      // Supervisor-managed mux: stamp this spawn with the antenna at the
+      // current rotation index. Each spawn drives ONE antenna; the
+      // watchdog rotates by killing+respawning on the swap deadline.
+      const muxAnt =
+        slot.muxAntennaSequence.length >= 2
+          ? slot.muxAntennaSequence[slot.muxCurrentIdx]
+          : null;
+      const stampAnt =
+        muxAnt !== undefined && muxAnt !== null
+          ? enabled.find((a) => a.antenna_number === muxAnt)
+          : enabled[0];
+      stampAntenna = stampAnt?.antenna_number ?? muxAnt ?? 1;
       // Per-antenna saved defaults from /antenna_test → "Save as default";
       // fall back to hardcoded normal-scan defaults when none set.
       const beh = stampAnt?.behaviour;
@@ -1323,7 +1407,20 @@ export class MonsoonSupervisor {
 
       const stamp = new Date().toISOString();
       const ts = slot.testSession;
+      const nowMs = Date.now();
+      // Cross-antenna dedup window for supervisor-managed mux readers: an
+      // EPC sighted on one antenna shouldn't also count under the next
+      // antenna in the rotation. Window = the swap interval, so a single
+      // EPC counts on at most one antenna per cycle. Non-mux readers keep
+      // the existing behaviour (DEDUP_WINDOW_MS = 0, no agent-side dedup,
+      // WMS does ingest-time dedup).
+      const muxDedupActive = slot.muxAntennaSequence.length >= 2 && !ts;
       for (const rec of result.records) {
+        if (muxDedupActive) {
+          const last = slot.lastSeen.get(rec.epcHex);
+          if (last !== undefined && nowMs - last < SUPERVISOR_MUX_INTERVAL_MS) continue;
+          slot.lastSeen.set(rec.epcHex, nowMs);
+        }
         // Antenna-test windows: every record from this child belongs to
         // `consoleStampAntenna`; if a window is open for that antenna,
         // count it.
