@@ -69,11 +69,21 @@ export async function POST(req: Request, { params }: Ctx) {
   }
 
   const userId = (session as { uid?: string }).uid ?? null;
+  // Both fields live INSIDE devices.config (jsonb) — there is no
+  // top-level transmit_power_dbm column on devices. Original code
+  // tried to UPDATE a non-existent column, which silently 500'd the
+  // request, which the antenna-test workspace's `if (res.ok)` swallowed
+  // → button looked dead since day one. Verified live 2026-05-10:
+  // `config->'behaviour'` was null on every antenna in prod.
   await pool.query(
     `UPDATE devices
-       SET transmit_power_dbm = $1::numeric,
-           config = jsonb_set(
-             COALESCE(config, '{}'::jsonb),
+       SET config = jsonb_set(
+             jsonb_set(
+               COALESCE(config, '{}'::jsonb),
+               '{transmit_power_dbm}',
+               to_jsonb($1::numeric),
+               true
+             ),
              '{behaviour}',
              jsonb_build_object(
                'read_time_ms', $2::int,

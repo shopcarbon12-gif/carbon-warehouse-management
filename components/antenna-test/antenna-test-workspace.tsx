@@ -479,9 +479,11 @@ export function AntennaTestWorkspace() {
 
   const [savingDefault, setSavingDefault] = useState(false);
   const [savedDefaultAt, setSavedDefaultAt] = useState<number | null>(null);
+  const [saveDefaultError, setSaveDefaultError] = useState<string | null>(null);
   const saveAsDefault = async () => {
     if (!picked) return;
     setSavingDefault(true);
+    setSaveDefaultError(null);
     try {
       const res = await fetch(
         `/api/hardware-config/antennas/${picked.antennaId}/behaviour`,
@@ -495,7 +497,20 @@ export function AntennaTestWorkspace() {
         setSavedDefaultAt(Date.now());
         // Refetch the tree so the picker shows new defaults.
         void tree.mutate();
+      } else {
+        // Surface the error instead of silently swallowing. Live evidence
+        // 2026-05-10: the endpoint had been 500-erroring since day one
+        // because it referenced a non-existent column, but the previous
+        // `if (res.ok)` pattern hid it — operators thought save succeeded.
+        let msg = `Save failed (HTTP ${res.status})`;
+        try {
+          const j = (await res.json()) as { error?: string };
+          if (j.error) msg = j.error;
+        } catch { /* body wasn't JSON */ }
+        setSaveDefaultError(msg);
       }
+    } catch (e) {
+      setSaveDefaultError(e instanceof Error ? e.message : "Network error");
     } finally {
       setSavingDefault(false);
     }
@@ -1203,6 +1218,11 @@ export function AntennaTestWorkspace() {
                   ? "✓ Saved"
                   : "💾 Save as antenna default"}
             </button>
+          )}
+          {saveDefaultError && (
+            <span className="font-mono text-xs text-red-500/90">
+              {saveDefaultError}
+            </span>
           )}
           {picked && (
             <span className="font-mono text-[10px] text-[var(--wms-muted)]">

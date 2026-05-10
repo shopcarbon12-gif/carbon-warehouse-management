@@ -212,6 +212,23 @@ export async function buildHardwareConfigTree(
     );
   }
 
+  // Parent → bridge-reachable lookup. The "test-passed sticky" bypass below
+  // needs this so we don't show an antenna green when its parent reader's
+  // WIZnet bridge has been off the LAN for hours. Live evidence 2026-05-10:
+  // operator's PoE switch was off for ~2h, hardware-config showed ~5
+  // antennas as green because they had `last_test_passed=true` from earlier
+  // antenna-test sessions even though the parent bridge_seen_at was 7547s
+  // stale. Test-passed should only count when the parent is currently
+  // reachable enough to actually be using the antenna.
+  const parentBridgeReachable = new Map<string, boolean>();
+  for (const d of devices.rows) {
+    if (!READER_TYPES.has(d.device_type)) continue;
+    const reachable =
+      d.bridge_seen_at !== null &&
+      nowMs - new Date(d.bridge_seen_at).getTime() <= BRIDGE_REACHABLE_MS;
+    parentBridgeReachable.set(d.id, !!d.status_online || reachable);
+  }
+
   const antennasByParent = new Map<string, HardwareAntennaRow[]>();
   for (const d of devices.rows) {
     if (d.device_type !== "antenna" || !d.parent_device_id) continue;
@@ -219,15 +236,19 @@ export async function buildHardwareConfigTree(
     const fresh =
       d.last_read_at !== null &&
       nowMs - new Date(d.last_read_at).getTime() <= ANTENNA_FRESHNESS_MS;
-    // Test-passed signal has no time decay — green sticks until a test fails.
-    const testedOk = d.last_test_passed === true;
+    // Test-passed signal sticks until a test fails — but ONLY while the
+    // parent reader's bridge is currently on the LAN. A passed test from
+    // last week doesn't mean the antenna is reading right now if the
+    // chassis lost power.
+    const parentReachable = parentBridgeReachable.get(d.parent_device_id) ?? false;
+    const testedOk = d.last_test_passed === true && parentReachable;
     const parentIsPaused = parentPaused.get(d.parent_device_id) ?? false;
     arr.push({
       id: d.id,
       name: d.name,
-      // Derived: paused parent OR fresh read (15min) OR last test passed
-      // (sticky, no time limit). The stored `status_online` column is
-      // intentionally ignored — see migration 0060_devices_last_read_at.
+      // Derived: paused parent OR fresh read (15min) OR (last test passed
+      // AND parent bridge currently reachable). The stored `status_online`
+      // column is intentionally ignored — see migration 0060.
       status_online: parentIsPaused || fresh || testedOk,
       config: (d.config ?? {}) as Record<string, unknown>,
     });
