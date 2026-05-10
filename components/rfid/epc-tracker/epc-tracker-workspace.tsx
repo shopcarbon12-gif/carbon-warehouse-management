@@ -211,6 +211,15 @@ export function EpcTrackerWorkspace() {
       location_name: row.location_code,
       bin_id: null,
       bin_code: row.bin_code,
+      first_scanned_at: null,
+      source: null,
+      source_device_label: null,
+      source_device_id: null,
+      source_device_name: null,
+      source_antenna_id: null,
+      source_antenna_name: null,
+      created_by_user_id: null,
+      created_by_email: null,
     };
   }, [selectedEpc, pickMatches]);
   const effectiveItem = item ?? fallbackDetail;
@@ -479,10 +488,43 @@ export function EpcTrackerWorkspace() {
                 <dt className="text-[var(--wms-muted)]">SKU</dt>
                 <dd className="text-right">{effectiveItem.sku}</dd>
               </div>
-              <div className="flex justify-between gap-2 py-1">
+              <div className="flex justify-between gap-2 border-b border-[var(--wms-border)]/80 py-1">
                 <dt className="text-[var(--wms-muted)]">System ID / UPC</dt>
                 <dd className="text-right">
                   {effectiveItem.ls_system_id} · {effectiveItem.upc || "—"}
+                </dd>
+              </div>
+              {/* Provenance: where this EPC came from to the system. */}
+              <div className="flex justify-between gap-2 border-b border-[var(--wms-border)]/80 py-1">
+                <dt className="text-[var(--wms-muted)]">Entered system</dt>
+                <dd className="text-right text-[var(--wms-muted)]">
+                  {effectiveItem.first_scanned_at
+                    ? new Date(effectiveItem.first_scanned_at).toLocaleString()
+                    : "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2 border-b border-[var(--wms-border)]/80 py-1">
+                <dt className="text-[var(--wms-muted)]">Source</dt>
+                <dd className="text-right">{effectiveItem.source ?? "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-2 border-b border-[var(--wms-border)]/80 py-1">
+                <dt className="text-[var(--wms-muted)]">Source device</dt>
+                <dd className="break-all text-right">
+                  {effectiveItem.source_device_name ??
+                    effectiveItem.source_device_label ??
+                    "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2 border-b border-[var(--wms-border)]/80 py-1">
+                <dt className="text-[var(--wms-muted)]">Source antenna</dt>
+                <dd className="text-right">
+                  {effectiveItem.source_antenna_name ?? "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2 py-1">
+                <dt className="text-[var(--wms-muted)]">Added by</dt>
+                <dd className="break-all text-right">
+                  {effectiveItem.created_by_email ?? "—"}
                 </dd>
               </div>
             </dl>

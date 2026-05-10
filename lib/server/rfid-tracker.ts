@@ -36,6 +36,15 @@ export async function getTrackerItemByEpc(
     serial_number: string;
     status: string;
     created_at: Date;
+    first_scanned_at: Date | null;
+    source: string | null;
+    source_device_label: string | null;
+    source_device_id: string | null;
+    source_device_name: string | null;
+    source_antenna_id: string | null;
+    source_antenna_name: string | null;
+    created_by_user_id: string | null;
+    created_by_email: string | null;
     custom_sku_id: string;
     sku: string;
     ls_system_id: string;
@@ -53,6 +62,15 @@ export async function getTrackerItemByEpc(
        i.serial_number::text,
        i.status,
        i.created_at,
+       i.first_scanned_at,
+       i.source,
+       i.source_device_label,
+       i.source_device_id::text,
+       sd.name AS source_device_name,
+       i.source_antenna_id::text,
+       sa.name AS source_antenna_name,
+       i.created_by_user_id::text,
+       cu.email AS created_by_email,
        i.custom_sku_id::text,
        cs.sku,
        cs.ls_system_id::text,
@@ -68,6 +86,9 @@ export async function getTrackerItemByEpc(
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
      INNER JOIN matrices m ON m.id = cs.matrix_id
      LEFT JOIN bins b ON b.id = i.bin_id
+     LEFT JOIN devices sd ON sd.id = i.source_device_id
+     LEFT JOIN devices sa ON sa.id = i.source_antenna_id
+     LEFT JOIN users   cu ON cu.id = i.created_by_user_id
      WHERE i.epc = $2
      LIMIT 1`,
     [tenantId, epc],
@@ -80,6 +101,15 @@ export async function getTrackerItemByEpc(
     serial_number: row.serial_number,
     status: row.status,
     created_at: row.created_at.toISOString(),
+    first_scanned_at: row.first_scanned_at ? row.first_scanned_at.toISOString() : null,
+    source: row.source,
+    source_device_label: row.source_device_label,
+    source_device_id: row.source_device_id,
+    source_device_name: row.source_device_name,
+    source_antenna_id: row.source_antenna_id,
+    source_antenna_name: row.source_antenna_name,
+    created_by_user_id: row.created_by_user_id,
+    created_by_email: row.created_by_email,
     custom_sku_id: row.custom_sku_id,
     sku: row.sku,
     ls_system_id: row.ls_system_id,
