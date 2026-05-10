@@ -3,6 +3,7 @@ import { getPool } from "@/lib/db";
 import {
   authenticateAgentToken,
   heartbeatSchema,
+  pruneOldCdmReads,
   recordAgentHeartbeat,
 } from "@/lib/server/cdm-agents";
 import { extractPublicIp } from "@/lib/server/request-public-ip";
@@ -58,6 +59,18 @@ export async function POST(req: Request) {
     await client.query("BEGIN");
     const result = await recordAgentHeartbeat(client, agent.agentId, parsed.data, publicIp);
     await client.query("COMMIT");
+
+    // Piggyback bounded TTL sweep on cdm_reads. Heartbeats run every ~30 s
+    // per agent so a single agent triggers ~2 sweeps/min — plenty to keep
+    // the table bounded. Awaited (cheap: a single indexed DELETE LIMIT
+    // 5000) so the client is still live when the query runs. Errors are
+    // swallowed so a sweep failure cannot break the heartbeat path.
+    try {
+      await pruneOldCdmReads(client);
+    } catch (e) {
+      console.warn("[cdm-agents/heartbeat] cdm_reads TTL sweep failed", e);
+    }
+
     return NextResponse.json({
       ok: true,
       restart_requested: result.restart_requested,

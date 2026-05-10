@@ -210,6 +210,37 @@ export async function regenerateAgentToken(
   return { token };
 }
 
+/**
+ * Bounded TTL sweep over `cdm_reads`. Piggybacks on agent heartbeats
+ * (~30 s cadence per agent) — each call deletes at most LIMIT old rows so
+ * a single sweep can never lock the table for long. Belt-and-suspenders
+ * for the passes_formula filter shipped in `ingestAgentReads`: even if a
+ * future code path bypasses the filter, this caps the table's lifetime.
+ *
+ * Lifetime: 48 h. Live-scan dashboards only query the last 15 min; the
+ * EPC tracker's "recently seen" panel queries the last 24 h. 48 h gives
+ * a comfortable margin without ever hitting the disk-pressure failure
+ * mode that took prod down on 2026-05-10.
+ *
+ * Caller should swallow errors — a failed sweep must not break heartbeat.
+ */
+export async function pruneOldCdmReads(
+  client: PoolClient,
+  retentionHours = 48,
+  batchLimit = 5000,
+): Promise<number> {
+  const r = await client.query(
+    `DELETE FROM cdm_reads
+       WHERE ctid IN (
+         SELECT ctid FROM cdm_reads
+           WHERE read_at < now() - ($1::int || ' hours')::interval
+           LIMIT $2
+       )`,
+    [retentionHours, batchLimit],
+  );
+  return r.rowCount ?? 0;
+}
+
 export async function recordAgentHeartbeat(
   client: PoolClient,
   agentId: string,
@@ -772,29 +803,49 @@ export async function ingestAgentReads(
     passesFormulas.push(passesFormulaByEpc.get(r.epcHex.toUpperCase()) ?? false);
   }
 
-  const result = await client.query(
-    `INSERT INTO cdm_reads
-        (tenant_id, cdm_agent_id, reader_id, antenna_id, epc_hex, rssi, read_at, passes_formula)
-     SELECT
-        unnest($1::uuid[]),
-        unnest($2::uuid[]),
-        unnest($3::uuid[]),
-        NULLIF(unnest($4::text[]), '')::uuid,
-        unnest($5::text[]),
-        NULLIF(unnest($6::text[]), '')::int,
-        unnest($7::timestamptz[]),
-        unnest($8::boolean[])`,
-    [
-      tenantIds,
-      agentIds,
-      readerIds,
-      antennaIds.map((x) => x ?? ""),
-      epcs,
-      rssis.map((x) => (x === null ? "" : String(x))),
-      readAts,
-      passesFormulas,
-    ],
-  );
+  // Persist only reads that passed the tenant's decoder. Live scan + every
+  // downstream query against `cdm_reads` already filter on
+  // `passes_formula = true`, so storing the rejected rows was pure DB
+  // bloat — at field rates we measured ~10 noise reads/sec per stuck
+  // antenna, ~99.98% of all writes. That filled the prod disk to 100% on
+  // 2026-05-10 and took Coolify down with it. Filter at write time so the
+  // table stays bounded under any reader misconfig.
+  //
+  // Side effects below (status_online flip, zone-change tracker, antenna
+  // last_read_at bump, SSE fan-out) intentionally still see ALL reads —
+  // the antenna IS receiving signal even if the EPCs don't decode, and
+  // the operator wants the antenna dot to stay green in that case.
+  const keepIdx: number[] = [];
+  for (let i = 0; i < passesFormulas.length; i++) {
+    if (passesFormulas[i]) keepIdx.push(i);
+  }
+  let insertedCount = 0;
+  if (keepIdx.length > 0) {
+    const result = await client.query(
+      `INSERT INTO cdm_reads
+          (tenant_id, cdm_agent_id, reader_id, antenna_id, epc_hex, rssi, read_at, passes_formula)
+       SELECT
+          unnest($1::uuid[]),
+          unnest($2::uuid[]),
+          unnest($3::uuid[]),
+          NULLIF(unnest($4::text[]), '')::uuid,
+          unnest($5::text[]),
+          NULLIF(unnest($6::text[]), '')::int,
+          unnest($7::timestamptz[]),
+          unnest($8::boolean[])`,
+      [
+        keepIdx.map((i) => tenantIds[i]),
+        keepIdx.map((i) => agentIds[i]),
+        keepIdx.map((i) => readerIds[i]),
+        keepIdx.map((i) => antennaIds[i] ?? ""),
+        keepIdx.map((i) => epcs[i]),
+        keepIdx.map((i) => (rssis[i] === null ? "" : String(rssis[i]))),
+        keepIdx.map((i) => readAts[i]),
+        keepIdx.map((i) => passesFormulas[i]),
+      ],
+    );
+    insertedCount = result.rowCount ?? keepIdx.length;
+  }
 
   // Mark the reader as online — its first read in this session.
   const readerInfo = await client.query<{ location_id: string; zone_id: string | null }>(
@@ -917,11 +968,11 @@ export async function ingestAgentReads(
       epcs,
       epcAntennaMap,
       timestamp: new Date().toISOString(),
-      rowsAffected: result.rowCount ?? body.reads.length,
+      rowsAffected: insertedCount,
     });
   }
 
-  return { inserted: result.rowCount ?? body.reads.length };
+  return { inserted: insertedCount };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
