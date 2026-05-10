@@ -542,8 +542,13 @@ export function AntennaTestWorkspace() {
     sessionId === null && rows.size > 0 && status !== "live" && status !== "armed";
 
   // Catalog enrichment: as new EPCs appear in `rows`, batch them and POST to
-  // /api/operations/transfers/lookup (session-cookie). Cache the result so we
-  // don't re-fetch the same EPC.
+  // /api/catalog/enrich-epcs (session-cookie). Cache the result so we don't
+  // re-fetch the same EPC. CRITICAL: this endpoint is pure-read — it does
+  // NOT mutate `items`. The previous implementation hit
+  // /api/operations/transfers/lookup which auto-ingested every observed EPC
+  // into `items` as a side effect, silently growing inventory whenever an
+  // operator ran an antenna test. See lib/server/catalog-enrich.ts for the
+  // separation rationale.
   //
   // Chunked at CATALOG_LOOKUP_CHUNK (200) because the server's zod schema
   // rejects bigger payloads with 400. Pre-fix the whole first burst could
@@ -575,7 +580,7 @@ export function AntennaTestWorkspace() {
       for (let i = 0; i < pending.length; i += CATALOG_LOOKUP_CHUNK) {
         const chunk = pending.slice(i, i + CATALOG_LOOKUP_CHUNK);
         try {
-          const res = await fetch("/api/operations/transfers/lookup", {
+          const res = await fetch("/api/catalog/enrich-epcs", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ epcs: chunk }),
