@@ -5,7 +5,14 @@ import type { AssetMovementRow } from "@/lib/queries/inventory-reports";
 import { downloadCsv, rowsToCsv } from "@/lib/csv-export";
 import { ReportToolbar } from "@/components/reports/report-toolbar";
 import { useDebouncedValue } from "@/components/reports/use-debounced-value";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -62,50 +69,83 @@ export function AssetMovementsWorkspace() {
         onDateFromChange={setDateFrom}
         onDateToChange={setDateTo}
       />
-      <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] dark:border-[var(--wms-border)]">
-        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)] dark:border-[var(--wms-border)]">
-              <th className="px-3 py-3">When</th>
-              <th className="px-3 py-3">EPC</th>
-              <th className="px-3 py-3">From</th>
-              <th className="px-3 py-3">To</th>
-              <th className="px-3 py-3 text-right">User</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--wms-border)]/80 dark:divide-[var(--wms-border)]/80">
-            {isLoading && !data ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-[var(--wms-muted)]">
-                  Loading…
-                </td>
-              </tr>
-            ) : !data?.length ? (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-[var(--wms-muted)]">
-                  No asset movements recorded yet.
-                </td>
-              </tr>
-            ) : (
-              data.map((row) => (
-                <tr key={row.id} className="text-[var(--wms-fg)]">
-                  <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-[var(--wms-muted)]">
-                    {new Date(row.created_at).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-xs">{row.epc}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]">
-                    {row.from_location ?? "—"}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-xs">{row.to_location}</td>
-                  <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">
-                    {row.user_id ?? "—"}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <AssetMovementsTable data={data} isLoading={isLoading} />
     </div>
+  );
+}
+
+function AssetMovementsTable({
+  data,
+  isLoading,
+}: {
+  data: AssetMovementRow[] | undefined;
+  isLoading: boolean;
+}) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 5);
+  const cols: { label: string; align?: "right" }[] = [
+    { label: "When" },
+    { label: "EPC" },
+    { label: "From" },
+    { label: "To" },
+    { label: "User", align: "right" },
+  ];
+  return (
+    <DataTableContainer maxHeight="min(70vh, 640px)">
+      <table
+        ref={tableRef}
+        className="w-full min-w-[720px] border-collapse text-left text-sm"
+        style={{ tableLayout: pickTableLayout(colWidths) }}
+      >
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+          <tr className="border-b border-[var(--wms-border)]">
+            {cols.map((c, i) => {
+              const w = colWidths[i];
+              return (
+                <th
+                  key={c.label}
+                  style={w !== null ? { width: w, minWidth: w } : undefined}
+                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right" : ""}`}
+                >
+                  <span>{c.label}</span>
+                  <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--wms-border)]/80">
+          {isLoading && !data ? (
+            <tr>
+              <td colSpan={5} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+                Loading…
+              </td>
+            </tr>
+          ) : !data?.length ? (
+            <tr>
+              <td colSpan={5} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+                No asset movements recorded yet.
+              </td>
+            </tr>
+          ) : (
+            data.map((row) => (
+              <tr key={row.id} className="text-[var(--wms-fg)]">
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs tabular-nums text-[var(--wms-muted)]`}>
+                  {new Date(row.created_at).toLocaleString()}
+                </td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.epc}>{row.epc}</td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]`} title={row.from_location ?? ""}>
+                  {row.from_location ?? "—"}
+                </td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.to_location}>{row.to_location}</td>
+                <td className={`${cellTruncate} px-3 py-2.5 text-right font-mono text-xs tabular-nums`}>
+                  {row.user_id ?? "—"}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </DataTableContainer>
   );
 }

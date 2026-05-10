@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { withDb } from "@/lib/db";
 import { Activity } from "lucide-react";
+import { LoyaltyLedgerTable } from "@/components/loyalty/ledger-table";
 
 const PAGE_SIZE = 100;
 const REASONS = [
@@ -77,50 +78,7 @@ export default async function LedgerPage({
         <button type="submit" className="border border-border bg-card hover:bg-muted px-4 py-2 text-sm font-semibold">Apply</button>
       </form>
 
-      <div className="border border-border bg-card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted text-xs uppercase tracking-wider font-bold">
-            <tr>
-              <th className="text-left px-3 py-2">When</th>
-              <th className="text-left px-3 py-2">Customer</th>
-              <th className="text-right px-3 py-2">Δ Pts</th>
-              <th className="text-left px-3 py-2">Reason</th>
-              <th className="text-left px-3 py-2">Source</th>
-              <th className="text-left px-3 py-2">Ref</th>
-              <th className="text-right px-3 py-2">Basis</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.length === 0 ? (
-              <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">No ledger rows match.</td></tr>
-            ) : (
-              rows.map((row) => (
-                <tr key={row.id}>
-                  <td className="px-3 py-2 whitespace-nowrap">{new Date(row.created_at).toLocaleString()}</td>
-                  <td className="px-3 py-2">
-                    {row.customer_id ? (
-                      <Link className="underline" href={`/loyalty/customers/${row.customer_id}`}>
-                        {row.customer_name}
-                      </Link>
-                    ) : (
-                      <span className="text-muted-foreground">{row.customer_name}</span>
-                    )}
-                  </td>
-                  <td className={`px-3 py-2 text-right tabular-nums font-bold ${row.delta_points > 0 ? "text-emerald-600" : "text-rose-700"}`}>
-                    {row.delta_points > 0 ? "+" : ""}{row.delta_points}
-                  </td>
-                  <td className="px-3 py-2">{row.reason}</td>
-                  <td className="px-3 py-2">{row.source}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{row.source_ref ?? "—"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {row.amount_basis ? `$${Number(row.amount_basis).toFixed(2)}` : "—"}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <LoyaltyLedgerTable rows={rows} />
 
       <div className="mt-3 flex items-center gap-2 text-sm">
         <Link className="px-3 py-1 border border-border" href={`?reason=${reason}&page=${Math.max(1, page - 1)}`}>Prev</Link>

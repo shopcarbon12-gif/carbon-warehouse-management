@@ -1,8 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { AlertTriangle, Download, EyeOff, RefreshCw, X } from "lucide-react";
+import {
+  cellTruncate,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 type DefectiveRow = {
   epc: string;
@@ -75,6 +81,8 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
   const rows = useMemo(() => data?.rows ?? [], [data]);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 9);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -270,18 +278,38 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                 No defective EPCs.
               </div>
             ) : (
-              <table className="w-full font-mono text-xs">
-                <thead className="sticky top-0 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
+              <table
+                ref={tableRef}
+                className="w-full min-w-[1100px] border-collapse font-mono text-xs"
+                style={{ tableLayout: pickTableLayout(colWidths) }}
+              >
+                <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
                   <tr>
-                    <th className="px-3 py-2 text-left"> </th>
-                    <th className="px-3 py-2 text-left">EPC</th>
-                    <th className="px-3 py-2 text-left">System ID</th>
-                    <th className="px-3 py-2 text-left">First scanned</th>
-                    <th className="px-3 py-2 text-left">Last seen</th>
-                    <th className="px-3 py-2 text-left">Age</th>
-                    <th className="px-3 py-2 text-left">Source</th>
-                    <th className="px-3 py-2 text-left">Device</th>
-                    <th className="px-3 py-2 text-left">Status</th>
+                    {[
+                      { label: "", noResize: true },
+                      { label: "EPC" },
+                      { label: "System ID" },
+                      { label: "First scanned" },
+                      { label: "Last seen" },
+                      { label: "Age" },
+                      { label: "Source" },
+                      { label: "Device" },
+                      { label: "Status" },
+                    ].map((c, i) => {
+                      const w = colWidths[i];
+                      return (
+                        <th
+                          key={c.label || `col-${i}`}
+                          style={w !== null ? { width: w, minWidth: w } : undefined}
+                          className="relative overflow-hidden px-3 py-2 text-left"
+                        >
+                          <span>{c.label}</span>
+                          {c.noResize ? null : (
+                            <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
@@ -304,8 +332,8 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                             aria-label={`Select ${r.epc}`}
                           />
                         </td>
-                        <td className="px-3 py-2 font-semibold text-teal-400/90">{r.epc}</td>
-                        <td className="px-3 py-2 text-[var(--wms-fg)]">
+                        <td className={`${cellTruncate} px-3 py-2 font-semibold text-teal-400/90`} title={r.epc}>{r.epc}</td>
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-fg)]`}>
                           {r.decode_reason ? (
                             <span className="rounded bg-amber-400/15 px-1.5 py-0.5 text-[0.65rem] uppercase tracking-wide text-amber-300">
                               {r.decode_reason}
@@ -314,12 +342,12 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                             r.system_id_padded
                           )}
                         </td>
-                        <td className="px-3 py-2 text-[var(--wms-muted)]">{formatDate(r.first_scanned_at)}</td>
-                        <td className="px-3 py-2 text-[var(--wms-muted)]">{formatDate(r.last_seen_at)}</td>
-                        <td className="px-3 py-2 text-[var(--wms-muted)]">{age === null ? "—" : `${age}d`}</td>
-                        <td className="px-3 py-2 text-[var(--wms-muted)]">{sourceLabel(r.source)}</td>
-                        <td className="px-3 py-2 text-[var(--wms-muted)]">{r.source_device_label ?? "—"}</td>
-                        <td className="px-3 py-2">
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>{formatDate(r.first_scanned_at)}</td>
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>{formatDate(r.last_seen_at)}</td>
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>{age === null ? "—" : `${age}d`}</td>
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={sourceLabel(r.source)}>{sourceLabel(r.source)}</td>
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.source_device_label ?? ""}>{r.source_device_label ?? "—"}</td>
+                        <td className="overflow-hidden px-3 py-2">
                           <span className="rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 text-[0.65rem] uppercase tracking-wide text-red-300">
                             {r.status_label}
                           </span>

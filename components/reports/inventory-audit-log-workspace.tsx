@@ -5,7 +5,14 @@ import type { InventoryAuditLogRow } from "@/lib/queries/inventory-reports";
 import { downloadCsv, rowsToCsv } from "@/lib/csv-export";
 import { ReportToolbar } from "@/components/reports/report-toolbar";
 import { useDebouncedValue } from "@/components/reports/use-debounced-value";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -86,60 +93,95 @@ export function InventoryAuditLogWorkspace({
         onDateFromChange={setDateFrom}
         onDateToChange={setDateTo}
       />
-      <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] dark:border-[var(--wms-border)]">
-        <table className="w-full min-w-[880px] border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)] dark:border-[var(--wms-border)]">
-              <th className="px-3 py-3">When</th>
-              <th className="px-3 py-3">Type</th>
-              <th className="px-3 py-3">Entity</th>
-              <th className="px-3 py-3">Reference</th>
-              <th className="px-3 py-3">Old → New</th>
-              <th className="px-3 py-3">Reason</th>
-              <th className="px-3 py-3 text-right">User</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--wms-border)]/80 dark:divide-[var(--wms-border)]/80">
-            {isLoading && !data ? (
-              <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-[var(--wms-muted)]">
-                  Loading…
-                </td>
-              </tr>
-            ) : !data?.length ? (
-              <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-[var(--wms-muted)]">
-                  {emptyLabel}
-                </td>
-              </tr>
-            ) : (
-              data.map((row) => (
-                <tr key={row.id} className="text-[var(--wms-fg)]">
-                  <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-[var(--wms-muted)]">
-                    {new Date(row.created_at).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-xs">{row.log_type}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs">{row.entity_type}</td>
-                  <td className="max-w-[200px] truncate px-3 py-2.5 font-mono text-xs" title={row.entity_reference}>
-                    {row.entity_reference}
-                  </td>
-                  <td className="max-w-[220px] px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                    <span className="text-red-400/90">{row.old_value ?? "—"}</span>
-                    <span className="mx-1 text-[var(--wms-fg)]">→</span>
-                    <span className="wms-status-success">{row.new_value ?? "—"}</span>
-                  </td>
-                  <td className="max-w-[200px] truncate px-3 py-2.5 text-xs" title={row.reason ?? ""}>
-                    {row.reason ?? "—"}
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">
-                    {row.user_id ?? "—"}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <AuditTable data={data} isLoading={isLoading} emptyLabel={emptyLabel} />
     </div>
+  );
+}
+
+function AuditTable({
+  data,
+  isLoading,
+  emptyLabel,
+}: {
+  data: InventoryAuditLogRow[] | undefined;
+  isLoading: boolean;
+  emptyLabel: string;
+}) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 7);
+  const cols: { label: string; align?: "right" }[] = [
+    { label: "When" },
+    { label: "Type" },
+    { label: "Entity" },
+    { label: "Reference" },
+    { label: "Old → New" },
+    { label: "Reason" },
+    { label: "User", align: "right" },
+  ];
+  return (
+    <DataTableContainer maxHeight="min(70vh, 640px)">
+      <table
+        ref={tableRef}
+        className="w-full min-w-[880px] border-collapse text-left text-sm"
+        style={{ tableLayout: pickTableLayout(colWidths) }}
+      >
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+          <tr className="border-b border-[var(--wms-border)]">
+            {cols.map((c, i) => {
+              const w = colWidths[i];
+              return (
+                <th
+                  key={c.label}
+                  style={w !== null ? { width: w, minWidth: w } : undefined}
+                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right" : ""}`}
+                >
+                  <span>{c.label}</span>
+                  <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--wms-border)]/80">
+          {isLoading && !data ? (
+            <tr>
+              <td colSpan={7} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+                Loading…
+              </td>
+            </tr>
+          ) : !data?.length ? (
+            <tr>
+              <td colSpan={7} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+                {emptyLabel}
+              </td>
+            </tr>
+          ) : (
+            data.map((row) => (
+              <tr key={row.id} className="text-[var(--wms-fg)]">
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs tabular-nums text-[var(--wms-muted)]`}>
+                  {new Date(row.created_at).toLocaleString()}
+                </td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.log_type}>{row.log_type}</td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.entity_type}>{row.entity_type}</td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.entity_reference}>
+                  {row.entity_reference}
+                </td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]`}>
+                  <span className="text-red-400/90">{row.old_value ?? "—"}</span>
+                  <span className="mx-1 text-[var(--wms-fg)]">→</span>
+                  <span className="wms-status-success">{row.new_value ?? "—"}</span>
+                </td>
+                <td className={`${cellTruncate} px-3 py-2.5 text-xs`} title={row.reason ?? ""}>
+                  {row.reason ?? "—"}
+                </td>
+                <td className={`${cellTruncate} px-3 py-2.5 text-right font-mono text-xs tabular-nums`}>
+                  {row.user_id ?? "—"}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </DataTableContainer>
   );
 }

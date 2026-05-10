@@ -1,5 +1,6 @@
 import { withDb } from "@/lib/db";
 import { Share2 } from "lucide-react";
+import { LoyaltyReferralsTable } from "@/components/loyalty/referrals-table";
 
 /**
  * WMS → Loyalty → Referrals. Read-only — full edits are at
@@ -107,48 +108,9 @@ export default async function LoyaltyReferrals() {
         <Stat label="Pending" value={data.pending.toLocaleString()} />
       </div>
 
-      <div className="border border-border bg-card overflow-hidden">
+      <div className="border border-border bg-card">
         <h2 className="text-base font-bold p-4 border-b border-border">Recent conversions</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted text-xs uppercase tracking-wider font-bold">
-              <tr>
-                <th className="text-left px-3 py-2">When</th>
-                <th className="text-left px-3 py-2">Referrer</th>
-                <th className="text-left px-3 py-2">Referee</th>
-                <th className="text-right px-3 py-2">First order</th>
-                <th className="text-left px-3 py-2">Order</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {data.recent.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                    No conversions yet.
-                  </td>
-                </tr>
-              ) : (
-                data.recent.map((r, i) => (
-                  <tr key={i}>
-                    <td className="px-3 py-2 whitespace-nowrap">{new Date(r.redeemed_at).toLocaleString()}</td>
-                    <td className="px-3 py-2">
-                      {[r.referrer_first, r.referrer_last].filter(Boolean).join(" ") || "—"}
-                    </td>
-                    <td className="px-3 py-2">
-                      {[r.referee_first, r.referee_last].filter(Boolean).join(" ") || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {r.qualifying_amount ? `$${Number(r.qualifying_amount).toFixed(2)}` : "—"}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs">
-                      {r.shopify_order_gid ?? (r.pos_sale_id ? `pos:${r.pos_sale_id}` : "—")}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <LoyaltyReferralsTable rows={data.recent} />
       </div>
     </main>
   );

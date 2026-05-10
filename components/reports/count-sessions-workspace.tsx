@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { Download } from "lucide-react";
 import type { CountSessionReportRow } from "@/lib/queries/inventory-reports";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 const PAGE_SIZE = 25;
 
@@ -150,68 +157,8 @@ export function CountSessionsWorkspace() {
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]">
-        <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
-              <th className="px-3 py-3">Uploaded at</th>
-              <th className="px-3 py-3">Activity</th>
-              <th className="px-3 py-3">Uploaded by</th>
-              <th className="px-3 py-3">Device</th>
-              <th className="px-3 py-3 text-right tabular-nums">Rows</th>
-              <th className="px-3 py-3">Filename</th>
-              <th className="px-3 py-3">Expires</th>
-              <th className="px-3 py-3 text-right">CSV</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--wms-border)]/80">
-            {isLoading && !data ? (
-              <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-[var(--wms-muted)]">
-                  Loading…
-                </td>
-              </tr>
-            ) : !rows.length ? (
-              <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-[var(--wms-muted)]">
-                  No reports match these filters.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => (
-                <tr key={row.id} className="text-[var(--wms-fg)]">
-                  <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-[var(--wms-muted)]">
-                    {new Date(row.uploaded_at).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-xs">{row.activity}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]">
-                    {row.uploaded_by ?? "—"}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]">
-                    {row.device_id ?? "—"}
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums">
-                    {row.row_count}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-xs">{row.filename}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-[var(--wms-muted)]">
-                    {new Date(row.expires_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-3 py-2.5 text-right">
-                    <a
-                      href={`/api/reports/count-sessions/${row.id}/download`}
-                      className="inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 py-1 font-mono text-[0.6rem] font-medium text-[var(--wms-accent)] hover:opacity-90"
-                    >
-                      <Download className="h-3 w-3" />
-                      Download
-                    </a>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <CountSessionsTable rows={rows} isLoading={isLoading} hasData={!!data} />
+
 
       {total > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
@@ -239,5 +186,102 @@ export function CountSessionsWorkspace() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+
+function CountSessionsTable({
+  rows,
+  isLoading,
+  hasData,
+}: {
+  rows: CountSessionReportRow[];
+  isLoading: boolean;
+  hasData: boolean;
+}) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
+  const cols: { label: string; align?: "right" }[] = [
+    { label: "Uploaded at" },
+    { label: "Activity" },
+    { label: "Uploaded by" },
+    { label: "Device" },
+    { label: "Rows", align: "right" },
+    { label: "Filename" },
+    { label: "Expires" },
+    { label: "CSV", align: "right" },
+  ];
+  return (
+    <DataTableContainer maxHeight="min(70vh, 640px)">
+      <table
+        ref={tableRef}
+        className="w-full min-w-[900px] border-collapse text-left text-sm"
+        style={{ tableLayout: pickTableLayout(colWidths) }}
+      >
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+          <tr className="border-b border-[var(--wms-border)]">
+            {cols.map((c, i) => {
+              const w = colWidths[i];
+              return (
+                <th
+                  key={c.label}
+                  style={w !== null ? { width: w, minWidth: w } : undefined}
+                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right tabular-nums" : ""}`}
+                >
+                  <span>{c.label}</span>
+                  <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--wms-border)]/80">
+          {isLoading && !hasData ? (
+            <tr>
+              <td colSpan={8} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+                Loading…
+              </td>
+            </tr>
+          ) : !rows.length ? (
+            <tr>
+              <td colSpan={8} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+                No reports match these filters.
+              </td>
+            </tr>
+          ) : (
+            rows.map((row) => (
+              <tr key={row.id} className="text-[var(--wms-fg)]">
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs tabular-nums text-[var(--wms-muted)]`}>
+                  {new Date(row.uploaded_at).toLocaleString()}
+                </td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.activity}>{row.activity}</td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]`} title={row.uploaded_by ?? ""}>
+                  {row.uploaded_by ?? "—"}
+                </td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]`} title={row.device_id ?? ""}>
+                  {row.device_id ?? "—"}
+                </td>
+                <td className="overflow-hidden px-3 py-2.5 text-right font-mono text-xs tabular-nums">
+                  {row.row_count}
+                </td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.filename}>{row.filename}</td>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs tabular-nums text-[var(--wms-muted)]`}>
+                  {new Date(row.expires_at).toLocaleDateString()}
+                </td>
+                <td className="overflow-hidden px-3 py-2.5 text-right">
+                  <a
+                    href={`/api/reports/count-sessions/${row.id}/download`}
+                    className="inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 py-1 font-mono text-[0.6rem] font-medium text-[var(--wms-accent)] hover:opacity-90"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download
+                  </a>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </DataTableContainer>
   );
 }

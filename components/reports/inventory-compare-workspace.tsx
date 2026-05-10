@@ -1,7 +1,14 @@
 "use client";
 
 import useSWR from "swr";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 type Row = {
   sku: string;
@@ -209,45 +216,82 @@ export function InventoryCompareWorkspace() {
         Push uses variance rows only. With row checkboxes, only selected SKUs are sent in the payload; if none selected, all variance rows go.
       </p>
 
-      <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] dark:border-[var(--wms-border)]">
-        <table className="w-full min-w-[900px] text-left text-xs">
-          <thead>
-            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.55rem] uppercase text-[var(--wms-muted)]">
-              <th className="w-10 px-2 py-2"> </th>
-              <th className="px-2 py-2">SKU</th>
-              <th className="px-2 py-2">Name</th>
-              <th className="w-24 px-2 py-2 text-right tabular-nums">LS ID</th>
-              <th className="px-2 py-2 text-right tabular-nums">Expected</th>
-              <th className="px-2 py-2 text-right tabular-nums">Found</th>
-              <th className="px-2 py-2 text-right tabular-nums">Missing</th>
-              <th className="px-2 py-2 text-right tabular-nums">Extra</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono">
-            {data.rows.map((r) => {
-              const hot = r.missing > 0 || r.extra > 0;
+      <CompareTable rows={data.rows} selected={selected} toggle={toggle} />
+    </div>
+  );
+}
+
+function CompareTable({
+  rows,
+  selected,
+  toggle,
+}: {
+  rows: Row[];
+  selected: Set<string>;
+  toggle: (sku: string) => void;
+}) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
+  const cols: { label: string; align?: "right"; noResize?: boolean }[] = [
+    { label: "", noResize: true },
+    { label: "SKU" },
+    { label: "Name" },
+    { label: "LS ID", align: "right" },
+    { label: "Expected", align: "right" },
+    { label: "Found", align: "right" },
+    { label: "Missing", align: "right" },
+    { label: "Extra", align: "right" },
+  ];
+  return (
+    <DataTableContainer maxHeight="min(70vh, 640px)">
+      <table
+        ref={tableRef}
+        className="w-full min-w-[900px] border-collapse text-left text-xs"
+        style={{ tableLayout: pickTableLayout(colWidths) }}
+      >
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.55rem] uppercase text-[var(--wms-muted)]">
+          <tr className="border-b border-[var(--wms-border)]">
+            {cols.map((c, i) => {
+              const w = colWidths[i];
               return (
-                <tr key={r.sku} className={hot ? "bg-amber-500/5" : ""}>
-                  <td className="px-2 py-1.5">
-                    {hot ? (
-                      <input type="checkbox" checked={selected.has(r.sku)} onChange={() => toggle(r.sku)} aria-label={`Select ${r.sku}`} />
-                    ) : null}
-                  </td>
-                  <td className="px-2 py-1.5">{r.sku}</td>
-                  <td className="max-w-[240px] truncate px-2 py-1.5 text-[var(--wms-muted)]">{r.name}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums text-[var(--wms-muted)]">
-                    {r.ls_item_id ?? "—"}
-                  </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{r.expected_ls}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{r.wms_found}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums text-amber-600/90">{r.missing}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums text-teal-600/90">{r.extra}</td>
-                </tr>
+                <th
+                  key={c.label || `col-${i}`}
+                  style={w !== null ? { width: w, minWidth: w } : undefined}
+                  className={`relative overflow-hidden ${i === 0 ? "w-10 px-2 py-2" : "px-2 py-2"} ${c.align === "right" ? "text-right tabular-nums" : ""}`}
+                >
+                  <span>{c.label}</span>
+                  {c.noResize ? null : (
+                    <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                  )}
+                </th>
               );
             })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono">
+          {rows.map((r) => {
+            const hot = r.missing > 0 || r.extra > 0;
+            return (
+              <tr key={r.sku} className={hot ? "bg-amber-500/5" : ""}>
+                <td className="px-2 py-1.5">
+                  {hot ? (
+                    <input type="checkbox" checked={selected.has(r.sku)} onChange={() => toggle(r.sku)} aria-label={`Select ${r.sku}`} />
+                  ) : null}
+                </td>
+                <td className={`${cellTruncate} px-2 py-1.5`} title={r.sku}>{r.sku}</td>
+                <td className={`${cellTruncate} px-2 py-1.5 text-[var(--wms-muted)]`} title={r.name}>{r.name}</td>
+                <td className="overflow-hidden px-2 py-1.5 text-right tabular-nums text-[var(--wms-muted)]">
+                  {r.ls_item_id ?? "—"}
+                </td>
+                <td className="overflow-hidden px-2 py-1.5 text-right tabular-nums">{r.expected_ls}</td>
+                <td className="overflow-hidden px-2 py-1.5 text-right tabular-nums">{r.wms_found}</td>
+                <td className="overflow-hidden px-2 py-1.5 text-right tabular-nums text-amber-600/90">{r.missing}</td>
+                <td className="overflow-hidden px-2 py-1.5 text-right tabular-nums text-teal-600/90">{r.extra}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </DataTableContainer>
   );
 }

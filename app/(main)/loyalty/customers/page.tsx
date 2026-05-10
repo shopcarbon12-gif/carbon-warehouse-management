@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { withDb } from "@/lib/db";
 import { UserSearch, UserPlus, Upload } from "lucide-react";
+import { LoyaltyCustomersTable } from "@/components/loyalty/customers-table";
 
 const PAGE_SIZE = 50;
 
@@ -188,64 +189,8 @@ export default async function LoyaltyMembers({
         </Link>
       </form>
 
-      <div className="border border-border bg-card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted text-xs uppercase tracking-wider font-bold">
-            <tr>
-              <th className="text-left px-3 py-2">Name</th>
-              <th className="text-left px-3 py-2">Email</th>
-              <th className="text-left px-3 py-2">Phone</th>
-              <th className="text-right px-3 py-2">Balance</th>
-              <th className="text-left px-3 py-2">Source</th>
-              <th className="text-left px-3 py-2">Where added</th>
-              <th className="text-left px-3 py-2">Added by</th>
-              <th className="text-left px-3 py-2">Added on</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.length === 0 ? (
-              <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No customers match.</td></tr>
-            ) : (
-              rows.map((r) => {
-                const src = SOURCE_LABELS[r.created_via] ?? SOURCE_LABELS.legacy;
-                const where = r.pos_location_name ?? r.created_at_geo ?? "—";
-                return (
-                  <tr key={r.id}>
-                    <td className="px-3 py-2 font-semibold">
-                      <Link href={`/loyalty/customers/${r.id}`} className="hover:underline">
-                        {[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2">{r.email ?? "—"}</td>
-                    <td className="px-3 py-2">{r.mobile_phone ?? r.phone ?? "—"}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-bold">
-                      {Number(r.balance).toLocaleString()}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${src.tone}`}>
-                        {src.label}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      {where}
-                      {r.shopify_customer_gid && r.created_via !== "shopify" ? (
-                        <span className="ml-1 text-[10px] text-emerald-600 font-bold">↗ shopify-linked</span>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2">{r.created_by_email ?? "—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
-                      {new Date(r.created_at).toLocaleDateString()} {new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td className="px-3 py-2">
-                      <Link className="text-xs underline" href={`/loyalty/customers/${r.id}`}>View</Link>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+      <div className="border border-border bg-card">
+        <LoyaltyCustomersTable rows={rows} sourceLabels={SOURCE_LABELS} />
         <div className="px-3 py-2 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
           <span>Showing {showFrom}–{showTo} of {total.toLocaleString()}</span>
           <div className="flex gap-2">

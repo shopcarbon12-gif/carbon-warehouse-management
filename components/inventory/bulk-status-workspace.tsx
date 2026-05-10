@@ -5,6 +5,13 @@ import { Radio, ScanLine } from "lucide-react";
 
 import { bulkStatusOptionsForUi } from "@/lib/inventory/bulk-wms-status-options";
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 /** Per-EPC row in the bulk-status table — populated as scans roll in. */
 type ScannedRow = {
@@ -46,6 +53,8 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
   const [override, setOverride] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 7);
 
   // Scan state — exactly the pattern Transfer Out uses. Empty picker accepts
   // all readers (consistent with item-5 spec); pick one or more readers to
@@ -331,25 +340,47 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
-        <table className="min-w-max table-auto text-sm">
-          <thead className="bg-[var(--wms-surface-elevated)] text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+      <DataTableContainer maxHeight="min(70vh, 640px)">
+        <table
+          ref={tableRef}
+          className="w-full min-w-[1000px] border-collapse text-sm"
+          style={{ tableLayout: pickTableLayout(colWidths) }}
+        >
+          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
             <tr>
-              <th className="whitespace-nowrap px-3 py-2 text-left">
-                <input
-                  type="checkbox"
-                  checked={allChecked}
-                  onChange={toggleAll}
-                  disabled={rows.size === 0}
-                  aria-label="Select all"
-                />
-              </th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">EPC</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">SKU</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">System ID</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">Description</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">Current status</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">Loc · Bin</th>
+              {[
+                { label: "", sel: true },
+                { label: "EPC" },
+                { label: "SKU" },
+                { label: "System ID" },
+                { label: "Description" },
+                { label: "Current status" },
+                { label: "Loc · Bin" },
+              ].map((c, i) => {
+                const w = colWidths[i];
+                return (
+                  <th
+                    key={c.label || `col-${i}`}
+                    style={w !== null ? { width: w, minWidth: w } : undefined}
+                    className="relative overflow-hidden whitespace-nowrap px-3 py-2 text-left"
+                  >
+                    {c.sel ? (
+                      <input
+                        type="checkbox"
+                        checked={allChecked}
+                        onChange={toggleAll}
+                        disabled={rows.size === 0}
+                        aria-label="Select all"
+                      />
+                    ) : (
+                      <span>{c.label}</span>
+                    )}
+                    {c.sel ? null : (
+                      <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -433,7 +464,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
             })}
           </tbody>
         </table>
-      </div>
+      </DataTableContainer>
 
       {msg ? (
         <p className="font-mono text-sm text-[var(--wms-fg)]">{msg}</p>

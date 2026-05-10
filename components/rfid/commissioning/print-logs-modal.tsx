@@ -1,7 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, FileText, X } from "lucide-react";
+import {
+  cellTruncate,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 type LogRow = {
   id: string;
@@ -48,6 +54,8 @@ function toCsv(rows: LogRow[]): string {
 }
 
 export function PrintLogsModal({ open, onClose }: Props) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 3);
   const [filter, setFilter] = useState("");
   const [debounced, setDebounced] = useState("");
   const [rows, setRows] = useState<LogRow[]>([]);
@@ -167,28 +175,45 @@ export function PrintLogsModal({ open, onClose }: Props) {
                 No rfid_print rows match this filter.
               </p>
             ) : (
-              <table className="w-full border-collapse text-left text-xs">
+              <table
+                ref={tableRef}
+                className="w-full min-w-[640px] border-collapse text-left text-xs"
+                style={{ tableLayout: pickTableLayout(colWidths) }}
+              >
                 <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)]">
                   <tr className="border-b border-[var(--wms-border)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
-                    <th className="px-2 py-2">When</th>
-                    <th className="px-2 py-2">Action</th>
-                    <th className="px-2 py-2">Summary</th>
+                    {["When", "Action", "Summary"].map((label, i) => {
+                      const w = colWidths[i];
+                      return (
+                        <th
+                          key={label}
+                          style={w !== null ? { width: w, minWidth: w } : undefined}
+                          className="relative overflow-hidden px-2 py-2"
+                        >
+                          <span>{label}</span>
+                          <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--wms-border)]/80">
-                  {rows.map((r) => (
-                    <tr key={r.id} className="text-[var(--wms-fg)]">
-                      <td className="whitespace-nowrap px-2 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                        {new Date(r.created_at).toLocaleString()}
-                      </td>
-                      <td className="px-2 py-2 font-mono text-[0.65rem] text-teal-500/90">
-                        {r.action}
-                      </td>
-                      <td className="max-w-md px-2 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                        {metadataSummary(r.metadata)}
-                      </td>
-                    </tr>
-                  ))}
+                  {rows.map((r) => {
+                    const summary = metadataSummary(r.metadata);
+                    return (
+                      <tr key={r.id} className="text-[var(--wms-fg)]">
+                        <td className={`${cellTruncate} px-2 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]`}>
+                          {new Date(r.created_at).toLocaleString()}
+                        </td>
+                        <td className={`${cellTruncate} px-2 py-2 font-mono text-[0.65rem] text-teal-500/90`} title={r.action}>
+                          {r.action}
+                        </td>
+                        <td className={`${cellTruncate} px-2 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]`} title={summary}>
+                          {summary}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
