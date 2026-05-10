@@ -624,6 +624,23 @@ export function CommandCenter() {
               </Link>
             </p>
           </div>
+          <div className="border-b border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-4 py-3.5 font-mono text-base text-[var(--wms-fg)] dark:text-[var(--wms-muted)]">
+            <Link className="text-[var(--wms-accent)] hover:underline" href="/inventory">
+              Inventory
+            </Link>
+            {" · "}
+            <Link className="text-[var(--wms-accent)] hover:underline" href="/compare">
+              Compare
+            </Link>
+            {" · "}
+            <Link className="text-[var(--wms-accent)] hover:underline" href="/integrations">
+              Integrations
+            </Link>
+            {" · "}
+            <Link className="text-[var(--wms-accent)] hover:underline" href="/rfid/commissioning">
+              Commissioning
+            </Link>
+          </div>
           <ul className="divide-y divide-[var(--wms-border)]/80">
             {activity.length === 0 ? (
               <li className="px-4 py-10 text-center font-mono text-base text-[var(--wms-muted)]">
@@ -656,30 +673,6 @@ export function CommandCenter() {
           </ul>
         </div>
 
-        {/*
-          Quick-links row. Per operator request 2026-05-10, this row must
-          render BELOW the "Last 10 audit events" panel above — never
-          alongside, never above. It ships as the last child of the
-          Recent activity section so the natural top-to-bottom block
-          flow places it correctly. Don't introduce flex/grid here.
-        */}
-        <div className="mt-4 rounded-lg border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-4 py-3.5 font-mono text-base text-[var(--wms-fg)] dark:text-[var(--wms-muted)]">
-          <Link className="text-[var(--wms-accent)] hover:underline" href="/inventory">
-            Inventory
-          </Link>
-          {" · "}
-          <Link className="text-[var(--wms-accent)] hover:underline" href="/compare">
-            Compare
-          </Link>
-          {" · "}
-          <Link className="text-[var(--wms-accent)] hover:underline" href="/integrations">
-            Integrations
-          </Link>
-          {" · "}
-          <Link className="text-[var(--wms-accent)] hover:underline" href="/rfid/commissioning">
-            Commissioning
-          </Link>
-        </div>
       </section>
     </div>
   );

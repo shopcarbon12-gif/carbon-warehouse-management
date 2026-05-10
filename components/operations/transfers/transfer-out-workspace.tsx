@@ -533,7 +533,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
   const stagedList = useMemo(
     () =>
       [...staged.values()].sort((a, b) =>
-        (a.name ?? a.sku).localeCompare(b.name ?? b.sku),
+        (a.name ?? a.sku ?? "").localeCompare(b.name ?? b.sku ?? ""),
       ),
     [staged],
   );

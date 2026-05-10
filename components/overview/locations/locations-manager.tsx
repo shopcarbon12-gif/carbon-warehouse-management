@@ -86,7 +86,7 @@ function collapseForClean(rows: BinContentLine[]): CleanGroup[] {
       map.set(key, { skuPrefix, label, qty: r.qty });
     }
   }
-  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+  return [...map.values()].sort((a, b) => (a.label ?? "").localeCompare(b.label ?? ""));
 }
 
 const fetcher = async (url: string) => {

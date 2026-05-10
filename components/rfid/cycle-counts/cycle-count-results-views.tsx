@@ -470,7 +470,9 @@ export function BySkuTable({
       b.expected += 1;
       if (matchedSet.has(e.epc)) b.matched += 1;
     }
-    const out = [...map.values()].sort((a, b) => b.missing - a.missing || a.sku.localeCompare(b.sku));
+    const out = [...map.values()].sort(
+      (a, b) => b.missing - a.missing || (a.sku ?? "").localeCompare(b.sku ?? ""),
+    );
     return out;
   }, [expected, matchedSet]);
 
@@ -659,7 +661,8 @@ export function ByBinTable({
       else v.missing += 1;
     }
     return [...map.values()].sort(
-      (a, b) => b.missing - a.missing || a.bin_code.localeCompare(b.bin_code),
+      (a, b) =>
+        b.missing - a.missing || (a.bin_code ?? "").localeCompare(b.bin_code ?? ""),
     );
   }, [expected, matchedSet]);
 

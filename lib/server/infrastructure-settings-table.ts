@@ -24,8 +24,15 @@ export async function getLightspeedCredentialsForSync(
     ls_client_secret: string | null;
     ls_account_id: string | null;
     ls_domain_prefix: string | null;
+    ls_refresh_token: string | null;
+    ls_personal_token: string | null;
   }>(
-    `SELECT ls_client_id, ls_client_secret, ls_account_id, ls_domain_prefix
+    `SELECT ls_client_id,
+            ls_client_secret,
+            ls_account_id,
+            ls_domain_prefix,
+            ls_refresh_token,
+            ls_personal_token
      FROM infrastructure_settings
      WHERE tenant_id = $1::uuid
      LIMIT 1`,
@@ -51,8 +58,12 @@ export async function getLightspeedCredentialsForSync(
     (process.env.LS_CLIENT_SECRET ?? "").trim() ||
     (fromRow?.ls_client_secret?.trim() ?? "");
 
-  const refreshToken = (process.env.LS_REFRESH_TOKEN ?? "").trim();
-  const personalToken = (process.env.LS_PERSONAL_TOKEN ?? "").trim();
+  const refreshToken =
+    (process.env.LS_REFRESH_TOKEN ?? "").trim() ||
+    (fromRow?.ls_refresh_token?.trim() ?? "");
+  const personalToken =
+    (process.env.LS_PERSONAL_TOKEN ?? "").trim() ||
+    (fromRow?.ls_personal_token?.trim() ?? "");
 
   return {
     clientId,

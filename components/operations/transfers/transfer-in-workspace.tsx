@@ -547,7 +547,7 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
       else if (confirmedAdjustmentIds.has(r.adjustment_id)) g.confirmed_in_session += r.qty;
     }
     return [...map.values()].sort((a, b) =>
-      (a.name ?? a.sku).localeCompare(b.name ?? b.sku),
+      (a.name ?? a.sku ?? "").localeCompare(b.name ?? b.sku ?? ""),
     );
   }, [detail, confirmedEpcs, confirmedAdjustmentIds]);
 
