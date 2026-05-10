@@ -750,33 +750,25 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
           {confirmedUnits} of {totalUnits} confirmed this session
         </div>
         <div className="max-h-[min(50vh,500px)] overflow-auto">
-          {!selectedTransferId ? (
-            <p className="p-6 text-center font-mono text-xs text-[var(--wms-muted)]">
-              Pick a pending transfer above to start receiving.
-            </p>
-          ) : grouped.length === 0 ? (
-            <p className="p-6 text-center font-mono text-xs text-[var(--wms-muted)]">
-              This transfer is empty.
-            </p>
-          ) : (
-            <table className="w-full border-collapse text-left text-xs">
-              <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
-                <tr className="border-b border-[var(--wms-border)]">
-                  <th className="w-10 px-3 py-2 text-right">#</th>
-                  <th className="px-3 py-2">Custom SKU</th>
-                  <th className="px-3 py-2">UPC</th>
-                  <th className="px-3 py-2">Item name</th>
-                  <th className="px-3 py-2">Color</th>
-                  <th className="px-3 py-2">Size</th>
-                  <th className="px-3 py-2 text-right">Price</th>
-                  <th className="px-3 py-2 text-right">Sent</th>
-                  <th className="px-3 py-2 text-right">Received</th>
-                  <th className="px-3 py-2 text-right">Missing</th>
-                  <th className="w-10 px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
-                {grouped.map((g, idx) => {
+          <table className="w-full border-collapse text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+              <tr className="border-b border-[var(--wms-border)]">
+                <th className="w-10 px-3 py-2 text-right">#</th>
+                <th className="px-3 py-2">Custom SKU</th>
+                <th className="px-3 py-2">UPC</th>
+                <th className="px-3 py-2">Item name</th>
+                <th className="px-3 py-2">Color</th>
+                <th className="px-3 py-2">Size</th>
+                <th className="px-3 py-2 text-right">Price</th>
+                <th className="px-3 py-2 text-right">Sent</th>
+                <th className="px-3 py-2 text-right">Received</th>
+                <th className="px-3 py-2 text-right">Missing</th>
+                <th className="w-10 px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
+              {grouped.length > 0 ? (
+                grouped.map((g, idx) => {
                   const open = openRows.has(g.custom_sku_id);
                   const sessionReceived = g.received + g.confirmed_in_session;
                   const missing = Math.max(0, g.sent - sessionReceived);
@@ -797,10 +789,21 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
                       onPrint={(epc) => setPrintEpc(epc)}
                     />
                   );
-                })}
-              </tbody>
-            </table>
-          )}
+                })
+              ) : (
+                <tr>
+                  <td
+                    colSpan={11}
+                    className="p-6 text-center font-mono text-xs text-[var(--wms-muted)]"
+                  >
+                    {!selectedTransferId
+                      ? "Pick a pending transfer above to start receiving."
+                      : "This transfer is empty."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
