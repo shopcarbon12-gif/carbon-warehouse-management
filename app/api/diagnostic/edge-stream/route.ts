@@ -21,7 +21,12 @@ export const dynamic = "force-dynamic";
  *   locationId (uuid, required)
  *
  * Auth:
- *   Authorization: Bearer <WMS_DEVICE_KEY>
+ *   Authorization: Bearer <WMS_OPS_SMOKE_SECRET>
+ *
+ * Picked WMS_OPS_SMOKE_SECRET because it's the env var that's already
+ * provisioned on Coolify for the ops team — WMS_DEVICE_KEY is set in
+ * the local .env.coolify.local mirror but isn't exported into the
+ * running container.
  *
  * SAFE TO LEAVE IN: rate-limited by hub fan-out itself; no DB writes,
  * no mutations, just a passive listener. Bearer-only (no session
@@ -31,7 +36,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const auth = req.headers.get("authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
-  const expected = process.env.WMS_DEVICE_KEY;
+  const expected = process.env.WMS_OPS_SMOKE_SECRET;
   if (!m || !expected || m[1].trim() !== expected) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
