@@ -34,6 +34,7 @@ type BinRow = { id: string; code: string; in_stock_count: number };
 
 type SessionDetail = {
   id: string;
+  session_number: number;
   location_id: string;
   location_code: string;
   location_name: string;
@@ -41,6 +42,8 @@ type SessionDetail = {
   bin_code: string | null;
   name: string;
   status: "active" | "paused" | "committed" | "canceled";
+  started_by: string | null;
+  started_by_email: string | null;
   started_at: string;
   completed_at: string | null;
   scanned_count: number;
@@ -272,29 +275,49 @@ function SessionTable({
   onOpen: (id: string) => void;
   variant?: "history";
 }) {
+  // History view drops the Bin column (operators reference closed counts
+  // by # + who ran them, not by bin scope), replaces leading "Name" with
+  // a per-tenant "#" session number, and adds a trailing "Name" column
+  // showing the email of the user who opened it. Open-counts view keeps
+  // the operator's chosen Name as the leading column for picking up an
+  // in-progress count.
+  const isHistory = variant === "history";
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
       <table className="w-full border-collapse text-left">
         <thead className="bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
           <tr>
-            <th className="px-3 py-2">Name</th>
+            {isHistory ? (
+              <th className="px-3 py-2 w-12 text-right">#</th>
+            ) : (
+              <th className="px-3 py-2">Name</th>
+            )}
             <th className="px-3 py-2">Location</th>
-            <th className="px-3 py-2">Bin</th>
+            {isHistory ? null : <th className="px-3 py-2">Bin</th>}
             <th className="px-3 py-2">Status</th>
             <th className="px-3 py-2 text-right">Expected</th>
             <th className="px-3 py-2 text-right">Scanned</th>
             <th className="px-3 py-2">Started</th>
+            {isHistory ? <th className="px-3 py-2">Name</th> : null}
             <th className="px-3 py-2"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
           {sessions.map((s) => (
             <tr key={s.id} className="hover:bg-[var(--wms-surface-elevated)]/40">
-              <td className="px-3 py-2 truncate max-w-[18rem] text-[var(--wms-accent)]">
-                {s.name}
-              </td>
+              {isHistory ? (
+                <td className="px-3 py-2 text-right tabular-nums text-[var(--wms-accent)]">
+                  {s.session_number ?? "—"}
+                </td>
+              ) : (
+                <td className="px-3 py-2 truncate max-w-[18rem] text-[var(--wms-accent)]">
+                  {s.name}
+                </td>
+              )}
               <td className="px-3 py-2">{s.location_code}</td>
-              <td className="px-3 py-2 text-[var(--wms-muted)]">{s.bin_code ?? "(all)"}</td>
+              {isHistory ? null : (
+                <td className="px-3 py-2 text-[var(--wms-muted)]">{s.bin_code ?? "(all)"}</td>
+              )}
               <td className="px-3 py-2">
                 <StatusPill status={s.status} />
               </td>
@@ -303,13 +326,21 @@ function SessionTable({
               <td className="px-3 py-2 text-[var(--wms-muted)]">
                 {new Date(s.started_at).toLocaleString()}
               </td>
+              {isHistory ? (
+                <td
+                  className="px-3 py-2 truncate max-w-[16rem] text-[var(--wms-muted)]"
+                  title={s.started_by_email ?? ""}
+                >
+                  {s.started_by_email ?? "—"}
+                </td>
+              ) : null}
               <td className="px-3 py-2 text-right">
                 <button
                   type="button"
                   onClick={() => onOpen(s.id)}
                   className="rounded-md border border-[var(--wms-border)] px-3 py-1 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
                 >
-                  {variant === "history" ? "View" : "Open"}
+                  {isHistory ? "View" : "Open"}
                 </button>
               </td>
             </tr>

@@ -52,6 +52,8 @@ export type PatchSessionBody = z.infer<typeof patchSessionSchema>;
 
 export type SessionRow = {
   id: string;
+  /** Per-tenant monotonic session number. Stamped at INSERT, never reused. */
+  session_number: number;
   tenant_id: string;
   location_id: string;
   location_code: string;
@@ -86,6 +88,7 @@ export type VarianceSummary = {
 
 const SESSION_COLUMNS = `
   s.id::text,
+  s.session_number,
   s.tenant_id::text,
   s.location_id::text,
   loc.code AS location_code,
@@ -149,12 +152,23 @@ export async function createSession(
       ? body.name
       : autoSessionName(loc.code, binCode);
 
+  // Stamp session_number = MAX(session_number)+1 scoped to tenant. Cycle
+  // counts are operator-driven and infrequent, so the rare race window is
+  // acceptable; the partial unique index on (tenant_id, session_number)
+  // makes a duplicate fail loudly so the caller can retry.
   const ins = await client.query<{ id: string }>(
     `INSERT INTO cycle_count_sessions
        (tenant_id, location_id, bin_id, name, status, started_by,
-        expected_snapshot, scanned_epcs, reader_filter, notes)
+        expected_snapshot, scanned_epcs, reader_filter, notes,
+        session_number)
      VALUES ($1::uuid, $2::uuid, $3::uuid, $4, 'active', $5::uuid,
-             $6::jsonb, '[]'::jsonb, $7::jsonb, $8)
+             $6::jsonb, '[]'::jsonb, $7::jsonb, $8,
+             COALESCE(
+               (SELECT MAX(session_number) + 1
+                  FROM cycle_count_sessions
+                 WHERE tenant_id = $1::uuid),
+               1
+             ))
      RETURNING id::text`,
     [
       session.tid,

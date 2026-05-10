@@ -163,8 +163,14 @@ export function LocationsManager({
   // whenever the operator picks a different location so the new pane
   // doesn't carry over the previous query.
   const [binSearch, setBinSearch] = useState("");
+  // "Show all bins" toggle — when on, the table renders every bin instead
+  // of just the first DEFAULT_VISIBLE_BINS, AND the search box behaves as
+  // a live prefix filter (typing "6A" shows 6A01, 6A02, …) instead of the
+  // default top-3 cap. Reset when the operator changes location.
+  const [showAllBins, setShowAllBins] = useState(false);
   useEffect(() => {
     setBinSearch("");
+    setShowAllBins(false);
   }, [selectedId]);
 
   const sortedBins = useMemo(() => {
@@ -179,8 +185,9 @@ export function LocationsManager({
   }, [sortedBins, binSearch]);
 
   const visibleBins = useMemo(
-    () => matchedBins.slice(0, DEFAULT_VISIBLE_BINS),
-    [matchedBins],
+    () =>
+      showAllBins ? matchedBins : matchedBins.slice(0, DEFAULT_VISIBLE_BINS),
+    [matchedBins, showAllBins],
   );
 
   const openAdd = () => {
@@ -334,21 +341,43 @@ export function LocationsManager({
                   {selected.code} · {selected.name} ·{" "}
                   {binSearch
                     ? `${matchedBins.length} match${matchedBins.length === 1 ? "" : "es"}`
-                    : `${selected.bins.length} bin${selected.bins.length === 1 ? "" : "s"} · showing first ${Math.min(DEFAULT_VISIBLE_BINS, selected.bins.length)}`}
+                    : showAllBins
+                      ? `${selected.bins.length} bin${selected.bins.length === 1 ? "" : "s"} · showing all`
+                      : `${selected.bins.length} bin${selected.bins.length === 1 ? "" : "s"} · showing first ${Math.min(DEFAULT_VISIBLE_BINS, selected.bins.length)}`}
                 </p>
               ) : (
                 <p className="font-mono text-xs text-[var(--wms-muted)]">Select a location</p>
               )}
             </div>
-            <button
-              type="button"
-              disabled={!selected}
-              onClick={openAdd}
-              className="wms-btn-accent-soft inline-flex items-center gap-1.5 rounded-md px-3 py-2 font-mono text-sm disabled:opacity-40"
-            >
-              <PackagePlus className="h-4 w-4 shrink-0" strokeWidth={2} />
-              Add new bin
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={!selected || (selected?.bins.length ?? 0) === 0}
+                onClick={() => setShowAllBins((v) => !v)}
+                aria-pressed={showAllBins}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-2 font-mono text-sm disabled:opacity-40 ${
+                  showAllBins
+                    ? "border-2 border-[var(--wms-accent)]/70 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] text-[var(--wms-fg)]"
+                    : "border-2 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/40"
+                }`}
+                title={
+                  showAllBins
+                    ? "Click to collapse back to the first 3 matches"
+                    : "Show every bin and switch search to live filter mode"
+                }
+              >
+                {showAllBins ? "Hide all bins" : "Show all bins"}
+              </button>
+              <button
+                type="button"
+                disabled={!selected}
+                onClick={openAdd}
+                className="wms-btn-accent-soft inline-flex items-center gap-1.5 rounded-md px-3 py-2 font-mono text-sm disabled:opacity-40"
+              >
+                <PackagePlus className="h-4 w-4 shrink-0" strokeWidth={2} />
+                Add new bin
+              </button>
+            </div>
           </div>
 
           {selected && selected.bins.length > 0 ? (
@@ -379,8 +408,10 @@ export function LocationsManager({
                 ) : null}
               </label>
               <p className="mt-1 px-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                Type the bin prefix in any case (it'll uppercase as you type); first{" "}
-                {DEFAULT_VISIBLE_BINS} matches show below (L → C → R within the same row).
+                Type the bin prefix in any case (it'll uppercase as you type).{" "}
+                {showAllBins
+                  ? "Live filter — every match below in real time."
+                  : `First ${DEFAULT_VISIBLE_BINS} matches show below (L → C → R within the same row).`}
               </p>
             </div>
           ) : null}
