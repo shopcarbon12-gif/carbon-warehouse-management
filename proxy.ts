@@ -22,6 +22,9 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/api/handheld")) return true;
   /* Handheld edge firehose (API key + device registry; no browser session). */
   if (pathname === "/api/edge/ingest") return true;
+  /* Diagnostic SSE — Bearer-authed (WMS_DEVICE_KEY) so the ops team can
+   * curl raw edge-scan events from the VPS without browser cookies. */
+  if (pathname === "/api/diagnostic/edge-stream") return true;
   /* Carbon CDM agent endpoints: Bearer-authenticate inside each route via
    * cdm_agents.api_token_hash. No user session involved. */
   if (pathname === "/api/cdm-agents/heartbeat") return true;
