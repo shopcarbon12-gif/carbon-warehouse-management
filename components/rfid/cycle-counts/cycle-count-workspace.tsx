@@ -28,6 +28,13 @@ import {
   type StateFilter,
   type Variance,
 } from "./cycle-count-results-views";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 type LocationRow = { id: string; code: string; name: string };
 type BinRow = { id: string; code: string; in_stock_count: number };
@@ -282,59 +289,107 @@ function SessionTable({
   // the operator's chosen Name as the leading column for picking up an
   // in-progress count.
   const isHistory = variant === "history";
+  const tableRef = useRef<HTMLTableElement>(null);
+  // Open-counts: 8 columns (Name, Location, Bin, Status, Expected, Scanned, Started, action)
+  // History:    8 columns (#,    Location,      Status, Expected, Scanned, Started, Name, action)
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
+
+  type ColCfg = {
+    label: string;
+    align?: "right" | "center";
+    noResize?: boolean;
+  };
+  const cols: ColCfg[] = isHistory
+    ? [
+        { label: "#", align: "right" },
+        { label: "Location" },
+        { label: "Status" },
+        { label: "Expected", align: "right" },
+        { label: "Scanned", align: "right" },
+        { label: "Started" },
+        { label: "Name" },
+        { label: "", noResize: true },
+      ]
+    : [
+        { label: "Name" },
+        { label: "Location" },
+        { label: "Bin" },
+        { label: "Status" },
+        { label: "Expected", align: "right" },
+        { label: "Scanned", align: "right" },
+        { label: "Started" },
+        { label: "", noResize: true },
+      ];
+
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
-      <table className="w-full border-collapse text-left">
-        <thead className="bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+    <DataTableContainer maxHeight="min(60vh, 560px)">
+      <table
+        ref={tableRef}
+        className="w-full min-w-[900px] border-collapse text-left"
+        style={{ tableLayout: pickTableLayout(colWidths) }}
+      >
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
           <tr>
-            {isHistory ? (
-              <th className="px-3 py-2 w-12 text-right">#</th>
-            ) : (
-              <th className="px-3 py-2">Name</th>
-            )}
-            <th className="px-3 py-2">Location</th>
-            {isHistory ? null : <th className="px-3 py-2">Bin</th>}
-            <th className="px-3 py-2">Status</th>
-            <th className="px-3 py-2 text-right">Expected</th>
-            <th className="px-3 py-2 text-right">Scanned</th>
-            <th className="px-3 py-2">Started</th>
-            {isHistory ? <th className="px-3 py-2">Name</th> : null}
-            <th className="px-3 py-2"></th>
+            {cols.map((c, i) => {
+              const w = colWidths[i];
+              return (
+                <th
+                  key={c.label || `col-${i}`}
+                  style={w !== null ? { width: w, minWidth: w } : undefined}
+                  className={`relative overflow-hidden px-3 py-2 ${
+                    c.align === "right"
+                      ? "text-right"
+                      : c.align === "center"
+                        ? "text-center"
+                        : ""
+                  }`}
+                >
+                  <span>{c.label}</span>
+                  {c.noResize ? null : (
+                    <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                  )}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
           {sessions.map((s) => (
             <tr key={s.id} className="hover:bg-[var(--wms-surface-elevated)]/40">
               {isHistory ? (
-                <td className="px-3 py-2 text-right tabular-nums text-[var(--wms-accent)]">
+                <td className="overflow-hidden px-3 py-2 text-right tabular-nums text-[var(--wms-accent)]">
                   {s.session_number ?? "—"}
                 </td>
               ) : (
-                <td className="px-3 py-2 truncate max-w-[18rem] text-[var(--wms-accent)]">
+                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-accent)]`} title={s.name}>
                   {s.name}
                 </td>
               )}
-              <td className="px-3 py-2">{s.location_code}</td>
+              <td className={`${cellTruncate} px-3 py-2`} title={s.location_code}>
+                {s.location_code}
+              </td>
               {isHistory ? null : (
-                <td className="px-3 py-2 text-[var(--wms-muted)]">{s.bin_code ?? "(all)"}</td>
+                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={s.bin_code ?? ""}>
+                  {s.bin_code ?? "(all)"}
+                </td>
               )}
-              <td className="px-3 py-2">
+              <td className="overflow-hidden px-3 py-2">
                 <StatusPill status={s.status} />
               </td>
-              <td className="px-3 py-2 text-right tabular-nums">{s.expected_count}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{s.scanned_count}</td>
-              <td className="px-3 py-2 text-[var(--wms-muted)]">
+              <td className="overflow-hidden px-3 py-2 text-right tabular-nums">{s.expected_count}</td>
+              <td className="overflow-hidden px-3 py-2 text-right tabular-nums">{s.scanned_count}</td>
+              <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>
                 {new Date(s.started_at).toLocaleString()}
               </td>
               {isHistory ? (
                 <td
-                  className="px-3 py-2 truncate max-w-[16rem] text-[var(--wms-muted)]"
+                  className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}
                   title={s.started_by_email ?? ""}
                 >
                   {s.started_by_email ?? "—"}
                 </td>
               ) : null}
-              <td className="px-3 py-2 text-right">
+              <td className="overflow-hidden px-3 py-2 text-right">
                 <button
                   type="button"
                   onClick={() => onOpen(s.id)}
@@ -347,7 +402,7 @@ function SessionTable({
           ))}
         </tbody>
       </table>
-    </div>
+    </DataTableContainer>
   );
 }
 
