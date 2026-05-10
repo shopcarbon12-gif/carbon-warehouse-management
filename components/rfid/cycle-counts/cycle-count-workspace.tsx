@@ -468,25 +468,13 @@ function ActiveSessionView({
     [detail, variance],
   );
 
-  if (error) {
-    return (
-      <Section title="Couldn’t load session" hint="">
-        <p className="font-mono text-xs text-red-400/90">{(error as Error).message}</p>
-        <button
-          type="button"
-          onClick={onLeave}
-          className="mt-3 rounded-md border border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]"
-        >
-          Back to sessions
-        </button>
-      </Section>
-    );
-  }
-  if (!detail) {
-    return <Empty>Loading session…</Empty>;
-  }
-
-  const closed = detail.status === "committed" || detail.status === "canceled";
+  // ALL hooks must run on every render — these used to live below the
+  // `if (!detail) return …` guard, which made the hook count differ
+  // between the loading render and the data-arrived render. React then
+  // crashed the page with "Rendered more hooks than during the previous
+  // render". That's the intermittent "Open count" white-screen the
+  // operator hit on 2026-05-10. Hooks now run unconditionally; runtime
+  // safety lives inside each effect via `if (!detail) return;`.
 
   // Track scan-session ids per reader so we can release them on status flip.
   // Keyed by reader id since cycle counts may use multiple readers and the
@@ -599,16 +587,17 @@ function ActiveSessionView({
   // When the count goes active, wake selected readers. When it goes
   // paused/canceled (or committed elsewhere), release them.
   useEffect(() => {
+    if (!detail) return;
     if (detail.status === "active") {
       void startScanSessionsForSelectedReaders();
     } else {
       void endAllScanSessions();
     }
-  }, [detail.status, startScanSessionsForSelectedReaders, endAllScanSessions]);
+  }, [detail?.status, startScanSessionsForSelectedReaders, endAllScanSessions]);
 
   // If the operator changes selected readers mid-count, re-sync sessions.
   useEffect(() => {
-    if (detail.status !== "active") return;
+    if (!detail || detail.status !== "active") return;
     const wantIds = selectedReaders;
     // Release any session for a reader no longer selected.
     for (const [rid, sid] of [...scanSessionIdsRef.current.entries()]) {
@@ -623,7 +612,27 @@ function ActiveSessionView({
     }
     // Wake any newly-selected readers.
     void startScanSessionsForSelectedReaders();
-  }, [selectedReaders, detail.status, startScanSessionsForSelectedReaders]);
+  }, [selectedReaders, detail?.status, startScanSessionsForSelectedReaders]);
+
+  if (error) {
+    return (
+      <Section title="Couldn’t load session" hint="">
+        <p className="font-mono text-xs text-red-400/90">{(error as Error).message}</p>
+        <button
+          type="button"
+          onClick={onLeave}
+          className="mt-3 rounded-md border border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]"
+        >
+          Back to sessions
+        </button>
+      </Section>
+    );
+  }
+  if (!detail) {
+    return <Empty>Loading session…</Empty>;
+  }
+
+  const closed = detail.status === "committed" || detail.status === "canceled";
 
   const setStatus = async (next: "active" | "paused" | "canceled") => {
     if (next === "canceled" && !confirm("Cancel this count? No inventory changes will be applied.")) {
