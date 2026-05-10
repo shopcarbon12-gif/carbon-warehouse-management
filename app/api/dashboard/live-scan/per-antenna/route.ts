@@ -6,6 +6,40 @@ import { touchSession } from "@/lib/server/live-scan-sessions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/* Per-tenant in-memory result cache. The DISTINCT ON (epc_hex) over a
+ * tenant's session-window of cdm_reads is the most expensive query in
+ * the live-scan path — at warehouse scale (~1M reads in 30 min) each
+ * call takes 2-7 s and saturates the DB pool when multiple dashboards
+ * are open. The dashboard polls this route every ~2 s, so caching for
+ * 3 s collapses N concurrent dashboards into a single DB query.
+ * Live evidence 2026-05-09 20:29 ET: 11 concurrent active sessions all
+ * running this same query, /api/cdm-agents/* timing out with HTTP 500
+ * because the pool was full. */
+const CACHE_TTL_MS = 3000;
+type CachedAntennas = {
+  expiresAtMs: number;
+  payload: ReturnType<typeof buildPayload>;
+};
+const cacheByTenant = new Map<string, CachedAntennas>();
+type AntennaRow = {
+  reader_id: string;
+  reader_name: string;
+  antenna_id: string;
+  antenna_name: string;
+  antenna_number: number;
+  network_address: string | null;
+  unique_epcs: number;
+  total_reads: number;
+};
+function buildPayload(rows: AntennaRow[], startedAtMs: number) {
+  return {
+    ok: true as const,
+    active: true as const,
+    started_at: new Date(startedAtMs).toISOString(),
+    antennas: rows,
+  };
+}
+
 /**
  * Per-antenna breakdown of unique EPCs read in the current live-scan session.
  * Mirrors the aggregate counter in /state, but split by antenna so the
@@ -29,6 +63,11 @@ export async function GET(req: Request) {
 
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+
+  const cached = cacheByTenant.get(session.tid);
+  if (cached && cached.expiresAtMs > Date.now()) {
+    return NextResponse.json(cached.payload);
+  }
 
   /* For every Carbon-owned antenna on this tenant, count BOTH:
    *  - unique_epcs: distinct EPCs ATTRIBUTED to this antenna. Each EPC is
@@ -100,19 +139,20 @@ export async function GET(req: Request) {
     [session.tid, new Date(s.startedAt).toISOString()],
   );
 
-  return NextResponse.json({
-    ok: true,
-    active: true,
-    started_at: new Date(s.startedAt).toISOString(),
-    antennas: r.rows.map((row) => ({
-      reader_id: row.reader_id,
-      reader_name: row.reader_name,
-      antenna_id: row.antenna_id,
-      antenna_name: row.antenna_name,
-      antenna_number: row.antenna_number,
-      network_address: row.network_address,
-      unique_epcs: Number(row.unique_epcs),
-      total_reads: Number(row.total_reads),
-    })),
+  const antennas: AntennaRow[] = r.rows.map((row) => ({
+    reader_id: row.reader_id,
+    reader_name: row.reader_name,
+    antenna_id: row.antenna_id,
+    antenna_name: row.antenna_name,
+    antenna_number: row.antenna_number,
+    network_address: row.network_address,
+    unique_epcs: Number(row.unique_epcs),
+    total_reads: Number(row.total_reads),
+  }));
+  const payload = buildPayload(antennas, s.startedAt);
+  cacheByTenant.set(session.tid, {
+    expiresAtMs: Date.now() + CACHE_TTL_MS,
+    payload,
   });
+  return NextResponse.json(payload);
 }

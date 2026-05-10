@@ -47,6 +47,16 @@ const FLUSH_INTERVAL_MS = 100;
 const FLUSH_AT_BATCH = 25;
 /** Per-reader cap on queued reads — drop oldest beyond this if WMS is slow. */
 const QUEUE_MAX = 5_000;
+/** Minimum dwell per sweep step. Each step kill+respawns the binary, which
+ *  takes ~500 ms before the SA-2000 chip is commissioned and producing. The
+ *  WMS UI default is 1500 ms — too tight to leave any productive read window
+ *  at low powers. Enforce a floor here so a thrashy server-side default
+ *  doesn't reduce sweep mode to "0 EPCs per step." 4000 ms gives the chip
+ *  ~3000 ms of actual radio-on time per step, which is enough to detect at
+ *  least one nearby tag if coverage is real. Live evidence 2026-05-09: at
+ *  1500 ms dwell, .85 swept 100→330 in 24 steps with zero records at every
+ *  step despite chassis being healthy. */
+const MIN_DWELL_MS = 4_000;
 
 export type TestSessionApplied = {
   sessionId: string;
@@ -239,12 +249,22 @@ export class AntennaTestController {
         antennaNumber: s.antennaNumber,
         flags: s.flags,
       };
-      const flagsChanged =
-        prior !== undefined &&
-        (prior.flags.powerArg !== s.flags.powerArg ||
-          prior.flags.readTimeMs !== s.flags.readTimeMs ||
-          prior.flags.cycleMode !== s.flags.cycleMode ||
-          prior.flags.tagFocus !== s.flags.tagFocus);
+      // While a sweep is running, the agent owns powerArg locally (it
+       // walks low→high every dwellMs). The server still reports the
+       // session's BASE/end powerArg in every poll response — comparing
+       // it against the swept step would always say "changed" and trigger
+       // a kill+respawn at base power every 250 ms, clobbering the sweep.
+       // Live evidence 2026-05-09: .81 sweep walked 200→330 in steps but
+       // every spawn was at 330 (base) because of this race; chassis
+       // never produced because it was being thrashed faster than RF
+       // warmup.
+       const inSweep = this.sweep.has(s.id);
+       const flagsChanged =
+         prior !== undefined &&
+         ((!inSweep && prior.flags.powerArg !== s.flags.powerArg) ||
+           prior.flags.readTimeMs !== s.flags.readTimeMs ||
+           prior.flags.cycleMode !== s.flags.cycleMode ||
+           prior.flags.tagFocus !== s.flags.tagFocus);
       if (prior === undefined) {
         log.info("antenna-test: session started, entering TEST_MODE", {
           sessionId: s.id,
@@ -266,7 +286,7 @@ export class AntennaTestController {
             startPowerArg: s.sweep.startPowerArg,
             endPowerArg: s.sweep.endPowerArg,
             stepPowerArg: s.sweep.stepPowerArg,
-            dwellMs: s.sweep.dwellMs,
+            dwellMs: Math.max(s.sweep.dwellMs, MIN_DWELL_MS),
             currentPowerArg: s.sweep.startPowerArg,
             stepIndex: 0,
             totalSteps,

@@ -800,8 +800,17 @@ export class MonsoonSupervisor {
       // match the one in spawnReader (line ~1015) or reconcile and
       // spawnReader will infinite-loop on driver flips.
       const enabledCount = spec.antennas.filter((a) => a.enabled).length;
+      // Default to console for single-antenna readers when the saved
+      // driver is null/undefined. Live evidence 2026-05-09: .78 was
+      // freshly commissioned with monsoon_driver explicitly "console" in
+      // the WMS DB, but during a brief post-restart reconcile window the
+      // spec arrived with the field unset and the supervisor fell back
+      // to "stream" — the stream binary then SIGSEGV'd twice in a row
+      // against the single-antenna chassis. Console driver works with
+      // any single-antenna SA-2000; stream is only the right choice
+      // when explicitly configured.
       const desiredDriver: "stream" | "console" =
-        enabledCount >= 2 ? "console" : spec.monsoon_driver === "console" ? "console" : "stream";
+        enabledCount >= 2 ? "console" : spec.monsoon_driver === "stream" ? "stream" : "console";
       const existing = this.slots.get(spec.id);
       if (existing) {
         // If operator changed the configured serial port in WMS, rebuild
@@ -1072,14 +1081,16 @@ export class MonsoonSupervisor {
     // was observed to under-utilize antenna 1 on at least one production
     // unit (.16 Transfer Bin: 1811 reads on antenna 2, 0 on antenna 1).
     // Supervisor mux gives both antennas full chassis throughput in turn.
+    // Mirror the reconcile-path default: console wins unless the saved
+    // driver is explicitly "stream". See note at the reconcile site.
     const desired: "stream" | "console" =
       slot.testSession !== null
         ? "console"
         : slot.muxAntennaSequence.length >= 2
           ? "console"
-          : slot.spec.monsoon_driver === "console"
-            ? "console"
-            : "stream";
+          : slot.spec.monsoon_driver === "stream"
+            ? "stream"
+            : "console";
     slot.currentDriver = desired;
     if (desired === "console") {
       this.spawnReaderConsole(slot);
@@ -1397,14 +1408,23 @@ export class MonsoonSupervisor {
       if (!slot.bytesSinceSpawn) {
         slot.bytesSinceSpawn = true;
         // Auto-sweep recovery succeeded — bytes arrived during a sweep
-        // attempt, so the radio un-stuck. Clear the override so the next
-        // spawn returns to configured power. Stamp lastSweepAttemptAt so
-        // the cooldown gate applies (counts as a completed attempt).
+        // attempt, so the radio un-stuck at THIS power step. Clear the
+        // override immediately and stamp the cooldown timestamp; the
+        // next respawn will use the operator's configured power again.
+        // Reverted 2026-05-09: an earlier hold-forever attempt silently
+        // capped readers at recovery power (often 10 dBm), masking
+        // chassis faults and giving operators an "off" reader without
+        // warning. Auto-sweep is now a DIAGNOSTIC only — it tells us
+        // the radio CAN un-stick at low power, but configured power
+        // wins on the next spawn. If the chassis re-wedges at the
+        // operator's chosen power, it's a hardware problem and should
+        // not be papered over by silent power downgrade.
         if (slot.sweepPowerOverrideArg !== null) {
           log.info("supervisor: sweep recovery succeeded — chassis producing bytes", {
             readerId: slot.spec.id,
             readerName: slot.spec.name,
             recoveredAtPower: slot.sweepPowerOverrideArg,
+            note: "clearing override; next spawn uses operator-configured power",
           });
           slot.sweepPowerOverrideArg = null;
           slot.lastSweepAttemptAt = Date.now();
@@ -1575,13 +1595,15 @@ export class MonsoonSupervisor {
       // rotation budget back next time it goes silent.
       if (!slot.bytesSinceSpawn) {
         slot.bytesSinceSpawn = true;
-        // Auto-sweep recovery succeeded — bytes arrived during a sweep
-        // attempt. Clear the override and stamp the cooldown timestamp.
+        // Auto-sweep recovery succeeded — see comment in console-driver
+        // byte-arrival path. Clear the override; next spawn returns to
+        // operator-configured power. Auto-sweep is diagnostic only.
         if (slot.sweepPowerOverrideArg !== null) {
           log.info("supervisor: sweep recovery succeeded — chassis producing bytes", {
             readerId: slot.spec.id,
             readerName: slot.spec.name,
             recoveredAtPower: slot.sweepPowerOverrideArg,
+            note: "clearing override; next spawn uses operator-configured power",
           });
           slot.sweepPowerOverrideArg = null;
           slot.lastSweepAttemptAt = Date.now();
