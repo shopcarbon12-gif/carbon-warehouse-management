@@ -18,6 +18,10 @@ export type CycleCountExpectedRow = {
   ls_system_id: string;
   upc: string;
   description: string;
+  /** From custom_skus.color_code — the SKU-level color, not per-EPC. */
+  color: string | null;
+  /** From custom_skus.size — the SKU-level size, not per-EPC. */
+  size: string | null;
   bin_id: string | null;
   bin_code: string | null;
   status: string;
@@ -91,6 +95,8 @@ export async function listExpectedCycleCountItems(
     ls_system_id: string;
     upc: string;
     description: string;
+    color: string | null;
+    size: string | null;
     bin_id: string | null;
     bin_code: string | null;
     status: string;
@@ -99,8 +105,10 @@ export async function listExpectedCycleCountItems(
        i.epc,
        cs.sku,
        cs.ls_system_id::text AS ls_system_id,
-       m.upc,
+       COALESCE(NULLIF(trim(cs.upc), ''), m.upc) AS upc,
        m.description,
+       cs.color_code AS color,
+       cs.size,
        i.bin_id::text AS bin_id,
        b.code AS bin_code,
        i.status
@@ -122,6 +130,8 @@ export async function listExpectedCycleCountItems(
     ls_system_id: row.ls_system_id,
     upc: row.upc,
     description: row.description,
+    color: row.color,
+    size: row.size,
     bin_id: row.bin_id,
     bin_code: row.bin_code,
     status: row.status,
