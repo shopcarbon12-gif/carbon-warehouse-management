@@ -1443,6 +1443,7 @@ export function AntennaTestWorkspace() {
               >
                 EPC{sortIndicator("epc")}
               </th>
+              <th className="whitespace-nowrap px-3 py-2 text-right">Ant #</th>
               <th
                 className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("firstPower")}
@@ -1456,17 +1457,22 @@ export function AntennaTestWorkspace() {
                 Custom SKU{sortIndicator("sku")}
               </th>
               <th className="whitespace-nowrap px-3 py-2 text-left">System ID</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">Asset ID</th>
               <th
                 className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("desc")}
               >
-                Description (name · color · size){sortIndicator("desc")}
+                Name{sortIndicator("desc")}
               </th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">Color</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">Size</th>
               <th className="whitespace-nowrap px-3 py-2 text-left">UPC</th>
               <th className="whitespace-nowrap px-3 py-2 text-left">Vendor</th>
               <th className="whitespace-nowrap px-3 py-2 text-right">Price</th>
               <th className="whitespace-nowrap px-3 py-2 text-left">Item status</th>
               <th className="whitespace-nowrap px-3 py-2 text-left">Loc · Bin</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">First seen</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left">Last seen</th>
               <th className="whitespace-nowrap px-3 py-2 text-left">Calibrate</th>
             </tr>
           </thead>
@@ -1474,7 +1480,7 @@ export function AntennaTestWorkspace() {
             {filteredRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={17}
+                  colSpan={23}
                   className="px-3 py-8 text-center text-xs text-[var(--wms-muted)]"
                 >
                   {filterQuery.trim()
@@ -1488,9 +1494,14 @@ export function AntennaTestWorkspace() {
             {filteredRows.map((row, idx) => {
               const bucket = rssiBucket(row.bestRssiDbm);
               const cat = catalog.get(row.epcHex);
-              const desc = cat
-                ? [cat.name, cat.color, cat.size].filter((x) => x && x.trim()).join(" · ")
-                : "";
+              const fmtTs = (ms: number): string => {
+                if (!Number.isFinite(ms) || ms <= 0) return "";
+                try {
+                  return new Date(ms).toLocaleTimeString([], { hour12: false });
+                } catch {
+                  return "";
+                }
+              };
               const calibrated = estimateDistance(calibPoints, row.firstReadPowerArg);
               const showCalibrated = calibPoints.length >= 2 && calibrated.feet !== null;
               const isReference = referenceSet.has(row.epcHex);
@@ -1543,6 +1554,9 @@ export function AntennaTestWorkspace() {
                     )}
                     {row.epcHex}
                   </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[11px]">
+                    {row.antennaNumber ?? <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {row.firstReadPowerArg !== null ? (
                       `${(row.firstReadPowerArg / 10).toFixed(1)} dBm`
@@ -1556,8 +1570,17 @@ export function AntennaTestWorkspace() {
                   <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {cat?.sku_ls_system_id ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                    {cat?.asset_id ?? <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
-                    {desc || <span className="text-[var(--wms-muted)]">—</span>}
+                    {cat?.name ?? <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
+                    {cat?.color ?? <span className="text-[var(--wms-muted)]">—</span>}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
+                    {cat?.size ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {cat?.upc ?? <span className="text-[var(--wms-muted)]">—</span>}
@@ -1600,6 +1623,12 @@ export function AntennaTestWorkspace() {
                     ) : (
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                    {fmtTs(row.firstSeenMs) || "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                    {fmtTs(row.lastSeenMs) || "—"}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5">
                     {row.firstReadPowerArg !== null && picked ? (
