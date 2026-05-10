@@ -117,7 +117,15 @@ export async function applyLightspeedSyncFromPreview(
     client = await pool.connect();
     await client.query("BEGIN");
 
-    await bumpProgress(pool, jobId, 0, total, "Upserting catalog rows…");
+    // Archive FIRST so any lost row's sku is freed before the incoming
+    // upserts try to claim it. Lightspeed re-keys variants (ls_system_id
+    // changes while sku stays the same); without this order the upsert
+    // collides on the active-only sku unique index and the new variant
+    // silently rolls back inside its SAVEPOINT.
+    await bumpProgress(pool, jobId, done, total, `Archiving ${lostIds.length.toLocaleString()} removed rows…`);
+    const archivedCount = await archiveMissingCustomSkus(client, lostIds);
+    done += archivedCount;
+    await bumpProgress(pool, jobId, done, total, "Upserting catalog rows…");
 
     for (const m of catalog) {
       await client.query("SAVEPOINT lsx_matrix");
@@ -147,9 +155,6 @@ export async function applyLightspeedSyncFromPreview(
       }
     }
 
-    await bumpProgress(pool, jobId, done, total, `Archiving ${lostIds.length.toLocaleString()} removed rows…`);
-    const archivedCount = await archiveMissingCustomSkus(client, lostIds);
-    done += archivedCount;
     await bumpProgress(pool, jobId, done, total, "Finalising…");
 
     const summary = {
