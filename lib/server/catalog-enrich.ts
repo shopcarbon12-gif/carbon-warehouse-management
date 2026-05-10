@@ -36,13 +36,19 @@ import { loadEpcConfig } from "@/lib/server/epc-ingress";
 export type CatalogEnrichRow = {
   epc: string;
   sku: string | null;
-  /** Always null — this function doesn't read items, so location is unknown. */
+  /** Read-only join against items: populated when this EPC is already in inventory. */
   location_id: string | null;
   location_code: string | null;
   bin_id: string | null;
   bin_code: string | null;
-  /** Computed from decode + catalog state, NOT from items.status. */
+  /**
+   * 'in-stock' | 'unknown' | 'undecodable' — derived from decode + catalog
+   * lookup. When an items row exists for this EPC the live items.status wins
+   * (in-stock / sold / tag_killed / etc.) and is surfaced in `item_status`.
+   */
   status: "in-stock" | "unknown" | "undecodable";
+  /** Live items.status when an items row exists; null when the EPC was never ingested. */
+  item_status: string | null;
   name: string | null;
   color: string | null;
   size: string | null;
@@ -131,16 +137,61 @@ export async function enrichEpcsByCatalog(
 
     const bySystemId = new Map(skuRows.rows.map((row) => [row.ls_system_id, row]));
 
+    // Read-only join against items: surfaces live location_code / bin_code /
+    // status when the EPC has already been ingested. NO writes — keeps the
+    // diagnostic-safe contract intact (cf. transfers/lookup which auto-creates
+    // items rows). Tenant-scoped to prevent cross-tenant leakage.
+    const itemsByEpc = norm.length
+      ? new Map(
+          (
+            await client.query<{
+              epc_hex: string;
+              status: string | null;
+              location_code: string | null;
+              location_id: string | null;
+              bin_code: string | null;
+              bin_id: string | null;
+            }>(
+              `SELECT
+                 i.epc_hex,
+                 i.status,
+                 i.location_id::text AS location_id,
+                 l.code            AS location_code,
+                 i.bin_id::text    AS bin_id,
+                 b.code            AS bin_code
+               FROM items i
+               LEFT JOIN locations l ON l.id = i.location_id
+               LEFT JOIN bins      b ON b.id = i.bin_id
+               WHERE i.tenant_id = $1::uuid
+                 AND UPPER(i.epc_hex) = ANY($2::text[])`,
+              [tenantId, norm],
+            )
+          ).rows.map((r) => [r.epc_hex.toUpperCase(), r] as const),
+        )
+      : new Map<
+          string,
+          {
+            epc_hex: string;
+            status: string | null;
+            location_code: string | null;
+            location_id: string | null;
+            bin_code: string | null;
+            bin_id: string | null;
+          }
+        >();
+
     return decodedList.map((d): CatalogEnrichRow => {
+      const item = itemsByEpc.get(d.epc);
       if (!d.decoded) {
         return {
           epc: d.epc,
           sku: null,
-          location_id: null,
-          location_code: null,
-          bin_id: null,
-          bin_code: null,
+          location_id: item?.location_id ?? null,
+          location_code: item?.location_code ?? null,
+          bin_id: item?.bin_id ?? null,
+          bin_code: item?.bin_code ?? null,
           status: "undecodable",
+          item_status: item?.status ?? null,
           name: null,
           color: null,
           size: null,
@@ -157,11 +208,12 @@ export async function enrichEpcsByCatalog(
         return {
           epc: d.epc,
           sku: null,
-          location_id: null,
-          location_code: null,
-          bin_id: null,
-          bin_code: null,
+          location_id: item?.location_id ?? null,
+          location_code: item?.location_code ?? null,
+          bin_id: item?.bin_id ?? null,
+          bin_code: item?.bin_code ?? null,
           status: "unknown",
+          item_status: item?.status ?? null,
           name: null,
           color: null,
           size: null,
@@ -176,11 +228,12 @@ export async function enrichEpcsByCatalog(
       return {
         epc: d.epc,
         sku: hit.sku,
-        location_id: null,
-        location_code: null,
-        bin_id: null,
-        bin_code: null,
+        location_id: item?.location_id ?? null,
+        location_code: item?.location_code ?? null,
+        bin_id: item?.bin_id ?? null,
+        bin_code: item?.bin_code ?? null,
         status: "in-stock",
+        item_status: item?.status ?? null,
         name: hit.name,
         color: hit.color,
         size: hit.size,

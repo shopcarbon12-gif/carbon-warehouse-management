@@ -16,11 +16,14 @@ import {
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 type CatalogHit = {
-  sku: string;
+  sku: string | null;
   name: string | null;
   color: string | null;
   size: string | null;
+  /** Decode/catalog state: 'in-stock' | 'unknown' | 'undecodable'. */
   status: string;
+  /** Live items.status when an items row exists for this EPC. */
+  item_status: string | null;
   upc: string | null;
   vendor: string | null;
   retail_price: string | null;
@@ -436,7 +439,7 @@ export function AntennaTestWorkspace() {
           cat?.vendor ?? "",
           cat?.retail_price ?? "",
           cat?.asset_id ?? "",
-          cat?.status ?? "",
+          cat?.item_status ?? cat?.status ?? "",
           cat?.location_code ?? "",
           cat?.bin_code ?? "",
           referenceSet.has(row.epcHex) ? "true" : "false",
@@ -635,11 +638,12 @@ export function AntennaTestWorkspace() {
           const data = (await res.json()) as {
             rows?: {
               epc: string;
-              sku: string;
+              sku: string | null;
               name: string | null;
               color: string | null;
               size: string | null;
               status: string;
+              item_status: string | null;
               upc: string | null;
               vendor: string | null;
               retail_price: string | null;
@@ -656,6 +660,7 @@ export function AntennaTestWorkspace() {
               color: row.color,
               size: row.size,
               status: row.status,
+              item_status: row.item_status,
               upc: row.upc,
               vendor: row.vendor,
               retail_price: row.retail_price,
@@ -878,6 +883,7 @@ export function AntennaTestWorkspace() {
         cat?.vendor,
         cat?.retail_price,
         cat?.status,
+        cat?.item_status,
         cat?.location_code,
         cat?.bin_code,
       ]
@@ -1567,21 +1573,23 @@ export function AntennaTestWorkspace() {
                     )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
-                    {cat?.status ? (
-                      <span
-                        className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white ${
-                          cat.status === "in-stock"
-                            ? "bg-emerald-600"
-                            : cat.status === "tag_killed"
-                              ? "bg-red-600"
-                              : "bg-slate-500"
-                        }`}
-                      >
-                        {cat.status}
-                      </span>
-                    ) : (
-                      <span className="text-[var(--wms-muted)]">—</span>
-                    )}
+                    {(() => {
+                      const s = cat?.item_status ?? cat?.status;
+                      if (!s) return <span className="text-[var(--wms-muted)]">—</span>;
+                      return (
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white ${
+                            s === "in-stock"
+                              ? "bg-emerald-600"
+                              : s === "tag_killed"
+                                ? "bg-red-600"
+                                : "bg-slate-500"
+                          }`}
+                        >
+                          {s}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {cat?.location_code ? (
