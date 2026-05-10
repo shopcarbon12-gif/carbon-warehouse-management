@@ -6,6 +6,13 @@ import { Search, Radio } from "lucide-react";
 import { decodeSGTIN96 } from "@/lib/epc";
 import { EpcHistoryTimeline, type HistoryRow } from "./epc-history-timeline";
 import type { TrackerItemDetail, TrackerSearchPickRow } from "@/lib/rfid-tracker-types";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -58,6 +65,8 @@ export function EpcTrackerWorkspace() {
   const [debounced, setDebounced] = useState("");
   const [selectedEpc, setSelectedEpc] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
 
   // Show live location — purely a UI gate over the existing edge-stream SSE.
   // When ON, every read for any checked EPC stamps a "last seen by this
@@ -340,25 +349,47 @@ export function EpcTrackerWorkspace() {
 
       {/* Results table — one row per EPC, no grouping */}
       {pickMatches.length > 0 ? (
-        <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
-          <table className="min-w-max table-auto text-sm">
-            <thead className="bg-[var(--wms-surface-elevated)] text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+        <DataTableContainer maxHeight="min(70vh, 640px)">
+          <table
+            ref={tableRef}
+            className="w-full min-w-[1100px] border-collapse text-left text-sm"
+            style={{ tableLayout: pickTableLayout(colWidths) }}
+          >
+            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-xs uppercase tracking-wide text-[var(--wms-muted)]">
               <tr>
-                <th className="whitespace-nowrap px-3 py-2 text-left">
-                  <input
-                    type="checkbox"
-                    checked={allChecked}
-                    onChange={toggleAll}
-                    aria-label="Select all"
-                  />
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">EPC</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">SKU</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">System ID</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Description</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Status</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Loc · Bin</th>
-                <th className="whitespace-nowrap px-3 py-2 text-left">Last seen</th>
+                {[
+                  { label: "", sel: true },
+                  { label: "EPC" },
+                  { label: "SKU" },
+                  { label: "System ID" },
+                  { label: "Description" },
+                  { label: "Status" },
+                  { label: "Loc · Bin" },
+                  { label: "Last seen" },
+                ].map((c, i) => {
+                  const w = colWidths[i];
+                  return (
+                    <th
+                      key={c.label || `col-${i}`}
+                      style={w !== null ? { width: w, minWidth: w } : undefined}
+                      className="relative overflow-hidden whitespace-nowrap px-3 py-2 text-left"
+                    >
+                      {c.sel ? (
+                        <input
+                          type="checkbox"
+                          checked={allChecked}
+                          onChange={toggleAll}
+                          aria-label="Select all"
+                        />
+                      ) : (
+                        <span>{c.label}</span>
+                      )}
+                      {c.sel ? null : (
+                        <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -446,7 +477,7 @@ export function EpcTrackerWorkspace() {
               })}
             </tbody>
           </table>
-        </div>
+        </DataTableContainer>
       ) : debounced.length >= 1 ? (
         <p className="font-mono text-xs text-[var(--wms-muted)]">
           No items match this query.

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 type SaleRow = {
   saleID: string;
@@ -28,6 +35,8 @@ export function LightspeedSalesWorkspace() {
   const [limit] = useState(25);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 7);
 
   const load = useCallback(async (nextOffset: number) => {
     setLoading(true);
@@ -98,17 +107,29 @@ export function LightspeedSalesWorkspace() {
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-xs uppercase text-[var(--wms-muted)]">
-              <th className="px-3 py-2">Sale ID</th>
-              <th className="px-3 py-2">Time</th>
-              <th className="px-3 py-2">Total</th>
-              <th className="px-3 py-2">Done</th>
-              <th className="px-3 py-2">Void</th>
-              <th className="px-3 py-2">Reference</th>
-              <th className="px-3 py-2">Shop</th>
+      <DataTableContainer maxHeight="min(70vh, 640px)">
+        <table
+          ref={tableRef}
+          className="w-full min-w-[720px] border-collapse text-left text-sm"
+          style={{ tableLayout: pickTableLayout(colWidths) }}
+        >
+          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-xs uppercase text-[var(--wms-muted)]">
+            <tr className="border-b border-[var(--wms-border)]">
+              {["Sale ID", "Time", "Total", "Done", "Void", "Reference", "Shop"].map(
+                (label, i) => {
+                  const w = colWidths[i];
+                  return (
+                    <th
+                      key={label}
+                      style={w !== null ? { width: w, minWidth: w } : undefined}
+                      className="relative overflow-hidden px-3 py-2"
+                    >
+                      <span>{label}</span>
+                      <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                    </th>
+                  );
+                },
+              )}
             </tr>
           </thead>
           <tbody>
@@ -121,19 +142,19 @@ export function LightspeedSalesWorkspace() {
             ) : (
               rows.map((r) => (
                 <tr key={r.saleID || r.referenceNumber} className="border-b border-[var(--wms-border)]/60">
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-fg)]">{r.saleID || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">{r.timeStamp || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-fg)]">{r.calcTotal || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">{r.completed || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">{r.voided || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">{r.referenceNumber || "—"}</td>
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">{r.shopID || "—"}</td>
+                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-fg)]`} title={r.saleID}>{r.saleID || "—"}</td>
+                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)]`} title={r.timeStamp}>{r.timeStamp || "—"}</td>
+                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-fg)]`} title={r.calcTotal}>{r.calcTotal || "—"}</td>
+                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)]`} title={r.completed}>{r.completed || "—"}</td>
+                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)]`} title={r.voided}>{r.voided || "—"}</td>
+                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)]`} title={r.referenceNumber}>{r.referenceNumber || "—"}</td>
+                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)]`} title={r.shopID}>{r.shopID || "—"}</td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
-      </div>
+      </DataTableContainer>
     </div>
   );
 }

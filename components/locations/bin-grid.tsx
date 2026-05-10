@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Printer, Search, X } from "lucide-react";
 import type { BinWithCountRow, BinContentLineRow } from "@/lib/queries/locations";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 function parseBinSegments(code: string): { section: string; shelf: string } {
   const parts = code.trim().split("-").filter(Boolean);
@@ -23,6 +30,8 @@ function formatGroupedLine(row: BinContentLineRow): string {
 export function BinGrid({ initialBins }: { initialBins: BinWithCountRow[] }) {
   const [bins, setBins] = useState(initialBins);
   const [query, setQuery] = useState("");
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 4);
   const [drawerBin, setDrawerBin] = useState<BinWithCountRow | null>(null);
   const [contents, setContents] = useState<BinContentLineRow[] | null>(null);
   const [loadingContents, setLoadingContents] = useState(false);
@@ -116,14 +125,34 @@ export function BinGrid({ initialBins }: { initialBins: BinWithCountRow[] }) {
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-        <table className="w-full min-w-[640px] border-collapse text-left">
-          <thead>
-            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wider">
-              <th className="px-3 py-2.5">Bin code</th>
-              <th className="px-3 py-2.5">Row / section</th>
-              <th className="px-3 py-2.5">Shelf</th>
-              <th className="px-3 py-2.5 text-right">In-stock EPCs</th>
+      <DataTableContainer maxHeight="min(70vh, 640px)">
+        <table
+          ref={tableRef}
+          className="w-full min-w-[640px] border-collapse text-left"
+          style={{ tableLayout: pickTableLayout(colWidths) }}
+        >
+          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wider">
+            <tr className="border-b border-[var(--wms-border)]">
+              {[
+                { label: "Bin code" },
+                { label: "Row / section" },
+                { label: "Shelf" },
+                { label: "In-stock EPCs", align: "right" as const },
+              ].map((c, i) => {
+                const w = colWidths[i];
+                return (
+                  <th
+                    key={c.label}
+                    style={w !== null ? { width: w, minWidth: w } : undefined}
+                    className={`relative overflow-hidden px-3 py-2.5 ${
+                      c.align === "right" ? "text-right" : ""
+                    }`}
+                  >
+                    <span>{c.label}</span>
+                    <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--wms-border)] bg-[var(--wms-surface)]">
@@ -156,15 +185,24 @@ export function BinGrid({ initialBins }: { initialBins: BinWithCountRow[] }) {
                     }}
                     className="cursor-pointer text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/80"
                   >
-                    <td className="px-3 py-2 align-middle">
+                    <td
+                      className={`${cellTruncate} px-3 py-2 align-middle`}
+                      title={bin.code}
+                    >
                       <span className="font-mono font-bold tracking-tight text-[var(--wms-fg)]">
                         {bin.code}
                       </span>
                     </td>
-                    <td className="px-3 py-2 align-middle font-mono text-[var(--wms-muted)]">
+                    <td
+                      className={`${cellTruncate} px-3 py-2 align-middle font-mono text-[var(--wms-muted)]`}
+                      title={section}
+                    >
                       {section}
                     </td>
-                    <td className="px-3 py-2 align-middle font-mono text-[var(--wms-muted)]">
+                    <td
+                      className={`${cellTruncate} px-3 py-2 align-middle font-mono text-[var(--wms-muted)]`}
+                      title={shelf}
+                    >
                       {shelf}
                     </td>
                     <td
@@ -180,7 +218,7 @@ export function BinGrid({ initialBins }: { initialBins: BinWithCountRow[] }) {
             )}
           </tbody>
         </table>
-      </div>
+      </DataTableContainer>
 
       {drawerBin ? (
         <>

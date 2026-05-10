@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { MapPin, PackagePlus, Pencil, Search, Trash2, X } from "lucide-react";
 import { BinEditorDrawer, type BinRow } from "./bin-editor-drawer";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 /** Default rows to show when no search is active. */
 const DEFAULT_VISIBLE_BINS = 3;
@@ -121,6 +128,9 @@ export function LocationsManager({
         initialLocations !== undefined ? { locations: initialLocations } : undefined,
     },
   );
+  const binsTableRef = useRef<HTMLTableElement>(null);
+  const { colWidths: binsColWidths, startDrag: binsStartDrag, autoFit: binsAutoFit } =
+    useColResize(binsTableRef, 5);
 
   const locations = data?.locations ?? [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -402,14 +412,40 @@ export function LocationsManager({
                 </button>
               </div>
             ) : (
-              <table className="w-full min-w-[640px] border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
-                    <th className="px-3 py-2">Identifier</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Items</th>
-                    <th className="px-3 py-2 text-right tabular-nums">In-stock EPCs</th>
-                    <th className="px-3 py-2 w-36"> </th>
+              <table
+                ref={binsTableRef}
+                className="w-full min-w-[640px] border-collapse text-left"
+                style={{ tableLayout: pickTableLayout(binsColWidths) }}
+              >
+                <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
+                  <tr className="border-b border-[var(--wms-border)]">
+                    {[
+                      { label: "Identifier" },
+                      { label: "Status" },
+                      { label: "Items" },
+                      { label: "In-stock EPCs", align: "right" as const },
+                      { label: " ", noResize: true },
+                    ].map((c, i) => {
+                      const w = binsColWidths[i];
+                      return (
+                        <th
+                          key={`bin-col-${i}`}
+                          style={w !== null ? { width: w, minWidth: w } : undefined}
+                          className={`relative overflow-hidden px-3 py-2 ${
+                            c.align === "right" ? "text-right tabular-nums" : ""
+                          } ${i === 4 ? "w-36" : ""}`}
+                        >
+                          <span>{c.label}</span>
+                          {c.noResize ? null : (
+                            <ResizeHandle
+                              colIdx={i}
+                              startDrag={binsStartDrag}
+                              autoFit={binsAutoFit}
+                            />
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
