@@ -308,41 +308,67 @@ export function AntennaTestWorkspace() {
       return s;
     };
     const lines: string[] = [];
-    // Metadata block — prefixed with # so spreadsheets can ignore if they
-    // care to. Most importers will just put these in the first rows; harmless.
-    lines.push(`# Carbon WMS — Antenna Test export`);
-    lines.push(`# Reader: ${picked.readerName} (${picked.readerHost ?? ""})`);
-    lines.push(`# Antenna: ${picked.antennaName} (A${picked.antennaNumber})`);
-    lines.push(`# Captured at: ${new Date().toISOString()}`);
+    // Metadata block — every row is a proper 2-column CSV line so Excel /
+    // Google Sheets / LibreOffice parse them into the same column grid as
+    // the data rows below. The previous `#`-prefixed style read fine in
+    // a text editor but every spreadsheet treated each comment as a
+    // single-cell row in column A, visually shifting all the headers and
+    // making the file look "broken in columns" — verified against the
+    // 2026-05-02 export the operator flagged.
+    const metaRow = (key: string, value: string): string =>
+      `${csvEscape(key)},${csvEscape(value)}`;
+    lines.push(metaRow("Carbon WMS — Antenna Test export", ""));
+    lines.push(metaRow("Reader", `${picked.readerName} (${picked.readerHost ?? ""})`));
+    lines.push(metaRow("Antenna", `${picked.antennaName} (A${picked.antennaNumber})`));
+    lines.push(metaRow("Captured at", new Date().toISOString()));
     lines.push(
-      `# Run duration: ${
-        runStartedAt ? fmtDuration(runDurationMs) : "—"
-      }${
-        runStartedAt
-          ? ` (start: ${new Date(runStartedAt).toISOString()}${
-              runEndedAt ? ` → end: ${new Date(runEndedAt).toISOString()}` : " — still running at export"
-            })`
-          : ""
-      }`,
+      metaRow(
+        "Run duration",
+        `${runStartedAt ? fmtDuration(runDurationMs) : "—"}${
+          runStartedAt
+            ? ` (start: ${new Date(runStartedAt).toISOString()}${
+                runEndedAt
+                  ? ` → end: ${new Date(runEndedAt).toISOString()}`
+                  : " — still running at export"
+              })`
+            : ""
+        }`,
+      ),
     );
-    lines.push(`# Power: ${(flags.powerArg / 10).toFixed(1)} dBm; cycle: ${flags.cycleMode}; read_time: ${flags.readTimeMs} ms; tagfocus: ${flags.tagFocus}`);
     lines.push(
-      `# Sweep: ${
+      metaRow(
+        "Power",
+        `${(flags.powerArg / 10).toFixed(1)} dBm; cycle: ${flags.cycleMode}; read_time: ${flags.readTimeMs} ms; tagfocus: ${flags.tagFocus}`,
+      ),
+    );
+    lines.push(
+      metaRow(
+        "Sweep",
         sweepEnabled
           ? `${(sweepCfg.startPowerArg / 10).toFixed(1)}-${(sweepCfg.endPowerArg / 10).toFixed(1)} dBm @ ${(sweepCfg.stepPowerArg / 10).toFixed(1)} dBm step / ${sweepCfg.dwellMs} ms dwell`
-          : "off"
-      }`,
+          : "off",
+      ),
     );
     lines.push(
-      `# Calibration points: ${calibPoints.length}${calibPoints.length >= 2 ? " (Distance column = interpolated feet)" : " (Distance column = heuristic bucket)"}`,
+      metaRow(
+        "Calibration points",
+        `${calibPoints.length}${
+          calibPoints.length >= 2
+            ? " (Distance column = interpolated feet)"
+            : " (Distance column = heuristic bucket)"
+        }`,
+      ),
     );
     // Reference-tag pass/fail summary, when a list is loaded.
     if (referenceState.list.length > 0) {
       const sg = buildSightings(referenceState.list, rows);
       lines.push(
-        `# Reference EPCs: ${sg.seen}/${sg.total} seen${
-          sg.total - sg.seen > 0 ? ` · ${sg.total - sg.seen} missing` : " · ✓ all seen"
-        }`,
+        metaRow(
+          "Reference EPCs",
+          `${sg.seen}/${sg.total} seen${
+            sg.total - sg.seen > 0 ? ` · ${sg.total - sg.seen} missing` : " · ✓ all seen"
+          }`,
+        ),
       );
     }
     lines.push("");
