@@ -4,6 +4,27 @@
  */
 
 import type { LightspeedSyncCredentialRow } from "@/lib/server/infrastructure-settings-table";
+import { getPool } from "@/lib/db";
+
+/**
+ * Best-effort write of a Lightspeed-rotated refresh token to every tenant's
+ * infrastructure_settings row. We don't have the requesting tenant in scope
+ * here (single-tenant DB; LS creds come from env in 99% of cases), so we
+ * UPDATE all rows — fine because there's only one tenant in production and
+ * the next sync will re-fetch its row anyway. If this turns into a real
+ * multi-tenant LS deployment we'll plumb tenantId through this function.
+ */
+async function persistRotatedRefreshToken(rotated: string): Promise<void> {
+  const pool = getPool();
+  if (!pool) return;
+  await pool.query(
+    `UPDATE infrastructure_settings
+        SET ls_refresh_token = $1,
+            updated_at = now()
+      WHERE ls_refresh_token IS DISTINCT FROM $1`,
+    [rotated],
+  );
+}
 
 const DEFAULT_LS_TOKEN_URL = "https://cloud.merchantos.com/oauth/access_token.php";
 const CACHE_FALLBACK_MS = 9 * 60 * 1000;
@@ -165,6 +186,15 @@ export async function refreshLightspeedRSeriesAccessToken(
       const newRefreshToken = normalizeText(tokenBody.refresh_token);
       if (newRefreshToken && newRefreshToken !== refreshToken) {
         process.env.LS_REFRESH_TOKEN = newRefreshToken;
+        // Persist rotation to DB so it survives container restart.
+        // Lightspeed invalidates the previous refresh token on rotation,
+        // so the env value Coolify holds becomes stale immediately. The
+        // DB-stored copy is what credentialsLookUsableForRSeries will
+        // prefer on the next request thanks to DB-first ordering in
+        // getLightspeedCredentialsForSync.
+        void persistRotatedRefreshToken(newRefreshToken).catch(() => {
+          /* best-effort; in-memory env update keeps current process working */
+        });
       }
 
       return accessToken;

@@ -58,12 +58,19 @@ export async function getLightspeedCredentialsForSync(
     (process.env.LS_CLIENT_SECRET ?? "").trim() ||
     (fromRow?.ls_client_secret?.trim() ?? "");
 
+  // DB takes precedence over env for OAuth-rotating tokens. Lightspeed
+  // rotates the refresh token on each use; we persist the rotation back
+  // to infrastructure_settings.ls_refresh_token (see persistRotatedRefreshToken
+  // in lightspeed-rseries-token.ts). On a container restart, env still
+  // holds the original (now-stale) token from Coolify, so reading env
+  // first would silently use a dead token. DB-first means the durable
+  // rotated token always wins, env is just bootstrap.
   const refreshToken =
-    (process.env.LS_REFRESH_TOKEN ?? "").trim() ||
-    (fromRow?.ls_refresh_token?.trim() ?? "");
+    (fromRow?.ls_refresh_token?.trim() ?? "") ||
+    (process.env.LS_REFRESH_TOKEN ?? "").trim();
   const personalToken =
-    (process.env.LS_PERSONAL_TOKEN ?? "").trim() ||
-    (fromRow?.ls_personal_token?.trim() ?? "");
+    (fromRow?.ls_personal_token?.trim() ?? "") ||
+    (process.env.LS_PERSONAL_TOKEN ?? "").trim();
 
   return {
     clientId,
