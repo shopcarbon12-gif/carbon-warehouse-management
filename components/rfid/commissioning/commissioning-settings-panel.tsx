@@ -13,7 +13,14 @@ export type RfidCommissionSettings = {
 };
 
 export const DEFAULT_RFID_COMMISSION_SETTINGS: RfidCommissionSettings = {
-  companyPrefix: 1_044_991,
+  // Carbon Jeans tenant prefix — hex F0A0B = decimal 985611. The
+  // commissioning-workspace forwards this value into the
+  // /api/rfid/commission body, and the server respects bodyCp ahead of
+  // its own envCompanyPrefix() fallback — so a wrong default here
+  // silently overrode the env default and stamped the wrong prefix on
+  // every web-driven print. Was 1_044_991 (hex FF1FF), corrected to
+  // match the live tag layout 2026-05-10.
+  companyPrefix: 985_611,
   itemRefBits: 40,
   serialBits: 36,
   // Default 80/PSTPRNT — browsers can't open raw TCP, so desktop-browser

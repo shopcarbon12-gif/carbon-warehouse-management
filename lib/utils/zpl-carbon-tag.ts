@@ -51,7 +51,12 @@ export type CarbonTagSettings = {
 };
 
 export const DEFAULT_CARBON_TAG_SETTINGS: CarbonTagSettings = {
-  companyPrefix: 1044991,
+  // Carbon Jeans tenant prefix — hex F0A0B = decimal 985611. Matches
+  // tenant_epc_config.prefix_hex and the value envCompanyPrefix()
+  // returns server-side. The prior 1044991 (hex FF1FF) was a placeholder
+  // that, if it ever leaked into a printed tag, would have stamped the
+  // wrong prefix and made every commissioned EPC fail the formula filter.
+  companyPrefix: 985611,
   companyPrefixBits: 20,
   itemNumberBits: 40,
   serialBits: 36,
