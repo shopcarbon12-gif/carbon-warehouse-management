@@ -29,6 +29,17 @@ const RESET_TIMEOUT_MS = 30_000;
  * NVRAM came from a previous network/install and need their config wiped.
  */
 const EXPECTED_GATEWAY = "192.168.1.1";
+/**
+ * Standard WIZnet inactivity timeout (seconds). When set to 0, the bridge
+ * disables its TCP idle-eviction — meaning if a client TCP RSTs (e.g. a
+ * SIGKILL'd MonsoonReader child), the bridge keeps the slot pinned forever
+ * because it was never told to give up. Live evidence on .69 (2026-05-09):
+ * WIZnet shipped/configured with Inactivity=0 while every other bridge in
+ * the fleet had 20. Symptom was 562 reads / 1 unique EPC after an antenna
+ * test — the chassis MCU was stuck waiting for a half-open R2000 reply
+ * that never arrived because the bridge wouldn't release the dead client.
+ */
+const EXPECTED_INACTIVITY = 20;
 /** Carbon network's expected control port for MonsoonReader. */
 const EXPECTED_PORT = 10002;
 /**
@@ -48,6 +59,13 @@ const LOCK_ATTEMPTED = new Set<string>();
  */
 const RESET_ATTEMPTED = new Set<string>();
 
+/**
+ * MACs we've issued an inactivity normalization to (Inactivity != 20 →
+ * Inactivity = 20) in this agent process. One-shot per MAC; on failure
+ * the entry is removed so the next sweep retries.
+ */
+const INACTIVITY_NORMALIZED = new Set<string>();
+
 type WiznetRecord = {
   mac: string;
   ip: string;
@@ -55,6 +73,8 @@ type WiznetRecord = {
   dhcp: boolean;
   /** Operating mode reported by wiznet-cli: "SERVER", "MIXED", "CLIENT". */
   mode: string;
+  /** Inactivity timeout in seconds, 0 = disabled. */
+  inactivity: number;
   raw: Record<string, string>;
 };
 
@@ -66,9 +86,9 @@ function parseWiznetCliOutput(text: string): WiznetRecord[] {
     // port, DHCP, baud, framing, mode, inactivity, hasclient):
     //   "  1. 0008DC1E1980  192.168.1.22  255.255.255.0  192.168.1.1  10002  N  115200  8N1  SERVER(2)  20  N"
     const m = line.trim().match(
-      /^\d+\.\s+([0-9A-Fa-f]{12})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d+)\s+([YN])\s+\d+\s+\S+\s+(\w+)\b/,
+      /^\d+\.\s+([0-9A-Fa-f]{12})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d{1,3}(?:\.\d{1,3}){3})\s+(\d+)\s+([YN])\s+\d+\s+\S+\s+(\w+)(?:\([^)]*\))?\s+(\d+)\b/,
     );
-    if (!m || m.length < 8) continue;
+    if (!m || m.length < 9) continue;
     const macUpper = m[1]!.toUpperCase();
     out.set(macUpper, {
       mac: macUpper,
@@ -78,6 +98,7 @@ function parseWiznetCliOutput(text: string): WiznetRecord[] {
       // Strip the trailing "(N)" parenthetical so callers can compare
       // against the bare keyword: "SERVER", "MIXED", "CLIENT".
       mode: m[7]!,
+      inactivity: Number(m[8]),
       raw: {
         netmask: m[3]!,
         gateway: m[4]!,
@@ -190,6 +211,10 @@ async function resetBridgeBadConfig(record: WiznetRecord): Promise<boolean> {
       "--mode-server",
       "--port",
       String(EXPECTED_PORT),
+      // Normalize inactivity at the same time we reset other config —
+      // saves a second wiznet-cli invocation per fresh bridge.
+      "--inactivity",
+      String(EXPECTED_INACTIVITY),
     ];
     // detached:true puts sudo + wiznet-cli in their own process group so
     // we can SIGKILL the whole group on timeout. Without this, killing
@@ -253,6 +278,66 @@ async function resetBridgeBadConfig(record: WiznetRecord): Promise<boolean> {
  * still on DHCP and try again. The LOCK_ATTEMPTED set prevents tight
  * retry loops within a single agent process.
  */
+/**
+ * Issue `wiznet-cli --ipconfig MAC --inactivity 20` on a bridge whose
+ * current Inactivity field isn't the expected value. Standalone path
+ * for bridges that don't go through reset/lock (already DHCP-locked at
+ * the right IP, just inherited a non-default inactivity from a prior
+ * install or factory flash). Bridge accepts the config over UDP, writes
+ * NVRAM, and reboots its TCP listener; existing reader connections are
+ * dropped briefly. Tolerant of failure — the next sweep tick retries.
+ */
+async function normalizeInactivity(record: WiznetRecord): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const args = [
+      "-n",
+      WIZNET_CLI,
+      "--ipconfig",
+      record.mac,
+      "--inactivity",
+      String(EXPECTED_INACTIVITY),
+    ];
+    // Same detached + group-kill rationale as resetBridgeBadConfig.
+    const child = spawn("sudo", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true,
+    });
+    let stderr = "";
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      resolve(ok);
+    };
+    const groupKill = () => {
+      if (!child.pid) return;
+      try { process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
+    };
+    child.stderr.on("data", (b: Buffer) => { stderr += b.toString("utf8"); });
+    child.on("error", (e) => {
+      log.warn("wiznet-discovery: inactivity-normalize spawn failed", { mac: record.mac, err: e.message });
+      finish(false);
+    });
+    child.on("exit", (code) => {
+      if (code !== 0) {
+        log.warn("wiznet-discovery: inactivity-normalize returned non-zero", {
+          mac: record.mac,
+          ip: record.ip,
+          code,
+          stderr: stderr.trim().slice(0, 200),
+        });
+      }
+      finish(code === 0);
+    });
+    setTimeout(() => {
+      if (done) return;
+      log.warn("wiznet-discovery: inactivity-normalize timed out, group-killing", { mac: record.mac });
+      groupKill();
+      finish(false);
+    }, RESET_TIMEOUT_MS);
+  });
+}
+
 async function lockBridgeStatic(record: WiznetRecord): Promise<boolean> {
   return await new Promise((resolve) => {
     const args = [
@@ -268,6 +353,10 @@ async function lockBridgeStatic(record: WiznetRecord): Promise<boolean> {
       record.raw.netmask ?? "255.255.255.0",
       "--port",
       String(record.port),
+      // Pin inactivity at the same time we pin the static IP — one
+      // bridge-reboot for all our standardization.
+      "--inactivity",
+      String(EXPECTED_INACTIVITY),
     ];
     // See resetBridgeBadConfig for why we need detached + group-kill: sudo
     // doesn't forward SIGTERM to wiznet-cli, so a stuck UDP retry loop
@@ -388,6 +477,33 @@ export function startWiznetDiscovery(env: AgentEnv): () => void {
           // Lock failed — drop from set so a future tick can retry once
           // the bridge is reachable again.
           LOCK_ATTEMPTED.delete(r.mac);
+        }
+      }
+
+      // Pass 2.5: normalize Inactivity to EXPECTED_INACTIVITY (20s) for
+      // bridges where it differs. Inactivity=0 was observed live on .69
+      // (2026-05-09): when the supervisor SIGKILLs a runner, the resulting
+      // TCP RST is silently dropped by the bridge with Inactivity=0, so
+      // the slot stays pinned and the chassis MCU is stuck waiting for
+      // an R2000 reply that never arrives. The 20s default lets the
+      // bridge auto-evict dead clients within one watchdog window.
+      // Skip MACs we just reset/locked (their NVRAM is already being
+      // written; double-write would race the reboot).
+      for (const r of records) {
+        if (r.inactivity === EXPECTED_INACTIVITY) continue;
+        if (INACTIVITY_NORMALIZED.has(r.mac)) continue;
+        if (toReset.has(r.mac)) continue;
+        if (dhcpBridges.some((d) => d.mac === r.mac)) continue;
+        INACTIVITY_NORMALIZED.add(r.mac);
+        log.info("wiznet-discovery: normalizing Inactivity", {
+          mac: r.mac,
+          ip: r.ip,
+          fromInactivity: r.inactivity,
+          toInactivity: EXPECTED_INACTIVITY,
+        });
+        const ok = await normalizeInactivity(r);
+        if (!ok) {
+          INACTIVITY_NORMALIZED.delete(r.mac);
         }
       }
 

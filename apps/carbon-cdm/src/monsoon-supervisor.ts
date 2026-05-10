@@ -1042,6 +1042,15 @@ export class MonsoonSupervisor {
       slot.intendedKill = true;
       this.killSlotChildHard(slot);
     }
+    // Send a chip-level radio abort so the SA-2000's R2000 chip drops
+    // any TagFocus / select / inventory state the test child set up
+    // before exiting under SIGKILL. Without this, the next normal-mode
+    // spawn inherits the wedged Gen2 state and reads only one or two
+    // tags repeatedly (562 reads / 1 unique EPC observed live on .69).
+    // The abort binary races the on-exit respawn for the bridge's
+    // single TCP slot; if the respawn loses, it falls into normal
+    // backoff and retries against a now-clean chip.
+    this.ensureRadioStopped(slot.spec);
   }
 
   shutdown(): void {
@@ -1209,9 +1218,29 @@ export class MonsoonSupervisor {
     // produced its first byte.
     slot.lastByteAt = Date.now();
 
-    // We don't need MonsoonReader's stdout/stderr — drain to avoid back-pressure.
+    // Drain stdout (legacy stream binary doesn't print useful info on it).
+    // Capture stderr though — when the WIZnet bridge's UART buffer holds
+    // partial Impinj-MAC reply bytes from a prior abrupt kill, the binary
+    // prints framing-corruption errors like "Socket out of sync, got
+    // wrong access_flag 1" and exits clean with zero records. These
+    // were silently dropped historically; surface as warn so the
+    // bridge-buffer issue is visible in the journal.
     child.stdout?.resume();
-    child.stderr?.resume();
+    child.stderr?.on("data", (chunk: Buffer) => {
+      const msg = chunk.toString("utf8").trim();
+      if (!msg) return;
+      if (/out of sync|wrong access_flag|access_flag/i.test(msg)) {
+        log.warn("supervisor: stream binary framing error (bridge UART buffer likely stale)", {
+          readerId: spec.id,
+          msg: msg.slice(0, 240),
+        });
+      } else {
+        log.debug("supervisor: stream binary stderr", {
+          readerId: spec.id,
+          msg: msg.slice(0, 240),
+        });
+      }
+    });
 
     child.on("exit", (code, signal) => {
       slot.child = null;
@@ -1266,12 +1295,19 @@ export class MonsoonSupervisor {
       // typically TCP-refuse from a dead bridge or wrong port): silence
       // watchdog can't fire because each spawn resets `lastByteAt`. Push
       // offline here so the WMS reflects truth. Throttled to ~once/min.
+      // Also fire a chip-level radio abort: a 0-byte child often means
+      // the chassis is in a wedged Gen2 state from a prior dirty kill,
+      // not that the bridge is dead. ensureRadioStopped resets the chip
+      // session so the next spawn starts clean. Extend the respawn
+      // delay so the abort has time to grab the bridge's single TCP slot.
       if (!slot.bytesSinceSpawn) {
         this.pushReaderOfflineIfDue(slot, Date.now());
+        this.ensureRadioStopped(spec);
       }
+      const finalDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
       setTimeout(() => {
         void this.spawnReader(slot);
-      }, delay);
+      }, finalDelay);
       slot.backoffMs = treatAsClean ? 1000 : Math.min(slot.backoffMs * 2, MAX_BACKOFF_MS);
     });
 
@@ -1392,10 +1428,19 @@ export class MonsoonSupervisor {
     slot.child = child;
 
     child.stderr?.on("data", (chunk: Buffer) => {
-      log.debug("supervisor: console reader stderr", {
-        readerId: spec.id,
-        msg: chunk.toString().slice(0, 200),
-      });
+      const msg = chunk.toString("utf8").trim();
+      if (!msg) return;
+      if (/out of sync|wrong access_flag|access_flag/i.test(msg)) {
+        log.warn("supervisor: console binary framing error (bridge UART buffer likely stale)", {
+          readerId: spec.id,
+          msg: msg.slice(0, 240),
+        });
+      } else {
+        log.debug("supervisor: console reader stderr", {
+          readerId: spec.id,
+          msg: msg.slice(0, 240),
+        });
+      }
     });
 
     let totalRecords = 0;
@@ -1527,12 +1572,18 @@ export class MonsoonSupervisor {
       // Each spawn resets `lastByteAt` so the silence watchdog never fires
       // on this pattern; without an explicit on-exit offline push the WMS
       // would keep showing the reader online indefinitely.
+      // Same rationale as the stream-driver branch: a 0-byte child often
+      // means a wedged chip Gen2 state, not a dead bridge. Send a radio
+      // abort so the next spawn doesn't inherit the lock; extend the
+      // respawn delay so the abort has time to grab the bridge.
       if (!slot.bytesSinceSpawn) {
         this.pushReaderOfflineIfDue(slot, Date.now());
+        this.ensureRadioStopped(spec);
       }
+      const finalDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
       setTimeout(() => {
         void this.spawnReader(slot);
-      }, delay);
+      }, finalDelay);
       slot.backoffMs = treatAsClean ? 1000 : Math.min(slot.backoffMs * 2, MAX_BACKOFF_MS);
     });
   }

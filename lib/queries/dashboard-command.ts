@@ -93,7 +93,9 @@ export async function getCommandCenterKpis(
            AND status_online = true
        )::text AS readers,
        COUNT(*) FILTER (
-         WHERE device_type = 'antenna' AND status_online = true
+         WHERE device_type = 'antenna'
+           AND last_read_at IS NOT NULL
+           AND last_read_at >= now() - interval '15 minutes'
        )::text AS antennas,
        COUNT(*) FILTER (
          WHERE device_type = 'printer' AND status_online = true
