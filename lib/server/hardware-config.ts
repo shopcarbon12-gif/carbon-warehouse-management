@@ -191,12 +191,12 @@ export async function buildHardwareConfigTree(
     ),
   ]);
 
-  // Build a parent→effectively-paused lookup so we can short-circuit
-  // antenna online to TRUE when the parent reader is paused or stopped.
-  // This matches the operator UX expectation: "I turned this reader off
-  // on purpose; don't punish its antennas with red dots." The freshness
-  // path (last_read_at within ANTENNA_FRESHNESS_MS) only kicks in when
-  // the parent is NOT paused.
+  // Reader paused/stopped state used to short-circuit antenna status to
+  // "online" — that flattered defective antennas (operator stopped a
+  // reader, broken antenna went green). Per operator: antenna status
+  // must reflect the antenna's own reality, independent of reader
+  // start/stop. The lookup is kept (other code paths read it) but the
+  // antenna-status calculation below no longer consults it.
   const now = new Date();
   const nowMs = now.getTime();
   const parentPaused = new Map<string, boolean>();
@@ -242,14 +242,17 @@ export async function buildHardwareConfigTree(
     // chassis lost power.
     const parentReachable = parentBridgeReachable.get(d.parent_device_id) ?? false;
     const testedOk = d.last_test_passed === true && parentReachable;
-    const parentIsPaused = parentPaused.get(d.parent_device_id) ?? false;
     arr.push({
       id: d.id,
       name: d.name,
-      // Derived: paused parent OR fresh read (15min) OR (last test passed
-      // AND parent bridge currently reachable). The stored `status_online`
-      // column is intentionally ignored — see migration 0060.
-      status_online: parentIsPaused || fresh || testedOk,
+      // Antenna status reflects the antenna's reality, not the parent
+      // reader's start/stop state. Online means we have concrete evidence
+      // the antenna can produce reads RIGHT NOW: either a fresh read
+      // within ANTENNA_FRESHNESS_MS, or a last-test-passed result while
+      // the parent bridge is still reachable. Everything else is offline.
+      // The stored `status_online` column is intentionally ignored —
+      // see migration 0060.
+      status_online: fresh || testedOk,
       config: (d.config ?? {}) as Record<string, unknown>,
     });
     antennasByParent.set(d.parent_device_id, arr);
