@@ -130,11 +130,11 @@ export async function POST(req: Request) {
     // Insert the new items row. ON CONFLICT (epc) is a defensive guard —
     // the FOR UPDATE lock above already prevents same-tenant collisions.
     const ins = await client.query<{ id: string }>(
-      `INSERT INTO items (epc, serial_number, custom_sku_id, location_id, status)
-         VALUES ($1, $2::bigint, $3::uuid, $4::uuid, 'in-stock')
+      `INSERT INTO items (epc, serial_number, custom_sku_id, location_id, status, created_by_user_id)
+         VALUES ($1, $2::bigint, $3::uuid, $4::uuid, 'in-stock', $5::uuid)
          ON CONFLICT (epc) DO NOTHING
          RETURNING id::text`,
-      [newEpc, nextSerial, customSkuId, session.lid],
+      [newEpc, nextSerial, customSkuId, session.lid, session.sub],
     );
     if (!ins.rows[0]) {
       // Extreme edge case: a Senitron-issued tag with this exact EPC was

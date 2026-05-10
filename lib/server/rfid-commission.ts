@@ -195,9 +195,9 @@ export async function rfidCommissionPrepare(
     const serial = nextSerial + i;
     const epc = generateSGTIN96(cp, lsId, serial);
     await client.query(
-      `INSERT INTO items (epc, serial_number, custom_sku_id, location_id, bin_id, status)
-       VALUES ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6)`,
-      [epc, serial, row.id, session.lid, binId ?? null, statusFinal],
+      `INSERT INTO items (epc, serial_number, custom_sku_id, location_id, bin_id, status, created_by_user_id)
+       VALUES ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6, $7::uuid)`,
+      [epc, serial, row.id, session.lid, binId ?? null, statusFinal, session.sub],
     );
     inserted.push({ epc, serial_number: serial });
     zplLabels.push(
