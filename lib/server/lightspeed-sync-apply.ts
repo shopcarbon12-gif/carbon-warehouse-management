@@ -61,23 +61,21 @@ async function bumpProgress(
 
 async function archiveMissingCustomSkus(
   client: PoolClient,
-  tenantId: string,
   lostIds: string[],
 ): Promise<number> {
   if (lostIds.length === 0) return 0;
+  // matrices + custom_skus are single-tenant (no tenant_id column).
+  // Apply the archive directly against custom_skus by ls_system_id.
   const r = await client.query<{ count: string }>(
     `WITH updated AS (
-       UPDATE custom_skus cs
+       UPDATE custom_skus
           SET archived = TRUE
-         FROM matrices m
-        WHERE m.id = cs.matrix_id
-          AND m.tenant_id = $1::uuid
-          AND cs.ls_system_id::text = ANY($2::text[])
-          AND cs.archived = FALSE
-        RETURNING cs.id
+        WHERE ls_system_id::text = ANY($1::text[])
+          AND archived = FALSE
+        RETURNING id
      )
      SELECT COUNT(*)::text AS count FROM updated`,
-    [tenantId, lostIds],
+    [lostIds],
   );
   return Number.parseInt(r.rows[0]?.count ?? "0", 10) || 0;
 }
@@ -150,7 +148,7 @@ export async function applyLightspeedSyncFromPreview(
     }
 
     await bumpProgress(pool, jobId, done, total, `Archiving ${lostIds.length.toLocaleString()} removed rows…`);
-    const archivedCount = await archiveMissingCustomSkus(client, tenantId, lostIds);
+    const archivedCount = await archiveMissingCustomSkus(client, lostIds);
     done += archivedCount;
     await bumpProgress(pool, jobId, done, total, "Finalising…");
 
