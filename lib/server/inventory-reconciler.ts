@@ -6,6 +6,7 @@ import {
   resolveEpcVisibilityForTenant,
 } from "@/lib/server/status-label-enforcement";
 import { ingestEpcs } from "@/lib/server/epc-ingress";
+import { resolveHandheldDeviceId } from "@/lib/server/devices-lookup";
 
 export type ReconcilerBatchInput = {
   tenantId: string;
@@ -123,6 +124,14 @@ export async function reconcileInventoryFromEdge(
     // EPCs get last_seen_at bumped. Skipped for EXCEPTION_ALARM since that
     // path intentionally records a stranger-tag event without commissioning.
     if (ctx !== "EXCEPTION_ALARM") {
+      // Resolve the operator's handheld alias to a devices.id once for the
+      // whole batch. null when the alias doesn't uniquely match an
+      // authorized handheld; ingestEpc writes NULL in that case.
+      const sourceDeviceId = await resolveHandheldDeviceId(
+        client,
+        input.deviceId,
+        input.tenantId,
+      );
       await ingestEpcs(
         client,
         epcs.map((epc) => ({
@@ -130,6 +139,7 @@ export async function reconcileInventoryFromEdge(
           epc,
           source: "handheld",
           sourceDeviceLabel: input.deviceId.slice(0, 256),
+          sourceDeviceId,
           locationId: input.locationId,
           receivedAt: input.timestamp ? new Date(input.timestamp) : new Date(),
         })),

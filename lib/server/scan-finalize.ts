@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { ingestEpcs, type EpcSource } from "@/lib/server/epc-ingress";
+import { resolveHandheldDeviceId } from "@/lib/server/devices-lookup";
 import {
   buildDefectiveCsv,
   epcHexToBits,
@@ -274,11 +275,15 @@ export async function finalizeScanSession(
 
     /* ---- 4. Per-EPC ingest. Decode → custom_sku lookup → in-stock or tag_killed. ---- */
     const epcSource = sourceForScreen(input.screen);
+    // Resolve the operator's handheld to a devices.id for FK attribution.
+    // null when the alias doesn't match a single authorized handheld.
+    const sourceDeviceId = await resolveHandheldDeviceId(client, input.deviceId, input.tenantId);
     const ingressInputs = epcsScanned.map((epc) => ({
       tenantId: input.tenantId,
       epc,
       source: epcSource,
       sourceDeviceLabel: input.deviceId,
+      sourceDeviceId,
       locationId: input.locationId,
       receivedAt: now,
     }));

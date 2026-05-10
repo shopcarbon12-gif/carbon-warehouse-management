@@ -4,6 +4,7 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { envCompanyPrefix } from "@/lib/server/rfid-commission";
 import { generateSGTIN96 } from "@/lib/utils/epc";
+import { resolveHandheldDeviceId } from "@/lib/server/devices-lookup";
 
 /**
  * Atomic "claim next serial + insert items row + return the new EPC".
@@ -69,9 +70,17 @@ export async function POST(req: Request) {
   const { customSkuId } = parsed.data;
   const oldEpc = parsed.data.oldEpc?.toUpperCase();
 
+  // Resolve the encoding handheld so source_device_id is set on the
+  // items row. Mobile sends the alias via `x-wms-device-id` (same
+  // convention as /api/handheld/epc-queue). null when missing or
+  // ambiguous — INSERT then writes NULL, attribution still works at the
+  // user level via created_by_user_id.
+  const handheldHint = req.headers.get("x-wms-device-id");
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const sourceDeviceId = await resolveHandheldDeviceId(client, handheldHint, session.tid);
 
     // Resolve the SKU + its ls_system_id (the asset field of the EPC).
     //
@@ -130,11 +139,16 @@ export async function POST(req: Request) {
     // Insert the new items row. ON CONFLICT (epc) is a defensive guard —
     // the FOR UPDATE lock above already prevents same-tenant collisions.
     const ins = await client.query<{ id: string }>(
-      `INSERT INTO items (epc, serial_number, custom_sku_id, location_id, status, created_by_user_id)
-         VALUES ($1, $2::bigint, $3::uuid, $4::uuid, 'in-stock', $5::uuid)
-         ON CONFLICT (epc) DO NOTHING
-         RETURNING id::text`,
-      [newEpc, nextSerial, customSkuId, session.lid, session.sub],
+      `INSERT INTO items (
+         epc, serial_number, custom_sku_id, location_id, status,
+         source, source_device_label, source_device_id, created_by_user_id
+       ) VALUES (
+         $1, $2::bigint, $3::uuid, $4::uuid, 'in-stock',
+         'handheld', $6, $7::uuid, $5::uuid
+       )
+       ON CONFLICT (epc) DO NOTHING
+       RETURNING id::text`,
+      [newEpc, nextSerial, customSkuId, session.lid, session.sub, handheldHint ?? null, sourceDeviceId],
     );
     if (!ins.rows[0]) {
       // Extreme edge case: a Senitron-issued tag with this exact EPC was

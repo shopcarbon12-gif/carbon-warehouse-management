@@ -41,6 +41,18 @@ export type EpcIngressInput = {
   source: EpcSource;
   /** Human-readable device id (e.g. "Antenna bin 1", "H001"). null is allowed. */
   sourceDeviceLabel: string | null;
+  /**
+   * Structured device attribution. devices.id of the reader / handheld /
+   * printer that originated this read. Use resolveHandheldDeviceId() (or
+   * pass a fixed-reader UUID directly) to populate. null = not resolved.
+   */
+  sourceDeviceId?: string | null;
+  /**
+   * For fixed-reader sources, the antenna sub-device that decoded this EPC.
+   * devices.id where device_type='antenna'. null for handhelds (single-radio)
+   * and for any path without per-antenna attribution.
+   */
+  sourceAntennaId?: string | null;
   /** Where the EPC was physically read. Required (NOT NULL on items). */
   locationId: string;
   /** When the read happened (for first_scanned_at + last_seen_at). */
@@ -204,11 +216,13 @@ async function writeItem(
     `INSERT INTO items (
        epc, serial_number, custom_sku_id, location_id,
        status, last_seen_at, first_scanned_at,
-       source, source_device_label
+       source, source_device_label,
+       source_device_id, source_antenna_id
      ) VALUES (
        $1, $2::bigint, $3::uuid, $4::uuid,
        $5, $6::timestamptz, $6::timestamptz,
-       $7, $8
+       $7, $8,
+       $9::uuid, $10::uuid
      )
      ON CONFLICT (epc) DO UPDATE SET
        serial_number       = EXCLUDED.serial_number,
@@ -218,7 +232,9 @@ async function writeItem(
        location_id         = EXCLUDED.location_id,
        first_scanned_at    = COALESCE(items.first_scanned_at, EXCLUDED.first_scanned_at),
        source              = COALESCE(items.source, EXCLUDED.source),
-       source_device_label = COALESCE(items.source_device_label, EXCLUDED.source_device_label)
+       source_device_label = COALESCE(items.source_device_label, EXCLUDED.source_device_label),
+       source_device_id    = COALESCE(items.source_device_id, EXCLUDED.source_device_id),
+       source_antenna_id   = COALESCE(items.source_antenna_id, EXCLUDED.source_antenna_id)
      RETURNING id::text`,
     [
       epcUpper,
@@ -229,6 +245,8 @@ async function writeItem(
       input.receivedAt.toISOString(),
       input.source,
       input.sourceDeviceLabel,
+      input.sourceDeviceId ?? null,
+      input.sourceAntennaId ?? null,
     ],
   );
 
