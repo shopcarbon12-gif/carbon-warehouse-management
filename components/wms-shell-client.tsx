@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ThemeProvider } from "@/components/theme/theme-provider";
+import { SyncProgressFloater } from "@/components/inventory/sync/sync-progress-floater";
 
 export function WmsShellClient({
   activeLocationId,
@@ -48,6 +49,7 @@ export function WmsShellClient({
             {children}
           </main>
         </div>
+        <SyncProgressFloater />
       </div>
     </ThemeProvider>
   );

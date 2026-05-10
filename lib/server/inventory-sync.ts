@@ -138,13 +138,13 @@ export async function enqueueLightspeedCatalogSync(
   return { job_id: id };
 }
 
-function parseAuditUserId(userSub: string | null): string | null {
+export function parseAuditUserId(userSub: string | null): string | null {
   if (!userSub?.trim()) return null;
   const t = userSub.trim();
   return /^[0-9a-f-]{36}$/i.test(t) ? t : null;
 }
 
-async function insertSyncAudit(
+export async function insertSyncAudit(
   client: PoolClient,
   tenantId: string,
   userId: string | null,
@@ -169,7 +169,7 @@ async function insertSyncAudit(
   );
 }
 
-async function upsertMatrixRow(
+export async function upsertMatrixRow(
   client: PoolClient,
   row: CatalogSyncMatrixPayload,
 ): Promise<string> {
@@ -217,7 +217,7 @@ async function upsertMatrixRow(
   return id;
 }
 
-async function upsertCustomSkuRow(
+export async function upsertCustomSkuRow(
   client: PoolClient,
   matrixId: string,
   v: CatalogSyncMatrixPayload["variants"][number],
@@ -266,7 +266,7 @@ async function upsertCustomSkuRow(
   );
 }
 
-function pgErrorDetail(err: unknown): string {
+export function pgErrorDetail(err: unknown): string {
   if (err && typeof err === "object" && "code" in err && "message" in err) {
     const code = String((err as { code?: string }).code ?? "");
     const msg = String((err as { message?: string }).message ?? err);

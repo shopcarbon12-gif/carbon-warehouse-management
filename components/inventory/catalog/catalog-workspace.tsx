@@ -7,6 +7,8 @@ import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, Radio } from "lucide-r
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
 import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epcs-modal";
+import { SyncPreviewModal } from "@/components/inventory/sync/sync-preview-modal";
+import { startSyncJobTracking } from "@/components/inventory/sync/sync-progress-floater";
 import {
   ResizeHandle,
   ThickScrollbars,
@@ -159,6 +161,7 @@ export function CatalogWorkspace({
   const [modalSku, setModalSku] = useState<CatalogGridRow | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [syncPreviewOpen, setSyncPreviewOpen] = useState(false);
   const [catalogMenuOpen, setCatalogMenuOpen] = useState<null | "lightspeed" | "more">(null);
   const [newItemOpen, setNewItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -495,7 +498,7 @@ export function CatalogWorkspace({
                     disabled={syncBusy || !canTriggerLightspeedSync}
                     onClick={() => {
                       setCatalogMenuOpen(null);
-                      void triggerLightspeedSync();
+                      setSyncPreviewOpen(true);
                     }}
                     className="block w-full px-3 py-2 text-left font-mono text-xs font-medium text-[var(--wms-accent)] hover:bg-[color-mix(in_srgb,var(--wms-accent)_10%,var(--wms-surface-elevated))] disabled:opacity-50"
                   >
@@ -940,6 +943,18 @@ export function CatalogWorkspace({
       {defectiveOpen ? (
         <DefectiveEpcsModal onClose={() => setDefectiveOpen(false)} />
       ) : null}
+
+      <SyncPreviewModal
+        open={syncPreviewOpen}
+        onClose={() => setSyncPreviewOpen(false)}
+        onConfirmed={(jobId) => {
+          startSyncJobTracking(jobId);
+          setSyncMsg(null);
+          // Catalog list refreshes when job completes; the floater handles user-facing feedback.
+          // We trigger an immediate first refresh in case the apply finishes quickly.
+          void mutate();
+        }}
+      />
     </div>
   );
 }
