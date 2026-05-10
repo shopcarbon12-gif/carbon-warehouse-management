@@ -7,6 +7,11 @@ import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, Radio } from "lucide-r
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
 import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epcs-modal";
+import {
+  ResizeHandle,
+  ThickScrollbars,
+  useColResize as useSharedColResize,
+} from "@/components/shared/data-table";
 
 const PAGE_SIZE_OPTIONS = [100, 300, 500, 1000, "ALL"] as const;
 const DEFAULT_PAGE_SIZE = 300;
@@ -109,17 +114,19 @@ type SortKey =
   | "qty_epc";
 
 const COL_COUNT = 10;
-const COL_MIN_PX = 40;
-const SCROLLBAR_THICKNESS = 14;
 
 /**
  * Default column widths — same order as the header config below
  * (system_id is hidden so its width is irrelevant). Picked to fit the
  * longest content seen in real catalogs without extra slack. Operators
  * can drag the resize handle on any column header to adjust.
+ *
+ * NOTE: catalog is the only table with hardcoded defaults — every other
+ * table that adopts the shared resize primitive starts with all-null
+ * (browser-sized) widths and lets the operator drag/auto-fit on demand.
  */
-const DEFAULT_COL_WIDTHS: number[] = [
-  0,    // system_id (hidden)
+const DEFAULT_COL_WIDTHS: (number | null)[] = [
+  null, // system_id (hidden)
   130,  // sku
   90,   // upc
   200,  // name
@@ -131,171 +138,10 @@ const DEFAULT_COL_WIDTHS: number[] = [
   70,   // rfid
 ];
 
-function ThickScrollbars({ scrollRef }: { scrollRef: React.RefObject<HTMLDivElement | null> }) {
-  const [state, setState] = useState({ vTop: 0, vH: 0, hLeft: 0, hW: 0, showV: false, showH: false });
-
-  const recompute = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const showV = el.scrollHeight > el.clientHeight + 1;
-    const showH = el.scrollWidth > el.clientWidth + 1;
-    const vH = showV ? Math.max(24, (el.clientHeight / el.scrollHeight) * el.clientHeight) : 0;
-    const vTop = showV ? (el.scrollTop / (el.scrollHeight - el.clientHeight)) * (el.clientHeight - vH) : 0;
-    const hW = showH ? Math.max(24, (el.clientWidth / el.scrollWidth) * el.clientWidth) : 0;
-    const hLeft = showH ? (el.scrollLeft / (el.scrollWidth - el.clientWidth)) * (el.clientWidth - hW) : 0;
-    setState({ vTop, vH, hLeft, hW, showV, showH });
-  }, [scrollRef]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    recompute();
-    el.addEventListener("scroll", recompute, { passive: true });
-    const ro = new ResizeObserver(recompute);
-    ro.observe(el);
-    const mo = new MutationObserver(recompute);
-    mo.observe(el, { childList: true, subtree: true });
-    return () => { el.removeEventListener("scroll", recompute); ro.disconnect(); mo.disconnect(); };
-  }, [recompute, scrollRef]);
-
-  const startDragV = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const el = scrollRef.current;
-    if (!el) return;
-    const startY = e.clientY;
-    const startTop = el.scrollTop;
-    const trackH = el.clientHeight - state.vH;
-    const scrollRange = el.scrollHeight - el.clientHeight;
-    const onMove = (ev: MouseEvent) => { el.scrollTop = startTop + ((ev.clientY - startY) / trackH) * scrollRange; };
-    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [scrollRef, state.vH]);
-
-  const startDragH = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const el = scrollRef.current;
-    if (!el) return;
-    const startX = e.clientX;
-    const startLeft = el.scrollLeft;
-    const trackW = el.clientWidth - state.hW;
-    const scrollRange = el.scrollWidth - el.clientWidth;
-    const onMove = (ev: MouseEvent) => { el.scrollLeft = startLeft + ((ev.clientX - startX) / trackW) * scrollRange; };
-    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [scrollRef, state.hW]);
-
-  return (
-    <>
-      {state.showV ? (
-        <div
-          className="pointer-events-none absolute top-0 z-20"
-          style={{ right: 0, width: SCROLLBAR_THICKNESS, height: "100%", background: "color-mix(in srgb, var(--wms-surface-elevated) 70%, #000)" }}
-        >
-          <div
-            onMouseDown={startDragV}
-            className="pointer-events-auto absolute left-[2px] right-[2px] cursor-pointer rounded"
-            style={{ top: state.vTop, height: state.vH, background: "color-mix(in srgb, var(--wms-muted) 60%, transparent)" }}
-          />
-        </div>
-      ) : null}
-      {state.showH ? (
-        <div
-          className="pointer-events-none absolute left-0 z-20"
-          style={{ bottom: 0, height: SCROLLBAR_THICKNESS, width: state.showV ? `calc(100% - ${SCROLLBAR_THICKNESS}px)` : "100%", background: "color-mix(in srgb, var(--wms-surface-elevated) 70%, #000)" }}
-        >
-          <div
-            onMouseDown={startDragH}
-            className="pointer-events-auto absolute top-[2px] bottom-[2px] cursor-pointer rounded"
-            style={{ left: state.hLeft, width: state.hW, background: "color-mix(in srgb, var(--wms-muted) 60%, transparent)" }}
-          />
-        </div>
-      ) : null}
-    </>
-  );
-}
-
 function useColResize(tableRef: React.RefObject<HTMLTableElement | null>) {
-  // Hardcoded widths from the start (no auto-fit). Predictable layout, no
-  // surprise reflows when data lands. Operator can drag a resize handle on
-  // any column to adjust per-session.
-  const [colWidths, setColWidths] = useState<(number | null)[]>(() =>
-    DEFAULT_COL_WIDTHS.map((w) => (w > 0 ? w : null)),
-  );
-
-  const autoFit = useCallback((colIdx: number) => {
-    const tbl = tableRef.current;
-    if (!tbl) return;
-    // Measure text using canvas — fully layout-independent. Range-based
-    // measurement was returning the parent box width when the cell contained
-    // a flex/w-full child (sortable header buttons), so columns came out way
-    // wider than the actual content. Canvas reads the computed font and
-    // measures glyph width directly.
-    const ths = tbl.querySelectorAll<HTMLElement>("thead th");
-    const th = ths[colIdx];
-    if (!th) return;
-
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const measure = (el: HTMLElement | null, text: string): number => {
-      if (!el || !text) return 0;
-      const cs = window.getComputedStyle(el);
-      // Minimal shorthand — `font-size font-family` is enough and is the only
-      // form Canvas reliably parses. Including font-variant or line-height
-      // (which computedStyle returns as a px value, not the unitless number
-      // the shorthand wants) silently invalidates the whole shorthand and
-      // canvas falls back to a wide default font.
-      ctx.font = `${cs.fontWeight || "400"} ${cs.fontSize} ${cs.fontFamily}`;
-      return ctx.measureText(text).width;
-    };
-
-    // Header label — find the label span (skip the sort chevron icon).
-    const headerSpan = th.querySelector<HTMLElement>("span") ?? th;
-    let maxTextW = measure(headerSpan, (headerSpan.textContent ?? "").trim());
-
-    // Body cells — straight text content.
-    const rows = tbl.querySelectorAll<HTMLTableRowElement>("tbody tr");
-    rows.forEach((row) => {
-      const cell = row.cells[colIdx];
-      if (!cell) return;
-      const w = measure(cell, (cell.textContent ?? "").trim());
-      if (w > maxTextW) maxTextW = w;
-    });
-
-    // px-2 padding = 16px total + small breathing room. Sortable headers also
-    // render a 16px chevron + 8px gap to its right; bake that into the buffer
-    // so the chevron has space without making non-sortable columns roomy.
-    const buffer = 16 + 14; // padding + chevron/breathing
-    const target = Math.min(320, Math.max(COL_MIN_PX, Math.ceil(maxTextW) + buffer));
-    setColWidths((w) => {
-      const n = [...w];
-      n[colIdx] = target;
-      return n;
-    });
-  }, [tableRef]);
-
-  const startDrag = useCallback((colIdx: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const tbl = tableRef.current;
-    const th = tbl?.querySelectorAll<HTMLElement>("thead th")[colIdx];
-    const startW = th ? th.offsetWidth : 100;
-    const onMove = (ev: MouseEvent) => {
-      const newW = Math.max(COL_MIN_PX, startW + (ev.clientX - startX));
-      setColWidths((w) => { const n = [...w]; n[colIdx] = newW; return n; });
-    };
-    const onUp = () => {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }, [tableRef]);
-
-  return { colWidths, autoFit, startDrag };
+  return useSharedColResize(tableRef, COL_COUNT, {
+    initialWidths: DEFAULT_COL_WIDTHS,
+  });
 }
 
 export function CatalogWorkspace({
@@ -830,13 +676,7 @@ export function CatalogWorkspace({
                         ) : (
                           <span className="text-[var(--wms-muted)]">{label}</span>
                         )}
-                        {/* Resize handle — invisible, right edge of th */}
-                        <span
-                          onMouseDown={(e) => startDrag(colIdx, e)}
-                          onDoubleClick={() => autoFit(colIdx)}
-                          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-[var(--wms-accent)]/30 active:bg-[var(--wms-accent)]/50"
-                          title="Drag to resize · double-click to fit"
-                        />
+                        <ResizeHandle colIdx={colIdx} startDrag={startDrag} autoFit={autoFit} />
                       </th>
                     );
                   })}

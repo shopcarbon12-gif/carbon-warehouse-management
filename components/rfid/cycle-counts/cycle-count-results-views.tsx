@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, ChevronDown, X as XIcon, Loader2 } from "lucide-react";
 import type { TrackerItemDetail } from "@/lib/rfid-tracker-types";
+import {
+  cellTruncate,
+  DataTableContainer,
+  pickTableLayout,
+  ResizeHandle,
+  useColResize,
+} from "@/components/shared/data-table";
 
 export type ExpectedRow = {
   epc: string;
@@ -116,46 +123,70 @@ export function AllEpcsTable({
   }, [rows, search, stateFilter]);
 
   const [openEpc, setOpenEpc] = useState<string | null>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
+
+  const cols: { label: string; align?: "right" | "center"; mdOnly?: boolean }[] = [
+    { label: "SKU" },
+    { label: "Description", mdOnly: true },
+    { label: "UPC" },
+    { label: "Color" },
+    { label: "Size" },
+    { label: "Expected bin" },
+    { label: "State" },
+    { label: "EPC" },
+  ];
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
-      <div className="border-b border-[var(--wms-border)] px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
-        Showing {filtered.length} of {rows.length}
-      </div>
-      <div className="max-h-[min(60vh,560px)] overflow-auto">
-        <table className="w-full border-collapse text-left">
+    <>
+      <DataTableContainer caption={`Showing ${filtered.length} of ${rows.length}`}>
+        <table
+          ref={tableRef}
+          className="w-full min-w-[1100px] border-collapse text-left"
+          style={{ tableLayout: pickTableLayout(colWidths) }}
+        >
           <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide">
             <tr>
-              <th className="px-3 py-2">SKU</th>
-              <th className="px-3 py-2 hidden md:table-cell">Description</th>
-              <th className="px-3 py-2">UPC</th>
-              <th className="px-3 py-2">Color</th>
-              <th className="px-3 py-2">Size</th>
-              <th className="px-3 py-2">Expected bin</th>
-              <th className="px-3 py-2">State</th>
-              <th className="px-3 py-2">EPC</th>
+              {cols.map((c, i) => {
+                const w = colWidths[i];
+                return (
+                  <th
+                    key={c.label}
+                    style={w !== null ? { width: w, minWidth: w } : undefined}
+                    className={`relative overflow-hidden px-3 py-2 ${
+                      c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : ""
+                    } ${c.mdOnly ? "hidden md:table-cell" : ""}`}
+                  >
+                    <span>{c.label}</span>
+                    <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
             {filtered.map((r) => (
               <tr key={r.epc + r.state}>
-                <td className="px-3 py-2">{r.sku}</td>
-                <td className="px-3 py-2 hidden md:table-cell text-[var(--wms-muted)]">
+                <td className={`${cellTruncate} px-3 py-2`} title={r.sku}>{r.sku}</td>
+                <td
+                  className={`${cellTruncate} hidden px-3 py-2 text-[var(--wms-muted)] md:table-cell`}
+                  title={r.description}
+                >
                   {r.description}
                 </td>
-                <td className="px-3 py-2 text-[var(--wms-muted)]">{r.upc || "—"}</td>
-                <td className="px-3 py-2 text-[var(--wms-muted)]">{r.color || "—"}</td>
-                <td className="px-3 py-2 text-[var(--wms-muted)]">{r.size || "—"}</td>
-                <td className="px-3 py-2 text-[var(--wms-muted)]">{r.bin}</td>
-                <td className="px-3 py-2">
+                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.upc}>{r.upc || "—"}</td>
+                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.color}>{r.color || "—"}</td>
+                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.size}>{r.size || "—"}</td>
+                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.bin}>{r.bin}</td>
+                <td className="overflow-hidden px-3 py-2">
                   <span className={STATE_CLS[r.state]}>{STATE_LABEL[r.state]}</span>
                 </td>
-                <td className="px-3 py-2">
+                <td className={`${cellTruncate} px-3 py-2`}>
                   <button
                     type="button"
                     onClick={() => setOpenEpc(r.epc)}
                     className="text-[var(--wms-accent)] underline-offset-2 hover:underline"
-                    title="Show item history + last seen"
+                    title={`${r.epc} — click for history`}
                   >
                     {r.epc}
                   </button>
@@ -171,11 +202,11 @@ export function AllEpcsTable({
             ) : null}
           </tbody>
         </table>
-      </div>
+      </DataTableContainer>
       {openEpc ? (
         <EpcHistoryModal epc={openEpc} onClose={() => setOpenEpc(null)} />
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -452,39 +483,83 @@ export function BySkuTable({
       )
     : agg;
 
+  return <BySkuTableInner filtered={filtered} />;
+}
+
+function BySkuTableInner({
+  filtered,
+}: {
+  filtered: {
+    sku: string;
+    description: string;
+    expected: number;
+    matched: number;
+    missing: number;
+    bins: { bin_code: string; expected: number; matched: number }[];
+  }[];
+}) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  // 7 columns: chevron, SKU, Description, Expected, Matched, Missing, Coverage
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 7);
+  const cols: {
+    label: string;
+    align?: "right" | "center";
+    mdOnly?: boolean;
+    width?: number;
+  }[] = [
+    { label: "" },
+    { label: "SKU" },
+    { label: "Description", mdOnly: true },
+    { label: "Expected", align: "right" },
+    { label: "Matched", align: "right" },
+    { label: "Missing", align: "right" },
+    { label: "Coverage", align: "right" },
+  ];
+
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
-      <div className="border-b border-[var(--wms-border)] px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
-        {filtered.length} SKU{filtered.length === 1 ? "" : "s"} — sorted by missing first
-      </div>
-      <div className="max-h-[min(60vh,560px)] overflow-auto">
-        <table className="w-full border-collapse text-left">
-          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide">
+    <DataTableContainer
+      caption={`${filtered.length} SKU${filtered.length === 1 ? "" : "s"} — sorted by missing first`}
+    >
+      <table
+        ref={tableRef}
+        className="w-full min-w-[800px] border-collapse text-left"
+        style={{ tableLayout: pickTableLayout(colWidths) }}
+      >
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide">
+          <tr>
+            {cols.map((c, i) => {
+              const w = colWidths[i];
+              return (
+                <th
+                  key={c.label || `col-${i}`}
+                  style={w !== null ? { width: w, minWidth: w } : undefined}
+                  className={`relative overflow-hidden ${i === 0 ? "w-6 px-1 py-2" : "px-3 py-2"} ${
+                    c.align === "right" ? "text-right" : ""
+                  } ${c.mdOnly ? "hidden md:table-cell" : ""}`}
+                >
+                  <span>{c.label}</span>
+                  {i > 0 ? (
+                    <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                  ) : null}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs">
+          {filtered.map((a) => (
+            <SkuRow key={a.sku} a={a} />
+          ))}
+          {filtered.length === 0 ? (
             <tr>
-              <th className="w-6 px-1 py-2"></th>
-              <th className="px-3 py-2">SKU</th>
-              <th className="px-3 py-2 hidden md:table-cell">Description</th>
-              <th className="px-3 py-2 text-right">Expected</th>
-              <th className="px-3 py-2 text-right">Matched</th>
-              <th className="px-3 py-2 text-right">Missing</th>
-              <th className="px-3 py-2 text-right">Coverage</th>
+              <td colSpan={7} className="p-6 text-center text-[var(--wms-muted)]">
+                No SKUs match.
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs">
-            {filtered.map((a) => (
-              <SkuRow key={a.sku} a={a} />
-            ))}
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="p-6 text-center text-[var(--wms-muted)]">
-                  No SKUs match.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          ) : null}
+        </tbody>
+      </table>
+    </DataTableContainer>
   );
 }
 
@@ -588,48 +663,79 @@ export function ByBinTable({
     );
   }, [expected, matchedSet]);
 
+  return <ByBinTableInner agg={agg} />;
+}
+
+function ByBinTableInner({
+  agg,
+}: {
+  agg: { bin_code: string; expected: number; matched: number; missing: number }[];
+}) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 5);
+  const cols: { label: string; align?: "right" }[] = [
+    { label: "Bin" },
+    { label: "Expected", align: "right" },
+    { label: "Matched", align: "right" },
+    { label: "Missing", align: "right" },
+    { label: "Coverage", align: "right" },
+  ];
+
   return (
-    <div className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
-      <div className="border-b border-[var(--wms-border)] px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
-        {agg.length} bin{agg.length === 1 ? "" : "s"} — sorted by missing first
-      </div>
-      <div className="max-h-[min(60vh,560px)] overflow-auto">
-        <table className="w-full border-collapse text-left">
-          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide">
-            <tr>
-              <th className="px-3 py-2">Bin</th>
-              <th className="px-3 py-2 text-right">Expected</th>
-              <th className="px-3 py-2 text-right">Matched</th>
-              <th className="px-3 py-2 text-right">Missing</th>
-              <th className="px-3 py-2 text-right">Coverage</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs">
-            {agg.map((b) => {
-              const cov = b.expected === 0 ? 0 : Math.round((b.matched / b.expected) * 100);
-              const cls =
-                cov === 100 ? "wms-status-success" : cov >= 80 ? "text-amber-400" : "text-red-400";
+    <DataTableContainer
+      caption={`${agg.length} bin${agg.length === 1 ? "" : "s"} — sorted by missing first`}
+    >
+      <table
+        ref={tableRef}
+        className="w-full min-w-[600px] border-collapse text-left"
+        style={{ tableLayout: pickTableLayout(colWidths) }}
+      >
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide">
+          <tr>
+            {cols.map((c, i) => {
+              const w = colWidths[i];
               return (
-                <tr key={b.bin_code} className="hover:bg-[var(--wms-surface-elevated)]/40">
-                  <td className="px-3 py-2 text-[var(--wms-accent)]">{b.bin_code}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{b.expected}</td>
-                  <td className="px-3 py-2 text-right tabular-nums wms-status-success">
-                    {b.matched}
-                  </td>
-                  <td
-                    className={`px-3 py-2 text-right tabular-nums ${
-                      b.missing > 0 ? "text-amber-400" : "text-[var(--wms-muted)]"
-                    }`}
-                  >
-                    {b.missing}
-                  </td>
-                  <td className={`px-3 py-2 text-right tabular-nums ${cls}`}>{cov}%</td>
-                </tr>
+                <th
+                  key={c.label}
+                  style={w !== null ? { width: w, minWidth: w } : undefined}
+                  className={`relative overflow-hidden px-3 py-2 ${
+                    c.align === "right" ? "text-right" : ""
+                  }`}
+                >
+                  <span>{c.label}</span>
+                  <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
+                </th>
               );
             })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs">
+          {agg.map((b) => {
+            const cov = b.expected === 0 ? 0 : Math.round((b.matched / b.expected) * 100);
+            const cls =
+              cov === 100 ? "wms-status-success" : cov >= 80 ? "text-amber-400" : "text-red-400";
+            return (
+              <tr key={b.bin_code} className="hover:bg-[var(--wms-surface-elevated)]/40">
+                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-accent)]`} title={b.bin_code}>
+                  {b.bin_code}
+                </td>
+                <td className="overflow-hidden px-3 py-2 text-right tabular-nums">{b.expected}</td>
+                <td className="overflow-hidden px-3 py-2 text-right tabular-nums wms-status-success">
+                  {b.matched}
+                </td>
+                <td
+                  className={`overflow-hidden px-3 py-2 text-right tabular-nums ${
+                    b.missing > 0 ? "text-amber-400" : "text-[var(--wms-muted)]"
+                  }`}
+                >
+                  {b.missing}
+                </td>
+                <td className={`overflow-hidden px-3 py-2 text-right tabular-nums ${cls}`}>{cov}%</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </DataTableContainer>
   );
 }
