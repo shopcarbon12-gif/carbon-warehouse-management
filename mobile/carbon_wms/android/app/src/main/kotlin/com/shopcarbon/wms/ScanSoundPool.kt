@@ -169,20 +169,6 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
     playCue("read", vol)
   }
 
-  /**
-   * Public hook for native code (MainActivity channel handlers, etc.) to fire
-   * a non-tag cue without going through Dart. Currently used so the
-   * RFID↔2D mode-switch handlers can play a phone-speaker confirmation:
-   * the RFD8500 sled's `BEEPER_VOLUME.QUIET_BEEP` setting silences both
-   * per-tag AND mode-change beeps at the firmware level, so the only way
-   * to retain a mode-change audio cue is through the host speaker. Goes
-   * through the same SoundPool/userVolume path as [playTagBeep], so the
-   * Settings → Sound slider governs it.
-   */
-  fun playEventCue(cue: String) {
-    playCue(cue, 1.0f)
-  }
-
   private fun playCue(cue: String, volume: Float) {
     val p = pool
     if (p == null) { Log.w(TAG, "playCue($cue): pool is null"); return }

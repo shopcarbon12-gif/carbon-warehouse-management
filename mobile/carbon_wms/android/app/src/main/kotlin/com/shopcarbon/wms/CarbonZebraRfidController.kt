@@ -983,6 +983,26 @@ class CarbonZebraRfidController(
       try { r.Actions.Inventory.stop() } catch (_: Exception) { /* ignore */ }
     }
 
+    // 3b. Restore the sled beeper to a non-QUIET volume in NVRAM BEFORE the
+    //     disconnect. We set QUIET_BEEP in connectAndConfigureReader to
+    //     suppress per-tag and mode-change beeps; that setting is
+    //     RFD8500-firmware-persistent, so if we left it at QUIET the
+    //     firmware's connect/disconnect status chime would also stay silent
+    //     on the *next* session. Setting MEDIUM_BEEP here means:
+    //       - the firmware fires the disconnect chime at MEDIUM right after
+    //         this call (on the r.disconnect() below),
+    //       - and the next connect's firmware chime fires at MEDIUM too,
+    //         before our connect-side setBeeperVolume(QUIET_BEEP) lands.
+    //     Best-effort; ignored if the link is already dead.
+    if (r != null) {
+      try {
+        r.Config.setBeeperVolume(BEEPER_VOLUME.MEDIUM_BEEP)
+        Log.d(TAG, "BeeperVolume -> MEDIUM_BEEP (pre-disconnect)")
+      } catch (e: Exception) {
+        Log.w(TAG, "pre-disconnect setBeeperVolume failed: ${e.message}")
+      }
+    }
+
     // 4. Disconnect UNCONDITIONALLY. On a connect-failed path the SDK still
     //    owns an in-flight SPP socket attempt; disconnect() is how we tell it
     //    to release. Skipping this because isConnected==false was the wedge.
