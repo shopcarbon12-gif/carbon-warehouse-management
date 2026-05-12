@@ -1671,14 +1671,14 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         .where((s) => s.qty > 0)
         .map((s) => s.colorCode.toUpperCase())
         .toSet();
-    final colours = <String>{};
+    final candidateColours = <String>{};
     for (final r in rows) {
       final c = (r['color_code'] ?? r['color'] ?? '').toString().toUpperCase();
       if (c.isEmpty) continue;
       if (assignedColours.contains(c)) continue;
-      colours.add(c);
+      candidateColours.add(c);
     }
-    if (colours.isEmpty) {
+    if (candidateColours.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('All colours of this product are already in the bin.'),
@@ -1687,7 +1687,55 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       );
       return null;
     }
-    final ordered = colours.toList()..sort();
+
+    // Pre-flight each candidate via the preview API and keep only those
+    // with `homeless > 0` — i.e. colours that have items currently sitting
+    // outside any bin and CAN be assigned via the multi-colour homeless_only
+    // path. Without this filter the picker shows colours whose items live
+    // in OTHER bins, and the subsequent multi-colour assign returns
+    // updated=0 because homeless_only ignores those items — producing the
+    // "0 items assigned across N colour(s) — every matching EPC may
+    // already be placed elsewhere" snackbar that the operator hit. Runs
+    // previews in parallel so the picker still opens quickly on matrices
+    // with many colours; permissive on preview failure so a network blip
+    // doesn't hide everything.
+    setState(() => _busy = true);
+    final assignableColours = <String>{};
+    try {
+      final api = context.read<WmsApiClient>();
+      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+      await Future.wait(candidateColours.map((c) async {
+        try {
+          final preview = await api.previewPutawayAssign(
+            deviceId: deviceId,
+            binCode: _currentBin,
+            skuScanned: '$base$c',
+            scope: 'single_color_all_sizes',
+          );
+          final homeless = (preview['homeless'] as num?)?.toInt() ?? 0;
+          if (homeless > 0) assignableColours.add(c);
+        } catch (_) {
+          // Preview blip — be permissive so a single failed call doesn't
+          // hide an otherwise-valid colour.
+          assignableColours.add(c);
+        }
+      }));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return null;
+    if (assignableColours.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No assignable colours — the remaining ones live in other bins. Re-scan an item and choose MOVE to bring them here.',
+          ),
+          duration: Duration(seconds: 5),
+        ),
+      );
+      return null;
+    }
+    final ordered = assignableColours.toList()..sort();
     final selected = <String>{};
     return showDialog<List<String>>(
       context: context,
