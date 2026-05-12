@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.zebra.rfid.api3.BEEPER_VOLUME
 import com.zebra.rfid.api3.ENUM_TRANSPORT
 import com.zebra.rfid.api3.ENUM_TRIGGER_MODE
 import com.zebra.rfid.api3.HANDHELD_TRIGGER_EVENT_TYPE
@@ -872,6 +873,27 @@ class CarbonZebraRfidController(
     r.Config.setTriggerMode(ENUM_TRIGGER_MODE.RFID_MODE, true)
     r.Config.setStartTrigger(triggerInfo.StartTrigger)
     r.Config.setStopTrigger(triggerInfo.StopTrigger)
+
+    // Silence the sled's built-in beeper. The RFD8500 firmware ships with
+    // BEEPER_VOLUME at HIGH, so out of the box it beeps loudly on every tag
+    // read. QUIET_BEEP is the same setting 123RFID exposes in its Beeper tab
+    // and is the only beeper knob the API3 SDK exposes (see BEEPER_VOLUME
+    // enum: HIGH/MEDIUM/LOW/QUIET — no per-event toggles exist). Status
+    // chimes the firmware fires on connect/disconnect, RFID↔2D mode change,
+    // and power on/off live on a separate audio path and are unaffected, so
+    // those keep playing as expected. We deliberately do NOT touch
+    // ScanSoundPool — the host-phone cues (per-tag, start, stop, success,
+    // error) stay at full volume under the user's Settings → Sound slider.
+    // Applied on every connect so a sled reboot can't leave us back at
+    // default-loud, and so reconnects after a USB drop also re-silence.
+    try {
+      r.Config.setBeeperVolume(BEEPER_VOLUME.QUIET_BEEP)
+      Log.d(TAG, "BeeperVolume -> QUIET_BEEP")
+    } catch (e: InvalidUsageException) {
+      Log.w(TAG, "setBeeperVolume failed (usage): ${e.message}")
+    } catch (e: OperationFailureException) {
+      Log.w(TAG, "setBeeperVolume failed (op): ${e.message}")
+    }
 
     applyTransmitPowerDbm(r)
 
