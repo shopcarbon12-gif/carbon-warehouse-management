@@ -859,6 +859,26 @@ class CarbonZebraRfidController(
       r.connect()
       Log.d(TAG, "connectAndConfigureReader: connected=${r.isConnected} host=${r.hostName}")
     }
+    // RFD8500 firmware fires its connect chime asynchronously some time
+    // AFTER r.connect() returns — the logcat trace from 1.2.61 showed our
+    // immediate setBeeperVolume(QUIET) landing ~1.2 s post-connect, which is
+    // inside the chime window and silenced it. Schedule the silence on a
+    // delay instead. 3.5 s is empirically past the chime window and short
+    // enough that the user can't trigger a tag scan before it lands.
+    // Guarded against the reader being torn down before the delay elapses.
+    mainHandler.postDelayed({
+      val rr = reader
+      if (rr == null || !rr.isConnected) {
+        Log.d(TAG, "delayed setBeeperVolume skipped: reader gone")
+        return@postDelayed
+      }
+      try {
+        rr.Config.setBeeperVolume(BEEPER_VOLUME.QUIET_BEEP)
+        Log.d(TAG, "BeeperVolume -> QUIET_BEEP (delayed)")
+      } catch (e: Exception) {
+        Log.w(TAG, "delayed setBeeperVolume failed: ${e.message}")
+      }
+    }, 3500)
     val triggerInfo = TriggerInfo()
     triggerInfo.StartTrigger.setTriggerType(START_TRIGGER_TYPE.START_TRIGGER_TYPE_IMMEDIATE)
     triggerInfo.StopTrigger.setTriggerType(STOP_TRIGGER_TYPE.STOP_TRIGGER_TYPE_IMMEDIATE)
@@ -873,27 +893,6 @@ class CarbonZebraRfidController(
     r.Config.setTriggerMode(ENUM_TRIGGER_MODE.RFID_MODE, true)
     r.Config.setStartTrigger(triggerInfo.StartTrigger)
     r.Config.setStopTrigger(triggerInfo.StopTrigger)
-
-    // Silence the sled's built-in beeper. The RFD8500 firmware ships with
-    // BEEPER_VOLUME at HIGH, so out of the box it beeps loudly on every tag
-    // read. QUIET_BEEP is the same setting 123RFID exposes in its Beeper tab
-    // and is the only beeper knob the API3 SDK exposes (see BEEPER_VOLUME
-    // enum: HIGH/MEDIUM/LOW/QUIET — no per-event toggles exist). Status
-    // chimes the firmware fires on connect/disconnect, RFID↔2D mode change,
-    // and power on/off live on a separate audio path and are unaffected, so
-    // those keep playing as expected. We deliberately do NOT touch
-    // ScanSoundPool — the host-phone cues (per-tag, start, stop, success,
-    // error) stay at full volume under the user's Settings → Sound slider.
-    // Applied on every connect so a sled reboot can't leave us back at
-    // default-loud, and so reconnects after a USB drop also re-silence.
-    try {
-      r.Config.setBeeperVolume(BEEPER_VOLUME.QUIET_BEEP)
-      Log.d(TAG, "BeeperVolume -> QUIET_BEEP")
-    } catch (e: InvalidUsageException) {
-      Log.w(TAG, "setBeeperVolume failed (usage): ${e.message}")
-    } catch (e: OperationFailureException) {
-      Log.w(TAG, "setBeeperVolume failed (op): ${e.message}")
-    }
 
     applyTransmitPowerDbm(r)
 
@@ -941,6 +940,23 @@ class CarbonZebraRfidController(
   private fun disconnectSync() {
     inventoryActive = false
 
+    // 0. BEFORE any teardown, restore the sled beeper to HIGH so the
+    //    firmware's disconnect chime fires loud AND so the NEXT connect's
+    //    firmware chime fires loud (BEEPER_VOLUME is RFD8500-NVRAM-persistent).
+    //    The connect-side silence runs on a 3.5 s delay so we don't race the
+    //    chime; here we run BEFORE the link teardown so the SDK call has a
+    //    healthy reader handle to talk to. Best-effort: any exception is
+    //    swallowed so a hard teardown still proceeds.
+    val rEarly = reader
+    if (rEarly != null) {
+      try {
+        rEarly.Config.setBeeperVolume(BEEPER_VOLUME.HIGH_BEEP)
+        Log.d(TAG, "BeeperVolume -> HIGH_BEEP (pre-teardown)")
+      } catch (e: Exception) {
+        Log.w(TAG, "pre-teardown setBeeperVolume failed: ${e.message}")
+      }
+    }
+
     // Tear down CoreScanner first so its session socket releases before we
     // kill the RFID side — same physical BT link, sequence matters.
     val handler = sdkHandler
@@ -981,26 +997,6 @@ class CarbonZebraRfidController(
     //    inventorying. Harmless no-op in the connect-failed case.
     if (r != null) {
       try { r.Actions.Inventory.stop() } catch (_: Exception) { /* ignore */ }
-    }
-
-    // 3b. Restore the sled beeper to a non-QUIET volume in NVRAM BEFORE the
-    //     disconnect. We set QUIET_BEEP in connectAndConfigureReader to
-    //     suppress per-tag and mode-change beeps; that setting is
-    //     RFD8500-firmware-persistent, so if we left it at QUIET the
-    //     firmware's connect/disconnect status chime would also stay silent
-    //     on the *next* session. Setting MEDIUM_BEEP here means:
-    //       - the firmware fires the disconnect chime at MEDIUM right after
-    //         this call (on the r.disconnect() below),
-    //       - and the next connect's firmware chime fires at MEDIUM too,
-    //         before our connect-side setBeeperVolume(QUIET_BEEP) lands.
-    //     Best-effort; ignored if the link is already dead.
-    if (r != null) {
-      try {
-        r.Config.setBeeperVolume(BEEPER_VOLUME.MEDIUM_BEEP)
-        Log.d(TAG, "BeeperVolume -> MEDIUM_BEEP (pre-disconnect)")
-      } catch (e: Exception) {
-        Log.w(TAG, "pre-disconnect setBeeperVolume failed: ${e.message}")
-      }
     }
 
     // 4. Disconnect UNCONDITIONALLY. On a connect-failed path the SDK still
