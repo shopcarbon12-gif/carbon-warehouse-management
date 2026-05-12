@@ -276,19 +276,22 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       );
       final outcome = result['outcome'] as String?;
       if (outcome == 'new') {
-        _session.recordNew(NewEpcEntry(epc: clean, scannedAtUtc: DateTime.now().toUtc()));
+        // Decode is already done above (formula check passed → valid =
+        // true), so reuse decoded.systemId. This is the ONLY enrichment
+        // that happens during scan — no catalog network call, no
+        // /epc/lookup, nothing. system_id displays on the card so the
+        // operator can identify the item without any round-trip. Full
+        // catalog resolution (SKU, name, color, size) happens
+        // server-side during UPLOAD intent only.
+        _session.recordNew(NewEpcEntry(
+          epc: clean,
+          scannedAtUtc: DateTime.now().toUtc(),
+          systemId: decoded.systemId?.toString(),
+        ));
         // Regular per-tag read tone (uhf-read-tag.mp3), not the heavier
-        // success cue — the operator wanted the same beep here as a
-        // normal RFID read elsewhere in the app.
+        // success cue.
         ScanSounds.instance.play(ScanCue.read);
         await _maybeVibrate();
-        // Read-only catalog *lookup* by system_id (NOT a catalog write —
-        // catalog mutation is gated to the UPLOAD intent's ingest path).
-        // Decode the EPC client-side to extract the system_id, then GET
-        // the existing catalog row for that system_id. Cached per
-        // system_id for this session, so many EPCs that share a SKU
-        // only fire one lookup total. Mirrors count_inventory_screen.
-        unawaited(_enrichBySystemId(clean));
       }
       // 'duplicate' / 'failed' / server-side-inSource → silent (Q16 + spec).
     } catch (_) {
@@ -305,41 +308,6 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     } catch (_) {/* best-effort */}
   }
 
-  /// Per-session cache: system_id → catalog row (or null = confirmed miss).
-  /// Each unique system_id is looked up at most once per Add-On session.
-  final Map<String, Map<String, dynamic>?> _catalogCache = {};
-
-  Future<void> _enrichBySystemId(String epc) async {
-    try {
-      final cfg = context.read<MobileSettingsRepository>().epcConfig;
-      final sid = decodeSystemId(epc, cfg);
-      if (sid == null) return; // formula-failed EPCs never reach here anyway
-      final sidStr = sid.toString();
-
-      Map<String, dynamic>? row;
-      if (_catalogCache.containsKey(sidStr)) {
-        row = _catalogCache[sidStr];
-      } else {
-        final api = context.read<WmsApiClient>();
-        row = await api.catalogLookupBySystemId(sidStr);
-        _catalogCache[sidStr] = row;
-      }
-      if (row == null) return; // catalog has no entry for this system_id
-
-      _session.enrichEntry(
-        epc,
-        NewEpcEntry(
-          epc: epc,
-          scannedAtUtc: DateTime.now().toUtc(),
-          systemId: sidStr,
-          customSku: row['sku'] as String? ?? row['custom_sku'] as String?,
-          itemName: row['product_name'] as String? ?? row['productName'] as String?,
-          color: row['color'] as String?,
-          size: row['size'] as String?,
-        ),
-      );
-    } catch (_) {/* best-effort enrichment, card stays at EPC-only */}
-  }
 
   Future<void> _stopAndReview() async {
     if (_session.scanning) {

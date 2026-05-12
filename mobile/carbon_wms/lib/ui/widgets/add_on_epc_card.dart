@@ -26,7 +26,17 @@ class AddOnEpcCard extends StatelessWidget {
     final color = (entry.color ?? '').trim();
     final size = (entry.size ?? '').trim();
     final bin = (entry.bin ?? '').trim();
+    final systemId = (entry.systemId ?? '').trim();
     final priceText = entry.retailPrice == null ? '' : '\$${entry.retailPrice}';
+
+    // Primary row identifier — what the operator reads at a glance.
+    // Order of preference: SKU (catalog-resolved, post-upload) > System ID
+    // (client-side decode, available immediately) > raw EPC. The Add-On
+    // scan loop is offline w/r/t the catalog, so during a live scan the
+    // System ID is what shows.
+    final primaryLabel = sku.isNotEmpty
+        ? sku
+        : (systemId.isNotEmpty ? 'System ID $systemId' : entry.epc);
 
     final descLine = [
       if (name.isNotEmpty) name,
@@ -49,14 +59,7 @@ class AddOnEpcCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    // Live scan no longer enriches per-EPC (1.2.66 — operator
-                    // wanted a quiet scan loop), so SKU is empty during the
-                    // session and only filled in server-side on UPLOAD. Use
-                    // the EPC itself as the primary identifier here; the
-                    // smaller EPC line below is now redundant when sku is
-                    // empty but keeps the card layout consistent on rows
-                    // that DO have a sku (older sessions, post-upload, etc.).
-                    sku.isEmpty ? entry.epc : sku,
+                    primaryLabel,
                     style: GoogleFonts.robotoMono(
                       fontSize: 16.sp,
                       fontWeight: FontWeight.w700,
