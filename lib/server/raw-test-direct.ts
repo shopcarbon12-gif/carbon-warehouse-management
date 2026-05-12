@@ -27,11 +27,59 @@
 
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
-import {
-  newConsoleParserState,
-  parseConsoleChunk,
-  type ConsoleParserState,
-} from "@/apps/carbon-cdm/src/console-parser";
+// Inlined from apps/carbon-cdm/src/console-parser.ts (which is ESM "type":"module"
+// and trips Next.js' production build TypeScript check when imported into the
+// WMS bundle). Kept tight — only the 30-line parser the dev tool actually uses.
+// Format produced by `new_monsoonreader --console`:
+//   RSSI -68.40 PC 3400 EPC F0A0B30E4F9B8C90000026B3 CRC 4CD0 (calculated 4CD0, OK)
+const CONSOLE_LINE_RE =
+  /^RSSI (-?\d+(?:\.\d+)?) PC ([0-9A-Fa-f]+) EPC ([0-9A-Fa-f]+) CRC ([0-9A-Fa-f]+) \(calculated ([0-9A-Fa-f]+), (OK|WRONG!)\)$/;
+
+type ConsoleParserState = { buf: string };
+type ConsoleParsedRead = { epcHex: string; rssiDbm: number; pc: string; crcOk: boolean };
+type ConsoleParseResult = {
+  records: ConsoleParsedRead[];
+  badCrcCount: number;
+  malformedCount: number;
+};
+
+function newConsoleParserState(): ConsoleParserState {
+  return { buf: "" };
+}
+
+function parseConsoleChunk(input: string, state: ConsoleParserState): ConsoleParseResult {
+  const combined = state.buf + input;
+  const lines = combined.split("\n");
+  state.buf = lines.pop() ?? "";
+  const records: ConsoleParsedRead[] = [];
+  let badCrcCount = 0;
+  let malformedCount = 0;
+  for (const raw of lines) {
+    if (raw.length === 0) continue;
+    const m = CONSOLE_LINE_RE.exec(raw.trim());
+    if (!m) {
+      malformedCount += 1;
+      continue;
+    }
+    const rssi = Number.parseFloat(m[1]!);
+    if (!Number.isFinite(rssi)) {
+      malformedCount += 1;
+      continue;
+    }
+    const crcOk = m[6] === "OK";
+    if (!crcOk) {
+      badCrcCount += 1;
+      continue;
+    }
+    records.push({
+      rssiDbm: rssi,
+      pc: m[2]!.toUpperCase(),
+      epcHex: m[3]!.toUpperCase(),
+      crcOk,
+    });
+  }
+  return { records, badCrcCount, malformedCount };
+}
 import {
   publishAntennaTestRead,
   publishAntennaTestLifecycle,
@@ -339,6 +387,12 @@ function spawnInventoryBinary(
   child.stderr?.on("data", (chunk: Buffer) => {
     const msg = chunk.toString("utf8").trim();
     if (!msg) return;
+    // Don't publish stderr lifecycle events once the session has ended.
+    // The binary's shutdown handshake (`Cancelling read... Cancel confirmed`)
+    // arrives ~100 ms AFTER the SIGTERM we sent — without this gate it
+    // overwrites the real ended-reason (silent_timeout / stop) in the
+    // operator's UI and looks like the failure was something else.
+    if (session.endedAt !== null) return;
     publishAntennaTestLifecycle(session.id, "armed", msg.slice(0, 240));
   });
 
