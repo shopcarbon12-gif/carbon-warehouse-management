@@ -105,11 +105,14 @@ export async function listScanSources(
       ${completedFilter}
   `;
 
-  // Cycle Count: only committed sessions are valid sources (in-progress ones
-  // could change). 'scanned_epcs' is a JSONB array of EPCs. `session_number`
-  // (migration 0064, soon 0070) is the operator-visible "#NNN" displayed in
-  // the cycle-counts web UI — we surface it as the slip so picker rows match
-  // what the operator already knows the count as.
+  // Cycle Count: include both 'committed' and 'paused' sources. Paused
+  // counts are surfaced per operator request so the warehouse can run an
+  // Add-On against an in-progress count without committing it first.
+  // Caveat: if someone resumes the underlying count and edits its EPC list
+  // mid-add-on the two diverge silently — operator owns that trade-off.
+  // `session_number` (migration 0064, soon 0070) is the operator-visible
+  // "#NNN" displayed in the cycle-counts web UI — we surface it as the
+  // slip so picker rows match what the operator already knows the count as.
   const cycleSql = `
     SELECT
       'cycle_count'::text                         AS source_type,
@@ -124,7 +127,7 @@ export async function listScanSources(
       session_number                              AS session_number
     FROM cycle_count_sessions
     WHERE tenant_id = $1::uuid
-      AND status = 'committed'
+      AND status IN ('committed', 'paused')
       ${completedFilter}
   `;
 
