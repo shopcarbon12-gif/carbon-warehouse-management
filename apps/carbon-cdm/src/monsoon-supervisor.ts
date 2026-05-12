@@ -1132,26 +1132,38 @@ export class MonsoonSupervisor {
     slot.testSession = null;
     if (slot.child && !slot.shuttingDown) {
       slot.intendedKill = true;
-      this.killSlotChildHard(slot);
+      // GRACEFUL SHUTDOWN 2026-05-12: was killSlotChildHard (SIGKILL).
+      // SIGKILL leaves the chip mid-inventory, and the next normal-mode
+      // spawn connects to a chip that's still in the middle of its
+      // previous inventory cycle. The new binary's startup-abort tries
+      // to abort an inventory that no longer has a client → chip
+      // returns an unexpected response → new binary exits cleanly in
+      // ~1 s with 0 reads → respawn loop forever (the exact "reader
+      // goes amber after test ends" symptom). Live 2026-05-12 on .69.
+      //
+      // Fix: SIGTERM first. The new_monsoonreader binary's signal
+      // handler issues a graceful "Cancelling read... Cancel confirmed"
+      // to the chip BEFORE exiting — leaving the chip in a clean idle
+      // state. Then the next normal-mode spawn connects to a clean
+      // chip and inventory resumes normally. SIGKILL as a 2-s fallback
+      // for the rare case the binary ignores SIGTERM (see
+      // killSlotChildHard comment about wiznet-cli / kernel UDP loops).
+      const pid = slot.child.pid;
+      if (pid) {
+        try { process.kill(-pid, "SIGTERM"); } catch { /* gone */ }
+        const child = slot.child;
+        setTimeout(() => {
+          if (child === slot.child && child.exitCode === null) {
+            this.killSlotChildHard(slot);
+          }
+        }, 2_000);
+      } else {
+        this.killSlotChildHard(slot);
+      }
     }
-    // REMOVED 2026-05-12: was `this.ensureRadioStopped(slot.spec)`.
-    // Original intent: "after a test the chip may be in TagFocus/Select
-    // state from the test's --tagfocus flag; an abort here keeps the
-    // next normal-mode spawn from inheriting that wedged Gen2 state".
-    //
-    // Empirically the opposite was true: this abort fires immediately
-    // after the test child's SIGKILL, lands on the chip, and puts it
-    // into the post-RadioAbortOperation wedge state — the chip then
-    // accepts commands but emits zero tag frames on the next spawn.
-    // Live signal 2026-05-12: operator runs antenna test on a healthy
-    // reader, test produces reads, test ends, dot flips back to amber
-    // "reachable / stuck" and stays there.
-    //
-    // The new_monsoonreader binary's own connect-time init handles
-    // the TagFocus reset. If we ever see the "562 reads / 1 unique
-    // EPC" TagFocus stuck-mode again on .69-class chips, address it
-    // there (e.g. add `--reset-select` to the next spawn's args) —
-    // NOT by aborting the chip between spawns.
+    // No ensureRadioStopped call here — the SIGTERM'd binary's own
+    // shutdown handler sends the chip cleanup. An additional abort
+    // would race the next spawn and put the chip back into the wedge.
   }
 
   shutdown(): void {
