@@ -14,6 +14,13 @@
 -- only to pos_password_hash so a WMS-side reset never touches the WMS
 -- login.
 --
--- Idempotent — safe to re-run.
-ALTER TABLE pos_employees
-  ADD COLUMN IF NOT EXISTS pos_password_hash TEXT;
+-- Idempotent — safe to re-run. Wrapped in a regclass check because
+-- pos_employees is owned by Carbon-POS (separate app), not WMS; a
+-- WMS-only dev/CI DB doesn't have the table and an unconditional
+-- ALTER would 42P01. Matches the pattern in 0057_pos_access.sql.
+DO $$
+BEGIN
+  IF to_regclass('public.pos_employees') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE pos_employees ADD COLUMN IF NOT EXISTS pos_password_hash TEXT';
+  END IF;
+END $$;

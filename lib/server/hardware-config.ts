@@ -356,18 +356,21 @@ export async function buildHardwareConfigTree(
   const readersByLocationUnzoned = new Map<string, HardwareReaderRow[]>();
   for (const d of devices.rows) {
     if (!READER_TYPES.has(d.device_type)) continue;
-    // Tri-state derivation: chip producing valid reads beats everything;
-    // otherwise fall back to "is the bridge on the LAN" via bridge_seen_at.
-    // Operators reading the dot get an actionable signal — yellow means
-    // "look at the chassis firmware/state, not the network/cable."
+    // Bi-state dot: bridge present on the LAN → online; absent → offline.
+    // The old amber/yellow "reachable" middle state — bridge alive but
+    // chip not producing reads — was hated by operators (it dominated the
+    // dashboard while the supervisor abort-loop bug 2026-05-11 kept chips
+    // wedged across the fleet, and "reachable" reads as "kind of broken"
+    // even when the network was perfectly healthy). The health-badge
+    // logic below still surfaces "stuck" when a reachable bridge has zero
+    // reads, so the diagnostic isn't lost — it just stops poisoning the
+    // dot. The dot now answers "is this reader reachable?" not "is this
+    // reader perfect?".
     const bridgeFresh =
       d.bridge_seen_at !== null &&
       nowMs - new Date(d.bridge_seen_at).getTime() <= BRIDGE_REACHABLE_MS;
-    const bridgeState: "online" | "reachable" | "offline" = d.status_online
-      ? "online"
-      : bridgeFresh
-        ? "reachable"
-        : "offline";
+    const bridgeState: "online" | "reachable" | "offline" =
+      d.status_online || bridgeFresh ? "online" : "offline";
 
     const paused = parentPaused.get(d.id) ?? false;
     const reads5m = readsByReaderId.get(d.id) ?? 0;
@@ -378,9 +381,17 @@ export async function buildHardwareConfigTree(
       healthStatus = "ok";
     } else if (bridgeState === "offline") {
       healthStatus = "offline";
-    } else if (bridgeState === "reachable" && reads5m === 0) {
-      // Bridge alive on the LAN but zero reads coming in → chassis firmware
-      // wedged. This is what auto-recovery sweep + Hard Reset address.
+    } else if (
+      bridgeState === "online" &&
+      reads5m === 0 &&
+      !d.status_online
+    ) {
+      // Bridge alive on the LAN but the chip is silent (no status_online
+      // push from the agent + zero reads in 5 min). Chassis firmware
+      // wedged → "stuck" badge. The dot stays green so the operator's eye
+      // isn't drawn away from a network-healthy reader; the badge carries
+      // the chip-level diagnostic. Was previously gated on the now-removed
+      // bridge_state === "reachable" branch.
       healthStatus = "stuck";
     } else if (
       peerCount >= SLOW_MIN_PEERS &&

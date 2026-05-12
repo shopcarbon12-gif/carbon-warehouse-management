@@ -65,13 +65,15 @@ async function main() {
     [t.id],
   );
 
+  // user_roles is now scoped (wms|pos) — unique index is (name, scope),
+  // not (name). Seed targets the WMS scope explicitly.
   await pool.query(`
-    INSERT INTO user_roles (name, permissions)
+    INSERT INTO user_roles (name, scope, permissions)
     VALUES
-      ('Super Admin', '{}'::jsonb),
-      ('Retail- Limited acess', '{}'::jsonb),
-      ('Warehouse - Limited Access', '{}'::jsonb)
-    ON CONFLICT (name) DO UPDATE SET
+      ('Super Admin',                'wms', '{}'::jsonb),
+      ('Retail- Limited acess',      'wms', '{}'::jsonb),
+      ('Warehouse - Limited Access', 'wms', '{}'::jsonb)
+    ON CONFLICT (name, scope) DO UPDATE SET
       updated_at = now()
   `);
 

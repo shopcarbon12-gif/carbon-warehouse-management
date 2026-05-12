@@ -48,9 +48,13 @@ export async function POST(req: Request) {
   // This is the operator's "I tested it, it works" signal — wired here from
   // the operator-driven /antenna-test page (the agent's own auto-test
   // result endpoint was the only writer before; now both paths persist).
+  //
+  // rawMode (admin reader-raw-test) suppresses this write so a diagnostic
+  // run never green-pins an antenna based on a test the operator wasn't
+  // asserting "this antenna works" with.
   const passed = s.totalReadsCount > 0;
   const pool = getPool();
-  if (pool) {
+  if (pool && !s.rawMode) {
     try {
       await pool.query(
         `UPDATE devices SET

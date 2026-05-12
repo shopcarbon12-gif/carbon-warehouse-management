@@ -64,9 +64,22 @@ export async function applyRfidMigrations(
     return 0;
   }
 
+  // Migrations use mixed 3-digit ("019_") and 4-digit ("0040_") numeric
+  // prefixes. Default lexicographic sort puts "0040" before "005" (since
+  // "0040" < "005" by string-compare), which means a fix-up migration
+  // like 0045_cdm_agents_recover.sql tries to ALTER a table that's
+  // created by 027_carbon_cdm_zones_and_hierarchy.sql — fresh DBs blow
+  // up before they finish. Sort by the leading integer instead so the
+  // order reflects intent: 001, 002, …, 019, 0040, 0041, …, 027, ….
   const allNames = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
-    .sort();
+    .sort((a, b) => {
+      const pa = parseInt(a, 10);
+      const pb = parseInt(b, 10);
+      if (Number.isNaN(pa) || Number.isNaN(pb)) return a.localeCompare(b);
+      if (pa !== pb) return pa - pb;
+      return a.localeCompare(b);
+    });
 
   const legacyFiles = allNames.filter(isLegacyRfidMigration);
   const tailFiles = allNames.filter((n) => !isLegacyRfidMigration(n));

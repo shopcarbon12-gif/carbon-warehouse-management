@@ -102,11 +102,16 @@ export async function POST(req: Request) {
   // ~60s and stay green while reads keep flowing. Operator running a test
   // and seeing reads on screen but a stale offline pill is the bug this
   // patches — pre-fix, only normal-scan reads bumped the timestamp.
+  //
+  // rawMode (admin reader-raw-test page) suppresses this write so a pure
+  // diagnostic run leaves no trace and no green-dot lie on the dashboard.
   if (parsed.data.reads.length > 0) {
-    await pool.query(
-      `UPDATE devices SET last_read_at = now(), updated_at = now() WHERE id = $1::uuid`,
-      [s.antennaId],
-    );
+    if (!s.rawMode) {
+      await pool.query(
+        `UPDATE devices SET last_read_at = now(), updated_at = now() WHERE id = $1::uuid`,
+        [s.antennaId],
+      );
+    }
     // Track lifetime reads on the session so /stop can decide pass/fail.
     recordSessionReads(s.id, parsed.data.reads.length);
   }

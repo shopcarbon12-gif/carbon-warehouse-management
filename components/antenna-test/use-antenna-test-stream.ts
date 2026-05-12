@@ -68,6 +68,7 @@ type StreamMessage =
 export function useAntennaTestStream(
   sessionId: string | null,
   paused: boolean = false,
+  streamUrl: string = "/api/antenna-test/stream",
 ) {
   const [rows, setRows] = useState<Map<string, AntennaTestRow>>(new Map());
   const [stats, setStats] = useState<AntennaTestStats>({
@@ -76,6 +77,10 @@ export function useAntennaTestStream(
     droppedBadCrc: 0,
   });
   const [status, setStatus] = useState<AntennaTestStatus>("idle");
+  /** Last lifecycle event's `reason` field. Surfaced to the UI so it can
+   *  explain WHY a session armed/ended (e.g. "bridge held by production",
+   *  binary stderr message, spawn error). */
+  const [lifecycleReason, setLifecycleReason] = useState<string | null>(null);
   const [sweepProgress, setSweepProgress] =
     useState<AntennaTestSweepProgress | null>(null);
   /** Ref so the SSE handler doesn't re-run on every state change. */
@@ -102,6 +107,7 @@ export function useAntennaTestStream(
       setStats({ uniqueEpcs: 0, totalReads: 0, droppedBadCrc: 0 });
       setSweepProgress(null);
       setStatus("armed");
+      setLifecycleReason(null);
     }
   }, [sessionId]);
 
@@ -113,6 +119,7 @@ export function useAntennaTestStream(
     setStats({ uniqueEpcs: 0, totalReads: 0, droppedBadCrc: 0 });
     setSweepProgress(null);
     setStatus("idle");
+    setLifecycleReason(null);
   }, []);
 
   useEffect(() => {
@@ -121,7 +128,7 @@ export function useAntennaTestStream(
       return;
     }
 
-    const es = new EventSource(`/api/antenna-test/stream?sessionId=${encodeURIComponent(sessionId)}`);
+    const es = new EventSource(`${streamUrl}?sessionId=${encodeURIComponent(sessionId)}`);
     let pendingFlush: number | null = null;
     let dirty = false;
 
@@ -154,6 +161,7 @@ export function useAntennaTestStream(
       // gates — that's the operator's freeze semantic.
       if (msg.kind === "lifecycle") {
         setStatus(msg.status);
+        if (msg.reason !== undefined) setLifecycleReason(msg.reason);
         return;
       }
       if (msg.kind === "stats") {
@@ -224,5 +232,5 @@ export function useAntennaTestStream(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  return { rows, stats, status, sweepProgress, clear };
+  return { rows, stats, status, lifecycleReason, sweepProgress, clear };
 }

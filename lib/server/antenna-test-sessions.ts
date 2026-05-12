@@ -26,7 +26,10 @@
 import { randomUUID } from "node:crypto";
 
 export type AntennaTestFlags = {
-  /** dBm × 10, matches MonsoonReader's `--power` arg. Range 100..330. */
+  /** dBm × 10, matches MonsoonReader's `--power` arg. Range 0..330
+   *  (the standard antenna-test page enforces 100..330; the admin
+   *  reader-raw-test page relaxes the floor to 0 for diagnosing
+   *  silent radios at low power). */
   powerArg: number;
   /** Inventory cycle time per pass; binary's `--read_time_ms`. */
   readTimeMs: number;
@@ -79,6 +82,11 @@ export type AntennaTestSession = {
    *  persists last_test_passed to the antenna row, so a passing test sticks
    *  the antenna green permanently per the Hardware Config rule. */
   totalReadsCount: number;
+  /** When true, every WMS-side write is suppressed: ingest skips the
+   *  antenna last_read_at bump, stop skips last_test_passed. Used by the
+   *  admin reader-raw-test page so a diagnostic run leaves zero trace in
+   *  the DB and no false-green dots on hardware-config. */
+  rawMode: boolean;
 };
 
 /**
@@ -97,8 +105,19 @@ export type AntennaTestSession = {
  */
 const SESSION_MAX_IDLE_MS = 60_000;
 
-const byReader = new Map<string, AntennaTestSession>();
-const byId = new Map<string, AntennaTestSession>();
+/**
+ * Pinned to globalThis so the same Map survives webpack/Next.js dev-mode
+ * double-evaluation across route bundles (start/stop/stream/ingest live
+ * in separate bundles). See note in raw-test-direct.ts.
+ */
+const G = globalThis as unknown as {
+  __antennaTestById?: Map<string, AntennaTestSession>;
+  __antennaTestByReader?: Map<string, AntennaTestSession>;
+};
+const byReader: Map<string, AntennaTestSession> =
+  G.__antennaTestByReader ?? (G.__antennaTestByReader = new Map());
+const byId: Map<string, AntennaTestSession> =
+  G.__antennaTestById ?? (G.__antennaTestById = new Map());
 
 function pruneStale(now: number): void {
   const toDrop: string[] = [];
@@ -122,6 +141,7 @@ export function createSession(input: {
   flags: AntennaTestFlags;
   sweep: AntennaTestSweep | null;
   startedBy: string | null;
+  rawMode?: boolean;
 }): { ok: true; session: AntennaTestSession } | { ok: false; reason: "reader_busy"; existing: AntennaTestSession } {
   const now = Date.now();
   pruneStale(now);
@@ -140,6 +160,7 @@ export function createSession(input: {
     startedAt: now,
     lastSeenAt: now,
     totalReadsCount: 0,
+    rawMode: input.rawMode === true,
   };
   byId.set(session.id, session);
   byReader.set(session.readerId, session);

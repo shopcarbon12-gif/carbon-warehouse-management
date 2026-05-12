@@ -260,7 +260,37 @@ type ReaderSlot = {
    *  state). The freshly-created slot's slotCreatedAt > recover_requested_at,
    *  so the same stamp won't keep retriggering. */
   slotCreatedAt: number;
+  /**
+   * Pending stopSlot belt-and-braces abort timer. stopSlot() schedules
+   * `ensureRadioStopped()` 11 s after kill to GUARANTEE the chip's radio
+   * stops. But if the slot gets a fresh child spawned before that timer
+   * fires (e.g. operator hits Stop-all then Start-all within 11 s, or a
+   * scan-session wakes the reader), the stale abort lands on the NEW
+   * child's chip and silently sabotages its inventory — every reader in
+   * the fleet ends up cycling silent. Bug observed live 2026-05-11. We
+   * track the timer handle here so the next spawn can cancel it.
+   *
+   * null = no pending abort timer.
+   */
+  pendingAbortTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * ms timestamp of the last ensureRadioStopped fired for this slot.
+   * Gate for the on-exit (0-byte) abort path — without it, the abort
+   * fires every ~5 s during a respawn loop, which puts the chip into
+   * the exact post-RadioAbortOperation wedge state the abort was meant
+   * to recover from. The counter we tried to use (consecutiveZeroByteKicks)
+   * is reset by auto-sweep recovery at line 720, so we use an
+   * independent timestamp here. Aborts within ABORT_COOLDOWN_MS of the
+   * last one are skipped. 0 = never aborted.
+   */
+  lastAbortAt: number;
 };
+
+/** Minimum wall-clock between consecutive on-exit aborts per slot. Long
+ *  enough to give the chip a real chance to respond to fresh inventory
+ *  commands without being kicked back into wedge. 30 s matches the
+ *  sweep-recovery cooldown elsewhere in this file. */
+const ABORT_COOLDOWN_MS = 30_000;
 
 /** Operator-tunable knobs an active /antenna-test session imposes on a reader. */
 export type TestModeSpec = {
@@ -915,6 +945,8 @@ export class MonsoonSupervisor {
         muxCurrentIdx: 0,
         muxSwapAtMs: Date.now() + SUPERVISOR_MUX_INTERVAL_MS,
         slotCreatedAt: Date.now(),
+        pendingAbortTimer: null,
+        lastAbortAt: 0,
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -1113,6 +1145,19 @@ export class MonsoonSupervisor {
 
   private spawnReader(slot: ReaderSlot): void {
     if (slot.shuttingDown) return;
+    // If a prior stopSlot scheduled an 11-s ensureRadioStopped that hasn't
+    // fired yet, cancel it now — we're about to put a fresh inventory
+    // process on this slot's chip, and that stale abort would sabotage
+    // the new binary's inventory (fleet-wide silent-respawn bug observed
+    // 2026-05-11). See pendingAbortTimer comment on ReaderSlot.
+    if (slot.pendingAbortTimer) {
+      clearTimeout(slot.pendingAbortTimer);
+      slot.pendingAbortTimer = null;
+      log.info("supervisor: cancelled pending stale abort before respawn", {
+        readerId: slot.spec.id,
+        readerName: slot.spec.name,
+      });
+    }
     // TEST_MODE forces the console driver — the stream binary's bursty
     // alive-but-stuck behaviour would defeat the live-feedback UX of the
     // /antenna-test page. The new_monsoonreader is on the VM regardless
@@ -1335,9 +1380,33 @@ export class MonsoonSupervisor {
       // not that the bridge is dead. ensureRadioStopped resets the chip
       // session so the next spawn starts clean. Extend the respawn
       // delay so the abort has time to grab the bridge's single TCP slot.
+      //
+      // CRITICAL FIX 2026-05-11: previously this fired the abort on
+      // EVERY 0-byte exit, which produced an ~5-second-cadence loop of
+      // abort → respawn → abort → respawn. Each abort puts the chip in
+      // a post-RadioAbortOperation wedge state where the next binary's
+      // inventory commands are acked but produce no tag frames. The
+      // loop was the bug — not the chip. Now we only fire the abort on
+      // the FIRST 0-byte exit of a streak; subsequent 0-byte exits skip
+      // the abort and just respawn, giving the chip a chance to actually
+      // accept the new binary's inventory commands without being kicked
+      // back into wedge state. Counter is reset by any spawn that sees
+      // bytes (slot.bytesSinceSpawn = true).
       if (!slot.bytesSinceSpawn) {
         this.pushReaderOfflineIfDue(slot, Date.now());
-        this.ensureRadioStopped(spec);
+        // Only fire abort if we haven't fired one for this slot in the
+        // last ABORT_COOLDOWN_MS. Without this gate, the abort fires on
+        // EVERY 0-byte exit in a 5-s respawn loop and the chip ends up
+        // stuck in a post-RadioAbortOperation wedge state where it acks
+        // commands but won't emit tag frames. (consecutiveZeroByteKicks
+        // is reset by auto-sweep recovery, so we use an independent
+        // timestamp here.)
+        const now = Date.now();
+        if (now - slot.lastAbortAt >= ABORT_COOLDOWN_MS) {
+          slot.lastAbortAt = now;
+          this.ensureRadioStopped(spec);
+        }
+        slot.consecutiveZeroByteKicks += 1;
       }
       const finalDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
       setTimeout(() => {
@@ -1611,9 +1680,27 @@ export class MonsoonSupervisor {
       // means a wedged chip Gen2 state, not a dead bridge. Send a radio
       // abort so the next spawn doesn't inherit the lock; extend the
       // respawn delay so the abort has time to grab the bridge.
+      //
+      // CRITICAL FIX 2026-05-11: only abort on the FIRST 0-byte exit of
+      // a streak. Subsequent aborts in a 5-s respawn loop create the
+      // exact wedge state they're trying to fix — chip ends up accepting
+      // commands but emitting no tag frames forever. See matching change
+      // in the stream-driver on-exit branch above.
       if (!slot.bytesSinceSpawn) {
         this.pushReaderOfflineIfDue(slot, Date.now());
-        this.ensureRadioStopped(spec);
+        // Only fire abort if we haven't fired one for this slot in the
+        // last ABORT_COOLDOWN_MS. Without this gate, the abort fires on
+        // EVERY 0-byte exit in a 5-s respawn loop and the chip ends up
+        // stuck in a post-RadioAbortOperation wedge state where it acks
+        // commands but won't emit tag frames. (consecutiveZeroByteKicks
+        // is reset by auto-sweep recovery, so we use an independent
+        // timestamp here.)
+        const now = Date.now();
+        if (now - slot.lastAbortAt >= ABORT_COOLDOWN_MS) {
+          slot.lastAbortAt = now;
+          this.ensureRadioStopped(spec);
+        }
+        slot.consecutiveZeroByteKicks += 1;
       }
       const finalDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
       setTimeout(() => {
@@ -1795,6 +1882,13 @@ export class MonsoonSupervisor {
     slot.shuttingDown = true;
     slot.streamSocket?.destroy();
     slot.streamSocket = null;
+    // If a prior stopSlot already scheduled an abort that hasn't fired
+    // yet, drop it — we only want at most one pending belt-and-braces
+    // abort per slot, and the latest stop's intent supersedes any prior.
+    if (slot.pendingAbortTimer) {
+      clearTimeout(slot.pendingAbortTimer);
+      slot.pendingAbortTimer = null;
+    }
     if (slot.child) {
       slot.child.kill("SIGTERM");
       setTimeout(() => slot.child?.kill("SIGKILL"), 10_000);
@@ -1807,7 +1901,26 @@ export class MonsoonSupervisor {
       // operator click on Pause leaves the chassis transmitting RF
       // ("infinite cycle" command in the chip's queue) and physically
       // hot, which is exactly the bug 2026-05-04 caught with .79.
-      setTimeout(() => this.ensureRadioStopped(slot.spec), 11_000);
+      //
+      // CRITICAL: we store the handle on the slot so that if a fresh
+      // child gets spawned for this slot within 11 s (Stop-all + Start-all
+      // race, or a scan-session wake right after a transient stop), the
+      // spawn path can cancel this stale abort before it slams the live
+      // chip and silently aborts the new inventory. The fleet-wide silent-
+      // respawn loop observed 2026-05-11 was this exact race.
+      slot.pendingAbortTimer = setTimeout(() => {
+        slot.pendingAbortTimer = null;
+        // Last-ditch self-check: don't abort if a fresh child is alive on
+        // the slot right now. Belt-and-braces on the belt-and-braces.
+        if (slot.child && slot.child.exitCode === null && !slot.shuttingDown) {
+          log.info("supervisor: skipping stale ensureRadioStopped — slot has live child", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+          });
+          return;
+        }
+        this.ensureRadioStopped(slot.spec);
+      }, 11_000);
     }
   }
 

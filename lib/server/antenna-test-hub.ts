@@ -48,7 +48,16 @@ type Subscriber = {
   send: (sseChunk: string) => void;
 };
 
-const subs = new Set<Subscriber>();
+/**
+ * Pinned to globalThis so that webpack/Next.js dev-mode double-evaluation
+ * of this module doesn't end up with the subscribe and publish call sites
+ * holding different Set instances. Without this, the SSE route subscribes
+ * into bundle-A's Set while the ingest/spawn route publishes into
+ * bundle-B's Set, and the browser sees zero reads.
+ */
+const G = globalThis as unknown as { __antennaTestHubSubs?: Set<Subscriber> };
+const subs: Set<Subscriber> =
+  G.__antennaTestHubSubs ?? (G.__antennaTestHubSubs = new Set());
 
 export function subscribeAntennaTestStream(
   sessionId: string,
