@@ -30,16 +30,22 @@ const RESET_TIMEOUT_MS = 30_000;
  */
 const EXPECTED_GATEWAY = "192.168.1.1";
 /**
- * Standard WIZnet inactivity timeout (seconds). When set to 0, the bridge
- * disables its TCP idle-eviction — meaning if a client TCP RSTs (e.g. a
- * SIGKILL'd MonsoonReader child), the bridge keeps the slot pinned forever
- * because it was never told to give up. Live evidence on .69 (2026-05-09):
- * WIZnet shipped/configured with Inactivity=0 while every other bridge in
- * the fleet had 20. Symptom was 562 reads / 1 unique EPC after an antenna
- * test — the chassis MCU was stuck waiting for a half-open R2000 reply
- * that never arrived because the bridge wouldn't release the dead client.
+ * Standard WIZnet inactivity timeout (seconds). 0 = disabled (bridge never
+ * auto-drops a client). Was 20s before 2026-05-12 — that turned out to be
+ * the FLEET-WIDE wedge source: any chip that goes silent for >20 s (which
+ * is normal during inventory startup, multi-second tagFocus pauses, or a
+ * brief PLL relock) causes the bridge to FIN-close its TCP client. The
+ * new_monsoonreader binary then sits in CLOSE-WAIT forever — TCP looks
+ * "ESTAB" to it, `recvfrom() = 0` (EOF) ignored — and the chip stops
+ * receiving reader commands. Symptom: reader reads briefly post-spawn
+ * then goes permanently dark. Verified 2026-05-12 against .18 / .225:
+ * setting `inactivity=0` made both recover to top-tier read rates and
+ * sustain. The earlier 2026-05-09 .69 misdiagnosis (562 reads / 1 unique
+ * after antenna test) was actually a separate test-mode loop bug that
+ * had nothing to do with the bridge's idle timer; the supervisor's
+ * antenna-test cleanup path was incorrectly blamed.
  */
-const EXPECTED_INACTIVITY = 20;
+const EXPECTED_INACTIVITY = 0;
 /** Carbon network's expected control port for MonsoonReader. */
 const EXPECTED_PORT = 10002;
 /**

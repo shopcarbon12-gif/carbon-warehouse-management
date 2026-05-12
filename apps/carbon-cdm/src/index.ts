@@ -95,6 +95,10 @@ async function main(): Promise<void> {
         });
       });
     },
+    // Reader-removed callback: supervisor pruned the slot during reconcile.
+    // Drop the aggregator queue so buffered reads for a removed/paused
+    // reader don't sit retrying against /api/cdm-agents/reads forever.
+    (readerId) => aggregator.flushAndDrop(readerId),
   );
 
   // Two-way wiring: supervisor needs to push TEST_MODE reads into the
@@ -122,7 +126,12 @@ async function main(): Promise<void> {
   antennaTest.start();
 
   let lastPullOk = false;
-  const stopHeartbeat = startHeartbeat(env, () => !lastPullOk);
+  const stopHeartbeat = startHeartbeat(
+    env,
+    () => !lastPullOk,
+    () => supervisor.getWedgedReaders(),
+    () => supervisor.getPowerSuggestions(),
+  );
   const stopWiznetDiscovery = startWiznetDiscovery(env);
 
   const pullConfig = async () => {

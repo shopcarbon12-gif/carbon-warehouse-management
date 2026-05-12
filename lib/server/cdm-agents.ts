@@ -47,6 +47,31 @@ export const heartbeatSchema = z.object({
   /** Agent's process boot time (ISO). Server compares this against
    *  `recover_requested_at` to decide whether to ask the agent to exit. */
   bootTimeIso: z.string().datetime().optional(),
+  /** Readers the supervisor flagged as Level-3 hardware-wedged. Each entry
+   *  stamps `devices.chassis_wedged_at`. Readers in the agent's bundle but
+   *  absent from this list get the column cleared (self-healed). */
+  wedgedReaders: z
+    .array(
+      z.object({
+        readerId: z.string().uuid(),
+        wedgedSinceMs: z.number().int().nonnegative(),
+      }),
+    )
+    .max(64)
+    .optional(),
+  /** Auto-sweep diagnosed a sub-configured working power for these readers.
+   *  Stamped on each enabled antenna of the reader as `suggested_power_dbm`.
+   *  Hardware Config surfaces a one-click apply banner. Operator approves
+   *  the actual config change — supervisor never silently downgrades. */
+  powerSuggestions: z
+    .array(
+      z.object({
+        readerId: z.string().uuid(),
+        suggestedDbm: z.number().int().min(0).max(33),
+      }),
+    )
+    .max(64)
+    .optional(),
 });
 
 export type HeartbeatBody = z.infer<typeof heartbeatSchema>;
@@ -269,6 +294,65 @@ export async function recordAgentHeartbeat(
       restartRequested = true;
     }
   }
+
+  // Sync `chassis_wedged_at` from the agent's wedge-Level-3 list. Readers
+  // in the agent's bundle that aren't in the wedged list get their flag
+  // cleared (self-healed). Readers owned by OTHER agents are untouched.
+  const wedgedIds = (body.wedgedReaders ?? []).map((w) => w.readerId);
+  if (wedgedIds.length > 0) {
+    await client.query(
+      `UPDATE devices
+         SET chassis_wedged_at = now(), updated_at = now()
+         WHERE cdm_agent_id = $1::uuid
+           AND id = ANY($2::uuid[])
+           AND chassis_wedged_at IS NULL`,
+      [agentId, wedgedIds],
+    );
+  }
+  await client.query(
+    `UPDATE devices
+       SET chassis_wedged_at = NULL, updated_at = now()
+       WHERE cdm_agent_id = $1::uuid
+         AND chassis_wedged_at IS NOT NULL
+         AND NOT (id = ANY($2::uuid[]))`,
+    [agentId, wedgedIds],
+  );
+
+  // Sync power suggestions onto antenna rows. The supervisor reports per-
+  // reader; we propagate to every enabled antenna of that reader since the
+  // sweep finding applies to the chassis radio shared by them all. Cleared
+  // for any reader owned by this agent that isn't in the suggestion list.
+  const suggestions = body.powerSuggestions ?? [];
+  for (const s of suggestions) {
+    await client.query(
+      `UPDATE devices
+         SET suggested_power_dbm = $3::int,
+             suggested_power_dbm_at = now(),
+             updated_at = now()
+         WHERE parent_device_id = $2::uuid
+           AND device_type = 'antenna'
+           AND tenant_id IN (
+             SELECT tenant_id FROM cdm_agents WHERE id = $1::uuid
+           )`,
+      [agentId, s.readerId, s.suggestedDbm],
+    );
+  }
+  const suggestedReaderIds = suggestions.map((s) => s.readerId);
+  await client.query(
+    `UPDATE devices
+       SET suggested_power_dbm = NULL,
+           suggested_power_dbm_at = NULL,
+           updated_at = now()
+       WHERE device_type = 'antenna'
+         AND suggested_power_dbm IS NOT NULL
+         AND parent_device_id IN (
+           SELECT id FROM devices
+             WHERE cdm_agent_id = $1::uuid
+               AND NOT (id = ANY($2::uuid[]))
+         )`,
+    [agentId, suggestedReaderIds],
+  );
+
   return { restart_requested: restartRequested };
 }
 
@@ -497,6 +581,17 @@ export type AgentConfigReader = {
    *  index + drop from map → next reconcile re-spawns with fresh state).
    *  Null = no reset pending. */
   reader_recover_requested_at: string | null;
+  /** WIZnet bridge MAC, pulled from devices.mac_address. Agent uses this
+   *  for `wiznet-cli --reset` recovery calls. Older bundles may omit;
+   *  agent falls back to `ip neigh` ARP lookup. */
+  mac_address?: string | null;
+  /** Per-reader forced respawn cadence (ms). When > 0, the supervisor
+   *  kills+respawns the binary every N ms in normal scanning to refresh
+   *  the chip's session state — used on chassis that exhibit Gen2
+   *  inventory deadlock under long-running `--infinite` mode. Pulled
+   *  from `devices.config.force_respawn_interval_ms`. NULL/missing =
+   *  no forced respawn (default for healthy chassis). */
+  force_respawn_interval_ms?: number | null;
 };
 
 export type AgentConfigBundle = {
@@ -545,6 +640,7 @@ export async function getAgentConfigBundle(
     scan_paused_at: string | null;
     scan_schedule: ScanSchedule | null;
     reader_recover_requested_at: string | null;
+    mac_address: string | null;
   }>(
     `SELECT
        d.id::text,
@@ -558,7 +654,8 @@ export async function getAgentConfigBundle(
        d.test_pending_at,
        d.scan_paused_at::text AS scan_paused_at,
        d.scan_schedule,
-       d.reader_recover_requested_at::text AS reader_recover_requested_at
+       d.reader_recover_requested_at::text AS reader_recover_requested_at,
+       d.mac_address
      FROM devices d
      LEFT JOIN zones z ON z.id = d.zone_id
      WHERE d.cdm_agent_id = $1::uuid
@@ -618,6 +715,7 @@ export async function getAgentConfigBundle(
       antenna_count?: number;
       epc_prefix?: string;
       monsoon_driver?: string;
+      force_respawn_interval_ms?: number;
     };
     const list = antennasByParent.get(d.id) ?? [];
     list.sort((a, b) => a.antenna_number - b.antenna_number);
@@ -641,6 +739,11 @@ export async function getAgentConfigBundle(
         d.scan_schedule,
       ),
       reader_recover_requested_at: d.reader_recover_requested_at,
+      force_respawn_interval_ms:
+        cfg.force_respawn_interval_ms && cfg.force_respawn_interval_ms > 0
+          ? Number(cfg.force_respawn_interval_ms)
+          : null,
+      mac_address: d.mac_address,
     });
   }
 

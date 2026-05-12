@@ -687,7 +687,18 @@ function ZoneBlock({
 function ReaderHealthBadge({ health }: { health: HardwareReaderRow["health"] }) {
   if (health.status === "ok") return null;
   const cfg =
-    health.status === "stuck"
+    health.status === "needs_service"
+      ? {
+          cls: "border-fuchsia-400/60 bg-fuchsia-500/20 text-fuchsia-200",
+          label: "needs service",
+          tip:
+            `Supervisor exhausted every software recovery (6+ failed cycles in ` +
+            `10 min) — the chassis radio is wedged below software reach. The ` +
+            `supervisor has stopped retrying on this reader to save CPU; it will ` +
+            `auto-clear once the chip starts reading again. Physical action: ` +
+            `swap the antenna cable, or PoE-cycle the chassis.`,
+        }
+      : health.status === "stuck"
       ? {
           cls: "border-red-400/50 bg-red-500/15 text-red-300",
           label: "stuck",
@@ -911,6 +922,21 @@ function AntennaLine({
         <span className="rounded bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[var(--wms-muted)]">
           {power} dBm
         </span>
+      ) : null}
+      {antenna.suggested_power_dbm !== null && antenna.suggested_power_dbm !== power ? (
+        <button
+          type="button"
+          onClick={() => onEditAntenna(reader, antenna)}
+          title={
+            `Supervisor auto-sweep found this antenna reads at ${antenna.suggested_power_dbm} dBm ` +
+            `but configured ${power ?? "?"} dBm produces no reads. Click to open the editor ` +
+            `and apply the suggested power. Banner disappears once the antenna self-heals at ` +
+            `configured.`
+          }
+          className="rounded border border-amber-400/60 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300 hover:bg-amber-500/25"
+        >
+          try {antenna.suggested_power_dbm} dBm
+        </button>
       ) : null}
       {isOff ? (
         <span className="rounded border border-zinc-500/40 bg-zinc-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase text-zinc-400">

@@ -59,6 +59,17 @@ export type AgentConfigReader = {
    *  the supervisor falls back to `ip neigh show IP` to resolve MAC
    *  on-demand from the kernel ARP table. */
   mac_address?: string | null;
+  /** Per-reader forced respawn cadence (milliseconds). When set, the
+   *  supervisor kills + respawns the binary every N ms in normal scanning,
+   *  mimicking what the antenna-test sweep mode does naturally between
+   *  steps. Use only on chassis that exhibit chip-firmware session-state
+   *  degradation under long-running `--infinite` mode (the chip produces
+   *  reads for ~10-20 s after spawn, then silences even though the binary
+   *  and bridge are healthy). Sweep mode masks this because each step
+   *  kills+respawns the binary anyway — this setting reproduces that
+   *  behaviour in normal scanning. Pulled from `devices.config.force_
+   *  respawn_interval_ms`. NULL/missing → no forced respawn (default). */
+  force_respawn_interval_ms?: number | null;
 };
 
 export type AgentConfigBundle = {
@@ -129,6 +140,17 @@ export async function postHeartbeat(
     hostname: string;
     status: HeartbeatStatus;
     bootTimeIso?: string;
+    /** Readers the supervisor has flagged as hardware-wedged (Level 3 in
+     *  the wedge-level state machine). Each entry sets
+     *  `devices.chassis_wedged_at` on the WMS side so Hardware Config can
+     *  surface a "needs hardware service" badge. Omit / empty array when
+     *  no readers are wedged. */
+    wedgedReaders?: { readerId: string; wedgedSinceMs: number }[];
+    /** Auto-sweep diagnosed working power below the configured value for
+     *  these readers. The WMS stamps `suggested_power_dbm` on the reader's
+     *  antennas so Hardware Config can offer a one-click "Apply X dBm"
+     *  banner. Cleared on self-heal. */
+    powerSuggestions?: { readerId: string; suggestedDbm: number }[];
   },
 ): Promise<HeartbeatResponse> {
   const r = await request<HeartbeatResponse>(

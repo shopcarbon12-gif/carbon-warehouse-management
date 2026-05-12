@@ -23,6 +23,13 @@ const BOOT_TIME_ISO = new Date().toISOString();
 export function startHeartbeat(
   env: AgentEnv,
   isDegraded: () => boolean,
+  /** Snapshot of supervisor wedge-Level-3 readers, called each heartbeat
+   *  so the WMS gets a fresh list of chassis that need physical service.
+   *  Omit if the agent isn't running a supervisor (test harnesses, etc.). */
+  getWedgedReaders?: () => { readerId: string; wedgedSinceMs: number }[],
+  /** Snapshot of supervisor auto-sweep power suggestions (working power
+   *  found below the operator-configured value). */
+  getPowerSuggestions?: () => { readerId: string; suggestedDbm: number }[],
 ): () => void {
   const intervalMs = env.CARBON_HEARTBEAT_INTERVAL_SEC * 1000;
   const host = effectiveHostname(env);
@@ -37,6 +44,8 @@ export function startHeartbeat(
         hostname: host,
         status: isDegraded() ? "degraded" : "online",
         bootTimeIso: BOOT_TIME_ISO,
+        wedgedReaders: getWedgedReaders?.() ?? [],
+        powerSuggestions: getPowerSuggestions?.() ?? [],
       });
       if (r.restart_requested) {
         log.warn("heartbeat: restart_requested by server — exiting (systemd will respawn)", {

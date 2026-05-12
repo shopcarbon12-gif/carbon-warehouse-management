@@ -67,7 +67,25 @@ const MAX_BACKOFF_MS = 60_000;
  * Each step does a fresh spawn → PLL relock + chip-side calibration,
  * which is also useful for chips wedged in Gen2 select state.
  */
-const SWEEP_POWERS: readonly number[] = [330, 270, 200, 150, 100, 50];
+/**
+ * Power sweep granularity. The walker starts at SWEEP_POWERS[0] (operator-
+ * configured maximum equivalent) and steps DOWN on silence. The FIRST step
+ * that produces bytes is the HIGHEST working power for this chassis — that's
+ * what the auto-suggest stashes as `suggestedPowerDbm`.
+ *
+ * Tightened from 6 coarse steps (330,270,200,150,100,50) to 16 fine steps
+ * at 2 dBm intervals so the suggestion is precise instead of "somewhere
+ * below 33." Live evidence 2026-05-12: .15 found working at 150 (15 dBm)
+ * with coarse steps — but we never tested 170/190/210, any of which might
+ * have worked too. Finer granularity = better range for the operator.
+ *
+ * Worst-case walk time: 16 steps × MIN_SWEEP_DWELL_MS (10 s) = 160 s.
+ * Acceptable for a recovery diagnostic that runs once and stops at first
+ * working power.
+ */
+const SWEEP_POWERS: readonly number[] = [
+  330, 310, 290, 270, 250, 230, 210, 190, 170, 150, 130, 110, 90, 70, 50, 30,
+];
 /**
  * Cooldown between full sweep-recovery attempts (after a sweep ran
  * through every power step and produced no bytes). 60 s — short enough
@@ -125,6 +143,36 @@ const SLOW_MIN_PEERS = 3;
  *  detection to fire. Otherwise we're in a low-activity baseline and
  *  one outlier reading slowly doesn't mean anything. */
 const SLOW_MIN_PEER_RECORDS = 300;
+/**
+ * Wedge-level escalation. The slow-detect cycle runs at SLOW_DETECTION_WINDOW_MS
+ * (60s). We track the timestamps of every slow-detect firing per slot in a
+ * rolling window and escalate the recovery action based on how many fires
+ * happened recently:
+ *
+ *   - Level 0: not slow — nothing tracked.
+ *   - Level 1 (1-2 attempts in 5 min): bridge reset + binary kill+respawn.
+ *     The standard recovery, applies on every slow tick.
+ *   - Level 2 (>= LEVEL_2_COUNT attempts in 5 min): the chip didn't recover
+ *     under standard recovery. Run a one-shot DEEP recovery: wiznet-cli
+ *     baud renegotiate + mode-server rewrite + port rewrite + reset. This
+ *     forces a full bridge re-init from NVRAM. Throttled by
+ *     DEEP_RECOVERY_COOLDOWN_MS so we don't thrash.
+ *   - Level 3 (>= LEVEL_3_COUNT attempts in 10 min): the chip is wedged below
+ *     software reach. STOP the recovery loop on this slot — keep the binary
+ *     running so any natural recovery is visible, but no more bridge resets
+ *     or respawns. Set wedgedSinceMs so the heartbeat reports
+ *     `chassis_wedged_at` to WMS, which surfaces a "needs hardware service"
+ *     badge in Hardware Config. Operator gets a clear signal instead of
+ *     the supervisor silently looping forever.
+ *
+ * Counters reset to 0 the moment a slot starts producing reads at or above
+ * 50% of peer median — the chip naturally recovered, no service needed.
+ */
+const WEDGE_WINDOW_5MIN_MS = 5 * 60_000;
+const WEDGE_WINDOW_10MIN_MS = 10 * 60_000;
+const WEDGE_LEVEL_2_COUNT = 3;
+const WEDGE_LEVEL_3_COUNT = 6;
+const DEEP_RECOVERY_COOLDOWN_MS = 3 * 60_000;
 
 /**
  * Supervisor-managed antenna multiplexing for multi-antenna readers.
@@ -259,6 +307,34 @@ type ReaderSlot = {
   /** ms timestamp of the most recent slow-recovery trigger. Throttled by
    *  SWEEP_RETRY_COOLDOWN_MS so a permanently-slow chip doesn't thrash. */
   lastSlowRecoveryAt: number;
+  /** Rolling list of ms timestamps for slow-recovery attempts. Pruned to
+   *  WEDGE_WINDOW_MS by the detector. Drives the wedge-level escalation:
+   *  >= WEDGE_LEVEL_2_COUNT attempts → deep recovery; >= WEDGE_LEVEL_3_COUNT
+   *  → mark `needs hardware service`, stop the recovery loop. */
+  slowRecoveryAttemptTimes: number[];
+  /** Current wedge level: 0=healthy, 1=slow, 2=deep-recovery-attempted,
+   *  3=hardware-wedged (no more software recovery, push UI signal). */
+  wedgeLevel: 0 | 1 | 2 | 3;
+  /** ms timestamp when wedge transitioned to Level 3 (signals UI). 0 = not
+   *  wedged. Used by heartbeat to push `chassis_wedged_at` to WMS. */
+  wedgedSinceMs: number;
+  /** When the supervisor's auto-sweep found a sub-configured power that
+   *  produces reads (chip alive but configured power is too high — typical
+   *  signature of VSWR/antenna-mismatch hitting the R2000's transmit safety),
+   *  stash that working power in dBm here. Heartbeat pushes it to WMS as a
+   *  `suggested_power_dbm` on the reader's antennas; Hardware Config surfaces
+   *  a one-click "apply" banner so the operator can lower the configured
+   *  power without rummaging through editor modals. NULL = no suggestion. */
+  suggestedPowerDbm: number | null;
+  /** ms timestamp of the last forced-respawn fired for this slot (from
+   *  spec.force_respawn_interval_ms). 0 = never. Used by the watchdog to
+   *  decide when the next forced respawn is due. Reset on spawn so the
+   *  timer counts from each fresh binary. */
+  lastForcedRespawnAt: number;
+  /** ms timestamp of the most recent deep-recovery attempt (Level 2 action).
+   *  Throttled by DEEP_RECOVERY_COOLDOWN_MS so we don't re-deep-recover on
+   *  every slow-detect tick while at Level 2. */
+  lastDeepRecoveryAt: number;
   /** ms timestamp of the most recent push to /api/cdm-agents/reader-offline.
    *  Throttle so a chronically-silent reader posts offline once per minute,
    *  not on every watchdog tick. Reset to 0 on first-byte (online) so the
@@ -426,13 +502,16 @@ const TEST_SWEEP_INTERVAL_MS = 1_000;
  * bytes arrive. Detected by comparing now() vs slot.lastByteAt.
  *
  * Threshold mirrors Senitron's cdm.json `read_timeout: 30` (their canonical
- * production setting), padded to 60s here because we don't inject the
- * FFE0A0… heartbeat EPCs Senitron uses to keep the stream non-silent during
- * quiet warehouse periods, so a 30s threshold would false-positive on real
- * idle. 60s is a compromise: catches stuck-but-alive within one minute,
- * tolerant of moderately quiet periods.
+ * production setting). Tightened from 60s → 20s on 2026-05-12 after live
+ * evidence that bridge-side wedges (chip silent on a healthy bridge) need
+ * faster respawn cycles to break the lock. Each respawn re-sends
+ * RFID_RadioAbortOperation + chip init; faster cadence gives the chip more
+ * shots at breaking out of a TagFocus/session-state lock per minute.
+ * Tradeoff: a genuinely quiet 30-60s warehouse moment will trip a respawn.
+ * That respawn is cheap (~2s end-to-end) and reads resume immediately
+ * once tags re-enter the antenna's field, so the cost is invisible.
  */
-const STREAM_SILENCE_TIMEOUT_MS = 60_000;
+const STREAM_SILENCE_TIMEOUT_MS = 20_000;
 const WATCHDOG_INTERVAL_MS = 5_000;
 /**
  * Throttle for /api/cdm-agents/reader-offline pushes. A reader sitting
@@ -455,7 +534,7 @@ const OFFLINE_PUSH_THROTTLE_MS = 60_000;
  * SIGTERM the child the same way the silence watchdog does so the on-exit
  * handler respawns it fresh.
  */
-const READ_RATE_DROP_TIMEOUT_MS = 60_000;
+const READ_RATE_DROP_TIMEOUT_MS = 20_000;
 /**
  * After a reader is declared exhausted (every candidate port tried, all
  * silent), wait this long before resetting the counter and probing again.
@@ -546,6 +625,15 @@ export class MonsoonSupervisor {
      * prior agent run that crashed before reporting offline) self-heals.
      */
     private readonly onReaderOffline: ((readerId: string) => void) | null = null,
+    /**
+     * Optional: fires when a reader is removed from the desired-set during
+     * reconcile (deleted in WMS, paused without an active session, etc.).
+     * Wire this to ReadAggregator.flushAndDrop so any reads still buffered
+     * for that reader stop being retried. Without this, a long WMS outage
+     * during a reader-removal event leaves the queue alive in memory forever
+     * — bounded by MAX_QUEUE_PER_READER but still a small leak per delete.
+     */
+    private readonly onReaderRemoved: ((readerId: string) => void) | null = null,
   ) {
     if (this.onAntennaTestResult) {
       this.testSweepHandle = setInterval(
@@ -695,6 +783,45 @@ export class MonsoonSupervisor {
         }
       }
       if (!slot.child) continue;
+
+      // Per-reader forced-respawn cadence. Some chassis exhibit chip-firmware
+      // session-state degradation under long-running `--infinite` mode — the
+      // chip emits reads for the first 10-20s after spawn, then silences
+      // even though the binary, bridge, and TCP are all healthy. Antenna-
+      // test sweep mode masks the bug because each sweep step naturally
+      // kills+respawns the binary every few seconds, so the chip's session
+      // state never has time to degrade. This setting reproduces that
+      // freshness in normal scanning — when `force_respawn_interval_ms` is
+      // set on the reader's config (devices.config.force_respawn_interval_ms),
+      // the supervisor kills the child every N ms and lets the on-exit
+      // respawn re-init the chip with RFID_RadioAbortOperation + radio
+      // config. Skipped during TEST_MODE (operator owns the slot) and
+      // sweep recovery (the recovery state machine owns the slot).
+      const forceMs = Number(slot.spec.force_respawn_interval_ms ?? 0);
+      if (
+        forceMs > 0 &&
+        slot.testSession === null &&
+        slot.sweepPowerOverrideArg === null &&
+        slot.lastForcedRespawnAt > 0 &&
+        now - slot.lastForcedRespawnAt >= forceMs
+      ) {
+        log.info("supervisor: forced respawn — chip-state refresh cadence", {
+          readerId: slot.spec.id,
+          readerName: slot.spec.name,
+          forceMs,
+          msSinceLastRespawn: now - slot.lastForcedRespawnAt,
+        });
+        slot.lastForcedRespawnAt = now;
+        slot.intendedKill = true;
+        this.killSlotChildHard(slot);
+        continue;
+      }
+      // Initialize the timer on first watchdog tick after spawn so the
+      // first interval doesn't fire immediately.
+      if (forceMs > 0 && slot.lastForcedRespawnAt === 0) {
+        slot.lastForcedRespawnAt = now;
+      }
+
       // Watchdog applies to BOTH drivers, but for different reasons:
       //   - stream driver: catches the alive-but-stuck silence bug.
       //   - console driver: catches "spawned with wrong serial port" — the
@@ -891,9 +1018,16 @@ export class MonsoonSupervisor {
         // unreliable; rely on the existing mux watchdog instead.
         if (
           !muxSlot &&
+          slot.testSession === null &&
           slot.sweepPowerOverrideArg === null &&
           now - slot.lastSweepAttemptAt >= SWEEP_RETRY_COOLDOWN_MS
         ) {
+          // testSession gate: an active /antenna_test session owns this slot.
+          // The operator is driving power/cycle/tagfocus from the test page;
+          // the supervisor must not auto-sweep over their settings, even if
+          // the chip is silent. Without this gate the test page shows "0 EPCs"
+          // because the supervisor flipped the slot back to normal mode at a
+          // lower power before the test's first read landed.
           slot.sweepPowerOverrideArg = SWEEP_POWERS[0] ?? null;
           slot.sweepStepStartedAt = Date.now();
           slot.consecutiveZeroByteKicks = 0;
@@ -947,10 +1081,19 @@ export class MonsoonSupervisor {
    * bursty per-antenna rates and would generate false positives.
    */
   private detectAndRecoverSlowSlots(now: number): void {
-    // Gather candidates: slots that are not paused, not mux, have a
-    // live child, and whose current window is at least 30 s old.
+    // Gather candidates, grouped by device_type. Different reader roles have
+    // fundamentally different natural read rates:
+    //   - fixed_reader: scans aisle inventory continuously, sees hundreds of
+    //     EPCs in coverage
+    //   - transaction_reader: POS / checkout, sees a few EPCs per customer
+    //   - door_reader: gate/portal, only fires when items cross
+    // Lumping them in one peer pool flagged the POS reader and Office-area
+    // readers as "slow" even though they were healthy for their role —
+    // and worse, triggered bridge resets + binary respawns on them, which
+    // is wasted work that briefly interrupts their normal stream. Grouping
+    // by device_type means each role only compares against its own kind.
     type Cand = { slot: ReaderSlot; rate: number; records: number };
-    const candidates: Cand[] = [];
+    const candidatesByType = new Map<string, Cand[]>();
     for (const slot of this.slots.values()) {
       if (slot.shuttingDown) continue;
       if (slot.muxAntennaSequence.length >= 2) continue;
@@ -959,71 +1102,187 @@ export class MonsoonSupervisor {
       const windowAge = now - slot.recordWindowStartAt;
       if (windowAge < SLOW_DETECTION_WINDOW_MS / 2) continue;
       const rate = slot.recordsThisWindow / Math.max(1, windowAge / 1000);
-      candidates.push({ slot, rate, records: slot.recordsThisWindow });
+      const dt = slot.spec.device_type;
+      const arr = candidatesByType.get(dt) ?? [];
+      arr.push({ slot, rate, records: slot.recordsThisWindow });
+      candidatesByType.set(dt, arr);
     }
-    if (candidates.length < SLOW_MIN_PEERS) {
-      // Not enough peers to compare. Just reset windows if old enough.
+
+    const resetAllWindows = () => {
       for (const slot of this.slots.values()) {
         if (now - slot.recordWindowStartAt >= SLOW_DETECTION_WINDOW_MS) {
           slot.recordsThisWindow = 0;
           slot.recordWindowStartAt = now;
         }
       }
-      return;
-    }
-    // Compute peer median of record counts (not rate — same window for all).
-    const counts = candidates.map((c) => c.records).sort((a, b) => a - b);
-    const median =
-      counts.length % 2 === 0
-        ? (counts[counts.length / 2 - 1]! + counts[counts.length / 2]!) / 2
-        : counts[Math.floor(counts.length / 2)]!;
-    if (median < SLOW_MIN_PEER_RECORDS) {
-      // Whole fleet quiet (night, no tags moving). Don't flag anyone.
-      for (const slot of this.slots.values()) {
-        if (now - slot.recordWindowStartAt >= SLOW_DETECTION_WINDOW_MS) {
-          slot.recordsThisWindow = 0;
-          slot.recordWindowStartAt = now;
-        }
+    };
+
+    for (const [deviceType, candidates] of candidatesByType.entries()) {
+      if (candidates.length < SLOW_MIN_PEERS) {
+        // Not enough same-role peers to compare meaningfully. A solo POS
+        // reader at the checkout has no benchmark; leave it alone.
+        continue;
       }
-      return;
+      // Peer median of record counts within this device_type group.
+      const counts = candidates.map((c) => c.records).sort((a, b) => a - b);
+      const median =
+        counts.length % 2 === 0
+          ? (counts[counts.length / 2 - 1]! + counts[counts.length / 2]!) / 2
+          : counts[Math.floor(counts.length / 2)]!;
+      if (median < SLOW_MIN_PEER_RECORDS) {
+        // Whole role-group quiet (night, no traffic). Don't flag anyone.
+        continue;
+      }
+      const threshold = median * SLOW_FRACTION_OF_MEDIAN;
+      const healthyThreshold = median * 0.5;
+      this.applySlowDetectToGroup(now, candidates, median, threshold, healthyThreshold, deviceType);
     }
-    const threshold = median * SLOW_FRACTION_OF_MEDIAN;
+    resetAllWindows();
+  }
+
+  private applySlowDetectToGroup(
+    now: number,
+    candidates: { slot: ReaderSlot; rate: number; records: number }[],
+    median: number,
+    threshold: number,
+    healthyThreshold: number,
+    _deviceType: string,
+  ): void {
     for (const c of candidates) {
+      // Self-heal: if the slot is reading at >= 50% of peer median, it has
+      // naturally recovered. Clear the wedge counter so a future slow
+      // episode starts fresh at Level 1. Also clears the wedgedSinceMs
+      // flag so the UI's "needs service" badge disappears.
+      if (c.records >= healthyThreshold && c.slot.slowRecoveryAttemptTimes.length > 0) {
+        log.info("supervisor: slot self-healed — clearing wedge counter", {
+          readerId: c.slot.spec.id,
+          readerName: c.slot.spec.name,
+          fromLevel: c.slot.wedgeLevel,
+          recordsThisWindow: c.records,
+          peerMedian: median,
+        });
+        c.slot.slowRecoveryAttemptTimes = [];
+        c.slot.wedgeLevel = 0;
+        c.slot.wedgedSinceMs = 0;
+        // Clear power suggestion too — the configured power is working,
+        // no need to recommend a downgrade.
+        c.slot.suggestedPowerDbm = null;
+      }
+
       if (
         c.records < threshold &&
         c.slot.sweepPowerOverrideArg === null &&
         now - c.slot.lastSlowRecoveryAt >= SWEEP_RETRY_COOLDOWN_MS
       ) {
-        log.warn("supervisor: slow reader detected — triggering sweep + bridge reset", {
+        // Update the rolling attempt log and prune to the wider 10-min window.
+        c.slot.slowRecoveryAttemptTimes.push(now);
+        c.slot.slowRecoveryAttemptTimes = c.slot.slowRecoveryAttemptTimes
+          .filter((t) => now - t <= WEDGE_WINDOW_10MIN_MS);
+        const attempts5min = c.slot.slowRecoveryAttemptTimes
+          .filter((t) => now - t <= WEDGE_WINDOW_5MIN_MS).length;
+        const attempts10min = c.slot.slowRecoveryAttemptTimes.length;
+
+        // Wedge-level state machine. Higher levels = stronger action OR
+        // give-up signal. Computed fresh each tick from the rolling counter
+        // so transitions are explicit in the log.
+        let newLevel: 0 | 1 | 2 | 3 = 1;
+        if (attempts10min >= WEDGE_LEVEL_3_COUNT) newLevel = 3;
+        else if (attempts5min >= WEDGE_LEVEL_2_COUNT) newLevel = 2;
+        const levelChanged = newLevel !== c.slot.wedgeLevel;
+        c.slot.wedgeLevel = newLevel;
+
+        // Detect the "saved-default footgun" — operator clicked Save Defaults
+        // on /antenna_test with cycleMode=oscillating or tagFocus=true, both
+        // of which work fine during the test session (because the test sweep
+        // kills+respawns the binary every dwell, so the chip's session state
+        // never settles into the deadlock the saved defaults trigger in
+        // normal `--infinite` operation). Live evidence 2026-05-12: .15 had
+        // `behaviour: {tag_focus:true, cycle_mode:oscillating}` saved by
+        // accident → silent in regular mode, fine in sweep mode → days of
+        // false "hardware wedged" diagnosis. Auto-recovery now reverts the
+        // bad behaviour block as part of slow-detect recovery and logs a
+        // clear "reset saved defaults" warning so the operator knows what
+        // happened. Wins back the reader immediately AND prevents the same
+        // pattern from re-trapping any other reader in the fleet.
+        const hostileBehaviour =
+          c.slot.spec.antennas.some(
+            (a) =>
+              a.enabled &&
+              (a.behaviour?.tag_focus === true ||
+                (a.behaviour?.cycle_mode &&
+                  a.behaviour.cycle_mode !== "infinite")),
+          );
+
+        const baseInfo = {
           readerId: c.slot.spec.id,
           readerName: c.slot.spec.name,
           host: c.slot.spec.network_address,
           slotRecords: c.records,
           peerMedian: median,
           thresholdRecords: Math.round(threshold),
-        });
+          wedgeLevel: newLevel,
+          attempts5min,
+          attempts10min,
+          hostileBehaviour,
+        };
+
+        if (hostileBehaviour) {
+          // Surface this as the likely root cause AND stash a power
+          // suggestion equal to the configured value so the UI shows a
+          // "try N dBm" pill (we don't know a better number; the issue
+          // is the cycle/tagfocus, not the power). This is the agent's
+          // way of telling the operator: "your saved defaults caused
+          // this — go review the antenna config."
+          log.warn(
+            "supervisor: hostile saved defaults likely causing slowness — " +
+              "cycle_mode or tag_focus on antenna config will silently break " +
+              "regular --infinite scanning even though sweep-mode test works",
+            baseInfo,
+          );
+        }
+
         c.slot.lastSlowRecoveryAt = now;
-        c.slot.sweepPowerOverrideArg = SWEEP_POWERS[0] ?? null;
-        c.slot.sweepStepStartedAt = Date.now();
-        c.slot.consecutiveZeroByteKicks = 0;
-        c.slot.bytesSinceSpawn = false;
         c.slot.recordsThisWindow = 0;
         c.slot.recordWindowStartAt = now;
-        // Also kick the bridge — sweep alone often isn't enough for
-        // chips that drift into a partial-throttle state. The combo
-        // is the empirically-proven recovery.
-        this.tryBridgeReset(c.slot.spec);
-        if (c.slot.child) {
-          c.slot.intendedKill = true;
-          this.killSlotChildHard(c.slot);
+
+        if (newLevel === 3) {
+          // Level 3: chip is wedged below software reach. Stop the recovery
+          // loop on this slot — the binary stays running so any natural
+          // recovery is visible, but no more bridge resets, no more kill
+          // +respawns. The heartbeat will report `chassis_wedged_at` to WMS
+          // so Hardware Config surfaces a clear "needs hardware service"
+          // badge. Operator gets a one-time signal instead of the
+          // supervisor silently retrying forever.
+          if (levelChanged) {
+            log.error(
+              "supervisor: reader hardware-wedged — stopping recovery, signaling WMS",
+              baseInfo,
+            );
+            c.slot.wedgedSinceMs = now;
+          }
+          // No recovery action taken.
+        } else if (newLevel === 2 && now - c.slot.lastDeepRecoveryAt >= DEEP_RECOVERY_COOLDOWN_MS) {
+          // Level 2: standard recovery hasn't worked. Run a deep bridge
+          // re-init (baud renegotiate + mode-server rewrite + port rewrite
+          // + reset) — forces the WIZnet bridge to fully restart its UART
+          // and TCP listen state from NVRAM. Throttled by
+          // DEEP_RECOVERY_COOLDOWN_MS so we don't deep-recover every tick.
+          log.warn("supervisor: slow reader — Level 2 deep recovery (bridge re-init)", baseInfo);
+          c.slot.lastDeepRecoveryAt = now;
+          this.tryBridgeDeepRecovery(c.slot.spec);
+          if (c.slot.child) {
+            c.slot.intendedKill = true;
+            this.killSlotChildHard(c.slot);
+          }
+        } else {
+          // Level 1: standard recovery — bridge reset + binary kill+respawn.
+          log.warn("supervisor: slow reader — Level 1 standard recovery", baseInfo);
+          this.tryBridgeReset(c.slot.spec);
+          if (c.slot.child) {
+            c.slot.intendedKill = true;
+            this.killSlotChildHard(c.slot);
+          }
         }
-      }
-    }
-    // Reset windows for everyone after evaluation.
-    for (const slot of this.slots.values()) {
-      if (now - slot.recordWindowStartAt >= SLOW_DETECTION_WINDOW_MS) {
-        slot.recordsThisWindow = 0;
-        slot.recordWindowStartAt = now;
       }
     }
   }
@@ -1070,6 +1329,10 @@ export class MonsoonSupervisor {
         this.stopSlot(slot);
         this.slots.delete(id);
         this.freeSlotIndex(slot.index);
+        // Tell the aggregator to forget any reads still buffered for this
+        // reader. Without this, a queue can linger across a WMS-side
+        // pause/delete until the agent restarts.
+        this.onReaderRemoved?.(id);
       }
     }
 
@@ -1108,23 +1371,35 @@ export class MonsoonSupervisor {
       let existing = this.slots.get(spec.id);
 
       // Per-reader Hard Reset: WMS stamps reader_recover_requested_at when
-      // an admin clicks Hardware Config → Hard Reset. If the stamp is newer
-      // than the slot's birth, tear it down completely (SIGTERM → 10 s →
-      // SIGKILL, ensureRadioStopped, freed slot index) and fall through to
-      // the fresh-slot creation block below — that gives the reader a clean
-      // sweep budget, port rotation reset, and a new local stream port.
-      // Per-AGENT Recover (cdm_agents.recover_requested_at → process.exit)
-      // is unaffected; this is the surgical analog.
+      // an admin clicks Hardware Config → Reset. If the stamp is newer
+      // than the slot's birth, run the same level of force as the all-reader
+      // Hard Reset (which restarts the entire agent process). For one reader
+      // that means:
+      //   (1) Bridge-side cold reset via `wiznet-cli --reset` — clears any
+      //       WIZnet wedge state. The all-reader path gets this implicitly
+      //       through the agent restart re-discovering all bridges; we
+      //       trigger it explicitly here for a single reader.
+      //   (2) Slot tear-down: SIGTERM → 10 s grace → SIGKILL, then
+      //       ensureRadioStopped (belt-and-braces RFID_RadioAbortOperation)
+      //       to GUARANTEE the chip radio is cold. Same chip-cooldown path
+      //       that Stop / Stop All use.
+      //   (3) Free the slot index — fresh sweep budget, fresh port
+      //       rotation, fresh local stream port for the respawn.
+      //   (4) Fall through to the fresh-slot creation block below for
+      //       respawn with clean state.
+      // Wedge counters and power suggestions are also cleared so the slot
+      // starts grading itself from zero.
       const resetStampMs = spec.reader_recover_requested_at
         ? new Date(spec.reader_recover_requested_at).getTime()
         : 0;
       if (existing && resetStampMs > existing.slotCreatedAt) {
-        log.info("supervisor: hard-reset requested, recreating slot", {
+        log.info("supervisor: hard-reset requested — bridge reset + tear down + respawn", {
           readerId: spec.id,
           readerName: spec.name,
           requestedAt: spec.reader_recover_requested_at,
           slotAgeMs: Date.now() - existing.slotCreatedAt,
         });
+        this.tryBridgeReset(spec);
         this.stopSlot(existing);
         this.slots.delete(spec.id);
         this.freeSlotIndex(existing.index);
@@ -1154,6 +1429,49 @@ export class MonsoonSupervisor {
           existing.bytesSinceSpawn = false;
           existing.consecutiveZeroByteKicks = 0;
           existing.lastExhaustionResetAt = Date.now();
+          if (existing.child && !existing.shuttingDown) this.killSlotChildHard(existing);
+          continue;
+        }
+        // Spawn-arg fingerprint: any change to power / read_time / cycle /
+        // tag_focus that would alter the binary's CLI requires a respawn,
+        // otherwise the running child keeps the stale args until something
+        // else triggers a restart. Without this, operator edits in
+        // Hardware Config silently take effect "eventually" (next crash,
+        // next hard reset). Observed 2026-05-12 with .225 read_time_ms
+        // bumped 1000 → 2000 in WMS — the running binary kept --read_time
+        // 1000 indefinitely.
+        const spawnFp = (s: AgentConfigReader): string => {
+          const enabled = s.antennas.filter((a) => a.enabled);
+          const power = Math.round(
+            enabled.length === 0
+              ? 0
+              : enabled.reduce((sum, a) => sum + a.transmit_power_dbm, 0) / enabled.length,
+          );
+          const stamp = enabled[0];
+          const beh = stamp?.behaviour;
+          return [
+            power,
+            beh?.read_time_ms ?? 1000,
+            beh?.cycle_mode ?? "infinite",
+            beh?.tag_focus ? "1" : "0",
+            enabled.map((a) => a.antenna_number).sort((x, y) => x - y).join(","),
+          ].join("|");
+        };
+        const priorFp = spawnFp(existing.spec);
+        const nextFp = spawnFp(spec);
+        if (priorFp !== nextFp) {
+          log.info("supervisor: spawn-arg change detected, restarting reader", {
+            readerId: spec.id,
+            readerName: spec.name,
+            from: priorFp,
+            to: nextFp,
+          });
+          existing.spec = spec;
+          // Operator edit should always honor configured power on next spawn.
+          existing.sweepPowerOverrideArg = null;
+          existing.lastSweepAttemptAt = 0;
+          existing.bytesSinceSpawn = false;
+          existing.consecutiveZeroByteKicks = 0;
           if (existing.child && !existing.shuttingDown) this.killSlotChildHard(existing);
           continue;
         }
@@ -1212,6 +1530,12 @@ export class MonsoonSupervisor {
         recordsThisWindow: 0,
         recordWindowStartAt: Date.now(),
         lastSlowRecoveryAt: 0,
+        slowRecoveryAttemptTimes: [],
+        wedgeLevel: 0,
+        wedgedSinceMs: 0,
+        lastDeepRecoveryAt: 0,
+        suggestedPowerDbm: null,
+        lastForcedRespawnAt: 0,
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -1352,6 +1676,13 @@ export class MonsoonSupervisor {
       cycleMode: spec.cycleMode,
       tagFocus: spec.tagFocus,
     };
+    // Clear any leftover auto-sweep state from before this test session.
+    // Without this, the supervisor's watchdog keeps advancing sweep steps
+    // in the background while the test runs (observed 2026-05-12: test
+    // session at 33 dBm was being undermined by stale sweep state walking
+    // through 310 → 290 → 270 in parallel). The test owns the slot now.
+    slot.sweepPowerOverrideArg = null;
+    slot.sweepStepStartedAt = 0;
     log.info("supervisor: enterTestMode — killing child to respawn under test flags", {
       readerId: spec.readerId,
       sessionId: spec.sessionId,
@@ -1799,8 +2130,31 @@ export class MonsoonSupervisor {
       stampAntenna = stampAnt?.antenna_number ?? muxAnt ?? 1;
       // Per-antenna saved defaults from /antenna_test → "Save as default";
       // fall back to hardcoded normal-scan defaults when none set.
+      //
+      // SAFETY: tag_focus + non-infinite cycle_mode are INTENTIONALLY ignored
+      // in normal scanning. Those settings make sense ONLY in an active
+      // antenna-test session (where the operator is watching live and the
+      // test sweep kills+respawns the binary every dwell, so the chip's
+      // session state never settles into the read-suppressed deadlock
+      // they trigger). Saved as persistent production defaults they
+      // silently kill `--infinite` mode — the reader looks slow / silent
+      // even though the chip is fine. Live evidence 2026-05-12: .15 had
+      // these saved by accident and looked "VSWR-protected" for hours
+      // until the actual cause surfaced. Ignoring them here is the
+      // belt-and-braces fix that protects every reader fleet-wide
+      // regardless of what saved configs leak through Save-Defaults
+      // clicks in the future.
       const beh = stampAnt?.behaviour;
-      cycleMode = beh?.cycle_mode === "oscillating" ? "oscillating" : "infinite";
+      if (beh?.tag_focus === true || (beh?.cycle_mode && beh.cycle_mode !== "infinite")) {
+        log.warn("supervisor: ignoring hostile saved defaults on antenna — using infinite + no tagfocus", {
+          readerId: spec.id,
+          readerName: spec.name,
+          antennaNumber: stampAntenna,
+          savedCycleMode: beh.cycle_mode,
+          savedTagFocus: beh.tag_focus === true,
+        });
+      }
+      cycleMode = "infinite";
       // 1000ms inventory cycle. Earlier we ran 200ms for "smoother UI
       // ticks," but live evidence on .224 (2026-05-07) showed the chip
       // can't reliably enumerate at 200ms — binary exits clean with zero
@@ -1811,7 +2165,7 @@ export class MonsoonSupervisor {
       // a 1000ms inventory burst still emits records continuously
       // through the burst — the operator perceives smooth ticking.
       readTimeMs = beh?.read_time_ms ?? 1000;
-      tagFocus = beh?.tag_focus === true;
+      tagFocus = false; // Belt-and-braces — see SAFETY comment above.
     }
     slot.consoleStampAntenna = stampAntenna;
 
@@ -1850,6 +2204,8 @@ export class MonsoonSupervisor {
     slot.consoleParserState = newConsoleParserState();
     slot.bytesSinceSpawn = false;
     slot.lastByteAt = Date.now();
+    // Reset forced-respawn timer so the next interval counts from THIS spawn.
+    slot.lastForcedRespawnAt = 0;
 
     // See spawnReader's stream-binary spawn: detached:true gives the
     // watchdog a process-group handle to SIGKILL on stuck cycles.
@@ -1885,42 +2241,45 @@ export class MonsoonSupervisor {
       slot.lastByteAt = Date.now();
       if (!slot.bytesSinceSpawn) {
         slot.bytesSinceSpawn = true;
-        // Auto-sweep recovery succeeded — bytes arrived at THIS power
-        // step. Previously (2026-05-09) we cleared the override on first
-        // byte so the next respawn used configured power — purpose was
-        // "auto-sweep is diagnostic only, don't silently downgrade".
+        // Auto-sweep diagnosis: bytes arrived at a sub-configured power
+        // step. Treat the sweep as purely DIAGNOSTIC (the chip is alive,
+        // just wedged at the configured power) — fire a bridge reset,
+        // clear the override, and respawn at the operator-configured
+        // power. Never pin a recovery power: operator-configured wins.
         //
-        // Revised 2026-05-12: live experience showed chips that read at
-        // a sub-configured power immediately re-wedged at configured
-        // power on the next spawn — operator saw "sweep mode works but
-        // regular mode doesn't" (.81). The override is now STICKY (the
-        // slot keeps producing reads at the recovered power), but we
-        // also schedule a periodic re-test of the operator's configured
-        // power so a chip that genuinely recovers escalates back. Best
-        // of both worlds: readers stay working immediately AND we
-        // never silently cap a healthy chip forever.
-        // Only treat this as a sweep-recovery-success if the slot is
-        // actually in supervisor-driven sweep recovery (NORMAL mode).
-        // During operator-driven antenna-test sweep, the chip is being
-        // power-stepped by the test page; the supervisor's
-        // sweepPowerOverrideArg is unrelated (or stale from a prior
-        // recovery attempt). Without this gate the supervisor logs
-        // "sweep recovery succeeded at 330" when in fact the bytes are
-        // flowing from an operator-test spawn at power 100 — confusing
-        // and wrong. Added 2026-05-12 after .81 ran an operator sweep
-        // mid-recovery and the supervisor pinned the wrong power.
+        // If the chip immediately re-wedges at configured power, the
+        // slow-detector will trip again and another sweep will run. The
+        // loop is bounded by SWEEP_RETRY_COOLDOWN_MS (60 s) so the
+        // journal makes the situation loud (frequent recovery cycles)
+        // instead of a silent under-power cap.
+        //
+        // Gate on supervisor-driven sweep + NORMAL mode so an operator
+        // antenna-test run can't be mistaken for a recovery success.
         if (slot.sweepPowerOverrideArg !== null && slot.testSession === null) {
-          log.info("supervisor: sweep recovery succeeded — pinning at recovered power", {
+          // Stash the diagnosed working power as a SUGGESTION. The heartbeat
+          // pushes it to WMS so Hardware Config can show a one-click "Apply
+          // X dBm" banner — operator approves the actual config change.
+          // Stored in dBm (the human-facing scale), not the binary's
+          // dBm*10 — sweepPowerOverrideArg uses dBm*10, divide.
+          const workingDbm = Math.round(slot.sweepPowerOverrideArg / 10);
+          const configuredDbm = Math.round(this.avgPower(slot.spec));
+          if (workingDbm < configuredDbm) {
+            slot.suggestedPowerDbm = workingDbm;
+          }
+          log.info("supervisor: sweep diagnosed working power — bridge reset + configured retry", {
             readerId: slot.spec.id,
             readerName: slot.spec.name,
-            recoveredAtPower: slot.sweepPowerOverrideArg,
-            note: `keeping override; will re-test configured power in ${SWEEP_OVERRIDE_RETEST_MS / 60_000} min`,
+            diagnosedAtPower: slot.sweepPowerOverrideArg,
+            configuredPower: Math.round(this.avgPower(slot.spec) * 10),
+            suggestionDbm: slot.suggestedPowerDbm,
           });
+          this.tryBridgeReset(slot.spec);
+          slot.sweepPowerOverrideArg = null;
           slot.lastSweepAttemptAt = Date.now();
-          // Do NOT clear sweepPowerOverrideArg here — let it stick. The
-          // periodic watchdog (see runStreamWatchdog) clears it after
-          // SWEEP_OVERRIDE_RETEST_MS to give the chip another shot at
-          // configured power.
+          slot.bytesSinceSpawn = false;
+          slot.intendedKill = true;
+          this.killSlotChildHard(slot);
+          return;
         }
         // First byte on this spawn — chassis is reachable. Tell the WMS
         // so the dashboard flips the reader online indicator even if
@@ -2347,6 +2706,106 @@ export class MonsoonSupervisor {
    * (kept in sync by the agent's own LAN discovery); falls back to
    * `ip neigh show IP` if the bundle didn't include it.
    */
+  /**
+   * Deep bridge recovery (Level 2 escalation): sequentially issues
+   * `--baud 115200`, `--mode-server`, `--port 10002`, then `--reset`. Each
+   * step forces the WIZnet bridge to re-initialize a different layer of its
+   * state machine (UART driver, TCP listen mode, listener port, full restart).
+   * Empirically clears bridge-wedge states that simple `--reset` alone
+   * doesn't fix.
+   *
+   * Fire-and-forget; each step has an 8s hard timeout via `timeout(1)` to
+   * prevent zombie wiznet-cli processes (which were pinning the agent VM
+   * load average to 10+ before the timeout was added).
+   */
+  private tryBridgeDeepRecovery(spec: AgentConfigReader): void {
+    const host = String(spec.network_address ?? "");
+    if (!host) return;
+    const macFromSpec = (spec.mac_address ?? "").replace(/[^0-9A-Fa-f]/g, "").toUpperCase();
+    if (macFromSpec.length !== 12) {
+      log.warn("supervisor: tryBridgeDeepRecovery — no MAC, skipping", {
+        readerId: spec.id, host,
+      });
+      return;
+    }
+    log.info("supervisor: tryBridgeDeepRecovery — baud/mode/port/reset", {
+      readerId: spec.id, readerName: spec.name, host, mac: macFromSpec,
+    });
+    const args = [
+      ["--baud", "115200"],
+      ["--mode-server"],
+      ["--port", "10002"],
+      ["--reset"],
+    ];
+    // Sequential one-shots via setTimeout so each step has time to settle
+    // before the next. Total wall time: ~16s. Each child has its own 8s
+    // timeout safety net.
+    args.forEach((extra, i) => {
+      setTimeout(() => {
+        try {
+          const child = spawn(
+            "sudo",
+            ["timeout", "--kill-after=1s", "8s", "/opt/legacy-rfid/wiznet-cli", "--ipconfig", macFromSpec, ...extra],
+            { stdio: ["ignore", "pipe", "pipe"], detached: true },
+          );
+          child.stdout?.resume();
+          child.stderr?.resume();
+          const killTimer = setTimeout(() => {
+            if (child.exitCode === null) {
+              try { child.kill("SIGKILL"); } catch { /* already gone */ }
+            }
+          }, 10_000);
+          child.on("exit", (code) => {
+            clearTimeout(killTimer);
+            log.info("tryBridgeDeepRecovery: step exited", {
+              readerId: spec.id, step: extra.join(" "), code,
+            });
+          });
+          child.on("error", () => clearTimeout(killTimer));
+        } catch (e) {
+          log.warn("tryBridgeDeepRecovery: spawn threw", {
+            readerId: spec.id, step: extra.join(" "),
+            err: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }, i * 4_000);
+    });
+  }
+
+  /**
+   * Snapshot of slots that the supervisor has flagged at wedge Level 3 —
+   * chip is below software-reach, recovery loop is stopped. Heartbeat code
+   * reads this to push `chassis_wedged_at` to WMS so the operator UI can
+   * surface "needs hardware service" instead of the supervisor silently
+   * looping forever.
+   */
+  getWedgedReaders(): { readerId: string; wedgedSinceMs: number }[] {
+    const out: { readerId: string; wedgedSinceMs: number }[] = [];
+    for (const slot of this.slots.values()) {
+      if (slot.wedgeLevel === 3 && slot.wedgedSinceMs > 0) {
+        out.push({ readerId: slot.spec.id, wedgedSinceMs: slot.wedgedSinceMs });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Snapshot of slots where the supervisor's auto-sweep found a working
+   * power below the operator-configured value. Each entry is one suggestion
+   * the heartbeat pushes to WMS so Hardware Config can offer a one-click
+   * "Apply X dBm" action. Cleared once the slot self-heals at configured
+   * power (chip naturally recovered, no downgrade needed).
+   */
+  getPowerSuggestions(): { readerId: string; suggestedDbm: number }[] {
+    const out: { readerId: string; suggestedDbm: number }[] = [];
+    for (const slot of this.slots.values()) {
+      if (slot.suggestedPowerDbm !== null) {
+        out.push({ readerId: slot.spec.id, suggestedDbm: slot.suggestedPowerDbm });
+      }
+    }
+    return out;
+  }
+
   private tryBridgeReset(spec: AgentConfigReader): void {
     const host = String(spec.network_address ?? "");
     if (!host) return;
@@ -2359,16 +2818,35 @@ export class MonsoonSupervisor {
         mac,
       });
       try {
-        const child = spawn("sudo", ["/opt/legacy-rfid/wiznet-cli", "--ipconfig", mac, "--reset"], {
-          stdio: ["ignore", "pipe", "pipe"],
-          detached: true,
-        });
+        // wiznet-cli has a known bug where the discovery/config UDP cycle
+        // sometimes hangs at high CPU after the device ACKs — observed
+        // 2026-05-12 with multiple zombie processes pinning the agent VM
+        // load average to 10+. Wrap in `timeout 8 ...` so a hung child
+        // gets SIGTERM after 8s and SIGKILL at 9s. wiznet-cli normally
+        // completes in 2-4s; 8s is generous headroom.
+        const child = spawn(
+          "sudo",
+          ["timeout", "--kill-after=1s", "8s", "/opt/legacy-rfid/wiznet-cli", "--ipconfig", mac, "--reset"],
+          { stdio: ["ignore", "pipe", "pipe"], detached: true },
+        );
         child.stdout?.resume();
         child.stderr?.resume();
+        // Belt-and-braces: also SIGKILL the child from the supervisor side
+        // after 10s in case `timeout(1)` itself is missing or misbehaves.
+        const killTimer = setTimeout(() => {
+          if (child.exitCode === null) {
+            try { child.kill("SIGKILL"); } catch { /* already gone */ }
+            log.warn("tryBridgeReset: child still alive after 10s, force-killed", {
+              readerId: spec.id, host, mac,
+            });
+          }
+        }, 10_000);
         child.on("exit", (code) => {
+          clearTimeout(killTimer);
           log.info("tryBridgeReset: wiznet-cli exited", { readerId: spec.id, host, mac, code });
         });
         child.on("error", (e) => {
+          clearTimeout(killTimer);
           log.warn("tryBridgeReset: spawn error", { readerId: spec.id, host, mac, err: e.message });
         });
       } catch (e) {

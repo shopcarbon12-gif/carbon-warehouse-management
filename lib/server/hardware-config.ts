@@ -6,9 +6,13 @@ export type HardwareAntennaRow = {
   name: string;
   status_online: boolean;
   config: Record<string, unknown>;
+  /** Auto-sweep diagnosed working power below configured. Surfaced in UI
+   *  as a one-click "Apply X dBm" banner. NULL = no suggestion. */
+  suggested_power_dbm: number | null;
+  suggested_power_dbm_at: string | null;
 };
 
-export type ReaderHealthStatus = "ok" | "slow" | "stuck" | "offline";
+export type ReaderHealthStatus = "ok" | "slow" | "stuck" | "offline" | "needs_service";
 
 export type ReaderHealth = {
   /** "stuck"   — bridge reachable on LAN but reader producing zero reads
@@ -112,6 +116,17 @@ type RawDevice = {
    *  agent's stale-row purge cutoff) to derive the reader's tri-state
    *  bridge_state. Antenna rows ignore this field. */
   bridge_seen_at: string | null;
+  /** Stamped by the agent's heartbeat when the supervisor flags a reader
+   *  at wedge Level 3 (chip unresponsive to recovery after 6+ failed
+   *  attempts in 10 min). NULL = healthy. Drives the "needs_service"
+   *  badge in Hardware Config. */
+  chassis_wedged_at: string | null;
+  /** Per-antenna columns: set on the antenna row, not the reader row.
+   *  These two come back attached to the reader query because the SELECT
+   *  pulls them in for both reader and antenna devices in one pass —
+   *  ignored on reader rows, used on antenna rows by the antenna mapper. */
+  suggested_power_dbm: number | null;
+  suggested_power_dbm_at: string | null;
 };
 
 /**
@@ -231,7 +246,10 @@ export async function buildHardwareConfigTree(
          d.last_read_at::text AS last_read_at,
          d.last_test_at::text AS last_test_at,
          d.last_test_passed,
-         d.bridge_seen_at::text AS bridge_seen_at
+         d.bridge_seen_at::text AS bridge_seen_at,
+         d.chassis_wedged_at::text AS chassis_wedged_at,
+         d.suggested_power_dbm,
+         d.suggested_power_dbm_at::text AS suggested_power_dbm_at
        FROM devices d
        LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
        WHERE d.tenant_id = $1::uuid
@@ -328,6 +346,8 @@ export async function buildHardwareConfigTree(
       // see migration 0060.
       status_online: fresh || testedOk,
       config: (d.config ?? {}) as Record<string, unknown>,
+      suggested_power_dbm: d.suggested_power_dbm,
+      suggested_power_dbm_at: d.suggested_power_dbm_at,
     });
     antennasByParent.set(d.parent_device_id, arr);
   }
@@ -335,21 +355,35 @@ export async function buildHardwareConfigTree(
   // Per-location peer-rate median. Computed across all non-paused readers in
   // the location, so the "slow" comparison isn't dragged down by readers an
   // admin has deliberately paused (they'll have 0 reads but shouldn't count).
-  const readerRowsByLocation = new Map<string, RawDevice[]>();
+  //
+  // Group by (location_id, device_type) so device roles only compare against
+  // their own kind. A transaction_reader at the POS sees a handful of EPCs
+  // per customer; a fixed_reader in an aisle sees hundreds continuously.
+  // Lumping them in the same peer pool gave false-positive "slow" badges
+  // on POS-type readers — they look 5% of peers but are healthy for their
+  // role. Same logic protects door_reader from being graded against
+  // fixed_reader inventory rates. With the group key tightened, a single
+  // POS reader alone in its (location, type) group falls below
+  // SLOW_MIN_PEERS and gets no slow flag at all — exactly what we want.
+  const readerRowsByGroup = new Map<string, RawDevice[]>();
+  const groupKey = (d: RawDevice) => `${d.location_id}|${d.device_type}`;
   for (const d of devices.rows) {
     if (!READER_TYPES.has(d.device_type)) continue;
-    const arr = readerRowsByLocation.get(d.location_id) ?? [];
+    const key = groupKey(d);
+    const arr = readerRowsByGroup.get(key) ?? [];
     arr.push(d);
-    readerRowsByLocation.set(d.location_id, arr);
+    readerRowsByGroup.set(key, arr);
   }
-  const peerMedianByLocation = new Map<string, number>();
-  for (const [locId, rows] of readerRowsByLocation.entries()) {
+  const peerMedianByGroup = new Map<string, number>();
+  const peerCountByGroup = new Map<string, number>();
+  for (const [key, rows] of readerRowsByGroup.entries()) {
     const activeRates: number[] = [];
     for (const r of rows) {
       if (parentPaused.get(r.id)) continue;
       activeRates.push(readsByReaderId.get(r.id) ?? 0);
     }
-    peerMedianByLocation.set(locId, median(activeRates));
+    peerMedianByGroup.set(key, median(activeRates));
+    peerCountByGroup.set(key, activeRates.length);
   }
 
   const readersByZone = new Map<string, HardwareReaderRow[]>();
@@ -374,11 +408,18 @@ export async function buildHardwareConfigTree(
 
     const paused = parentPaused.get(d.id) ?? false;
     const reads5m = readsByReaderId.get(d.id) ?? 0;
-    const peerMedian = peerMedianByLocation.get(d.location_id) ?? 0;
-    const peerCount = readerRowsByLocation.get(d.location_id)?.length ?? 0;
+    const groupId = `${d.location_id}|${d.device_type}`;
+    const peerMedian = peerMedianByGroup.get(groupId) ?? 0;
+    const peerCount = peerCountByGroup.get(groupId) ?? 0;
     let healthStatus: ReaderHealthStatus = "ok";
     if (paused) {
       healthStatus = "ok";
+    } else if (d.chassis_wedged_at) {
+      // Supervisor escalated this reader to Level 3 — chip unresponsive to
+      // every software recovery. Surface clearly so the operator knows
+      // physical service is the next step (instead of waiting for the
+      // supervisor to silently retry forever).
+      healthStatus = "needs_service";
     } else if (bridgeState === "offline") {
       healthStatus = "offline";
     } else if (
