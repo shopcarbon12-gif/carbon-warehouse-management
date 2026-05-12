@@ -238,11 +238,13 @@ class MainActivity : FlutterFragmentActivity() {
         }
         "scanner.enableRfidFunctionMode" -> {
           enableScannerRfidMode(this, "MainActivity")
+          ScanSoundPool.shared?.playEventCue("success")
           result.success(true)
         }
         "scanner.disableRfidFunctionMode" -> {
           stopSystemScannerInventory(this, "MainActivity")
           disableScannerRfidMode(this, "MainActivity")
+          ScanSoundPool.shared?.playEventCue("success")
           result.success(true)
         }
         "scanner.close2dBarcode" -> {
@@ -272,10 +274,12 @@ class MainActivity : FlutterFragmentActivity() {
         }
         "zebra.setTriggerMode2D" -> {
           zebra.setTriggerModeBarcode()
+          ScanSoundPool.shared?.playEventCue("success")
           result.success(null)
         }
         "zebra.setTriggerModeRfid" -> {
           zebra.setTriggerModeRfid()
+          ScanSoundPool.shared?.playEventCue("success")
           result.success(null)
         }
         "zebra.stopInventory" -> {
