@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
   Radio,
@@ -84,20 +85,42 @@ const STATE_LABELS = {
 } as const;
 
 export function CycleCountWorkspace({ isAdmin = false }: { isAdmin?: boolean }) {
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // Keep the active-session id in the URL (?session=<uuid>) so the browser
+  // Back button navigates back to the landing view instead of jumping to the
+  // previous page (e.g. dashboard).
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeId = searchParams.get("session");
   const [showHistory, setShowHistory] = useState(false);
+
+  const openSession = useCallback(
+    (id: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("session", id);
+      router.push(`${pathname}?${params.toString()}`);
+    },
+    [router, pathname, searchParams],
+  );
+
+  const leaveSession = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("session");
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }, [router, pathname, searchParams]);
 
   return (
     <div className="space-y-6">
       {activeId ? (
         <ActiveSessionView
           sessionId={activeId}
-          onLeave={() => setActiveId(null)}
+          onLeave={leaveSession}
           isAdmin={isAdmin}
         />
       ) : (
         <SessionLanding
-          onOpen={(id) => setActiveId(id)}
+          onOpen={openSession}
           showHistory={showHistory}
           onToggleHistory={() => setShowHistory((v) => !v)}
         />
