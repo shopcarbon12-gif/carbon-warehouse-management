@@ -432,7 +432,11 @@ function dedupeEpcs(epcs: string[]): string[] {
  * of the call, NOT from a queued/staged list waiting for commit. Cycle-count
  * scans now mutate inventory in real time (see ingestCycleCountEpcs), so:
  *   - matched   : scanned ∩ expected snapshot
- *   - missing   : expected − scanned (still applied to tag_killed on commit)
+ *   - missing   : expected − scanned. NOT killed on cycle-count commit
+ *                 (2026-05-12 policy). The handheld add-on count picks
+ *                 up tags the fixed-reader fleet couldn't see; reconcile
+ *                 runs after add-on completion, and only THEN does any
+ *                 still-missing tag flip to tag_killed.
  *   - added_here: scanned − expected, currently in-stock at this location
  *   - defective : scanned − expected, currently tag_killed (formula failed)
  *   - locked    : scanned − expected, currently super_admin_locked (untouched)
@@ -564,7 +568,9 @@ export async function commitSession(
   if (cur.status === "canceled") throw new Error("BAD_REQUEST:Session was canceled");
 
   // Live-ingest already settled added_here / defective / locked during the
-  // scan. The only thing left to apply at commit is Missing → tag_killed.
+  // scan. Missing items are recorded in variance_summary but NOT killed
+  // here (2026-05-12 policy) — the handheld add-on count + reconcile is
+  // what eventually flips truly-missing tags to tag_killed.
   const variance = await classifyVarianceLive(
     client,
     session.tid,

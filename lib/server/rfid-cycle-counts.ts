@@ -186,22 +186,16 @@ export async function commitCycleCount(
     throw new Error(`BAD_REQUEST:Item ${blocked} cannot be processed in its current status.`);
   }
 
-  let updatedMissing = 0;
-  for (const epc of missingSet) {
-    const u = await client.query(
-      `UPDATE items i
-       SET status = 'tag_killed'
-       FROM locations loc
-       WHERE i.epc = $1
-         AND i.location_id = loc.id
-         AND loc.tenant_id = $2::uuid
-         AND i.location_id = $3::uuid
-         AND i.status = 'in-stock'
-         AND ($4::uuid IS NULL OR i.bin_id = $4::uuid)`,
-      [epc, session.tid, locationId, bodyBinId],
-    );
-    updatedMissing += u.rowCount ?? 0;
-  }
+  // Cycle count commit no longer flips missing → tag_killed (2026-05-12
+  // policy change). The fixed-reader scan can only see what the antennas
+  // illuminate; physical inventory legitimately outside reader coverage
+  // (RF dead zones, dense fabric stacks, metal hangers) would be wrongly
+  // killed otherwise. The kill happens AFTER the add-on count on the
+  // mobile handheld uploads its results and a reconcile step runs:
+  // anything still missing AFTER both passes is what actually got lost.
+  // Variance is still recorded in the session.variance_summary for the
+  // audit trail; only the items.status mutation is deferred to reconcile.
+  const updatedMissing = 0;
 
   let updatedMisplaced = 0;
   for (const epc of misplacedSet) {
