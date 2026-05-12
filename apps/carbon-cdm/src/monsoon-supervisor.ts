@@ -84,11 +84,15 @@ const SWEEP_RETRY_COOLDOWN_MS = 60_000;
  * we drop the pin and let the next spawn use the operator's configured
  * power again — if the chip has genuinely recovered we escalate back,
  * if it re-wedges sweep recovery just kicks in again and re-pins.
- * 30 min — long enough to actually be productive between retests.
- * Was 5 min, which made recovered readers thrash every 5 min between
- * "working at pinned power" and "wedged at configured power."
+ * 3 min — short enough that a recovered chip returns to full power
+ * fast (so we're not silently leaving readers at low power forever),
+ * long enough that brief glitches don't trigger constant thrashing.
+ * Was 30 min — observed live with .15: chip provably reads at 33 dBm
+ * (594 reads in 21 s during antenna test) but slot remained pinned at
+ * 10 dBm for 30 min after a stale sweep recovery — operator saw 9
+ * unique EPCs while chip could've seen many more at full power.
  */
-const SWEEP_OVERRIDE_RETEST_MS = 30 * 60 * 1000;
+const SWEEP_OVERRIDE_RETEST_MS = 3 * 60 * 1000;
 
 /**
  * Slow-detection window (rolling): how often we compare each slot's
@@ -613,6 +617,21 @@ export class MonsoonSupervisor {
     const now = Date.now();
     for (const slot of this.slots.values()) {
       if (slot.shuttingDown) continue;
+      // DEFENSIVE 2026-05-12: mux readers should NEVER have a sweep
+      // override (auto-sweep skips mux, slow-detection skips mux).
+      // But .16 was observed today running pinned to antenna 2 with
+      // a non-null sweepPowerOverrideArg, which suppressed mux swaps.
+      // Until the source is traced, defensively clear any sweep state
+      // from mux slots on every watchdog tick.
+      if (slot.muxAntennaSequence.length >= 2 && slot.sweepPowerOverrideArg !== null) {
+        log.warn("supervisor: defensively clearing sweepPowerOverrideArg on mux slot", {
+          readerId: slot.spec.id,
+          readerName: slot.spec.name,
+          stalePower: slot.sweepPowerOverrideArg,
+        });
+        slot.sweepPowerOverrideArg = null;
+        slot.lastSweepAttemptAt = 0;
+      }
       // Periodic auto-retest of operator-configured power. When sweep
       // recovery pinned the slot to a sub-configured power earlier,
       // we keep it there long enough for the reader to actually be
