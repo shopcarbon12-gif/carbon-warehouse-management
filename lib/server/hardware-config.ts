@@ -8,6 +8,22 @@ export type HardwareAntennaRow = {
   config: Record<string, unknown>;
 };
 
+export type ReaderHealthStatus = "ok" | "slow" | "stuck" | "offline";
+
+export type ReaderHealth = {
+  /** "stuck"   — bridge reachable on LAN but reader producing zero reads
+   *              for the freshness window (chassis firmware-wedged; needs
+   *              physical power-cycle or a Hard Reset click).
+   *  "slow"    — reads_5m below SLOW_FRACTION_OF_MEDIAN of the location's
+   *              peer median, with enough peers to be meaningful.
+   *  "offline" — bridge missed last few sweeps OR no MAC bound.
+   *  "ok"      — everything else (including effectively-paused readers,
+   *              which are already surfaced via scan_paused_at separately). */
+  status: ReaderHealthStatus;
+  reads_5m: number;
+  peers_median_5m: number;
+};
+
 export type HardwareReaderRow = {
   id: string;
   name: string;
@@ -37,6 +53,11 @@ export type HardwareReaderRow = {
   /** Surfaced so the hardware-config UI can render pause state + schedule. */
   scan_paused_at: string | null;
   scan_schedule: unknown | null;
+  /** Per-reader health derived from the last 5 minutes of cdm_reads + bridge
+   *  reachability. Drives the Hardware Config badge next to the reader name.
+   *  Effectively-paused readers always report "ok" — pause state is its
+   *  own UI affordance and shouldn't compound the badge. */
+  health: ReaderHealth;
   antennas: HardwareAntennaRow[];
 };
 
@@ -120,6 +141,36 @@ const ANTENNA_FRESHNESS_MS = 15 * 60_000;
  */
 const BRIDGE_REACHABLE_MS = 3 * 60_000;
 
+/**
+ * "slow" badge threshold: a reader is slow if its 5-min read count is below
+ * this fraction of the median read count of its location peers. 0.5 = "less
+ * than half the median." Live evidence 2026-05-11: Aisle 1-2/2 (.225)
+ * 16,589 reads / 5min vs sibling readers' 27,747 and 40,087 in the same
+ * aisle. The slow one was 60% of its slower sibling and 40% of its faster
+ * sibling — clearly degraded. 0.5 of median catches that without flagging
+ * normal variance.
+ */
+const SLOW_FRACTION_OF_MEDIAN = 0.5;
+/**
+ * Don't flag "slow" unless the location's peers produced at least this many
+ * reads in the window — otherwise low-activity periods (overnight, weekends)
+ * cause a flood of false-positive slow badges where everyone reads 5 tags
+ * and one reader reads 2.
+ */
+const SLOW_MIN_PEER_MEDIAN = 100;
+/**
+ * Need this many peer readers in the same location to compute a meaningful
+ * median. Below this, the comparison is too noisy to draw a slow conclusion.
+ */
+const SLOW_MIN_PEERS = 3;
+
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
 export async function buildHardwareConfigTree(
   pool: Pool,
   tenantId: string,
@@ -131,7 +182,7 @@ export async function buildHardwareConfigTree(
   locationId?: string | null,
 ): Promise<HardwareConfigTree> {
   const scoped = !!locationId;
-  const [locations, zones, devices] = await Promise.all([
+  const [locations, zones, devices, readsByReader] = await Promise.all([
     pool.query<{ id: string; code: string; name: string }>(
       scoped
         ? `SELECT id::text, code, name
@@ -189,7 +240,30 @@ export async function buildHardwareConfigTree(
        ORDER BY d.name ASC`,
       scoped ? [tenantId, locationId] : [tenantId],
     ),
+    // Per-reader read counts over the last 5 min. Drives the "slow" and
+    // "stuck" badges. Aggregated client-side per location (median of peers).
+    pool.query<{ reader_id: string; reads_5m: number }>(
+      scoped
+        ? `SELECT cr.reader_id::text AS reader_id, COUNT(*)::int AS reads_5m
+             FROM cdm_reads cr
+             JOIN devices d ON d.id = cr.reader_id
+            WHERE cr.tenant_id = $1::uuid
+              AND d.location_id = $2::uuid
+              AND cr.read_at > now() - interval '5 minutes'
+            GROUP BY cr.reader_id`
+        : `SELECT cr.reader_id::text AS reader_id, COUNT(*)::int AS reads_5m
+             FROM cdm_reads cr
+            WHERE cr.tenant_id = $1::uuid
+              AND cr.read_at > now() - interval '5 minutes'
+            GROUP BY cr.reader_id`,
+      scoped ? [tenantId, locationId] : [tenantId],
+    ),
   ]);
+
+  const readsByReaderId = new Map<string, number>();
+  for (const r of readsByReader.rows) {
+    readsByReaderId.set(r.reader_id, r.reads_5m);
+  }
 
   // Reader paused/stopped state used to short-circuit antenna status to
   // "online" — that flattered defective antennas (operator stopped a
@@ -258,6 +332,26 @@ export async function buildHardwareConfigTree(
     antennasByParent.set(d.parent_device_id, arr);
   }
 
+  // Per-location peer-rate median. Computed across all non-paused readers in
+  // the location, so the "slow" comparison isn't dragged down by readers an
+  // admin has deliberately paused (they'll have 0 reads but shouldn't count).
+  const readerRowsByLocation = new Map<string, RawDevice[]>();
+  for (const d of devices.rows) {
+    if (!READER_TYPES.has(d.device_type)) continue;
+    const arr = readerRowsByLocation.get(d.location_id) ?? [];
+    arr.push(d);
+    readerRowsByLocation.set(d.location_id, arr);
+  }
+  const peerMedianByLocation = new Map<string, number>();
+  for (const [locId, rows] of readerRowsByLocation.entries()) {
+    const activeRates: number[] = [];
+    for (const r of rows) {
+      if (parentPaused.get(r.id)) continue;
+      activeRates.push(readsByReaderId.get(r.id) ?? 0);
+    }
+    peerMedianByLocation.set(locId, median(activeRates));
+  }
+
   const readersByZone = new Map<string, HardwareReaderRow[]>();
   const readersByLocationUnzoned = new Map<string, HardwareReaderRow[]>();
   for (const d of devices.rows) {
@@ -274,6 +368,28 @@ export async function buildHardwareConfigTree(
       : bridgeFresh
         ? "reachable"
         : "offline";
+
+    const paused = parentPaused.get(d.id) ?? false;
+    const reads5m = readsByReaderId.get(d.id) ?? 0;
+    const peerMedian = peerMedianByLocation.get(d.location_id) ?? 0;
+    const peerCount = readerRowsByLocation.get(d.location_id)?.length ?? 0;
+    let healthStatus: ReaderHealthStatus = "ok";
+    if (paused) {
+      healthStatus = "ok";
+    } else if (bridgeState === "offline") {
+      healthStatus = "offline";
+    } else if (bridgeState === "reachable" && reads5m === 0) {
+      // Bridge alive on the LAN but zero reads coming in → chassis firmware
+      // wedged. This is what auto-recovery sweep + Hard Reset address.
+      healthStatus = "stuck";
+    } else if (
+      peerCount >= SLOW_MIN_PEERS &&
+      peerMedian >= SLOW_MIN_PEER_MEDIAN &&
+      reads5m < peerMedian * SLOW_FRACTION_OF_MEDIAN
+    ) {
+      healthStatus = "slow";
+    }
+
     const reader: HardwareReaderRow = {
       id: d.id,
       name: d.name,
@@ -288,6 +404,11 @@ export async function buildHardwareConfigTree(
       zone_id: d.zone_id,
       scan_paused_at: d.scan_paused_at,
       scan_schedule: d.scan_schedule,
+      health: {
+        status: healthStatus,
+        reads_5m: reads5m,
+        peers_median_5m: peerMedian,
+      },
       antennas: antennasByParent.get(d.id) ?? [],
     };
     if (d.zone_id) {

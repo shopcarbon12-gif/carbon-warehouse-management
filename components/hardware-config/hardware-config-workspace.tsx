@@ -122,6 +122,31 @@ export function HardwareConfigWorkspace() {
       window.alert(e instanceof Error ? e.message : "Start failed");
     }
   };
+  const hardResetReader = async (id: string, name: string) => {
+    if (
+      !window.confirm(
+        `Hard Reset "${name}"?\n\n` +
+          "The agent will tear down this reader's process and respawn it with " +
+          "a fresh state (port rotation reset, sweep budget reset, fresh local " +
+          "stream port). Any in-flight scan-session on this reader will end.\n\n" +
+          "NOTE: this is the strongest SOFT reset. If the WIZnet bridge inside " +
+          "the reader is firmware-wedged, only a physical power-cycle (or PoE " +
+          "port reset on the switch) will recover it.",
+      )
+    )
+      return;
+    try {
+      const res = await fetch(
+        `/api/hardware-config/readers/${encodeURIComponent(id)}/hard-reset`,
+        { method: "POST" },
+      );
+      const j = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(j.error ?? "Hard reset failed");
+      await reload();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Hard reset failed");
+    }
+  };
   const pauseAllReaders = async () => {
     if (
       !window.confirm(
@@ -271,6 +296,7 @@ export function HardwareConfigWorkspace() {
         onDeleteAntenna={removeAntenna}
         onPauseReader={pauseReader}
         onResumeReader={resumeReader}
+        onHardResetReader={hardResetReader}
         onSetMonsoonDriver={setMonsoonDriver}
         onPauseAllReaders={pauseAllReaders}
         onResumeAllReaders={resumeAllReaders}
@@ -499,6 +525,7 @@ type TreeProps = {
   onDeleteAntenna: (id: string, name: string) => void;
   onPauseReader: (id: string) => void;
   onResumeReader: (id: string) => void;
+  onHardResetReader: (id: string, name: string) => void;
   onSetMonsoonDriver: (id: string, driver: "stream" | "console") => void;
   onPauseAllReaders: () => void;
   onResumeAllReaders: () => void;
@@ -657,6 +684,44 @@ function ZoneBlock({
   );
 }
 
+function ReaderHealthBadge({ health }: { health: HardwareReaderRow["health"] }) {
+  if (health.status === "ok") return null;
+  const cfg =
+    health.status === "stuck"
+      ? {
+          cls: "border-red-400/50 bg-red-500/15 text-red-300",
+          label: "stuck",
+          tip:
+            `Reader is on the network but producing zero reads — chassis ` +
+            `firmware likely wedged. Try Hard Reset; if no recovery, physically ` +
+            `power-cycle the reader.`,
+        }
+      : health.status === "slow"
+        ? {
+            cls: "border-amber-400/50 bg-amber-500/15 text-amber-300",
+            label: "slow",
+            tip:
+              `Reading at ${health.reads_5m} reads in last 5 min vs location ` +
+              `median ${health.peers_median_5m}. Check antenna orientation, ` +
+              `cable, or swap the antenna with a known-good sibling reader.`,
+          }
+        : {
+            cls: "border-zinc-400/40 bg-zinc-500/15 text-zinc-300",
+            label: "offline",
+            tip:
+              `Reader's WIZnet bridge has been off the LAN for >3 min. Check ` +
+              `network cable / PoE switch port.`,
+          };
+  return (
+    <span
+      title={cfg.tip}
+      className={`rounded border px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide ${cfg.cls}`}
+    >
+      {cfg.label}
+    </span>
+  );
+}
+
 function ReaderCard({
   reader,
   onEditReader,
@@ -666,12 +731,14 @@ function ReaderCard({
   onDeleteAntenna,
   onPauseReader,
   onResumeReader,
+  onHardResetReader,
   onSetMonsoonDriver,
   onOpenSchedule,
 }: {
   reader: HardwareReaderRow;
   onPauseReader: (id: string) => void;
   onResumeReader: (id: string) => void;
+  onHardResetReader: (id: string, name: string) => void;
   onSetMonsoonDriver: (id: string, driver: "stream" | "console") => void;
   onOpenSchedule: (reader: HardwareReaderRow) => void;
 } & TreeProps) {
@@ -686,6 +753,7 @@ function ReaderCard({
       <div className="flex flex-wrap items-center gap-2">
         <Radio className="h-3.5 w-3.5 text-[var(--wms-accent)]" />
         <span className="font-mono text-xs text-[var(--wms-fg)]">{reader.name}</span>
+        <ReaderHealthBadge health={reader.health} />
         {reader.network_address ? (
           <span className="rounded bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">
             {reader.network_address}
@@ -746,6 +814,18 @@ function ReaderCard({
             }`}
           >
             {driver}
+          </button>
+          <button
+            type="button"
+            onClick={() => onHardResetReader(reader.id, reader.name)}
+            title={
+              "Hard Reset this reader — agent tears down and respawns the " +
+              "process with fresh state. Use when the reader is stuck or has " +
+              "drifted slow. Any in-flight scan-session on this reader will end."
+            }
+            className="inline-flex items-center gap-0.5 rounded border border-red-400/40 bg-red-500/10 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-red-300 hover:bg-red-400/20"
+          >
+            <RefreshCw className="h-2.5 w-2.5" /> Reset
           </button>
           <button
             type="button"

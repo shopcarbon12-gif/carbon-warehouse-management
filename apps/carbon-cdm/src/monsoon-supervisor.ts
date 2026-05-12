@@ -251,6 +251,15 @@ type ReaderSlot = {
    *  watchdog should rotate to the next antenna. Set to now+interval on each
    *  rotation; the watchdog tick checks this and triggers the swap. */
   muxSwapAtMs: number;
+  /** ms timestamp when this slot was created (NOT respawned — this is set
+   *  once at slot allocation and survives across child respawns). Compared
+   *  against `spec.reader_recover_requested_at` on reconcile: if the WMS
+   *  stamp is newer than slotCreatedAt, the admin clicked Hard Reset after
+   *  this slot was born and we must tear it down and recreate from scratch
+   *  (fresh sweep budget, fresh candidate-port index, fresh exhaustion
+   *  state). The freshly-created slot's slotCreatedAt > recover_requested_at,
+   *  so the same stamp won't keep retriggering. */
+  slotCreatedAt: number;
 };
 
 /** Operator-tunable knobs an active /antenna-test session imposes on a reader. */
@@ -811,7 +820,32 @@ export class MonsoonSupervisor {
       // when explicitly configured.
       const desiredDriver: "stream" | "console" =
         enabledCount >= 2 ? "console" : spec.monsoon_driver === "stream" ? "stream" : "console";
-      const existing = this.slots.get(spec.id);
+      let existing = this.slots.get(spec.id);
+
+      // Per-reader Hard Reset: WMS stamps reader_recover_requested_at when
+      // an admin clicks Hardware Config → Hard Reset. If the stamp is newer
+      // than the slot's birth, tear it down completely (SIGTERM → 10 s →
+      // SIGKILL, ensureRadioStopped, freed slot index) and fall through to
+      // the fresh-slot creation block below — that gives the reader a clean
+      // sweep budget, port rotation reset, and a new local stream port.
+      // Per-AGENT Recover (cdm_agents.recover_requested_at → process.exit)
+      // is unaffected; this is the surgical analog.
+      const resetStampMs = spec.reader_recover_requested_at
+        ? new Date(spec.reader_recover_requested_at).getTime()
+        : 0;
+      if (existing && resetStampMs > existing.slotCreatedAt) {
+        log.info("supervisor: hard-reset requested, recreating slot", {
+          readerId: spec.id,
+          readerName: spec.name,
+          requestedAt: spec.reader_recover_requested_at,
+          slotAgeMs: Date.now() - existing.slotCreatedAt,
+        });
+        this.stopSlot(existing);
+        this.slots.delete(spec.id);
+        this.freeSlotIndex(existing.index);
+        existing = undefined;
+      }
+
       if (existing) {
         // If operator changed the configured serial port in WMS, rebuild
         // the candidate list and reset rotation so we re-test from scratch.
@@ -880,6 +914,7 @@ export class MonsoonSupervisor {
           .sort((a, b) => a - b),
         muxCurrentIdx: 0,
         muxSwapAtMs: Date.now() + SUPERVISOR_MUX_INTERVAL_MS,
+        slotCreatedAt: Date.now(),
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {

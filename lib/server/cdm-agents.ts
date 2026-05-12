@@ -492,6 +492,11 @@ export type AgentConfigReader = {
    *  redo schedule math. When true, the supervisor skips this reader
    *  entirely (kills any running child, doesn't spawn). */
   effective_paused: boolean;
+  /** Admin Hard Reset stamp. Supervisor compares to slot.spawnedAt on each
+   *  config-pull; if newer, force-recreates the slot (stopSlot + free
+   *  index + drop from map → next reconcile re-spawns with fresh state).
+   *  Null = no reset pending. */
+  reader_recover_requested_at: string | null;
 };
 
 export type AgentConfigBundle = {
@@ -539,6 +544,7 @@ export async function getAgentConfigBundle(
     test_pending_at: string | null;
     scan_paused_at: string | null;
     scan_schedule: ScanSchedule | null;
+    reader_recover_requested_at: string | null;
   }>(
     `SELECT
        d.id::text,
@@ -551,7 +557,8 @@ export async function getAgentConfigBundle(
        z.name AS zone_name,
        d.test_pending_at,
        d.scan_paused_at::text AS scan_paused_at,
-       d.scan_schedule
+       d.scan_schedule,
+       d.reader_recover_requested_at::text AS reader_recover_requested_at
      FROM devices d
      LEFT JOIN zones z ON z.id = d.zone_id
      WHERE d.cdm_agent_id = $1::uuid
@@ -633,6 +640,7 @@ export async function getAgentConfigBundle(
         d.scan_paused_at,
         d.scan_schedule,
       ),
+      reader_recover_requested_at: d.reader_recover_requested_at,
     });
   }
 

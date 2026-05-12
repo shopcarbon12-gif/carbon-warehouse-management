@@ -45,6 +45,12 @@ export type AgentConfigReader = {
    *  were absent from the bundle (kills child, no spawn). Older WMS
    *  bundles may omit; treat missing as false (not paused). */
   effective_paused?: boolean;
+  /** Admin Hard Reset stamp. Compared by the supervisor against the
+   *  slot's slotCreatedAt on each reconcile; if newer, the slot is
+   *  torn down (SIGTERM → SIGKILL → ensureRadioStopped → freeIndex)
+   *  and a fresh one is created in the same reconcile pass. Older WMS
+   *  bundles may omit; treat missing as null (no reset pending). */
+  reader_recover_requested_at?: string | null;
 };
 
 export type AgentConfigBundle = {
