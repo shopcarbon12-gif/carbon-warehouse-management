@@ -282,9 +282,13 @@ export async function getScanSourceEpcs(
   }
 
   if (sourceType === "cycle_count") {
+    // Mirror the picker filter — both 'committed' and 'paused' counts are
+    // valid Add-On sources. Without this match, the picker shows paused
+    // C-NNN rows but the EPC-fetch returns 404 and the resume/start fails.
     const r = await pool.query<{ scanned_epcs: unknown }>(
       `SELECT scanned_epcs FROM cycle_count_sessions
-        WHERE id = $1::uuid AND tenant_id = $2::uuid AND status = 'committed' LIMIT 1`,
+        WHERE id = $1::uuid AND tenant_id = $2::uuid
+          AND status IN ('committed', 'paused') LIMIT 1`,
       [sourceId, tenantId],
     );
     const raw = r.rows[0]?.scanned_epcs;
