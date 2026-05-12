@@ -9,6 +9,8 @@ import {
   type CycleCountExpectedRow,
   type SessionPayload,
 } from "./rfid-cycle-counts";
+import { loadStatusLabelBrainMap } from "./status-label-enforcement";
+import { labelNameForWmsStatus } from "./wms-status-to-label-name";
 
 /**
  * Persistent state for the cycle count workflow.
@@ -45,6 +47,29 @@ export const patchSessionSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
   readerFilter: z.array(z.string().uuid()).max(64).optional(),
 });
+
+/** Live variance — buckets derived from current items state, not the snapshot. */
+export type LiveScanRow = {
+  epc: string;
+  sku: string | null;
+  description: string | null;
+  upc: string | null;
+  color: string | null;
+  size: string | null;
+  bin_id: string | null;
+  bin_code: string | null;
+  current_status: string;
+  current_location_id: string | null;
+  current_location_code: string | null;
+};
+
+export type LiveVariance = {
+  matched: CycleCountExpectedRow[];
+  missing: CycleCountExpectedRow[];
+  added_here: LiveScanRow[];
+  defective: LiveScanRow[];
+  locked: LiveScanRow[];
+};
 
 export type CreateSessionBody = z.infer<typeof createSessionSchema>;
 export type PatchSessionBody = z.infer<typeof patchSessionSchema>;
@@ -313,59 +338,127 @@ function dedupeEpcs(epcs: string[]): string[] {
 }
 
 /**
- * Variance computation — used by the commit path AND the CSV export so
- * both stay consistent. The misplaced/unrecognized split for "extras"
- * (scanned EPCs not in the expected snapshot) is determined by checking
- * if the EPC currently exists as in-stock anywhere else in the tenant.
+ * Live variance — buckets are derived from current items state at the moment
+ * of the call, NOT from a queued/staged list waiting for commit. Cycle-count
+ * scans now mutate inventory in real time (see ingestCycleCountEpcs), so:
+ *   - matched   : scanned ∩ expected snapshot
+ *   - missing   : expected − scanned (still applied to tag_killed on commit)
+ *   - added_here: scanned − expected, currently in-stock at this location
+ *   - defective : scanned − expected, currently tag_killed (formula failed)
+ *   - locked    : scanned − expected, currently super_admin_locked (untouched)
  */
-export async function classifyVariance(
+export async function classifyVarianceLive(
   client: PoolClient,
   tenantId: string,
   expected: CycleCountExpectedRow[],
   scanned: string[],
-): Promise<{
-  matched: string[];
-  missing: string[];
-  misplaced: string[];
-  unrecognized: string[];
-}> {
-  const expSet = new Set(expected.map((e) => e.epc));
+  sessionLocationId: string,
+): Promise<LiveVariance> {
+  const expByEpc = new Map(expected.map((e) => [e.epc, e]));
   const scSet = new Set(scanned.map((s) => s.toUpperCase()));
-  const matched = [...expSet].filter((e) => scSet.has(e));
-  const missing = [...expSet].filter((e) => !scSet.has(e));
-  const extras = [...scSet].filter((e) => !expSet.has(e));
+  const matched: CycleCountExpectedRow[] = [];
+  const missing: CycleCountExpectedRow[] = [];
+  for (const e of expected) {
+    if (scSet.has(e.epc)) matched.push(e);
+    else missing.push(e);
+  }
+  const extras = [...scSet].filter((e) => !expByEpc.has(e));
 
   if (extras.length === 0) {
-    return { matched, missing, misplaced: [], unrecognized: [] };
+    return { matched, missing, added_here: [], defective: [], locked: [] };
   }
 
-  // Look up which extras are in-stock somewhere else → misplaced.
-  // Anything not found OR not in-stock → unrecognized.
-  const r = await client.query<{ epc: string }>(
-    `SELECT i.epc
-       FROM items i
-       INNER JOIN locations loc ON loc.id = i.location_id AND loc.tenant_id = $1::uuid
-       WHERE i.epc = ANY($2::text[])
-         AND i.status = 'in-stock'`,
+  const labelMap = await loadStatusLabelBrainMap(client);
+
+  const r = await client.query<{
+    epc: string;
+    sku: string | null;
+    description: string | null;
+    upc: string | null;
+    color: string | null;
+    size: string | null;
+    bin_id: string | null;
+    bin_code: string | null;
+    current_status: string;
+    current_location_id: string | null;
+    current_location_code: string | null;
+  }>(
+    `SELECT
+       i.epc,
+       cs.sku,
+       m.description,
+       COALESCE(NULLIF(trim(cs.upc), ''), m.upc) AS upc,
+       cs.color_code AS color,
+       cs.size,
+       i.bin_id::text AS bin_id,
+       b.code AS bin_code,
+       i.status AS current_status,
+       i.location_id::text AS current_location_id,
+       loc.code AS current_location_code
+     FROM items i
+     INNER JOIN locations loc ON loc.id = i.location_id AND loc.tenant_id = $1::uuid
+     LEFT JOIN custom_skus cs ON cs.id = i.custom_sku_id
+     LEFT JOIN matrices m ON m.id = cs.matrix_id
+     LEFT JOIN bins b ON b.id = i.bin_id
+     WHERE i.epc = ANY($2::text[])`,
     [tenantId, extras],
   );
-  const stillInStock = new Set(r.rows.map((row) => row.epc.toUpperCase()));
-  const misplaced: string[] = [];
-  const unrecognized: string[] = [];
-  for (const epc of extras) {
-    if (stillInStock.has(epc)) misplaced.push(epc);
-    else unrecognized.push(epc);
+
+  const byEpc = new Map<string, LiveScanRow>();
+  for (const row of r.rows) {
+    byEpc.set(row.epc.toUpperCase(), row);
   }
-  return { matched, missing, misplaced, unrecognized };
+
+  const added_here: LiveScanRow[] = [];
+  const defective: LiveScanRow[] = [];
+  const locked: LiveScanRow[] = [];
+
+  for (const epc of extras) {
+    const row = byEpc.get(epc);
+    if (!row) {
+      // No items row at all — shouldn't happen since live ingest always
+      // writes one. Bucket as defective so it's visible to the operator.
+      defective.push({
+        epc,
+        sku: null,
+        description: null,
+        upc: null,
+        color: null,
+        size: null,
+        bin_id: null,
+        bin_code: null,
+        current_status: "tag_killed",
+        current_location_id: null,
+        current_location_code: null,
+      });
+      continue;
+    }
+    const flags = labelMap.get(labelNameForWmsStatus(row.current_status).toLowerCase());
+    if (flags?.super_admin_locked && row.current_status !== "tag_killed") {
+      locked.push(row);
+    } else if (row.current_status === "tag_killed") {
+      defective.push(row);
+    } else if (
+      row.current_status === "in-stock" &&
+      row.current_location_id === sessionLocationId
+    ) {
+      added_here.push(row);
+    } else {
+      // Edge: in-stock at another location, or some other unlocked non-in-stock
+      // status. Show as added_here so the operator at least sees it — they
+      // can resolve from there.
+      added_here.push(row);
+    }
+  }
+
+  return { matched, missing, added_here, defective, locked };
 }
 
 export type CommitOpts = {
-  /** If set, only the misplaced EPCs in this list are persisted. Lets the
-   *  operator deselect a misplaced row in the preview if they don't trust
-   *  the auto-classification. Same for missing. */
-  acceptMisplaced?: string[];
+  /** Optional: if set, only the missing EPCs in this list are flipped to
+   *  tag_killed. Lets the operator deselect a row in the preview modal if
+   *  they don't want to mark a given EPC as missing yet. */
   acceptMissing?: string[];
-  acceptUnrecognized?: string[];
   notes?: string;
 };
 
@@ -380,33 +473,27 @@ export async function commitSession(
   if (cur.status === "committed") throw new Error("BAD_REQUEST:Session already committed");
   if (cur.status === "canceled") throw new Error("BAD_REQUEST:Session was canceled");
 
-  const variance = await classifyVariance(
+  // Live-ingest already settled added_here / defective / locked during the
+  // scan. The only thing left to apply at commit is Missing → tag_killed.
+  const variance = await classifyVarianceLive(
     client,
     session.tid,
     cur.expected,
     cur.scanned_epcs,
+    cur.location_id,
   );
-
-  // Apply opt-in filters: if the operator passed explicit accept lists,
-  // intersect them with auto-classified buckets so anything unchecked in
-  // the preview modal is left unchanged.
+  const missingEpcs = variance.missing.map((m) => m.epc);
   const filteredMissing = opts.acceptMissing
-    ? variance.missing.filter((e) => opts.acceptMissing!.includes(e))
-    : variance.missing;
-  const filteredMisplaced = opts.acceptMisplaced
-    ? variance.misplaced.filter((e) => opts.acceptMisplaced!.includes(e))
-    : variance.misplaced;
-  const filteredUnrecognized = opts.acceptUnrecognized
-    ? variance.unrecognized.filter((e) => opts.acceptUnrecognized!.includes(e))
-    : variance.unrecognized;
+    ? missingEpcs.filter((e) => opts.acceptMissing!.includes(e))
+    : missingEpcs;
 
   const commitBody = cycleCountCommitSchema.parse({
     locationId: cur.location_id,
     binId: cur.bin_id,
-    matched: variance.matched,
+    matched: variance.matched.map((m) => m.epc),
     missing: filteredMissing,
-    misplaced: filteredMisplaced,
-    unrecognized: filteredUnrecognized,
+    misplaced: [],
+    unrecognized: [],
   });
 
   const result = await commitCycleCount(client, session, commitBody);
@@ -414,8 +501,8 @@ export async function commitSession(
   const summary: VarianceSummary = {
     matched: variance.matched.length,
     missing: filteredMissing.length,
-    misplaced: filteredMisplaced.length,
-    unrecognized: filteredUnrecognized.length,
+    misplaced: 0,
+    unrecognized: variance.defective.length + variance.locked.length,
   };
 
   await client.query(
@@ -459,64 +546,3 @@ export type BinRollupRow = {
   misplaced_in: number;
 };
 
-/**
- * Server-rendered CSV: fixed column order so it diffs cleanly between
- * counts. Includes session header + one row per EPC + variance totals.
- */
-export function renderSessionCsv(
-  detail: SessionDetail,
-  variance: {
-    matched: string[];
-    missing: string[];
-    misplaced: string[];
-    unrecognized: string[];
-  },
-): string {
-  const expByEpc = new Map(detail.expected.map((e) => [e.epc, e]));
-  const lines: string[] = [];
-  lines.push(`# Cycle count session ${detail.id}`);
-  lines.push(`# Name: ${csvEscape(detail.name)}`);
-  lines.push(`# Location: ${detail.location_code} (${csvEscape(detail.location_name)})`);
-  lines.push(`# Bin: ${detail.bin_code ?? "(all bins at location)"}`);
-  lines.push(`# Status: ${detail.status}`);
-  lines.push(`# Started: ${detail.started_at}`);
-  lines.push(`# Started by: ${detail.started_by_email ?? "(unknown)"}`);
-  lines.push(`# Completed: ${detail.completed_at ?? ""}`);
-  lines.push(`# Notes: ${csvEscape(detail.notes ?? "")}`);
-  lines.push(`#`);
-  lines.push(`# Totals`);
-  lines.push(`# Matched, Missing, Misplaced, Unrecognized, Expected, Scanned`);
-  lines.push(
-    `# ${variance.matched.length}, ${variance.missing.length}, ${variance.misplaced.length}, ${variance.unrecognized.length}, ${detail.expected.length}, ${detail.scanned_epcs.length}`,
-  );
-  lines.push(`#`);
-  lines.push(`epc,sku,description,expected_bin,state`);
-
-  const seen = new Set<string>();
-  const push = (epc: string, state: string) => {
-    if (seen.has(epc)) return;
-    seen.add(epc);
-    const exp = expByEpc.get(epc);
-    lines.push(
-      [
-        epc,
-        csvEscape(exp?.sku ?? ""),
-        csvEscape(exp?.description ?? ""),
-        csvEscape(exp?.bin_code ?? ""),
-        state,
-      ].join(","),
-    );
-  };
-  for (const e of variance.matched) push(e, "matched");
-  for (const e of variance.missing) push(e, "missing");
-  for (const e of variance.misplaced) push(e, "misplaced");
-  for (const e of variance.unrecognized) push(e, "unrecognized");
-
-  return lines.join("\n");
-}
-
-function csvEscape(s: string): string {
-  if (!s) return "";
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}

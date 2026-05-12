@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import {
-  classifyVariance,
+  classifyVarianceLive,
   getSession,
   patchSessionSchema,
   updateSession,
@@ -24,11 +24,12 @@ export async function GET(req: Request, { params }: Ctx) {
   try {
     const detail = await getSession(client, session.tid, id);
     if (!detail) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    const variance = await classifyVariance(
+    const variance = await classifyVarianceLive(
       client,
       session.tid,
       detail.expected,
       detail.scanned_epcs,
+      detail.location_id,
     );
     return NextResponse.json({ ok: true, session: detail, variance });
   } finally {

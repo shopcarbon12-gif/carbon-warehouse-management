@@ -13,8 +13,6 @@ const epcArr = z
 
 const commitSchema = z.object({
   acceptMissing: epcArr,
-  acceptMisplaced: epcArr,
-  acceptUnrecognized: epcArr,
   notes: z.string().trim().max(2000).optional(),
 });
 

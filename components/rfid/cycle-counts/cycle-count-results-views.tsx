@@ -26,7 +26,21 @@ export type ExpectedRow = {
   status: string;
 };
 
-export type RowState = "matched" | "missing" | "misplaced" | "unrecognized";
+export type RowState = "matched" | "missing" | "added_here" | "defective" | "locked";
+
+export type LiveScanRow = {
+  epc: string;
+  sku: string | null;
+  description: string | null;
+  upc: string | null;
+  color: string | null;
+  size: string | null;
+  bin_id: string | null;
+  bin_code: string | null;
+  current_status: string;
+  current_location_id: string | null;
+  current_location_code: string | null;
+};
 
 export type FlatRow = {
   epc: string;
@@ -36,40 +50,38 @@ export type FlatRow = {
   color: string;
   size: string;
   bin: string;
+  current_status: string;
   state: RowState;
 };
 
 export type Variance = {
-  matched: string[];
-  missing: string[];
-  misplaced: string[];
-  unrecognized: string[];
+  matched: ExpectedRow[];
+  missing: ExpectedRow[];
+  added_here: LiveScanRow[];
+  defective: LiveScanRow[];
+  locked: LiveScanRow[];
 };
 
 export type StateFilter = RowState | "all";
 
-const STATE_LABEL: Record<RowState, string> = {
+export const STATE_LABEL: Record<RowState, string> = {
   matched: "Matched",
   missing: "Missing",
-  misplaced: "Misplaced",
-  unrecognized: "Unrecognized",
+  added_here: "Added here",
+  defective: "Defective",
+  locked: "Locked",
 };
 
 const STATE_CLS: Record<RowState, string> = {
   matched: "wms-status-success",
   missing: "text-amber-400",
-  misplaced: "text-orange-400",
-  unrecognized: "text-[var(--wms-muted)]",
+  added_here: "text-sky-300",
+  defective: "text-red-400",
+  locked: "text-fuchsia-300",
 };
 
-export function buildFlatRows(
-  expected: ExpectedRow[],
-  variance: Variance,
-): FlatRow[] {
-  const expByEpc = new Map(expected.map((e) => [e.epc, e]));
-  const rows: FlatRow[] = [];
-  const matchedSet = new Set(variance.matched);
-  const fromExpected = (e: ExpectedRow): Omit<FlatRow, "state"> => ({
+function fromExpected(e: ExpectedRow, state: "matched" | "missing"): FlatRow {
+  return {
     epc: e.epc,
     sku: e.sku,
     description: e.description ?? "",
@@ -77,21 +89,35 @@ export function buildFlatRows(
     color: e.color ?? "",
     size: e.size ?? "",
     bin: e.bin_code ?? "—",
-  });
-  const fallback = (epc: string): Omit<FlatRow, "state"> => {
-    const e = expByEpc.get(epc);
-    if (e) return fromExpected(e);
-    return { epc, sku: "—", description: "", upc: "", color: "", size: "", bin: "—" };
+    current_status: e.status,
+    state,
   };
-  for (const e of expected) {
-    rows.push({ ...fromExpected(e), state: matchedSet.has(e.epc) ? "matched" : "missing" });
-  }
-  for (const epc of variance.misplaced) {
-    rows.push({ ...fallback(epc), state: "misplaced" });
-  }
-  for (const epc of variance.unrecognized) {
-    rows.push({ ...fallback(epc), state: "unrecognized" });
-  }
+}
+
+function fromLive(r: LiveScanRow, state: "added_here" | "defective" | "locked"): FlatRow {
+  return {
+    epc: r.epc,
+    sku: r.sku ?? "—",
+    description: r.description ?? "",
+    upc: r.upc ?? "",
+    color: r.color ?? "",
+    size: r.size ?? "",
+    bin: r.bin_code ?? "—",
+    current_status: r.current_status,
+    state,
+  };
+}
+
+export function buildFlatRows(
+  _expected: ExpectedRow[],
+  variance: Variance,
+): FlatRow[] {
+  const rows: FlatRow[] = [];
+  for (const e of variance.matched) rows.push(fromExpected(e, "matched"));
+  for (const e of variance.missing) rows.push(fromExpected(e, "missing"));
+  for (const r of variance.added_here) rows.push(fromLive(r, "added_here"));
+  for (const r of variance.defective) rows.push(fromLive(r, "defective"));
+  for (const r of variance.locked) rows.push(fromLive(r, "locked"));
   return rows;
 }
 
@@ -180,6 +206,11 @@ export function AllEpcsTable({
                 <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.bin}>{r.bin}</td>
                 <td className="overflow-hidden px-3 py-2">
                   <span className={STATE_CLS[r.state]}>{STATE_LABEL[r.state]}</span>
+                  {r.state === "locked" || r.state === "defective" ? (
+                    <span className="ml-1 text-[0.6rem] text-[var(--wms-muted)]">
+                      ({r.current_status})
+                    </span>
+                  ) : null}
                 </td>
                 <td className={`${cellTruncate} px-3 py-2`}>
                   <button
@@ -440,7 +471,7 @@ export function BySkuTable({
   variance: Variance;
   search: string;
 }) {
-  const matchedSet = new Set(variance.matched);
+  const matchedSet = new Set(variance.matched.map((m) => m.epc));
   type SkuAgg = {
     sku: string;
     description: string;
@@ -640,7 +671,7 @@ export function ByBinTable({
   expected: ExpectedRow[];
   variance: Variance;
 }) {
-  const matchedSet = new Set(variance.matched);
+  const matchedSet = new Set(variance.matched.map((m) => m.epc));
   type BinAgg = {
     bin_code: string;
     expected: number;

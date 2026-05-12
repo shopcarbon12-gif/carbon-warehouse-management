@@ -78,8 +78,9 @@ const STATE_LABELS = {
   all: "All",
   matched: "Matched",
   missing: "Missing",
-  misplaced: "Misplaced",
-  unrecognized: "Unrecognized",
+  added_here: "Added here",
+  defective: "Defective",
+  locked: "Locked",
 } as const;
 
 export function CycleCountWorkspace({ isAdmin = false }: { isAdmin?: boolean }) {
@@ -460,8 +461,9 @@ function ActiveSessionView({
   const variance: Variance = data?.variance ?? {
     matched: [],
     missing: [],
-    misplaced: [],
-    unrecognized: [],
+    added_here: [],
+    defective: [],
+    locked: [],
   };
 
   // Local scanned set — driven by SSE stream when status === active.
@@ -535,6 +537,7 @@ function ActiveSessionView({
         for (const epc of list) next.add(epc);
         return next;
       });
+      for (const epc of list) pendingScanRef.current.add(epc);
     };
     return () => es.close();
   }, [detail?.id, detail?.status]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -551,22 +554,43 @@ function ActiveSessionView({
     return () => clearInterval(t);
   }, []);
 
-  // Server-sync — push local scanned set on a 3s debounce while active.
+  // Pending EPCs buffer — every SSE batch lands here, a 1.5s debounce POSTs
+  // them to /scan which runs the catalog formula, mutates `items` (live add /
+  // move / revive / tag_killed), writes per-EPC audit_log entries, and merges
+  // them into the session's scanned_epcs list. The GET session response then
+  // returns enriched live variance buckets.
+  const pendingScanRef = useRef<Set<string>>(new Set());
+  const flushingRef = useRef(false);
+
+  const flushPendingScans = useCallback(async () => {
+    if (flushingRef.current) return;
+    if (pendingScanRef.current.size === 0) return;
+    flushingRef.current = true;
+    const batch = [...pendingScanRef.current];
+    pendingScanRef.current.clear();
+    try {
+      await fetch(`/api/rfid/cycle-counts/sessions/${sessionId}/scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ epcs: batch }),
+      });
+      await mutate();
+    } catch {
+      // Re-queue on failure so the next tick retries.
+      for (const e of batch) pendingScanRef.current.add(e);
+    } finally {
+      flushingRef.current = false;
+    }
+  }, [sessionId, mutate]);
+
   useEffect(() => {
     if (!detail) return;
     if (detail.status !== "active") return;
     const t = setInterval(() => {
-      const arr = [...localScanned];
-      // Only PATCH if the server's count differs.
-      if (arr.length === detail.scanned_count) return;
-      void fetch(`/api/rfid/cycle-counts/sessions/${sessionId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scannedEpcs: arr }),
-      }).then(() => mutate());
-    }, 3000);
+      void flushPendingScans();
+    }, 1500);
     return () => clearInterval(t);
-  }, [detail?.id, detail?.status, detail?.scanned_count, localScanned, sessionId, mutate]);
+  }, [detail?.id, detail?.status, flushPendingScans]);
 
   const flatRows = useMemo(
     () => (detail ? buildFlatRows(detail.expected, variance) : []),
@@ -743,11 +767,12 @@ function ActiveSessionView({
     }
     setBusyAction(next);
     try {
-      // Push any pending scans first (so the server snapshot is current).
+      // Flush any pending live scans first (server is the source of truth).
+      await flushPendingScans();
       await fetch(`/api/rfid/cycle-counts/sessions/${sessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scannedEpcs: [...localScanned], status: next }),
+        body: JSON.stringify({ status: next }),
       });
       await mutate();
       // Release readers immediately on pause/cancel — don't wait for
@@ -763,16 +788,10 @@ function ActiveSessionView({
 
   const doCommit = async (opts: {
     acceptMissing: string[];
-    acceptMisplaced: string[];
-    acceptUnrecognized: string[];
     notes: string;
   }) => {
-    // Make sure latest scans are persisted before committing.
-    await fetch(`/api/rfid/cycle-counts/sessions/${sessionId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scannedEpcs: [...localScanned] }),
-    });
+    // Flush any pending live scans first so missing/matched include them.
+    await flushPendingScans();
     const res = await fetch(
       `/api/rfid/cycle-counts/sessions/${sessionId}/commit`,
       {
@@ -821,18 +840,19 @@ function ActiveSessionView({
             href={`/api/rfid/cycle-counts/sessions/${sessionId}/export`}
             className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
           >
-            <Download className="h-3.5 w-3.5" /> Export CSV
+            <Download className="h-3.5 w-3.5" /> Export XLSX
           </a>
         </div>
       </div>
 
       {/* KPI strip with coverage + read rate */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-7">
         <KpiTile big label="Coverage" value={`${coverage}%`} cls={coverage === 100 ? "wms-status-success" : coverage >= 80 ? "text-amber-400" : "text-red-400"} />
         <KpiTile label="Matched" value={`${variance.matched.length} / ${expectedCount}`} cls="wms-status-success" />
         <KpiTile label="Missing" value={String(variance.missing.length)} cls="text-amber-400" />
-        <KpiTile label="Misplaced" value={String(variance.misplaced.length)} cls="text-orange-400" />
-        <KpiTile label="Unrecognized" value={String(variance.unrecognized.length)} cls="text-[var(--wms-muted)]" />
+        <KpiTile label="Added here" value={String(variance.added_here.length)} cls="text-sky-300" />
+        <KpiTile label="Defective" value={String(variance.defective.length)} cls="text-red-400" />
+        <KpiTile label="Locked" value={String(variance.locked.length)} cls="text-fuchsia-300" />
         <KpiTile
           label="Read rate"
           value={`${readsPerMin}/min`}
@@ -957,9 +977,11 @@ function ActiveSessionView({
                     ? variance.matched.length
                     : s === "missing"
                       ? variance.missing.length
-                      : s === "misplaced"
-                        ? variance.misplaced.length
-                        : variance.unrecognized.length;
+                      : s === "added_here"
+                        ? variance.added_here.length
+                        : s === "defective"
+                          ? variance.defective.length
+                          : variance.locked.length;
               return (
                 <button
                   key={s}
@@ -1001,8 +1023,8 @@ function ActiveSessionView({
 
       {detail.status === "committed" && detail.variance_summary ? (
         <p className="font-mono text-xs text-[var(--wms-muted)]">
-          Committed: {detail.variance_summary.matched} matched · {detail.variance_summary.missing} missing
-          · {detail.variance_summary.misplaced} misplaced · {detail.variance_summary.unrecognized} unrecognized.
+          Committed: {detail.variance_summary.matched} matched · {detail.variance_summary.missing} missing → tag_killed
+          · {detail.variance_summary.unrecognized} settled live (added / defective / locked).
           Audit log: {detail.audit_log_id ?? "—"}.
         </p>
       ) : null}

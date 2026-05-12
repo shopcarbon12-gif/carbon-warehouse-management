@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { X, AlertTriangle, ArrowRight, HelpCircle } from "lucide-react";
-import type { ExpectedRow, Variance } from "./cycle-count-results-views";
+import { useEffect, useState } from "react";
+import { X, ArrowRight, HelpCircle } from "lucide-react";
+import type { ExpectedRow, LiveScanRow, Variance } from "./cycle-count-results-views";
 
 export type VarianceSummary = {
   matched: number;
@@ -17,89 +17,54 @@ type Props = {
   expected: ExpectedRow[];
   variance: Variance;
   binCodeForCommit: string | null;
-  /** Submit. The caller decides whether to include each accept-list. */
   onCommit: (opts: {
     acceptMissing: string[];
-    acceptMisplaced: string[];
-    acceptUnrecognized: string[];
     notes: string;
   }) => Promise<void>;
 };
 
 /**
- * Pre-commit preview. Shows every row that's about to mutate inventory,
- * grouped by what will happen. Each row has a checkbox so the operator
- * can opt-out lines they don't trust (e.g. a "missing" item they know is
- * physically there but didn't read).
+ * Pre-commit preview.
  *
- * The commit body sends accept-lists, which the server intersects with
- * its own variance computation. Anything unchecked is silently skipped
- * (the item row is not mutated).
+ * With live cycle-count ingestion, added_here / defective / locked rows are
+ * already settled in inventory before this modal opens — they're shown here
+ * read-only so the operator sees what landed. The only thing left for commit
+ * is Missing → tag_killed, where the operator can opt-out specific rows.
  */
 export function CycleCountCommitModal({
   open,
   onClose,
-  expected,
   variance,
-  binCodeForCommit,
   onCommit,
 }: Props) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [accepted, setAccepted] = useState<{
-    missing: Set<string>;
-    misplaced: Set<string>;
-    unrecognized: Set<string>;
-  }>({ missing: new Set(), misplaced: new Set(), unrecognized: new Set() });
+  const [accepted, setAccepted] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
 
-  // Re-init accept-everything every time the modal opens.
   useEffect(() => {
     if (!open) return;
-    setAccepted({
-      missing: new Set(variance.missing),
-      misplaced: new Set(variance.misplaced),
-      unrecognized: new Set(variance.unrecognized),
-    });
+    setAccepted(new Set(variance.missing.map((m) => m.epc)));
     setErr(null);
     setNotes("");
-  }, [open, variance.missing, variance.misplaced, variance.unrecognized]);
-
-  const expByEpc = useMemo(
-    () => new Map(expected.map((e) => [e.epc, e])),
-    [expected],
-  );
+  }, [open, variance.missing]);
 
   if (!open) return null;
 
-  const counts = {
-    matched: variance.matched.length,
-    missing: accepted.missing.size,
-    misplaced: accepted.misplaced.size,
-    unrecognized: accepted.unrecognized.size,
-  };
-
-  const toggle = (
-    bucket: "missing" | "misplaced" | "unrecognized",
-    epc: string,
-  ) => {
+  const toggle = (epc: string) => {
     setAccepted((cur) => {
-      const next = new Set(cur[bucket]);
+      const next = new Set(cur);
       if (next.has(epc)) next.delete(epc);
       else next.add(epc);
-      return { ...cur, [bucket]: next };
+      return next;
     });
   };
 
-  const toggleAll = (
-    bucket: "missing" | "misplaced" | "unrecognized",
-    epcs: string[],
-  ) => {
+  const toggleAll = () => {
     setAccepted((cur) => {
-      if (cur[bucket].size === epcs.length) {
-        return { ...cur, [bucket]: new Set() };
-      }
-      return { ...cur, [bucket]: new Set(epcs) };
+      const all = variance.missing.map((m) => m.epc);
+      if (cur.size === all.length) return new Set();
+      return new Set(all);
     });
   };
 
@@ -108,9 +73,7 @@ export function CycleCountCommitModal({
     setBusy(true);
     try {
       await onCommit({
-        acceptMissing: [...accepted.missing],
-        acceptMisplaced: [...accepted.misplaced],
-        acceptUnrecognized: [...accepted.unrecognized],
+        acceptMissing: [...accepted],
         notes: notes.trim(),
       });
       onClose();
@@ -120,6 +83,9 @@ export function CycleCountCommitModal({
       setBusy(false);
     }
   };
+
+  const liveTotal =
+    variance.added_here.length + variance.defective.length + variance.locked.length;
 
   return (
     <>
@@ -141,8 +107,9 @@ export function CycleCountCommitModal({
                 Review &amp; commit cycle count
               </h2>
               <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                Each line below shows what will change in inventory. Uncheck any
-                line you don&apos;t want applied.
+                Added / Defective / Locked rows already settled live during the scan.
+                The only thing left to apply is Missing → tag_killed; uncheck any row
+                you don&apos;t want flipped.
               </p>
             </div>
             <button
@@ -155,78 +122,33 @@ export function CycleCountCommitModal({
             </button>
           </div>
 
-          <SummaryStrip counts={counts} matched={variance.matched.length} />
+          <SummaryStrip
+            matched={variance.matched.length}
+            missingAccepted={accepted.size}
+            addedHere={variance.added_here.length}
+            defective={variance.defective.length}
+            locked={variance.locked.length}
+          />
 
           {variance.missing.length > 0 ? (
-            <Bucket
-              title="Missing — will be marked tag_killed"
-              hint="Tag was expected at this scope but didn’t read. Status will move from in-stock → tag_killed (counts as shrink)."
-              tone="amber"
-              epcs={variance.missing}
-              accepted={accepted.missing}
-              onToggle={(e) => toggle("missing", e)}
-              onToggleAll={() => toggleAll("missing", variance.missing)}
-              describe={(epc) => {
-                const r = expByEpc.get(epc);
-                return {
-                  sku: r?.sku ?? "—",
-                  description: r?.description ?? "",
-                  fromBin: r?.bin_code ?? "—",
-                  arrowText: "tag_killed",
-                };
-              }}
+            <MissingBucket
+              rows={variance.missing}
+              accepted={accepted}
+              onToggle={toggle}
+              onToggleAll={toggleAll}
             />
-          ) : null}
-
-          {variance.misplaced.length > 0 ? (
-            <Bucket
-              title={
-                binCodeForCommit
-                  ? `Misplaced — will be moved to bin ${binCodeForCommit}`
-                  : "Misplaced — bin required to commit"
-              }
-              hint="Tag is in-stock somewhere else but you scanned it here. The item will be relocated to the count’s bin."
-              tone="orange"
-              epcs={variance.misplaced}
-              accepted={accepted.misplaced}
-              onToggle={(e) => toggle("misplaced", e)}
-              onToggleAll={() => toggleAll("misplaced", variance.misplaced)}
-              describe={(epc) => {
-                const r = expByEpc.get(epc);
-                return {
-                  sku: r?.sku ?? "—",
-                  description: r?.description ?? "",
-                  fromBin: "(elsewhere)",
-                  arrowText: binCodeForCommit ?? "bin?",
-                };
-              }}
-              warning={!binCodeForCommit ? "Pick a bin in the workspace before committing misplaced rows." : null}
-            />
-          ) : null}
-
-          {variance.unrecognized.length > 0 ? (
-            <Bucket
-              title="Unrecognized — routed through ingest"
-              hint="EPC isn’t in your catalog or doesn’t decode. Decodable EPCs that match catalog become in-stock here; the rest land as tag_killed (visible in Defective EPCs)."
-              tone="muted"
-              epcs={variance.unrecognized}
-              accepted={accepted.unrecognized}
-              onToggle={(e) => toggle("unrecognized", e)}
-              onToggleAll={() => toggleAll("unrecognized", variance.unrecognized)}
-              describe={() => ({
-                sku: "—",
-                description: "",
-                fromBin: "(unknown)",
-                arrowText: "ingest",
-              })}
-            />
-          ) : null}
-
-          {variance.matched.length > 0 ? (
-            <p className="mt-3 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-              <span className="wms-status-success">{variance.matched.length} matched</span>{" "}
-              tags need no action — they were expected and seen.
+          ) : (
+            <p className="mt-4 font-mono text-xs text-[var(--wms-muted)]">
+              No missing rows — nothing to flip on commit.
             </p>
+          )}
+
+          {liveTotal > 0 ? (
+            <LiveSummary
+              addedHere={variance.added_here}
+              defective={variance.defective}
+              locked={variance.locked}
+            />
           ) : null}
 
           <div className="mt-4">
@@ -238,7 +160,7 @@ export function CycleCountCommitModal({
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               maxLength={2000}
-              placeholder="e.g. Counted by J. with 3 SA-2000 readers, 2 missing items confirmed shrink"
+              placeholder="e.g. Counted by J. with 3 SA-2000 readers, 2 missing confirmed shrink"
               className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]"
             />
           </div>
@@ -258,20 +180,13 @@ export function CycleCountCommitModal({
             </button>
             <button
               type="button"
-              disabled={
-                busy ||
-                (variance.misplaced.length > 0 &&
-                  !binCodeForCommit &&
-                  accepted.misplaced.size > 0)
-              }
+              disabled={busy}
               onClick={() => void run()}
               className="wms-btn-primary px-6 font-mono disabled:opacity-50"
             >
               {busy
                 ? "Committing…"
-                : `Apply ${counts.missing + counts.misplaced + counts.unrecognized} change${
-                    counts.missing + counts.misplaced + counts.unrecognized === 1 ? "" : "s"
-                  }`}
+                : `Apply ${accepted.size} missing → tag_killed`}
             </button>
           </div>
         </div>
@@ -281,18 +196,25 @@ export function CycleCountCommitModal({
 }
 
 function SummaryStrip({
-  counts,
   matched,
+  missingAccepted,
+  addedHere,
+  defective,
+  locked,
 }: {
-  counts: { missing: number; misplaced: number; unrecognized: number };
   matched: number;
+  missingAccepted: number;
+  addedHere: number;
+  defective: number;
+  locked: number;
 }) {
   return (
-    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
       <Tile label="Matched" n={matched} cls="wms-status-success" />
-      <Tile label="Missing" n={counts.missing} cls="text-amber-400" />
-      <Tile label="Misplaced" n={counts.misplaced} cls="text-orange-400" />
-      <Tile label="Unrecognized" n={counts.unrecognized} cls="text-[var(--wms-muted)]" />
+      <Tile label="Missing →" n={missingAccepted} cls="text-amber-400" />
+      <Tile label="Added live" n={addedHere} cls="text-sky-300" />
+      <Tile label="Defective" n={defective} cls="text-red-400" />
+      <Tile label="Locked" n={locked} cls="text-fuchsia-300" />
     </div>
   );
 }
@@ -308,48 +230,28 @@ function Tile({ label, n, cls }: { label: string; n: number; cls: string }) {
   );
 }
 
-function Bucket({
-  title,
-  hint,
-  tone,
-  epcs,
+function MissingBucket({
+  rows,
   accepted,
   onToggle,
   onToggleAll,
-  describe,
-  warning,
 }: {
-  title: string;
-  hint: string;
-  tone: "amber" | "orange" | "muted";
-  epcs: string[];
+  rows: ExpectedRow[];
   accepted: Set<string>;
   onToggle: (epc: string) => void;
   onToggleAll: () => void;
-  describe: (epc: string) => {
-    sku: string;
-    description: string;
-    fromBin: string;
-    arrowText: string;
-  };
-  warning?: string | null;
 }) {
-  const headerCls =
-    tone === "amber"
-      ? "text-amber-400"
-      : tone === "orange"
-        ? "text-orange-400"
-        : "text-[var(--wms-muted)]";
-
   return (
     <section className="mt-4 overflow-hidden rounded-lg border border-[var(--wms-border)]">
       <header className="flex flex-wrap items-center justify-between gap-2 bg-[var(--wms-surface-elevated)] px-3 py-2">
         <div>
-          <h3 className={`font-mono text-xs font-semibold uppercase tracking-wide ${headerCls}`}>
-            {title} ({epcs.length})
+          <h3 className="font-mono text-xs font-semibold uppercase tracking-wide text-amber-400">
+            Missing — will be marked tag_killed ({rows.length})
           </h3>
           <p className="mt-0.5 flex items-start gap-1.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">
-            <HelpCircle className="mt-0.5 h-3 w-3 shrink-0" /> {hint}
+            <HelpCircle className="mt-0.5 h-3 w-3 shrink-0" /> Tag was expected but
+            never scanned. Status will move from in-stock → tag_killed (counts as
+            shrink). Uncheck rows you know are physically here but didn&apos;t read.
           </p>
         </div>
         <button
@@ -357,38 +259,63 @@ function Bucket({
           onClick={onToggleAll}
           className="rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
         >
-          {accepted.size === epcs.length ? "Uncheck all" : "Check all"}
+          {accepted.size === rows.length ? "Uncheck all" : "Check all"}
         </button>
       </header>
-      {warning ? (
-        <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-950/30 px-3 py-1.5 font-mono text-[0.65rem] text-amber-200/80">
-          <AlertTriangle className="h-3.5 w-3.5" /> {warning}
-        </div>
-      ) : null}
-      <ul className="max-h-48 overflow-auto divide-y divide-[var(--wms-border)]/60 font-mono text-xs">
-        {epcs.map((epc) => {
-          const d = describe(epc);
-          const checked = accepted.has(epc);
+      <ul className="max-h-64 overflow-auto divide-y divide-[var(--wms-border)]/60 font-mono text-xs">
+        {rows.map((r) => {
+          const checked = accepted.has(r.epc);
           return (
             <li
-              key={epc}
+              key={r.epc}
               className={`flex items-center gap-2 px-3 py-1.5 ${checked ? "" : "opacity-50"}`}
             >
               <input
                 type="checkbox"
                 checked={checked}
-                onChange={() => onToggle(epc)}
+                onChange={() => onToggle(r.epc)}
                 aria-label="apply this change"
               />
-              <span className="text-[var(--wms-accent)] truncate">{epc}</span>
-              <span className="text-[var(--wms-fg)]">{d.sku}</span>
-              <span className="text-[var(--wms-muted)] hidden md:inline truncate">{d.description}</span>
+              <span className="truncate text-[var(--wms-accent)]">{r.epc}</span>
+              <span className="text-[var(--wms-fg)]">{r.sku}</span>
+              <span className="hidden truncate text-[var(--wms-muted)] md:inline">
+                {r.description ?? ""}
+              </span>
               <span className="ml-auto inline-flex items-center gap-1 text-[var(--wms-muted)]">
-                {d.fromBin} <ArrowRight className="h-3 w-3" /> {d.arrowText}
+                {r.bin_code ?? "—"} <ArrowRight className="h-3 w-3" /> tag_killed
               </span>
             </li>
           );
         })}
+      </ul>
+    </section>
+  );
+}
+
+function LiveSummary({
+  addedHere,
+  defective,
+  locked,
+}: {
+  addedHere: LiveScanRow[];
+  defective: LiveScanRow[];
+  locked: LiveScanRow[];
+}) {
+  return (
+    <section className="mt-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 px-3 py-2">
+      <h3 className="font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-muted)]">
+        Settled live during the scan
+      </h3>
+      <ul className="mt-1 grid gap-1 font-mono text-[0.65rem] sm:grid-cols-3">
+        <li className="text-sky-300">
+          {addedHere.length} added / moved here (in-stock at this location)
+        </li>
+        <li className="text-red-400">
+          {defective.length} defective → tag_killed
+        </li>
+        <li className="text-fuchsia-300">
+          {locked.length} locked (Super Admin status — unchanged)
+        </li>
       </ul>
     </section>
   );
