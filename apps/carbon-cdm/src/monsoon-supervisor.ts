@@ -1484,6 +1484,37 @@ export class MonsoonSupervisor {
         // chip-level abort. Counter increment kept so port-rotation
         // and auto-sweep recovery still work.
         slot.consecutiveZeroByteKicks += 1;
+        // Auto-sweep recovery — advance on 0-byte exits 2026-05-12.
+        // Previously the watchdog only advanced sweep when silentMs
+        // exceeded silenceTimeout (~5s), but on these fast-respawning
+        // wedged chips the binary exits in <1s and `lastByteAt` resets
+        // on every spawn, so silentMs never reached the threshold.
+        // Sweep effectively never advanced past the first step. By
+        // advancing here on every 0-byte exit we walk through
+        // SWEEP_POWERS rapidly until we find a power that produces
+        // bytes — observed live 2026-05-12 on .81 stuck at 330 dBm
+        // while operator sweep proved the chip CAN read at lower power.
+        if (slot.sweepPowerOverrideArg !== null && slot.testSession === null) {
+          const idx = SWEEP_POWERS.indexOf(slot.sweepPowerOverrideArg);
+          if (idx >= 0 && idx + 1 < SWEEP_POWERS.length) {
+            const nextPower = SWEEP_POWERS[idx + 1];
+            slot.sweepPowerOverrideArg = nextPower ?? null;
+            log.info("supervisor: sweep step silent (0-byte exit) — advancing power", {
+              readerId: slot.spec.id,
+              readerName: slot.spec.name,
+              prevPower: SWEEP_POWERS[idx],
+              nextPower,
+            });
+          } else {
+            log.warn("supervisor: sweep recovery failed — silent at all power steps", {
+              readerId: slot.spec.id,
+              readerName: slot.spec.name,
+              triedPowers: [...SWEEP_POWERS],
+            });
+            slot.sweepPowerOverrideArg = null;
+            slot.lastSweepAttemptAt = Date.now();
+          }
+        }
       }
       const finalDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
       setTimeout(() => {
@@ -1647,7 +1678,17 @@ export class MonsoonSupervisor {
         // power so a chip that genuinely recovers escalates back. Best
         // of both worlds: readers stay working immediately AND we
         // never silently cap a healthy chip forever.
-        if (slot.sweepPowerOverrideArg !== null) {
+        // Only treat this as a sweep-recovery-success if the slot is
+        // actually in supervisor-driven sweep recovery (NORMAL mode).
+        // During operator-driven antenna-test sweep, the chip is being
+        // power-stepped by the test page; the supervisor's
+        // sweepPowerOverrideArg is unrelated (or stale from a prior
+        // recovery attempt). Without this gate the supervisor logs
+        // "sweep recovery succeeded at 330" when in fact the bytes are
+        // flowing from an operator-test spawn at power 100 — confusing
+        // and wrong. Added 2026-05-12 after .81 ran an operator sweep
+        // mid-recovery and the supervisor pinned the wrong power.
+        if (slot.sweepPowerOverrideArg !== null && slot.testSession === null) {
           log.info("supervisor: sweep recovery succeeded — pinning at recovered power", {
             readerId: slot.spec.id,
             readerName: slot.spec.name,
@@ -1782,6 +1823,37 @@ export class MonsoonSupervisor {
         // chip-level abort. Counter increment kept so port-rotation
         // and auto-sweep recovery still work.
         slot.consecutiveZeroByteKicks += 1;
+        // Auto-sweep recovery — advance on 0-byte exits 2026-05-12.
+        // Previously the watchdog only advanced sweep when silentMs
+        // exceeded silenceTimeout (~5s), but on these fast-respawning
+        // wedged chips the binary exits in <1s and `lastByteAt` resets
+        // on every spawn, so silentMs never reached the threshold.
+        // Sweep effectively never advanced past the first step. By
+        // advancing here on every 0-byte exit we walk through
+        // SWEEP_POWERS rapidly until we find a power that produces
+        // bytes — observed live 2026-05-12 on .81 stuck at 330 dBm
+        // while operator sweep proved the chip CAN read at lower power.
+        if (slot.sweepPowerOverrideArg !== null && slot.testSession === null) {
+          const idx = SWEEP_POWERS.indexOf(slot.sweepPowerOverrideArg);
+          if (idx >= 0 && idx + 1 < SWEEP_POWERS.length) {
+            const nextPower = SWEEP_POWERS[idx + 1];
+            slot.sweepPowerOverrideArg = nextPower ?? null;
+            log.info("supervisor: sweep step silent (0-byte exit) — advancing power", {
+              readerId: slot.spec.id,
+              readerName: slot.spec.name,
+              prevPower: SWEEP_POWERS[idx],
+              nextPower,
+            });
+          } else {
+            log.warn("supervisor: sweep recovery failed — silent at all power steps", {
+              readerId: slot.spec.id,
+              readerName: slot.spec.name,
+              triedPowers: [...SWEEP_POWERS],
+            });
+            slot.sweepPowerOverrideArg = null;
+            slot.lastSweepAttemptAt = Date.now();
+          }
+        }
       }
       const finalDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
       setTimeout(() => {
