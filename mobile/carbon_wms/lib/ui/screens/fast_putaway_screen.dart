@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/services.dart'
-    show DeviceOrientation, EventChannel, SystemChrome, SystemUiOverlayStyle;
+    show DeviceOrientation, EventChannel, SystemChrome, SystemUiOverlayStyle,
+        TextEditingValue, TextInputFormatter, TextSelection;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -320,6 +321,37 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _flashOk = false;
     });
     _scanFocus.requestFocus();
+  }
+
+  /// Operator tapped "Refresh session". Beyond clearing bin/items, this
+  /// MUST return the screen to the **default** state: manual mode OFF,
+  /// 2D scanner re-armed (trigger pull fires the imager again), no
+  /// leftover bin code or staged item rows.
+  ///
+  /// Order matters:
+  ///   1. Disable manual mode in the session — sub-options cascade off,
+  ///      and resetVersion bumps so the listener wipes our local copies.
+  ///   2. Re-assert hardware mode: enable trigger relay + put the radio
+  ///      in 2D mode (Zebra trigger + Chainway). Same calls _load() runs
+  ///      on first entry — explicitly run them again because the screen
+  ///      may have been flipped to manual scanner-source while in manual
+  ///      mode.
+  ///   3. Clear all on-screen state via the existing reset path.
+  void _resetToDefaultMode() {
+    BinAssignSession.setManualMode(false);
+    setState(() {
+      _manualBin = BinAssignSession.manualBin;
+      _manualAddItem = BinAssignSession.manualAddItem;
+      _externalScanner = BinAssignSession.externalScanner;
+      _scannerSource = 'hardware';
+    });
+    // Re-arm the 2D imager / Zebra 2D trigger. _load() does the same on
+    // entry; mirroring it here so refresh is a true "back to defaults."
+    _syncHardwareBarcodeStream();
+    unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
+    unawaited(RfidVendorChannel.setZebraTriggerMode2D());
+    unawaited(_wakeCameraImagerOnce());
+    _resetForNextEntry();
   }
 
   /// End-of-session — keeps the bin showing (per spec answer #6/#10) and
@@ -2178,7 +2210,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               // Refresh — drops back to the "scan a bin" empty state without
               // touching DB rows. Same path the screen takes after a successful
               // assign or a delete-bin.
-              onRefreshSession: _resetForNextEntry,
+              onRefreshSession: _resetToDefaultMode,
               onAddBin: _addNewBin,
               onAddBinCamera: () async {
                 final code = await _scanWithCamera('SCAN BIN LOCATION');
@@ -2329,6 +2361,17 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
     if (widget.manualBin && widget.isActive && widget.binCode.isNotEmpty) {
       _binCtrl.text = widget.binCode;
     }
+    // Pre-load bins on mount so the dropdown has data the moment the
+    // operator focuses the field. Previously it waited until the first
+    // focus event AND the user reported "all I see is Add new bin" —
+    // that happens when fetchBins throws (silently caught) and the
+    // dropdown then has no rows beyond the "Add new" entry. Loading
+    // eagerly + retrying-on-text-change keeps the dropdown populated.
+    if (widget.manualBin) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadBins();
+      });
+    }
   }
 
   @override
@@ -2344,6 +2387,13 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
       }
     } else if (oldWidget.isActive && !widget.isActive && _binCtrl.text.isNotEmpty) {
       _binCtrl.clear();
+    }
+    // Manual mode just turned on (was off, now on) — load the bin list
+    // so the dropdown is populated for the operator's first keystroke.
+    if (widget.manualBin && !oldWidget.manualBin && !_binsLoaded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadBins();
+      });
     }
   }
 
@@ -2376,10 +2426,21 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
           _filterBins();
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      // Silently caught — but don't flip _binsLoaded so the next
+      // keystroke / focus event triggers a retry. The previous version
+      // also caught silently AND set _binsLoaded=true earlier in the
+      // happy path only, so a single transient fetch failure left the
+      // operator with an empty dropdown for the rest of the session.
+    }
   }
 
   void _onTextChanged() {
+    // If the initial load failed, retry once when the operator starts
+    // typing — typically the bins endpoint is back by then.
+    if (!_binsLoaded && _binCtrl.text.isNotEmpty) {
+      unawaited(_loadBins());
+    }
     _filterBins();
   }
 
@@ -2511,6 +2572,14 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                             border: InputBorder.none,
                           ),
                           textCapitalization: TextCapitalization.characters,
+                          // Live-format the typed text into the same shape a
+                          // 2D scan produces (e.g. `6B03R` → `6-B-03-R`).
+                          // Operator never types the hyphens; we insert them
+                          // for visual parity with scanner-fed bins. Verify
+                          // (_onVerify) still calls the parent's
+                          // onManualBinSubmit which runs _formatBinCode again
+                          // server-side — idempotent.
+                          inputFormatters: [_BinCodeHyphenFormatter()],
                           onSubmitted: (_) => _onVerify(),
                         ),
                       )
@@ -2637,6 +2706,36 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Live formatter for the manual-mode bin field. Strips spaces / hyphens
+/// from the operator's typed input, uppercases, and re-inserts the
+/// canonical hyphenated shape `D-L-DD-L` once the input reaches 5
+/// alphanumerics (e.g. `6B03R` → `6-B-03-R`). Anything shorter or
+/// longer is rendered raw-uppercased.
+///
+/// Mirrors `_formatBinCode` so a typed bin reads the same as one
+/// scanned by the 2D imager. The cursor sticks to the end after every
+/// keystroke — fine for this UX because the operator types left-to-
+/// right and never edits the middle of a 5-char code.
+class _BinCodeHyphenFormatter extends TextInputFormatter {
+  static final RegExp _nonAlnum = RegExp(r'[^A-Za-z0-9]');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final raw = newValue.text.replaceAll(_nonAlnum, '').toUpperCase();
+    final formatted = raw.length == 5
+        ? '${raw[0]}-${raw[1]}-${raw.substring(2, 4)}-${raw[4]}'
+        : raw;
+    if (formatted == newValue.text) return newValue;
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

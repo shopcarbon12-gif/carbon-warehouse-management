@@ -36,11 +36,25 @@ class _AddOnCountSourcePickerScreenState
   bool _includeCompleted = false;
   String? _error;
   List<Map<String, dynamic>> _rows = const [];
+  // Logged-in operator's email, cached at mount. Used to detect "I'm the
+  // owner of this locked row" so we can resume the session directly instead
+  // of sending a join-request to ourselves (which deadlocks: the server
+  // gates 'respond' on owner == requester, and the picker just sits on
+  // "Waiting for owner" forever). See _onRowTap below.
+  String? _currentUserEmail;
 
   @override
   void initState() {
     super.initState();
+    _loadCurrentUserEmail();
     _refresh();
+  }
+
+  Future<void> _loadCurrentUserEmail() async {
+    final api = context.read<WmsApiClient>();
+    final email = await api.getSavedLoginEmail();
+    if (!mounted) return;
+    setState(() => _currentUserEmail = email?.toLowerCase().trim());
   }
 
   Future<void> _refresh() async {
@@ -75,6 +89,23 @@ class _AddOnCountSourcePickerScreenState
       return;
     }
     if (state == 'in_use') {
+      // Same-user resume: if the operator who locked this row is me, skip
+      // the join-request dance and just walk back into the existing
+      // session. Without this branch the server treats me as a stranger
+      // asking for permission, and the picker hangs on "Waiting for owner"
+      // because owner == me and I can't approve my own request from this
+      // screen.
+      final lockedBy =
+          (row['locked_by_user_email'] as String?)?.toLowerCase().trim();
+      final me = _currentUserEmail;
+      if (lockedBy != null &&
+          lockedBy.isNotEmpty &&
+          me != null &&
+          me.isNotEmpty &&
+          lockedBy == me) {
+        await _resumeOwnSession(row);
+        return;
+      }
       await _requestJoin(row);
       return;
     }
@@ -113,6 +144,40 @@ class _AddOnCountSourcePickerScreenState
   void _showSnackbar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Same operator who originally locked the row is back — walk directly
+  /// into the existing session without any join-request round-trip. Mirrors
+  /// the post-approval branch of [_requestJoin] (fetch source EPCs, push
+  /// AddOnCountScreen with the locked_session_id) but no SSE dialog.
+  Future<void> _resumeOwnSession(Map<String, dynamic> row) async {
+    final api = context.read<WmsApiClient>();
+    final lockedSessionId = row['locked_session_id'] as String?;
+    if (lockedSessionId == null || lockedSessionId.isEmpty) {
+      _showSnackbar('Cannot resume — session info unavailable. Pull to refresh.');
+      return;
+    }
+    try {
+      final epcs = await api.getScanSourceEpcs(
+        sourceType: row['source_type'] as String,
+        sourceId: row['source_id'] as String,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => AddOnCountScreen(
+            sessionId: lockedSessionId,
+            sourceType: row['source_type'] as String,
+            sourceId: row['source_id'] as String,
+            sourceSlip: row['slip'] as String,
+            sourceEpcs: epcs,
+          ),
+        ),
+      );
+      await _refresh();
+    } catch (e) {
+      _showSnackbar('Could not resume session: $e');
+    }
   }
 
   /// In-use row → POST /join-request, open SSE on that session, await

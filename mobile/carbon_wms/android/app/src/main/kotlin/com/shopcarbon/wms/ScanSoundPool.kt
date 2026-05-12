@@ -47,6 +47,19 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
    */
   @Volatile private var userVolume: Float = 1.0f
 
+  /**
+   * EFD8500 hosts (Samsung phones with the Zebra RFID sled) must be silent —
+   * the only acceptable beeps are firmware-level: connect/disconnect with the
+   * app, RFID↔2D mode change, and device power on/off. App-side cues (per-tag
+   * read, start, stop, success, error) are suppressed entirely. The C72E
+   * (Chainway, MediaTek) keeps its full cue set. Detection is by manufacturer
+   * because the only Samsung devices running Carbon WMS in our fleet are the
+   * EFD8500-sled handhelds.
+   */
+  private val isEfd8500Host: Boolean by lazy {
+    (android.os.Build.MANUFACTURER ?: "").equals("samsung", ignoreCase = true)
+  }
+
   companion object {
     private const val TAG = "ScanSoundPool"
     private const val CHANNEL = "carbon_wms/scan_sound"
@@ -170,6 +183,7 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
   }
 
   private fun playCue(cue: String, volume: Float) {
+    if (isEfd8500Host) return
     val p = pool
     if (p == null) { Log.w(TAG, "playCue($cue): pool is null"); return }
     val sid: Int
