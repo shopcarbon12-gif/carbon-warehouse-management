@@ -366,7 +366,18 @@ export async function buildHardwareConfigTree(
   // POS reader alone in its (location, type) group falls below
   // SLOW_MIN_PEERS and gets no slow flag at all — exactly what we want.
   const readerRowsByGroup = new Map<string, RawDevice[]>();
-  const groupKey = (d: RawDevice) => `${d.location_id}|${d.device_type}`;
+  // Group by (location, device_type, zone). Same reasoning as before, but
+  // tighter: a fixed_reader in the Office zone (sparse coverage, few EPCs)
+  // gets badly false-positive-flagged "slow" when compared against
+  // fixed_readers in the Aisle zone (dense inventory, hundreds of EPCs).
+  // Both are healthy for their physical context. Including zone_id in the
+  // group key means Office readers only compare to other Office readers
+  // (and with <SLOW_MIN_PEERS in that group → no flag at all). Solo
+  // readers in a zone never get the "slow" badge — the right outcome for
+  // any reader without enough same-zone same-type peers to be meaningfully
+  // compared.
+  const groupKey = (d: RawDevice) =>
+    `${d.location_id}|${d.device_type}|${d.zone_id ?? "_none"}`;
   for (const d of devices.rows) {
     if (!READER_TYPES.has(d.device_type)) continue;
     const key = groupKey(d);

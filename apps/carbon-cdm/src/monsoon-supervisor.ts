@@ -1094,18 +1094,39 @@ export class MonsoonSupervisor {
     // by device_type means each role only compares against its own kind.
     type Cand = { slot: ReaderSlot; rate: number; records: number };
     const candidatesByType = new Map<string, Cand[]>();
+    // Post-spawn warmup grace: a freshly-spawned chip takes 5-15s to start
+    // emitting reads (cold-boot of the R2000 inventory state machine). The
+    // first-byte usually lands within 2-5s, but tag-reads can lag another
+    // 5-10s. Skipping slow-detect for the first 20s after spawn prevents
+    // the supervisor from kill+respawning a perfectly-healthy chip that
+    // just hasn't finished warming up — which would create a death loop
+    // (kill at 5s, respawn, kill again at 5s, etc., never producing reads).
+    const WARMUP_GRACE_MS = 20_000;
     for (const slot of this.slots.values()) {
       if (slot.shuttingDown) continue;
       if (slot.muxAntennaSequence.length >= 2) continue;
       if (slot.testSession !== null) continue;
       if (!slot.child) continue;
+      // slot.lastByteAt is set to Date.now() at spawn — use it as a proxy
+      // for "process has been alive at least this long." We don't have a
+      // dedicated spawnedAt, but lastByteAt is bumped at spawn AND every
+      // byte received; either way "now - lastByteAt < WARMUP_GRACE" means
+      // we either spawned recently OR have been receiving bytes recently
+      // (latter case = healthy, not a slow-detect concern). Skip both.
+      if (now - slot.lastByteAt < WARMUP_GRACE_MS) continue;
       const windowAge = now - slot.recordWindowStartAt;
       if (windowAge < SLOW_DETECTION_WINDOW_MS / 2) continue;
       const rate = slot.recordsThisWindow / Math.max(1, windowAge / 1000);
-      const dt = slot.spec.device_type;
-      const arr = candidatesByType.get(dt) ?? [];
+      // Group by (device_type, zone) — same reasoning as the WMS-side
+      // hardware-config badge logic. Office-zone fixed_reader and Aisle-zone
+      // fixed_reader have fundamentally different natural read rates because
+      // they cover different inventory density. Lumping them flags healthy
+      // Office readers as "slow" because they read at 5-10% of Aisle rates.
+      // Same group-by-zone fix the badge gets.
+      const dtZone = `${slot.spec.device_type}|${slot.spec.zone_id ?? "_none"}`;
+      const arr = candidatesByType.get(dtZone) ?? [];
       arr.push({ slot, rate, records: slot.recordsThisWindow });
-      candidatesByType.set(dt, arr);
+      candidatesByType.set(dtZone, arr);
     }
 
     const resetAllWindows = () => {
