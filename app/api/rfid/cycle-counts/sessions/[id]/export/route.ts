@@ -4,7 +4,9 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import {
   classifyVarianceLive,
+  formatScanDuration,
   getSession,
+  totalScanDurationMs,
   type LiveVariance,
   type SessionDetail,
 } from "@/lib/server/rfid-cycle-count-sessions";
@@ -63,14 +65,17 @@ async function renderWorkbook(
     { header: "Field", key: "k", width: 22 },
     { header: "Value", key: "v", width: 56 },
   ];
+  const totalMs = totalScanDurationMs(detail.scan_periods);
   sum.addRows([
     { k: "Session #", v: detail.name },
     { k: "Location", v: `${detail.location_code} — ${detail.location_name}` },
     { k: "Bin", v: detail.bin_code ?? "(all bins at location)" },
     { k: "Status", v: detail.status },
-    { k: "Started", v: detail.started_at },
+    { k: "Session created", v: detail.started_at },
     { k: "Started by", v: detail.started_by_email ?? "" },
     { k: "Completed", v: detail.completed_at ?? "" },
+    { k: "Scan periods", v: detail.scan_periods.length },
+    { k: "Total active scan time", v: formatScanDuration(totalMs) },
     { k: "Notes", v: detail.notes ?? "" },
     { k: "Expected", v: detail.expected.length },
     { k: "Scanned (unique)", v: detail.scanned_epcs.length },
@@ -81,6 +86,30 @@ async function renderWorkbook(
     { k: "Locked (Super Admin)", v: variance.locked.length },
   ]);
   sum.getRow(1).font = { bold: true };
+
+  // Scan periods — one row per Start/Pause cycle.
+  const periods = wb.addWorksheet("Scan periods");
+  periods.columns = [
+    { header: "#", key: "n", width: 6 },
+    { header: "Started", key: "started", width: 28 },
+    { header: "Ended", key: "ended", width: 28 },
+    { header: "Duration", key: "duration", width: 16 },
+  ];
+  periods.getRow(1).font = { bold: true };
+  detail.scan_periods.forEach((p, i) => {
+    const start = Date.parse(p.started_at);
+    const end = p.ended_at ? Date.parse(p.ended_at) : Date.now();
+    const dur =
+      Number.isFinite(start) && Number.isFinite(end)
+        ? formatScanDuration(Math.max(0, end - start))
+        : "—";
+    periods.addRow({
+      n: i + 1,
+      started: p.started_at,
+      ended: p.ended_at ?? "(still open)",
+      duration: dur,
+    });
+  });
 
   // Matched / Missing — same columns (from expected snapshot)
   const expectedCols = [

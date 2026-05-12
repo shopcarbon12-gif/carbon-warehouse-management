@@ -61,7 +61,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const detail = await updateSession(client, session.tid, id, parsed.data);
+    const detail = await updateSession(client, session.tid, id, parsed.data, {
+      userId: session.sub ?? null,
+    });
     await client.query("COMMIT");
     return NextResponse.json({ ok: true, session: detail });
   } catch (e) {

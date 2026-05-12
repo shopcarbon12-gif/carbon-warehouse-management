@@ -18,6 +18,7 @@ import {
   CircleSlash,
 } from "lucide-react";
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { useCountUp } from "@/components/dashboard/use-count-up";
 import { CycleCountCommitModal } from "./cycle-count-commit-modal";
 import { ZeroOutRfidButton } from "./zero-out-rfid-button";
 import {
@@ -39,6 +40,8 @@ import {
 
 type LocationRow = { id: string; code: string; name: string };
 type BinRow = { id: string; code: string; in_stock_count: number };
+
+type ScanPeriod = { started_at: string; ended_at: string | null };
 
 type SessionDetail = {
   id: string;
@@ -62,7 +65,29 @@ type SessionDetail = {
   audit_log_id: string | null;
   expected: ExpectedRow[];
   scanned_epcs: string[];
+  scan_periods: ScanPeriod[];
 };
+
+function totalScanMs(periods: ScanPeriod[], now: number): number {
+  let ms = 0;
+  for (const p of periods) {
+    const s = Date.parse(p.started_at);
+    if (Number.isNaN(s)) continue;
+    const e = p.ended_at ? Date.parse(p.ended_at) : now;
+    if (Number.isNaN(e)) continue;
+    ms += Math.max(0, e - s);
+  }
+  return ms;
+}
+
+function formatHms(totalMs: number): string {
+  const s = Math.floor(totalMs / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
 
 type SessionRow = Omit<SessionDetail, "expected" | "scanned_epcs">;
 
@@ -790,6 +815,35 @@ function ActiveSessionView({
     void startScanSessionsForSelectedReaders();
   }, [selectedReaders, detail?.status, startScanSessionsForSelectedReaders]);
 
+  // Smoothly animate KPI counts as scans land. The targets come from the
+  // server's variance buckets (refreshed on every /scan POST), so animation
+  // makes the climb visible instead of jumping in batches.
+  const liveExpectedCount = detail?.expected.length ?? 0;
+  const liveCoverage =
+    liveExpectedCount === 0
+      ? 0
+      : Math.round((variance.matched.length / liveExpectedCount) * 100);
+  const animCoverage = useCountUp(liveCoverage);
+  const animMatched = useCountUp(variance.matched.length);
+  const animMissing = useCountUp(variance.missing.length);
+  const animAdded = useCountUp(variance.added_here.length);
+  const animDefective = useCountUp(variance.defective.length);
+  const animLocked = useCountUp(variance.locked.length);
+  const animReadsPerMin = useCountUp(readsPerMin);
+
+  // Live-ticking scan time. When the session is active, the open period's
+  // contribution grows in real time, so tick every second.
+  const [scanClockTick, setScanClockTick] = useState(0);
+  useEffect(() => {
+    if (detail?.status !== "active") return;
+    const t = setInterval(() => setScanClockTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [detail?.status]);
+  const scanMs = detail
+    ? totalScanMs(detail.scan_periods, Date.now())
+    : 0;
+  void scanClockTick;
+
   if (error) {
     return (
       <Section title="Couldn’t load session" hint="">
@@ -895,16 +949,22 @@ function ActiveSessionView({
       </div>
 
       {/* KPI strip with coverage + read rate */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-7">
-        <KpiTile big label="Coverage" value={`${coverage}%`} cls={coverage === 100 ? "wms-status-success" : coverage >= 80 ? "text-amber-400" : "text-red-400"} />
-        <KpiTile label="Matched" value={`${variance.matched.length} / ${expectedCount}`} cls="wms-status-success" />
-        <KpiTile label="Missing" value={String(variance.missing.length)} cls="text-amber-400" />
-        <KpiTile label="Added here" value={String(variance.added_here.length)} cls="text-sky-300" />
-        <KpiTile label="Defective" value={String(variance.defective.length)} cls="text-red-400" />
-        <KpiTile label="Locked" value={String(variance.locked.length)} cls="text-fuchsia-300" />
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-8">
+        <KpiTile big label="Coverage" value={`${animCoverage}%`} cls={coverage === 100 ? "wms-status-success" : coverage >= 80 ? "text-amber-400" : "text-red-400"} />
+        <KpiTile label="Matched" value={`${animMatched} / ${expectedCount}`} cls="wms-status-success" />
+        <KpiTile label="Missing" value={String(animMissing)} cls="text-amber-400" />
+        <KpiTile label="Added here" value={String(animAdded)} cls="text-sky-300" />
+        <KpiTile label="Defective" value={String(animDefective)} cls="text-red-400" />
+        <KpiTile label="Locked" value={String(animLocked)} cls="text-fuchsia-300" />
+        <KpiTile
+          label="Scan time"
+          value={formatHms(scanMs)}
+          sub={`${detail.scan_periods.length} period${detail.scan_periods.length === 1 ? "" : "s"}`}
+          cls={detail.status === "active" ? "text-emerald-300" : "text-[var(--wms-muted)]"}
+        />
         <KpiTile
           label="Read rate"
-          value={`${readsPerMin}/min`}
+          value={`${animReadsPerMin}/min`}
           sub={`last read ${lastReadStr}`}
           cls={readsPerMin > 0 ? "text-emerald-300" : "text-[var(--wms-muted)]"}
         />

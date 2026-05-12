@@ -74,6 +74,12 @@ export type LiveVariance = {
 export type CreateSessionBody = z.infer<typeof createSessionSchema>;
 export type PatchSessionBody = z.infer<typeof patchSessionSchema>;
 
+export type ScanPeriod = {
+  started_at: string;
+  /** null while the period is open (status='active'). */
+  ended_at: string | null;
+};
+
 export type SessionRow = {
   id: string;
   /** Per-(tenant, location) monotonic session number. Stamped at INSERT, never reused. */
@@ -96,6 +102,8 @@ export type SessionRow = {
   notes: string | null;
   variance_summary: VarianceSummary | null;
   audit_log_id: string | null;
+  /** Each Start/Pause cycle. Total active duration = sum(ended_at - started_at). */
+  scan_periods: ScanPeriod[];
 };
 
 export type SessionDetail = SessionRow & {
@@ -130,7 +138,8 @@ const SESSION_COLUMNS = `
   s.reader_filter,
   s.notes,
   s.variance_summary,
-  s.audit_log_id::text
+  s.audit_log_id::text,
+  s.scan_periods
 `;
 
 export async function createSession(
@@ -275,6 +284,7 @@ export async function updateSession(
   tenantId: string,
   id: string,
   patch: PatchSessionBody,
+  audit?: { userId: string | null },
 ): Promise<SessionDetail> {
   // Fetch first so we can validate transitions and merge appendEpcs.
   const cur = await getSession(client, tenantId, id);
@@ -287,6 +297,9 @@ export async function updateSession(
   const sets: string[] = [];
   const params: unknown[] = [tenantId, id];
 
+  let nextPeriods: ScanPeriod[] | null = null;
+  let periodTransition: "start" | "pause" | "cancel" | null = null;
+
   if (patch.status) {
     if (patch.status === "active" || patch.status === "paused") {
       sets.push(`status = $${params.length + 1}`);
@@ -295,6 +308,27 @@ export async function updateSession(
       sets.push(`status = 'canceled'`);
       sets.push(`completed_at = now()`);
     }
+
+    // Maintain scan_periods on status flips. New period on paused→active;
+    // close the open period on active→paused or active→canceled.
+    if (patch.status === "active" && cur.status !== "active") {
+      nextPeriods = [
+        ...closeOpenPeriods(cur.scan_periods),
+        { started_at: new Date().toISOString(), ended_at: null },
+      ];
+      periodTransition = "start";
+    } else if (patch.status === "paused" && cur.status === "active") {
+      nextPeriods = closeOpenPeriods(cur.scan_periods);
+      periodTransition = "pause";
+    } else if (patch.status === "canceled") {
+      nextPeriods = closeOpenPeriods(cur.scan_periods);
+      periodTransition = "cancel";
+    }
+  }
+
+  if (nextPeriods !== null) {
+    sets.push(`scan_periods = $${params.length + 1}::jsonb`);
+    params.push(JSON.stringify(nextPeriods));
   }
 
   let nextScanned: string[] | null = null;
@@ -328,9 +362,65 @@ export async function updateSession(
     params,
   );
 
+  // Audit-log the start/pause/cancel transition so reports show date+time
+  // + how long the scan was. Skips no-op writes (no status change).
+  if (periodTransition) {
+    await client.query(
+      `INSERT INTO audit_log (tenant_id, user_id, action, entity, metadata)
+       VALUES ($1::uuid, $2::uuid, $3, 'cycle_count_sessions', $4::jsonb)`,
+      [
+        tenantId,
+        audit?.userId ?? null,
+        periodTransition === "start"
+          ? "cycle_count_scan_start"
+          : periodTransition === "pause"
+            ? "cycle_count_scan_pause"
+            : "cycle_count_scan_cancel",
+        JSON.stringify({
+          session_id: id,
+          session_number: cur.session_number,
+          location_id: cur.location_id,
+          at: new Date().toISOString(),
+        }),
+      ],
+    );
+  }
+
   const updated = await getSession(client, tenantId, id);
   if (!updated) throw new Error("INTERNAL:Updated session not found");
   return updated;
+}
+
+/** Stamp ended_at on any period whose ended_at is still null. */
+function closeOpenPeriods(periods: ScanPeriod[]): ScanPeriod[] {
+  const now = new Date().toISOString();
+  return periods.map((p) =>
+    p.ended_at === null ? { started_at: p.started_at, ended_at: now } : p,
+  );
+}
+
+/** Total active scan time in milliseconds, summed across all periods. */
+export function totalScanDurationMs(periods: ScanPeriod[]): number {
+  let ms = 0;
+  const now = Date.now();
+  for (const p of periods) {
+    const start = Date.parse(p.started_at);
+    if (Number.isNaN(start)) continue;
+    const end = p.ended_at ? Date.parse(p.ended_at) : now;
+    if (Number.isNaN(end)) continue;
+    ms += Math.max(0, end - start);
+  }
+  return ms;
+}
+
+/** Human duration like "1h 23m 04s". */
+export function formatScanDuration(totalMs: number): string {
+  const s = Math.floor(totalMs / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return h > 0 ? `${h}h ${pad(m)}m ${pad(sec)}s` : `${m}m ${pad(sec)}s`;
 }
 
 function dedupeEpcs(epcs: string[]): string[] {
@@ -505,13 +595,17 @@ export async function commitSession(
     unrecognized: variance.defective.length + variance.locked.length,
   };
 
+  // Close any period still open (operator may have committed while active).
+  const closedPeriods = closeOpenPeriods(cur.scan_periods);
+
   await client.query(
     `UPDATE cycle_count_sessions
         SET status = 'committed',
             completed_at = now(),
             variance_summary = $3::jsonb,
             audit_log_id = $4::uuid,
-            notes = COALESCE($5, notes)
+            notes = COALESCE($5, notes),
+            scan_periods = $6::jsonb
       WHERE tenant_id = $1::uuid AND id = $2::uuid`,
     [
       session.tid,
@@ -519,6 +613,7 @@ export async function commitSession(
       JSON.stringify(summary),
       result.audit_id || null,
       opts.notes ?? null,
+      JSON.stringify(closedPeriods),
     ],
   );
 
