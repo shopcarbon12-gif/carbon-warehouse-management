@@ -531,6 +531,12 @@ function ActiveSessionView({
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [search, setSearch] = useState("");
   const [commitOpen, setCommitOpen] = useState(false);
+  // "Finish" popup: replaces the old "Review & commit" closer. The fixed-
+  // reader cycle count cannot close itself anymore (2026-05-12 policy) —
+  // operators must hand off to the mobile handheld add-on count, which is
+  // the only path that closes the session + runs reconcile + flips
+  // truly-missing tags to tag_killed.
+  const [finishOpen, setFinishOpen] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   // Tracks whether scanning has been started at least once in this mount.
@@ -1070,10 +1076,10 @@ function ActiveSessionView({
             <button
               type="button"
               disabled={localScanned.size === 0}
-              onClick={() => setCommitOpen(true)}
+              onClick={() => setFinishOpen(true)}
               className="wms-btn-primary px-6 font-mono disabled:opacity-50"
             >
-              Review &amp; commit
+              Finish
             </button>
           ) : (
             <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
@@ -1178,6 +1184,49 @@ function ActiveSessionView({
         binCodeForCommit={detail.bin_code}
         onCommit={doCommit}
       />
+
+      {finishOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setFinishOpen(false)}
+        >
+          <div
+            className="max-w-md rounded-xl border border-amber-400/60 bg-[var(--wms-surface)] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <Clock className="h-5 w-5 text-amber-400" />
+              <h2 className="font-mono text-base font-semibold uppercase tracking-wide text-amber-300">
+                Almost there — finish on mobile
+              </h2>
+            </div>
+            <p className="mb-4 font-mono text-sm text-[var(--wms-fg)]">
+              This cycle count is recorded but <strong>not closed yet</strong>.
+              Fixed readers can&apos;t see everything in coverage — to finalize
+              this count and update inventory, you must complete the add-on
+              pass on the mobile handheld:
+            </p>
+            <p className="mb-4 font-mono text-sm font-semibold text-[var(--wms-fg)]">
+              📱 Carbon WMS mobile → <span className="text-[var(--wms-accent)]">Inventory → Add-On Count</span>
+            </p>
+            <p className="mb-5 font-mono text-xs text-[var(--wms-muted)]">
+              When the handheld finishes and uploads, the system reconciles:
+              tags the handheld picks up flip to <strong>live</strong>; tags
+              missed by BOTH passes flip to <strong>tag_killed</strong>;
+              defective EPCs are surfaced in <em>Catalog → Defective EPCs</em>.
+            </p>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setFinishOpen(false)}
+                className="wms-btn-primary px-6 font-mono"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
