@@ -318,16 +318,28 @@ export async function recordAgentHeartbeat(
     [agentId, wedgedIds],
   );
 
-  // Sync power suggestions onto antenna rows. The supervisor reports per-
-  // reader; we propagate to every enabled antenna of that reader since the
-  // sweep finding applies to the chassis radio shared by them all. Cleared
-  // for any reader owned by this agent that isn't in the suggestion list.
+  // Sync power suggestions onto antenna rows AND auto-apply them as the
+  // new configured transmit_power_dbm. The supervisor's sweep already
+  // confirmed this power works for the chip (first-byte stamped the
+  // suggestion); applying it as the configured value means the reader
+  // continues to read instead of cycling between "configured silent" →
+  // "sweep find working" → "respawn at configured silent" forever.
+  //
+  // Operator policy (per 2026-05-12): supervisor is authorized to auto-
+  // apply working powers so readers stay productive without manual
+  // intervention. The suggested_power_dbm column still gets written so
+  // the audit trail / UI can show what was applied and when.
   const suggestions = body.powerSuggestions ?? [];
   for (const s of suggestions) {
     await client.query(
       `UPDATE devices
          SET suggested_power_dbm = $3::int,
              suggested_power_dbm_at = now(),
+             config = jsonb_set(
+               COALESCE(config, '{}'::jsonb),
+               '{transmit_power_dbm}',
+               to_jsonb($3::int)
+             ),
              updated_at = now()
          WHERE parent_device_id = $2::uuid
            AND device_type = 'antenna'
