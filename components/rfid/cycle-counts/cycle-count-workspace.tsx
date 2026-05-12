@@ -440,8 +440,6 @@ function StatusPill({ status }: { status: SessionRow["status"] }) {
 
 /* ──────────── Active session view ──────────── */
 
-const cycleStreamContexts = new Set(["CYCLE_COUNT"]);
-
 function ActiveSessionView({
   sessionId,
   onLeave,
@@ -511,8 +509,11 @@ function ActiveSessionView({
       } catch {
         return;
       }
-      const ctx = (p.scanContext ?? "").toUpperCase();
-      if (!cycleStreamContexts.has(ctx)) return;
+      // No scanContext gate: agent reads are tagged "TRANSFER" regardless
+      // of the workflow that woke the reader, so filtering on "CYCLE_COUNT"
+      // dropped every read. Reader-picker selection is the relevance signal
+      // (same pattern as Transfer Out's workspace) — empty picker accepts
+      // all reads, otherwise only matching device IDs.
       const sel = selectedReadersRef.current;
       if (sel.size > 0 && p.deviceId && !sel.has(p.deviceId)) return;
       const list = (p.epcs ?? [])
