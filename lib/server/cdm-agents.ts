@@ -692,16 +692,6 @@ export type IngestReadsBody = z.infer<typeof ingestReadsSchema>;
 const ANTENNA_CACHE_TTL_MS = 60_000;
 const ANTENNA_CACHE = new Map<string, { map: Map<number, string>; expiresAt: number }>();
 
-/**
- * cdm_reads per-(reader, antenna, epc) write-dedup window. Collapses the
- * 5-6×-per-second burst from the Monsoon binary into a single row per
- * second per tag per antenna. Live-scan SSE / status_online flip /
- * antenna last_read_at all still see every read; only the cdm_reads
- * INSERT dedups. Without this, normal warehouse scan produces ~10 000
- * rows/min and the 48-h TTL ceiling is ~600 GB — would fill the 38 GB
- * prod disk again. With this, expected ceiling is ~50 GB worst case.
- */
-const WRITE_DEDUP_WINDOW_MS = 1_000;
 
 async function getAntennaIdMap(
   client: PoolClient,
@@ -839,25 +829,23 @@ export async function ingestAgentReads(
     if (passesFormulas[i]) keepIdx.push(i);
   }
 
-  // PER-KEY WRITE DEDUP 2026-05-12: collapse same (reader, antenna, epc)
-  // rows that arrive within WRITE_DEDUP_WINDOW_MS into a single insert.
-  // The Monsoon binary's per-cycle burst pattern reports each tag 5-6×
-  // back-to-back (one per recently-completed inventory cycle), so without
-  // this dedup cdm_reads grew at ~10 000 rows/min during normal scan —
-  // ~600 GB projected over the 48 h TTL, would fill the 38 GB Coolify
-  // VPS disk again (see project_coolify_disk_fill_2026_05_10 in agent
-  // memory). Live-scan SSE fan-out below intentionally still sees every
-  // read so the dashboard's activity tile keeps its burst feel — only
-  // the persistence layer dedups.
+  // Per-batch dedup (cheap; reduces work for the upsert below).
+  // The UNIQUE index from migration 0069 enforces the actual one-row-per-key
+  // invariant across batches — this just trims duplicates we already know
+  // about within this single batch before hitting the DB.
   if (keepIdx.length > 1) {
-    const lastSeenAt = new Map<string, number>();
+    const seenInBatch = new Set<string>();
     const dedupedKeepIdx: number[] = [];
-    for (const i of keepIdx) {
+    // Walk newest-to-oldest so the row we keep has the most recent read_at.
+    const sorted = [...keepIdx].sort((a, b) => {
+      const ta = new Date(readAts[a]!).getTime();
+      const tb = new Date(readAts[b]!).getTime();
+      return tb - ta;
+    });
+    for (const i of sorted) {
       const key = `${readerIds[i]}|${antennaIds[i] ?? ""}|${epcs[i]}`;
-      const t = new Date(readAts[i]!).getTime();
-      const prev = lastSeenAt.get(key);
-      if (prev !== undefined && t - prev < WRITE_DEDUP_WINDOW_MS) continue;
-      lastSeenAt.set(key, t);
+      if (seenInBatch.has(key)) continue;
+      seenInBatch.add(key);
       dedupedKeepIdx.push(i);
     }
     keepIdx.length = 0;
@@ -865,6 +853,12 @@ export async function ingestAgentReads(
   }
   let insertedCount = 0;
   if (keepIdx.length > 0) {
+    // UPSERT: one row per (reader_id, antenna_id, epc_hex). On conflict,
+    // refresh read_at + rssi so the row reflects the MOST RECENT observation
+    // of this tag on this antenna. Driven by the unique index from
+    // migration 0069 (NULLS NOT DISTINCT so NULL antenna_id still dedups).
+    // RETURNING the inserted/updated rows so insertedCount reflects writes
+    // not raw rowCount which would be 0 on pure conflicts.
     const result = await client.query(
       `INSERT INTO cdm_reads
           (tenant_id, cdm_agent_id, reader_id, antenna_id, epc_hex, rssi, read_at, passes_formula)
@@ -876,7 +870,13 @@ export async function ingestAgentReads(
           unnest($5::text[]),
           NULLIF(unnest($6::text[]), '')::int,
           unnest($7::timestamptz[]),
-          unnest($8::boolean[])`,
+          unnest($8::boolean[])
+       ON CONFLICT (reader_id, antenna_id, epc_hex)
+       DO UPDATE SET
+         read_at        = EXCLUDED.read_at,
+         rssi           = EXCLUDED.rssi,
+         passes_formula = EXCLUDED.passes_formula,
+         cdm_agent_id   = EXCLUDED.cdm_agent_id`,
       [
         keepIdx.map((i) => tenantIds[i]),
         keepIdx.map((i) => agentIds[i]),
