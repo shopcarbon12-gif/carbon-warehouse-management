@@ -173,6 +173,24 @@ const WEDGE_WINDOW_10MIN_MS = 10 * 60_000;
 const WEDGE_LEVEL_2_COUNT = 3;
 const WEDGE_LEVEL_3_COUNT = 6;
 const DEEP_RECOVERY_COOLDOWN_MS = 3 * 60_000;
+/**
+ * Upward-power probe cadence + step. When a slot is healthy at a power
+ * below MAX, the supervisor periodically bumps the configured power +N
+ * dBm to see if the chip can sustain higher output. If reads keep flowing
+ * at the new power, it sticks (the suggestion auto-apply path on the
+ * heartbeat handler writes the new configured value to devices.config).
+ * If the chip silences, the existing sweep + auto-apply chain walks back
+ * down to the working value. Net effect: supervisor always tends toward
+ * MAX productive power without operator intervention.
+ *
+ * 5-min cadence is the right trade-off between "discover recovery fast"
+ * and "don't churn the chip every few seconds." 2 dBm step matches the
+ * sweep granularity. MAX_DBM caps the climb at the radio's regulatory
+ * ceiling.
+ */
+const UPWARD_PROBE_INTERVAL_MS = 60_000;
+const UPWARD_PROBE_STEP_DBM = 2;
+const UPWARD_PROBE_MAX_DBM = 33;
 
 /**
  * Supervisor-managed antenna multiplexing for multi-antenna readers.
@@ -331,6 +349,15 @@ type ReaderSlot = {
    *  decide when the next forced respawn is due. Reset on spawn so the
    *  timer counts from each fresh binary. */
   lastForcedRespawnAt: number;
+  /** ms timestamp of the last upward power probe. Every UPWARD_PROBE_
+   *  INTERVAL_MS, the supervisor bumps configured power +2 dBm when the
+   *  slot is reading at a sub-MAX power, so a chip that's been stable at
+   *  a low auto-applied power keeps testing whether it can climb back
+   *  toward the radio's 33 dBm ceiling. If the bump silents the chip, the
+   *  existing sweep loop walks back down and auto-applies the lower
+   *  working value. Net effect: supervisor always tries to maximize
+   *  productive power without operator intervention. */
+  lastUpwardProbeAt: number;
   /** ms timestamp of the most recent deep-recovery attempt (Level 2 action).
    *  Throttled by DEEP_RECOVERY_COOLDOWN_MS so we don't re-deep-recover on
    *  every slow-detect tick while at Level 2. */
@@ -820,6 +847,55 @@ export class MonsoonSupervisor {
       // first interval doesn't fire immediately.
       if (forceMs > 0 && slot.lastForcedRespawnAt === 0) {
         slot.lastForcedRespawnAt = now;
+      }
+
+      // ── Upward-power probe ──
+      // Periodically bump configured power +UPWARD_PROBE_STEP_DBM dBm while
+      // the slot is reading at a sub-MAX power. Gives a chip that was
+      // auto-applied to a low power (because of transient session-state
+      // problems, brief VSWR trips, etc.) a chance to climb back toward the
+      // radio ceiling autonomously. If the bump silences the chip, the
+      // existing silence-watchdog → sweep → auto-apply chain walks back
+      // down to the working value, so the probe is self-correcting.
+      //
+      // Gates:
+      //   - Not in TEST_MODE (operator owns the slot)
+      //   - Not in sweep recovery (slot already cycling)
+      //   - Healthy: producing bytes (lastByteAt fresh)
+      //   - Configured power < UPWARD_PROBE_MAX_DBM (don't probe above
+      //     the radio's regulatory ceiling)
+      //   - UPWARD_PROBE_INTERVAL_MS elapsed since last probe
+      const probeConfiguredDbm = Math.round(this.avgPower(slot.spec));
+      if (
+        slot.testSession === null &&
+        slot.sweepPowerOverrideArg === null &&
+        slot.bytesSinceSpawn &&
+        now - slot.lastByteAt < 5_000 &&
+        probeConfiguredDbm < UPWARD_PROBE_MAX_DBM &&
+        slot.lastUpwardProbeAt > 0 &&
+        now - slot.lastUpwardProbeAt >= UPWARD_PROBE_INTERVAL_MS
+      ) {
+        const probeDbm = Math.min(
+          probeConfiguredDbm + UPWARD_PROBE_STEP_DBM,
+          UPWARD_PROBE_MAX_DBM,
+        );
+        log.info("supervisor: upward probe — bumping configured power", {
+          readerId: slot.spec.id,
+          readerName: slot.spec.name,
+          fromDbm: probeConfiguredDbm,
+          toDbm: probeDbm,
+        });
+        // Reuse the existing suggestion mechanism — the heartbeat handler
+        // writes suggested_power_dbm AND config.transmit_power_dbm in one
+        // pass (auto-apply). Same flow used when sweep finds a lower
+        // working power; here we use it upward.
+        slot.suggestedPowerDbm = probeDbm;
+        slot.lastUpwardProbeAt = now;
+      }
+      // Initialize the probe timer on first watchdog tick after the slot
+      // is healthy so the first interval counts from now, not from epoch.
+      if (slot.lastUpwardProbeAt === 0 && slot.bytesSinceSpawn) {
+        slot.lastUpwardProbeAt = now;
       }
 
       // Watchdog applies to BOTH drivers, but for different reasons:
@@ -1569,6 +1645,7 @@ export class MonsoonSupervisor {
         lastDeepRecoveryAt: 0,
         suggestedPowerDbm: null,
         lastForcedRespawnAt: 0,
+        lastUpwardProbeAt: 0,
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
