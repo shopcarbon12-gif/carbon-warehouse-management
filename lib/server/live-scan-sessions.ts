@@ -27,6 +27,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { getPool } from "@/lib/db";
 
 export type LiveScanSession = {
   /** Stable opaque id; useful for client-side correlation. */
@@ -54,9 +55,47 @@ const SESSION_MAX_IDLE_MS = 60_000;
 
 const byTenant = new Map<string, LiveScanSession>();
 
+/**
+ * Fire-and-forget: write the session to live_scan_sessions history. Computes
+ * unique EPC count from cdm_reads between started_at and ended_at. Errors
+ * are swallowed — a failed history insert must not affect the live session
+ * teardown path.
+ */
+function recordSessionHistory(s: LiveScanSession, endReason: "stopped" | "expired"): void {
+  void (async () => {
+    try {
+      const pool = getPool();
+      if (!pool) return;
+      const startedAtIso = new Date(s.startedAt).toISOString();
+      const endedAtIso = new Date().toISOString();
+      const r = await pool.query<{ unique_epcs: string }>(
+        `SELECT count(DISTINCT epc_hex)::text AS unique_epcs
+           FROM cdm_reads
+          WHERE tenant_id = $1::uuid
+            AND read_at >= $2::timestamptz
+            AND read_at <  $3::timestamptz
+            AND passes_formula = true`,
+        [s.tenantId, startedAtIso, endedAtIso],
+      );
+      const uniqueEpcs = Number(r.rows[0]?.unique_epcs ?? 0);
+      await pool.query(
+        `INSERT INTO live_scan_sessions
+           (tenant_id, started_by, started_at, ended_at, unique_epc_count, end_reason)
+         VALUES ($1::uuid, $2::uuid, $3::timestamptz, $4::timestamptz, $5::int, $6)`,
+        [s.tenantId, s.startedBy, startedAtIso, endedAtIso, uniqueEpcs, endReason],
+      );
+    } catch (e) {
+      console.warn("[live-scan-sessions] history write failed (continuing)", e);
+    }
+  })();
+}
+
 function pruneStale(now: number): void {
   for (const [tid, s] of byTenant) {
-    if (now - s.lastSeenAt > SESSION_MAX_IDLE_MS) byTenant.delete(tid);
+    if (now - s.lastSeenAt > SESSION_MAX_IDLE_MS) {
+      byTenant.delete(tid);
+      recordSessionHistory(s, "expired");
+    }
   }
 }
 
@@ -114,8 +153,11 @@ export function isLiveScanActive(tenantId: string): boolean {
 }
 
 export function endSession(tenantId: string): boolean {
-  const existed = byTenant.delete(tenantId);
-  return existed;
+  const s = byTenant.get(tenantId);
+  if (!s) return false;
+  byTenant.delete(tenantId);
+  recordSessionHistory(s, "stopped");
+  return true;
 }
 
 /** When the session started (ms epoch) — needed to compute the counter. */

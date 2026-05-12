@@ -60,6 +60,56 @@ async function postLookup(epcs: string[]): Promise<LookupRow[]> {
   return data.rows ?? [];
 }
 
+/**
+ * Read-only "Last Scan" pill. Fetches the most recently-completed live-scan
+ * session from /api/dashboard/last-live-scan (backed by the persisted
+ * live_scan_sessions table). Replaces the in-place Live Scan control on the
+ * dashboard — that's moved to Hardware Config (2026-05-12).
+ */
+function LastScanPill() {
+  const [data, setData] = useState<{
+    started_at: string;
+    ended_at: string;
+    unique_epc_count: number;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/dashboard/last-live-scan");
+        if (!res.ok) return;
+        const j = (await res.json()) as { last_scan: typeof data | null };
+        if (cancelled) return;
+        setData(j.last_scan ?? null);
+      } catch {
+        /* transient */
+      }
+    };
+    void tick();
+    const id = setInterval(tick, 5_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+  const hint = data
+    ? new Date(data.ended_at).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "(no scans yet)";
+  return (
+    <PulsePill
+      label="Last scan"
+      count={data?.unique_epc_count ?? 0}
+      Icon={Radio}
+      hint={data ? undefined : hint}
+    />
+  );
+}
+
 function PulsePill({
   label,
   count,
@@ -555,15 +605,14 @@ export function CommandCenter() {
           Hardware pulse
         </h2>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <PulsePill
-            label="Live scan"
-            count={liveScanCount}
-            Icon={Radio}
-            active={liveScanRunning}
-            dim={!liveScanHardwarePresent}
-            onClick={liveScanHardwarePresent ? onLiveScanClick : undefined}
-            hint={liveScanRunning ? undefined : "(click to run)"}
-          />
+          <LastScanPill />
+          {/*
+            Live Scan moved to Hardware Config (2026-05-12) — the Start/Stop
+            control + counter + per-antenna detail now live at the top of
+            /hardware-config. Dashboard shows the LAST completed session's
+            unique-EPC total, sourced from the persisted live_scan_sessions
+            table so it survives server restarts.
+          */}
           <PulsePill label="Readers" count={kpis.hardware.readers} Icon={Radio} />
           <PulsePill label="Antennas" count={kpis.hardware.antennas} Icon={Wifi} />
           <PulsePill label="Printers" count={kpis.hardware.printers} Icon={Printer} />
@@ -574,39 +623,7 @@ export function CommandCenter() {
             No hardware configured at this location — Live scan is disabled.
           </p>
         ) : null}
-        {liveScanRunning && perAntenna.length > 0 ? (
-          <div className="mt-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
-            <p className="mb-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
-              Live scan · per-antenna unique EPCs (this session)
-            </p>
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4">
-              {perAntenna.map((a) => (
-                <div
-                  key={a.antenna_id}
-                  className="flex items-center justify-between rounded border border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/60 px-2 py-1.5"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-mono text-[0.7rem] text-[var(--wms-fg)]">
-                      {a.reader_name}
-                    </div>
-                    <div className="truncate font-mono text-[0.55rem] text-[var(--wms-muted)]">
-                      ant #{a.antenna_number}
-                      {a.network_address ? ` · ${a.network_address}` : ""}
-                    </div>
-                  </div>
-                  <div className="ml-2 font-mono text-base font-semibold text-[var(--wms-accent)]">
-                    {a.unique_epcs}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="mt-2 font-mono text-[0.55rem] text-[var(--wms-muted)]">
-              Sum across antennas can exceed the headline live count when one
-              tag is read by multiple antennas — same EPC counts once toward
-              the headline, once per antenna here.
-            </p>
-          </div>
-        ) : null}
+        {/* Per-antenna detail moved to Hardware Config along with the Live Scan widget. */}
       </section>
 
       {/* Bottom: recent activity timeline */}

@@ -36,6 +36,7 @@ import {
 } from "./reader-schedule-modal";
 import { ReaderEditorModal } from "./reader-editor-modal";
 import { AntennaEditorModal } from "./antenna-editor-modal";
+import { LiveScanWidget } from "./live-scan-widget";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -256,6 +257,8 @@ export function HardwareConfigWorkspace() {
 
   return (
     <div className="space-y-8">
+      <LiveScanWidget />
+
       <CdmAgentsSection
         agents={agents.data?.agents ?? []}
         onCreate={() => setAgentModalOpen(true)}
