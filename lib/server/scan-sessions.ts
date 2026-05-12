@@ -84,7 +84,27 @@ export function createSession(input: {
   | { ok: true; session: ScanSession }
   | { ok: false; reason: "reader_busy"; existing: ScanSession } {
   const existing = byReader.get(input.readerId);
-  if (existing) return { ok: false, reason: "reader_busy", existing };
+  if (existing) {
+    // Idempotency: same operator (startedBy) running the same workflow
+    // kind on the same reader gets the EXISTING session back, not a
+    // "reader_busy" conflict. Without this, two tabs of the same cycle
+    // count (or a tab + an SWR-refresh-triggered re-claim) would fight
+    // each other in a "take all" loop — observed 2026-05-12 with three
+    // simultaneous cycle-count sessions accumulating 30s apart on three
+    // different readers from the same user.
+    //
+    // True conflicts (different kind, or a different user grabbing a
+    // reader you're scanning with) still surface as "reader_busy" so the
+    // operator can decide whether to take over.
+    if (
+      existing.kind === input.kind &&
+      existing.startedBy !== null &&
+      existing.startedBy === input.startedBy
+    ) {
+      return { ok: true, session: existing };
+    }
+    return { ok: false, reason: "reader_busy", existing };
+  }
   const session: ScanSession = {
     id: randomUUID(),
     tenantId: input.tenantId,
