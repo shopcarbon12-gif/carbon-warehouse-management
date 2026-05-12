@@ -49,7 +49,14 @@ class AddOnEpcCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    sku.isEmpty ? '(resolving…)' : sku,
+                    // Live scan no longer enriches per-EPC (1.2.66 — operator
+                    // wanted a quiet scan loop), so SKU is empty during the
+                    // session and only filled in server-side on UPLOAD. Use
+                    // the EPC itself as the primary identifier here; the
+                    // smaller EPC line below is now redundant when sku is
+                    // empty but keeps the card layout consistent on rows
+                    // that DO have a sku (older sessions, post-upload, etc.).
+                    sku.isEmpty ? entry.epc : sku,
                     style: GoogleFonts.robotoMono(
                       fontSize: 16.sp,
                       fontWeight: FontWeight.w700,
