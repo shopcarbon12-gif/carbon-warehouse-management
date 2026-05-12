@@ -37,10 +37,12 @@ import {
  *  scan-session wake (transfer-out / cycle-count / print-commission). 250 ms
  *  was chosen because the scan-session model defaults readers to PAUSED:
  *  the click-to-first-EPC cold-path cost is dominated by this interval.
- *  At 1 s we measured up to ~8 s cold-path; at 250 ms it's ~2-3 s, with
- *  the remainder being hardware floor (chip mux init + first-tag detect).
- *  Cost: 4× more poll requests, each ~50 ms server-side. Negligible load. */
-const POLL_INTERVAL_MS = 250;
+ *  At 1 s we measured up to ~8 s cold-path; at 250 ms it's ~2-3 s; at
+ *  100 ms it's ~1.5-2 s, with the remainder being hardware floor (chip
+ *  mux init + first-tag detect). Bumped to 100 ms 2026-05-12 — operator
+ *  wanted the antenna-test response faster. Cost is ~10× more poll
+ *  requests, each ~50 ms server-side; still negligible for one agent. */
+const POLL_INTERVAL_MS = 100;
 /** Micro-batcher: ship reads at least this often. */
 const FLUSH_INTERVAL_MS = 100;
 /** Micro-batcher: or earlier if we hit this many. */

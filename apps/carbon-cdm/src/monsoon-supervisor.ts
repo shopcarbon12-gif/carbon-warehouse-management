@@ -1580,7 +1580,11 @@ export class MonsoonSupervisor {
       const wasIntendedKill = slot.intendedKill;
       slot.intendedKill = false;
       const treatAsClean = cleanExit || expectedMuxCrash || wasIntendedKill;
-      const delay = treatAsClean ? 250 : slot.backoffMs;
+      // Was 250 ms; reduced 2026-05-12 to shorten antenna-test cold-start.
+      // For wasIntendedKill (enterTestMode, leaveTestMode, mux swap) the
+      // delay is just to let the OS reap the SIGKILLed child before
+      // binding the same local ports; 75 ms is enough on modern kernels.
+      const delay = treatAsClean ? 75 : slot.backoffMs;
       if (cleanExit) {
         log.debug("supervisor: MonsoonReader cycle complete, respawning", {
           readerId: spec.id,
@@ -1937,7 +1941,11 @@ export class MonsoonSupervisor {
       const wasIntendedKill = slot.intendedKill;
       slot.intendedKill = false;
       const treatAsClean = cleanExit || wasIntendedKill;
-      const delay = treatAsClean ? 250 : slot.backoffMs;
+      // Was 250 ms; reduced 2026-05-12 to shorten antenna-test cold-start.
+      // For wasIntendedKill (enterTestMode, leaveTestMode, mux swap) the
+      // delay is just to let the OS reap the SIGKILLed child before
+      // binding the same local ports; 75 ms is enough on modern kernels.
+      const delay = treatAsClean ? 75 : slot.backoffMs;
       log.info("supervisor: new_monsoonreader exited", {
         readerId: spec.id,
         code,
