@@ -55,8 +55,18 @@ const MAX_BACKOFF_MS = 60_000;
  * project_sweep_mode_unsticks_radio_2026_05_09 in agent memory.
  *
  * Powers are the `--power` arg in tenths of a dBm: 100 = 10 dBm, 330 = 33 dBm.
+ *
+ * REORDERED 2026-05-12 to high→low. Previously [100, 200, 330] — sweep
+ * started at 10 dBm, which in a real warehouse (concrete + steel) reads
+ * essentially nothing even from a perfectly healthy chip. The sweep
+ * would then advance to 200 and 330, but by then the chip was already
+ * in the stuck state we were trying to recover, AND the supervisor had
+ * port-rotated to 1461 (now fixed separately). High→low starts at
+ * full configured power so a chip that's actually fine immediately
+ * starts producing reads and exits sweep. Only if 33 dBm fails do we
+ * step down — at which point we're confirming a chassis fault.
  */
-const SWEEP_POWERS: readonly number[] = [100, 200, 330];
+const SWEEP_POWERS: readonly number[] = [330, 200, 100];
 /** Cooldown so a permanently-broken reader doesn't sweep-thrash forever. */
 const SWEEP_RETRY_COOLDOWN_MS = 30 * 60 * 1000;
 
@@ -86,18 +96,27 @@ const SUPERVISOR_MUX_INTERVAL_MS = 5_000;
  *   10002 — Senitron-configured WIZnet factory image
  *    1461 — WIZnet WIZ100SR/110SR/140SR factory default data-tunnel port
  */
-const SERIAL_PORT_FALLBACKS: readonly number[] = [10002, 1461];
+/**
+ * DISABLED 2026-05-12: was [10002, 1461]. The 1461 fallback was for
+ * factory-fresh WIZnet bridges before commissioning. Today the agent
+ * also runs LAN-wide `wiznet-cli -d` discovery and auto-updates
+ * `monsoon_serial_port` in the WMS, so the configured port is always
+ * the right port. Keeping 1461 in the rotation made things worse:
+ * a chip that briefly went silent on its configured port (10002) was
+ * rotated to 1461, which can never produce reads because that's the
+ * config port, not the data tunnel. Catch-22 — supervisor stayed on
+ * the wrong port forever. Confirmed live 2026-05-12 on .15/.77/.78/
+ * .81/.82 cycling silent at port 1461 for hours.
+ *
+ * Kept the constant + function shape so any future need (e.g. an
+ * uncommissioned bridge on the floor) can be solved at the discovery
+ * layer, not by blind port rotation.
+ */
+const SERIAL_PORT_FALLBACKS: readonly number[] = [];
 
 function buildCandidatePorts(configured: number): number[] {
-  const out: number[] = [];
-  const seen = new Set<number>();
-  for (const p of [configured, ...SERIAL_PORT_FALLBACKS]) {
-    if (!Number.isFinite(p) || p <= 0) continue;
-    if (seen.has(p)) continue;
-    seen.add(p);
-    out.push(p);
-  }
-  return out.length > 0 ? out : [10002];
+  const p = Number.isFinite(configured) && configured > 0 ? configured : 10002;
+  return [p, ...SERIAL_PORT_FALLBACKS.filter((f) => f !== p)];
 }
 // Per-(epc, antenna) suppression DISABLED. Empirically the binary flushes
 // its inventory in a single ~22ms-wide burst of 100s of records (each
@@ -946,7 +965,13 @@ export class MonsoonSupervisor {
         muxSwapAtMs: Date.now() + SUPERVISOR_MUX_INTERVAL_MS,
         slotCreatedAt: Date.now(),
         pendingAbortTimer: null,
-        lastAbortAt: 0,
+        // Initialize to "now" so a freshly-created slot's first 0-byte
+        // exit can't fire an abort. Agent restart inherits 5+ zombie
+        // child processes that exit SIGKILL/0-byte simultaneously — with
+        // `lastAbortAt = 0` every slot's "first" abort would fire and
+        // re-wedge the chip across the fleet. Observed 2026-05-12 after
+        // a Hard Reset cascade.
+        lastAbortAt: Date.now(),
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -1394,18 +1419,17 @@ export class MonsoonSupervisor {
       // bytes (slot.bytesSinceSpawn = true).
       if (!slot.bytesSinceSpawn) {
         this.pushReaderOfflineIfDue(slot, Date.now());
-        // Only fire abort if we haven't fired one for this slot in the
-        // last ABORT_COOLDOWN_MS. Without this gate, the abort fires on
-        // EVERY 0-byte exit in a 5-s respawn loop and the chip ends up
-        // stuck in a post-RadioAbortOperation wedge state where it acks
-        // commands but won't emit tag frames. (consecutiveZeroByteKicks
-        // is reset by auto-sweep recovery, so we use an independent
-        // timestamp here.)
-        const now = Date.now();
-        if (now - slot.lastAbortAt >= ABORT_COOLDOWN_MS) {
-          slot.lastAbortAt = now;
-          this.ensureRadioStopped(spec);
-        }
+        // The on-exit 0-byte ensureRadioStopped was REMOVED 2026-05-12.
+        // Original intent: "a 0-byte child often means wedged Gen2 state,
+        // ensureRadioStopped resets the chip session so the next spawn
+        // starts clean." Live data showed the opposite: the abort is
+        // exactly what PUTS the chip into the post-RadioAbortOperation
+        // wedge state it was trying to fix. The next-spawn binary's own
+        // startup-abort handles re-init cleanly; an extra abort between
+        // spawns just wedges the chip. Bridge reset (wiznet-cli --reset)
+        // is the actual recovery for deeply-wedged chips, not another
+        // chip-level abort. Counter increment kept so port-rotation
+        // and auto-sweep recovery still work.
         slot.consecutiveZeroByteKicks += 1;
       }
       const finalDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
@@ -1688,18 +1712,17 @@ export class MonsoonSupervisor {
       // in the stream-driver on-exit branch above.
       if (!slot.bytesSinceSpawn) {
         this.pushReaderOfflineIfDue(slot, Date.now());
-        // Only fire abort if we haven't fired one for this slot in the
-        // last ABORT_COOLDOWN_MS. Without this gate, the abort fires on
-        // EVERY 0-byte exit in a 5-s respawn loop and the chip ends up
-        // stuck in a post-RadioAbortOperation wedge state where it acks
-        // commands but won't emit tag frames. (consecutiveZeroByteKicks
-        // is reset by auto-sweep recovery, so we use an independent
-        // timestamp here.)
-        const now = Date.now();
-        if (now - slot.lastAbortAt >= ABORT_COOLDOWN_MS) {
-          slot.lastAbortAt = now;
-          this.ensureRadioStopped(spec);
-        }
+        // The on-exit 0-byte ensureRadioStopped was REMOVED 2026-05-12.
+        // Original intent: "a 0-byte child often means wedged Gen2 state,
+        // ensureRadioStopped resets the chip session so the next spawn
+        // starts clean." Live data showed the opposite: the abort is
+        // exactly what PUTS the chip into the post-RadioAbortOperation
+        // wedge state it was trying to fix. The next-spawn binary's own
+        // startup-abort handles re-init cleanly; an extra abort between
+        // spawns just wedges the chip. Bridge reset (wiznet-cli --reset)
+        // is the actual recovery for deeply-wedged chips, not another
+        // chip-level abort. Counter increment kept so port-rotation
+        // and auto-sweep recovery still work.
         slot.consecutiveZeroByteKicks += 1;
       }
       const finalDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
