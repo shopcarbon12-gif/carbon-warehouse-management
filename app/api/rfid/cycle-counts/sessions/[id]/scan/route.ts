@@ -3,7 +3,10 @@ import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { ingestCycleCountEpcs } from "@/lib/server/rfid-cycle-count-scan";
-import { getSession as getCycleSession } from "@/lib/server/rfid-cycle-count-sessions";
+import {
+  classifyVarianceLive,
+  getSession as getCycleSession,
+} from "@/lib/server/rfid-cycle-count-sessions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,8 +85,27 @@ export async function POST(req: Request, { params }: Ctx) {
       );
     }
 
+    // Refetch the session + variance in the same transaction so the workspace
+    // can show new rows the instant the POST returns — no extra SWR round
+    // trip needed.
+    const refreshed = await getCycleSession(client, session.tid, id);
+    const variance = refreshed
+      ? await classifyVarianceLive(
+          client,
+          session.tid,
+          refreshed.expected,
+          refreshed.scanned_epcs,
+          refreshed.location_id,
+        )
+      : null;
+
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, results });
+    return NextResponse.json({
+      ok: true,
+      results,
+      session: refreshed,
+      variance,
+    });
   } catch (e) {
     try {
       await client.query("ROLLBACK");

@@ -498,6 +498,55 @@ function ActiveSessionView({
     setLocalScanned(new Set(detail.scanned_epcs.map((e) => e.toUpperCase())));
   }, [detail?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Pending EPCs buffer — SSE events kick an immediate flush (gated against
+  // pile-up by flushingRef). The /scan endpoint runs the catalog formula,
+  // mutates `items`, writes audit_log rows, AND returns the refreshed session
+  // + variance so the workspace can render new rows the instant the POST
+  // returns. A 750ms interval acts as a safety net for events that arrived
+  // while a flush was already in flight.
+  const pendingScanRef = useRef<Set<string>>(new Set());
+  const flushingRef = useRef(false);
+
+  const flushPendingScans = useCallback(async () => {
+    if (flushingRef.current) return;
+    if (pendingScanRef.current.size === 0) return;
+    flushingRef.current = true;
+    try {
+      // Drain in a loop so events that arrive during the POST are picked up
+      // immediately on the next iteration instead of waiting for an interval.
+      while (pendingScanRef.current.size > 0) {
+        const batch = [...pendingScanRef.current];
+        pendingScanRef.current.clear();
+        try {
+          const r = await fetch(
+            `/api/rfid/cycle-counts/sessions/${sessionId}/scan`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ epcs: batch }),
+            },
+          );
+          const j = (await r.json().catch(() => null)) as
+            | { ok?: boolean; session?: SessionDetail; variance?: Variance }
+            | null;
+          if (j?.ok && j.session && j.variance) {
+            await mutate(
+              { session: j.session, variance: j.variance },
+              { revalidate: false },
+            );
+          } else {
+            await mutate();
+          }
+        } catch {
+          for (const e of batch) pendingScanRef.current.add(e);
+          break;
+        }
+      }
+    } finally {
+      flushingRef.current = false;
+    }
+  }, [sessionId, mutate]);
+
   // SSE feed — only acts when status is "active". When paused, ignore reads.
   useEffect(() => {
     if (!detail) return;
@@ -538,9 +587,12 @@ function ActiveSessionView({
         return next;
       });
       for (const epc of list) pendingScanRef.current.add(epc);
+      // Fire immediately — flushingRef gates pile-up. Drain loop in the
+      // flusher keeps draining as events arrive during the in-flight POST.
+      void flushPendingScans();
     };
     return () => es.close();
-  }, [detail?.id, detail?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [detail?.id, detail?.status, flushPendingScans]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Read-rate refresher even when no new reads arrive (decay to 0).
   useEffect(() => {
@@ -554,41 +606,15 @@ function ActiveSessionView({
     return () => clearInterval(t);
   }, []);
 
-  // Pending EPCs buffer — every SSE batch lands here, a 1.5s debounce POSTs
-  // them to /scan which runs the catalog formula, mutates `items` (live add /
-  // move / revive / tag_killed), writes per-EPC audit_log entries, and merges
-  // them into the session's scanned_epcs list. The GET session response then
-  // returns enriched live variance buckets.
-  const pendingScanRef = useRef<Set<string>>(new Set());
-  const flushingRef = useRef(false);
-
-  const flushPendingScans = useCallback(async () => {
-    if (flushingRef.current) return;
-    if (pendingScanRef.current.size === 0) return;
-    flushingRef.current = true;
-    const batch = [...pendingScanRef.current];
-    pendingScanRef.current.clear();
-    try {
-      await fetch(`/api/rfid/cycle-counts/sessions/${sessionId}/scan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ epcs: batch }),
-      });
-      await mutate();
-    } catch {
-      // Re-queue on failure so the next tick retries.
-      for (const e of batch) pendingScanRef.current.add(e);
-    } finally {
-      flushingRef.current = false;
-    }
-  }, [sessionId, mutate]);
-
+  // Safety-net interval — picks up anything that piled up while a flush was
+  // already running. Short cadence so the UI stays current even if the
+  // SSE-triggered flush is gated.
   useEffect(() => {
     if (!detail) return;
     if (detail.status !== "active") return;
     const t = setInterval(() => {
       void flushPendingScans();
-    }, 1500);
+    }, 750);
     return () => clearInterval(t);
   }, [detail?.id, detail?.status, flushPendingScans]);
 
