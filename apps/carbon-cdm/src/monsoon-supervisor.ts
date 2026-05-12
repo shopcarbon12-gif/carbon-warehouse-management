@@ -1134,15 +1134,24 @@ export class MonsoonSupervisor {
       slot.intendedKill = true;
       this.killSlotChildHard(slot);
     }
-    // Send a chip-level radio abort so the SA-2000's R2000 chip drops
-    // any TagFocus / select / inventory state the test child set up
-    // before exiting under SIGKILL. Without this, the next normal-mode
-    // spawn inherits the wedged Gen2 state and reads only one or two
-    // tags repeatedly (562 reads / 1 unique EPC observed live on .69).
-    // The abort binary races the on-exit respawn for the bridge's
-    // single TCP slot; if the respawn loses, it falls into normal
-    // backoff and retries against a now-clean chip.
-    this.ensureRadioStopped(slot.spec);
+    // REMOVED 2026-05-12: was `this.ensureRadioStopped(slot.spec)`.
+    // Original intent: "after a test the chip may be in TagFocus/Select
+    // state from the test's --tagfocus flag; an abort here keeps the
+    // next normal-mode spawn from inheriting that wedged Gen2 state".
+    //
+    // Empirically the opposite was true: this abort fires immediately
+    // after the test child's SIGKILL, lands on the chip, and puts it
+    // into the post-RadioAbortOperation wedge state — the chip then
+    // accepts commands but emits zero tag frames on the next spawn.
+    // Live signal 2026-05-12: operator runs antenna test on a healthy
+    // reader, test produces reads, test ends, dot flips back to amber
+    // "reachable / stuck" and stays there.
+    //
+    // The new_monsoonreader binary's own connect-time init handles
+    // the TagFocus reset. If we ever see the "562 reads / 1 unique
+    // EPC" TagFocus stuck-mode again on .69-class chips, address it
+    // there (e.g. add `--reset-select` to the next spawn's args) —
+    // NOT by aborting the chip between spawns.
   }
 
   shutdown(): void {
