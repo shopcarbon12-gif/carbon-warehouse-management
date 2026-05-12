@@ -9,6 +9,7 @@ import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/add_on_session_realtime.dart';
@@ -53,7 +54,8 @@ class AddOnCountScreen extends StatefulWidget {
 class _AddOnCountScreenState extends State<AddOnCountScreen> {
   late AddOnSessionState _session;
   AddOnSessionRealtime? _sse;
-  StreamSubscription<String>? _epcSub;
+  StreamSubscription<RfidTagRead>? _directTagSub;
+  StreamSubscription<String>? _barcodeSub;
   StreamSubscription<AddOnRealtimeEvent>? _sseSub;
   StreamSubscription<String>? _triggerSub;
   Timer? _heartbeat;
@@ -122,6 +124,29 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       if (event == 'down') {
         unawaited(_toggleScanning());
       }
+    }, onError: (_) {});
+
+    // Subscribe directly to the native tag-read stream — same path Count
+    // Inventory uses. The RfidManager's `visibleEpcs` requires `_active`
+    // to be a connected scanner instance, which isn't always wired up by
+    // the time the Add-On screen mounts; the vendor channel emits raw
+    // tags from the native bridge regardless of manager state and never
+    // misses reads. The `_session.scanning` flag inside `_onEpc` gates
+    // ingest so tags read between START and STOP are processed.
+    _directTagSub = RfidVendorChannel.tagReadStream().listen(
+      (tag) => _onEpc(tag.epcHex24),
+      onError: (_) {},
+    );
+    // Some rugged handhelds (Chainway broadcast-only mode) emit UHF EPCs
+    // on the hardware_barcode channel instead. Mirror Count Inventory's
+    // _barcodeSub so we don't miss reads on those devices. Dedup in
+    // `_session.shouldSubmit` makes double-reads safe.
+    _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((raw) {
+      final compact = raw.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
+      if (compact.isEmpty) return;
+      final match = RegExp(r'([0-9A-F]{24})').firstMatch(compact);
+      final epc = match?.group(1);
+      if (epc != null) _onEpc(epc);
     }, onError: (_) {});
 
     // Silence the auto per-tag beep fired by the native RFID controllers
@@ -213,17 +238,16 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       _session.setScanning(false);
       ScanSounds.instance.play(ScanCue.stop);
     } else {
-      // Start side: attach the listener BEFORE firing the radio so we
-      // don't miss the first burst of tags. Then explicitly start the
-      // radio — the bug 1.2.63 shipped with was pauseScanning() being
-      // the only inventory call here, so the radio never actually ran
-      // when the operator pulled the trigger from the picker.
+      // Start side: tag stream is already subscribed in
+      // _ensureScannerReady (always-on, gated by _session.scanning), so
+      // here we just flip the gate and fire the radio. Both Zebra
+      // (startInventoryFlutterResult) and Chainway paths terminate on
+      // startScanning under the manager.
       _session.setScanning(true);
       ScanSounds.instance.play(ScanCue.start);
-      _epcSub ??= rfid.visibleEpcs.listen(_onEpc);
       try {
         await rfid.startLocateScanning();
-      } catch (_) {/* radio may be unconnected — visibleEpcs stays cold */}
+      } catch (_) {/* radio may be unconnected — tag stream stays cold */}
     }
   }
 
@@ -334,7 +358,8 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     _heartbeat?.cancel();
     _sseSub?.cancel();
     unawaited(_sse?.dispose() ?? Future<void>.value());
-    _epcSub?.cancel();
+    _directTagSub?.cancel();
+    _barcodeSub?.cancel();
     _triggerSub?.cancel();
     // Re-enable the auto per-tag beep for other screens.
     unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
