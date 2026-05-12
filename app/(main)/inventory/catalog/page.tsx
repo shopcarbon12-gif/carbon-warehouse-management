@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSession } from "@/lib/get-session";
 import { CatalogWorkspace } from "@/components/inventory/catalog/catalog-workspace";
+import { CatalogHeaderStats } from "@/components/inventory/catalog/catalog-header-stats";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +14,14 @@ export default async function ProductCatalogPage() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--wms-border)] pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--wms-border)] pb-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Inventory catalog</h1>
           <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
             Lightspeed item lines (SKU, color, size, retail price, bin) with active EPCs from RFID scans.
           </p>
         </div>
+        <CatalogHeaderStats />
         <Link
           href="/inventory"
           className="shrink-0 font-mono text-xs text-teal-400 hover:text-teal-300 hover:underline"
