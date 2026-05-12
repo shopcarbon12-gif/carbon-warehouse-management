@@ -1016,10 +1016,22 @@ export class MonsoonSupervisor {
         // inventory states that "Stop / Start inventory" alone can't.
         // Skip mux readers — their startup latency makes the sweep timing
         // unreliable; rely on the existing mux watchdog instead.
+        // force_respawn gate: when the operator has explicitly configured
+        // a forced respawn cadence on this reader (devices.config.
+        // force_respawn_interval_ms), the operator has chosen the chip-
+        // freshness strategy. The supervisor must NOT auto-sweep over that
+        // choice — sweep would walk the configured power down to a
+        // sub-configured value while force_respawn keeps respawning at the
+        // configured value, creating a fight. Live evidence 2026-05-12:
+        // .15 was set to 31 dBm with force_respawn 4s; auto-sweep walked
+        // the same slot down to 22 dBm in parallel. Trust the operator's
+        // explicit setting and skip sweep entry entirely.
+        const forceConfigured = Number(slot.spec.force_respawn_interval_ms ?? 0) > 0;
         if (
           !muxSlot &&
           slot.testSession === null &&
           slot.sweepPowerOverrideArg === null &&
+          !forceConfigured &&
           now - slot.lastSweepAttemptAt >= SWEEP_RETRY_COOLDOWN_MS
         ) {
           // testSession gate: an active /antenna_test session owns this slot.
@@ -2767,7 +2779,8 @@ export class MonsoonSupervisor {
           const child = spawn(
             "sudo",
             ["timeout", "--kill-after=1s", "8s", "/opt/legacy-rfid/wiznet-cli", "--ipconfig", macFromSpec, ...extra],
-            { stdio: ["ignore", "pipe", "pipe"], detached: true },
+            // detached:false — see tryBridgeReset comment.
+            { stdio: ["ignore", "pipe", "pipe"] },
           );
           child.stdout?.resume();
           child.stderr?.resume();
@@ -2848,7 +2861,14 @@ export class MonsoonSupervisor {
         const child = spawn(
           "sudo",
           ["timeout", "--kill-after=1s", "8s", "/opt/legacy-rfid/wiznet-cli", "--ipconfig", mac, "--reset"],
-          { stdio: ["ignore", "pipe", "pipe"], detached: true },
+          // detached:false (default) so the child dies with the agent's
+          // process group if systemd restarts us mid-call. detached:true
+          // earlier left ~3 stuck wiznet-cli orphans per agent restart
+          // (survived the parent death; kill-timer was lost in the dying
+          // Node event loop). Agent's startup cleanup also nukes any
+          // residual wiznet-cli processes inherited across crashes —
+          // belt-and-braces against the same orphan class.
+          { stdio: ["ignore", "pipe", "pipe"] },
         );
         child.stdout?.resume();
         child.stderr?.resume();
