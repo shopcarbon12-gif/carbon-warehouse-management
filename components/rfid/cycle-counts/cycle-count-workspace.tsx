@@ -815,17 +815,38 @@ function ActiveSessionView({
     void startScanSessionsForSelectedReaders();
   }, [selectedReaders, detail?.status, startScanSessionsForSelectedReaders]);
 
-  // Smoothly animate KPI counts as scans land. The targets come from the
-  // server's variance buckets (refreshed on every /scan POST), so animation
-  // makes the climb visible instead of jumping in batches.
+  // KPI counters: for Matched / Missing / Coverage we compute LOCALLY from
+  // localScanned ∩ expected, identical to how the dashboard's Live Scan tile
+  // ticks from its own SSE-driven Set. That makes the count climb the
+  // instant a read lands in the browser, instead of waiting for the POST
+  // round-trip (~300-500ms per batch) to return the server-side variance.
+  // Categorical buckets (added_here, defective, locked) still come from
+  // the server because they need items-table joins; the live local matched
+  // count never undercounts those (added/defective are EXTRAS, not part of
+  // expected).
+  //
+  // Server variance.matched is used as a high-water reconciliation: if the
+  // server has counted more matched than we have locally (e.g., on session
+  // reload, or after a transient SSE gap), we take its number. Never moves
+  // backwards.
   const liveExpectedCount = detail?.expected.length ?? 0;
+  const expectedEpcSet = useMemo(
+    () => new Set((detail?.expected ?? []).map((e) => e.epc.toUpperCase())),
+    [detail?.expected],
+  );
+  const liveMatchedCount = useMemo(() => {
+    let n = 0;
+    for (const epc of localScanned) if (expectedEpcSet.has(epc)) n += 1;
+    return Math.max(n, variance.matched.length);
+  }, [localScanned, expectedEpcSet, variance.matched.length]);
+  const liveMissingCount = Math.max(0, liveExpectedCount - liveMatchedCount);
   const liveCoverage =
     liveExpectedCount === 0
       ? 0
-      : Math.round((variance.matched.length / liveExpectedCount) * 100);
+      : Math.round((liveMatchedCount / liveExpectedCount) * 100);
   const animCoverage = useCountUp(liveCoverage);
-  const animMatched = useCountUp(variance.matched.length);
-  const animMissing = useCountUp(variance.missing.length);
+  const animMatched = useCountUp(liveMatchedCount);
+  const animMissing = useCountUp(liveMissingCount);
   const animAdded = useCountUp(variance.added_here.length);
   const animDefective = useCountUp(variance.defective.length);
   const animLocked = useCountUp(variance.locked.length);
