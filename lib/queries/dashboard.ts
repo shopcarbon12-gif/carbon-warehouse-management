@@ -52,13 +52,16 @@ export async function getDashboardKpis(
        AND status IN ('queued', 'running', 'failed')`,
     [tenantId, locationId],
   );
-  // Match the web command-center exactly: same FILTER clauses, same
-  // location-only WHERE (no tenant filter — devices.location_id is unique
-  // per tenant and the web query doesn't filter by tenant either, so
-  // adding one here would surface a different count than the dashboard).
-  // Online counts use status_online=true; "total" counts everything in
-  // the category for completeness, even though the mobile UI surfaces
-  // only the online figure to mirror the web's PulsePill.
+  // Online definition matches Hardware Config: a reader/antenna counts as
+  // online if EITHER the stored status_online flag is true (chip is
+  // producing tag reads) OR the bridge has been seen on the LAN within the
+  // last 3 minutes (chip is reachable, may be mid-recovery). Without the
+  // bridge-reachable arm, a reader with a healthy bridge but a transiently
+  // silent chip counted as OFFLINE on the Dashboard while Hardware Config
+  // showed it ONLINE — producing the "15 in HC vs 13/14 on Dashboard"
+  // confusion observed 2026-05-12. The two pages now report the same
+  // number for the same reader. Bridge-freshness window mirrors
+  // hardware-config.ts BRIDGE_REACHABLE_MS = 3 * 60_000.
   const hw = await pool.query<{
     readers: string;
     readers_online: string;
@@ -73,11 +76,12 @@ export async function getDashboardKpis(
        )::text AS readers,
        COUNT(*) FILTER (
          WHERE device_type IN ('fixed_reader','transaction_reader','door_reader')
-           AND status_online = true
+           AND (status_online = true OR bridge_seen_at > now() - interval '3 minutes')
        )::text AS readers_online,
        COUNT(*) FILTER (WHERE device_type = 'antenna')::text AS antennas,
        COUNT(*) FILTER (
-         WHERE device_type = 'antenna' AND status_online = true
+         WHERE device_type = 'antenna'
+           AND (status_online = true OR last_read_at > now() - interval '60 seconds')
        )::text AS antennas_online,
        COUNT(*) FILTER (WHERE device_type = 'printer')::text AS printers,
        COUNT(*) FILTER (
