@@ -115,21 +115,70 @@ function SessionLanding({
   showHistory: boolean;
   onToggleHistory: () => void;
 }) {
+  const { data: locData } = useSWR<{ id: string; code: string; name: string }[]>(
+    "/api/locations",
+    fetcher,
+  );
+  const locations: LocationRow[] = useMemo(() => locData ?? [], [locData]);
+  const [selectedLocationId, setSelectedLocationId] = useState("");
+  // Each location keeps its own count history — operators don't want Orlando's
+  // history showing up at Florida Mall and vice versa. Pin the filter to the
+  // first available location until the operator picks another. We derive this
+  // during render (rather than seeding state in an effect) so there is no
+  // visible flash of the empty state.
+  const locationId =
+    selectedLocationId && locations.some((l) => l.id === selectedLocationId)
+      ? selectedLocationId
+      : (locations[0]?.id ?? "");
+
+  const openUrl = locationId
+    ? `/api/rfid/cycle-counts/sessions?status=open&locationId=${encodeURIComponent(locationId)}`
+    : null;
+  const closedUrl = showHistory && locationId
+    ? `/api/rfid/cycle-counts/sessions?status=closed&locationId=${encodeURIComponent(locationId)}`
+    : null;
+
   const { data: openData, mutate: mutateOpen } = useSWR<{ sessions: SessionRow[] }>(
-    "/api/rfid/cycle-counts/sessions?status=open",
+    openUrl,
     fetcher,
     { refreshInterval: 5_000 },
   );
   const { data: closedData } = useSWR<{ sessions: SessionRow[] }>(
-    showHistory ? "/api/rfid/cycle-counts/sessions?status=closed" : null,
+    closedUrl,
     fetcher,
   );
 
+  const selectedLoc = locations.find((l) => l.id === locationId);
+  const locLabel = selectedLoc ? `${selectedLoc.code} — ${selectedLoc.name}` : "—";
+
   return (
     <>
-      <NewSessionForm onCreated={(id) => onOpen(id)} onMutate={mutateOpen} />
+      <Section
+        title="Location"
+        hint="Counts are kept separate per location. Each location numbers its counts 001, 002, 003… independently."
+      >
+        <select
+          value={locationId}
+          onChange={(e) => setSelectedLocationId(e.target.value)}
+          className={inputCls}
+          disabled={locations.length === 0}
+        >
+          {locations.length === 0 ? <option value="">Loading…</option> : null}
+          {locations.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.code} — {l.name}
+            </option>
+          ))}
+        </select>
+      </Section>
 
-      <Section title="Open counts" hint="Active or paused sessions you can resume.">
+      <NewSessionForm
+        locationId={locationId}
+        onCreated={(id) => onOpen(id)}
+        onMutate={mutateOpen}
+      />
+
+      <Section title={`Open counts at ${locLabel}`} hint="Active or paused sessions you can resume.">
         {openData && openData.sessions.length > 0 ? (
           <SessionTable sessions={openData.sessions} onOpen={onOpen} />
         ) : (
@@ -149,11 +198,11 @@ function SessionLanding({
       </div>
 
       {showHistory ? (
-        <Section title="History" hint="Committed and canceled sessions.">
+        <Section title={`History at ${locLabel}`} hint="Committed and canceled sessions at this location.">
           {closedData && closedData.sessions.length > 0 ? (
             <SessionTable sessions={closedData.sessions} onOpen={onOpen} variant="history" />
           ) : (
-            <Empty>No closed sessions yet.</Empty>
+            <Empty>No closed sessions at this location yet.</Empty>
           )}
         </Section>
       ) : null}
@@ -162,23 +211,23 @@ function SessionLanding({
 }
 
 function NewSessionForm({
+  locationId,
   onCreated,
   onMutate,
 }: {
+  locationId: string;
   onCreated: (id: string) => void;
   onMutate: () => void;
 }) {
-  const { data: locData } = useSWR<{ id: string; code: string; name: string }[]>(
-    "/api/locations",
-    fetcher,
-  );
-  const locations: LocationRow[] = locData ?? [];
-
-  const [locationId, setLocationId] = useState("");
   const [binId, setBinId] = useState("");
-  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Reset bin whenever the page-level location changes so we don't carry a
+  // bin from the previous location.
+  useEffect(() => {
+    setBinId("");
+  }, [locationId]);
 
   const binsUrl = locationId
     ? `/api/locations/bins?locationId=${encodeURIComponent(locationId)}`
@@ -195,7 +244,6 @@ function NewSessionForm({
         body: JSON.stringify({
           locationId,
           binId: binId || null,
-          name: name.trim() || undefined,
         }),
       });
       const j = (await res.json()) as { error?: string; session?: { id: string } };
@@ -210,25 +258,11 @@ function NewSessionForm({
   };
 
   return (
-    <Section title="Start a new count" hint="Pick a location (and optionally a bin) to scope what should be counted. The expected list is frozen at start.">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Location">
-          <select
-            value={locationId}
-            onChange={(e) => {
-              setLocationId(e.target.value);
-              setBinId("");
-            }}
-            className={inputCls}
-          >
-            <option value="">— Select —</option>
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.code} — {l.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+    <Section
+      title="Start a new count"
+      hint="The next number for this location is assigned automatically (001, 002, 003…). Optionally scope to a single bin; otherwise the count covers the whole location. The expected list is frozen at start. Scanning stays off until you press Start."
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Bin (optional)">
           <select
             value={binId}
@@ -244,15 +278,6 @@ function NewSessionForm({
             ))}
           </select>
         </Field>
-        <Field label="Name (optional)">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="auto-named with location + time"
-            className={inputCls}
-          />
-        </Field>
       </div>
       <div className="mt-3 flex items-center justify-between">
         {err ? (
@@ -266,7 +291,7 @@ function NewSessionForm({
           onClick={create}
           className="wms-btn-primary px-6 font-mono disabled:opacity-50"
         >
-          {busy ? "Starting…" : "Start count"}
+          {busy ? "Creating…" : "Create count"}
         </button>
       </div>
     </Section>
@@ -282,17 +307,15 @@ function SessionTable({
   onOpen: (id: string) => void;
   variant?: "history";
 }) {
-  // History view drops the Bin column (operators reference closed counts
-  // by # + who ran them, not by bin scope), replaces leading "Name" with
-  // a per-tenant "#" session number, and adds a trailing "Name" column
-  // showing the email of the user who opened it. Open-counts view keeps
-  // the operator's chosen Name as the leading column for picking up an
-  // in-progress count.
+  // Lists are already filtered to a single location at the workspace level,
+  // so we drop the Location column. The auto-assigned per-location number
+  // is the canonical identifier and lives in the "#" column. History adds a
+  // trailing "By" column with the operator's email.
   const isHistory = variant === "history";
   const tableRef = useRef<HTMLTableElement>(null);
-  // Open-counts: 8 columns (Name, Location, Bin, Status, Expected, Scanned, Started, action)
-  // History:    8 columns (#,    Location,      Status, Expected, Scanned, Started, Name, action)
-  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
+  // Open: 7 cols (#, Bin, Status, Expected, Scanned, Started, action)
+  // Hist: 7 cols (#,      Status, Expected, Scanned, Started, By, action)
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 7);
 
   type ColCfg = {
     label: string;
@@ -301,18 +324,16 @@ function SessionTable({
   };
   const cols: ColCfg[] = isHistory
     ? [
-        { label: "#", align: "right" },
-        { label: "Location" },
+        { label: "#" },
         { label: "Status" },
         { label: "Expected", align: "right" },
         { label: "Scanned", align: "right" },
         { label: "Started" },
-        { label: "Name" },
+        { label: "By" },
         { label: "", noResize: true },
       ]
     : [
-        { label: "Name" },
-        { label: "Location" },
+        { label: "#" },
         { label: "Bin" },
         { label: "Status" },
         { label: "Expected", align: "right" },
@@ -325,7 +346,7 @@ function SessionTable({
     <DataTableContainer maxHeight="min(60vh, 560px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[900px] border-collapse text-left"
+        className="w-full min-w-[800px] border-collapse text-left"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
         <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
@@ -356,17 +377,8 @@ function SessionTable({
         <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
           {sessions.map((s) => (
             <tr key={s.id} className="hover:bg-[var(--wms-surface-elevated)]/40">
-              {isHistory ? (
-                <td className="overflow-hidden px-3 py-2 text-right tabular-nums text-[var(--wms-accent)]">
-                  {s.session_number ?? "—"}
-                </td>
-              ) : (
-                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-accent)]`} title={s.name}>
-                  {s.name}
-                </td>
-              )}
-              <td className={`${cellTruncate} px-3 py-2`} title={s.location_code}>
-                {s.location_code}
+              <td className={`${cellTruncate} px-3 py-2 tabular-nums text-[var(--wms-accent)]`} title={s.name}>
+                {s.name}
               </td>
               {isHistory ? null : (
                 <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={s.bin_code ?? ""}>
@@ -473,6 +485,12 @@ function ActiveSessionView({
   const [commitOpen, setCommitOpen] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Tracks whether scanning has been started at least once in this mount.
+  // Used to flip the primary button label from "Start scanning" → "Resume"
+  // after the operator pauses mid-scan. Combined with scanned_count below
+  // so the label is also "Resume" when re-opening a session that already
+  // has reads.
+  const [wasEverActive, setWasEverActive] = useState(false);
 
   // Hydrate local scanned set from server on first load + when session changes.
   useEffect(() => {
@@ -613,29 +631,25 @@ function ActiveSessionView({
     }
   }, []);
 
-  // Stop the workflow that currently owns a specific reader, then claim it.
-  const takeoverReader = useCallback(
-    async (readerId: string) => {
-      const c = conflicts.get(readerId);
-      if (!c) return;
-      try {
-        await fetch("/api/scan-sessions/end", {
+  // Stop every workflow that currently owns any of the selected readers, then
+  // claim them all in one shot. Operators don't want to see which reader is
+  // busy — one button takes them all over.
+  const takeoverAllReaders = useCallback(async () => {
+    const entries = [...conflicts.entries()];
+    if (entries.length === 0) return;
+    await Promise.all(
+      entries.map(([, c]) =>
+        fetch("/api/scan-sessions/end", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionId: c.sessionId }),
-        }).catch(() => {});
-      } finally {
-        setConflicts((prev) => {
-          const next = new Map(prev);
-          next.delete(readerId);
-          return next;
-        });
-      }
-      await new Promise((r) => setTimeout(r, 300));
-      void startScanSessionsForSelectedReaders();
-    },
-    [conflicts, startScanSessionsForSelectedReaders],
-  );
+        }).catch(() => {}),
+      ),
+    );
+    setConflicts(new Map());
+    await new Promise((r) => setTimeout(r, 300));
+    void startScanSessionsForSelectedReaders();
+  }, [conflicts, startScanSessionsForSelectedReaders]);
 
   const endAllScanSessions = useCallback(async () => {
     const entries = [...scanSessionIdsRef.current.entries()];
@@ -670,11 +684,13 @@ function ActiveSessionView({
     };
   }, []);
 
-  // When the count goes active, wake selected readers. When it goes
-  // paused/canceled (or committed elsewhere), release them.
+  // When the count goes active, wake selected readers and remember that
+  // we've been scanning. When it goes paused/canceled (or committed
+  // elsewhere), release them.
   useEffect(() => {
     if (!detail) return;
     if (detail.status === "active") {
+      setWasEverActive(true);
       void startScanSessionsForSelectedReaders();
     } else {
       void endAllScanSessions();
@@ -792,10 +808,10 @@ function ActiveSessionView({
               <ArrowLeft className="h-3 w-3" /> All sessions
             </button>
             <h2 className="truncate text-base font-semibold text-[var(--wms-fg)]">
-              {detail.name}
+              Count #{detail.name} — {detail.location_code}
             </h2>
             <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-              {detail.location_code} · {detail.bin_code ?? "all bins"} ·{" "}
+              {detail.location_name} · {detail.bin_code ?? "all bins"} ·{" "}
               <StatusPill status={detail.status} /> ·{" "}
               started {new Date(detail.started_at).toLocaleString()}
             </p>
@@ -842,7 +858,8 @@ function ActiveSessionView({
             onClick={() => setStatus("active")}
             className="inline-flex min-h-[2.5rem] items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-950/40 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-emerald-100 hover:bg-emerald-900/40 disabled:opacity-50"
           >
-            <Play className="h-4 w-4" /> Resume
+            <Play className="h-4 w-4" />
+            {wasEverActive || localScanned.size > 0 ? "Resume" : "Start scanning"}
           </button>
         ) : null}
 
@@ -865,18 +882,17 @@ function ActiveSessionView({
             >
               <ScanLine className="h-4 w-4" /> Clear scans
             </button>
-            {[...conflicts.entries()].map(([rid, c]) => (
+            {conflicts.size > 0 ? (
               <button
-                key={rid}
                 type="button"
-                onClick={() => void takeoverReader(rid)}
-                title={`Reader ${rid.slice(0, 8)}… is busy with a ${c.kind} workflow. Click to stop it and take this reader.`}
-                className="inline-flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-950/40 px-3 py-2 font-mono text-xs font-semibold text-amber-100 hover:bg-amber-900/40"
+                onClick={() => void takeoverAllReaders()}
+                title="Some selected readers are busy on another screen. Stop them there and take them all here in one click."
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-950/40 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-900/40"
               >
                 <Radio className="h-3.5 w-3.5 text-amber-300" />
-                Stop other & take {rid.slice(0, 6)}
+                Take all readers here ({conflicts.size})
               </button>
-            ))}
+            ) : null}
           </>
         ) : null}
 

@@ -34,7 +34,6 @@ const epcArray = z
 export const createSessionSchema = z.object({
   locationId: z.string().uuid(),
   binId: z.string().uuid().nullable().optional(),
-  name: z.string().trim().max(160).optional(),
   notes: z.string().trim().max(2000).optional(),
   readerFilter: z.array(z.string().uuid()).max(64).optional(),
 });
@@ -52,7 +51,7 @@ export type PatchSessionBody = z.infer<typeof patchSessionSchema>;
 
 export type SessionRow = {
   id: string;
-  /** Per-tenant monotonic session number. Stamped at INSERT, never reused. */
+  /** Per-(tenant, location) monotonic session number. Stamped at INSERT, never reused. */
   session_number: number;
   tenant_id: string;
   location_id: string;
@@ -114,7 +113,7 @@ export async function createSession(
   session: SessionPayload,
   body: CreateSessionBody,
 ): Promise<SessionDetail> {
-  const loc = await assertLocationInTenant(client, session.tid, body.locationId);
+  await assertLocationInTenant(client, session.tid, body.locationId);
   let binCode: string | null = null;
   if (body.binId) {
     const b = await assertBinInLocation(client, body.locationId, body.binId);
@@ -147,34 +146,31 @@ export async function createSession(
     body.binId ?? null,
   );
 
-  const name =
-    (body.name && body.name.length > 0)
-      ? body.name
-      : autoSessionName(loc.code, binCode);
-
-  // Stamp session_number = MAX(session_number)+1 scoped to tenant. Cycle
-  // counts are operator-driven and infrequent, so the rare race window is
-  // acceptable; the partial unique index on (tenant_id, session_number)
-  // makes a duplicate fail loudly so the caller can retry.
-  const ins = await client.query<{ id: string }>(
-    `INSERT INTO cycle_count_sessions
+  // Stamp session_number = MAX(session_number)+1 scoped to (tenant, location)
+  // and use the zero-padded number as the session name ("001", "002", …).
+  // Status defaults to 'paused' so readers don't auto-wake; operator clicks
+  // Start to begin scanning.
+  const ins = await client.query<{ id: string; session_number: number; name: string }>(
+    `WITH next_num AS (
+       SELECT COALESCE(MAX(session_number), 0) + 1 AS n
+         FROM cycle_count_sessions
+        WHERE tenant_id = $1::uuid AND location_id = $2::uuid
+     )
+     INSERT INTO cycle_count_sessions
        (tenant_id, location_id, bin_id, name, status, started_by,
         expected_snapshot, scanned_epcs, reader_filter, notes,
         session_number)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, 'active', $5::uuid,
-             $6::jsonb, '[]'::jsonb, $7::jsonb, $8,
-             COALESCE(
-               (SELECT MAX(session_number) + 1
-                  FROM cycle_count_sessions
-                 WHERE tenant_id = $1::uuid),
-               1
-             ))
-     RETURNING id::text`,
+     SELECT $1::uuid, $2::uuid, $3::uuid,
+            lpad(next_num.n::text, 3, '0'),
+            'paused', $4::uuid,
+            $5::jsonb, '[]'::jsonb, $6::jsonb, $7,
+            next_num.n
+       FROM next_num
+     RETURNING id::text, session_number, name`,
     [
       session.tid,
       body.locationId,
       body.binId ?? null,
-      name,
       session.sub,
       JSON.stringify(expected),
       JSON.stringify(body.readerFilter ?? []),
@@ -185,13 +181,6 @@ export async function createSession(
   const detail = await getSession(client, session.tid, ins.rows[0].id);
   if (!detail) throw new Error("INTERNAL:Created session not found");
   return detail;
-}
-
-function autoSessionName(locationCode: string, binCode: string | null): string {
-  const ts = new Date().toISOString().replace("T", " ").slice(0, 16);
-  return binCode
-    ? `${locationCode} · ${binCode} · ${ts}`
-    : `${locationCode} · all bins · ${ts}`;
 }
 
 export async function listSessions(
