@@ -34,7 +34,8 @@ export type SessionEventType =
   | "signed_out"
   | "heartbeat"
   | "completed"
-  | "cancelled";
+  | "cancelled"
+  | "reopened";
 
 export type AddOnSessionRow = {
   id: string;
@@ -398,6 +399,76 @@ export async function touchSession(
     deviceId,
     eventType: "heartbeat",
   });
+}
+
+/** Re-open a completed Add-On session so the operator can continue scanning.
+ *  Caller MUST verify super-admin role before invoking — this helper does no
+ *  authorisation of its own. Flips state back to 'paused' (operator is in
+ *  the picker about to enter, not actively scanning yet), clears ended_at +
+ *  report_id, and resets the underlying source's add_on_completed_at /
+ *  add_on_locked_by so the picker treats the source as 'in_use' again and
+ *  the picker filter doesn't hide it.
+ *
+ *  EPC ledger + failed ledger are preserved — the operator picks up where
+ *  the prior session left off. The next finalize will create a NEW
+ *  inventory_reports row; the prior report remains as a historical record.
+ */
+export async function reopenSession(
+  pool: Pool,
+  tenantId: string,
+  sessionId: string,
+  reopenedByUserId: string | null,
+  reopenedByDeviceId: string | null,
+): Promise<AddOnSessionRow | null> {
+  const session = await getSession(pool, tenantId, sessionId);
+  if (!session) return null;
+  if (session.state !== "completed") {
+    // Only re-open *completed* sessions. Cancelled / active stay as-is.
+    return null;
+  }
+
+  await pool.query(
+    `UPDATE add_on_sessions
+        SET state            = 'paused',
+            ended_at         = NULL,
+            report_id        = NULL,
+            last_activity_at = now()
+      WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+    [sessionId, tenantId],
+  );
+
+  // Reset the underlying source's add-on lock columns so the picker shows
+  // the source as 'in_use' again rather than 'completed'. Three possible
+  // source types — we update all three by id; only the matching one
+  // actually has a row.
+  const srcType = session.source_type;
+  const srcId = session.source_id;
+  const tables: Record<string, string> = {
+    mobile_count: "inventory_reports",
+    cycle_count: "cycle_count_sessions",
+    csv_import: "device_upload_logs",
+  };
+  const table = tables[srcType];
+  if (table) {
+    await pool.query(
+      `UPDATE ${table}
+          SET add_on_completed_at = NULL,
+              add_on_completed_by = NULL,
+              add_on_locked_by    = $1::uuid
+        WHERE id = $2::uuid AND tenant_id = $3::uuid`,
+      [session.owner_user_id, srcId, tenantId],
+    );
+  }
+
+  await logEvent(pool, {
+    sessionId,
+    tenantId,
+    userId: reopenedByUserId,
+    deviceId: reopenedByDeviceId,
+    eventType: "reopened",
+  });
+
+  return await getSession(pool, tenantId, sessionId);
 }
 
 /** Janitor: cancel sessions idle past IDLE_CANCEL_MS. Run periodically. */

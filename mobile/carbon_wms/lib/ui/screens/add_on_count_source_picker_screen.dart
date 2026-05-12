@@ -83,9 +83,11 @@ class _AddOnCountSourcePickerScreenState
   Future<void> _onRowTap(Map<String, dynamic> row) async {
     final state = (row['state'] as String?) ?? 'free';
     if (state == 'completed') {
-      // Q29 lock: super-admin only re-open. Read-only popup for now.
-      _showSnackbar(
-          'Completed by ${row['completed_by_user_email'] ?? '—'} on ${row['completed_at'] ?? ''}');
+      // Q29 lock: super-admin only re-open. Picker offers the re-open path
+      // to any user; the /reopen endpoint server-side gates on role and
+      // returns 403 for non-super-admins. We surface the 403 as a
+      // friendly snackbar so a regular operator sees what's going on.
+      await _offerReopenCompleted(row);
       return;
     }
     if (state == 'in_use') {
@@ -144,6 +146,89 @@ class _AddOnCountSourcePickerScreenState
   void _showSnackbar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Tap on a completed row → confirm + POST /reopen + navigate. The
+  /// server gates on super-admin role; non-super-admins get a 403 here
+  /// which we surface as a snackbar. EPC ledger + failed ledger are
+  /// preserved server-side, so the operator walks into the scan screen
+  /// with the prior session state intact and the counters resume.
+  Future<void> _offerReopenCompleted(Map<String, dynamic> row) async {
+    final completedBy = (row['completed_by_user_email'] as String?) ?? '—';
+    final completedAt = (row['completed_at'] as String?) ?? '';
+    final slip = (row['slip'] as String?) ?? '—';
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Re-open completed count?'),
+        content: Text(
+          '$slip was completed by $completedBy on ${completedAt.substring(0, completedAt.length.clamp(0, 16))}.\n\n'
+          'Re-opening lets you continue scanning. Super-admin only.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('CANCEL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('RE-OPEN'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+
+    final lockedSessionId = row['locked_session_id'] as String?;
+    final api = context.read<WmsApiClient>();
+    String? sessionIdToUse = lockedSessionId;
+
+    // If the picker row doesn't carry a locked_session_id (sessions get
+    // unlinked when finalize runs), we'd have nothing to re-open. Try the
+    // start path instead — but the user explicitly asked for re-open, so
+    // surface that with a snackbar and bail.
+    if (sessionIdToUse == null || sessionIdToUse.isEmpty) {
+      _showSnackbar('No session record for this count to re-open. Pull to refresh.');
+      return;
+    }
+
+    try {
+      await api.reopenAddOnSession(sessionIdToUse);
+    } catch (e) {
+      if (!mounted) return;
+      // WmsApiException carries the HTTP status — 403 = not super admin.
+      // Use the message body as fallback so the server's text shows.
+      final msg = e.toString();
+      if (msg.contains('403')) {
+        _showSnackbar('Only super-admin can re-open a completed count.');
+      } else {
+        _showSnackbar('Re-open failed: $msg');
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    try {
+      final epcs = await api.getScanSourceEpcs(
+        sourceType: row['source_type'] as String,
+        sourceId: row['source_id'] as String,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => AddOnCountScreen(
+            sessionId: sessionIdToUse!,
+            sourceType: row['source_type'] as String,
+            sourceId: row['source_id'] as String,
+            sourceSlip: slip,
+            sourceEpcs: epcs,
+          ),
+        ),
+      );
+      await _refresh();
+    } catch (e) {
+      _showSnackbar('Could not enter re-opened session: $e');
+    }
   }
 
   /// Same operator who originally locked the row is back — walk directly

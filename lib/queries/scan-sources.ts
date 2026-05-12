@@ -172,12 +172,17 @@ export async function listScanSources(
       sess.owner_user_id::text AS locked_owner_id
     FROM all_sources s
     LEFT JOIN LATERAL (
+      -- Include 'completed' sessions too so completed picker rows carry a
+      -- session id that the super-admin re-open path can target. 'active'
+      -- + 'paused' still win the ordering when a source has both an
+      -- in-flight session AND a historical completed one, because
+      -- last_activity_at on the active session is fresher.
       SELECT id, owner_user_id
         FROM add_on_sessions
        WHERE add_on_sessions.tenant_id = $1::uuid
          AND add_on_sessions.source_type = s.source_type
          AND add_on_sessions.source_id = s.source_id
-         AND add_on_sessions.state IN ('active','paused')
+         AND add_on_sessions.state IN ('active','paused','completed')
        ORDER BY add_on_sessions.last_activity_at DESC
        LIMIT 1
     ) sess ON true

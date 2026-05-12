@@ -1706,6 +1706,30 @@ class WmsApiClient {
     return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
   }
 
+  /// Re-open a completed Add-On session so the operator can keep scanning.
+  /// Server gates this on super-admin role. Returns the updated session row
+  /// on success (`{id, state, source_type, source_id, source_slip}`).
+  /// Throws [WmsApiException(403, …)] when the logged-in user isn't super
+  /// admin — callers should surface that as an "only super admin can
+  /// re-open" message rather than retrying.
+  ///
+  /// Uses the *session* bearer (not handheld API key) because the role
+  /// check needs a real user identity.
+  Future<Map<String, dynamic>> reopenAddOnSession(String sessionId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/handheld/add-on-sessions/$sessionId/reopen');
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...await sessionAuthHeaders(),
+    };
+    final res = await _http.post(uri, headers: headers, body: '{}');
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> respondJoinAddOnSession({
     required String sessionId,
     required bool approve,
