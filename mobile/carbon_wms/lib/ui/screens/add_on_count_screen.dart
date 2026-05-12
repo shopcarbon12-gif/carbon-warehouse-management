@@ -194,13 +194,27 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
   Future<void> _toggleScanning() async {
     final rfid = context.read<RfidManager>();
     if (_session.scanning) {
-      await rfid.pauseScanning();
+      // Stop side: stop the radio first, then drop the gate. Order
+      // matters because the visibleEpcs stream can flush late tags
+      // between stop and the listener being torn down — we still
+      // _session.scanning-gate them in _onEpc so they go nowhere.
+      try {
+        await rfid.stopLocateScanning();
+      } catch (_) {/* ignore — best-effort stop */}
       _session.setScanning(false);
       ScanSounds.instance.play(ScanCue.stop);
     } else {
+      // Start side: attach the listener BEFORE firing the radio so we
+      // don't miss the first burst of tags. Then explicitly start the
+      // radio — the bug 1.2.63 shipped with was pauseScanning() being
+      // the only inventory call here, so the radio never actually ran
+      // when the operator pulled the trigger from the picker.
       _session.setScanning(true);
       ScanSounds.instance.play(ScanCue.start);
       _epcSub ??= rfid.visibleEpcs.listen(_onEpc);
+      try {
+        await rfid.startLocateScanning();
+      } catch (_) {/* radio may be unconnected — visibleEpcs stays cold */}
     }
   }
 

@@ -450,6 +450,16 @@ class CarbonZebraRfidController(
           return@execute
         }
         applyTransmitPowerDbm(r)
+        // Silence the sled's per-tag beeper ONLY during this active
+        // inventory burst. Restored to HIGH in stopInventoryAsync so
+        // the sled is back at the resting volume by the time anything
+        // outside scan (connect/disconnect chime, power chime) fires.
+        try {
+          r.Config.setBeeperVolume(BEEPER_VOLUME.QUIET_BEEP)
+          Log.d(TAG, "BeeperVolume -> QUIET_BEEP (scan-start)")
+        } catch (e: Exception) {
+          Log.w(TAG, "scan-start setBeeperVolume failed: ${e.message}")
+        }
         r.Actions.Inventory.perform()
         inventoryActive = true
         mainHandler.post { result.success(null) }
@@ -473,6 +483,16 @@ class CarbonZebraRfidController(
         reader?.takeIf { it.isConnected }?.Actions?.Inventory?.stop()
       } catch (_: Exception) {
         /* ignore */
+      }
+      // Restore the sled's resting volume so subsequent firmware chimes
+      // (mode change → done elsewhere, disconnect, power) fire audibly,
+      // including after a force-close because NVRAM is now HIGH. This
+      // is the central guarantee of the at-rest=HIGH policy.
+      try {
+        reader?.takeIf { it.isConnected }?.Config?.setBeeperVolume(BEEPER_VOLUME.HIGH_BEEP)
+        Log.d(TAG, "BeeperVolume -> HIGH_BEEP (scan-stop)")
+      } catch (e: Exception) {
+        Log.w(TAG, "scan-stop setBeeperVolume failed: ${e.message}")
       }
     }
   }
@@ -859,26 +879,23 @@ class CarbonZebraRfidController(
       r.connect()
       Log.d(TAG, "connectAndConfigureReader: connected=${r.isConnected} host=${r.hostName}")
     }
-    // RFD8500 firmware fires its connect chime asynchronously some time
-    // AFTER r.connect() returns — the logcat trace from 1.2.61 showed our
-    // immediate setBeeperVolume(QUIET) landing ~1.2 s post-connect, which is
-    // inside the chime window and silenced it. Schedule the silence on a
-    // delay instead. 3.5 s is empirically past the chime window and short
-    // enough that the user can't trigger a tag scan before it lands.
-    // Guarded against the reader being torn down before the delay elapses.
-    mainHandler.postDelayed({
-      val rr = reader
-      if (rr == null || !rr.isConnected) {
-        Log.d(TAG, "delayed setBeeperVolume skipped: reader gone")
-        return@postDelayed
-      }
-      try {
-        rr.Config.setBeeperVolume(BEEPER_VOLUME.QUIET_BEEP)
-        Log.d(TAG, "BeeperVolume -> QUIET_BEEP (delayed)")
-      } catch (e: Exception) {
-        Log.w(TAG, "delayed setBeeperVolume failed: ${e.message}")
-      }
-    }, 3500)
+    // Beeper policy: the sled stays at HIGH_BEEP at REST (between
+    // active scans + at idle), and is set to QUIET_BEEP only for the
+    // duration of an inventory burst (in startInventoryFlutterResult).
+    // This way the firmware's connect/disconnect/power chimes always
+    // fire — they happen while the sled is at rest — and per-tag beeps
+    // are silent during scanning. Critically, this is *robust to
+    // force-close*: NVRAM is HIGH whenever the user isn't pulling the
+    // trigger, so the next session's connect chime fires even if the
+    // app was swiped away without a clean disconnect.
+    //
+    // We don't set HIGH here on connect because the sled is already at
+    // HIGH from the prior stopInventory (or its factory default). The
+    // one edge case that loses a chime is a force-close *mid-scan* —
+    // NVRAM is QUIET at process death, so the next connect is silent
+    // until that session's first stopInventory restores it. We accept
+    // that as the cost of not running a heavyweight Activity-lifecycle
+    // hook just to cover the mid-scan-kill case.
     val triggerInfo = TriggerInfo()
     triggerInfo.StartTrigger.setTriggerType(START_TRIGGER_TYPE.START_TRIGGER_TYPE_IMMEDIATE)
     triggerInfo.StopTrigger.setTriggerType(STOP_TRIGGER_TYPE.STOP_TRIGGER_TYPE_IMMEDIATE)
@@ -940,22 +957,11 @@ class CarbonZebraRfidController(
   private fun disconnectSync() {
     inventoryActive = false
 
-    // 0. BEFORE any teardown, restore the sled beeper to HIGH so the
-    //    firmware's disconnect chime fires loud AND so the NEXT connect's
-    //    firmware chime fires loud (BEEPER_VOLUME is RFD8500-NVRAM-persistent).
-    //    The connect-side silence runs on a 3.5 s delay so we don't race the
-    //    chime; here we run BEFORE the link teardown so the SDK call has a
-    //    healthy reader handle to talk to. Best-effort: any exception is
-    //    swallowed so a hard teardown still proceeds.
-    val rEarly = reader
-    if (rEarly != null) {
-      try {
-        rEarly.Config.setBeeperVolume(BEEPER_VOLUME.HIGH_BEEP)
-        Log.d(TAG, "BeeperVolume -> HIGH_BEEP (pre-teardown)")
-      } catch (e: Exception) {
-        Log.w(TAG, "pre-teardown setBeeperVolume failed: ${e.message}")
-      }
-    }
+    // Beeper restore lives in stopInventoryAsync now — by the time
+    // disconnect runs, the sled is already back at HIGH_BEEP from the
+    // last stopInventory, so the firmware's disconnect chime fires
+    // naturally. Doing it here too would be redundant and risks
+    // racing the link teardown.
 
     // Tear down CoreScanner first so its session socket releases before we
     // kill the RFID side — same physical BT link, sequence matters.
