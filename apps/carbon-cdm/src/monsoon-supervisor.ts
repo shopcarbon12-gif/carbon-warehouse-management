@@ -95,6 +95,19 @@ const SWEEP_RETRY_COOLDOWN_MS = 60_000;
 const SWEEP_OVERRIDE_RETEST_MS = 3 * 60 * 1000;
 
 /**
+ * Minimum time the sweep must dwell at the CURRENT power step before
+ * advancing on a 0-byte exit. Without this, the binary exits in <1 s
+ * with no bytes (the chip needs warm-up time), the supervisor reads
+ * that as "silent at this power, try next", and sweep walks past a
+ * working power before the chip even had a chance to produce a frame.
+ * Observed live on .15 — chip produces 594 reads at 33 dBm in test
+ * mode (multi-second), but sweep advanced past 33 → 27 → 20 → 15 in
+ * the first ~5 s after recovery start because each cycle was a
+ * sub-second silent exit.
+ */
+const MIN_SWEEP_DWELL_MS = 10_000;
+
+/**
  * Slow-detection window (rolling): how often we compare each slot's
  * read rate to its peers. A slot reading significantly slower than peer
  * median while peers are healthy gets auto-recovered (sweep + bridge
@@ -309,6 +322,13 @@ type ReaderSlot = {
    * broken reader doesn't sweep-thrash indefinitely. 0 = never attempted.
    */
   lastSweepAttemptAt: number;
+  /**
+   * ms timestamp when the current sweep STEP started. Used to enforce
+   * MIN_SWEEP_DWELL_MS so a sub-second 0-byte exit can't bounce the
+   * sweep past a power that would actually have worked given a few
+   * more seconds of chip warm-up.
+   */
+  sweepStepStartedAt: number;
   /**
    * Supervisor-managed antenna mux. When `length >= 2`, we rotate through
    * these antenna numbers (one console-driver child per antenna) in place
@@ -622,15 +642,31 @@ export class MonsoonSupervisor {
       // But .16 was observed today running pinned to antenna 2 with
       // a non-null sweepPowerOverrideArg, which suppressed mux swaps.
       // Until the source is traced, defensively clear any sweep state
-      // from mux slots on every watchdog tick.
-      if (slot.muxAntennaSequence.length >= 2 && slot.sweepPowerOverrideArg !== null) {
-        log.warn("supervisor: defensively clearing sweepPowerOverrideArg on mux slot", {
-          readerId: slot.spec.id,
-          readerName: slot.spec.name,
-          stalePower: slot.sweepPowerOverrideArg,
-        });
-        slot.sweepPowerOverrideArg = null;
-        slot.lastSweepAttemptAt = 0;
+      // from mux slots on every watchdog tick AND reset muxSwapAtMs so
+      // the swap window can't be stuck in the future.
+      if (slot.muxAntennaSequence.length >= 2) {
+        if (slot.sweepPowerOverrideArg !== null) {
+          log.warn("supervisor: defensively clearing sweepPowerOverrideArg on mux slot", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            stalePower: slot.sweepPowerOverrideArg,
+          });
+          slot.sweepPowerOverrideArg = null;
+          slot.lastSweepAttemptAt = 0;
+        }
+        // Force mux swap to be due soon if it's somehow stuck in the
+        // future (>SUPERVISOR_MUX_INTERVAL_MS * 2). This catches the
+        // pathological state where the watchdog never triggers a swap
+        // because muxSwapAtMs was set far ahead by a stale spawn path.
+        if (slot.muxSwapAtMs > now + SUPERVISOR_MUX_INTERVAL_MS * 2) {
+          log.warn("supervisor: muxSwapAtMs stuck in far future on mux slot — resetting", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            muxSwapAtMs: slot.muxSwapAtMs,
+            now,
+          });
+          slot.muxSwapAtMs = now;
+        }
       }
       // Periodic auto-retest of operator-configured power. When sweep
       // recovery pinned the slot to a sub-configured power earlier,
@@ -770,6 +806,7 @@ export class MonsoonSupervisor {
         if (idx >= 0 && idx + 1 < SWEEP_POWERS.length) {
           const nextPower = SWEEP_POWERS[idx + 1];
           slot.sweepPowerOverrideArg = nextPower ?? null;
+          slot.sweepStepStartedAt = Date.now();
           log.info("supervisor: sweep step silent — advancing power", {
             readerId: slot.spec.id,
             readerName: slot.spec.name,
@@ -858,6 +895,7 @@ export class MonsoonSupervisor {
           now - slot.lastSweepAttemptAt >= SWEEP_RETRY_COOLDOWN_MS
         ) {
           slot.sweepPowerOverrideArg = SWEEP_POWERS[0] ?? null;
+          slot.sweepStepStartedAt = Date.now();
           slot.consecutiveZeroByteKicks = 0;
           slot.lastExhaustionResetAt = 0;
           slot.bytesSinceSpawn = false;
@@ -966,6 +1004,7 @@ export class MonsoonSupervisor {
         });
         c.slot.lastSlowRecoveryAt = now;
         c.slot.sweepPowerOverrideArg = SWEEP_POWERS[0] ?? null;
+        c.slot.sweepStepStartedAt = Date.now();
         c.slot.consecutiveZeroByteKicks = 0;
         c.slot.bytesSinceSpawn = false;
         c.slot.recordsThisWindow = 0;
@@ -1154,6 +1193,7 @@ export class MonsoonSupervisor {
         intendedKill: false,
         sweepPowerOverrideArg: null,
         lastSweepAttemptAt: 0,
+        sweepStepStartedAt: 0,
         muxAntennaSequence: spec.antennas
           .filter((a) => a.enabled)
           .map((a) => a.antenna_number)
@@ -1666,11 +1706,16 @@ export class MonsoonSupervisor {
         // SWEEP_POWERS rapidly until we find a power that produces
         // bytes — observed live 2026-05-12 on .81 stuck at 330 dBm
         // while operator sweep proved the chip CAN read at lower power.
-        if (slot.sweepPowerOverrideArg !== null && slot.testSession === null) {
+        if (
+          slot.sweepPowerOverrideArg !== null &&
+          slot.testSession === null &&
+          Date.now() - slot.sweepStepStartedAt >= MIN_SWEEP_DWELL_MS
+        ) {
           const idx = SWEEP_POWERS.indexOf(slot.sweepPowerOverrideArg);
           if (idx >= 0 && idx + 1 < SWEEP_POWERS.length) {
             const nextPower = SWEEP_POWERS[idx + 1];
             slot.sweepPowerOverrideArg = nextPower ?? null;
+            slot.sweepStepStartedAt = Date.now();
             log.info("supervisor: sweep step silent (0-byte exit) — advancing power", {
               readerId: slot.spec.id,
               readerName: slot.spec.name,
@@ -2016,11 +2061,16 @@ export class MonsoonSupervisor {
         // SWEEP_POWERS rapidly until we find a power that produces
         // bytes — observed live 2026-05-12 on .81 stuck at 330 dBm
         // while operator sweep proved the chip CAN read at lower power.
-        if (slot.sweepPowerOverrideArg !== null && slot.testSession === null) {
+        if (
+          slot.sweepPowerOverrideArg !== null &&
+          slot.testSession === null &&
+          Date.now() - slot.sweepStepStartedAt >= MIN_SWEEP_DWELL_MS
+        ) {
           const idx = SWEEP_POWERS.indexOf(slot.sweepPowerOverrideArg);
           if (idx >= 0 && idx + 1 < SWEEP_POWERS.length) {
             const nextPower = SWEEP_POWERS[idx + 1];
             slot.sweepPowerOverrideArg = nextPower ?? null;
+            slot.sweepStepStartedAt = Date.now();
             log.info("supervisor: sweep step silent (0-byte exit) — advancing power", {
               readerId: slot.spec.id,
               readerName: slot.spec.name,
