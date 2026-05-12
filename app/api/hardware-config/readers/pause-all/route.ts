@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { isAdminRole } from "@/lib/auth/dashboard-rbac";
+import { endSessionForReader } from "@/lib/server/scan-sessions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,10 +33,27 @@ export async function POST(req: Request) {
       RETURNING d.id::text`,
     [session.tid, session.sub, session.lid ?? null],
   );
+  // Force-end any in-flight scan-sessions on the readers we just paused, so
+  // an operator's open workflow can't keep a reader awake past Pause-All.
+  let endedScanSessions = 0;
+  for (const row of r.rows) {
+    if (endSessionForReader(row.id)) endedScanSessions++;
+  }
   await pool.query(
     `INSERT INTO audit_log (tenant_id, user_id, action, entity, metadata)
        VALUES ($1::uuid, $2::uuid, 'cdm_reader_pause_all', 'devices', $3::jsonb)`,
-    [session.tid, session.sub, JSON.stringify({ paused_count: r.rowCount ?? 0 })],
+    [
+      session.tid,
+      session.sub,
+      JSON.stringify({
+        paused_count: r.rowCount ?? 0,
+        ended_scan_sessions: endedScanSessions,
+      }),
+    ],
   );
-  return NextResponse.json({ ok: true, paused: r.rowCount ?? 0 });
+  return NextResponse.json({
+    ok: true,
+    paused: r.rowCount ?? 0,
+    endedScanSessions,
+  });
 }
