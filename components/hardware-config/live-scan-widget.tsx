@@ -54,11 +54,14 @@ export function LiveScanWidget() {
       try {
         const res = await fetch("/api/dashboard/live-scan/state");
         if (!res.ok) return;
-        const j = (await res.json()) as { active?: boolean; count?: number };
+        const j = (await res.json()) as {
+          active?: boolean;
+          reads_since_start?: number;
+        };
         if (cancelled) return;
         if (j.active) {
           setState("running");
-          setCount(j.count ?? 0);
+          setCount(j.reads_since_start ?? 0);
         }
       } catch {
         /* ignore */
@@ -80,7 +83,10 @@ export function LiveScanWidget() {
       try {
         const res = await fetch("/api/dashboard/live-scan/state");
         if (!res.ok) return;
-        const j = (await res.json()) as { active?: boolean; count?: number };
+        const j = (await res.json()) as {
+          active?: boolean;
+          reads_since_start?: number;
+        };
         if (cancelled) return;
         if (!j.active) {
           // Server auto-expired or stopped externally.
@@ -88,7 +94,7 @@ export function LiveScanWidget() {
           setCount(0);
           return;
         }
-        setCount((prev) => Math.max(prev, j.count ?? 0));
+        setCount((prev) => Math.max(prev, j.reads_since_start ?? 0));
       } catch {
         /* transient */
       }
