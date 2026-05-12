@@ -34,6 +34,16 @@ class AddOnSessionState extends ChangeNotifier {
   List<NewEpcEntry> get newEntries => List.unmodifiable(_newEntries);
   final Set<String> _newSeen = {};
 
+  /// Defective EPCs — failed the Carbon EPC formula check (wrong prefix /
+  /// bad hex / wrong length). Captured locally so the Review screen can
+  /// show the count and forward to scan-finalize, but never beep / display
+  /// in the main scan list. Server-side mirror lives in
+  /// `add_on_sessions.failed_ledger` (populated by our /epc POSTs with
+  /// validationFailed=true).
+  final List<FailedEpcEntry> _failedEntries = [];
+  List<FailedEpcEntry> get failedEntries => List.unmodifiable(_failedEntries);
+  final Set<String> _failedSeen = {};
+
   /// EPCs we've already submitted to the server this session (any outcome).
   /// Stops us from spamming /epc with the same tag on re-reads.
   final Set<String> _submitted = {};
@@ -75,6 +85,19 @@ class AddOnSessionState extends ChangeNotifier {
   void recordRemoteDuplicate(String epc) {
     _submitted.add(epc.toUpperCase());
   }
+
+  /// Record a defective EPC (failed Carbon formula check). Silent — does
+  /// not beep, does not render in the main list. Surfaces only on the
+  /// Review screen as a count and as an extra "Defective" sheet/blob in
+  /// the SAVE/UPLOAD output.
+  void recordFailed(FailedEpcEntry entry) {
+    if (_failedSeen.add(entry.epc)) {
+      _failedEntries.add(entry);
+      notifyListeners();
+    }
+  }
+
+  int get failedCount => _failedEntries.length;
 
   void setScanning(bool value) {
     if (_disposed || _scanning == value) return;
@@ -128,4 +151,20 @@ class NewEpcEntry {
         'first_seen_iso': scannedAtUtc.toIso8601String(),
         'last_seen_iso': scannedAtUtc.toIso8601String(),
       };
+}
+
+/// Defective EPC entry — failed the Carbon formula check (wrong prefix,
+/// bad hex, or wrong length). Held locally + mirrored server-side in
+/// `add_on_sessions.failed_ledger`.
+@immutable
+class FailedEpcEntry {
+  const FailedEpcEntry({
+    required this.epc,
+    required this.reason,
+    required this.scannedAtUtc,
+  });
+
+  final String epc;
+  final String reason;
+  final DateTime scannedAtUtc;
 }

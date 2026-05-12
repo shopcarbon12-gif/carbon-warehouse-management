@@ -26,6 +26,7 @@ class AddOnCountReviewScreen extends StatefulWidget {
     required this.sourceId,
     required this.sourceSlip,
     required this.newEntries,
+    this.failedEntries = const [],
   });
 
   final String sessionId;
@@ -33,6 +34,13 @@ class AddOnCountReviewScreen extends StatefulWidget {
   final String sourceId;
   final String sourceSlip;
   final List<NewEpcEntry> newEntries;
+  // Defective EPCs scanned this session (failed Carbon EPC formula). Not
+  // rendered as cards — only the count is shown next to the new-EPC count.
+  // The server already has them in add_on_sessions.failed_ledger (we POST
+  // each with validationFailed=true during scan); scan-finalize pulls
+  // failed_ledger and emits a "Defective" sheet on SAVE / threads them
+  // through the defective-CSV pipeline on UPLOAD.
+  final List<FailedEpcEntry> failedEntries;
 
   @override
   State<AddOnCountReviewScreen> createState() => _AddOnCountReviewScreenState();
@@ -88,16 +96,37 @@ class _AddOnCountReviewScreenState extends State<AddOnCountReviewScreen> {
           children: [
             Padding(
               padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 6.h),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${entries.length} new EPCs',
-                  style: GoogleFonts.manrope(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMain,
+              child: Row(
+                children: [
+                  Text(
+                    '${entries.length} new EPCs',
+                    style: GoogleFonts.manrope(
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textMain,
+                    ),
                   ),
-                ),
+                  if (widget.failedEntries.isNotEmpty) ...[
+                    SizedBox(width: 8.w),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFDECEA),
+                        border: Border.all(color: const Color(0xFFD9534F)),
+                        borderRadius: BorderRadius.circular(2.r),
+                      ),
+                      child: Text(
+                        '${widget.failedEntries.length} defective',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 10.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                          color: const Color(0xFFD9534F),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             Expanded(

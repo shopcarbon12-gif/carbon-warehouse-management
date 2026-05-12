@@ -164,6 +164,41 @@ function sourceForScreen(screen: ScanFinalizeScreen): EpcSource {
   }
 }
 
+/** Load an add-on session's failed_ledger (defective EPCs scanned but never
+ *  surfaced to the operator because they failed Carbon's formula check) and
+ *  flatten into DefectiveEpcRow[] for the same CSV pipeline UPLOAD failures
+ *  use. Used by both SAVE and UPLOAD so the operator's audit/defective blob
+ *  reflects every EPC the device saw — not just the ones the review screen
+ *  showed.
+ */
+async function loadFailedLedgerAsDefective(
+  client: PoolClient,
+  tenantId: string,
+  sessionId: string,
+): Promise<DefectiveEpcRow[]> {
+  const r = await client.query<{ failed_ledger: Record<string, { u: string | null; d: string | null; at: string; r: string }> | null }>(
+    `SELECT failed_ledger
+       FROM add_on_sessions
+      WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+    [sessionId, tenantId],
+  );
+  const ledger = r.rows[0]?.failed_ledger;
+  if (!ledger || typeof ledger !== "object") return [];
+  const out: DefectiveEpcRow[] = [];
+  for (const [epc, meta] of Object.entries(ledger)) {
+    if (typeof epc !== "string" || !epc) continue;
+    out.push({
+      epc: epc.toUpperCase(),
+      scannedAtIso: meta?.at ?? new Date().toISOString(),
+      decodeReason: meta?.r ?? "invalid",
+      rawDecodedBits: epcHexToBits(epc),
+      deviceId: meta?.d ?? null,
+      operatorUserId: meta?.u ?? null,
+    });
+  }
+  return out;
+}
+
 /** Wipe existing live items for the SKUs covered by `scannedSkus` whose EPC
  *  isn't in `keepEpcs`. Returns count of rows wiped. */
 async function wipeOverrideReplace(
@@ -239,14 +274,48 @@ export async function finalizeScanSession(
 
     /* ---- 2. SAVE = stop here. No catalog mutation. ---- */
     if (input.intent === "save") {
+      // BUT — for Add-On Count SAVE, still attach the defective blob so the
+      // saved report carries both the audit (valid EPCs) and the
+      // formula-rejected EPCs the mobile filtered out before review. The
+      // mobile already POSTed each defective tag to /epc with
+      // validationFailed=true, populating add_on_sessions.failed_ledger.
+      let savedDefectiveCount = 0;
+      if (input.screen === "add_on_count" && input.addOnSessionId) {
+        const ledgerDefective = await loadFailedLedgerAsDefective(
+          client,
+          input.tenantId,
+          input.addOnSessionId,
+        );
+        if (ledgerDefective.length > 0) {
+          const defectiveCsv = buildDefectiveCsv(ledgerDefective);
+          await client.query(
+            `UPDATE inventory_reports
+                SET defective_csv_blob = $1,
+                    defective_row_count = $2
+              WHERE id = $3::uuid AND tenant_id = $4::uuid`,
+            [defectiveCsv, ledgerDefective.length, reportId, input.tenantId],
+          );
+          savedDefectiveCount = ledgerDefective.length;
+        }
+        // Even on SAVE, mark the session completed so the picker reflects
+        // state. (Mirrors the UPLOAD link below but without source-complete.)
+        await client.query(
+          `UPDATE add_on_sessions
+              SET state = 'completed',
+                  ended_at = now(),
+                  report_id = $1::uuid
+            WHERE id = $2::uuid AND tenant_id = $3::uuid`,
+          [reportId, input.addOnSessionId, input.tenantId],
+        );
+      }
       await client.query("COMMIT");
       return {
         reportId,
         rowsArchived: input.rows.length,
         rowsValid: 0,
-        rowsFailed: 0,
+        rowsFailed: savedDefectiveCount,
         wipedCount: 0,
-        defectiveRowCount: 0,
+        defectiveRowCount: savedDefectiveCount,
       };
     }
 
@@ -310,14 +379,31 @@ export async function finalizeScanSession(
     }
 
     /* ---- 5. Attach defective CSV to the report row. ---- */
-    const defectiveCsv = buildDefectiveCsv(failures);
-    if (failures.length > 0) {
+    // Merge in the Add-On session's pre-filtered defectives (EPCs the mobile
+    // rejected on the Carbon formula check before they ever reached the
+    // review payload). They wouldn't be in `failures` because they never
+    // ingested — but the operator scanned them and they belong on the same
+    // defective output as the ingest-time failures.
+    let combinedFailures = failures;
+    if (input.screen === "add_on_count" && input.addOnSessionId) {
+      const ledgerDefective = await loadFailedLedgerAsDefective(
+        client,
+        input.tenantId,
+        input.addOnSessionId,
+      );
+      const seen = new Set(failures.map((f) => f.epc));
+      for (const d of ledgerDefective) {
+        if (!seen.has(d.epc)) combinedFailures = combinedFailures.concat(d);
+      }
+    }
+    const defectiveCsv = buildDefectiveCsv(combinedFailures);
+    if (combinedFailures.length > 0) {
       await client.query(
         `UPDATE inventory_reports
             SET defective_csv_blob = $1,
                 defective_row_count = $2
           WHERE id = $3::uuid AND tenant_id = $4::uuid`,
-        [defectiveCsv, failures.length, reportId, input.tenantId],
+        [defectiveCsv, combinedFailures.length, reportId, input.tenantId],
       );
     }
 
@@ -347,9 +433,9 @@ export async function finalizeScanSession(
       reportId,
       rowsArchived: input.rows.length,
       rowsValid,
-      rowsFailed: failures.length,
+      rowsFailed: combinedFailures.length,
       wipedCount,
-      defectiveRowCount: failures.length,
+      defectiveRowCount: combinedFailures.length,
     };
   } catch (e) {
     try {

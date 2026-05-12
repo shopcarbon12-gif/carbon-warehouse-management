@@ -9,9 +9,12 @@ import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/add_on_session_realtime.dart';
 import 'package:carbon_wms/services/add_on_session_state.dart';
+import 'package:carbon_wms/services/epc/epc_codec.dart';
+import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/add_on_count_settings_screen.dart';
@@ -52,7 +55,10 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
   AddOnSessionRealtime? _sse;
   StreamSubscription<String>? _epcSub;
   StreamSubscription<AddOnRealtimeEvent>? _sseSub;
+  StreamSubscription<String>? _triggerSub;
   Timer? _heartbeat;
+  String? _previousScanContext;
+  bool _scannerReady = false;
 
   @override
   void initState() {
@@ -80,6 +86,44 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     _heartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
       api.touchAddOnSession(widget.sessionId).catchError((Object _) {});
     });
+
+    // Route the physical trigger to RFID + subscribe to trigger-down events
+    // so a trigger pull toggles start/pause (Q18 lock). Mirrors the working
+    // pattern from count_inventory_screen.dart:_ensureScannerReady — without
+    // this the screen has no way for the operator to scan via hardware
+    // trigger; only the on-screen START button works.
+    unawaited(_ensureScannerReady());
+  }
+
+  /// Put the device in RFID-trigger mode and bind the hardware trigger to
+  /// [_toggleScanning]. We deliberately keep tag ingest on
+  /// `RfidManager.visibleEpcs` (rather than switching to the raw
+  /// vendor stream the way Count Inventory does) so the manager's
+  /// dedup + RSSI logic still applies and we don't duplicate ingest paths.
+  Future<void> _ensureScannerReady() async {
+    if (_scannerReady) return;
+    final rfid = context.read<RfidManager>();
+    _previousScanContext ??= rfid.scanContext;
+    rfid.scanContext = 'ADD-ON COUNT';
+
+    // Mirror Count Inventory: silence the 2D laser + relay so a trigger
+    // pull goes straight to the UHF radio. setZebraTriggerModeRfid is the
+    // RFD8500-side analogue of Chainway's enableRfidFunctionMode broadcast.
+    try {
+      await RfidVendorChannel.scannerDisableTriggerRelay();
+      await RfidVendorChannel.close2dBarcode();
+      await RfidVendorChannel.enableRfidFunctionMode();
+      await RfidVendorChannel.setZebraTriggerModeRfid();
+    } catch (_) {/* best-effort — channel may no-op when sled not connected */}
+
+    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+      // Q18 contract: single trigger press toggles start/pause. 'down' is
+      // press; we ignore 'up' so a held trigger doesn't keep retoggling.
+      if (event == 'down') {
+        unawaited(_toggleScanning());
+      }
+    }, onError: (_) {});
+    _scannerReady = true;
   }
 
   void _handleSseEvent(AddOnRealtimeEvent event) {
@@ -165,15 +209,47 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     final clean = epc.replaceAll(RegExp(r'\s+'), '').toUpperCase();
     if (clean.length != 24) return;
 
+    // Note: _session.shouldSubmit returns false for any EPC already in the
+    // chosen source list (silent skip per Q16) AND for any EPC we already
+    // submitted this session — so anything reaching past this line is
+    // unambiguously a NEW-to-session, not-in-source tag.
     if (!_session.shouldSubmit(clean)) return;
 
     final api = context.read<WmsApiClient>();
-    final inSource = _session.sourceEpcs.contains(clean);
+
+    // Carbon EPC formula gate. Defective tags (wrong prefix, bad hex,
+    // wrong length already filtered above) go in their own bucket — they
+    // are NOT shown in the main "new EPCs" list and do NOT beep. We still
+    // POST them with validationFailed=true so the server captures them
+    // in add_on_sessions.failed_ledger; scan-finalize then emits them as
+    // a separate "Defective" sheet on SAVE and through the defective-CSV
+    // pipeline on UPLOAD.
+    final cfg = context.read<MobileSettingsRepository>().epcConfig;
+    final decoded = decodeEpc(clean, cfg);
+    if (!decoded.valid) {
+      final reason = decoded.reason?.name ?? 'invalid';
+      _session.recordFailed(FailedEpcEntry(
+        epc: clean,
+        reason: reason,
+        scannedAtUtc: DateTime.now().toUtc(),
+      ));
+      try {
+        await api.submitAddOnSessionEpc(
+          sessionId: widget.sessionId,
+          epc: clean,
+          inSource: false,
+          validationFailed: true,
+          failureReason: reason,
+        );
+      } catch (_) {/* best-effort — server reconciles on retry */}
+      return; // no display, no beep
+    }
+
     try {
       final result = await api.submitAddOnSessionEpc(
         sessionId: widget.sessionId,
         epc: clean,
-        inSource: inSource,
+        inSource: false,
       );
       final outcome = result['outcome'] as String?;
       if (outcome == 'new') {
@@ -183,7 +259,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
         // Fire-and-forget enrichment so the row gets sku/name/color/size.
         unawaited(_enrichEpc(clean));
       }
-      // 'duplicate' / 'failed' / inSource → silent (Q16 + spec).
+      // 'duplicate' / 'failed' / server-side-inSource → silent (Q16 + spec).
     } catch (_) {
       // Best-effort — server-mediated dedup will catch up on retries.
     }
@@ -234,6 +310,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
           sourceId: widget.sourceId,
           sourceSlip: widget.sourceSlip,
           newEntries: _session.newEntries,
+          failedEntries: _session.failedEntries,
         ),
       ),
     );
@@ -245,6 +322,21 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     _sseSub?.cancel();
     unawaited(_sse?.dispose() ?? Future<void>.value());
     _epcSub?.cancel();
+    _triggerSub?.cancel();
+    // Restore the prior scan context so screens we pop back to see the
+    // value they had when they pushed us. We can't safely `context.read`
+    // here (the element may already be detached), but the manager is a
+    // singleton-per-app provider and grabbing it via the captured
+    // reference at init time is the established pattern in CountInventory.
+    final prev = _previousScanContext;
+    if (prev != null) {
+      try {
+        // RfidManager is a top-level Provider; reading via context here is
+        // a no-op if the tree is gone, which is fine for restore.
+        // ignore: use_build_context_synchronously
+        context.read<RfidManager>().scanContext = prev;
+      } catch (_) {/* tree already detached */}
+    }
     _session.dispose();
     super.dispose();
   }
