@@ -67,14 +67,46 @@ const MAX_BACKOFF_MS = 60_000;
  * step down — at which point we're confirming a chassis fault.
  */
 const SWEEP_POWERS: readonly number[] = [330, 200, 100];
-/** Cooldown so a permanently-broken reader doesn't sweep-thrash forever. */
-const SWEEP_RETRY_COOLDOWN_MS = 30 * 60 * 1000;
-/** When sweep recovery succeeds at a sub-configured power, we pin the
- *  slot to that power so it keeps producing reads. After this interval
- *  we drop the pin and let the next spawn use the operator's configured
- *  power again — if the chip has genuinely recovered we escalate back,
- *  if it re-wedges sweep recovery just kicks in again and re-pins. */
-const SWEEP_OVERRIDE_RETEST_MS = 5 * 60 * 1000;
+/**
+ * Cooldown between full sweep-recovery attempts (after a sweep ran
+ * through every power step and produced no bytes). 60 s — short enough
+ * that a flaky chassis keeps getting retried autonomously without
+ * operator intervention. Previously 30 minutes, which left dead-looking
+ * readers idle for half-hour windows. Combined with auto-bridge-reset
+ * on sweep failure (see runStreamWatchdog), the 60-s retry usually
+ * succeeds because the bridge has been reset in between.
+ */
+const SWEEP_RETRY_COOLDOWN_MS = 60_000;
+/**
+ * When sweep recovery succeeds at a sub-configured power, pin the
+ * slot to that power so it keeps producing reads. After this interval
+ * we drop the pin and let the next spawn use the operator's configured
+ * power again — if the chip has genuinely recovered we escalate back,
+ * if it re-wedges sweep recovery just kicks in again and re-pins.
+ * 30 min — long enough to actually be productive between retests.
+ * Was 5 min, which made recovered readers thrash every 5 min between
+ * "working at pinned power" and "wedged at configured power."
+ */
+const SWEEP_OVERRIDE_RETEST_MS = 30 * 60 * 1000;
+
+/**
+ * Slow-detection window (rolling): how often we compare each slot's
+ * read rate to its peers. A slot reading significantly slower than peer
+ * median while peers are healthy gets auto-recovered (sweep + bridge
+ * reset). Prevents the "slow" health badge from being a steady state —
+ * operators shouldn't have to babysit it.
+ */
+const SLOW_DETECTION_WINDOW_MS = 60_000;
+/** Slot is slow if its rate < SLOW_FRACTION * peer_median */
+const SLOW_FRACTION_OF_MEDIAN = 0.25;
+/** Don't bother with slow detection unless there are at least this many
+ *  peer slots producing reads (avoids false positives at night or when
+ *  most of the fleet is paused). */
+const SLOW_MIN_PEERS = 3;
+/** Peer median must be at least this many records/window for slow
+ *  detection to fire. Otherwise we're in a low-activity baseline and
+ *  one outlier reading slowly doesn't mean anything. */
+const SLOW_MIN_PEER_RECORDS = 300;
 
 /**
  * Supervisor-managed antenna multiplexing for multi-antenna readers.
@@ -198,6 +230,17 @@ type ReaderSlot = {
    *  (status / heartbeat lines) while producing zero tag reads — the silence
    *  watchdog won't fire but rate-drop will. 0 = no records ever seen. */
   lastRecordAt: number;
+  /** Records counted in the current 60-s rate window. Used by the slow-
+   *  detection watchdog to compare a slot's read rate against peer slots'
+   *  median rate. If this slot is significantly slower than peers AND
+   *  it's not in mux mode, the watchdog auto-triggers sweep recovery.
+   *  Reset every SLOW_DETECTION_WINDOW_MS by runStreamWatchdog. */
+  recordsThisWindow: number;
+  /** ms timestamp when recordsThisWindow started counting. */
+  recordWindowStartAt: number;
+  /** ms timestamp of the most recent slow-recovery trigger. Throttled by
+   *  SWEEP_RETRY_COOLDOWN_MS so a permanently-slow chip doesn't thrash. */
+  lastSlowRecoveryAt: number;
   /** ms timestamp of the most recent push to /api/cdm-agents/reader-offline.
    *  Throttle so a chronically-silent reader posts offline once per minute,
    *  not on every watchdog tick. Reset to 0 on first-byte (online) so the
@@ -714,13 +757,22 @@ export class MonsoonSupervisor {
             nextPower,
           });
         } else {
-          log.warn("supervisor: sweep recovery failed — chassis silent at all power steps", {
+          log.warn("supervisor: sweep recovery failed — chassis silent at all power steps; triggering bridge reset", {
             readerId: slot.spec.id,
             readerName: slot.spec.name,
             triedPowers: [...SWEEP_POWERS],
           });
           slot.sweepPowerOverrideArg = null;
           slot.lastSweepAttemptAt = now;
+          // AUTO BRIDGE RESET 2026-05-12: when sweep recovery fails at
+          // every power step, the chip is in a state that power-cycling
+          // the inventory loop can't clear. Empirical evidence (today,
+          // multiple readers): wiznet-cli --reset on the bridge IS what
+          // unsticks these chips. So we run it automatically here. The
+          // 60-s SWEEP_RETRY_COOLDOWN_MS then gives us a fast next
+          // attempt that usually succeeds because the bridge reset
+          // cleared the chip's stuck state.
+          this.tryBridgeReset(slot.spec);
         }
         slot.lastByteAt = now;
         this.killSlotChildHard(slot);
@@ -820,6 +872,99 @@ export class MonsoonSupervisor {
             ),
           });
         }
+      }
+    }
+    // After per-slot processing, do peer-relative slow detection.
+    this.detectAndRecoverSlowSlots(now);
+  }
+
+  /**
+   * Auto-detect "slow" readers: ones producing reads, but at a rate
+   * significantly below their peers in this agent's location. Without
+   * intervention these end up flagged "slow" in Hardware Config and
+   * operators have to babysit them. Here the supervisor triggers sweep
+   * recovery + bridge reset for any slow slot, fully autonomously.
+   *
+   * Single-antenna slots only. Mux readers (.16-style) have inherently
+   * bursty per-antenna rates and would generate false positives.
+   */
+  private detectAndRecoverSlowSlots(now: number): void {
+    // Gather candidates: slots that are not paused, not mux, have a
+    // live child, and whose current window is at least 30 s old.
+    type Cand = { slot: ReaderSlot; rate: number; records: number };
+    const candidates: Cand[] = [];
+    for (const slot of this.slots.values()) {
+      if (slot.shuttingDown) continue;
+      if (slot.muxAntennaSequence.length >= 2) continue;
+      if (slot.testSession !== null) continue;
+      if (!slot.child) continue;
+      const windowAge = now - slot.recordWindowStartAt;
+      if (windowAge < SLOW_DETECTION_WINDOW_MS / 2) continue;
+      const rate = slot.recordsThisWindow / Math.max(1, windowAge / 1000);
+      candidates.push({ slot, rate, records: slot.recordsThisWindow });
+    }
+    if (candidates.length < SLOW_MIN_PEERS) {
+      // Not enough peers to compare. Just reset windows if old enough.
+      for (const slot of this.slots.values()) {
+        if (now - slot.recordWindowStartAt >= SLOW_DETECTION_WINDOW_MS) {
+          slot.recordsThisWindow = 0;
+          slot.recordWindowStartAt = now;
+        }
+      }
+      return;
+    }
+    // Compute peer median of record counts (not rate — same window for all).
+    const counts = candidates.map((c) => c.records).sort((a, b) => a - b);
+    const median =
+      counts.length % 2 === 0
+        ? (counts[counts.length / 2 - 1]! + counts[counts.length / 2]!) / 2
+        : counts[Math.floor(counts.length / 2)]!;
+    if (median < SLOW_MIN_PEER_RECORDS) {
+      // Whole fleet quiet (night, no tags moving). Don't flag anyone.
+      for (const slot of this.slots.values()) {
+        if (now - slot.recordWindowStartAt >= SLOW_DETECTION_WINDOW_MS) {
+          slot.recordsThisWindow = 0;
+          slot.recordWindowStartAt = now;
+        }
+      }
+      return;
+    }
+    const threshold = median * SLOW_FRACTION_OF_MEDIAN;
+    for (const c of candidates) {
+      if (
+        c.records < threshold &&
+        c.slot.sweepPowerOverrideArg === null &&
+        now - c.slot.lastSlowRecoveryAt >= SWEEP_RETRY_COOLDOWN_MS
+      ) {
+        log.warn("supervisor: slow reader detected — triggering sweep + bridge reset", {
+          readerId: c.slot.spec.id,
+          readerName: c.slot.spec.name,
+          host: c.slot.spec.network_address,
+          slotRecords: c.records,
+          peerMedian: median,
+          thresholdRecords: Math.round(threshold),
+        });
+        c.slot.lastSlowRecoveryAt = now;
+        c.slot.sweepPowerOverrideArg = SWEEP_POWERS[0] ?? null;
+        c.slot.consecutiveZeroByteKicks = 0;
+        c.slot.bytesSinceSpawn = false;
+        c.slot.recordsThisWindow = 0;
+        c.slot.recordWindowStartAt = now;
+        // Also kick the bridge — sweep alone often isn't enough for
+        // chips that drift into a partial-throttle state. The combo
+        // is the empirically-proven recovery.
+        this.tryBridgeReset(c.slot.spec);
+        if (c.slot.child) {
+          c.slot.intendedKill = true;
+          this.killSlotChildHard(c.slot);
+        }
+      }
+    }
+    // Reset windows for everyone after evaluation.
+    for (const slot of this.slots.values()) {
+      if (now - slot.recordWindowStartAt >= SLOW_DETECTION_WINDOW_MS) {
+        slot.recordsThisWindow = 0;
+        slot.recordWindowStartAt = now;
       }
     }
   }
@@ -1004,6 +1149,9 @@ export class MonsoonSupervisor {
         // re-wedge the chip across the fleet. Observed 2026-05-12 after
         // a Hard Reset cascade.
         lastAbortAt: Date.now(),
+        recordsThisWindow: 0,
+        recordWindowStartAt: Date.now(),
+        lastSlowRecoveryAt: 0,
       };
       this.slots.set(spec.id, slot);
       log.info("supervisor: starting reader", {
@@ -1506,13 +1654,17 @@ export class MonsoonSupervisor {
               nextPower,
             });
           } else {
-            log.warn("supervisor: sweep recovery failed — silent at all power steps", {
+            log.warn("supervisor: sweep recovery failed — silent at all power steps; triggering bridge reset", {
               readerId: slot.spec.id,
               readerName: slot.spec.name,
               triedPowers: [...SWEEP_POWERS],
             });
             slot.sweepPowerOverrideArg = null;
             slot.lastSweepAttemptAt = Date.now();
+            // See watchdog-path sibling: auto-bridge-reset on full
+            // sweep failure. wiznet-cli --reset unsticks chips that
+            // power-cycling the inventory loop can't.
+            this.tryBridgeReset(slot.spec);
           }
         }
       }
@@ -1722,7 +1874,10 @@ export class MonsoonSupervisor {
       totalRecords += result.records.length;
       totalBad += result.badCrcCount;
       totalMal += result.malformedCount;
-      if (result.records.length > 0) slot.lastRecordAt = Date.now();
+      if (result.records.length > 0) {
+        slot.lastRecordAt = Date.now();
+        slot.recordsThisWindow += result.records.length;
+      }
 
       const stamp = new Date().toISOString();
       const ts = slot.testSession;
@@ -1845,13 +2000,17 @@ export class MonsoonSupervisor {
               nextPower,
             });
           } else {
-            log.warn("supervisor: sweep recovery failed — silent at all power steps", {
+            log.warn("supervisor: sweep recovery failed — silent at all power steps; triggering bridge reset", {
               readerId: slot.spec.id,
               readerName: slot.spec.name,
               triedPowers: [...SWEEP_POWERS],
             });
             slot.sweepPowerOverrideArg = null;
             slot.lastSweepAttemptAt = Date.now();
+            // See watchdog-path sibling: auto-bridge-reset on full
+            // sweep failure. wiznet-cli --reset unsticks chips that
+            // power-cycling the inventory loop can't.
+            this.tryBridgeReset(slot.spec);
           }
         }
       }
@@ -1968,7 +2127,10 @@ export class MonsoonSupervisor {
     }
 
     const now = Date.now();
-    if (result.records.length > 0) slot.lastRecordAt = now;
+    if (result.records.length > 0) {
+      slot.lastRecordAt = now;
+      slot.recordsThisWindow += result.records.length;
+    }
     for (const rec of result.records) {
       // Per-antenna test windows: count every record whose antenna_number
       // matches an active window for THIS reader.
@@ -2092,6 +2254,88 @@ export class MonsoonSupervisor {
    * before sending the radio abort. Use `ensureRadioPortBase + counter`
    * so every concurrent abort gets its own port pair.
    */
+  /**
+   * Trigger a WIZnet bridge reset for the reader via `wiznet-cli --reset`.
+   * Used as the last-resort recovery after sweep fails at every power
+   * step. Empirically the bridge reset is what unsticks chips that
+   * software-level power cycling can't — verified against .15 / .77 /
+   * .78 / .81 / .82 / .225 on 2026-05-12.
+   *
+   * Fire-and-forget: tolerant of failure (missing MAC, missing binary,
+   * sudo prompt, etc.). The next sweep retry (60 s later) will run and
+   * usually succeed because the bridge has been reset.
+   *
+   * MAC resolution: prefers `spec.mac_address` from the WMS bundle
+   * (kept in sync by the agent's own LAN discovery); falls back to
+   * `ip neigh show IP` if the bundle didn't include it.
+   */
+  private tryBridgeReset(spec: AgentConfigReader): void {
+    const host = String(spec.network_address ?? "");
+    if (!host) return;
+
+    const runReset = (mac: string): void => {
+      log.info("supervisor: tryBridgeReset — spawning wiznet-cli --reset", {
+        readerId: spec.id,
+        readerName: spec.name,
+        host,
+        mac,
+      });
+      try {
+        const child = spawn("sudo", ["/opt/legacy-rfid/wiznet-cli", "--ipconfig", mac, "--reset"], {
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: true,
+        });
+        child.stdout?.resume();
+        child.stderr?.resume();
+        child.on("exit", (code) => {
+          log.info("tryBridgeReset: wiznet-cli exited", { readerId: spec.id, host, mac, code });
+        });
+        child.on("error", (e) => {
+          log.warn("tryBridgeReset: spawn error", { readerId: spec.id, host, mac, err: e.message });
+        });
+      } catch (e) {
+        log.warn("tryBridgeReset: spawn threw", {
+          readerId: spec.id,
+          host,
+          mac,
+          err: e instanceof Error ? e.message : String(e),
+        });
+      }
+    };
+
+    const macFromSpec = (spec.mac_address ?? "").replace(/[^0-9A-Fa-f]/g, "").toUpperCase();
+    if (macFromSpec.length === 12) {
+      runReset(macFromSpec);
+      return;
+    }
+
+    // Fallback: resolve MAC from the kernel ARP table via `ip neigh show IP`.
+    // Format: "192.168.1.15 dev wlp2s0 lladdr 00:08:dc:1e:19:80 STALE"
+    try {
+      const arpProbe = spawn("ip", ["neigh", "show", host], { stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      arpProbe.stdout?.on("data", (b: Buffer) => { out += b.toString("utf8"); });
+      arpProbe.on("exit", () => {
+        const m = /lladdr\s+([0-9a-f:]{17})/i.exec(out);
+        if (!m) {
+          log.warn("tryBridgeReset: no MAC for reader and ARP didn't resolve, skipping", {
+            readerId: spec.id,
+            host,
+          });
+          return;
+        }
+        const mac = m[1]!.replace(/:/g, "").toUpperCase();
+        runReset(mac);
+      });
+    } catch (e) {
+      log.warn("tryBridgeReset: arp probe threw", {
+        readerId: spec.id,
+        host,
+        err: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
   private ensureRadioPortCounter = 0;
   private ensureRadioStopped(spec: AgentConfigReader): void {
     const host = String(spec.network_address ?? "");

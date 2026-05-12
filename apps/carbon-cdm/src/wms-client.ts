@@ -51,6 +51,14 @@ export type AgentConfigReader = {
    *  and a fresh one is created in the same reconcile pass. Older WMS
    *  bundles may omit; treat missing as null (no reset pending). */
   reader_recover_requested_at?: string | null;
+  /** WIZnet bridge MAC (12 hex chars, no separators). The supervisor
+   *  uses this for `wiznet-cli --ipconfig MAC --reset` recovery when
+   *  sweep recovery exhausts all power steps. WMS pulls it from
+   *  `devices.mac_address` which is kept in sync by the agent's own
+   *  LAN discovery (wiznet-discoveries cron). Older bundles may omit;
+   *  the supervisor falls back to `ip neigh show IP` to resolve MAC
+   *  on-demand from the kernel ARP table. */
+  mac_address?: string | null;
 };
 
 export type AgentConfigBundle = {
