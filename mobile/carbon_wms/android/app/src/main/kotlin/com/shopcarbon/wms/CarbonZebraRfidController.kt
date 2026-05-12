@@ -882,20 +882,27 @@ class CarbonZebraRfidController(
     // Beeper policy: the sled stays at HIGH_BEEP at REST (between
     // active scans + at idle), and is set to QUIET_BEEP only for the
     // duration of an inventory burst (in startInventoryFlutterResult).
-    // This way the firmware's connect/disconnect/power chimes always
-    // fire — they happen while the sled is at rest — and per-tag beeps
-    // are silent during scanning. Critically, this is *robust to
-    // force-close*: NVRAM is HIGH whenever the user isn't pulling the
-    // trigger, so the next session's connect chime fires even if the
-    // app was swiped away without a clean disconnect.
+    // Per-tag is silenced during scan; connect/disconnect/power chimes
+    // happen while the sled is at rest and fire audibly.
     //
-    // We don't set HIGH here on connect because the sled is already at
-    // HIGH from the prior stopInventory (or its factory default). The
-    // one edge case that loses a chime is a force-close *mid-scan* —
-    // NVRAM is QUIET at process death, so the next connect is silent
-    // until that session's first stopInventory restores it. We accept
-    // that as the cost of not running a heavyweight Activity-lifecycle
-    // hook just to cover the mid-scan-kill case.
+    // Belt-and-suspenders: write HIGH right after r.connect() too.
+    // This connect's own firmware chime is gated by whatever NVRAM
+    // held *before* this write lands — so a sled stuck at QUIET from
+    // a prior force-close still has a silent first connect. But by
+    // committing HIGH here, every operation AFTER this point uses
+    // HIGH: the upcoming disconnect chime fires, the next session's
+    // connect chime fires, etc. One sacrificed chime to self-heal
+    // out of a stuck-QUIET NVRAM state without making the user run
+    // a scan + stop cycle manually to prime it.
+    val rJustConnected = reader
+    if (rJustConnected != null && rJustConnected.isConnected) {
+      try {
+        rJustConnected.Config.setBeeperVolume(BEEPER_VOLUME.HIGH_BEEP)
+        Log.d(TAG, "BeeperVolume -> HIGH_BEEP (post-connect, at-rest)")
+      } catch (e: Exception) {
+        Log.w(TAG, "post-connect setBeeperVolume failed: ${e.message}")
+      }
+    }
     val triggerInfo = TriggerInfo()
     triggerInfo.StartTrigger.setTriggerType(START_TRIGGER_TYPE.START_TRIGGER_TYPE_IMMEDIATE)
     triggerInfo.StopTrigger.setTriggerType(STOP_TRIGGER_TYPE.STOP_TRIGGER_TYPE_IMMEDIATE)

@@ -73,6 +73,24 @@ class ScanSounds {
     } catch (_) {/* native may not be ready yet */}
   }
 
+  /// Suppress the *native-fired* per-tag beep (the one `CarbonZebraRfidController`
+  /// + `CarbonChainwayRfidController` call directly via `playTagBeep` for every
+  /// EPC the radio decodes). Other cues (start/stop/success/error and explicit
+  /// `play(ScanCue.read, …)` calls from Dart) keep working.
+  ///
+  /// Add-On Count turns this on while in the screen so the host beeps only
+  /// on NEW EPCs (manually fired in `_onEpc`), not on every tag the radio
+  /// sees. Reset on dispose so other screens (Count Inventory, Locate, etc.)
+  /// keep their per-tag beep.
+  Future<void> setTagBeepSuppressed(bool suppressed) async {
+    try {
+      await _channel.invokeMethod<void>(
+        'setTagBeepSuppressed',
+        <String, dynamic>{'suppressed': suppressed},
+      );
+    } catch (_) {/* native may not be ready yet */}
+  }
+
   // Fire-and-forget. Safe before init completes (becomes a no-op on the native side).
   // [volume] defaults to 1.0 (full), clamped 0..1 by the native layer.
   void play(ScanCue cue, {double volume = 1.0}) {

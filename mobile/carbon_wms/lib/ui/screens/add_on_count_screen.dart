@@ -123,6 +123,15 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
         unawaited(_toggleScanning());
       }
     }, onError: (_) {});
+
+    // Silence the auto per-tag beep fired by the native RFID controllers
+    // (CarbonZebraRfidController.emitTag → ScanSoundPool.playTagBeep) for
+    // the duration of this screen. We drive the beep manually in _onEpc
+    // so the operator only hears a tone when a tag genuinely makes it
+    // past the in-source / formula filters and is added as a NEW EPC.
+    // Restored in dispose so Count Inventory / Locate / etc. still beep.
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
+
     _scannerReady = true;
   }
 
@@ -268,7 +277,10 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       final outcome = result['outcome'] as String?;
       if (outcome == 'new') {
         _session.recordNew(NewEpcEntry(epc: clean, scannedAtUtc: DateTime.now().toUtc()));
-        ScanSounds.instance.play(ScanCue.success);
+        // Regular per-tag read tone (uhf-read-tag.mp3), not the heavier
+        // success cue — the operator wanted the same beep here as a
+        // normal RFID read elsewhere in the app.
+        ScanSounds.instance.play(ScanCue.read);
         await _maybeVibrate();
         // Fire-and-forget enrichment so the row gets sku/name/color/size.
         unawaited(_enrichEpc(clean));
@@ -337,6 +349,8 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     unawaited(_sse?.dispose() ?? Future<void>.value());
     _epcSub?.cancel();
     _triggerSub?.cancel();
+    // Re-enable the auto per-tag beep for other screens.
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
     // Restore the prior scan context so screens we pop back to see the
     // value they had when they pushed us. We can't safely `context.read`
     // here (the element may already be detached), but the manager is a

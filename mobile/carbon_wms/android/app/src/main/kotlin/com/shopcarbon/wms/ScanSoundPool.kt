@@ -47,6 +47,16 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
    */
   @Volatile private var userVolume: Float = 1.0f
 
+  /**
+   * Per-tag-beep gate, toggled from Dart via `setTagBeepSuppressed`. Set to
+   * true on screens that drive their own beep policy (Add-On Count: beep
+   * only on NEW EPCs, not every tag the radio sees). When true,
+   * [playTagBeep] is a no-op; [playCue] still works for the screen's
+   * explicit cues. Reset to false when the screen exits so other RFID
+   * screens (Count Inventory, Locate, etc.) keep their per-tag beep.
+   */
+  @Volatile private var tagBeepSuppressed: Boolean = false
+
   companion object {
     private const val TAG = "ScanSoundPool"
     private const val CHANNEL = "carbon_wms/scan_sound"
@@ -93,6 +103,13 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
         userVolume = v.coerceIn(0f, 1f)
         forceMediaStreamVolume(userVolume)
         Log.d(TAG, "userVolume set to $userVolume")
+        result.success(null)
+      }
+      "setTagBeepSuppressed" -> {
+        val args = call.arguments as? Map<*, *>
+        val s = (args?.get("suppressed") as? Boolean) ?: false
+        tagBeepSuppressed = s
+        Log.d(TAG, "tagBeepSuppressed -> $s")
         result.success(null)
       }
       "stopAll" -> { stopAll(); result.success(null) }
@@ -164,6 +181,7 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
    * scaling lives in the caller so the proximity UI and audio agree).
    */
   fun playTagBeep(rssiNormalized: Int) {
+    if (tagBeepSuppressed) return
     val n = rssiNormalized.coerceIn(0, 100)
     val vol = (0.3f + (n / 100.0f) * 0.7f).coerceIn(0f, 1f)
     playCue("read", vol)

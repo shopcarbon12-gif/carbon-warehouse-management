@@ -105,7 +105,10 @@ export async function listScanSources(
   `;
 
   // Cycle Count: only committed sessions are valid sources (in-progress ones
-  // could change). 'scanned_epcs' is a JSONB array of EPCs.
+  // could change). 'scanned_epcs' is a JSONB array of EPCs. `session_number`
+  // (migration 0064, soon 0070) is the operator-visible "#NNN" displayed in
+  // the cycle-counts web UI — we surface it as the slip so picker rows match
+  // what the operator already knows the count as.
   const cycleSql = `
     SELECT
       'cycle_count'::text                         AS source_type,
@@ -116,7 +119,8 @@ export async function listScanSources(
       jsonb_array_length(scanned_epcs)            AS row_count,
       add_on_locked_by::text                      AS locked_by,
       add_on_completed_at                         AS completed_at,
-      add_on_completed_by::text                   AS completed_by
+      add_on_completed_by::text                   AS completed_by,
+      session_number                              AS session_number
     FROM cycle_count_sessions
     WHERE tenant_id = $1::uuid
       AND status = 'committed'
@@ -188,6 +192,8 @@ export async function listScanSources(
     completed_by: string | null;
     locked_session_id: string | null;
     locked_owner_id: string | null;
+    // Only present for cycle_count rows — mobile_count + csv_import return null.
+    session_number?: number | null;
   }>(sql, [tenantId, limit]);
 
   // Resolve user emails for uploaded_by / locked_owner / completed_by in one batch.
@@ -217,6 +223,13 @@ export async function listScanSources(
       if (row.source_type === "csv_import") {
         const n = Number.parseInt(row.source_id, 10);
         return slipFromInt(Number.isFinite(n) ? n : 0, "I");
+      }
+      // Cycle Count: prefer the operator-visible session_number (#NNN in
+      // the web UI). Falls back to UUID-hash slip only if the column is
+      // null — should only happen for pre-0064 rows that never got
+      // backfilled. 3-digit pad matches the "#010" form the operator sees.
+      if (row.source_type === "cycle_count" && typeof row.session_number === "number") {
+        return `C-${row.session_number.toString().padStart(3, "0")}`;
       }
       const prefix = row.source_type === "mobile_count" ? "M" : "C";
       return slipFromUuid(row.source_id, prefix);
