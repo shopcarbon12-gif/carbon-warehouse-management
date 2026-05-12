@@ -69,6 +69,12 @@ const MAX_BACKOFF_MS = 60_000;
 const SWEEP_POWERS: readonly number[] = [330, 200, 100];
 /** Cooldown so a permanently-broken reader doesn't sweep-thrash forever. */
 const SWEEP_RETRY_COOLDOWN_MS = 30 * 60 * 1000;
+/** When sweep recovery succeeds at a sub-configured power, we pin the
+ *  slot to that power so it keeps producing reads. After this interval
+ *  we drop the pin and let the next spawn use the operator's configured
+ *  power again — if the chip has genuinely recovered we escalate back,
+ *  if it re-wedges sweep recovery just kicks in again and re-pins. */
+const SWEEP_OVERRIDE_RETEST_MS = 5 * 60 * 1000;
 
 /**
  * Supervisor-managed antenna multiplexing for multi-antenna readers.
@@ -563,6 +569,32 @@ export class MonsoonSupervisor {
     const now = Date.now();
     for (const slot of this.slots.values()) {
       if (slot.shuttingDown) continue;
+      // Periodic auto-retest of operator-configured power. When sweep
+      // recovery pinned the slot to a sub-configured power earlier,
+      // we keep it there long enough for the reader to actually be
+      // useful, then drop the pin and try the configured power again.
+      // If the chip has genuinely recovered, this restores it to the
+      // operator's chosen power. If not, sweep just re-pins.
+      if (
+        slot.sweepPowerOverrideArg !== null &&
+        slot.lastSweepAttemptAt > 0 &&
+        now - slot.lastSweepAttemptAt >= SWEEP_OVERRIDE_RETEST_MS
+      ) {
+        log.info("supervisor: re-testing configured power after sweep pin", {
+          readerId: slot.spec.id,
+          readerName: slot.spec.name,
+          previousPinnedPower: slot.sweepPowerOverrideArg,
+          pinnedForMs: now - slot.lastSweepAttemptAt,
+        });
+        slot.sweepPowerOverrideArg = null;
+        slot.lastSweepAttemptAt = 0;
+        slot.consecutiveZeroByteKicks = 0;
+        slot.bytesSinceSpawn = false;
+        if (slot.child) {
+          slot.intendedKill = true;
+          this.killSlotChildHard(slot);
+        }
+      }
       if (!slot.child) continue;
       // Watchdog applies to BOTH drivers, but for different reasons:
       //   - stream driver: catches the alive-but-stuck silence bug.
@@ -1601,27 +1633,32 @@ export class MonsoonSupervisor {
       slot.lastByteAt = Date.now();
       if (!slot.bytesSinceSpawn) {
         slot.bytesSinceSpawn = true;
-        // Auto-sweep recovery succeeded — bytes arrived during a sweep
-        // attempt, so the radio un-stuck at THIS power step. Clear the
-        // override immediately and stamp the cooldown timestamp; the
-        // next respawn will use the operator's configured power again.
-        // Reverted 2026-05-09: an earlier hold-forever attempt silently
-        // capped readers at recovery power (often 10 dBm), masking
-        // chassis faults and giving operators an "off" reader without
-        // warning. Auto-sweep is now a DIAGNOSTIC only — it tells us
-        // the radio CAN un-stick at low power, but configured power
-        // wins on the next spawn. If the chassis re-wedges at the
-        // operator's chosen power, it's a hardware problem and should
-        // not be papered over by silent power downgrade.
+        // Auto-sweep recovery succeeded — bytes arrived at THIS power
+        // step. Previously (2026-05-09) we cleared the override on first
+        // byte so the next respawn used configured power — purpose was
+        // "auto-sweep is diagnostic only, don't silently downgrade".
+        //
+        // Revised 2026-05-12: live experience showed chips that read at
+        // a sub-configured power immediately re-wedged at configured
+        // power on the next spawn — operator saw "sweep mode works but
+        // regular mode doesn't" (.81). The override is now STICKY (the
+        // slot keeps producing reads at the recovered power), but we
+        // also schedule a periodic re-test of the operator's configured
+        // power so a chip that genuinely recovers escalates back. Best
+        // of both worlds: readers stay working immediately AND we
+        // never silently cap a healthy chip forever.
         if (slot.sweepPowerOverrideArg !== null) {
-          log.info("supervisor: sweep recovery succeeded — chassis producing bytes", {
+          log.info("supervisor: sweep recovery succeeded — pinning at recovered power", {
             readerId: slot.spec.id,
             readerName: slot.spec.name,
             recoveredAtPower: slot.sweepPowerOverrideArg,
-            note: "clearing override; next spawn uses operator-configured power",
+            note: `keeping override; will re-test configured power in ${SWEEP_OVERRIDE_RETEST_MS / 60_000} min`,
           });
-          slot.sweepPowerOverrideArg = null;
           slot.lastSweepAttemptAt = Date.now();
+          // Do NOT clear sweepPowerOverrideArg here — let it stick. The
+          // periodic watchdog (see runStreamWatchdog) clears it after
+          // SWEEP_OVERRIDE_RETEST_MS to give the chip another shot at
+          // configured power.
         }
         // First byte on this spawn — chassis is reachable. Tell the WMS
         // so the dashboard flips the reader online indicator even if
