@@ -840,10 +840,17 @@ function ActiveSessionView({
     return Math.max(n, variance.matched.length);
   }, [localScanned, expectedEpcSet, variance.matched.length]);
   const liveMissingCount = Math.max(0, liveExpectedCount - liveMatchedCount);
+  // Coverage % uses Math.floor so a count that's 99.91% complete shows as
+  // 99%, not a misleading "100%". Only display 100 when ALL expected EPCs
+  // are accounted for (matched == expected, missing == 0). Without this
+  // rule, operators see "Coverage 100%" with "Missing 4" in the same row
+  // and reasonably ask "how does that happen?" — observed 2026-05-12.
   const liveCoverage =
     liveExpectedCount === 0
       ? 0
-      : Math.round((liveMatchedCount / liveExpectedCount) * 100);
+      : liveMissingCount === 0
+        ? 100
+        : Math.min(99, Math.floor((liveMatchedCount / liveExpectedCount) * 100));
   const animCoverage = useCountUp(liveCoverage);
   const animMatched = useCountUp(liveMatchedCount);
   const animMissing = useCountUp(liveMissingCount);
