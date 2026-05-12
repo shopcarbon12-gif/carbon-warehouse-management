@@ -692,6 +692,17 @@ export type IngestReadsBody = z.infer<typeof ingestReadsSchema>;
 const ANTENNA_CACHE_TTL_MS = 60_000;
 const ANTENNA_CACHE = new Map<string, { map: Map<number, string>; expiresAt: number }>();
 
+/**
+ * cdm_reads per-(reader, antenna, epc) write-dedup window. Collapses the
+ * 5-6×-per-second burst from the Monsoon binary into a single row per
+ * second per tag per antenna. Live-scan SSE / status_online flip /
+ * antenna last_read_at all still see every read; only the cdm_reads
+ * INSERT dedups. Without this, normal warehouse scan produces ~10 000
+ * rows/min and the 48-h TTL ceiling is ~600 GB — would fill the 38 GB
+ * prod disk again. With this, expected ceiling is ~50 GB worst case.
+ */
+const WRITE_DEDUP_WINDOW_MS = 1_000;
+
 async function getAntennaIdMap(
   client: PoolClient,
   readerId: string,
@@ -826,6 +837,31 @@ export async function ingestAgentReads(
   const keepIdx: number[] = [];
   for (let i = 0; i < passesFormulas.length; i++) {
     if (passesFormulas[i]) keepIdx.push(i);
+  }
+
+  // PER-KEY WRITE DEDUP 2026-05-12: collapse same (reader, antenna, epc)
+  // rows that arrive within WRITE_DEDUP_WINDOW_MS into a single insert.
+  // The Monsoon binary's per-cycle burst pattern reports each tag 5-6×
+  // back-to-back (one per recently-completed inventory cycle), so without
+  // this dedup cdm_reads grew at ~10 000 rows/min during normal scan —
+  // ~600 GB projected over the 48 h TTL, would fill the 38 GB Coolify
+  // VPS disk again (see project_coolify_disk_fill_2026_05_10 in agent
+  // memory). Live-scan SSE fan-out below intentionally still sees every
+  // read so the dashboard's activity tile keeps its burst feel — only
+  // the persistence layer dedups.
+  if (keepIdx.length > 1) {
+    const lastSeenAt = new Map<string, number>();
+    const dedupedKeepIdx: number[] = [];
+    for (const i of keepIdx) {
+      const key = `${readerIds[i]}|${antennaIds[i] ?? ""}|${epcs[i]}`;
+      const t = new Date(readAts[i]!).getTime();
+      const prev = lastSeenAt.get(key);
+      if (prev !== undefined && t - prev < WRITE_DEDUP_WINDOW_MS) continue;
+      lastSeenAt.set(key, t);
+      dedupedKeepIdx.push(i);
+    }
+    keepIdx.length = 0;
+    keepIdx.push(...dedupedKeepIdx);
   }
   let insertedCount = 0;
   if (keepIdx.length > 0) {

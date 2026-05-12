@@ -17,8 +17,6 @@ export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname.startsWith("/infrastructure")) return true;
   if (pathname.startsWith("/settings")) return true;
   if (pathname.startsWith("/inventory/sync")) return true;
-  if (pathname.startsWith("/admin")) return true;
-  if (pathname.startsWith("/api/admin")) return true;
   if (pathname.startsWith("/api/infrastructure")) return true;
   if (pathname.startsWith("/api/settings")) return true;
   if (pathname.startsWith("/api/inventory/sync")) return true;
