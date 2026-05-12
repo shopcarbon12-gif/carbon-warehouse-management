@@ -92,7 +92,8 @@ export async function listScanSources(
       row_count                                   AS row_count,
       add_on_locked_by::text                      AS locked_by,
       add_on_completed_at                         AS completed_at,
-      add_on_completed_by::text                   AS completed_by
+      add_on_completed_by::text                   AS completed_by,
+      NULL::int                                   AS session_number
     FROM inventory_reports
     WHERE tenant_id = $1::uuid
       AND (
@@ -139,7 +140,8 @@ export async function listScanSources(
       0                                           AS row_count,
       add_on_locked_by::text                      AS locked_by,
       add_on_completed_at                         AS completed_at,
-      add_on_completed_by::text                   AS completed_by
+      add_on_completed_by::text                   AS completed_by,
+      NULL::int                                   AS session_number
     FROM device_upload_logs
     WHERE tenant_id = $1::uuid
       AND device_id = 'web-session'
