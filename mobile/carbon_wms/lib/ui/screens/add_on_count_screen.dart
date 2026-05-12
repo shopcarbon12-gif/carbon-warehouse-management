@@ -282,10 +282,13 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
         // normal RFID read elsewhere in the app.
         ScanSounds.instance.play(ScanCue.read);
         await _maybeVibrate();
-        // No live catalog enrichment during scan — operator asked for a
-        // plain scan loop with no network round-trips per EPC. SKU /
-        // item_name / color / size are resolved server-side during the
-        // UPLOAD intent's per-EPC ingest pipeline.
+        // Read-only catalog *lookup* by system_id (NOT a catalog write —
+        // catalog mutation is gated to the UPLOAD intent's ingest path).
+        // Decode the EPC client-side to extract the system_id, then GET
+        // the existing catalog row for that system_id. Cached per
+        // system_id for this session, so many EPCs that share a SKU
+        // only fire one lookup total. Mirrors count_inventory_screen.
+        unawaited(_enrichBySystemId(clean));
       }
       // 'duplicate' / 'failed' / server-side-inSource → silent (Q16 + spec).
     } catch (_) {
@@ -302,26 +305,40 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     } catch (_) {/* best-effort */}
   }
 
-  Future<void> _enrichEpc(String epc) async {
+  /// Per-session cache: system_id → catalog row (or null = confirmed miss).
+  /// Each unique system_id is looked up at most once per Add-On session.
+  final Map<String, Map<String, dynamic>?> _catalogCache = {};
+
+  Future<void> _enrichBySystemId(String epc) async {
     try {
-      final api = context.read<WmsApiClient>();
-      final rows = await api.lookupEpcs([epc]);
-      if (rows.isEmpty) return;
-      final r = rows.first;
-      final scannedAt = DateTime.now().toUtc();
+      final cfg = context.read<MobileSettingsRepository>().epcConfig;
+      final sid = decodeSystemId(epc, cfg);
+      if (sid == null) return; // formula-failed EPCs never reach here anyway
+      final sidStr = sid.toString();
+
+      Map<String, dynamic>? row;
+      if (_catalogCache.containsKey(sidStr)) {
+        row = _catalogCache[sidStr];
+      } else {
+        final api = context.read<WmsApiClient>();
+        row = await api.catalogLookupBySystemId(sidStr);
+        _catalogCache[sidStr] = row;
+      }
+      if (row == null) return; // catalog has no entry for this system_id
+
       _session.enrichEntry(
         epc,
         NewEpcEntry(
           epc: epc,
-          scannedAtUtc: scannedAt,
-          systemId: r['systemId'] as String?,
-          customSku: r['sku'] as String?,
-          itemName: r['productName'] as String?,
-          color: r['color'] as String?,
-          size: r['size'] as String?,
+          scannedAtUtc: DateTime.now().toUtc(),
+          systemId: sidStr,
+          customSku: row['sku'] as String? ?? row['custom_sku'] as String?,
+          itemName: row['product_name'] as String? ?? row['productName'] as String?,
+          color: row['color'] as String?,
+          size: row['size'] as String?,
         ),
       );
-    } catch (_) {/* best-effort enrichment */}
+    } catch (_) {/* best-effort enrichment, card stays at EPC-only */}
   }
 
   Future<void> _stopAndReview() async {
