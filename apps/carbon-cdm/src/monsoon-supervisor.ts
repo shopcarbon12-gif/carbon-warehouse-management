@@ -56,17 +56,18 @@ const MAX_BACKOFF_MS = 60_000;
  *
  * Powers are the `--power` arg in tenths of a dBm: 100 = 10 dBm, 330 = 33 dBm.
  *
- * REORDERED 2026-05-12 to high→low. Previously [100, 200, 330] — sweep
- * started at 10 dBm, which in a real warehouse (concrete + steel) reads
- * essentially nothing even from a perfectly healthy chip. The sweep
- * would then advance to 200 and 330, but by then the chip was already
- * in the stuck state we were trying to recover, AND the supervisor had
- * port-rotated to 1461 (now fixed separately). High→low starts at
- * full configured power so a chip that's actually fine immediately
- * starts producing reads and exits sweep. Only if 33 dBm fails do we
- * step down — at which point we're confirming a chassis fault.
+ * GRANULARITY 2026-05-12: was [330, 200, 100] — three coarse steps with
+ * 10-dBm gaps between them. Live evidence on .15 today: chip reads
+ * cleanly at 15 dBm (= 150) but is silent at 10 / 20 / 25 / 33 dBm.
+ * The original 3-step sweep skipped right over the working power and
+ * declared the chassis broken. Now 6 steps with 5-dBm granularity so
+ * narrow-band chips are catchable. Still high→low so a healthy chip
+ * starts at configured power and exits sweep immediately.
+ *
+ * Each step does a fresh spawn → PLL relock + chip-side calibration,
+ * which is also useful for chips wedged in Gen2 select state.
  */
-const SWEEP_POWERS: readonly number[] = [330, 200, 100];
+const SWEEP_POWERS: readonly number[] = [330, 270, 200, 150, 100, 50];
 /**
  * Cooldown between full sweep-recovery attempts (after a sweep ran
  * through every power step and produced no bytes). 60 s — short enough
