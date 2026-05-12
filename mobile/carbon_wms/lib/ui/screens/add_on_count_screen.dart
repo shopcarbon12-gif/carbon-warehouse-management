@@ -282,8 +282,10 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
         // normal RFID read elsewhere in the app.
         ScanSounds.instance.play(ScanCue.read);
         await _maybeVibrate();
-        // Fire-and-forget enrichment so the row gets sku/name/color/size.
-        unawaited(_enrichEpc(clean));
+        // No live catalog enrichment during scan — operator asked for a
+        // plain scan loop with no network round-trips per EPC. SKU /
+        // item_name / color / size are resolved server-side during the
+        // UPLOAD intent's per-EPC ingest pipeline.
       }
       // 'duplicate' / 'failed' / server-side-inSource → silent (Q16 + spec).
     } catch (_) {
@@ -380,7 +382,10 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
             _Header(slip: widget.sourceSlip, sourceCount: widget.sourceEpcs.length),
             ListenableBuilder(
               listenable: _session,
-              builder: (_, __) => _Counter(count: _session.newCount),
+              builder: (_, __) => _CounterRow(
+                newCount: _session.newCount,
+                defectiveCount: _session.failedCount,
+              ),
             ),
             Expanded(
               child: ListenableBuilder(
@@ -427,32 +432,76 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _Counter extends StatelessWidget {
-  const _Counter({required this.count});
-  final int count;
+class _CounterRow extends StatelessWidget {
+  const _CounterRow({required this.newCount, required this.defectiveCount});
+  final int newCount;
+  final int defectiveCount;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 16.h),
+      padding: EdgeInsets.fromLTRB(12.w, 16.h, 12.w, 12.h),
+      child: Row(
+        children: [
+          Expanded(
+            child: _CounterTile(
+              count: newCount,
+              label: 'NEW',
+              accent: AppColors.primary,
+            ),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: _CounterTile(
+              count: defectiveCount,
+              label: 'DEFECTIVE',
+              accent: const Color(0xFFD9534F),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CounterTile extends StatelessWidget {
+  const _CounterTile({
+    required this.count,
+    required this.label,
+    required this.accent,
+  });
+  final int count;
+  final String label;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 8.w),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: accent),
+        borderRadius: BorderRadius.circular(2.r),
+      ),
       child: Column(
         children: [
           Text(
             '$count',
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 84.sp,
+              fontSize: 56.sp,
               fontWeight: FontWeight.w900,
-              color: AppColors.primary,
+              color: accent,
               height: 1.0,
             ),
           ),
+          SizedBox(height: 4.h),
           Text(
-            'NEW EPCS FOUND',
+            label,
             style: GoogleFonts.spaceGrotesk(
               fontSize: 11.sp,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.2,
-              color: AppColors.textMuted,
+              color: accent,
             ),
           ),
         ],
