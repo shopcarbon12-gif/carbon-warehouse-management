@@ -350,6 +350,33 @@ export async function finalizeScanSession(
             [defectiveCsv, ledgerDefective.length, reportId, input.tenantId],
           );
           savedDefectiveCount = ledgerDefective.length;
+          // Push ledger-defective EPCs through ingestEpcs so they land in
+          // items.status='tag_killed' and surface in Catalog → Defective
+          // EPCs. Symmetric with the UPLOAD branch below. SAVE still
+          // doesn't run override-wipe (Q21) — only ensures defective
+          // EPCs make it into the items table.
+          const sourceDeviceId = await resolveHandheldDeviceId(
+            client,
+            input.deviceId,
+            input.tenantId,
+          );
+          const ledgerIngressInputs = ledgerDefective.map((d) => ({
+            tenantId: input.tenantId,
+            epc: d.epc,
+            source: sourceForScreen(input.screen),
+            sourceDeviceLabel: d.deviceId ?? input.deviceId,
+            sourceDeviceId,
+            locationId: input.locationId,
+            receivedAt: now,
+          }));
+          try {
+            await ingestEpcs(client, ledgerIngressInputs);
+          } catch (e) {
+            console.warn(
+              "[scan-finalize SAVE] ledger-defective ingest failed (continuing)",
+              e,
+            );
+          }
         }
         // Even on SAVE, mark the session completed so the picker reflects
         // state. (Mirrors the UPLOAD link below but without source-complete.)
@@ -446,8 +473,37 @@ export async function finalizeScanSession(
         input.addOnSessionId,
       );
       const seen = new Set(failures.map((f) => f.epc));
+      const ledgerOnly: DefectiveEpcRow[] = [];
       for (const d of ledgerDefective) {
-        if (!seen.has(d.epc)) combinedFailures = combinedFailures.concat(d);
+        if (!seen.has(d.epc)) {
+          ledgerOnly.push(d);
+          combinedFailures = combinedFailures.concat(d);
+        }
+      }
+      // ALSO push the ledger-defective EPCs through the per-EPC ingest so
+      // they land in items.status='tag_killed' and surface in
+      // Catalog → Defective EPCs. Before this fix, ledger-defective EPCs
+      // were only added to the CSV blob attached to inventory_reports
+      // — they never reached the items table, so the operator's "Defective
+      // EPCs" modal never showed them. Reported 2026-05-13.
+      if (ledgerOnly.length > 0) {
+        const ledgerIngressInputs = ledgerOnly.map((d) => ({
+          tenantId: input.tenantId,
+          epc: d.epc,
+          source: epcSource,
+          sourceDeviceLabel: d.deviceId ?? input.deviceId,
+          sourceDeviceId,
+          locationId: input.locationId,
+          receivedAt: now,
+        }));
+        try {
+          await ingestEpcs(client, ledgerIngressInputs);
+        } catch (e) {
+          console.warn(
+            "[scan-finalize] ledger-defective ingest failed (continuing — CSV blob still attached)",
+            e,
+          );
+        }
       }
     }
     const defectiveCsv = buildDefectiveCsv(combinedFailures);
