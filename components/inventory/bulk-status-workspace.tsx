@@ -323,7 +323,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
           />
           {scanning ? "Scanning… (click to pause)" : "Start scan"}
         </button>
-        <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} />
+        <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} hidePosDedicated />
         <button
           type="button"
           disabled={rows.size === 0}

@@ -40,6 +40,13 @@ type Props = {
    * user's later manual change.
    */
   defaultReaderName?: string;
+  /**
+   * Drop readers flagged `is_pos_dedicated=true` from the list. Used by
+   * surfaces where POS-dedicated readers don't belong (Operations dashboard,
+   * Bulk Status, Transfer In). Cycle Counts and Hardware Config pickers
+   * keep them visible.
+   */
+  hidePosDedicated?: boolean;
 };
 
 type FlatReader = HardwareReaderRow & { _zoneName: string; _locationCode: string };
@@ -50,6 +57,7 @@ export function ReaderPicker({
   label = "Readers",
   disabled = false,
   defaultReaderName,
+  hidePosDedicated = false,
 }: Props) {
   const { data } = useSWR<HardwareConfigTree>("/api/hardware-config", fetcher, {
     revalidateOnFocus: false,
@@ -65,16 +73,18 @@ export function ReaderPicker({
     for (const loc of data.locations) {
       for (const z of loc.zones ?? []) {
         for (const r of z.readers ?? []) {
+          if (hidePosDedicated && r.is_pos_dedicated) continue;
           out.push({ ...r, _zoneName: z.name, _locationCode: loc.code });
         }
       }
       // include unzoned readers so operators can still pick them
       for (const r of loc.unzonedReaders ?? []) {
+        if (hidePosDedicated && r.is_pos_dedicated) continue;
         out.push({ ...r, _zoneName: "(no zone)", _locationCode: loc.code });
       }
     }
     return out;
-  }, [data]);
+  }, [data, hidePosDedicated]);
 
   const allIds = useMemo(() => flat.map((r) => r.id), [flat]);
   const allChecked = allIds.length > 0 && allIds.every((id) => selected.has(id));

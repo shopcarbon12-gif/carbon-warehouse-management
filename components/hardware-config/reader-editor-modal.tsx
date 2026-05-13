@@ -53,6 +53,7 @@ export function ReaderEditorModal({
   const [streamPort, setStreamPort] = useState("");
   const [controlPort, setControlPort] = useState("");
   const [epcPrefix, setEpcPrefix] = useState("");
+  const [isPosDedicated, setIsPosDedicated] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -92,6 +93,7 @@ export function ReaderEditorModal({
       // Falls back to "" for legacy unzoned readers; server allows omitted
       // zoneId on update (preserves existing zone_id).
       setZoneId(editing.zone_id ?? "");
+      setIsPosDedicated(editing.is_pos_dedicated === true);
     } else {
       setZoneId(defaultZoneId ?? "");
       setCdmAgentId("");
@@ -104,6 +106,7 @@ export function ReaderEditorModal({
       setStreamPort("");
       setControlPort("");
       setEpcPrefix("");
+      setIsPosDedicated(false);
     }
     setAdvanced(false);
     setErr(null);
@@ -162,6 +165,7 @@ export function ReaderEditorModal({
       if (cdmAgentId) body.cdmAgentId = cdmAgentId;
       if (streamPort) body.streamPort = Number(streamPort);
       if (controlPort) body.controlPort = Number(controlPort);
+      body.isPosDedicated = isPosDedicated;
 
       const url = editing
         ? `/api/hardware-config/readers/${encodeURIComponent(editing.id)}`
@@ -290,6 +294,26 @@ export function ReaderEditorModal({
               ))}
             </select>
           </Field>
+
+          <label className="flex items-start gap-2 rounded border border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/40 p-2.5">
+            <input
+              type="checkbox"
+              checked={isPosDedicated}
+              onChange={(e) => setIsPosDedicated(e.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5"
+            />
+            <span className="flex-1">
+              <span className="block font-mono text-[0.7rem] font-semibold text-[var(--wms-fg)]">
+                POS-dedicated reader
+              </span>
+              <span className="mt-0.5 block font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                Reads stream to the companion POS app, not WMS. Reader will be
+                hidden from Operations dashboard, Bulk Status, and Transfer In
+                pickers, and its reads won&apos;t count toward the Live Scan
+                tile. Cycle Counts and Hardware Config still show it.
+              </span>
+            </span>
+          </label>
 
           <button
             type="button"

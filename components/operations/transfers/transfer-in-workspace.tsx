@@ -721,6 +721,7 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
             selected={selectedReaders}
             onChange={setSelectedReaders}
             defaultReaderName="Transfer bin"
+            hidePosDedicated
           />
           <button
             type="button"

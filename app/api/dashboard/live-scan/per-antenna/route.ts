@@ -99,14 +99,19 @@ export async function GET(req: Request) {
     unique_epcs: string;
     total_reads: string;
   }>(
+    // Exclude POS-dedicated readers and their reads — those antennas
+    // feed the companion POS app, not WMS, and shouldn't appear in the
+    // dashboard Live Scan per-antenna breakdown.
     `WITH first_attribution AS (
        SELECT DISTINCT ON (cr.epc_hex)
          cr.epc_hex,
          cr.antenna_id
        FROM cdm_reads cr
+       JOIN devices rd ON rd.id = cr.reader_id
        WHERE cr.tenant_id = $1::uuid
          AND cr.read_at   >= $2::timestamptz
          AND cr.passes_formula
+         AND rd.is_pos_dedicated = FALSE
        ORDER BY cr.epc_hex, cr.read_at ASC
      ),
      attribution_counts AS (
@@ -117,7 +122,10 @@ export async function GET(req: Request) {
      read_totals AS (
        SELECT cr.antenna_id, COUNT(*)::int AS total
        FROM cdm_reads cr
-       WHERE cr.tenant_id = $1::uuid AND cr.read_at >= $2::timestamptz
+       JOIN devices rd ON rd.id = cr.reader_id
+       WHERE cr.tenant_id = $1::uuid
+         AND cr.read_at >= $2::timestamptz
+         AND rd.is_pos_dedicated = FALSE
        GROUP BY cr.antenna_id
      )
      SELECT
@@ -135,6 +143,7 @@ export async function GET(req: Request) {
      LEFT JOIN attribution_counts ac ON ac.antenna_id = a.id
      LEFT JOIN read_totals       rt ON rt.antenna_id = a.id
      WHERE a.device_type = 'antenna'
+       AND parent.is_pos_dedicated = FALSE
      ORDER BY parent.name ASC, antenna_number ASC`,
     [session.tid, new Date(s.startedAt).toISOString()],
   );

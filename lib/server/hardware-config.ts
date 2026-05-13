@@ -62,6 +62,12 @@ export type HardwareReaderRow = {
    *  Effectively-paused readers always report "ok" — pause state is its
    *  own UI affordance and shouldn't compound the badge. */
   health: ReaderHealth;
+  /** True when this reader belongs exclusively to the companion POS app —
+   *  scans are streamed to Carbon-POS, not consumed by WMS. Hidden from
+   *  every general WMS picker (Operations dashboard, Bulk Status, Transfer
+   *  In, etc.) but still shown in Hardware Config + Cycle Counts so admins
+   *  retain physical control. Flag is set per-reader; see migration 0074. */
+  is_pos_dedicated: boolean;
   antennas: HardwareAntennaRow[];
 };
 
@@ -127,6 +133,8 @@ type RawDevice = {
    *  ignored on reader rows, used on antenna rows by the antenna mapper. */
   suggested_power_dbm: number | null;
   suggested_power_dbm_at: string | null;
+  /** Reader-level flag (ignored on antenna rows). See HardwareReaderRow. */
+  is_pos_dedicated: boolean;
 };
 
 /**
@@ -249,7 +257,8 @@ export async function buildHardwareConfigTree(
          d.bridge_seen_at::text AS bridge_seen_at,
          d.chassis_wedged_at::text AS chassis_wedged_at,
          d.suggested_power_dbm,
-         d.suggested_power_dbm_at::text AS suggested_power_dbm_at
+         d.suggested_power_dbm_at::text AS suggested_power_dbm_at,
+         d.is_pos_dedicated
        FROM devices d
        LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
        WHERE d.tenant_id = $1::uuid
@@ -472,6 +481,7 @@ export async function buildHardwareConfigTree(
         reads_5m: reads5m,
         peers_median_5m: peerMedian,
       },
+      is_pos_dedicated: d.is_pos_dedicated === true,
       antennas: antennasByParent.get(d.id) ?? [],
     };
     if (d.zone_id) {

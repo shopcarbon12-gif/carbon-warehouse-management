@@ -44,6 +44,10 @@ export const upsertReaderSchema = z.object({
   controlPort: z.coerce.number().int().min(1024).max(65535).optional(),
   antennaCount: z.coerce.number().int().min(1).max(32).default(1),
   epcPrefix: z.string().trim().max(32).optional().default(""),
+  /** True = reader belongs exclusively to the companion POS app (Carbon-POS).
+   *  Hidden from general WMS pickers; only Hardware Config + Cycle Counts
+   *  surface it. See migration 0074. */
+  isPosDedicated: z.boolean().optional(),
 }).superRefine((val, ctx) => {
   if (!val.id && !val.zoneId) {
     ctx.addIssue({
@@ -165,6 +169,11 @@ export async function upsertReader(
       sets.push(`zone_id = $${params.length + 1}::uuid`);
       params.push(body.zoneId);
     }
+    // Only update is_pos_dedicated when the caller explicitly supplied it.
+    if (body.isPosDedicated !== undefined) {
+      sets.push(`is_pos_dedicated = $${params.length + 1}::boolean`);
+      params.push(body.isPosDedicated);
+    }
     const r = await client.query<{ id: string }>(
       `UPDATE devices SET ${sets.join(", ")}
          WHERE id = $1::uuid AND tenant_id = $2::uuid
@@ -180,9 +189,10 @@ export async function upsertReader(
   const r = await client.query<{ id: string }>(
     `INSERT INTO devices (
        tenant_id, location_id, zone_id, cdm_agent_id,
-       device_type, name, network_address, status_online, config, mac_address
+       device_type, name, network_address, status_online, config, mac_address,
+       is_pos_dedicated
      )
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, false, $8::jsonb, $9)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, false, $8::jsonb, $9, $10)
      RETURNING id::text`,
     [
       tenantId,
@@ -194,6 +204,7 @@ export async function upsertReader(
       body.networkAddress,
       JSON.stringify(config),
       body.macAddress ?? null,
+      body.isPosDedicated === true,
     ],
   );
   return { id: r.rows[0].id };

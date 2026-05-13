@@ -47,12 +47,17 @@ export async function GET(req: Request) {
       { status: 503 },
     );
   }
+  // Exclude reads from POS-dedicated readers — those readers stream to
+  // the companion POS app, not WMS, and shouldn't inflate the dashboard
+  // Live Scan counter. Hardware Config / Cycle Counts still see them.
   const r = await pool.query<{ n: string }>(
     `SELECT count(DISTINCT cr.epc_hex)::text AS n
        FROM cdm_reads cr
+       JOIN devices d ON d.id = cr.reader_id
       WHERE cr.tenant_id = $1::uuid
         AND cr.read_at >= $2::timestamptz
-        AND cr.passes_formula = true`,
+        AND cr.passes_formula = true
+        AND d.is_pos_dedicated = FALSE`,
     [session.tid, new Date(s.startedAt).toISOString()],
   );
   return NextResponse.json({
