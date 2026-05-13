@@ -393,6 +393,28 @@ export async function markSourceCompleted(
       ? "cycle_count_sessions"
       : "device_upload_logs";
   const idCast = sourceType === "csv_import" ? "::int" : "::uuid";
+
+  if (sourceType === "cycle_count") {
+    // Cycle count: the mobile add-on upload is the canonical closer
+    // (2026-05-12 policy). Flip status → committed AND stamp completed_at
+    // so the session shows up under "History" in the cycle counts page
+    // instead of staying in the "Active / Paused" list forever.
+    // Reconcile (cycle-count-missing − add-on-found → tag_killed) is
+    // handled by the caller after scan-finalize's per-EPC ingest already
+    // flipped the add-on-found EPCs to in-stock.
+    await pool.query(
+      `UPDATE cycle_count_sessions
+          SET add_on_locked_by    = NULL,
+              add_on_completed_at = now(),
+              add_on_completed_by = $1::uuid,
+              status              = 'committed',
+              completed_at        = COALESCE(completed_at, now())
+        WHERE id = $2::uuid AND tenant_id = $3::uuid`,
+      [userId, sourceId, tenantId],
+    );
+    return;
+  }
+
   await pool.query(
     `UPDATE ${table}
         SET add_on_locked_by    = NULL,
@@ -401,6 +423,65 @@ export async function markSourceCompleted(
       WHERE id = $2${idCast} AND tenant_id = $3::uuid`,
     [userId, sourceId, tenantId],
   );
+}
+
+/**
+ * After a cycle-count's add-on pass completes, reconcile what's truly
+ * missing: EPCs in the cycle-count expected_snapshot that were NOT
+ * scanned by either the fixed-reader cycle count OR the handheld add-on.
+ * Those flip to tag_killed.
+ *
+ * Add-on-found EPCs that DID match expected are already in-stock thanks
+ * to scan-finalize's per-EPC ingest. Anything add-on found that was NOT
+ * in expected is "extra" and stays in-stock — it surfaces as added_here
+ * inventory. Defective EPCs are already in tag_killed via the ingest's
+ * formula-fail branch and surface in Catalog → Defective EPCs.
+ */
+export async function reconcileCycleCountWithAddOn(
+  pool: Pool,
+  tenantId: string,
+  cycleCountSessionId: string,
+  addOnFoundEpcs: string[],
+): Promise<{ killed: number }> {
+  const foundUpper = new Set(
+    addOnFoundEpcs.map((e) => e.replace(/\s/g, "").toUpperCase()),
+  );
+  const r = await pool.query<{ expected_snapshot: unknown; scanned_epcs: unknown }>(
+    `SELECT expected_snapshot, scanned_epcs
+       FROM cycle_count_sessions
+      WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+    [cycleCountSessionId, tenantId],
+  );
+  if (r.rowCount === 0) return { killed: 0 };
+  const row = r.rows[0]!;
+  const expected = Array.isArray(row.expected_snapshot)
+    ? (row.expected_snapshot as Array<{ epc?: string }>)
+    : [];
+  const cycleScanned = new Set(
+    (Array.isArray(row.scanned_epcs) ? (row.scanned_epcs as string[]) : []).map((e) =>
+      e.toUpperCase(),
+    ),
+  );
+  const reallyMissing: string[] = [];
+  for (const e of expected) {
+    const epc = e.epc?.toUpperCase();
+    if (!epc) continue;
+    if (cycleScanned.has(epc)) continue;
+    if (foundUpper.has(epc)) continue;
+    reallyMissing.push(epc);
+  }
+  if (reallyMissing.length === 0) return { killed: 0 };
+  const k = await pool.query(
+    `UPDATE items i
+        SET status = 'tag_killed', updated_at = now()
+       FROM locations loc
+      WHERE i.epc = ANY($1::text[])
+        AND i.location_id = loc.id
+        AND loc.tenant_id = $2::uuid
+        AND i.status = 'in-stock'`,
+    [reallyMissing, tenantId],
+  );
+  return { killed: k.rowCount ?? 0 };
 }
 
 /** Super-admin re-open: clears completion (Q29 lock — events table preserves history). */

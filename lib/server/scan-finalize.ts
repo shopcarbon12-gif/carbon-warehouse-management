@@ -8,6 +8,7 @@ import {
 } from "@/lib/server/upload-defective-epcs";
 import {
   markSourceCompleted,
+  reconcileCycleCountWithAddOn,
   type ScanSourceType,
 } from "@/lib/queries/scan-sources";
 
@@ -469,6 +470,32 @@ export async function finalizeScanSession(
         input.addOnSourceId,
         input.userId,
       );
+      // Cycle count reconcile: when the source was a cycle_count session,
+      // close it AND kill anything still-missing after both passes (the
+      // fixed-reader cycle count + this handheld add-on). markSourceCompleted
+      // already flipped status → committed; this step handles the items
+      // table mutation for EPCs that BOTH passes failed to find.
+      // Add-on-found EPCs are already in-stock from the per-EPC ingest above.
+      if (input.addOnSourceType === "cycle_count") {
+        try {
+          const { killed } = await reconcileCycleCountWithAddOn(
+            pool,
+            input.tenantId,
+            input.addOnSourceId,
+            epcsScanned,
+          );
+          if (killed > 0) {
+            console.info(
+              "[scan-finalize] reconcile killed",
+              killed,
+              "EPCs still missing after cycle-count + add-on",
+              { cycleCountSessionId: input.addOnSourceId },
+            );
+          }
+        } catch (e) {
+          console.warn("[scan-finalize] reconcile failed (continuing)", e);
+        }
+      }
     }
     if (input.addOnSessionId) {
       await client.query(
