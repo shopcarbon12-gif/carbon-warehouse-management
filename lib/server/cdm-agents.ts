@@ -628,9 +628,13 @@ export async function getAgentConfigBundle(
     location_id: string;
     location_code: string;
     tenant_id: string;
+    live_scan_active: boolean;
+    live_scan_last_started_at: string | null;
   }>(
     `SELECT a.id::text, a.name, a.location_id::text, l.code AS location_code,
-            a.tenant_id::text
+            a.tenant_id::text,
+            a.live_scan_active,
+            a.live_scan_last_started_at::text AS live_scan_last_started_at
        FROM cdm_agents a
        JOIN locations l ON l.id = a.location_id
        WHERE a.id = $1::uuid`,
@@ -759,16 +763,27 @@ export async function getAgentConfigBundle(
     });
   }
 
+  // Per-agent live_scan resolution: once an agent has been individually
+  // managed (live_scan_last_started_at IS NOT NULL), use its own column.
+  // Otherwise fall back to the tenant-wide in-memory session so the
+  // existing dashboard mass-toggle behaviour is preserved for untouched
+  // agents. See migration 0075 + lib/server/live-scan-sessions.ts.
+  const agentRow = ag.rows[0];
+  const liveScanActive =
+    agentRow.live_scan_last_started_at != null
+      ? agentRow.live_scan_active === true
+      : isLiveScanActive(tenantId);
+
   return {
     agent: {
-      id: ag.rows[0].id,
-      name: ag.rows[0].name,
-      location_id: ag.rows[0].location_id,
-      location_code: ag.rows[0].location_code,
+      id: agentRow.id,
+      name: agentRow.name,
+      location_id: agentRow.location_id,
+      location_code: agentRow.location_code,
     },
     readers,
     server_time: new Date().toISOString(),
-    live_scan_active: isLiveScanActive(tenantId),
+    live_scan_active: liveScanActive,
   };
 }
 
