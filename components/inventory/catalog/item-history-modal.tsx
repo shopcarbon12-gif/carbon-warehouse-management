@@ -143,14 +143,14 @@ export function ItemHistoryModal({
                   Item History
                 </h2>
                 {sku ? (
-                  <p className="mt-0.5 text-xs text-[var(--wms-muted)]">
-                    <span className="text-[var(--wms-fg)]">{sku.matrix_name}</span>
+                  <p className="mt-1 text-sm text-white">
+                    <span className="font-semibold">{sku.matrix_name}</span>
                     {subtitle ? <> · {subtitle}</> : null}
                     {sku.matrix_upc ? <> · UPC {sku.matrix_upc}</> : null}
-                    <> · current qty <span className="font-semibold text-[var(--wms-fg)] tabular-nums">{sku.current_qty}</span></>
+                    <> · CURRENT QTY <span className="ml-1 font-semibold tabular-nums">{sku.current_qty}</span></>
                   </p>
                 ) : (
-                  <p className="mt-0.5 text-xs text-[var(--wms-muted)]">Loading…</p>
+                  <p className="mt-1 text-sm text-white">Loading…</p>
                 )}
               </div>
             </div>

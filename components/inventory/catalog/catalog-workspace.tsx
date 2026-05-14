@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Archive, Barcode, ChevronDown, ChevronUp, ChevronsUpDown, Radio } from "lucide-react";
+import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, Radio } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
 import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epcs-modal";
@@ -479,6 +479,19 @@ export function CatalogWorkspace({
             >
               Export
             </button>
+            <button
+              type="button"
+              onClick={() => setManualItemsOpen(true)}
+              className="rounded-md border px-3 py-2 font-mono text-xs font-semibold tracking-widest shadow-sm hover:opacity-90"
+              style={{
+                borderColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 45%, transparent)",
+                backgroundColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 18%, var(--wms-surface-elevated))",
+                color: "oklch(82.8% 0.111 230.318)",
+              }}
+              title="Manual (non-RFID) items — manage which UPCs are tracked manually"
+            >
+              MANUAL ITEMS
+            </button>
 
             <div className="relative">
               <button
@@ -749,22 +762,21 @@ export function CatalogWorkspace({
                           <button
                             type="button"
                             onClick={() => setHistoryForSku(r.custom_sku_id)}
-                            className="inline-flex h-[22px] w-[78px] items-center justify-center gap-1 rounded border border-sky-400/45 bg-sky-400/15 px-2 text-[0.6rem] font-medium tracking-wide text-sky-400 hover:opacity-90"
+                            className="inline-flex h-[22px] w-[78px] items-center justify-center rounded border border-sky-400/45 bg-sky-400/15 px-2 text-[0.6rem] font-medium leading-none tracking-widest text-sky-400 hover:opacity-90"
                             title="Manual (non-RFID) item — view qty history"
                             aria-label="Manual item — view qty history"
                           >
-                            <Barcode className="h-3.5 w-3.5" />
-                            Manual
+                            MANUAL
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => setModalSku(r)}
-                            className="inline-flex h-[22px] w-[78px] items-center justify-center gap-1 rounded border border-sky-400/45 bg-sky-400/15 px-2 text-[0.6rem] font-medium tracking-wide text-sky-400 hover:opacity-90"
+                            className="inline-flex h-[22px] w-[78px] items-center justify-center gap-1 rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 text-[0.6rem] font-medium text-[var(--wms-accent)] hover:opacity-90 dark:text-[var(--wms-accent)]"
                             title="RFID item — view EPCs"
                             aria-label="RFID item — view EPCs"
                           >
-                            <Radio className="h-3.5 w-3.5" />
+                            <Radio className="h-3 w-3" />
                             EPCs
                           </button>
                         )}

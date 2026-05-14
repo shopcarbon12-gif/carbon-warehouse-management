@@ -115,18 +115,14 @@ export async function GET(req: Request, { params }: Ctx) {
 
   const { id } = await params;
   const client = await pool.connect();
+  let detailOut: NonNullable<Awaited<ReturnType<typeof getSession>>> | null = null;
+  let varianceOut: Awaited<ReturnType<typeof classifyVarianceLive>> | null = null;
   try {
     await client.query("BEGIN");
     const detail = await getSession(client, session.tid, id);
     if (!detail) {
       await client.query("ROLLBACK");
       return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-    // Recover any SSE-dropped reads before computing variance.
-    try {
-      await backfillFromCdmReads(client, session.tid, id, detail, session.sub ?? null);
-    } catch (e) {
-      console.warn("[cycle-counts GET] backfill failed (continuing)", e);
     }
     const variance = await classifyVarianceLive(
       client,
@@ -136,7 +132,8 @@ export async function GET(req: Request, { params }: Ctx) {
       detail.location_id,
     );
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, session: detail, variance });
+    detailOut = detail;
+    varianceOut = variance;
   } catch (e) {
     try {
       await client.query("ROLLBACK");
@@ -144,6 +141,40 @@ export async function GET(req: Request, { params }: Ctx) {
       /* ignore */
     }
     throw e;
+  } finally {
+    client.release();
+  }
+
+  /* Backfill SSE-dropped reads OUT OF BAND — runs on its own pool connection
+   * after the response goes out. Was blocking the GET response on first open
+   * because it scans cdm_reads from session.started_at, which can be tens of
+   * thousands of rows. Now the GET is fast (just getSession + variance), and
+   * the backfill catches up by the next 10-second poll. */
+  void runBackfillAsync(pool, session.tid, id, detailOut, session.sub ?? null);
+
+  return NextResponse.json({ ok: true, session: detailOut, variance: varianceOut });
+}
+
+/* Spawns backfill on a fresh pool connection so it survives the GET response. */
+async function runBackfillAsync(
+  pool: import("pg").Pool,
+  tenantId: string,
+  sessionId: string,
+  detail: NonNullable<Awaited<ReturnType<typeof getSession>>>,
+  userId: string | null,
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await backfillFromCdmReads(client, tenantId, sessionId, detail, userId);
+    await client.query("COMMIT");
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    console.warn("[cycle-counts GET] async backfill failed", e);
   } finally {
     client.release();
   }

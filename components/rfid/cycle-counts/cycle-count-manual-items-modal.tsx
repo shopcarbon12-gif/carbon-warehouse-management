@@ -184,16 +184,19 @@ export function CycleCountManualItemsModal({
       );
       const j = (await res.json()) as { committed?: number; error?: string };
       if (!res.ok) throw new Error(j.error ?? "Finish failed");
-      setMsg(`Committed ${j.committed ?? 0} manual override${(j.committed ?? 0) === 1 ? "" : "s"}.`);
       setEdits({});
       await mutate();
       onCommitted?.();
+      /* Close the popup once the commit lands so the operator returns to
+         the cycle count workspace. Successful entries are now visible in
+         each row's Item History via the catalog MANUAL badge. */
+      onClose();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Finish failed");
     } finally {
       setBusy(false);
     }
-  }, [busy, closed, dirtyEntries, sessionId, mutate, onCommitted]);
+  }, [busy, closed, dirtyEntries, sessionId, mutate, onCommitted, onClose]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
