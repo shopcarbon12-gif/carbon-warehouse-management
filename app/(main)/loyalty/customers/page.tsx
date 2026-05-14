@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { withDb } from "@/lib/db";
-import { UserSearch, UserPlus, Upload } from "lucide-react";
+import { getPool } from "@/lib/db";
+import { UserSearch, UserPlus, Upload, AlertTriangle } from "lucide-react";
 import { LoyaltyCustomersTable } from "@/components/loyalty/customers-table";
+
+export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 50;
 
@@ -48,8 +50,19 @@ export default async function LoyaltyMembers({
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  const { rows, total, locations } = await withDb(
-    async (pool) => {
+  // Call queries directly instead of via withDb's silent fallback — when
+  // something throws (missing column, view, perms) we want it visible on
+  // the page and in logs, not a silent empty list.
+  let rows: Row[] = [];
+  let total = 0;
+  let locations: { id: number; name: string }[] = [];
+  let dbError: string | null = null;
+
+  const pool = getPool();
+  if (!pool) {
+    dbError = "Database unavailable (DATABASE_URL not set on this instance).";
+  } else {
+    try {
       const args: unknown[] = [];
       const where: string[] = [];
       if (q) {
@@ -105,14 +118,14 @@ export default async function LoyaltyMembers({
       const locs = await pool.query<{ id: number; name: string }>(
         `SELECT id, name FROM pos_locations ORDER BY name`,
       );
-      return {
-        rows: r.rows,
-        total: Number(c.rows[0]?.n ?? 0),
-        locations: locs.rows,
-      };
-    },
-    { rows: [], total: 0, locations: [] },
-  );
+      rows = r.rows;
+      total = Number(c.rows[0]?.n ?? 0);
+      locations = locs.rows;
+    } catch (e) {
+      console.error("[loyalty/customers] db query failed:", e);
+      dbError = e instanceof Error ? e.message : "Unknown database error";
+    }
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const showFrom = total === 0 ? 0 : offset + 1;
@@ -131,7 +144,7 @@ export default async function LoyaltyMembers({
           <h1 className="text-2xl font-bold mt-1">Members</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Every <code>pos_customers</code> row, pooled across all locations.
-            Click a row for the full ledger and to award/redeem.
+            Click a row for the full ledger and to reward / adjust points.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
@@ -188,6 +201,16 @@ export default async function LoyaltyMembers({
           Clear
         </Link>
       </form>
+
+      {dbError ? (
+        <div className="mb-4 flex items-start gap-2 border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-bold">Couldn&rsquo;t load members.</p>
+            <p className="mt-1 font-mono text-xs">{dbError}</p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="border border-border bg-card">
         <LoyaltyCustomersTable rows={rows} sourceLabels={SOURCE_LABELS} />
