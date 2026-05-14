@@ -20,6 +20,7 @@ import {
 import { ReaderPicker } from "@/components/shared/reader-picker";
 import { useCountUp } from "@/components/dashboard/use-count-up";
 import { CycleCountCommitModal } from "./cycle-count-commit-modal";
+import { CycleCountManualItemsModal } from "./cycle-count-manual-items-modal";
 import { ZeroOutRfidButton } from "./zero-out-rfid-button";
 import {
   AllEpcsTable,
@@ -537,6 +538,7 @@ function ActiveSessionView({
   // the only path that closes the session + runs reconcile + flips
   // truly-missing tags to tag_killed.
   const [finishOpen, setFinishOpen] = useState(false);
+  const [manualItemsOpen, setManualItemsOpen] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   // Tracks whether scanning has been started at least once in this mount.
@@ -1073,14 +1075,29 @@ function ActiveSessionView({
 
         <div className="ml-auto flex items-center gap-2">
           {!closed ? (
-            <button
-              type="button"
-              disabled={localScanned.size === 0}
-              onClick={() => setFinishOpen(true)}
-              className="wms-btn-primary px-6 font-mono disabled:opacity-50"
-            >
-              Finish
-            </button>
+            <>
+              <button
+                type="button"
+                disabled={localScanned.size === 0}
+                onClick={() => setFinishOpen(true)}
+                className="wms-btn-primary px-6 font-mono disabled:opacity-50"
+              >
+                Finish
+              </button>
+              <button
+                type="button"
+                onClick={() => setManualItemsOpen(true)}
+                className="rounded-md border px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wider hover:opacity-90"
+                style={{
+                  borderColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 45%, transparent)",
+                  backgroundColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 18%, var(--wms-surface-elevated))",
+                  color: "oklch(82.8% 0.111 230.318)",
+                }}
+                title="Count non-RFID SKUs at this location"
+              >
+                Manual Items
+              </button>
+            </>
           ) : (
             <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
               <Clock className="mr-1 inline h-3 w-3" />
@@ -1184,6 +1201,15 @@ function ActiveSessionView({
         binCodeForCommit={detail.bin_code}
         onCommit={doCommit}
       />
+
+      {manualItemsOpen ? (
+        <CycleCountManualItemsModal
+          sessionId={detail.id}
+          sessionName={detail.name}
+          onClose={() => setManualItemsOpen(false)}
+          onCommitted={() => void mutate()}
+        />
+      ) : null}
 
       {finishOpen ? (
         <div
