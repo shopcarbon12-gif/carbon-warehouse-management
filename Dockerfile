@@ -28,8 +28,13 @@ ENV CI=true
 ENV DOCKER_BUILD=1
 # React Compiler off in image build (saves large amounts of compile RAM); runtime unchanged.
 ENV NEXT_REACT_COMPILER=0
-# Heap cap: raise on Coolify only if the build host has RAM (e.g. 8192); 6144 is a common default.
-ENV NODE_OPTIONS=--max-old-space-size=6144
+# Heap cap. The Coolify build host has 1.9 GB RAM + 2 GB swap. 6144 was
+# the original default and started OOM-killing the TypeScript phase
+# during 2026-05-14 deploys (exit 255 + Coolify generic DeploymentException).
+# 2048 fits comfortably alongside the running app containers; tsc + webpack
+# both stay under that cap on this codebase. Raise back if the build host
+# is upsized.
+ENV NODE_OPTIONS=--max-old-space-size=2048
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Avoid `npm run build` here: package.json runs db:migrate first, which needs DATABASE_URL.
