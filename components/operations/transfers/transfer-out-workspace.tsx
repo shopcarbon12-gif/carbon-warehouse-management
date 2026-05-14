@@ -501,7 +501,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
     const handle = window.setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/inventory/catalog/search?q=${encodeURIComponent(q)}`,
+          `/api/inventory/catalog/search?q=${encodeURIComponent(q)}&manualOnly=1`,
         );
         if (!res.ok) return;
         const j = (await res.json()) as { rows?: CatalogSearchRow[] };

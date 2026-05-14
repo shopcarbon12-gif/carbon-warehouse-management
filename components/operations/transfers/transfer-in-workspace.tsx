@@ -260,58 +260,67 @@ function FragmentLikeRow({
                       </tr>
                     );
                   })}
-                  {g.manual.map((a) =>
-                    Array.from({ length: a.qty }).map((_, i) => {
-                      const checked =
-                        a.state === "settled" || confirmedAdjustmentIds.has(a.adjustment_id);
-                      const status: "pending" | "checked" | "received" =
-                        a.state === "settled"
-                          ? "received"
-                          : confirmedAdjustmentIds.has(a.adjustment_id)
-                            ? "checked"
-                            : "pending";
-                      return (
-                        <tr
-                          key={`${a.adjustment_id}-${i}`}
-                          className="hover:bg-[var(--wms-surface-elevated)]/40"
-                        >
-                          <td className="px-3 py-1">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              disabled={a.state === "settled" || i > 0}
-                              onChange={() => toggleManual(a.adjustment_id)}
-                              className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)] disabled:opacity-50"
-                              title={
-                                i > 0
-                                  ? "All units of this manual line confirm together"
-                                  : undefined
-                              }
-                            />
-                          </td>
-                          <td className="px-3 py-1 text-[var(--wms-muted)]">—</td>
-                          <td className="px-3 py-1 text-[var(--wms-muted)]">
-                            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider text-amber-300">
-                              Manual
-                            </span>
-                          </td>
-                          <td className="px-3 py-1">
-                            <StatusPill status={status} />
-                          </td>
-                          <td className="px-3 py-1 text-right">
-                            <button
-                              type="button"
-                              disabled
-                              className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] opacity-40"
-                              title="Manual lines have no EPC to reprint"
-                            >
-                              <Printer className="h-3 w-3" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }),
-                  )}
+                  {g.manual.map((a) => {
+                    const settled = a.state === "settled";
+                    const confirmed = settled || confirmedAdjustmentIds.has(a.adjustment_id);
+                    const status: "pending" | "checked" | "received" = settled
+                      ? "received"
+                      : confirmed
+                        ? "checked"
+                        : "pending";
+                    return (
+                      <tr
+                        key={a.adjustment_id}
+                        className="hover:bg-[var(--wms-surface-elevated)]/40"
+                      >
+                        {/* Received cell: 3-digit numeric input. Any positive value
+                            confirms the line (settles a.qty units on the backend;
+                            partial settle is not yet supported). Empty/0 = pending. */}
+                        <td className="px-3 py-1">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={3}
+                            disabled={settled}
+                            value={settled ? String(a.qty) : confirmed ? String(a.qty) : ""}
+                            onChange={(e) => {
+                              const cleaned = e.target.value.replace(/\D/g, "").slice(0, 3);
+                              const n = cleaned === "" ? 0 : Number(cleaned);
+                              const isConfirmed = confirmedAdjustmentIds.has(a.adjustment_id);
+                              if (n > 0 && !isConfirmed) toggleManual(a.adjustment_id);
+                              else if (n === 0 && isConfirmed) toggleManual(a.adjustment_id);
+                            }}
+                            placeholder={`/ ${a.qty}`}
+                            title={`Sent ${a.qty} unit${a.qty === 1 ? "" : "s"} — type the received count`}
+                            className="w-14 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 text-center tabular-nums text-[0.7rem] text-[var(--wms-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+                            aria-label={`Received qty for manual line (sent ${a.qty})`}
+                          />
+                        </td>
+                        <td className="px-3 py-1 tabular-nums text-[var(--wms-muted)]">
+                          Sent {a.qty}
+                        </td>
+                        <td className="px-3 py-1 text-[var(--wms-muted)]">
+                          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider text-amber-300">
+                            Manual
+                          </span>
+                        </td>
+                        <td className="px-3 py-1">
+                          <StatusPill status={status} />
+                        </td>
+                        <td className="px-3 py-1 text-right">
+                          <button
+                            type="button"
+                            disabled
+                            className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] opacity-40"
+                            title="Manual lines have no EPC to reprint"
+                          >
+                            <Printer className="h-3 w-3" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

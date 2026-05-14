@@ -20,6 +20,10 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();
+  /* When set (Transfer Out's Non-RFID search), restrict to matrices flagged
+     is_manual_only and never suggest RFID SKUs. RFID items are picked by
+     scanning, not by typing in the non-RFID search box. */
+  const manualOnly = searchParams.get("manualOnly") === "1";
   if (q.length < 1) {
     return NextResponse.json({ rows: [] });
   }
@@ -32,6 +36,9 @@ export async function GET(req: Request) {
   const like = `%${q.replace(/[\\%_]/g, (s) => `\\${s}`)}%`;
 
   try {
+    const manualClause = manualOnly
+      ? "AND COALESCE(m.is_manual_only, FALSE) = TRUE AND cs.archived = FALSE"
+      : "";
     const r = await pool.query<{
       custom_sku_id: string;
       sku: string;
@@ -60,14 +67,15 @@ export async function GET(req: Request) {
        FROM custom_skus cs
        INNER JOIN matrices m ON m.id = cs.matrix_id
        WHERE
-           m.description ILIKE $1 ESCAPE '\\'
+           (m.description ILIKE $1 ESCAPE '\\'
            OR cs.sku ILIKE $1 ESCAPE '\\'
            OR cs.upc ILIKE $1 ESCAPE '\\'
            OR m.upc ILIKE $1 ESCAPE '\\'
            OR m.vendor ILIKE $1 ESCAPE '\\'
            OR cs.color_code ILIKE $1 ESCAPE '\\'
            OR cs.size ILIKE $1 ESCAPE '\\'
-           OR cs.ls_system_id::text = $2
+           OR cs.ls_system_id::text = $2)
+           ${manualClause}
        ORDER BY
          cs.archived ASC,
          CASE WHEN cs.sku ILIKE $1 ESCAPE '\\' THEN 0 ELSE 1 END,
