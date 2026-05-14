@@ -22,12 +22,22 @@ type Ctx = { params: Promise<{ id: string }> };
  * Live evidence 2026-05-12: 1,005 of 1,010 "missing" EPCs were actually
  * seen by readers during the count.
  *
- * Every GET /sessions/[id] (SWR-polled every 5 s) reconciles by pulling
- * any cdm_reads EPCs since started_at that aren't in scanned_epcs yet,
- * running them through the same ingest pipeline (formula → items upsert
- * → audit), and merging into scanned_epcs. Idempotent — no-op when SSE
- * is keeping up.
+ * Every GET /sessions/[id] (SWR-polled) reconciles by pulling any
+ * cdm_reads EPCs that aren't in scanned_epcs yet. To keep the GET cheap
+ * under SWR polling we do two things:
+ *
+ *   1. Throttle: at most one backfill per session every BACKFILL_MIN_GAP_MS.
+ *   2. Window: after the first backfill, only scan cdm_reads from the last
+ *      BACKFILL_WINDOW_MS — anything older was caught by the previous pass
+ *      (or was outside this session's window).
+ *
+ * Idempotent — no-op when SSE is keeping up. Cache is per-process; a Node
+ * restart safely falls back to a full first-pass scan.
  */
+const BACKFILL_MIN_GAP_MS = 20_000; // skip if we ran within the last 20s
+const BACKFILL_WINDOW_MS = 5 * 60_000; // sliding 5-minute scan after first pass
+const backfillState = new Map<string, { lastAt: number; firstDone: boolean }>();
+
 async function backfillFromCdmReads(
   client: import("pg").PoolClient,
   tenantId: string,
@@ -36,7 +46,24 @@ async function backfillFromCdmReads(
   userId: string | null,
 ): Promise<void> {
   if (detail.status === "committed" || detail.status === "canceled") return;
-  const startedAtIso = new Date(detail.started_at).toISOString();
+
+  const now = Date.now();
+  const state = backfillState.get(sessionId);
+  if (state && now - state.lastAt < BACKFILL_MIN_GAP_MS) {
+    /* Too soon since last backfill — skip. SSE is the primary path; this
+       reconciler only needs to catch occasional drops. */
+    return;
+  }
+
+  /* First call for this session in this Node process scans from session
+     start (catches everything missed before the server came up). Subsequent
+     calls use a sliding 5-min window — older drops were caught last time. */
+  const startedAtMs = new Date(detail.started_at).getTime();
+  const windowStartMs = state?.firstDone
+    ? Math.max(startedAtMs, now - BACKFILL_WINDOW_MS)
+    : startedAtMs;
+  const sinceIso = new Date(windowStartMs).toISOString();
+
   const r = await client.query<{ epc: string }>(
     `SELECT DISTINCT upper(cr.epc_hex) AS epc
        FROM cdm_reads cr
@@ -45,8 +72,12 @@ async function backfillFromCdmReads(
         AND d.location_id = $2::uuid
         AND cr.read_at >= $3::timestamptz
         AND cr.passes_formula = true`,
-    [tenantId, detail.location_id, startedAtIso],
+    [tenantId, detail.location_id, sinceIso],
   );
+
+  /* Record that this pass ran (even if nothing was missed) so subsequent
+     polls within MIN_GAP_MS are skipped. */
+  backfillState.set(sessionId, { lastAt: now, firstDone: true });
   if (r.rowCount === 0) return;
   const haveSet = new Set(detail.scanned_epcs.map((e) => e.toUpperCase()));
   const missed = r.rows.map((row) => row.epc).filter((epc) => !haveSet.has(epc));

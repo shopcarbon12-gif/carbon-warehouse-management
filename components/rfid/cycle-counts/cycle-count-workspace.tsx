@@ -503,7 +503,11 @@ function ActiveSessionView({
     session: SessionDetail;
     variance: Variance;
   }>(`/api/rfid/cycle-counts/sessions/${sessionId}`, fetcher, {
-    refreshInterval: 5_000,
+    /* Slowed from 5s → 10s. The GET handler reconciles SSE-dropped reads
+       from cdm_reads every poll, which is the heavy part. 10s plus the
+       server-side 20s backfill throttle keeps the session view responsive
+       without hammering the DB. */
+    refreshInterval: 10_000,
   });
 
   const detail = data?.session;

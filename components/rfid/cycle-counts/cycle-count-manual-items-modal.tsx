@@ -81,18 +81,33 @@ export function CycleCountManualItemsModal({
   const [edits, setEdits] = useState<Record<string, number | null | undefined>>({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
   const tableRef = useRef<HTMLTableElement>(null);
   const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
 
-  const rowsForRender = useMemo(
-    () =>
-      sessionRows.map((r) => {
-        const edit = edits[r.custom_sku_id];
-        const effectiveCount = edit === undefined ? r.count_qty : edit;
-        return { ...r, count_qty: effectiveCount };
-      }),
-    [sessionRows, edits],
-  );
+  /* Apply edits first, THEN filter — so the operator's typed counts persist
+     across filter changes (rows just hide/show, the buffer keeps them). */
+  const rowsForRender = useMemo(() => {
+    const enriched = sessionRows.map((r) => {
+      const edit = edits[r.custom_sku_id];
+      const effectiveCount = edit === undefined ? r.count_qty : edit;
+      return { ...r, count_qty: effectiveCount };
+    });
+    const q = filter.trim().toLowerCase();
+    if (!q) return enriched;
+    return enriched.filter((r) => {
+      const hay = [
+        r.sku,
+        r.upc ?? "",
+        r.name ?? "",
+        r.color ?? "",
+        r.size ?? "",
+        r.matrix_ls_system_id ?? "",
+        r.sku_ls_system_id ?? "",
+      ].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }, [sessionRows, edits, filter]);
 
   const dirtyEntries = useMemo(() => {
     const out: { customSkuId: string; countQty: number | null }[] = [];
@@ -220,8 +235,19 @@ export function CycleCountManualItemsModal({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 px-5 py-3">
+            <input
+              type="search"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter by SKU, UPC, name, color, size…"
+              className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)]"
+            />
             <span className="font-mono text-xs text-[var(--wms-muted)]">
-              {data ? `${data.count} manual SKU${data.count === 1 ? "" : "s"} at this location` : ""}
+              {data
+                ? filter.trim()
+                  ? `${rowsForRender.length} / ${data.count} match`
+                  : `${data.count} manual SKU${data.count === 1 ? "" : "s"} at this location`
+                : ""}
               {dirtyEntries.length > 0 ? ` · ${dirtyEntries.length} unsaved` : ""}
             </span>
             <div className="ml-auto flex gap-2">
@@ -250,6 +276,10 @@ export function CycleCountManualItemsModal({
               <div className="px-5 py-12 text-center font-mono text-sm text-[var(--wms-muted)]">
                 No manual SKUs at this location. Mark UPCs as manual in Catalog → More → Manual Items.
               </div>
+            ) : rowsForRender.length === 0 ? (
+              <div className="px-5 py-12 text-center font-mono text-sm text-[var(--wms-muted)]">
+                No SKUs match &ldquo;{filter}&rdquo;.
+              </div>
             ) : (
               <table
                 ref={tableRef}
@@ -260,8 +290,8 @@ export function CycleCountManualItemsModal({
                   <tr>
                     {[
                       { label: "SKU" },
-                      { label: "Description" },
                       { label: "UPC" },
+                      { label: "Description" },
                       { label: "Color" },
                       { label: "Size" },
                       { label: "Expected qty", align: "center" },
@@ -294,11 +324,11 @@ export function CycleCountManualItemsModal({
                         } hover:bg-[var(--wms-surface-elevated)]/40`}
                       >
                         <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-fg)]`}>{r.sku}</td>
-                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-fg)]`} title={r.name}>
-                          {r.name}
-                        </td>
                         <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>
                           {r.upc ?? "—"}
+                        </td>
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-fg)]`} title={r.name}>
+                          {r.name}
                         </td>
                         <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>
                           {r.color?.trim() || "—"}
