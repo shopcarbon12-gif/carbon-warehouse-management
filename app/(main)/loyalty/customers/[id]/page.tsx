@@ -74,10 +74,12 @@ export default async function CustomerDetail({
                 pc.birthday::text, pc.shopify_customer_gid, pc.shopify_linked_at::text,
                 pc.created_at::text,
                 pc.created_via, pc.created_at_geo,
-                pl.name AS pos_location_name,
+                -- pos_locations has no name; resolve through WMS locations
+                l.name AS pos_location_name,
                 u.email AS created_by_email
            FROM pos_customers pc
            LEFT JOIN pos_locations pl ON pl.id = pc.pos_location_id
+           LEFT JOIN locations     l  ON l.id  = pl.wms_location_id
            LEFT JOIN users         u  ON u.id  = pc.created_by_user_id
           WHERE pc.id = $1`,
         [customerId],

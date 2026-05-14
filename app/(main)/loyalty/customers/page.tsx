@@ -100,11 +100,14 @@ export default async function LoyaltyMembers({
                 pc.created_at,
                 pc.created_via,
                 pc.created_at_geo,
-                pl.name                       AS pos_location_name,
+                -- pos_locations has no name column; resolve via the
+                -- WMS-owned locations table
+                l.name                        AS pos_location_name,
                 u.email                       AS created_by_email
            FROM pos_customers pc
            LEFT JOIN loyalty_balance lb ON lb.customer_id = pc.id
            LEFT JOIN pos_locations  pl  ON pl.id = pc.pos_location_id
+           LEFT JOIN locations      l   ON l.id  = pl.wms_location_id
            LEFT JOIN users          u   ON u.id  = pc.created_by_user_id
            ${whereSql}
           ORDER BY pc.created_at DESC, pc.id DESC
