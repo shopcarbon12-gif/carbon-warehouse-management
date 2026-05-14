@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 
-export type RoleScope = "wms" | "pos";
+export type RoleScope = "wms" | "pos" | "rewards";
 
 export type UserRoleRow = {
   id: number;

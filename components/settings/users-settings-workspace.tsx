@@ -12,6 +12,7 @@ import {
   setSectionMode,
 } from "@/lib/settings/permission-catalog";
 import { PosAccessPanel } from "./pos-access-panel";
+import { RewardsAccessPanel } from "./rewards-access-panel";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -34,10 +35,12 @@ function hydratePermissions(raw: unknown): PermissionsMap {
   return out;
 }
 
-type Tab = "users" | "roles" | "pos";
+type TopTab = "wms" | "pos" | "rewards";
+type WmsSubTab = "users" | "roles";
 
 export function UsersSettingsWorkspace() {
-  const [tab, setTab] = useState<Tab>("users");
+  const [topTab, setTopTab] = useState<TopTab>("wms");
+  const [tab, setTab] = useState<WmsSubTab>("users");
   const [bulkOpen, setBulkOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [addUserOpen, setAddUserOpen] = useState(false);
@@ -152,52 +155,85 @@ export function UsersSettingsWorkspace() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [bulkOpen]);
 
+  const wmsTabBtnCls = (active: boolean) =>
+    `rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
+      active
+        ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
+        : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+    }`;
+
+  const topTabBtnCls = (active: boolean) =>
+    `rounded-md px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-widest ${
+      active
+        ? "border border-[var(--wms-accent)]/55 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] text-[var(--wms-accent)]"
+        : "border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+    }`;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 border-b border-[var(--wms-border)] pb-2" role="tablist">
+      {/* Top-level scope picker: WMS / POS / REWARDS */}
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Access scope">
         <button
           type="button"
           role="tab"
-          aria-selected={tab === "users"}
-          onClick={() => setTab("users")}
-          className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
-            tab === "users"
-              ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
-              : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
-          }`}
+          aria-selected={topTab === "wms"}
+          onClick={() => setTopTab("wms")}
+          className={topTabBtnCls(topTab === "wms")}
         >
-          Users
+          WMS
         </button>
         <button
           type="button"
           role="tab"
-          aria-selected={tab === "roles"}
-          onClick={() => setTab("roles")}
-          className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
-            tab === "roles"
-              ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
-              : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
-          }`}
-        >
-          User roles
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "pos"}
-          onClick={() => setTab("pos")}
-          className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide ${
-            tab === "pos"
-              ? "border border-b-0 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-teal-300/90"
-              : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
-          }`}
+          aria-selected={topTab === "pos"}
+          onClick={() => setTopTab("pos")}
+          className={topTabBtnCls(topTab === "pos")}
         >
           POS
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={topTab === "rewards"}
+          onClick={() => setTopTab("rewards")}
+          className={topTabBtnCls(topTab === "rewards")}
+        >
+          Rewards
+        </button>
       </div>
 
-      {tab === "pos" ? (
+      {/* WMS sub-tabs: Users / User roles (only visible when WMS is the active scope) */}
+      {topTab === "wms" ? (
+        <div
+          className="flex flex-wrap gap-2 border-b border-[var(--wms-border)] pb-2"
+          role="tablist"
+          aria-label="WMS access tabs"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "users"}
+            onClick={() => setTab("users")}
+            className={wmsTabBtnCls(tab === "users")}
+          >
+            Users
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "roles"}
+            onClick={() => setTab("roles")}
+            className={wmsTabBtnCls(tab === "roles")}
+          >
+            User roles
+          </button>
+        </div>
+      ) : null}
+
+      {topTab === "pos" ? (
         <PosAccessPanel />
+      ) : topTab === "rewards" ? (
+        <RewardsAccessPanel />
       ) : tab === "users" ? (
         <>
           <div className="flex flex-wrap items-center justify-end gap-2">

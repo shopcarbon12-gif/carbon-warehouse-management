@@ -15,10 +15,15 @@ export async function GET(req: Request) {
   if (denied) return denied;
   try {
     // Default to wms scope so existing callers keep working. Pass ?scope=pos
-    // for the POS roles UI, ?scope=all for both.
+    // for the POS roles UI, ?scope=rewards for the loyalty admin UI,
+    // ?scope=all for everything.
     const url = new URL(req.url);
     const raw = url.searchParams.get("scope");
-    const scope = raw === "pos" ? "pos" : raw === "all" ? undefined : "wms";
+    const scope =
+      raw === "pos" ? "pos"
+      : raw === "rewards" ? "rewards"
+      : raw === "all" ? undefined
+      : "wms";
     const rows = await listUserRoles(pool, scope);
     return NextResponse.json(rows, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
@@ -30,8 +35,11 @@ export async function GET(req: Request) {
 const postSchema = z.object({
   name: z.string().min(1).max(256),
   permissions: z.record(z.string(), z.record(z.string(), z.enum(["view", "hide"]))).optional(),
-  scope: z.enum(["wms", "pos"]).optional(),
-});
+  scope: z.enum(["wms", "pos", "rewards"]).optional(),
+}).refine(
+  (v) => !((v.scope === "pos" || v.scope === "rewards") && /warehouse/i.test(v.name)),
+  { message: "Warehouse roles aren't allowed under POS or Rewards." },
+);
 
 export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
