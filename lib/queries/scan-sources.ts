@@ -471,9 +471,13 @@ export async function reconcileCycleCountWithAddOn(
     reallyMissing.push(epc);
   }
   if (reallyMissing.length === 0) return { killed: 0 };
+  // Missing from BOTH the fixed-reader pass AND the mobile add-on pass → 'unknown'.
+  // Not tag_killed: the tag may still physically exist, just out of reader sight.
+  // 'unknown' keeps it visible to handheld antennas so a future scan can recover
+  // it. tag_killed is reserved for genuinely-destroyed tags.
   const k = await pool.query(
     `UPDATE items i
-        SET status = 'tag_killed', updated_at = now()
+        SET status = 'unknown', updated_at = now()
        FROM locations loc
       WHERE i.epc = ANY($1::text[])
         AND i.location_id = loc.id

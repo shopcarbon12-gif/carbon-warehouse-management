@@ -246,9 +246,12 @@ async function wipeOverrideReplace(
 ): Promise<number> {
   if (scannedSkus.length === 0) return 0;
 
+  // Override-replace wipe: operator said "this scan IS the truth for these
+  // SKUs, anything else is gone." Flip displaced tags to 'unknown' (not
+  // tag_killed) so handhelds can recover them if they're scanned again.
   const r = await client.query(
     `UPDATE items i
-        SET status = 'tag_killed',
+        SET status = 'unknown',
             last_seen_at = now()
        FROM custom_skus cs, locations l
       WHERE i.custom_sku_id = cs.id

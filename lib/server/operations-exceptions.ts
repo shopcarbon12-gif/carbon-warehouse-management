@@ -157,9 +157,12 @@ export async function resolveRfidException(
 
   let updatedItems = 0;
   if (resolution === "mark_missing" && epcs.length > 0) {
+    // Operator-marked "missing" on an exception → 'unknown'. Tag may still
+    // exist physically; keeping it visible to handheld antennas lets a future
+    // scan recover it. tag_killed is reserved for tags known to be destroyed.
     const u = await client.query(
       `UPDATE items i
-       SET status = 'tag_killed'
+       SET status = 'unknown'
        FROM locations l
        WHERE i.epc = ANY($1::text[])
          AND i.location_id = l.id
