@@ -61,6 +61,8 @@ export async function GET(req: Request) {
     const sortDir = searchParams.get("sortDir")?.trim() ?? "";
     const showArchivedRaw = searchParams.get("showArchived")?.trim().toLowerCase() ?? "";
     const showArchived = showArchivedRaw === "1" || showArchivedRaw === "true";
+    const manualOnlyRaw = searchParams.get("manualOnly")?.trim().toLowerCase() ?? "";
+    const manualOnly = manualOnlyRaw === "1" || manualOnlyRaw === "true";
 
     try {
       const result = await listCatalogGrid(pool, {
@@ -75,6 +77,7 @@ export async function GET(req: Request) {
         sortBy,
         sortDir,
         showArchived,
+        manualOnly,
       });
       return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
     } catch (e) {

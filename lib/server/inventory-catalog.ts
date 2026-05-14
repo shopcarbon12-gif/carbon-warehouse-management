@@ -49,6 +49,7 @@ function buildWhere(
   systemId: string,
   locationId: string,
   showArchived: boolean,
+  manualOnly: boolean,
 ): { sql: string; params: unknown[] } {
   const parts: string[] = ["1=1"];
   const params: unknown[] = [];
@@ -56,6 +57,13 @@ function buildWhere(
 
   if (!showArchived) {
     parts.push(`cs.archived = FALSE`);
+  }
+
+  /* MANUAL ITEMS toolbar toggle — restricts the grid to matrices flagged
+     is_manual_only = TRUE. Sister concept to showArchived; both narrow
+     the visible rows without changing any other behavior. */
+  if (manualOnly) {
+    parts.push(`COALESCE(m.is_manual_only, FALSE) = TRUE`);
   }
 
   // Exact variant-level system ID match — used by handheld EPC lookup
@@ -174,17 +182,18 @@ export async function listCatalogGrid(
     sortBy?: string;
     sortDir?: string;
     showArchived?: boolean;
+    manualOnly?: boolean;
   },
 ): Promise<CatalogGridResult> {
   const {
     page, limit, q, brand, category, vendor, locationId,
-    systemId = "", sortBy = "", sortDir = "", showArchived = false,
+    systemId = "", sortBy = "", sortDir = "", showArchived = false, manualOnly = false,
   } = options;
   const safeLimit = Math.min(5000, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
 
   const { sql: whereSql, params: whereParams } = buildWhere(
-    q, brand, category, vendor, systemId, locationId, showArchived,
+    q, brand, category, vendor, systemId, locationId, showArchived, manualOnly,
   );
 
   const countR = await pool.query<{ c: string }>(

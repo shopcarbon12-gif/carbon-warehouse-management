@@ -38,6 +38,7 @@ function buildGridUrl(
   sortBy: string,
   sortDir: SortDir,
   showArchived: boolean,
+  manualOnly: boolean,
   limit: number,
 ): string {
   const p = new URLSearchParams({
@@ -48,6 +49,7 @@ function buildGridUrl(
   if (q.trim()) p.set("q", q.trim());
   if (sortBy) { p.set("sortBy", sortBy); p.set("sortDir", sortDir); }
   if (showArchived) p.set("showArchived", "1");
+  if (manualOnly) p.set("manualOnly", "1");
   return `/api/inventory/catalog?${p}`;
 }
 
@@ -185,6 +187,7 @@ export function CatalogWorkspace({
   const [importErr, setImportErr] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [manualOnly, setManualOnly] = useState(false);
   const [pageSizeChoice, setPageSizeChoice] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(
     DEFAULT_PAGE_SIZE,
   );
@@ -210,13 +213,17 @@ export function CatalogWorkspace({
   }, [sortBy, sortDir]);
 
   const url = useMemo(
-    () => buildGridUrl(page, debounced, sortBy, sortDir, showArchived, effectivePageSize),
-    [page, debounced, sortBy, sortDir, showArchived, effectivePageSize],
+    () => buildGridUrl(page, debounced, sortBy, sortDir, showArchived, manualOnly, effectivePageSize),
+    [page, debounced, sortBy, sortDir, showArchived, manualOnly, effectivePageSize],
   );
 
   useEffect(() => {
     setPage(1);
   }, [showArchived]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [manualOnly]);
 
   useEffect(() => {
     setPage(1);
@@ -481,16 +488,31 @@ export function CatalogWorkspace({
             </button>
             <button
               type="button"
-              onClick={() => setManualItemsOpen(true)}
-              className="rounded-md border px-3 py-2 font-mono text-xs font-semibold tracking-widest shadow-sm hover:opacity-90"
-              style={{
-                borderColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 45%, transparent)",
-                backgroundColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 18%, var(--wms-surface-elevated))",
-                color: "oklch(82.8% 0.111 230.318)",
-              }}
-              title="Manual (non-RFID) items — manage which UPCs are tracked manually"
+              aria-pressed={manualOnly}
+              onClick={() => setManualOnly((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-xs font-semibold tracking-widest shadow-sm hover:opacity-90 ${
+                manualOnly ? "" : "transition-colors"
+              }`}
+              style={
+                manualOnly
+                  ? {
+                      borderColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 55%, transparent)",
+                      backgroundColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 22%, var(--wms-surface-elevated))",
+                      color: "oklch(82.8% 0.111 230.318)",
+                    }
+                  : {
+                      borderColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 45%, transparent)",
+                      backgroundColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 12%, var(--wms-surface-elevated))",
+                      color: "oklch(82.8% 0.111 230.318)",
+                    }
+              }
+              title={
+                manualOnly
+                  ? "Showing manual (non-RFID) items only — click to show all"
+                  : "Show only manual (non-RFID) items"
+              }
             >
-              MANUAL ITEMS
+              MANUAL ITEMS{manualOnly ? ": ON" : ""}
             </button>
 
             <div className="relative">
