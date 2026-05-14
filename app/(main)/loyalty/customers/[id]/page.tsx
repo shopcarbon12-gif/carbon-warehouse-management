@@ -160,16 +160,16 @@ export default async function CustomerDetail({
     redirect(`/loyalty/customers/${customerId}`);
   }
 
-  async function adjustAction(formData: FormData) {
+  async function deductAction(formData: FormData) {
     "use server";
     const s = await getSession();
     if (!s?.sub) return;
-    const delta = Number(formData.get("points") ?? 0);
+    const pts = Number(formData.get("points") ?? 0);
     const note = String(formData.get("note") ?? "").trim().slice(0, 60);
-    if (!Number.isFinite(delta) || delta === 0) return;
+    if (!Number.isFinite(pts) || pts <= 0) return;
     await loyaltyPost("/api/admin/adjust", {
       customer_id: customerId,
-      delta_points: Math.trunc(delta),
+      delta_points: -Math.floor(pts),
       reason_text: note || "manual",
       acted_by_user_id: s.sub,
     });
@@ -299,10 +299,10 @@ export default async function CustomerDetail({
 
         <aside className="space-y-4">
           <div className="border border-border bg-card p-5">
-            <h2 className="text-base font-bold mb-2">＋ Reward points</h2>
+            <h2 className="text-base font-bold mb-2">＋ Rewards points</h2>
             <p className="text-xs text-muted-foreground mb-3">
-              Manager override · adds points directly. Posts through the loyalty
-              service so it&rsquo;s idempotent + auditable.
+              Manager override · adds points to this customer. Posts through
+              the loyalty service so it&rsquo;s idempotent + auditable.
             </p>
             {!userId ? (
               <p className="text-sm text-rose-700">Not signed in.</p>
@@ -341,24 +341,24 @@ export default async function CustomerDetail({
           </div>
 
           <div className="border border-border bg-card p-5">
-            <h2 className="text-base font-bold mb-2">⇄ Adjust points</h2>
+            <h2 className="text-base font-bold mb-2">− Rewards points</h2>
             <p className="text-xs text-muted-foreground mb-3">
-              Manager override · positive adds, negative deducts.
+              Manager override · deducts points from this customer.
             </p>
             {!userId ? (
               <p className="text-sm text-rose-700">Not signed in.</p>
             ) : (
-              <form action={adjustAction} className="space-y-3">
+              <form action={deductAction} className="space-y-3">
                 <label className="flex flex-col gap-1">
-                  <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Points (±)</span>
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Points to deduct</span>
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="-?[0-9]+"
+                    type="number"
+                    step="1"
+                    min="1"
                     name="points"
                     required
                     className="border border-border bg-background px-3 py-2"
-                    placeholder="-100"
+                    placeholder="100"
                   />
                 </label>
                 <label className="flex flex-col gap-1">
@@ -375,7 +375,7 @@ export default async function CustomerDetail({
                   type="submit"
                   className="w-full border border-border bg-card hover:bg-muted text-foreground px-4 py-2 text-sm font-bold"
                 >
-                  Apply adjustment
+                  Deduct points
                 </button>
               </form>
             )}
