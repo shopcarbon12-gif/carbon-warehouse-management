@@ -139,7 +139,7 @@ const DEFAULT_COL_WIDTHS: (number | null)[] = [
   100,  // retail price (fits header + "$XXX.XX")
   80,   // bin
   90,   // qty (epc) — centered numerals
-  70,   // rfid
+  90,   // rfid (fits 78px badge + table padding)
 ];
 
 function useColResize(tableRef: React.RefObject<HTMLTableElement | null>) {
@@ -749,21 +749,23 @@ export function CatalogWorkspace({
                           <button
                             type="button"
                             onClick={() => setHistoryForSku(r.custom_sku_id)}
-                            className="inline-flex h-[22px] w-[64px] items-center justify-center rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 text-[var(--wms-accent)] hover:opacity-90 dark:text-[var(--wms-accent)]"
+                            className="inline-flex h-[22px] w-[78px] items-center justify-center gap-1 rounded border border-sky-400/45 bg-sky-400/15 px-2 text-[0.6rem] font-medium tracking-wide text-sky-400 hover:opacity-90"
                             title="Manual (non-RFID) item — view qty history"
                             aria-label="Manual item — view qty history"
                           >
-                            <Barcode className="h-4 w-4" />
+                            <Barcode className="h-3.5 w-3.5" />
+                            Manual
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => setModalSku(r)}
-                            className="inline-flex h-[22px] w-[64px] items-center justify-center rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 text-[var(--wms-accent)] hover:opacity-90 dark:text-[var(--wms-accent)]"
+                            className="inline-flex h-[22px] w-[78px] items-center justify-center gap-1 rounded border border-sky-400/45 bg-sky-400/15 px-2 text-[0.6rem] font-medium tracking-wide text-sky-400 hover:opacity-90"
                             title="RFID item — view EPCs"
                             aria-label="RFID item — view EPCs"
                           >
-                            <Radio className="h-4 w-4" />
+                            <Radio className="h-3.5 w-3.5" />
+                            EPCs
                           </button>
                         )}
                       </td>
