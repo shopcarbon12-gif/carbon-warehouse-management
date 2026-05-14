@@ -18,7 +18,7 @@ import { Upload } from "lucide-react";
  * source location chosen at upload time.
  *
  * No balance migration here — that's a separate workflow on
- * loyalty.shopcarbon.com/admin/customers/import which writes ledger
+ * rewards.shopcarbon.com/admin/customers/import which writes ledger
  * rows. WMS only writes customer records.
  */
 export default async function CustomerImportPage({

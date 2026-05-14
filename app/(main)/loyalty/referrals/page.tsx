@@ -4,7 +4,7 @@ import { LoyaltyReferralsTable } from "@/components/loyalty/referrals-table";
 
 /**
  * WMS → Loyalty → Referrals. Read-only — full edits are at
- * loyalty.shopcarbon.com/admin/referrals.
+ * rewards.shopcarbon.com/admin/referrals.
  */
 type Settings = {
   referral_reward_points: number;
@@ -84,8 +84,8 @@ export default async function LoyaltyReferrals() {
         <h1 className="text-2xl font-bold mt-1">Referrals</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Read-only summary. Edit rules at{" "}
-          <a className="underline" href="https://loyalty.shopcarbon.com/admin/referrals" target="_blank" rel="noreferrer">
-            loyalty.shopcarbon.com/admin/referrals ↗
+          <a className="underline" href="https://rewards.shopcarbon.com/admin/referrals" target="_blank" rel="noreferrer">
+            rewards.shopcarbon.com/admin/referrals ↗
           </a>
           .
         </p>

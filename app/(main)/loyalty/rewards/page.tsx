@@ -46,8 +46,8 @@ export default async function RewardsPage() {
         <h1 className="text-2xl font-bold mt-1">Rewards</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Read-only here. Edit at{" "}
-          <a className="underline" href="https://loyalty.shopcarbon.com/admin/settings" target="_blank" rel="noreferrer">
-            loyalty.shopcarbon.com/admin/settings
+          <a className="underline" href="https://rewards.shopcarbon.com/admin/settings" target="_blank" rel="noreferrer">
+            rewards.shopcarbon.com/admin/settings
           </a>.
         </p>
       </header>

@@ -4,11 +4,11 @@ import { Star, Users, TrendingUp, Activity } from "lucide-react";
 
 /**
  * Loyalty → Overview. Top-level dashboard mirroring what
- * loyalty.shopcarbon.com/admin shows, but rendered inside the WMS shell
+ * rewards.shopcarbon.com/admin shows, but rendered inside the WMS shell
  * so back-office staff don't context-switch.
  *
  * All ledger reads come from the SHARED Postgres directly — WMS doesn't
- * have to traverse the loyalty.shopcarbon.com HTTP API just to display
+ * have to traverse the rewards.shopcarbon.com HTTP API just to display
  * numbers. Writes (manual adjustments) DO go through the API so the
  * idempotency table catches double-clicks.
  */
@@ -85,7 +85,7 @@ export default async function LoyaltyOverview() {
         <h1 className="text-2xl font-bold mt-1">Overview</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Live program data from the shared Postgres ledger. All write
-          operations route through <code>loyalty.shopcarbon.com</code>.
+          operations route through <code>rewards.shopcarbon.com</code>.
         </p>
       </header>
 
@@ -113,8 +113,8 @@ export default async function LoyaltyOverview() {
           </ul>
           <p className="text-xs text-muted-foreground mt-3">
             Edit at{" "}
-            <a className="underline" href="https://loyalty.shopcarbon.com/admin/settings">
-              loyalty.shopcarbon.com/admin/settings
+            <a className="underline" href="https://rewards.shopcarbon.com/admin/settings">
+              rewards.shopcarbon.com/admin/settings
             </a>
             .
           </p>
@@ -136,7 +136,7 @@ export default async function LoyaltyOverview() {
           Recent ledger →
         </Link>
         <a
-          href="https://loyalty.shopcarbon.com/admin"
+          href="https://rewards.shopcarbon.com/admin"
           target="_blank"
           rel="noreferrer"
           className="px-4 py-2 border border-border bg-card hover:bg-muted text-sm font-semibold"

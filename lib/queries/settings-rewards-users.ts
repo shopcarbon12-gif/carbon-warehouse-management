@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import type { Pool } from "pg";
 
 /**
- * Rewards (loyalty.shopcarbon.com) credentials manager.
+ * Rewards (rewards.shopcarbon.com) credentials manager.
  *
  * Mirrors the shape of settings-pos-users.ts but simpler — rewards has no
  * PIN concept and no per-location scoping. A "rewards user" is any users row

@@ -1,11 +1,11 @@
 /**
- * Server-side HTTP client for loyalty.shopcarbon.com.
+ * Server-side HTTP client for rewards.shopcarbon.com.
  *
  * Used by the WMS Loyalty pages to fetch balances, ledger entries, and
  * to post manual adjustments. Uses LOYALTY_API_KEY (same value as the
  * loyalty service and Carbon-POS).
  */
-const BASE = process.env.LOYALTY_API_BASE_URL?.trim() || "https://loyalty.shopcarbon.com";
+const BASE = process.env.LOYALTY_API_BASE_URL?.trim() || "https://rewards.shopcarbon.com";
 const KEY = process.env.LOYALTY_API_KEY?.trim() || "";
 
 export type LoyaltyBalance = {

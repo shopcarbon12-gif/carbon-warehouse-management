@@ -3,7 +3,7 @@ import { Layers } from "lucide-react";
 
 /**
  * WMS → Loyalty → Tiers. Read-only mirror of the tier program — edits
- * happen at loyalty.shopcarbon.com/admin/tiers so the loyalty service
+ * happen at rewards.shopcarbon.com/admin/tiers so the loyalty service
  * is the system of record.
  */
 type TierRow = {
@@ -73,8 +73,8 @@ export default async function LoyaltyTiers() {
         <h1 className="text-2xl font-bold mt-1">Tier program</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Read-only view. Edit at{" "}
-          <a className="underline" href="https://loyalty.shopcarbon.com/admin/tiers" target="_blank" rel="noreferrer">
-            loyalty.shopcarbon.com/admin/tiers ↗
+          <a className="underline" href="https://rewards.shopcarbon.com/admin/tiers" target="_blank" rel="noreferrer">
+            rewards.shopcarbon.com/admin/tiers ↗
           </a>
           .
         </p>

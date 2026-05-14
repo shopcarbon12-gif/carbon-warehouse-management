@@ -11,7 +11,7 @@ const REASONS = [
 ] as const;
 
 /**
- * Loyalty → Ledger. Mirrors loyalty.shopcarbon.com/admin/ledger but
+ * Loyalty → Ledger. Mirrors rewards.shopcarbon.com/admin/ledger but
  * inside the WMS shell. Filterable by reason, paged.
  */
 export default async function LedgerPage({

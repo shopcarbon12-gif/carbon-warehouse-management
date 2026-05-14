@@ -9,7 +9,7 @@ import { AlertTriangle, UserSearch } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 /**
- * Loyalty → Customer detail. Mirrors loyalty.shopcarbon.com/admin/customers/[id]:
+ * Loyalty → Customer detail. Mirrors rewards.shopcarbon.com/admin/customers/[id]:
  *   - ＋ Reward points  (positive integer, optional 60-char note)
  *   - ⇄ Adjust points  (signed integer, optional 60-char note)
  * Both write reason='manual', source='admin' via the loyalty service's
@@ -385,7 +385,7 @@ export default async function CustomerDetail({
             <h2 className="text-base font-bold mb-2">Quick links</h2>
             <ul className="text-sm space-y-1">
               <li>
-                <a className="underline" href={`https://loyalty.shopcarbon.com/admin/ledger?customer_id=${customerId}`} target="_blank" rel="noreferrer">
+                <a className="underline" href={`https://rewards.shopcarbon.com/admin/ledger?customer_id=${customerId}`} target="_blank" rel="noreferrer">
                   Loyalty admin ledger ↗
                 </a>
               </li>

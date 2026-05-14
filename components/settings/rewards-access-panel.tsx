@@ -20,7 +20,7 @@ type SubTab = "users" | "roles";
  * REWARDS sub-section of the Users & Roles page.
  *
  * Mirrors PosAccessPanel structure: two sub-tabs, "Rewards users" and
- * "Rewards roles". Credentials apply to loyalty.shopcarbon.com (Carbon-Loyalty
+ * "Rewards roles". Credentials apply to rewards.shopcarbon.com (Carbon-Loyalty
  * shares the WMS Postgres). Roles are restricted to "Super Admin" and
  * "Manager" — no Warehouse role here, the API rejects it on POST.
  */
@@ -106,7 +106,7 @@ function RewardsUsersTab() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
           Credentials manager for{" "}
-          <span className="text-[var(--wms-fg)]">loyalty.shopcarbon.com</span>. Roles are
+          <span className="text-[var(--wms-fg)]">rewards.shopcarbon.com</span>. Roles are
           restricted to Super Admin and Manager.
         </p>
         <button
@@ -275,7 +275,7 @@ function RewardsUserCreateModal({
             Add rewards user
           </h3>
           <p className="mt-1 text-xs text-[var(--wms-muted)]">
-            Creates a credential for loyalty.shopcarbon.com. Independent of WMS / POS
+            Creates a credential for rewards.shopcarbon.com. Independent of WMS / POS
             passwords.
           </p>
           <div className="mt-4 grid gap-3 font-mono text-xs">

@@ -5,11 +5,11 @@
 --   - Same name+scope unique index lets each scope have its own "Super Admin"
 --     and "Manager" rows independent of the other scopes.
 --   - rewards_employees table holds the per-user state for the rewards app
---     (loyalty.shopcarbon.com). Login is by users.email + rewards_password_hash;
+--     (rewards.shopcarbon.com). Login is by users.email + rewards_password_hash;
 --     authorization comes from rewards_role_id (a user_roles row with
 --     scope='rewards'). Active=FALSE soft-disables the credential.
 --
--- Carbon-Loyalty (loyalty.shopcarbon.com) authenticates against this table —
+-- Carbon-Loyalty (rewards.shopcarbon.com) authenticates against this table —
 -- shared Postgres, same pattern Carbon-POS uses against pos_employees.
 
 ALTER TABLE user_roles DROP CONSTRAINT IF EXISTS user_roles_scope_chk;
