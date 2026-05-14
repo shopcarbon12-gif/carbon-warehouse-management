@@ -8,27 +8,23 @@ import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 /**
  * Manual (non-RFID) catalog items, managed at the matrix/UPC level.
  *
- * GET    → List of matrices flagged is_manual_only = TRUE, with per-matrix
- *          stats (sku count, summed LS on-hand, summed adjustments at the
- *          user's active location).
+ * GET    → List of matrices flagged is_manual_only = TRUE. Each row shows
+ *          UPC, item name, brand, sku_count, retail_price (MIN across
+ *          non-archived variants), bin (aggregated from any items rows
+ *          that exist for these SKUs at this location), and the TOTAL qty
+ *          summed from manual_item_qty.current_qty across every variant.
  * POST   → { matrixIds: string[] }   flips is_manual_only = TRUE
  * DELETE → { matrixIds: string[] }   flips is_manual_only = FALSE
- *
- * Matrices are tenant-scoped via the items/locations relationship; we don't
- * have a direct matrices.tenant_id column, so writes intentionally don't
- * filter by tenant. Multi-tenant isolation is enforced upstream by the
- * single-tenant deployment model used in production.
  */
 
 type ManualMatrixRow = {
   matrix_id: string;
-  matrix_ls_system_id: string | null;
   matrix_upc: string | null;
   name: string;
-  vendor: string | null;
   brand: string | null;
   sku_count: number;
-  ls_on_hand_total: number;
+  retail_price: string | null;
+  bin_location: string | null;
   qty: number;
 };
 
@@ -41,72 +37,69 @@ export async function GET(req: Request) {
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
 
+  /* qty is summed from manual_item_qty.current_qty across all non-archived
+     variants under each matrix at the user's active location. Bin is
+     aggregated from any items rows still attached (e.g. SKUs that had EPCs
+     before being flipped to manual — operator may still want to know where
+     they physically sit). Retail price = MIN(non-null) across variants. */
   const r = await pool.query<{
     matrix_id: string;
-    matrix_ls_system_id: string | null;
     matrix_upc: string | null;
     name: string;
-    vendor: string | null;
     brand: string | null;
     sku_count: string;
-    ls_on_hand_total: string | null;
+    retail_price: string | null;
+    bin_location: string | null;
+    qty: string;
   }>(
     `SELECT
        m.id::text AS matrix_id,
-       m.ls_system_id::text AS matrix_ls_system_id,
        m.upc AS matrix_upc,
        m.description AS name,
-       m.vendor,
        m.brand,
-       COUNT(cs.id)::text AS sku_count,
-       COALESCE(SUM(cs.ls_on_hand_total), 0)::text AS ls_on_hand_total
+       COUNT(DISTINCT cs.id)::text AS sku_count,
+       MIN(cs.retail_price)::text AS retail_price,
+       (
+         SELECT string_agg(DISTINCT b.code, ', ' ORDER BY b.code)
+           FROM items i
+           INNER JOIN custom_skus cs2 ON cs2.id = i.custom_sku_id
+           INNER JOIN bins b ON b.id = i.bin_id
+          WHERE cs2.matrix_id = m.id
+            AND cs2.archived = FALSE
+            AND i.location_id = $1::uuid
+            AND i.bin_id IS NOT NULL
+            AND b.archived_at IS NULL
+       ) AS bin_location,
+       COALESCE(
+         (
+           SELECT SUM(miq.current_qty)::text
+             FROM manual_item_qty miq
+             INNER JOIN custom_skus cs3 ON cs3.id = miq.custom_sku_id
+            WHERE cs3.matrix_id = m.id
+              AND cs3.archived = FALSE
+              AND miq.location_id = $1::uuid
+         ),
+         '0'
+       ) AS qty
      FROM matrices m
      LEFT JOIN custom_skus cs ON cs.matrix_id = m.id AND cs.archived = FALSE
      WHERE m.is_manual_only = TRUE
-     GROUP BY m.id, m.ls_system_id, m.upc, m.description, m.vendor, m.brand
+     GROUP BY m.id, m.upc, m.description, m.brand
      ORDER BY m.description ASC NULLS LAST, m.upc ASC NULLS LAST
      LIMIT 5000`,
+    [session.lid],
   );
 
-  // Per-matrix adjustments overlay at the user's active location.
-  const matrixIds = r.rows.map((row) => row.matrix_id);
-  const adjustmentsByMatrix = new Map<string, number>();
-  if (matrixIds.length > 0) {
-    try {
-      const adj = await pool.query<{ matrix_id: string; delta: string }>(
-        `SELECT cs.matrix_id::text AS matrix_id,
-                COALESCE(SUM(ia.qty_delta), 0)::text AS delta
-           FROM inventory_adjustments ia
-           INNER JOIN custom_skus cs ON cs.id = ia.custom_sku_id
-          WHERE cs.matrix_id = ANY($1::uuid[])
-            AND ia.location_id = $2::uuid
-            AND ia.state = 'settled'
-          GROUP BY cs.matrix_id`,
-        [matrixIds, session.lid],
-      );
-      for (const row of adj.rows) {
-        adjustmentsByMatrix.set(row.matrix_id, Number(row.delta) || 0);
-      }
-    } catch {
-      // inventory_adjustments missing/broken — keep going with zero overlay.
-    }
-  }
-
-  const rows: ManualMatrixRow[] = r.rows.map((row) => {
-    const onHand = Number(row.ls_on_hand_total ?? 0) || 0;
-    const delta = adjustmentsByMatrix.get(row.matrix_id) ?? 0;
-    return {
-      matrix_id: row.matrix_id,
-      matrix_ls_system_id: row.matrix_ls_system_id,
-      matrix_upc: row.matrix_upc,
-      name: row.name,
-      vendor: row.vendor,
-      brand: row.brand,
-      sku_count: Number(row.sku_count) || 0,
-      ls_on_hand_total: onHand,
-      qty: onHand + delta,
-    };
-  });
+  const rows: ManualMatrixRow[] = r.rows.map((row) => ({
+    matrix_id: row.matrix_id,
+    matrix_upc: row.matrix_upc,
+    name: row.name,
+    brand: row.brand,
+    sku_count: Number(row.sku_count) || 0,
+    retail_price: row.retail_price,
+    bin_location: row.bin_location,
+    qty: Number(row.qty) || 0,
+  }));
 
   return NextResponse.json(
     { rows, count: rows.length },

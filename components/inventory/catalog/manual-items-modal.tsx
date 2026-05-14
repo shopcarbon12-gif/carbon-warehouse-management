@@ -12,13 +12,12 @@ import {
 
 type ManualMatrixRow = {
   matrix_id: string;
-  matrix_ls_system_id: string | null;
   matrix_upc: string | null;
   name: string;
-  vendor: string | null;
   brand: string | null;
   sku_count: number;
-  ls_on_hand_total: number;
+  retail_price: string | null;
+  bin_location: string | null;
   qty: number;
 };
 
@@ -359,12 +358,12 @@ export function ManualItemsModal({
                   <tr>
                     {[
                       { label: "", noResize: true },
-                      { label: "System ID" },
                       { label: "UPC" },
                       { label: "Item name" },
-                      { label: "Vendor" },
                       { label: "Brand" },
                       { label: "SKUs" },
+                      { label: "Retail price" },
+                      { label: "Bin" },
                       { label: "Qty" },
                     ].map((c, i) => {
                       const w = colWidths[i];
@@ -402,9 +401,6 @@ export function ManualItemsModal({
                             aria-label={`Select ${r.matrix_upc ?? r.name}`}
                           />
                         </td>
-                        <td className={`${cellTruncate} px-3 py-2 tabular-nums text-teal-400/85`}>
-                          {r.matrix_ls_system_id ?? "—"}
-                        </td>
                         <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.matrix_upc ?? ""}>
                           {r.matrix_upc ?? "—"}
                         </td>
@@ -412,13 +408,18 @@ export function ManualItemsModal({
                           {r.name}
                         </td>
                         <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>
-                          {r.vendor ?? "—"}
-                        </td>
-                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>
                           {r.brand ?? "—"}
                         </td>
                         <td className={`${cellTruncate} px-3 py-2 tabular-nums text-[var(--wms-muted)]`}>
                           {r.sku_count}
+                        </td>
+                        <td className={`${cellTruncate} px-3 py-2 tabular-nums text-[var(--wms-fg)]`}>
+                          {r.retail_price
+                            ? new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(Number(r.retail_price))
+                            : "—"}
+                        </td>
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.bin_location ?? ""}>
+                          {r.bin_location ?? "—"}
                         </td>
                         <td className={`${cellTruncate} px-3 py-2 tabular-nums text-[var(--wms-fg)]`}>
                           {r.qty}

@@ -48,7 +48,7 @@ export async function GET(req: Request) {
        m.vendor,
        COUNT(cs.id)::text AS sku_count
      FROM matrices m
-     LEFT JOIN custom_skus cs ON cs.matrix_id = m.id AND cs.archived = FALSE
+     INNER JOIN custom_skus cs ON cs.matrix_id = m.id AND cs.archived = FALSE
      WHERE COALESCE(m.is_manual_only, FALSE) = FALSE
        AND (
          COALESCE(m.upc, '') ILIKE $1
@@ -58,6 +58,7 @@ export async function GET(req: Request) {
          OR EXISTS (
            SELECT 1 FROM custom_skus cs2
            WHERE cs2.matrix_id = m.id
+             AND cs2.archived = FALSE
              AND (
                cs2.sku ILIKE $1
                OR COALESCE(cs2.upc, '') ILIKE $1
