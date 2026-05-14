@@ -44,7 +44,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Could not create sync job" }, { status: 500 });
     }
 
-    const result = await performLightspeedCatalogSync(pool, job_id, session.tid, session.sub);
+    const result = await performLightspeedCatalogSync(
+      pool,
+      job_id,
+      session.tid,
+      session.sub,
+      session.lid,
+    );
 
     if (!result.ok) {
       return NextResponse.json(

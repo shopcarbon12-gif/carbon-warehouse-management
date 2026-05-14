@@ -6,6 +6,7 @@ import {
   getLightspeedCredentialsForSync,
 } from "@/lib/server/infrastructure-settings-table";
 import { tryFetchLightspeedCatalogProducts } from "@/lib/services/lightspeed-catalog-fetch";
+import { applyManualItemOverride, lookupUserNameForHistory } from "@/lib/server/manual-item-qty";
 
 export type { CatalogSyncMatrixPayload } from "@/lib/types/catalog-sync";
 
@@ -266,6 +267,26 @@ export async function upsertCustomSkuRow(
   );
 }
 
+async function isMatrixManualOnly(client: PoolClient, matrixId: string): Promise<boolean> {
+  const r = await client.query<{ is_manual_only: boolean }>(
+    `SELECT COALESCE(is_manual_only, FALSE) AS is_manual_only
+       FROM matrices WHERE id = $1::uuid`,
+    [matrixId],
+  );
+  return r.rows[0]?.is_manual_only === true;
+}
+
+async function lookupCustomSkuIdByLsSystemId(
+  client: PoolClient,
+  lsSystemId: number | string,
+): Promise<string | null> {
+  const r = await client.query<{ id: string }>(
+    `SELECT id::text FROM custom_skus WHERE ls_system_id = $1::bigint LIMIT 1`,
+    [String(lsSystemId)],
+  );
+  return r.rows[0]?.id ?? null;
+}
+
 export function pgErrorDetail(err: unknown): string {
   if (err && typeof err === "object" && "code" in err && "message" in err) {
     const code = String((err as { code?: string }).code ?? "");
@@ -294,8 +315,16 @@ export async function performLightspeedCatalogSync(
   jobId: string,
   tenantId: string,
   userSub: string | null,
+  /**
+   * Active location of the WMS user who triggered this sync. LS only knows
+   * one on-hand number per SKU (no per-location breakdown), so manual-item
+   * overrides apply to whichever location the operator was working in when
+   * they hit Sync. Omit (NULL) and manual-item override is skipped.
+   */
+  locationId: string | null = null,
 ): Promise<CatalogSyncResult> {
   const auditUser = parseAuditUserId(userSub);
+  const userName = await lookupUserNameForHistory(pool, userSub);
   let client: PoolClient | undefined;
 
   try {
@@ -341,11 +370,30 @@ export async function performLightspeedCatalogSync(
       await client.query("SAVEPOINT catalog_matrix");
       try {
         const matrixId = await upsertMatrixRow(client, m);
+        /* Manual-only matrices: every variant under this matrix needs an
+         * override + history row at the operator's active location. LS gives
+         * one on-hand number per variant — that becomes the new absolute qty. */
+        const manualOnly = await isMatrixManualOnly(client, matrixId);
         for (const v of m.variants) {
           await client.query("SAVEPOINT catalog_variant");
           try {
             await upsertCustomSkuRow(client, matrixId, v);
             records_updated += 1;
+            if (manualOnly && locationId && v.onHandTotal != null && Number.isFinite(v.onHandTotal)) {
+              const customSkuId = await lookupCustomSkuIdByLsSystemId(client, v.lsSystemId);
+              if (customSkuId) {
+                await applyManualItemOverride(client, {
+                  customSkuId,
+                  locationId,
+                  newQty: Math.max(0, Math.floor(v.onHandTotal)),
+                  source: "lightspeed_sync",
+                  changedByUserId: auditUser,
+                  changedByUserName: userName,
+                  notes: `Lightspeed catalog sync (job ${jobId})`,
+                  referenceId: jobId,
+                });
+              }
+            }
             await client.query("RELEASE SAVEPOINT catalog_variant");
           } catch (err) {
             await client.query("ROLLBACK TO SAVEPOINT catalog_variant");
@@ -439,8 +487,9 @@ export async function performLightspeedCatalogSync(
 
 /** Worker entry: resolves tenant from job row then runs `performLightspeedCatalogSync`. */
 export async function executeLightspeedCatalogJob(pool: Pool, jobId: string): Promise<void> {
-  const j = await pool.query<{ tenant_id: string; payload: unknown }>(
-    `SELECT tenant_id, payload FROM sync_jobs WHERE id = $1::uuid LIMIT 1`,
+  const j = await pool.query<{ tenant_id: string; location_id: string | null; payload: unknown }>(
+    `SELECT tenant_id, location_id::text AS location_id, payload
+       FROM sync_jobs WHERE id = $1::uuid LIMIT 1`,
     [jobId],
   );
   const row = j.rows[0];
@@ -452,7 +501,13 @@ export async function executeLightspeedCatalogJob(pool: Pool, jobId: string): Pr
     userSub = String((p as Record<string, unknown>).user_id ?? "") || null;
   }
 
-  const r = await performLightspeedCatalogSync(pool, jobId, row.tenant_id, userSub);
+  const r = await performLightspeedCatalogSync(
+    pool,
+    jobId,
+    row.tenant_id,
+    userSub,
+    row.location_id,
+  );
   if (!r.ok) {
     /* Job row already marked failed inside `performLightspeedCatalogSync`. */
     return;

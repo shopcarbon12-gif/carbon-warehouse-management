@@ -7,6 +7,8 @@ import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, Radio } from "lucide-r
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
 import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epcs-modal";
+import { ManualItemsModal } from "@/components/inventory/catalog/manual-items-modal";
+import { ItemHistoryModal } from "@/components/inventory/catalog/item-history-modal";
 import { SyncPreviewModal } from "@/components/inventory/sync/sync-preview-modal";
 import { startSyncJobTracking } from "@/components/inventory/sync/sync-progress-floater";
 import {
@@ -166,6 +168,8 @@ export function CatalogWorkspace({
   const [newItemOpen, setNewItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [defectiveOpen, setDefectiveOpen] = useState(false);
+  const [manualItemsOpen, setManualItemsOpen] = useState(false);
+  const [historyForSku, setHistoryForSku] = useState<string | null>(null);
   const [manualMatrixUpc, setManualMatrixUpc] = useState("");
   const [manualDesc, setManualDesc] = useState("");
   const [manualSku, setManualSku] = useState("");
@@ -543,6 +547,17 @@ export function CatalogWorkspace({
                     role="menuitem"
                     onClick={() => {
                       setCatalogMenuOpen(null);
+                      setManualItemsOpen(true);
+                    }}
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))]"
+                  >
+                    Manual Items
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setCatalogMenuOpen(null);
                       setDefectiveOpen(true);
                     }}
                     className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))]"
@@ -730,14 +745,30 @@ export function CatalogWorkspace({
                         {r.active_epc_count}
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setModalSku(r)}
-                          className="inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 py-1 text-[0.6rem] font-medium text-[var(--wms-accent)] hover:opacity-90 dark:text-[var(--wms-accent)]"
-                        >
-                          <Radio className="h-3 w-3" />
-                          EPCs
-                        </button>
+                        {r.is_manual_only ? (
+                          <button
+                            type="button"
+                            onClick={() => setHistoryForSku(r.custom_sku_id)}
+                            className="inline-flex h-[22px] w-[64px] items-center justify-center gap-1 rounded border px-2 text-[0.6rem] font-medium leading-none tracking-widest hover:opacity-90"
+                            style={{
+                              borderColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 45%, transparent)",
+                              backgroundColor: "color-mix(in srgb, oklch(82.8% 0.111 230.318) 18%, var(--wms-surface-elevated))",
+                              color: "oklch(82.8% 0.111 230.318)",
+                            }}
+                            title="Manual (non-RFID) item — view qty history"
+                          >
+                            MANUAL
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setModalSku(r)}
+                            className="inline-flex h-[22px] w-[64px] items-center justify-center gap-1 rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 text-[0.6rem] font-medium leading-none text-[var(--wms-accent)] hover:opacity-90 dark:text-[var(--wms-accent)]"
+                          >
+                            <Radio className="h-3 w-3" />
+                            EPCs
+                          </button>
+                        )}
                       </td>
                     </tr>
                     );
@@ -942,6 +973,21 @@ export function CatalogWorkspace({
 
       {defectiveOpen ? (
         <DefectiveEpcsModal onClose={() => setDefectiveOpen(false)} />
+      ) : null}
+
+      {manualItemsOpen ? (
+        <ManualItemsModal
+          onClose={() => setManualItemsOpen(false)}
+          onMutated={() => void mutate()}
+        />
+      ) : null}
+
+      {historyForSku ? (
+        <ItemHistoryModal
+          customSkuId={historyForSku}
+          onClose={() => setHistoryForSku(null)}
+          onMutated={() => void mutate()}
+        />
       ) : null}
 
       <SyncPreviewModal

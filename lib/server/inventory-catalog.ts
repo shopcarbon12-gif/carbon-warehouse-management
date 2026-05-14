@@ -24,6 +24,13 @@ export type CatalogGridRow = {
   archived: boolean;
   /** True only when every variant under the same matrix is archived. */
   matrix_archived: boolean;
+  /**
+   * True when the parent matrix is flagged as a manual (non-RFID) item.
+   * For manual rows, `active_epc_count` is the LS on-hand total + settled
+   * adjustments instead of an EPC count, and the UI swaps the RFID button
+   * for a "Manual" badge.
+   */
+  is_manual_only: boolean;
 };
 
 export type CatalogGridResult = {
@@ -212,6 +219,8 @@ export async function listCatalogGrid(
     bin_location: string | null;
     archived: boolean;
     matrix_archived: boolean;
+    is_manual_only: boolean;
+    manual_qty: number | null;
   }>(
     `SELECT
        cs.id::text AS custom_sku_id,
@@ -229,6 +238,7 @@ export async function listCatalogGrid(
        cs.ls_on_hand_total::text AS ls_on_hand_total,
        cs.archived AS archived,
        bool_and(cs.archived) OVER (PARTITION BY cs.matrix_id) AS matrix_archived,
+       COALESCE(m.is_manual_only, FALSE) AS is_manual_only,
        (
          SELECT COUNT(*)::int
          FROM items i
@@ -236,6 +246,12 @@ export async function listCatalogGrid(
            AND i.location_id = $${locIdx}::uuid
            AND i.status = 'in-stock'
        ) AS active_epc_count,
+       (
+         SELECT miq.current_qty
+         FROM manual_item_qty miq
+         WHERE miq.custom_sku_id = cs.id
+           AND miq.location_id = $${locIdx}::uuid
+       ) AS manual_qty,
        (
          SELECT string_agg(DISTINCT b.code, ', ' ORDER BY b.code)
          FROM items i
@@ -293,8 +309,21 @@ export async function listCatalogGrid(
 
   return {
     rows: data.rows.map((row) => {
-      const baseCount = Number(row.active_epc_count ?? 0);
+      const epcCount = Number(row.active_epc_count ?? 0);
       const delta = adjustmentsBySku.get(row.custom_sku_id) ?? 0;
+      const lsOnHand = (() => {
+        if (row.ls_on_hand_total == null || row.ls_on_hand_total === "") return null;
+        const n = Number(row.ls_on_hand_total);
+        return Number.isFinite(n) ? n : null;
+      })();
+      const manual = row.is_manual_only === true;
+      // Manual matrices: qty is the absolute value stored in manual_item_qty
+      // for this (sku, location). No fallback — if no row exists yet (never
+      // synced, never counted) the operator sees 0 until something writes one.
+      // RFID matrices: unchanged — EPC count + settled inventory_adjustments delta.
+      const displayQty = manual
+        ? Number(row.manual_qty ?? 0)
+        : epcCount + delta;
       return {
         custom_sku_id: row.custom_sku_id,
         matrix_id: row.matrix_id,
@@ -308,15 +337,12 @@ export async function listCatalogGrid(
         color: row.color,
         size: row.size,
         retail_price: row.retail_price,
-        ls_on_hand_total: (() => {
-          if (row.ls_on_hand_total == null || row.ls_on_hand_total === "") return null;
-          const n = Number(row.ls_on_hand_total);
-          return Number.isFinite(n) ? n : null;
-        })(),
-        active_epc_count: baseCount + delta,
+        ls_on_hand_total: lsOnHand,
+        active_epc_count: displayQty,
         bin_location: row.bin_location ?? null,
         archived: row.archived === true,
         matrix_archived: row.matrix_archived === true,
+        is_manual_only: manual,
       };
     }),
     total,
