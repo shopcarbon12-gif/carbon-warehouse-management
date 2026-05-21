@@ -126,6 +126,25 @@ const SWEEP_OVERRIDE_RETEST_MS = 3 * 60 * 1000;
 const MIN_SWEEP_DWELL_MS = 10_000;
 
 /**
+ * Quiet window after firing `wiznet-cli --reset`. The bridge takes ~8-12 s
+ * to come back on the network; the chip behind the bridge needs another
+ * 5-10 s for its UART to drain whatever half-open Gen2 state the prior
+ * supervisor child left it in. If the next reader spawn races the reset
+ * (today's default 5 s grace), it lands on a wedged chip and we re-enter
+ * the 0-record loop the reset was trying to break.
+ *
+ * 18 s is the empirical floor — observed live 2026-05-21 on the POS
+ * reader: stopping the agent entirely, waiting ~10 s, restarting always
+ * unwedges (101 reads on the first cold spawn). Same effect with a 18 s
+ * post-reset delay, without taking the rest of the fleet offline.
+ *
+ * The on-exit respawn timer (both stream and console drivers) is bumped
+ * to `max(finalDelay, slot.bridgeResetAt + POST_BRIDGE_RESET_QUIET_MS -
+ * now)` so this honors any reset fired during the current 0-byte streak.
+ */
+const POST_BRIDGE_RESET_QUIET_MS = 18_000;
+
+/**
  * Slow-detection window (rolling): how often we compare each slot's
  * read rate to its peers. A slot reading significantly slower than peer
  * median while peers are healthy gets auto-recovered (sweep + bridge
@@ -362,6 +381,16 @@ type ReaderSlot = {
    *  Throttled by DEEP_RECOVERY_COOLDOWN_MS so we don't re-deep-recover on
    *  every slow-detect tick while at Level 2. */
   lastDeepRecoveryAt: number;
+  /** ms timestamp of the most recent `wiznet-cli --reset` for this slot's
+   *  bridge. 0 = never. Used by the on-exit respawn timer to enforce a
+   *  POST_BRIDGE_RESET_QUIET_MS window before the next spawn so the bridge +
+   *  chip can fully reboot before the supervisor reconnects. Without this
+   *  the supervisor races the reset and re-wedges the chip immediately,
+   *  observed live 2026-05-21 on POS reader (.69) — bridge reset succeeded
+   *  but auto-sweep respawned 5 s later while the chip was mid-reboot,
+   *  every spawn returned 0 records, only `systemctl stop carbon-cdm-agent
+   *  + 10s pause + start` broke the loop. */
+  bridgeResetAt: number;
   /** ms timestamp of the most recent push to /api/cdm-agents/reader-offline.
    *  Throttle so a chronically-silent reader posts offline once per minute,
    *  not on every watchdog tick. Reset to 0 on first-byte (online) so the
@@ -1643,6 +1672,7 @@ export class MonsoonSupervisor {
         wedgeLevel: 0,
         wedgedSinceMs: 0,
         lastDeepRecoveryAt: 0,
+        bridgeResetAt: 0,
         suggestedPowerDbm: null,
         lastForcedRespawnAt: 0,
         lastUpwardProbeAt: 0,
@@ -2178,7 +2208,32 @@ export class MonsoonSupervisor {
           }
         }
       }
-      const finalDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
+      const baseDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
+      // If a bridge reset fired recently on this slot, stretch the respawn
+      // until POST_BRIDGE_RESET_QUIET_MS has elapsed — gives the bridge +
+      // chip time to fully reboot before the supervisor reconnects.
+      // Without this the reset is wasted: the new spawn lands on a half-
+      // booted bridge, exits 0-byte, and the wedge loop continues. The
+      // operator's manual fix (stop agent → wait → start) does exactly
+      // this; we just automate it per-slot instead of fleet-wide.
+      const minSpawnAt = slot.bridgeResetAt
+        ? slot.bridgeResetAt + POST_BRIDGE_RESET_QUIET_MS
+        : 0;
+      const desiredAt = Date.now() + baseDelay;
+      const actualAt = Math.max(desiredAt, minSpawnAt);
+      const finalDelay = Math.max(0, actualAt - Date.now());
+      // Clearing the sweep override after a quiet window forces the next
+      // spawn to use the operator's configured power, not a stale sweep
+      // step — observed live the chip recovers on configured power once
+      // the bridge has fully come back.
+      if (minSpawnAt > 0 && finalDelay >= POST_BRIDGE_RESET_QUIET_MS - 1_000) {
+        slot.sweepPowerOverrideArg = null;
+        slot.bridgeResetAt = 0;
+        log.info("supervisor: post-bridge-reset quiet window — single clean spawn at configured power", {
+          readerId: slot.spec.id,
+          quietMs: finalDelay,
+        });
+      }
       setTimeout(() => {
         void this.spawnReader(slot);
       }, finalDelay);
@@ -2561,7 +2616,32 @@ export class MonsoonSupervisor {
           }
         }
       }
-      const finalDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
+      const baseDelay = !slot.bytesSinceSpawn ? Math.max(delay, 5_000) : delay;
+      // If a bridge reset fired recently on this slot, stretch the respawn
+      // until POST_BRIDGE_RESET_QUIET_MS has elapsed — gives the bridge +
+      // chip time to fully reboot before the supervisor reconnects.
+      // Without this the reset is wasted: the new spawn lands on a half-
+      // booted bridge, exits 0-byte, and the wedge loop continues. The
+      // operator's manual fix (stop agent → wait → start) does exactly
+      // this; we just automate it per-slot instead of fleet-wide.
+      const minSpawnAt = slot.bridgeResetAt
+        ? slot.bridgeResetAt + POST_BRIDGE_RESET_QUIET_MS
+        : 0;
+      const desiredAt = Date.now() + baseDelay;
+      const actualAt = Math.max(desiredAt, minSpawnAt);
+      const finalDelay = Math.max(0, actualAt - Date.now());
+      // Clearing the sweep override after a quiet window forces the next
+      // spawn to use the operator's configured power, not a stale sweep
+      // step — observed live the chip recovers on configured power once
+      // the bridge has fully come back.
+      if (minSpawnAt > 0 && finalDelay >= POST_BRIDGE_RESET_QUIET_MS - 1_000) {
+        slot.sweepPowerOverrideArg = null;
+        slot.bridgeResetAt = 0;
+        log.info("supervisor: post-bridge-reset quiet window — single clean spawn at configured power", {
+          readerId: slot.spec.id,
+          quietMs: finalDelay,
+        });
+      }
       setTimeout(() => {
         void this.spawnReader(slot);
       }, finalDelay);
@@ -2920,6 +3000,14 @@ export class MonsoonSupervisor {
   private tryBridgeReset(spec: AgentConfigReader): void {
     const host = String(spec.network_address ?? "");
     if (!host) return;
+
+    // Stamp the bridge-reset timestamp on the slot (if any) so the on-exit
+    // respawn timer can enforce POST_BRIDGE_RESET_QUIET_MS. Without this
+    // the supervisor races the reset and lands its next spawn on a half-
+    // booted bridge / mid-reset chip — exactly the loop the reset is
+    // trying to break.
+    const slotForStamp = this.slots.get(spec.id);
+    if (slotForStamp) slotForStamp.bridgeResetAt = Date.now();
 
     const runReset = (mac: string): void => {
       log.info("supervisor: tryBridgeReset — spawning wiznet-cli --reset", {
