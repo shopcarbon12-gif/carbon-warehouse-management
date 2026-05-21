@@ -3096,6 +3096,56 @@ export class MonsoonSupervisor {
     const slotForStamp = this.slots.get(spec.id);
     if (slotForStamp) slotForStamp.bridgeResetAt = Date.now();
 
+    // Clear stale TCP connections the bridge may still be holding from a
+    // previously SIGKILL'd supervisor child. Observed live 2026-05-21 on
+    // POS reader (.69): every fresh spawn got 0 bytes for an hour. Manual
+    // `MonsoonReader --stop` printed "A MonsoonReader instance connected
+    // to 192.168.1.69 is already running. MonsoonReader shutdown." — a
+    // ghost session was tying up the bridge's serial channel to the chip,
+    // so new spawns connected over TCP but the chip was busy serving the
+    // dead session. Bridge-reset alone doesn't always reap these.
+    // MonsoonReader --stop reaches into the bridge, finds the orphan
+    // session, and closes it before we wiznet-reset the box.
+    try {
+      const stopChild = spawn(
+        "sudo",
+        [
+          "timeout",
+          "--kill-after=1s",
+          "6s",
+          "/opt/legacy-rfid/MonsoonReader",
+          "--stop",
+          "--monsoon_host",
+          host,
+          "--monsoon_cport",
+          String(Number(spec.monsoon_serial_port ?? 10002)),
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      stopChild.stdout?.resume();
+      stopChild.stderr?.resume();
+      stopChild.on("exit", (code) => {
+        log.info("supervisor: tryBridgeReset — MonsoonReader --stop exited", {
+          readerId: spec.id,
+          host,
+          code,
+        });
+      });
+      stopChild.on("error", (e) => {
+        log.warn("supervisor: tryBridgeReset — MonsoonReader --stop spawn error", {
+          readerId: spec.id,
+          host,
+          err: e.message,
+        });
+      });
+    } catch (e) {
+      log.warn("supervisor: tryBridgeReset — MonsoonReader --stop threw", {
+        readerId: spec.id,
+        host,
+        err: e instanceof Error ? e.message : String(e),
+      });
+    }
+
     const runReset = (mac: string): void => {
       log.info("supervisor: tryBridgeReset — spawning wiznet-cli --reset", {
         readerId: spec.id,
