@@ -20,6 +20,8 @@ import {
   Package,
   PackagePlus,
   Palette,
+  Pin,
+  PinOff,
   Printer,
   Radio,
   RefreshCw,
@@ -269,17 +271,27 @@ function NavAccordion({
 
 export function Sidebar({
   activeLocationId,
-  mobileOpen,
-  onMobileOpenChange,
+  pinned,
+  onTogglePin,
+  open,
+  onOpenChange,
 }: {
   activeLocationId: string;
-  mobileOpen: boolean;
-  onMobileOpenChange: (open: boolean) => void;
+  /** True = sidebar sits in flow + auto-stays open. False = overlay drawer
+   *  that only appears when `open` is true (same as the old mobile
+   *  behaviour, now available on every viewport). */
+  pinned: boolean;
+  onTogglePin: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const pathname = usePathname() ?? "";
+  // Pinned sidebars stay open after clicking a nav item — matches the
+  // POS behaviour where the pin "locks" the menu. Unpinned sidebars
+  // close themselves like an overlay drawer.
   const onNavigate = useCallback(() => {
-    onMobileOpenChange(false);
-  }, [onMobileOpenChange]);
+    if (!pinned) onOpenChange(false);
+  }, [pinned, onOpenChange]);
 
   // Same-route refresh: clicking a menu entry for the page you're
   // already on should fully reload it (window.location.reload), not a
@@ -298,7 +310,7 @@ export function Sidebar({
   );
 
   useEffect(() => {
-    onMobileOpenChange(false);
+    if (!pinned) onOpenChange(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- close drawer on route change only
   }, [pathname]);
 
@@ -307,24 +319,35 @@ export function Sidebar({
     [pathname],
   );
 
+  // Overlay drawer (unpinned) vs in-flow (pinned). The mask covers the
+  // page when the drawer is open AND the sidebar is not pinned — pinning
+  // makes the sidebar a permanent column with no mask, just like the
+  // pinned POS menu.
+  const isOverlay = !pinned;
+  const visible = pinned || open;
+
   return (
     <>
       <button
         type="button"
         aria-label="Close menu"
-        className={`fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity md:hidden ${
-          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"
-        }`}
-        onClick={() => onMobileOpenChange(false)}
+        className={`fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity ${
+          isOverlay && open ? "opacity-100" : "pointer-events-none opacity-0"
+        } ${pinned ? "hidden" : ""}`}
+        onClick={() => onOpenChange(false)}
       />
 
       <aside
         id="wms-sidebar"
-        className={`fixed inset-y-0 left-0 z-50 flex w-80 shrink-0 flex-col border-r border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl transition-transform duration-200 ease-out md:static md:z-0 md:translate-x-0 md:shadow-none ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        className={`${
+          isOverlay
+            ? "fixed inset-y-0 left-0 z-50 shadow-2xl"
+            : "static z-0 shadow-none"
+        } flex w-80 shrink-0 flex-col border-r border-[var(--wms-border)] bg-[var(--wms-surface)] transition-transform duration-200 ease-out ${
+          visible ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-4">
+        <div className="flex items-center justify-between gap-2 border-b border-[var(--wms-border)] px-4 py-4">
           <Link
             href="/dashboard"
             className="min-w-0"
@@ -340,14 +363,40 @@ export function Sidebar({
               RFID operations
             </span>
           </Link>
-          <button
-            type="button"
-            aria-label="Close sidebar"
-            className="rounded-md p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)] md:hidden"
-            onClick={() => onMobileOpenChange(false)}
-          >
-            <X className="h-5 w-5" strokeWidth={1.75} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              aria-label={pinned ? "Unpin sidebar" : "Pin sidebar"}
+              aria-pressed={pinned}
+              title={
+                pinned
+                  ? "Unpin — sidebar will close after navigation"
+                  : "Pin — keep sidebar open"
+              }
+              onClick={onTogglePin}
+              className={`rounded-md p-2 transition-colors ${
+                pinned
+                  ? "bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] text-[var(--wms-accent)]"
+                  : "text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
+              }`}
+            >
+              {pinned ? (
+                <Pin className="h-5 w-5" strokeWidth={1.75} />
+              ) : (
+                <PinOff className="h-5 w-5" strokeWidth={1.75} />
+              )}
+            </button>
+            <button
+              type="button"
+              aria-label="Close sidebar"
+              className={`rounded-md p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)] ${
+                pinned ? "hidden" : ""
+              }`}
+              onClick={() => onOpenChange(false)}
+            >
+              <X className="h-5 w-5" strokeWidth={1.75} />
+            </button>
+          </div>
         </div>
 
         <LocationSwitcher activeLocationId={activeLocationId} />
