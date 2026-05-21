@@ -20,6 +20,8 @@ type Props = {
   editingBin: BinRow | null;
   locationId: string;
   locationLabel: string;
+  /** Pre-filled bin code for add mode (used by the Shelf Map "+ Add 1A05R" link). */
+  presetCode?: string;
   onClose: () => void;
   onSaved: () => void;
 };
@@ -30,6 +32,7 @@ export function BinEditorDrawer({
   editingBin,
   locationId,
   locationLabel,
+  presetCode,
   onClose,
   onSaved,
 }: Props) {
@@ -50,6 +53,8 @@ export function BinEditorDrawer({
     if (!open || !mode) return;
     if (mode === "add") {
       resetForm();
+      // Shelf Map "+ Add 1A05R" link → pre-fill so the operator just confirms.
+      if (presetCode) setCode(presetCode);
       return;
     }
     if (editingBin) {
@@ -58,7 +63,7 @@ export function BinEditorDrawer({
       setStatus(editingBin.status === "inactive" ? "inactive" : "active");
       setErr(null);
     }
-  }, [open, mode, editingBin, resetForm]);
+  }, [open, mode, editingBin, presetCode, resetForm]);
 
   useEffect(() => {
     if (!open) return;

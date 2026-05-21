@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, Radio } from "lucide-react";
+import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, PackageOpen, Radio } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
+import { computeSkuPrefix } from "@/lib/queries/bin-code";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
 import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epcs-modal";
 import { ManualItemsModal } from "@/components/inventory/catalog/manual-items-modal";
 import { ItemHistoryModal } from "@/components/inventory/catalog/item-history-modal";
+import { CatalogBinMoveDialog } from "@/components/inventory/catalog/catalog-bin-move-dialog";
 import { SyncPreviewModal } from "@/components/inventory/sync/sync-preview-modal";
 import { startSyncJobTracking } from "@/components/inventory/sync/sync-progress-floater";
 import {
@@ -172,6 +174,7 @@ export function CatalogWorkspace({
   const [defectiveOpen, setDefectiveOpen] = useState(false);
   const [manualItemsOpen, setManualItemsOpen] = useState(false);
   const [historyForSku, setHistoryForSku] = useState<string | null>(null);
+  const [movingRow, setMovingRow] = useState<CatalogGridRow | null>(null);
   const [manualMatrixUpc, setManualMatrixUpc] = useState("");
   const [manualDesc, setManualDesc] = useState("");
   const [manualSku, setManualSku] = useState("");
@@ -774,7 +777,20 @@ export function CatalogWorkspace({
                         {formatPrice(r.retail_price)}
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">
-                        {r.bin_location ?? "—"}
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="truncate">{r.bin_location ?? "—"}</span>
+                          {r.is_manual_only ? null : (
+                            <button
+                              type="button"
+                              onClick={() => setMovingRow(r)}
+                              title="Move all in-stock EPCs of this (UPC, color) — all sizes — into a bin"
+                              aria-label="Move to bin"
+                              className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] text-[var(--wms-accent)] hover:opacity-90"
+                            >
+                              <PackageOpen className="h-3 w-3" strokeWidth={2} />
+                            </button>
+                          )}
+                        </span>
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-center tabular-nums text-[var(--wms-fg)]">
                         {r.active_epc_count}
@@ -1020,6 +1036,19 @@ export function CatalogWorkspace({
           customSkuId={historyForSku}
           onClose={() => setHistoryForSku(null)}
           onMutated={() => void mutate()}
+        />
+      ) : null}
+
+      {movingRow ? (
+        <CatalogBinMoveDialog
+          skuPrefix={computeSkuPrefix(movingRow.sku)}
+          name={movingRow.name}
+          color={movingRow.color}
+          onClose={() => setMovingRow(null)}
+          onDone={() => {
+            setMovingRow(null);
+            void mutate();
+          }}
         />
       ) : null}
 
