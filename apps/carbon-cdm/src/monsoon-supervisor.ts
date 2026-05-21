@@ -642,6 +642,17 @@ export class MonsoonSupervisor {
    *  agent's active-sessions poll handler. Default state in the new model
    *  is "every reader paused"; this set is the wake mechanism. */
   private activeScanSessionReaders = new Set<string>();
+  /** Reader IDs that have an in-flight Antenna Test. Same wake mechanism
+   *  as activeScanSessionReaders but populated by enterTestMode() so a
+   *  paused reader can run a one-off antenna test from the WMS UI, then
+   *  go back to paused on leaveTestMode(). Without this set, the UI's
+   *  "Antenna Test" button silently no-op'd on paused readers: the
+   *  supervisor logged "enterTestMode for unknown reader" because no slot
+   *  existed (paused → filtered out of reconcile), the WMS still showed
+   *  green/ready, but no tags were ever read. Observed live 2026-05-21
+   *  on the POS reader (.69, cbbeffbd) — 4 test sessions in a row all
+   *  warning "unknown reader". */
+  private testWakeReaders = new Set<string>();
   /** Last-bundle reference so setActiveScanSessionReaders can reconcile
    *  immediately on session change without waiting for the next config-pull. */
   private lastBundle: AgentConfigBundle | null = null;
@@ -1451,7 +1462,8 @@ export class MonsoonSupervisor {
         .filter(
           (r) =>
             !(r.effective_paused ?? false) ||
-            this.activeScanSessionReaders.has(r.id),
+            this.activeScanSessionReaders.has(r.id) ||
+            this.testWakeReaders.has(r.id),
         )
         .map((r) => [r.id, r] as const),
     );
@@ -1793,10 +1805,33 @@ export class MonsoonSupervisor {
    * is a no-op; with different flags, kills+respawns under new flags.
    */
   enterTestMode(spec: TestModeSpec & { readerId: string }): void {
-    const slot = this.slots.get(spec.readerId);
+    let slot = this.slots.get(spec.readerId);
+    // Wake-for-test path: when a paused reader has no slot (paused readers
+    // are filtered out of reconcile), open one for the duration of the
+    // test. Without this, "Antenna Test" in the WMS silently no-op'd on
+    // any reader whose effective_paused was true — the WMS still showed
+    // green/ready, but no tags were ever read. Live repro 2026-05-21 on
+    // the POS reader. leaveTestMode() drops testWakeReaders and re-
+    // reconciles so the slot stops cleanly once the test ends.
     if (!slot) {
-      log.warn("supervisor: enterTestMode for unknown reader", { readerId: spec.readerId });
-      return;
+      const inBundle = this.lastBundle?.readers.find((r) => r.id === spec.readerId);
+      if (!inBundle) {
+        log.warn("supervisor: enterTestMode for reader not in bundle", { readerId: spec.readerId });
+        return;
+      }
+      log.info("supervisor: enterTestMode waking paused reader for antenna test", {
+        readerId: spec.readerId,
+        readerName: inBundle.name,
+        sessionId: spec.sessionId,
+      });
+      this.testWakeReaders.add(spec.readerId);
+      this.reconcile(this.lastBundle!);
+      slot = this.slots.get(spec.readerId);
+      if (!slot) {
+        log.warn("supervisor: enterTestMode could not start slot after wake", { readerId: spec.readerId });
+        this.testWakeReaders.delete(spec.readerId);
+        return;
+      }
     }
     const prior = slot.testSession;
     const flagsEqual =
@@ -1875,6 +1910,18 @@ export class MonsoonSupervisor {
     // No ensureRadioStopped call here — the SIGTERM'd binary's own
     // shutdown handler sends the chip cleanup. An additional abort
     // would race the next spawn and put the chip back into the wedge.
+
+    // Wake-for-test housekeeping: if enterTestMode opened the slot
+    // specifically for this test (paused reader), drop the wake and
+    // re-reconcile so the supervisor tears the slot back down. A 2 s
+    // delay lets the SIGTERM'd binary finish its shutdown handshake
+    // before the slot disappears.
+    if (this.testWakeReaders.delete(readerId) && this.lastBundle) {
+      const lastBundle = this.lastBundle;
+      setTimeout(() => {
+        if (this.lastBundle === lastBundle) this.reconcile(lastBundle);
+      }, 2_000);
+    }
   }
 
   shutdown(): void {
