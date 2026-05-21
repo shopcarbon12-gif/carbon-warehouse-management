@@ -810,15 +810,19 @@ function AddItemDialog({
     setBusy(true);
     setErr(null);
     try {
-      // "Add to bin" = move homeless EPCs of this sku_prefix into this bin.
-      // The Move endpoint handles the actual UPDATE + audit log.
+      // "Add to bin" = sweep ALL in-stock EPCs of this (UPC, color) group
+      // — every size, whether homeless or currently in another bin — into
+      // this bin. sourceBinId="any" mirrors the catalog "📦 Bin" button.
+      // Previously this only moved homeless EPCs (sourceBinId=null), which
+      // silently no-op'd whenever the operator picked a color that was
+      // already shelved elsewhere — the bug the operator hit.
       const res = await fetch("/api/locations/bins/move", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           skuPrefix: picked.sku_prefix,
-          sourceBinId: null,
+          sourceBinId: "any",
           targetBinId: bin.id,
         }),
       });
@@ -827,6 +831,13 @@ function AddItemDialog({
         moved?: number;
       };
       if (!res.ok) throw new Error(j.error ?? "Add failed");
+      const moved = Number(j.moved ?? 0);
+      if (moved === 0) {
+        setErr(
+          `No in-stock EPCs found for ${picked.sku_prefix} · ${picked.color ?? "—"}. Nothing to assign.`,
+        );
+        return;
+      }
       onDone();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Add failed");
