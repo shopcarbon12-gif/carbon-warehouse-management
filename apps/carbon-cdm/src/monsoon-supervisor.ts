@@ -1143,11 +1143,25 @@ export class MonsoonSupervisor {
         // the same slot down to 22 dBm in parallel. Trust the operator's
         // explicit setting and skip sweep entry entirely.
         const forceConfigured = Number(slot.spec.force_respawn_interval_ms ?? 0) > 0;
+        // Skip auto-sweep entirely when the operator has configured a power
+        // below SWEEP_POWERS' minimum (30 dBm). Live evidence 2026-05-21 on
+        // POS reader (.69, 17 dBm configured): sweep walked through
+        // 330→310→290…→30, none of which match the operator's intent —
+        // each spawn at the wrong power gave 0 records, leaving the slot
+        // wedged forever. For low-power slots the recovery path that
+        // actually works is "bridge reset + UART quiet + respawn at
+        // configured power", which is what bridgeResetAt+POST_BRIDGE_RESET_
+        // QUIET_MS implements. The on-exit 0-record path triggers
+        // tryBridgeReset directly without needing sweep state.
+        const configuredPower = this.avgPower(slot.spec);
+        const minSweepPower = SWEEP_POWERS[SWEEP_POWERS.length - 1] ?? 30;
+        const skipSweepLowPower = configuredPower < minSweepPower;
         if (
           !muxSlot &&
           slot.testSession === null &&
           slot.sweepPowerOverrideArg === null &&
           !forceConfigured &&
+          !skipSweepLowPower &&
           now - slot.lastSweepAttemptAt >= SWEEP_RETRY_COOLDOWN_MS
         ) {
           // testSession gate: an active /antenna_test session owns this slot.
@@ -1168,6 +1182,32 @@ export class MonsoonSupervisor {
             host: slot.spec.network_address,
             firstSweepPower: slot.sweepPowerOverrideArg,
           });
+          this.killSlotChildHard(slot);
+          continue;
+        }
+        // Low-power slots take the direct bridge-reset path: silence at
+        // configured power for SWEEP_RETRY_COOLDOWN_MS → fire bridge reset
+        // (rate-limited) → POST_BRIDGE_RESET_QUIET_MS quiet → respawn at
+        // configured power. No power-sweep theatrics that would override
+        // the operator's deliberate setting.
+        if (
+          !muxSlot &&
+          slot.testSession === null &&
+          slot.sweepPowerOverrideArg === null &&
+          !forceConfigured &&
+          skipSweepLowPower &&
+          !slot.bytesSinceSpawn &&
+          now - slot.lastSweepAttemptAt >= SWEEP_RETRY_COOLDOWN_MS &&
+          now - slot.bridgeResetAt >= SWEEP_RETRY_COOLDOWN_MS
+        ) {
+          log.info("supervisor: low-power slot stuck — direct bridge reset (no sweep)", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            host: slot.spec.network_address,
+            configuredPower,
+          });
+          slot.lastSweepAttemptAt = Date.now();
+          this.tryBridgeReset(slot.spec);
           this.killSlotChildHard(slot);
           continue;
         }
