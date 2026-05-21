@@ -212,23 +212,29 @@ export function ShelfMap({
         </div>
       ) : null}
 
-      {/* The 3×5 grid */}
+      {/* The 3×5 grid.
+          Mobile: the outer div allows horizontal scroll so the rack
+          mental model (shelf 05 top → 01 floor, L/C/R columns) stays
+          intact even on a 360px viewport. min-w on the inner grid
+          keeps cells readable; sm+ removes the min-width and behaves
+          like a normal full-width grid. */}
       {aisle && section ? (
-        <div className="grid grid-cols-[64px_minmax(0,1fr)] gap-3">
+        <div className="-mx-3 overflow-x-auto px-3 sm:mx-0 sm:overflow-visible sm:px-0">
+          <div className="grid min-w-[680px] grid-cols-[44px_minmax(0,1fr)] gap-2 sm:min-w-0 sm:grid-cols-[64px_minmax(0,1fr)] sm:gap-3">
           {/* row labels column */}
-          <div className="grid grid-rows-5 gap-3 pt-1">
+          <div className="grid grid-rows-5 gap-2 pt-1 sm:gap-3">
             {["05", "04", "03", "02", "01"].map((shelf, i) => (
               <div
                 key={shelf}
-                className="flex items-center justify-end border-r border-dashed border-[var(--wms-border)] pr-2 font-mono text-xs text-[var(--wms-muted)]"
+                className="flex items-center justify-end border-r border-dashed border-[var(--wms-border)] pr-1.5 font-mono text-[10px] text-[var(--wms-muted)] sm:pr-2 sm:text-xs"
               >
-                <span className="text-sm font-semibold text-[var(--wms-fg)]">{shelf}</span>
-                <span className="ml-1">{i === 0 ? "top" : i === 4 ? "floor" : ""}</span>
+                <span className="text-xs font-semibold text-[var(--wms-fg)] sm:text-sm">{shelf}</span>
+                <span className="ml-1 hidden sm:inline">{i === 0 ? "top" : i === 4 ? "floor" : ""}</span>
               </div>
             ))}
           </div>
           {/* the grid cells */}
-          <div className="grid grid-cols-3 grid-rows-5 gap-3">
+          <div className="grid grid-cols-3 grid-rows-5 gap-2 sm:gap-3">
             {["05", "04", "03", "02", "01"].flatMap((shelf) =>
               (["L", "C", "R"] as const).map((pos) => {
                 const code = `${aisle}${section}${shelf}${pos}`;
@@ -264,6 +270,7 @@ export function ShelfMap({
                 );
               }),
             )}
+          </div>
           </div>
         </div>
       ) : null}
