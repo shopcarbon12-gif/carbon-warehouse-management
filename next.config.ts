@@ -24,6 +24,14 @@ const nextConfig: NextConfig = {
   output: "standalone",
   allowedDevOrigins: ["192.168.1.214"],
   /**
+   * Skip Next.js's in-build TypeScript pass when running inside the Coolify
+   * Docker image. The 1.9 GB VPS heap-caps tsc at 2048 MB and a full re-check
+   * OOM-kills the build (exit 255 right after "Running TypeScript ..."). We
+   * already run `npx tsc --noEmit` separately in dev/CI before pushing — that
+   * stays authoritative. Local `npm run build` keeps the check enabled.
+   */
+  ...(dockerBuild ? { typescript: { ignoreBuildErrors: true } } : {}),
+  /**
    * `proxy.ts` buffers the request body so it can be read in both proxy and route handlers.
    * Default limit is 10MB — large APK uploads to `/api/mobile/upload-apk` were truncated,
    * breaking multipart parsing ("Expected multipart form").
