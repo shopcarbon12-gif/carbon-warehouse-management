@@ -8,6 +8,19 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
+ * Per-reader live POS power override.
+ *
+ * Cashier-driven slider in Carbon-POS writes pos_register_sessions.live_power_dbm
+ * on every drag. The is_pos_dedicated reader bound to that register's agent
+ * gets its spawn power overridden to this value while the register session
+ * is open. NULL = use WMS-configured power.
+ */
+type PosPowerOverride = {
+  readerId: string;
+  livePowerDbm: number;
+};
+
+/**
  * Agent fast-poll for active sessions at its location.
  * Bearer-authenticated by the agent's API token. Returns only sessions for
  * the agent's own location (by joining via cdm_agents row).
@@ -53,8 +66,26 @@ export async function GET(req: Request) {
     startedAt: new Date(s.startedAt).toISOString(),
   }));
 
+  // POS register live-power overrides. Joins open register sessions to the
+  // agent's is_pos_dedicated reader (one POS reader per agent, at most one
+  // open session per register). NULL live_power_dbm means "no override —
+  // use WMS-configured power"; we omit those rows from the response.
+  const posOverridesRows = await pool.query<PosPowerOverride>(
+    `SELECT d.id::text AS "readerId",
+            s.live_power_dbm::int AS "livePowerDbm"
+       FROM pos_register_sessions s
+       JOIN pos_registers reg ON reg.id = s.register_id
+       JOIN devices d ON d.cdm_agent_id = reg.cdm_agent_id
+                     AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
+                     AND d.is_pos_dedicated = TRUE
+      WHERE s.status = 'open'
+        AND s.live_power_dbm IS NOT NULL
+        AND reg.cdm_agent_id = $1::uuid`,
+    [a.agentId],
+  );
+
   return NextResponse.json(
-    { sessions, scanSessions },
+    { sessions, scanSessions, posOverrides: posOverridesRows.rows },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

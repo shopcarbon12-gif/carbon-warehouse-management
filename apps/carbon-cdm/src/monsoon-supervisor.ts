@@ -715,6 +715,11 @@ export class MonsoonSupervisor {
    *  on the POS reader (.69, cbbeffbd) — 4 test sessions in a row all
    *  warning "unknown reader". */
   private testWakeReaders = new Set<string>();
+  /** Per-reader live RF power override (real dBm, 1–33). Populated from
+   *  Carbon-POS cashier slider via the active-sessions poll's posOverrides
+   *  payload. Wins over WMS-configured power at spawn time. Empty map =
+   *  no overrides; revert to configured power. Updated every ~100 ms. */
+  private posPowerOverrides = new Map<string, number>();
   /** Last-bundle reference so setActiveScanSessionReaders can reconcile
    *  immediately on session change without waiting for the next config-pull. */
   private lastBundle: AgentConfigBundle | null = null;
@@ -825,6 +830,42 @@ export class MonsoonSupervisor {
     }
     this.activeScanSessionReaders = new Set(readerIds);
     if (this.lastBundle) this.reconcile(this.lastBundle);
+  }
+
+  /**
+   * Apply per-reader live RF power overrides from Carbon-POS cashier
+   * slider. Called every ~100 ms from the active-sessions poll. Diff
+   * against the current overrides; if any reader's power actually changed
+   * (or an override appeared/disappeared), kill the running child so the
+   * next spawn picks up the new power. This is what makes the slider
+   * feel "live" — drag → ~2 s later the chip is at the new power.
+   */
+  setPosPowerOverrides(overrides: Map<string, number>): void {
+    const prev = this.posPowerOverrides;
+    const allReaderIds = new Set<string>([
+      ...prev.keys(),
+      ...overrides.keys(),
+    ]);
+    const changedReaders: string[] = [];
+    for (const id of allReaderIds) {
+      if (prev.get(id) !== overrides.get(id)) changedReaders.push(id);
+    }
+    if (changedReaders.length === 0) return;
+    this.posPowerOverrides = new Map(overrides);
+    for (const readerId of changedReaders) {
+      const slot = this.slots.get(readerId);
+      if (!slot) continue;
+      // Don't disrupt an in-flight antenna test — the operator owns
+      // the slot's power via the test page in that case.
+      if (slot.testSession !== null) continue;
+      log.info("supervisor: POS power override changed — respawning", {
+        readerId,
+        readerName: slot.spec.name,
+        newOverrideDbm: overrides.get(readerId) ?? null,
+      });
+      slot.intendedKill = true;
+      this.killSlotChildHard(slot);
+    }
   }
 
   /**
@@ -2139,7 +2180,15 @@ export class MonsoonSupervisor {
     // because override was applied unconditionally. Min() caps any
     // override to <= requested.
     const overridePower = slot.sweepPowerOverrideArg ?? requestedPower;
-    const basePower = Math.min(overridePower, requestedPower);
+    const clampedPower = Math.min(overridePower, requestedPower);
+    // Carbon-POS cashier slider override (real dBm → dBm*10). Wins over
+    // every other source when active — the cashier is the source of truth
+    // for the POS reader's RF power while their register is open. This is
+    // the only path that exceeds operator-WMS-configured power, because
+    // the WMS value for POS is deliberately set to the regulatory ceiling
+    // (33 dBm) and the cashier's slider scales DOWN per register context.
+    const posOverrideDbm = this.posPowerOverrides.get(slot.spec.id);
+    const basePower = posOverrideDbm != null ? posOverrideDbm * 10 : clampedPower;
     const powerArg = muxMode ? Math.min(basePower, 300) : basePower;
 
     // Pick the current candidate serial port. The candidate list is
@@ -2475,7 +2524,13 @@ export class MonsoonSupervisor {
       // start point). Test-mode bypasses this entirely.
       const configuredArg = Math.round(this.avgPower(spec) * 10);
       const overrideArg = slot.sweepPowerOverrideArg ?? configuredArg;
-      powerArg = Math.min(overrideArg, configuredArg);
+      const clampedArg = Math.min(overrideArg, configuredArg);
+      // Carbon-POS cashier slider override wins (see basePower computation
+      // in the stream-driver branch for the same logic). The cashier is
+      // the authoritative source for the POS reader's RF power during a
+      // register session.
+      const posOverrideDbm = this.posPowerOverrides.get(slot.spec.id);
+      powerArg = posOverrideDbm != null ? posOverrideDbm * 10 : clampedArg;
       const enabled = spec.antennas.filter((a) => a.enabled);
       // Supervisor-managed mux: stamp this spawn with the antenna at the
       // current rotation index. Each spawn drives ONE antenna; the

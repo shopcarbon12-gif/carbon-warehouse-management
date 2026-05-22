@@ -6,6 +6,7 @@ import {
   type ActiveAntennaTestSession,
   type ActiveScanSession,
   type AntennaTestIngestRead,
+  type PosPowerOverride,
 } from "./wms-client.js";
 
 /**
@@ -103,6 +104,11 @@ export type AntennaTestSupervisorHooks = {
    *  this is the only mechanism (besides Hardware Config admin Resume) that
    *  brings a reader to active scan. */
   setActiveScanSessionReaders: (readerIds: Set<string>) => void;
+  /** Update per-reader live RF power overrides from Carbon-POS cashier
+   *  slider. Map values are real dBm (1–33). When the supervisor next
+   *  spawns the reader, this value wins over WMS-configured power. Empty
+   *  map = no overrides; revert to configured power on next respawn. */
+  setPosPowerOverrides: (overrides: Map<string, number>) => void;
 };
 
 type Pending = {
@@ -213,9 +219,11 @@ export class AntennaTestController {
     if (this.polling) return; // simple in-flight guard
     this.polling = true;
     try {
-      const { antennaTestSessions, scanSessions } = await fetchActiveSessions(this.env);
+      const { antennaTestSessions, scanSessions, posOverrides } =
+        await fetchActiveSessions(this.env);
       this.reconcile(antennaTestSessions);
       this.reconcileScanSessions(scanSessions);
+      this.reconcilePosOverrides(posOverrides);
     } catch (e) {
       // Don't spam — log at debug. Real operator-visible errors will
       // surface via the SSE channel anyway when reads stop flowing.
@@ -233,6 +241,17 @@ export class AntennaTestController {
     if (!this.hooks) return;
     const readerIds = new Set<string>(scanSessions.map((s) => s.readerId));
     this.hooks.setActiveScanSessionReaders(readerIds);
+  }
+
+  /** Forward Carbon-POS live-power slider overrides to the supervisor.
+   *  Map keyed by readerId; values are real dBm (1–33). Empty map clears
+   *  all overrides (the slider was closed / cashier logged out). */
+  private reconcilePosOverrides(posOverrides: PosPowerOverride[]): void {
+    if (!this.hooks) return;
+    const map = new Map<string, number>(
+      posOverrides.map((o) => [o.readerId, o.livePowerDbm]),
+    );
+    this.hooks.setPosPowerOverrides(map);
   }
 
   private reconcile(sessions: ActiveAntennaTestSession[]): void {

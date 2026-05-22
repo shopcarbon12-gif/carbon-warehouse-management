@@ -123,6 +123,8 @@ async function main(): Promise<void> {
     leaveTestMode: (readerId) => supervisor.leaveTestMode(readerId),
     setActiveScanSessionReaders: (readerIds) =>
       supervisor.setActiveScanSessionReaders(readerIds),
+    setPosPowerOverrides: (overrides) =>
+      supervisor.setPosPowerOverrides(overrides),
   });
   antennaTest.start();
 

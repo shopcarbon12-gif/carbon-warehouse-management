@@ -307,17 +307,29 @@ export type ActiveScanSession = {
   startedAt: string;
 };
 
+/** Live per-reader RF power override driven by Carbon-POS sell-screen slider.
+ *  Supervisor uses this value (1–33 dBm) as the spawn power for the POS-
+ *  dedicated reader while the cashier's register session is open. Omitted
+ *  for any reader without an active override (revert to WMS configured). */
+export type PosPowerOverride = {
+  readerId: string;
+  livePowerDbm: number;
+};
+
 export async function fetchActiveSessions(env: AgentEnv): Promise<{
   antennaTestSessions: ActiveAntennaTestSession[];
   scanSessions: ActiveScanSession[];
+  posOverrides: PosPowerOverride[];
 }> {
   const r = await request<{
     sessions?: ActiveAntennaTestSession[];
     scanSessions?: ActiveScanSession[];
+    posOverrides?: PosPowerOverride[];
   }>(env, "GET", "/api/cdm-agents/active-sessions");
   return {
     antennaTestSessions: r.sessions ?? [],
     scanSessions: r.scanSessions ?? [],
+    posOverrides: r.posOverrides ?? [],
   };
 }
 
