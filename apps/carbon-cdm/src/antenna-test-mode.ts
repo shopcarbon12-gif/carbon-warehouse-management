@@ -118,6 +118,17 @@ export class AntennaTestController {
   /** Sessions we've handed to the supervisor (sessionId → applied). */
   private applied = new Map<string, TestSessionApplied>();
 
+  /** Per-session count of consecutive polls where the server did NOT
+   *  return this session. Only leaveTestMode after N consecutive misses
+   *  — defends against the server-side race (or transient blip) that was
+   *  toggling sessions in/out every 100 ms poll and SIGKILL-storming
+   *  the test child. Live evidence 2026-05-22 on POS .9: 100 ms toggle
+   *  storm wedged the chip's radio silicon. Three-strike guard
+   *  reproduces the operator's intent (session ends only on a sustained
+   *  server-side absence) while never killing test mode on a single
+   *  missed poll. */
+  private missCount = new Map<string, number>();
+
   /** Queue of reads pending POST to /api/antenna-test/ingest. */
   private queue: Pending[] = [];
 
@@ -228,18 +239,38 @@ export class AntennaTestController {
     if (!this.hooks) return; // supervisor not attached yet
     const desiredById = new Map(sessions.map((s) => [s.id, s]));
 
-    // End sessions that disappeared.
+    // End sessions that disappeared — but only after several consecutive
+    // misses. The server's in-memory session Map can return inconsistent
+    // results between rapid polls (observed: 100 ms poll alternated
+    // session present / absent, causing enter/leave SIGKILL storm that
+    // silicon-wedged POS .9 chip's radio 2026-05-22 ~08:42).
+    const LEAVE_AFTER_CONSECUTIVE_MISSES = 4;
     for (const [id, applied] of this.applied) {
-      if (!desiredById.has(id)) {
-        log.info("antenna-test: session ended, leaving TEST_MODE", {
+      if (desiredById.has(id)) {
+        // Server confirms session still present — reset miss counter.
+        this.missCount.delete(id);
+        continue;
+      }
+      const misses = (this.missCount.get(id) ?? 0) + 1;
+      this.missCount.set(id, misses);
+      if (misses < LEAVE_AFTER_CONSECUTIVE_MISSES) {
+        log.debug("antenna-test: session missing transiently — holding", {
           sessionId: id,
           readerId: applied.readerId,
+          misses,
         });
-        this.hooks.leaveTestMode(applied.readerId);
-        this.applied.delete(id);
-        this.stats.delete(id);
-        this.sweep.delete(id);
+        continue;
       }
+      log.info("antenna-test: session ended, leaving TEST_MODE", {
+        sessionId: id,
+        readerId: applied.readerId,
+        missesBeforeLeave: misses,
+      });
+      this.hooks.leaveTestMode(applied.readerId);
+      this.applied.delete(id);
+      this.stats.delete(id);
+      this.sweep.delete(id);
+      this.missCount.delete(id);
     }
 
     // Start / update sessions that are present.
