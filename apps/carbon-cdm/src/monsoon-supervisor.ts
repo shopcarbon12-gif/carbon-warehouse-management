@@ -1877,6 +1877,76 @@ export class MonsoonSupervisor {
     if (this.onAntennaTestResult) {
       this.startPendingTests(bundle);
     }
+
+    // Pin kernel ARP entries to the WMS-authoritative MAC for every reader
+    // in the bundle. Defends against rogue LAN devices (e.g. WiFi extenders
+    // doing proxy-ARP — observed live 2026-05-21/22 on .9 POS where
+    // 8c:88:22:81:5a:bd kept claiming .9's IP whenever the kernel ARP cache
+    // for the legitimate bridge expired). `ip neigh replace … nud permanent`
+    // is idempotent and rewrites whatever stale/hijacked binding the kernel
+    // has cached. WMS bundle is the source of truth — pin-wiznet-readers-arp.
+    // service was disabled because it used wiznet-cli's discovery cache
+    // (subject to rogue contamination); this loop uses devices.mac_address
+    // which the agent itself updates from authenticated WIZnet discovery,
+    // never from rogue ARP replies.
+    void this.maintainArpPins(bundle);
+  }
+
+  /**
+   * For every reader in the bundle that has a WMS-recorded mac_address,
+   * pin the kernel's ARP entry for its IP to that MAC. `ip neigh replace`
+   * is idempotent (adds if missing, updates if present). `nud permanent`
+   * prevents the kernel from later replacing it with a (potentially rogue)
+   * dynamic learn. Fire-and-forget; per-reader failures (sudo unavailable,
+   * IP changed mid-flight, etc.) are tolerated and logged at debug.
+   */
+  private async maintainArpPins(bundle: AgentConfigBundle): Promise<void> {
+    const tasks: Promise<void>[] = [];
+    for (const reader of bundle.readers) {
+      const ip = (reader.network_address ?? "").trim();
+      const macRaw = (reader.mac_address ?? "").replace(/[^0-9A-Fa-f]/g, "");
+      if (!ip || macRaw.length !== 12) continue;
+      const macColons = macRaw.match(/.{2}/g)!.join(":").toLowerCase();
+      tasks.push(
+        new Promise<void>((resolve) => {
+          const child = spawn(
+            "sudo",
+            [
+              "-n",
+              "ip",
+              "neigh",
+              "replace",
+              ip,
+              "lladdr",
+              macColons,
+              "dev",
+              "enp0s3",
+              "nud",
+              "permanent",
+            ],
+            { stdio: ["ignore", "pipe", "pipe"] },
+          );
+          const t = setTimeout(() => {
+            try { child.kill("SIGKILL"); } catch { /* gone */ }
+            resolve();
+          }, 2_000);
+          child.on("exit", (code) => {
+            clearTimeout(t);
+            if (code !== 0) {
+              log.debug("supervisor: arp-pin replace non-zero exit", {
+                readerId: reader.id,
+                ip,
+                mac: macColons,
+                code,
+              });
+            }
+            resolve();
+          });
+          child.on("error", () => { clearTimeout(t); resolve(); });
+        }),
+      );
+    }
+    await Promise.all(tasks);
   }
 
   /**
