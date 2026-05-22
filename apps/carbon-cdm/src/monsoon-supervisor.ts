@@ -966,54 +966,11 @@ export class MonsoonSupervisor {
         slot.lastForcedRespawnAt = now;
       }
 
-      // ── Upward-power probe ──
-      // Periodically bump configured power +UPWARD_PROBE_STEP_DBM dBm while
-      // the slot is reading at a sub-MAX power. Gives a chip that was
-      // auto-applied to a low power (because of transient session-state
-      // problems, brief VSWR trips, etc.) a chance to climb back toward the
-      // radio ceiling autonomously. If the bump silences the chip, the
-      // existing silence-watchdog → sweep → auto-apply chain walks back
-      // down to the working value, so the probe is self-correcting.
-      //
-      // Gates:
-      //   - Not in TEST_MODE (operator owns the slot)
-      //   - Not in sweep recovery (slot already cycling)
-      //   - Healthy: producing bytes (lastByteAt fresh)
-      //   - Configured power < UPWARD_PROBE_MAX_DBM (don't probe above
-      //     the radio's regulatory ceiling)
-      //   - UPWARD_PROBE_INTERVAL_MS elapsed since last probe
-      const probeConfiguredDbm = Math.round(this.avgPower(slot.spec));
-      if (
-        slot.testSession === null &&
-        slot.sweepPowerOverrideArg === null &&
-        slot.bytesSinceSpawn &&
-        now - slot.lastByteAt < 5_000 &&
-        probeConfiguredDbm < UPWARD_PROBE_MAX_DBM &&
-        slot.lastUpwardProbeAt > 0 &&
-        now - slot.lastUpwardProbeAt >= UPWARD_PROBE_INTERVAL_MS
-      ) {
-        const probeDbm = Math.min(
-          probeConfiguredDbm + UPWARD_PROBE_STEP_DBM,
-          UPWARD_PROBE_MAX_DBM,
-        );
-        log.info("supervisor: upward probe — bumping configured power", {
-          readerId: slot.spec.id,
-          readerName: slot.spec.name,
-          fromDbm: probeConfiguredDbm,
-          toDbm: probeDbm,
-        });
-        // Reuse the existing suggestion mechanism — the heartbeat handler
-        // writes suggested_power_dbm AND config.transmit_power_dbm in one
-        // pass (auto-apply). Same flow used when sweep finds a lower
-        // working power; here we use it upward.
-        slot.suggestedPowerDbm = probeDbm;
-        slot.lastUpwardProbeAt = now;
-      }
-      // Initialize the probe timer on first watchdog tick after the slot
-      // is healthy so the first interval counts from now, not from epoch.
-      if (slot.lastUpwardProbeAt === 0 && slot.bytesSinceSpawn) {
-        slot.lastUpwardProbeAt = now;
-      }
+      // Upward-power probe REMOVED 2026-05-22. Was bumping operator's
+      // configured power up by +2 dBm/min toward 33 — operator sets 10
+      // dBm and watches it climb to 12, 14, 16 ... 33 unbidden. Operator's
+      // setting is authoritative; never auto-bump. Clamp at the spawn
+      // site (line ~2178) enforces it.
 
       // Watchdog applies to BOTH drivers, but for different reasons:
       //   - stream driver: catches the alive-but-stuck silence bug.

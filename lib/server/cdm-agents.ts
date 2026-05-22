@@ -318,28 +318,18 @@ export async function recordAgentHeartbeat(
     [agentId, wedgedIds],
   );
 
-  // Sync power suggestions onto antenna rows AND auto-apply them as the
-  // new configured transmit_power_dbm. The supervisor's sweep already
-  // confirmed this power works for the chip (first-byte stamped the
-  // suggestion); applying it as the configured value means the reader
-  // continues to read instead of cycling between "configured silent" →
-  // "sweep find working" → "respawn at configured silent" forever.
-  //
-  // Operator policy (per 2026-05-12): supervisor is authorized to auto-
-  // apply working powers so readers stay productive without manual
-  // intervention. The suggested_power_dbm column still gets written so
-  // the audit trail / UI can show what was applied and when.
+  // Power suggestions are ADVISORY only — write to suggested_power_dbm
+  // (informational, surfaced as a one-click "Apply X dBm" banner in
+  // Hardware Config) but NEVER overwrite the operator-configured
+  // transmit_power_dbm in the antenna's config. The operator's setting
+  // is authoritative; reverted 2026-05-22 from auto-apply after operator
+  // observed their 10 dBm POS power silently climbing to 28 dBm.
   const suggestions = body.powerSuggestions ?? [];
   for (const s of suggestions) {
     await client.query(
       `UPDATE devices
          SET suggested_power_dbm = $3::int,
              suggested_power_dbm_at = now(),
-             config = jsonb_set(
-               COALESCE(config, '{}'::jsonb),
-               '{transmit_power_dbm}',
-               to_jsonb($3::int)
-             ),
              updated_at = now()
          WHERE parent_device_id = $2::uuid
            AND device_type = 'antenna'
