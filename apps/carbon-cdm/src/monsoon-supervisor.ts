@@ -1231,8 +1231,18 @@ export class MonsoonSupervisor {
         // QUIET_MS implements. The on-exit 0-record path triggers
         // tryBridgeReset directly without needing sweep state.
         const configuredPower = this.avgPower(slot.spec);
-        const minSweepPower = SWEEP_POWERS[SWEEP_POWERS.length - 1] ?? 30;
-        const skipSweepLowPower = configuredPower < minSweepPower;
+        // Sweep starts at the MAX power (SWEEP_POWERS[0] = 330 in dBm*10
+        // = 33 dBm) and walks DOWN looking for a working power. So sweep
+        // is only useful when the operator configured this reader AT the
+        // max — otherwise we'd be bumping the operator's deliberate
+        // lower setting up to a higher one. Live evidence 2026-05-22:
+        // operator complaint about supervisor pushing 17/30/etc-dBm
+        // readers back to 33 dBm. Skip sweep entirely if configured
+        // below max; the bridge-reset / chip-reset recovery paths
+        // (which respect configured power) still fire for them.
+        // avgPower() returns real dBm; SWEEP_POWERS is dBm*10.
+        const maxSweepPowerDbm = (SWEEP_POWERS[0] ?? 330) / 10;
+        const skipSweepLowPower = configuredPower < maxSweepPowerDbm;
         if (
           !muxSlot &&
           slot.testSession === null &&
