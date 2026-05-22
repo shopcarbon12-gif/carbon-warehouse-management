@@ -169,7 +169,7 @@ const FAST_CLEAN_EXIT_THRESHOLD_MS = 1_000;
  * gets at most one chip-reset per cooldown window.
  */
 const FAST_STUCK_CHIP_RESET_AFTER_CYCLES = 5;
-const CHIP_RESET_COOLDOWN_MS = 30 * 60 * 1000;
+const CHIP_RESET_COOLDOWN_MS = 2 * 60 * 1000;
 
 /**
  * Grace window between SIGTERM and SIGKILL when stopping a slot's child.
