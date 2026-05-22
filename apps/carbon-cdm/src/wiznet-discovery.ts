@@ -207,12 +207,58 @@ function bridgeNeedsReset(r: WiznetRecord, allRecords: WiznetRecord[]): string |
  * in, and the agent will normalize it within one sweep cycle.
  */
 async function resetBridgeBadConfig(record: WiznetRecord): Promise<boolean> {
+  return resetBridgeBadConfigImpl(record.mac, record.ip);
+}
+
+/**
+ * Public API for callers that have only a MAC (no full WiznetRecord) and
+ * want to wipe a bridge's NVRAM back to DHCP + SERVER mode + port 10002.
+ * Used by the supervisor's reader-deletion path so the bridge is ready
+ * for re-deployment without manual operator intervention.
+ *
+ * Tolerant of failure (returns false). Caller should not assume the
+ * bridge is reachable — it may already be unplugged or hardware-failed,
+ * in which case the wipe is a best-effort no-op.
+ */
+export async function wipeBridgeToDhcp(mac: string, ipForLogs: string): Promise<boolean> {
+  return resetBridgeBadConfigImpl(mac, ipForLogs);
+}
+
+/**
+ * Run wiznet-cli -d, return every discovered bridge that is currently on
+ * a STATIC IP whose MAC is not in `knownMacs`. These are orphans: a
+ * bridge that was previously adopted (so it was set static at adoption
+ * time) but is no longer in WMS. Caller can wipe them so the bridge
+ * goes back to DHCP and either disappears or re-appears for adoption.
+ *
+ * Healthy adoption flow is unaffected — freshly-plugged bridges arrive
+ * with DHCP=Y and are skipped by this filter.
+ */
+export async function findOrphanStaticBridges(
+  knownMacs: ReadonlySet<string>,
+): Promise<{ mac: string; ip: string }[]> {
+  const records = await runWiznetDiscovery();
+  const normalized = new Set<string>();
+  for (const m of knownMacs) {
+    const u = m.replace(/[^0-9A-Fa-f]/g, "").toUpperCase();
+    if (u.length === 12) normalized.add(u);
+  }
+  const out: { mac: string; ip: string }[] = [];
+  for (const r of records) {
+    if (r.dhcp) continue;
+    if (normalized.has(r.mac)) continue;
+    out.push({ mac: r.mac, ip: r.ip });
+  }
+  return out;
+}
+
+async function resetBridgeBadConfigImpl(mac: string, ip: string): Promise<boolean> {
   return await new Promise((resolve) => {
     const args = [
       "-n",
       WIZNET_CLI,
       "--ipconfig",
-      record.mac,
+      mac,
       "--dhcp",
       "--mode-server",
       "--port",
@@ -246,14 +292,14 @@ async function resetBridgeBadConfig(record: WiznetRecord): Promise<boolean> {
     };
     child.stderr.on("data", (b: Buffer) => { stderr += b.toString("utf8"); });
     child.on("error", (e) => {
-      log.warn("wiznet-discovery: reset spawn failed", { mac: record.mac, err: e.message });
+      log.warn("wiznet-discovery: reset spawn failed", { mac, err: e.message });
       finish(false);
     });
     child.on("exit", (code) => {
       if (code !== 0) {
         log.warn("wiznet-discovery: reset returned non-zero", {
-          mac: record.mac,
-          ip: record.ip,
+          mac,
+          ip,
           code,
           stderr: stderr.trim().slice(0, 200),
         });
@@ -262,7 +308,7 @@ async function resetBridgeBadConfig(record: WiznetRecord): Promise<boolean> {
     });
     setTimeout(() => {
       if (done) return;
-      log.warn("wiznet-discovery: reset timed out, group-killing", { mac: record.mac });
+      log.warn("wiznet-discovery: reset timed out, group-killing", { mac });
       groupKill();
       finish(false);
     }, RESET_TIMEOUT_MS);

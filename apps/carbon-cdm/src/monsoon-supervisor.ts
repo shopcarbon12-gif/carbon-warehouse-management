@@ -12,6 +12,7 @@ import {
   newConsoleParserState,
   type ConsoleParserState,
 } from "./console-parser.js";
+import { wipeBridgeToDhcp } from "./wiznet-discovery.js";
 
 /** Paths to the two Mojix binaries we know how to drive. */
 export type MonsoonBinaries = {
@@ -1532,14 +1533,21 @@ export class MonsoonSupervisor {
         .map((r) => [r.id, r] as const),
     );
 
-    // Stop slots for readers no longer in the bundle.
+    // Stop slots for readers no longer in the bundle (or paused).
+    // Differentiate between paused (still in bundle, comes back later) and
+    // truly deleted (not in bundle at all). Only the deletion path wipes
+    // the bridge's NVRAM and removes ARP pins — pausing must preserve
+    // bridge config so unpause is instant.
+    const bundleReaderIds = new Set(bundle.readers.map((r) => r.id));
     for (const [id, slot] of this.slots) {
       if (!desiredById.has(id)) {
+        const trulyDeleted = !bundleReaderIds.has(id);
         log.info("supervisor: reader removed, stopping", {
           readerId: id,
           name: slot.spec.name,
-          reason: "left_bundle_or_paused",
+          reason: trulyDeleted ? "deleted_from_wms" : "left_bundle_or_paused",
         });
+        const stoppedSpec = slot.spec;
         this.stopSlot(slot);
         this.slots.delete(id);
         this.freeSlotIndex(slot.index);
@@ -1547,6 +1555,15 @@ export class MonsoonSupervisor {
         // reader. Without this, a queue can linger across a WMS-side
         // pause/delete until the agent restarts.
         this.onReaderRemoved?.(id);
+        // Deleted readers: wipe the bridge's NVRAM back to DHCP and
+        // unpin the kernel ARP entry. Operator deleted the device in
+        // WMS — they don't want this bridge's static config or ARP
+        // claim lingering on the network. Fire-and-forget; tolerant of
+        // a hardware-failed bridge (wiznet-cli returns non-zero, we
+        // still unpin so the kernel forgets the stale binding).
+        if (trulyDeleted) {
+          void this.wipeRemovedBridge(stoppedSpec);
+        }
       }
     }
 
@@ -3106,6 +3123,75 @@ export class MonsoonSupervisor {
       }
     }
     return out;
+  }
+
+  /**
+   * Fire-and-forget cleanup for a reader that was deleted in WMS.
+   * Wipes the bridge's NVRAM back to DHCP+SERVER+10002 so the unit is
+   * ready for re-deployment (or, if the operator unplugs it, doesn't
+   * leak a stale static IP onto a fresh LAN it gets moved to). Also
+   * removes the kernel ARP pin for the reader's old IP so the pin
+   * daemon doesn't keep refreshing a now-invalid binding.
+   *
+   * Tolerant of every failure mode: bridge unreachable, MAC missing,
+   * sudo unavailable. The deletion completes either way — this is a
+   * best-effort hygiene step, not a precondition.
+   */
+  private async wipeRemovedBridge(spec: AgentConfigReader): Promise<void> {
+    const ip = String(spec.network_address ?? "");
+    const macRaw = (spec.mac_address ?? "").replace(/[^0-9A-Fa-f]/g, "").toUpperCase();
+    log.info("supervisor: wiping bridge for deleted reader", {
+      readerId: spec.id,
+      name: spec.name,
+      ip,
+      mac: macRaw || "(unknown)",
+    });
+    if (macRaw.length === 12) {
+      try {
+        const ok = await wipeBridgeToDhcp(macRaw, ip);
+        log.info("supervisor: bridge wipe complete", { readerId: spec.id, ok });
+      } catch (e) {
+        log.warn("supervisor: bridge wipe threw", {
+          readerId: spec.id,
+          err: e instanceof Error ? e.message : String(e),
+        });
+      }
+    } else {
+      log.warn("supervisor: bridge wipe skipped — no MAC on spec", { readerId: spec.id, ip });
+    }
+    if (ip) {
+      // Remove the kernel ARP pin. pin-wiznet-readers-arp.service installs
+      // these as `nud permanent` — they don't time out. If we leave it,
+      // the IP keeps resolving to the deleted bridge's MAC even after
+      // a swap/replug. Use the host's `ip` command (no sudo required for
+      // delete on Linux when running as root — agent runs as shopcarbon
+      // which has passwordless sudo for everything per the VM setup).
+      await new Promise<void>((resolve) => {
+        const child = spawn(
+          "sudo",
+          ["-n", "ip", "neigh", "del", ip, "dev", "enp0s3"],
+          { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        const t = setTimeout(() => {
+          try { child.kill("SIGKILL"); } catch { /* gone */ }
+          resolve();
+        }, 3_000);
+        child.on("exit", (code) => {
+          clearTimeout(t);
+          log.info("supervisor: arp unpin", { readerId: spec.id, ip, code });
+          resolve();
+        });
+        child.on("error", (e) => {
+          clearTimeout(t);
+          log.warn("supervisor: arp unpin spawn error", {
+            readerId: spec.id,
+            ip,
+            err: e.message,
+          });
+          resolve();
+        });
+      });
+    }
   }
 
   private tryBridgeReset(spec: AgentConfigReader): void {

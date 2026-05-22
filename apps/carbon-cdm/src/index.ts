@@ -10,7 +10,7 @@ import { ReadAggregator } from "./read-aggregator.js";
 import { MonsoonSupervisor } from "./monsoon-supervisor.js";
 import { AntennaTestController } from "./antenna-test-mode.js";
 import { postAntennaTestResult, postReaderOnline, postReaderOffline } from "./wms-client.js";
-import { startWiznetDiscovery } from "./wiznet-discovery.js";
+import { startWiznetDiscovery, findOrphanStaticBridges, wipeBridgeToDhcp } from "./wiznet-discovery.js";
 
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
 /** 2024 Mojix binary; selected per-reader via devices.config.monsoon_driver = "console". */
@@ -164,6 +164,61 @@ async function main(): Promise<void> {
   };
 
   await pullConfig();
+
+  // Startup catch-up: if a reader was deleted from WMS while the agent
+  // was down, the runtime delete-handler in monsoon-supervisor never
+  // fired (the slot didn't exist to be removed). Scan the LAN for
+  // bridges on STATIC IPs whose MACs are not in the current bundle,
+  // and wipe each one back to DHCP. Freshly-plugged bridges (DHCP=Y)
+  // are skipped — they're awaiting normal adoption in Hardware Config.
+  // ARP pins for those orphan IPs are also removed so the per-bridge
+  // pin daemon doesn't keep refreshing stale bindings. Best-effort,
+  // tolerant of every failure mode.
+  void (async () => {
+    try {
+      const known = new Set<string>();
+      // Use whatever bundle the first pull gave us — supervisor exposes
+      // it via its reconciled state. Fall back to empty set if the pull
+      // failed (then EVERYTHING looks orphan; the static-only filter
+      // still protects fresh bridges, but skip the sweep to be safe).
+      const lastBundle = (supervisor as unknown as { lastBundle: AgentConfigBundle | null }).lastBundle;
+      if (!lastBundle) {
+        log.warn("startup: orphan-bridge sweep skipped — no bundle yet");
+        return;
+      }
+      for (const r of lastBundle.readers) {
+        const m = (r.mac_address ?? "").replace(/[^0-9A-Fa-f]/g, "").toUpperCase();
+        if (m.length === 12) known.add(m);
+      }
+      const orphans = await findOrphanStaticBridges(known);
+      if (orphans.length === 0) {
+        log.info("startup: orphan-bridge sweep clean", { knownMacs: known.size });
+        return;
+      }
+      log.info("startup: orphan-bridge sweep — wiping", {
+        knownMacs: known.size,
+        orphans,
+      });
+      for (const o of orphans) {
+        try { await wipeBridgeToDhcp(o.mac, o.ip); } catch { /* tolerated */ }
+        // Also drop the kernel ARP pin so the pin daemon doesn't refresh
+        // a binding to a now-DHCP'd bridge whose IP just changed.
+        await new Promise<void>((resolve) => {
+          const c = spawn("sudo", ["-n", "ip", "neigh", "del", o.ip, "dev", "enp0s3"], {
+            stdio: ["ignore", "ignore", "ignore"],
+          });
+          const t = setTimeout(() => { try { c.kill("SIGKILL"); } catch { /* gone */ } resolve(); }, 3000);
+          c.on("exit", () => { clearTimeout(t); resolve(); });
+          c.on("error", () => { clearTimeout(t); resolve(); });
+        });
+      }
+    } catch (e) {
+      log.warn("startup: orphan-bridge sweep threw", {
+        err: e instanceof Error ? e.message : String(e),
+      });
+    }
+  })();
+
   const pollHandle = setInterval(
     pullConfig,
     env.CARBON_CONFIG_POLL_INTERVAL_SEC * 1000,
