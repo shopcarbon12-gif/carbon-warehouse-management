@@ -1231,18 +1231,10 @@ export class MonsoonSupervisor {
         // QUIET_MS implements. The on-exit 0-record path triggers
         // tryBridgeReset directly without needing sweep state.
         const configuredPower = this.avgPower(slot.spec);
-        // Sweep starts at the MAX power (SWEEP_POWERS[0] = 330 in dBm*10
-        // = 33 dBm) and walks DOWN looking for a working power. So sweep
-        // is only useful when the operator configured this reader AT the
-        // max — otherwise we'd be bumping the operator's deliberate
-        // lower setting up to a higher one. Live evidence 2026-05-22:
-        // operator complaint about supervisor pushing 17/30/etc-dBm
-        // readers back to 33 dBm. Skip sweep entirely if configured
-        // below max; the bridge-reset / chip-reset recovery paths
-        // (which respect configured power) still fire for them.
-        // avgPower() returns real dBm; SWEEP_POWERS is dBm*10.
-        const maxSweepPowerDbm = (SWEEP_POWERS[0] ?? 330) / 10;
-        const skipSweepLowPower = configuredPower < maxSweepPowerDbm;
+        // Below-configured-min slots take a different recovery path
+        // (direct bridge reset, no sweep) — see second branch below.
+        const minSweepPower = SWEEP_POWERS[SWEEP_POWERS.length - 1] ?? 30;
+        const skipSweepLowPower = configuredPower * 10 < minSweepPower;
         if (
           !muxSlot &&
           slot.testSession === null &&
@@ -1257,7 +1249,18 @@ export class MonsoonSupervisor {
           // the chip is silent. Without this gate the test page shows "0 EPCs"
           // because the supervisor flipped the slot back to normal mode at a
           // lower power before the test's first read landed.
-          slot.sweepPowerOverrideArg = SWEEP_POWERS[0] ?? null;
+          // Start sweep at the largest SWEEP_POWERS step at or below
+          // the operator's configured power. Sweep walks DOWN from here.
+          // Never start above configured — operator's setting is the
+          // ceiling, sweep only ever finds a working power LOWER than
+          // configured.
+          const configuredArg = Math.round(configuredPower * 10);
+          const startIdx = SWEEP_POWERS.findIndex((p) => p <= configuredArg);
+          const startPower =
+            startIdx >= 0
+              ? SWEEP_POWERS[startIdx]
+              : SWEEP_POWERS[SWEEP_POWERS.length - 1];
+          slot.sweepPowerOverrideArg = startPower ?? null;
           slot.sweepStepStartedAt = Date.now();
           slot.consecutiveZeroByteKicks = 0;
           slot.lastExhaustionResetAt = 0;
@@ -1267,6 +1270,7 @@ export class MonsoonSupervisor {
             readerId: slot.spec.id,
             readerName: slot.spec.name,
             host: slot.spec.network_address,
+            configuredDbm: configuredPower,
             firstSweepPower: slot.sweepPowerOverrideArg,
           });
           this.killSlotChildHard(slot);
@@ -2172,9 +2176,13 @@ export class MonsoonSupervisor {
     // 33 dBm, verified safe on .18 / .22 / .77 / etc).
     const muxMode = spec.antennas.filter((a) => a.enabled).length >= 2;
     const requestedPower = Math.round(this.avgPower(spec) * 10);
-    // Sweep override (when set by the auto-recovery state machine) wins over
-    // the configured power. Mux clamp still applies on top.
-    const basePower = slot.sweepPowerOverrideArg ?? requestedPower;
+    // Operator's configured power is the CEILING. Any supervisor recovery
+    // override (sweep) can only go LOWER. Live evidence 2026-05-22: operator
+    // set readers at 17/27/etc, supervisor sweep was pinning them at 33
+    // because override was applied unconditionally. Min() caps any
+    // override to <= requested.
+    const overridePower = slot.sweepPowerOverrideArg ?? requestedPower;
+    const basePower = Math.min(overridePower, requestedPower);
     const powerArg = muxMode ? Math.min(basePower, 300) : basePower;
 
     // Pick the current candidate serial port. The candidate list is
@@ -2504,10 +2512,13 @@ export class MonsoonSupervisor {
       readTimeMs = testSession.readTimeMs;
       tagFocus = testSession.tagFocus;
     } else {
-      // Sweep override (set by the auto-recovery state machine) wins over
-      // the configured power. Test-mode is unaffected — sweep recovery only
-      // runs in normal scan after exhaustion, never during /antenna-test.
-      powerArg = slot.sweepPowerOverrideArg ?? Math.round(this.avgPower(spec) * 10);
+      // Operator's configured power is the CEILING. Sweep override can
+      // only go LOWER. Min() defends against any code path that set
+      // sweepPowerOverrideArg above configured (e.g., legacy SWEEP_POWERS[0]
+      // start point). Test-mode bypasses this entirely.
+      const configuredArg = Math.round(this.avgPower(spec) * 10);
+      const overrideArg = slot.sweepPowerOverrideArg ?? configuredArg;
+      powerArg = Math.min(overrideArg, configuredArg);
       const enabled = spec.antennas.filter((a) => a.enabled);
       // Supervisor-managed mux: stamp this spawn with the antenna at the
       // current rotation index. Each spawn drives ONE antenna; the
