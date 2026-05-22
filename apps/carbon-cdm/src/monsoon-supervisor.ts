@@ -3206,108 +3206,19 @@ export class MonsoonSupervisor {
     const slotForStamp = this.slots.get(spec.id);
     if (slotForStamp) slotForStamp.bridgeResetAt = Date.now();
 
-    // Clear stale TCP connections the bridge may still be holding from a
-    // previously SIGKILL'd supervisor child. Observed live 2026-05-21 on
-    // POS reader (.69): every fresh spawn got 0 bytes for an hour. Manual
-    // `MonsoonReader --stop` printed "A MonsoonReader instance connected
-    // to 192.168.1.69 is already running. MonsoonReader shutdown." — a
-    // ghost session was tying up the bridge's serial channel to the chip,
-    // so new spawns connected over TCP but the chip was busy serving the
-    // dead session. Bridge-reset alone doesn't always reap these.
-    // MonsoonReader --stop reaches into the bridge, finds the orphan
-    // session, and closes it before we wiznet-reset the box.
-    const monsoonPort = String(Number(spec.monsoon_serial_port ?? 10002));
-    try {
-      const stopChild = spawn(
-        "sudo",
-        [
-          "timeout",
-          "--kill-after=1s",
-          "6s",
-          "/opt/legacy-rfid/MonsoonReader",
-          "--stop",
-          "--monsoon_host",
-          host,
-          "--monsoon_cport",
-          monsoonPort,
-        ],
-        { stdio: ["ignore", "pipe", "pipe"] },
-      );
-      stopChild.stdout?.resume();
-      stopChild.stderr?.resume();
-      stopChild.on("exit", (code) => {
-        log.info("supervisor: tryBridgeReset — MonsoonReader --stop exited", {
-          readerId: spec.id,
-          host,
-          code,
-        });
-      });
-      stopChild.on("error", (e) => {
-        log.warn("supervisor: tryBridgeReset — MonsoonReader --stop spawn error", {
-          readerId: spec.id,
-          host,
-          err: e.message,
-        });
-      });
-    } catch (e) {
-      log.warn("supervisor: tryBridgeReset — MonsoonReader --stop threw", {
-        readerId: spec.id,
-        host,
-        err: e instanceof Error ? e.message : String(e),
-      });
-    }
-
-    // Chip-level reset via new_monsoonreader --reset. This goes BEYOND
-    // session cleanup: it issues an R2000 reset opcode to the chip
-    // itself, clearing internal Gen2 state (selection target, session,
-    // inventory queue) that survives both --stop and wiznet-cli --reset.
-    // Observed live 2026-05-21 on POS reader: after antenna-test sweep
-    // killed/respawned the chip every 1.5 s for ~minute, the chip was
-    // alive (--query replies) but produced 0 tag reads at any power.
-    // Manual `new_monsoonreader --reset` returned "Reset command issued"
-    // and the chip resumed normal inventory. Bake it into the recovery
-    // chain so the supervisor can self-heal this wedge without operator
-    // help. Runs concurrent with --stop above (fire-and-forget); the
-    // 18 s POST_BRIDGE_RESET_QUIET_MS gives both calls time to complete
-    // before the supervisor reconnects.
-    try {
-      const chipReset = spawn(
-        "sudo",
-        [
-          "timeout",
-          "--kill-after=1s",
-          "8s",
-          "/opt/legacy-rfid/new_monsoonreader",
-          host,
-          monsoonPort,
-          "--reset",
-        ],
-        { stdio: ["ignore", "pipe", "pipe"] },
-      );
-      chipReset.stdout?.resume();
-      chipReset.stderr?.resume();
-      chipReset.on("exit", (code) => {
-        log.info("supervisor: tryBridgeReset — new_monsoonreader --reset (chip-level) exited", {
-          readerId: spec.id,
-          host,
-          code,
-        });
-      });
-      chipReset.on("error", (e) => {
-        log.warn("supervisor: tryBridgeReset — chip --reset spawn error", {
-          readerId: spec.id,
-          host,
-          err: e.message,
-        });
-      });
-    } catch (e) {
-      log.warn("supervisor: tryBridgeReset — chip --reset threw", {
-        readerId: spec.id,
-        host,
-        err: e instanceof Error ? e.message : String(e),
-      });
-    }
-
+    // REVERTED 2026-05-21 night: the previous agent (c866c6c and f8b3ac7,
+    // 16:51 + 17:01) added concurrent `MonsoonReader --stop` and
+    // `new_monsoonreader --reset` to every bridge-reset cycle. Both fired
+    // every 60s of silence. The chip-level --reset opcode going to the
+    // chip while wiznet-cli was simultaneously rebooting the bridge
+    // appears to push the chip's MCU into the UART break loop
+    // (`00 00 FF FF FF FF FF FF` reply) that this session has been
+    // chasing. At 14:12 (before those commits) the POS reader was
+    // reading 4 tags fine at 17 dBm. Reverting to the pre-c866c6c
+    // behavior: bridge reset only via wiznet-cli, no chip-side opcodes.
+    // If a future genuine "ghost session" case needs `MonsoonReader --stop`
+    // again, gate it on actual evidence (HasClient=Y AND zero bytes for
+    // N minutes) rather than firing on every silence kick.
     const runReset = (mac: string): void => {
       log.info("supervisor: tryBridgeReset — spawning wiznet-cli --reset", {
         readerId: spec.id,
