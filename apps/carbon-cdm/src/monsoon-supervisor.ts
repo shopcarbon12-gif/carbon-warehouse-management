@@ -96,7 +96,7 @@ const SWEEP_POWERS: readonly number[] = [
  * on sweep failure (see runStreamWatchdog), the 60-s retry usually
  * succeeds because the bridge has been reset in between.
  */
-const SWEEP_RETRY_COOLDOWN_MS = 60_000;
+const SWEEP_RETRY_COOLDOWN_MS = 10_000;
 /**
  * When sweep recovery succeeds at a sub-configured power, pin the
  * slot to that power so it keeps producing reads. After this interval
@@ -143,7 +143,20 @@ const MIN_SWEEP_DWELL_MS = 10_000;
  * to `max(finalDelay, slot.bridgeResetAt + POST_BRIDGE_RESET_QUIET_MS -
  * now)` so this honors any reset fired during the current 0-byte streak.
  */
-const POST_BRIDGE_RESET_QUIET_MS = 18_000;
+const POST_BRIDGE_RESET_QUIET_MS = 5_000;
+
+/**
+ * Fast-stuck detection: number of consecutive `cleanExit:true, totalRecords:0`
+ * with duration under FAST_CLEAN_EXIT_THRESHOLD_MS that triggers an immediate
+ * bridge reset, bypassing the silence-timer countdown. The 14:12-worked /
+ * 17:01-broke episode of 2026-05-21 spent hours in this exact pattern
+ * (180 ms cleanExit:true 0 records, 5 s respawn, repeat) without the
+ * silence-watchdog ever firing because each spawn briefly reset the timer.
+ * 3-strike + sub-1s exit means we react inside ~3 s of detection and the
+ * full kill+bridge-reset+respawn loop completes inside the 15-s SLO.
+ */
+const FAST_CLEAN_EXIT_STRIKES = 3;
+const FAST_CLEAN_EXIT_THRESHOLD_MS = 1_000;
 
 /**
  * Grace window between SIGTERM and SIGKILL when stopping a slot's child.
@@ -324,6 +337,17 @@ type ReaderSlot = {
    * doesn't spam the log forever.
    */
   consecutiveZeroByteKicks: number;
+  /**
+   * Consecutive console-driver spawns that exited cleanly (no signal,
+   * code 0) with zero records in under FAST_CLEAN_EXIT_THRESHOLD_MS.
+   * This is the signature of a chip in a stuck state where the binary's
+   * setup handshake fails fast — the silence-watchdog never fires
+   * because each spawn briefly resets the byte-timer. After
+   * FAST_CLEAN_EXIT_STRIKES strikes, we trigger an immediate
+   * bridge reset to break the loop inside the 15-s SLO. Reset on any
+   * byte received or on a non-fast / non-clean exit.
+   */
+  consecutiveFastCleanExits: number;
   /**
    * ms timestamp of the last time we either entered the exhausted state OR
    * reset the exhausted state for a re-probe. The watchdog uses this to
@@ -1731,6 +1755,7 @@ export class MonsoonSupervisor {
         candidatePortIdx: 0,
         bytesSinceSpawn: false,
         consecutiveZeroByteKicks: 0,
+        consecutiveFastCleanExits: 0,
         lastExhaustionResetAt: 0,
         lastRecordAt: 0,
         lastOfflinePushAt: 0,
@@ -2500,6 +2525,12 @@ export class MonsoonSupervisor {
     // Reset forced-respawn timer so the next interval counts from THIS spawn.
     slot.lastForcedRespawnAt = 0;
 
+    // Capture spawn time so the on-exit handler can measure how fast the
+    // child died. Sub-FAST_CLEAN_EXIT_THRESHOLD_MS cleanExit:true exits
+    // accumulate strikes; FAST_CLEAN_EXIT_STRIKES of them in a row trigger
+    // an immediate bridge reset, inside the 15-s recovery SLO.
+    const spawnStartedAt = Date.now();
+
     // See spawnReader's stream-binary spawn: detached:true gives the
     // watchdog a process-group handle to SIGKILL on stuck cycles.
     const child = spawn(this.binaries.console, args, {
@@ -2663,6 +2694,7 @@ export class MonsoonSupervisor {
       // delay is just to let the OS reap the SIGKILLed child before
       // binding the same local ports; 75 ms is enough on modern kernels.
       const delay = treatAsClean ? 75 : slot.backoffMs;
+      const spawnDurationMs = Date.now() - spawnStartedAt;
       log.info("supervisor: new_monsoonreader exited", {
         readerId: spec.id,
         code,
@@ -2672,7 +2704,39 @@ export class MonsoonSupervisor {
         malformed: totalMal,
         cleanExit,
         wasIntendedKill,
+        spawnDurationMs,
       });
+      // FAST-STUCK DETECTION 2026-05-21: track consecutive sub-1s
+      // cleanExit:true 0-records exits. After FAST_CLEAN_EXIT_STRIKES
+      // in a row, fire tryBridgeReset immediately and kill any in-
+      // flight child. Bypasses the silence-watchdog (which never fires
+      // on this pattern because each spawn briefly resets the timer)
+      // so the 15-s recovery SLO can be met. Reset on any byte received,
+      // on a non-clean exit (signal/non-zero code), or on a non-fast
+      // exit (the child got past handshake but read nothing — different
+      // failure mode handled by the existing watchdog).
+      if (
+        cleanExit &&
+        !wasIntendedKill &&
+        !slot.bytesSinceSpawn &&
+        totalRecords === 0 &&
+        spawnDurationMs < FAST_CLEAN_EXIT_THRESHOLD_MS
+      ) {
+        slot.consecutiveFastCleanExits += 1;
+        if (slot.consecutiveFastCleanExits >= FAST_CLEAN_EXIT_STRIKES) {
+          log.warn("supervisor: fast-stuck detected — firing immediate bridge reset", {
+            readerId: spec.id,
+            readerName: spec.name,
+            host: String(spec.network_address ?? ""),
+            strikes: slot.consecutiveFastCleanExits,
+            spawnDurationMs,
+          });
+          slot.consecutiveFastCleanExits = 0;
+          this.tryBridgeReset(spec);
+        }
+      } else if (slot.bytesSinceSpawn || !cleanExit) {
+        slot.consecutiveFastCleanExits = 0;
+      }
       // Rapid-respawn pattern (cleanExit:true, totalRecords:0, child exited
       // without ever producing a byte) means the chip is silent — typically
       // bridge port mismatch or the chassis isn't running its RFID firmware.
