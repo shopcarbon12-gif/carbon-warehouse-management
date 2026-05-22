@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { loadConfig, AGENT_VERSION, effectiveHostname } from "./config.js";
 import { log, setLogLevel } from "./log.js";
 import {
@@ -125,6 +126,16 @@ async function main(): Promise<void> {
   });
   antennaTest.start();
 
+  // Startup orphan-sweep. If the previous agent process crashed or was
+  // SIGKILL'd, it can leave MonsoonReader / new_monsoonreader / wiznet-cli
+  // grandchildren alive. Those orphans keep TCP sockets open to WIZnet
+  // bridges (SERVER(2) = single-client) and block the fresh supervisor
+  // from connecting — every new spawn returns `cleanExit:true,
+  // totalRecords:0` in ~300 ms. Live 2026-05-21 on POS reader: an orphan
+  // `MonsoonReader --stop` had held the .69 bridge socket for 13 min
+  // through an agent restart. `pkill -9 -f <abs path>` reaps them.
+  await sweepLegacyOrphans();
+
   let lastPullOk = false;
   const stopHeartbeat = startHeartbeat(
     env,
@@ -176,6 +187,30 @@ async function main(): Promise<void> {
   };
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
+}
+
+async function sweepLegacyOrphans(): Promise<void> {
+  // Patterns are absolute paths so `pkill -f` can't match the supervisor's
+  // own argv or shell command lines that mention the binary name.
+  const patterns = [
+    "/opt/legacy-rfid/MonsoonReader",
+    "/opt/legacy-rfid/new_monsoonreader",
+    "/opt/legacy-rfid/wiznet-cli",
+  ];
+  await Promise.all(patterns.map((pat) => {
+    return new Promise<void>((resolve) => {
+      const child = spawn("sudo", ["pkill", "-9", "-f", pat], {
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+      const t = setTimeout(() => {
+        try { child.kill("SIGKILL"); } catch { /* gone */ }
+        resolve();
+      }, 3_000);
+      child.on("exit", () => { clearTimeout(t); resolve(); });
+      child.on("error", () => { clearTimeout(t); resolve(); });
+    });
+  }));
+  log.info("startup: orphan sweep complete", { patterns });
 }
 
 main().catch((e) => {

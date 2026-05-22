@@ -145,6 +145,15 @@ const MIN_SWEEP_DWELL_MS = 10_000;
 const POST_BRIDGE_RESET_QUIET_MS = 18_000;
 
 /**
+ * Grace window between SIGTERM and SIGKILL when stopping a slot's child.
+ * `new_monsoonreader` catches SIGTERM and FINs its bridge TCP socket
+ * within ~300 ms; we wait a touch longer for safety. SIGKILL fallback
+ * fires if the child ignores SIGTERM (old MonsoonReader, wiznet-cli).
+ * See `killSlotChildHard` for the leaked-session-on-SIGKILL backstory.
+ */
+const GRACEFUL_KILL_GRACE_MS = 1_500;
+
+/**
  * Slow-detection window (rolling): how often we compare each slot's
  * read rate to its peers. A slot reading significantly slower than peer
  * median while peers are healthy gets auto-recovered (sweep + bridge
@@ -766,26 +775,41 @@ export class MonsoonSupervisor {
   }
 
   /**
-   * Force-kill the slot's current child via the process group it was
-   * spawned into (detached:true at spawn time). Plain `child.kill("SIGTERM")`
-   * gets ignored by both `wiznet-cli` and `new_monsoonreader` — the
-   * binaries either catch SIGTERM or stay in a kernel UDP-retry loop that
-   * doesn't process signals. Live evidence 2026-05-07: orphaned binaries
-   * survive at 99% CPU for minutes-to-days. SIGKILL on the negative pid
-   * targets the whole group, which the kernel CAN'T ignore.
+   * Stop the slot's current child. SIGTERM the process group first to give
+   * `new_monsoonreader` (which catches SIGTERM as of 2024) a chance to send
+   * FIN on its bridge-side TCP socket; if it's still alive after
+   * GRACEFUL_KILL_GRACE_MS, SIGKILL the group.
+   *
+   * Why graceful first: SIGKILL drops the child mid-syscall, leaving the
+   * WIZnet bridge holding a half-open TCP session that registers as
+   * HasClient=Y. The bridge is SERVER(2) mode = single-client, so every
+   * leaked session blocks the next supervisor spawn until the bridge's own
+   * TCP timeout reaps it (minutes). Live 2026-05-21 on POS reader: 93
+   * silence-watchdog cycles in one afternoon each leaked a session, until
+   * the bridge stopped accepting new connections entirely and reads stayed
+   * at 0 for hours. The antenna-test leaveTestMode path already uses this
+   * pattern (see "GRACEFUL SHUTDOWN 2026-05-12" below).
+   *
+   * Old MonsoonReader (stream driver) and wiznet-cli ignore SIGTERM (per
+   * 2026-05-07 evidence) — the SIGKILL fallback handles them.
    */
   private killSlotChildHard(slot: ReaderSlot): void {
     const pid = slot.child?.pid;
     if (!pid) return;
     try {
-      process.kill(-pid, "SIGKILL");
+      process.kill(-pid, "SIGTERM");
     } catch {
-      try {
-        slot.child?.kill("SIGKILL");
-      } catch {
-        /* already gone */
-      }
+      try { slot.child?.kill("SIGTERM"); } catch { /* already gone */ }
     }
+    setTimeout(() => {
+      const child = slot.child;
+      if (!child || child.exitCode !== null || child.signalCode !== null) return;
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {
+        try { child.kill("SIGKILL"); } catch { /* gone */ }
+      }
+    }, GRACEFUL_KILL_GRACE_MS);
   }
 
   private runStreamWatchdog(): void {
