@@ -159,6 +159,19 @@ const FAST_CLEAN_EXIT_STRIKES = 3;
 const FAST_CLEAN_EXIT_THRESHOLD_MS = 1_000;
 
 /**
+ * After this many fast-stuck → bridge-reset cycles fail in a row, escalate
+ * to a chip-level reset (R2000 reset opcode via `new_monsoonreader
+ * --reset`). The prior agent's f8b3ac7 fired this on EVERY 60-s silence
+ * kick, which beat the chip into the UART break loop. Here it's gated on
+ * actual evidence that bridge-reset isn't working (5 consecutive
+ * fast-stuck cycles ≈ 60 s of failed bridge-only recovery) and
+ * rate-limited by CHIP_RESET_COOLDOWN_MS so a chronically-bad chip
+ * gets at most one chip-reset per cooldown window.
+ */
+const FAST_STUCK_CHIP_RESET_AFTER_CYCLES = 5;
+const CHIP_RESET_COOLDOWN_MS = 30 * 60 * 1000;
+
+/**
  * Grace window between SIGTERM and SIGKILL when stopping a slot's child.
  * `new_monsoonreader` catches SIGTERM and FINs its bridge TCP socket
  * within ~300 ms; we wait a touch longer for safety. SIGKILL fallback
@@ -349,6 +362,13 @@ type ReaderSlot = {
    */
   consecutiveFastCleanExits: number;
   /**
+   * Consecutive fast-stuck CYCLES (each = FAST_CLEAN_EXIT_STRIKES strikes +
+   * one bridge reset that failed to clear it). Resets the moment a byte
+   * is received. Used to escalate from bridge-reset-only recovery to
+   * chip-level reset after FAST_STUCK_CHIP_RESET_AFTER_CYCLES.
+   */
+  fastStuckCycles: number;
+  /**
    * ms timestamp of the last time we either entered the exhausted state OR
    * reset the exhausted state for a re-probe. The watchdog uses this to
    * periodically clear `consecutiveZeroByteKicks` so a reader that comes
@@ -425,6 +445,14 @@ type ReaderSlot = {
    *  every spawn returned 0 records, only `systemctl stop carbon-cdm-agent
    *  + 10s pause + start` broke the loop. */
   bridgeResetAt: number;
+  /** ms timestamp of the most recent `new_monsoonreader --reset` chip-level
+   *  reset fired by `tryChipReset`. 0 = never. Used by tryChipReset to
+   *  enforce a CHIP_RESET_COOLDOWN_MS gap between firings so we don't
+   *  damage a chip the way the every-60s f8b3ac7 commit did 2026-05-21
+   *  afternoon. Chip reset is reserved for true wedges where bridge
+   *  reset alone hasn't cleared the fast-stuck pattern after multiple
+   *  attempts. */
+  chipResetAt: number;
   /** ms timestamp of the most recent push to /api/cdm-agents/reader-offline.
    *  Throttle so a chronically-silent reader posts offline once per minute,
    *  not on every watchdog tick. Reset to 0 on first-byte (online) so the
@@ -1756,6 +1784,7 @@ export class MonsoonSupervisor {
         bytesSinceSpawn: false,
         consecutiveZeroByteKicks: 0,
         consecutiveFastCleanExits: 0,
+        fastStuckCycles: 0,
         lastExhaustionResetAt: 0,
         lastRecordAt: 0,
         lastOfflinePushAt: 0,
@@ -1791,6 +1820,7 @@ export class MonsoonSupervisor {
         wedgedSinceMs: 0,
         lastDeepRecoveryAt: 0,
         bridgeResetAt: 0,
+        chipResetAt: 0,
         suggestedPowerDbm: null,
         lastForcedRespawnAt: 0,
         lastUpwardProbeAt: 0,
@@ -2724,18 +2754,45 @@ export class MonsoonSupervisor {
       ) {
         slot.consecutiveFastCleanExits += 1;
         if (slot.consecutiveFastCleanExits >= FAST_CLEAN_EXIT_STRIKES) {
-          log.warn("supervisor: fast-stuck detected — firing immediate bridge reset", {
-            readerId: spec.id,
-            readerName: spec.name,
-            host: String(spec.network_address ?? ""),
-            strikes: slot.consecutiveFastCleanExits,
-            spawnDurationMs,
-          });
+          slot.fastStuckCycles += 1;
+          // Escalation: after FAST_STUCK_CHIP_RESET_AFTER_CYCLES bridge-only
+          // recoveries have failed in a row (chip stayed wedged across
+          // multiple bridge reboots), fire ONE chip-level reset opcode at
+          // the chip — rate-limited by CHIP_RESET_COOLDOWN_MS so this can
+          // never repeat at the every-60s cadence that hurt the chip
+          // 2026-05-21 afternoon. Chip-reset is the only software path
+          // that can clear an R2000 MCU wedge without a PoE cycle.
+          const sinceLastChipReset = Date.now() - slot.chipResetAt;
+          const chipResetAllowed =
+            slot.fastStuckCycles >= FAST_STUCK_CHIP_RESET_AFTER_CYCLES &&
+            sinceLastChipReset >= CHIP_RESET_COOLDOWN_MS;
+          if (chipResetAllowed) {
+            log.warn("supervisor: bridge-reset cycles exhausted — escalating to chip-level reset", {
+              readerId: spec.id,
+              readerName: spec.name,
+              host: String(spec.network_address ?? ""),
+              fastStuckCycles: slot.fastStuckCycles,
+              cooldownAgoMs: slot.chipResetAt === 0 ? null : sinceLastChipReset,
+            });
+            slot.fastStuckCycles = 0;
+            slot.chipResetAt = Date.now();
+            this.tryChipReset(spec);
+          } else {
+            log.warn("supervisor: fast-stuck detected — firing immediate bridge reset", {
+              readerId: spec.id,
+              readerName: spec.name,
+              host: String(spec.network_address ?? ""),
+              strikes: slot.consecutiveFastCleanExits,
+              fastStuckCycles: slot.fastStuckCycles,
+              spawnDurationMs,
+            });
+            this.tryBridgeReset(spec);
+          }
           slot.consecutiveFastCleanExits = 0;
-          this.tryBridgeReset(spec);
         }
       } else if (slot.bytesSinceSpawn || !cleanExit) {
         slot.consecutiveFastCleanExits = 0;
+        if (slot.bytesSinceSpawn) slot.fastStuckCycles = 0;
       }
       // Rapid-respawn pattern (cleanExit:true, totalRecords:0, child exited
       // without ever producing a byte) means the chip is silent — typically
@@ -3256,6 +3313,71 @@ export class MonsoonSupervisor {
         });
       });
     }
+  }
+
+  /**
+   * Chip-level reset via `new_monsoonreader --reset`. Sends the R2000
+   * reset opcode over the bridge's UART to clear the chip's MCU state
+   * (selection target, session, inventory queue, and — critically — the
+   * UART break loop documented for reader .82 and observed on POS 2026-
+   * 05-21).
+   *
+   * Strict rate-limit: caller (the fast-stuck escalation in the on-exit
+   * handler) only calls this after FAST_STUCK_CHIP_RESET_AFTER_CYCLES
+   * bridge-reset cycles have failed in a row AND at least
+   * CHIP_RESET_COOLDOWN_MS has elapsed since the last chip-reset. The
+   * every-60s cadence the prior agent shipped (f8b3ac7) hurt the chip
+   * because it kept firing while the chip was mid-recovery; this gating
+   * ensures we only fire when bridge-side recovery has demonstrably
+   * failed and gives the chip 30 min before any retry.
+   */
+  private tryChipReset(spec: AgentConfigReader): void {
+    const host = String(spec.network_address ?? "");
+    if (!host) return;
+    const monsoonPort = String(Number(spec.monsoon_serial_port ?? 10002));
+    log.warn("supervisor: tryChipReset — spawning new_monsoonreader --reset", {
+      readerId: spec.id,
+      readerName: spec.name,
+      host,
+      port: monsoonPort,
+    });
+    try {
+      const child = spawn(
+        "sudo",
+        [
+          "timeout",
+          "--kill-after=1s",
+          "8s",
+          "/opt/legacy-rfid/new_monsoonreader",
+          host,
+          monsoonPort,
+          "--reset",
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+      child.stdout?.resume();
+      child.stderr?.resume();
+      child.on("exit", (code) => {
+        log.info("supervisor: tryChipReset — exited", { readerId: spec.id, host, code });
+      });
+      child.on("error", (e) => {
+        log.warn("supervisor: tryChipReset — spawn error", {
+          readerId: spec.id,
+          host,
+          err: e.message,
+        });
+      });
+    } catch (e) {
+      log.warn("supervisor: tryChipReset — threw", {
+        readerId: spec.id,
+        host,
+        err: e instanceof Error ? e.message : String(e),
+      });
+    }
+    // Pair with a bridge reset so the chip's serial channel is cleanly
+    // re-established after the chip MCU restarts. Without this the
+    // bridge keeps any half-open Gen2 state from the pre-reset session.
+    this.tryBridgeReset(spec);
   }
 
   private tryBridgeReset(spec: AgentConfigReader): void {
