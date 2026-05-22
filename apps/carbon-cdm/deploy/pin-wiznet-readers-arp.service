@@ -1,0 +1,15 @@
+[Unit]
+Description=Pin WIZnet reader bridge IPs to their true MACs (defends against ARP hijack)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/pin-wiznet-readers-arp.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
