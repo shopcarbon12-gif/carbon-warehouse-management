@@ -2196,14 +2196,24 @@ export class MonsoonSupervisor {
     const enabledAntennas = spec.antennas.filter((a) => a.enabled);
     const antennaArgs: string[] = [];
     const useMux = enabledAntennas.length >= 2;
-    if (useMux) {
-      antennaArgs.push(
-        "--cmux",
-        "--mxa",
-        enabledAntennas.map((a) => a.antenna_number).join(","),
-        "--mux_cycles",
-        "-1",
-      );
+    // Single-antenna readers in `--infinite` mode bypass the chip's RF
+    // power-state init path on this binary version. When the chip's radio
+    // section is in a wedged state (RFID_ERROR_RADIO_NOT_RESPONDING) the
+    // `--cmux --mxa N` initializer is what RE-arms the radio. Live 2026-
+    // 05-21 on POS .9: `--cmux --mxa 1 --mux_cycles -1 --infinite` got
+    // 144/199/156 tag inventories per cycle; same chip with bare
+    // `--infinite` (no --cmux) returned -9981 RADIO_NOT_RESPONDING. So
+    // we now ALWAYS use --cmux for stream-driver readers — for single-
+    // antenna it's `--cmux --mxa 1 --mux_cycles -1`, for multi-antenna
+    // it's `--cmux --mxa N1,N2,... --mux_cycles -1`. Same code path.
+    // `--infinite` is still passed (the recovery trace shows it ran
+    // both INFINITE_CYCLE and MUX_CYCLE successfully with --cmux added).
+    const useCmux = true;
+    if (useCmux) {
+      const antList = enabledAntennas.length > 0
+        ? enabledAntennas.map((a) => a.antenna_number).join(",")
+        : "1";
+      antennaArgs.push("--cmux", "--mxa", antList, "--mux_cycles", "-1");
     } else if (enabledAntennas.length === 1 && enabledAntennas[0]!.antenna_number !== 1) {
       antennaArgs.push("-a", String(enabledAntennas[0]!.antenna_number));
     }
@@ -2226,11 +2236,11 @@ export class MonsoonSupervisor {
       "--serial_host", host,
       "--serial_port", String(serialPort),
       "--fastid",
-      // Single-antenna readers: `--infinite` cycles continuously. Multi-
-      // antenna readers omit `--infinite` and use `--mux_cycles -1` (set
-      // above) instead — combining the two flags produces zero stream
-      // output (verified live 2026-05-07 with the .16 chassis).
-      ...(useMux ? [] : ["--infinite"]),
+      // With --cmux always enabled now, both single- and multi-antenna
+      // readers run with --mux_cycles -1. Omit --infinite — the binary
+      // does INFINITE_CYCLE on its own when --cmux + --mux_cycles -1
+      // are present (verified live 2026-05-21: --cmux --mxa 1
+      // --mux_cycles -1 produced 144/199/156 record inventories on POS).
     ];
     log.info("supervisor: spawning MonsoonReader", {
       readerId: spec.id,
