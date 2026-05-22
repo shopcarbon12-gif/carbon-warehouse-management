@@ -1277,14 +1277,39 @@ export class MonsoonSupervisor {
           now - slot.lastSweepAttemptAt >= SWEEP_RETRY_COOLDOWN_MS &&
           now - slot.bridgeResetAt >= SWEEP_RETRY_COOLDOWN_MS
         ) {
-          log.info("supervisor: low-power slot stuck — direct bridge reset (no sweep)", {
-            readerId: slot.spec.id,
-            readerName: slot.spec.name,
-            host: slot.spec.network_address,
-            configuredPower,
-          });
-          slot.lastSweepAttemptAt = Date.now();
-          this.tryBridgeReset(slot.spec);
+          // Count this as a stuck cycle so the chip-reset escalator can
+          // kick in even when the binary exits cleanly after 20-25s
+          // (which doesn't trigger the FAST_CLEAN_EXIT detection path).
+          // Same FAST_STUCK_CHIP_RESET_AFTER_CYCLES threshold + cooldown
+          // as the console-driver fast path. Resets when bytes arrive.
+          slot.fastStuckCycles += 1;
+          const sinceLastChipReset = Date.now() - slot.chipResetAt;
+          const chipResetAllowed =
+            slot.fastStuckCycles >= FAST_STUCK_CHIP_RESET_AFTER_CYCLES &&
+            sinceLastChipReset >= CHIP_RESET_COOLDOWN_MS;
+          if (chipResetAllowed) {
+            log.warn("supervisor: low-power bridge-reset cycles exhausted — escalating to chip-level reset", {
+              readerId: slot.spec.id,
+              readerName: slot.spec.name,
+              host: slot.spec.network_address,
+              fastStuckCycles: slot.fastStuckCycles,
+              cooldownAgoMs: slot.chipResetAt === 0 ? null : sinceLastChipReset,
+            });
+            slot.fastStuckCycles = 0;
+            slot.chipResetAt = Date.now();
+            slot.lastSweepAttemptAt = Date.now();
+            this.tryChipReset(slot.spec);
+          } else {
+            log.info("supervisor: low-power slot stuck — direct bridge reset (no sweep)", {
+              readerId: slot.spec.id,
+              readerName: slot.spec.name,
+              host: slot.spec.network_address,
+              configuredPower,
+              fastStuckCycles: slot.fastStuckCycles,
+            });
+            slot.lastSweepAttemptAt = Date.now();
+            this.tryBridgeReset(slot.spec);
+          }
           this.killSlotChildHard(slot);
           continue;
         }
@@ -3335,48 +3360,55 @@ export class MonsoonSupervisor {
     const host = String(spec.network_address ?? "");
     if (!host) return;
     const monsoonPort = String(Number(spec.monsoon_serial_port ?? 10002));
-    log.warn("supervisor: tryChipReset — spawning new_monsoonreader --reset", {
+    log.warn("supervisor: tryChipReset — chip recovery sequence", {
       readerId: spec.id,
       readerName: spec.name,
       host,
       port: monsoonPort,
     });
-    try {
-      const child = spawn(
-        "sudo",
-        [
-          "timeout",
-          "--kill-after=1s",
-          "8s",
-          "/opt/legacy-rfid/new_monsoonreader",
-          host,
-          monsoonPort,
-          "--reset",
-        ],
-        { stdio: ["ignore", "pipe", "pipe"] },
-      );
-      child.stdout?.resume();
-      child.stderr?.resume();
-      child.on("exit", (code) => {
-        log.info("supervisor: tryChipReset — exited", { readerId: spec.id, host, code });
-      });
-      child.on("error", (e) => {
-        log.warn("supervisor: tryChipReset — spawn error", {
+    // Sequence: --buffer-reset (clears the chip's internal byte buffers,
+    // observed live 2026-05-21 night to actually transition chip state on
+    // POS .9), then --reset (R2000 protocol reset opcode), then a bridge
+    // reset so the bridge's UART channel is clean for the post-reset
+    // session. Spawn each one detached / fire-and-forget so we don't block
+    // the supervisor's event loop on a binary that hangs.
+    const fireFlag = (flag: string, timeoutSec: string, label: string): void => {
+      try {
+        const child = spawn(
+          "sudo",
+          [
+            "timeout",
+            "--kill-after=1s",
+            timeoutSec,
+            "/opt/legacy-rfid/new_monsoonreader",
+            host,
+            monsoonPort,
+            flag,
+          ],
+          { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        child.stdout?.resume();
+        child.stderr?.resume();
+        child.on("exit", (code) => {
+          log.info(`supervisor: tryChipReset — ${label} exited`, { readerId: spec.id, host, code });
+        });
+        child.on("error", (e) => {
+          log.warn(`supervisor: tryChipReset — ${label} spawn error`, {
+            readerId: spec.id,
+            host,
+            err: e.message,
+          });
+        });
+      } catch (e) {
+        log.warn(`supervisor: tryChipReset — ${label} threw`, {
           readerId: spec.id,
           host,
-          err: e.message,
+          err: e instanceof Error ? e.message : String(e),
         });
-      });
-    } catch (e) {
-      log.warn("supervisor: tryChipReset — threw", {
-        readerId: spec.id,
-        host,
-        err: e instanceof Error ? e.message : String(e),
-      });
-    }
-    // Pair with a bridge reset so the chip's serial channel is cleanly
-    // re-established after the chip MCU restarts. Without this the
-    // bridge keeps any half-open Gen2 state from the pre-reset session.
+      }
+    };
+    fireFlag("--buffer-reset", "6s", "buffer-reset");
+    fireFlag("--reset", "8s", "reset");
     this.tryBridgeReset(spec);
   }
 
