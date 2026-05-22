@@ -3522,6 +3522,13 @@ export class MonsoonSupervisor {
     };
     fireFlag("--buffer-reset", "6s", "buffer-reset");
     fireFlag("--reset", "8s", "reset");
+    // `--hard-reset` is a stronger chip-level reset (Reader::hardReset in
+    // new_monsoonreader binary) — verified live 2026-05-22 on .85 healthy
+    // bridge: "Hard reset command issued" message, bridge stayed up, chip
+    // came back clean. Heavier than `--reset`, so we fire it LAST in the
+    // sequence and let the bridge-reset that follows give the chip a
+    // chance to fully reboot on a cleared bridge socket.
+    fireFlag("--hard-reset", "10s", "hard-reset");
     this.tryBridgeReset(spec);
   }
 
