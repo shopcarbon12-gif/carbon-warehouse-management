@@ -28,34 +28,26 @@ import {
   postEncodeJobResult,
   type PendingEncodeJob,
 } from "./wms-client.js";
+import {
+  startEncodeWriteProxy,
+  PLACEHOLDER_TARGET_EPC,
+} from "./encode-write-proxy.js";
 
 const POLL_INTERVAL_MS = 3_000;
 const WRITE_TIMEOUT_MS = 25_000;
 /**
- * Default write binary — Senitron MonsoonReader (2019 build). Handles
- * F0A0B-prefix Carbon Gen2 SGTIN-96 EPCs cleanly.
+ * The only Senitron binary in the entire archive that produces real
+ * `TAG_ACCESS : cmd = WRITE` traffic against the SA-2000 family. MR2
+ * (2020) was tried for C-prefix targets but its RFID_RadioOpen fails
+ * with `-9983 RADIO_NOT_PRESENT` on .30 and .34 in every state (cold
+ * / warm / reset / reboot), so MR2 is dead end. MR1 is what we use,
+ * with the encode-write-proxy stripping the C-prefix segfault out
+ * of the loop for C1/C2 targets.
  */
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
-/**
- * Alternate write binary — Senitron MonsoonReader2 (Feb 2020 build). Used
- * only when the *target* EPC starts with C1/C2 (the Senitron-era custom
- * non-SGTIN pool). The 2019 binary segfaults parsing those targets
- * (live evidence 2026-05-26: SIGSEGV before banner output on .70 with
- * target_tag=C1...). The 2020 binary's parser was rewritten and accepts
- * non-SGTIN targets — confirmed end-to-end with TAG_ACCESS write_bytes=12
- * against the same chip. Same protocol, same wire format, just a fixed
- * argument-parse path. Kept as a separate constant so the F0A0B happy
- * path is untouched (operator preference: don't migrate working tags). */
-const MONSOON_BINARY_C_PREFIX = "/opt/legacy-rfid/MonsoonReader2";
 
-/**
- * Pick which binary to spawn based on the target_tag (the EPC currently
- * burned into the chip). The new write EPC is always F0A0B-prefix, so
- * `--write_tag` doesn't influence binary selection — only the target
- * matters for the parser-crash decision.
- */
-function pickWriteBinary(targetEpc: string): string {
-  return /^[Cc][12]/.test(targetEpc) ? MONSOON_BINARY_C_PREFIX : MONSOON_BINARY;
+function isCPrefixTarget(epc: string): boolean {
+  return /^[Cc][12]/.test(epc);
 }
 
 export type EncodeJobsWorkerHandle = { stop: () => void };
@@ -184,25 +176,50 @@ type WriteOutcome =
  *   -p / --power  → Tx power in tenths-dBm (300 = 30 dBm)
  *   --num 1       → Reader index (single reader)
  */
-function runWriteTag(
+async function runWriteTag(
   host: string,
   serialPort: number,
   oldEpc: string,
   newEpc: string,
 ): Promise<WriteOutcome> {
+  // For C-prefix targets we route MR1 through a local TCP proxy that
+  // substitutes the SELECT-mask register bytes mid-flight. MR1 thinks
+  // it's targeting a parser-safe F0A0B placeholder; the bridge sees
+  // the real C-prefix EPC. See `encode-write-proxy.ts` for the wire
+  // protocol breakdown.
+  const cPrefix = isCPrefixTarget(oldEpc);
+  let proxyHandle: Awaited<ReturnType<typeof startEncodeWriteProxy>> | null = null;
+  let effectiveHost = host;
+  let effectivePort = serialPort;
+  let targetForBinary = oldEpc.toUpperCase();
+  if (cPrefix) {
+    try {
+      proxyHandle = await startEncodeWriteProxy(host, serialPort, oldEpc.toUpperCase());
+    } catch (e) {
+      return {
+        ok: false,
+        error_msg: "proxy_start_failed",
+        meta: { stage: "proxy_start", err: e instanceof Error ? e.message : String(e) },
+      };
+    }
+    effectiveHost = "127.0.0.1";
+    effectivePort = proxyHandle.port;
+    targetForBinary = PLACEHOLDER_TARGET_EPC;
+  }
+
   return new Promise<WriteOutcome>((resolve) => {
     const args = [
-      "--serial_host", host,
-      "--serial_port", String(serialPort),
+      "--serial_host", effectiveHost,
+      "--serial_port", String(effectivePort),
       "--num", "1",
       "-p", "300",
-      "--target_tag", oldEpc.toUpperCase(),
+      "--target_tag", targetForBinary,
       "--write_tag", newEpc.toUpperCase(),
     ];
     let stderr = "";
     let stdout = "";
     let timedOut = false;
-    const binary = pickWriteBinary(oldEpc);
+    const binary = MONSOON_BINARY;
     const child = spawn(binary, args, {
       stdio: ["ignore", "pipe", "pipe"],
       // detached so we can SIGKILL the whole process group on timeout
@@ -222,20 +239,33 @@ function runWriteTag(
     child.stderr?.on("data", (b: Buffer) => { stderr += b.toString("utf8"); });
     child.on("error", (e) => {
       clearTimeout(killTimer);
+      if (proxyHandle) {
+        void proxyHandle.shutdown().catch(() => { /* ignore */ });
+      }
       resolve({
         ok: false,
         error_msg: `spawn_error: ${e.message}`,
-        meta: { stage: "spawn" },
+        meta: { stage: "spawn", proxy_used: cPrefix },
       });
     });
     child.on("exit", (code, signal) => {
       clearTimeout(killTimer);
+      const proxyStats = proxyHandle?.stats();
+      // Tear the proxy down before resolving so the localhost port is
+      // released cleanly even on fast follow-up jobs.
+      if (proxyHandle) {
+        void proxyHandle.shutdown().catch(() => {
+          /* ignore — best-effort cleanup */
+        });
+      }
       const meta: Record<string, unknown> = {
         binary,
         exit_code: code,
         signal,
         stdout_tail: stdout.slice(-400),
         stderr_tail: stderr.slice(-400),
+        proxy_used: cPrefix,
+        ...(proxyStats ? { proxy_stats: proxyStats } : {}),
       };
       if (timedOut) {
         resolve({ ok: false, error_msg: "write_timeout", meta });
