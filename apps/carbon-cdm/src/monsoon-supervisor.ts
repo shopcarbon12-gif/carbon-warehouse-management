@@ -1108,12 +1108,24 @@ export class MonsoonSupervisor {
     // this flag the kill would compound exponential backoff.
     slot.intendedKill = true;
     this.killSlotChildHard(slot);
-    // Brief settle window so the bridge fully releases its TCP slot
-    // before the worker connects. GRACEFUL_KILL_GRACE_MS + small
-    // buffer. The bridge takes ~200ms after the FIN to free the slot.
-    await new Promise<void>((resolve) =>
-      setTimeout(resolve, GRACEFUL_KILL_GRACE_MS + 250),
-    );
+    // Settle window so the bridge fully releases its TCP slot and the
+    // chip's radio is reachable when the next binary RFID_RadioOpen's.
+    //
+    // Normal LAN readers: GRACEFUL_KILL_GRACE_MS + 250 ms = 1.75 s is
+    // enough (bridge frees the slot ~200 ms after FIN, radio stays warm).
+    //
+    // skip_arp_pin (WiFi-extender) readers: 1.75 s is NOT enough. Live
+    // evidence 2026-05-26 on .34 — every encode failed with
+    // RFID_ERROR_RADIO_NOT_PRESENT because the binary hit RFID_RadioOpen
+    // before the extender + chip path had stabilized. 8 s clears the
+    // failure window with margin (the supervisor's own SLOW_WARMUP
+    // tolerance for these readers is 90 s, so 8 s is conservative
+    // without being painfully slow).
+    const settleMs =
+      slot.spec.skip_arp_pin === true
+        ? 8_000
+        : GRACEFUL_KILL_GRACE_MS + 250;
+    await new Promise<void>((resolve) => setTimeout(resolve, settleMs));
     return { host, serialPort };
   }
 
@@ -1178,6 +1190,31 @@ export class MonsoonSupervisor {
     // schedule the respawn ourselves. The 5.5 s delay clears the
     // quiet window plus a buffer; the spawn path's own check still
     // owns the gate so it self-corrects if the timing slips.
+    //
+    // skip_arp_pin (WiFi-extender) readers: bridge reset is HARMFUL
+    // here. The chassis behind the extender needs 30-90 s of
+    // uninterrupted runtime before its chip stream flows; a wiznet
+    // reset between every encode keeps it permanently cold, and live
+    // evidence on .34 was every C-prefix encode failing with
+    // RFID_ERROR_RADIO_NOT_PRESENT because the previous job's reset
+    // hadn't cleared yet when the next job's spawn hit RadioOpen.
+    // For these readers we skip the reset and just respawn quickly;
+    // the supervisor's normal slow-warmup tolerance covers the
+    // chip's post-write state without needing a cold reset.
+    if (slot.spec.skip_arp_pin === true) {
+      log.info("supervisor: external-op release — scheduled respawn (no bridge reset, skip_arp_pin)", {
+        readerId,
+        readerName: slot.spec.name,
+      });
+      setTimeout(() => {
+        if (this.externalBridgeHold.has(readerId)) return;
+        const s = this.slots.get(readerId);
+        if (!s || s.shuttingDown) return;
+        if (s.child && s.child.exitCode === null) return;
+        void this.spawnReader(s);
+      }, 750);
+      return;
+    }
     log.info("supervisor: external-op release — bridge reset + scheduled respawn", {
       readerId,
       readerName: slot.spec.name,
