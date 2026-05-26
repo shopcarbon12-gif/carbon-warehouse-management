@@ -1108,26 +1108,28 @@ export class MonsoonSupervisor {
     // this flag the kill would compound exponential backoff.
     slot.intendedKill = true;
     this.killSlotChildHard(slot);
-    // Settle window so the bridge fully releases its TCP slot AND the
-    // chip drops out of console mode the supervisor's --console child
-    // had it in. Live evidence 2026-05-26:
+
+    // Bridge cold reset to forcibly drop the chip out of whatever mode
+    // the supervisor's just-killed `new_monsoonreader --console` child
+    // left it in. Without this, MR1's stream-mode RFID_RadioEnumerate
+    // returns zero radios because the chip's UART is still framing
+    // console-mode responses. Live evidence 2026-05-26 on .30: even
+    // MR1 `--reset` (RFID_MacReset) couldn't enumerate the radio
+    // afterward — the chip needs a physical UART power cycle, which
+    // `wiznet-cli --reset` provides by rebooting the bridge.
     //
-    //   - .34 (skip_arp_pin): every encode failed with
-    //     RFID_ERROR_RADIO_NOT_PRESENT at 1.75 s. 8 s settle still
-    //     wasn't enough on its own; needed proxy approach later.
-    //   - .30 (normal LAN, console driver): every encode failed with
-    //     "No radios found in enumeration" at 1.75 s. The chip was
-    //     still in console mode from the supervisor's just-killed
-    //     `new_monsoonreader --console` child; MR1 stream-mode
-    //     enumerate returned zero radios.
-    //
-    // The 1.75-s value comes from a time when readers used stream
-    // mode and didn't have the console-mode residue problem. Modern
-    // single-antenna readers all run --console, so the residue affects
-    // every reader. 8 s for everyone — bridge slot + chip mode reset
-    // settle with margin.
-    const settleMs = 8_000;
-    await new Promise<void>((resolve) => setTimeout(resolve, settleMs));
+    // Stamps `bridgeResetAt` on the slot so any future supervisor
+    // spawn-path enforces POST_BRIDGE_RESET_QUIET_MS too. The bridge
+    // takes ~5 s to fully come back; we wait POST_BRIDGE_RESET_QUIET_MS
+    // + 1 s margin before returning to the caller.
+    log.info("supervisor: external-op acquire — bridge reset for clean chip state", {
+      readerId,
+      readerName: slot.spec.name,
+    });
+    this.tryBridgeReset(slot.spec);
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, POST_BRIDGE_RESET_QUIET_MS + 1_000),
+    );
     return { host, serialPort };
   }
 
