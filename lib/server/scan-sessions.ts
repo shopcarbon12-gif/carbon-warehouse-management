@@ -7,6 +7,12 @@
  *   - Transfer Out  (kind: "transfer-out")
  *   - Cycle Counts  (kind: "cycle-count")
  *   - Print/Commission  (kind: "print-commission")
+ *   - Encode Items   (kind: "encode-items") — RFID & Hardware → Encode
+ *     Items re-encode workflow. Wakes a fixed reader so the page can
+ *     stream EPCs into its table; operator picks a target custom SKU
+ *     and clicks Encode to rotate each checked tag's identity via
+ *     /api/rfid/encode-claim. Same single-client constraint as the
+ *     other kinds.
  *
  * When a session is active for a reader, the agent's supervisor TREATS the
  * reader as un-paused (overriding any persisted scan_paused_at). The reader
@@ -47,7 +53,7 @@
 import { randomUUID } from "node:crypto";
 
 /** The three pages that may wake a reader. */
-export type ScanSessionKind = "transfer-out" | "cycle-count" | "print-commission";
+export type ScanSessionKind = "transfer-out" | "cycle-count" | "print-commission" | "encode-items";
 
 export type ScanSession = {
   /** Stable opaque id; used as the lifecycle handle. */

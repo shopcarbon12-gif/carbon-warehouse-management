@@ -1,10 +1,36 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import useSWR from "swr";
 import { Radio, ScanLine } from "lucide-react";
 
 import { bulkStatusOptionsForUi } from "@/lib/inventory/bulk-wms-status-options";
 import { ReaderPicker } from "@/components/shared/reader-picker";
+
+/** IP of the reader the operator wants pre-selected when this workspace
+ *  mounts. Operator request 2026-05-26: .70 covers the bulk-status table
+ *  area; auto-selecting it removes a click from the common flow. The
+ *  default is applied once, on first data load, then never again — so a
+ *  cashier who deselects it (or picks a different reader) isn't fought
+ *  by a re-application. */
+const BULK_STATUS_DEFAULT_READER_IP = "192.168.1.70";
+
+type HardwareConfigZone = {
+  readers?: Array<{ id: string; network_address: string | null }>;
+};
+type HardwareConfigLocation = {
+  zones?: HardwareConfigZone[];
+  unzoned_readers?: Array<{ id: string; network_address: string | null }>;
+};
+type HardwareConfigTree = {
+  locations?: HardwareConfigLocation[];
+};
+
+const hcFetcher = async (url: string): Promise<HardwareConfigTree> => {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error("hardware-config fetch failed");
+  return r.json() as Promise<HardwareConfigTree>;
+};
 import {
   cellTruncate,
   DataTableContainer,
@@ -71,6 +97,46 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
   useEffect(() => {
     selectedReadersRef.current = selectedReaders;
   }, [selectedReaders]);
+
+  // Pre-select the default reader (currently .70) when this workspace
+  // mounts. Fires exactly once — `appliedDefaultRef` guards against the
+  // SWR cache re-firing the effect on focus/revalidate from re-applying
+  // and stomping on the operator's manual edits.
+  const { data: hcData } = useSWR<HardwareConfigTree>(
+    "/api/hardware-config",
+    hcFetcher,
+    { revalidateOnFocus: false },
+  );
+  const appliedDefaultRef = useRef(false);
+  useEffect(() => {
+    if (appliedDefaultRef.current) return;
+    if (!hcData) return;
+    // Walk zones + unzoned readers across locations to find the IP match.
+    let defaultId: string | null = null;
+    for (const loc of hcData.locations ?? []) {
+      for (const z of loc.zones ?? []) {
+        for (const r of z.readers ?? []) {
+          if (r.network_address === BULK_STATUS_DEFAULT_READER_IP) {
+            defaultId = r.id;
+            break;
+          }
+        }
+        if (defaultId) break;
+      }
+      if (defaultId) break;
+      for (const r of loc.unzoned_readers ?? []) {
+        if (r.network_address === BULK_STATUS_DEFAULT_READER_IP) {
+          defaultId = r.id;
+          break;
+        }
+      }
+      if (defaultId) break;
+    }
+    appliedDefaultRef.current = true; // mark applied either way — no retry
+    if (defaultId) {
+      setSelectedReaders(new Set([defaultId]));
+    }
+  }, [hcData]);
 
   // Table state — Map keyed by EPC so duplicate reads collapse to one row.
   const [rows, setRows] = useState<Map<string, ScannedRow>>(new Map());

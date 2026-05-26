@@ -87,6 +87,7 @@ const sections: NavSection[] = [
     isActiveSection: (p) =>
       p.startsWith("/rfid/epc-tracker") ||
       p.startsWith("/rfid/commissioning") ||
+      p.startsWith("/rfid/encode-items") ||
       p.startsWith("/operations/exceptions") ||
       p.startsWith("/infrastructure/devices") ||
       p.startsWith("/hardware_config") ||
@@ -97,6 +98,7 @@ const sections: NavSection[] = [
     items: [
       { href: "/rfid/epc-tracker", label: "EPC Tracker", icon: Search },
       { href: "/rfid/commissioning", label: "Print / Commission", icon: Printer },
+      { href: "/rfid/encode-items", label: "Encode Items", icon: Tags },
       {
         href: "/operations/exceptions",
         label: "Exceptions",
