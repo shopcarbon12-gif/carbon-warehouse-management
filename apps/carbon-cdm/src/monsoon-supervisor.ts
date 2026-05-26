@@ -524,6 +524,36 @@ type ReaderSlot = {
    */
   sweepStepStartedAt: number;
   /**
+   * ms timestamp of the most recent POS-driven kill on this slot. 0 = none
+   * yet. Used by setPosPowerOverrides to enforce MIN_POS_RESPAWN_INTERVAL_MS
+   * between cashier-slider-triggered respawns.
+   */
+  lastIntendedRespawnAt: number;
+  /**
+   * Queued POS power value (dBm) when a slider PATCH lands inside the
+   * MIN_POS_RESPAWN_INTERVAL_MS cooldown window. Drained by the queued-
+   * flush timer; null when no value is pending. Latest-wins coalesce:
+   * subsequent PATCHes during cooldown overwrite this without touching
+   * the existing timer.
+   */
+  queuedPosPowerDbm: number | null;
+  /**
+   * Scheduled setTimeout handle that drains queuedPosPowerDbm when the
+   * cooldown expires. Null when no timer is scheduled. Cleared by the
+   * timer's callback on fire.
+   */
+  queuedPosPowerTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * The dBm value (whole, not tenths) the currently-running binary was
+   * spawned with — set inside spawnReader/spawnReaderConsole the moment
+   * powerArg is finalized after the posOverride / sweep / configured
+   * precedence resolves. null = no spawn has happened on this slot.
+   * Used by applyPosPowerChange to skip kills when an incoming or
+   * queued PATCH represents a redundant re-PATCH to the same value
+   * (cashier nudges then undoes — landing back at the start).
+   */
+  lastSpawnedPowerDbm: number | null;
+  /**
    * Supervisor-managed antenna mux. When `length >= 2`, we rotate through
    * these antenna numbers (one console-driver child per antenna) in place
    * of relying on the chassis's --cmux mode. Empty/length=1 means no
@@ -643,6 +673,28 @@ const STREAM_SILENCE_TIMEOUT_MS = 20_000;
  * room while still catching genuinely dead chips within ~2 min.
  */
 const SLOW_WARMUP_SILENCE_TIMEOUT_MS = 90_000;
+/**
+ * Minimum interval between POS-slider-driven kill+respawn cycles on the
+ * SAME slot. Carbon-POS already debounces the slider at 1500 ms so the
+ * common case is fine; this is the belt to that suspender — defends
+ * against two PATCHes landing in rapid succession (cashier scrubbing,
+ * an undo-then-redo, two registers touching the same reader, etc.)
+ * spawning a fresh binary on top of one that's still booting.
+ *
+ * Sized to "a clean respawn end-to-end" — SIGTERM grace (~1.5 s) +
+ * baseDelay (~1 s) + binary connect + first-byte (~2.5 s) ≈ 5 s. Below
+ * that, the next PATCH could SIGTERM a previous binary BEFORE its
+ * bytesSinceSpawn ever flipped true, exponential backoff doubles, and
+ * we're back in the .69 wedge mode (see HANDOFF_POS_READER_2026_05_21).
+ *
+ * PATCHes that land during cooldown are coalesced (latest-wins) into
+ * `slot.queuedPosPowerDbm`; a timer drains the queue when the cooldown
+ * expires. Equivalent re-PATCH (queued value == running spawn's value)
+ * fires no kill. POS-driven kills set `slot.backoffMs = 1000` first
+ * so the cashier-induced spawn cadence can't compound the no-bytes
+ * backoff doubler in the on-exit handler.
+ */
+const MIN_POS_RESPAWN_INTERVAL_MS = 5_000;
 const WATCHDOG_INTERVAL_MS = 5_000;
 /**
  * Throttle for /api/cdm-agents/reader-offline pushes. A reader sitting
@@ -848,10 +900,28 @@ export class MonsoonSupervisor {
   /**
    * Apply per-reader live RF power overrides from Carbon-POS cashier
    * slider. Called every ~100 ms from the active-sessions poll. Diff
-   * against the current overrides; if any reader's power actually changed
-   * (or an override appeared/disappeared), kill the running child so the
-   * next spawn picks up the new power. This is what makes the slider
-   * feel "live" — drag → ~2 s later the chip is at the new power.
+   * against the current overrides; if any reader's power actually
+   * changed, hand it to applyPosPowerChange which decides between
+   * no-op / coalesce / kill+respawn based on the slot's cooldown.
+   *
+   * INVESTIGATION 2026-05-26: the cleanest "change power live" would
+   * be to send a control command to the running binary instead of
+   * killing it. That path is INFEASIBLE on this hardware/binary combo:
+   *   - new_monsoonreader exposes no --set_power / --override / runtime
+   *     reconfig flag (full flag table: --buffer-reset, --clear-error,
+   *     --console, --DRT-, --hard-reset, --infinite, --power, --query,
+   *     --read_time, --reset, --sleep_time, --stop, --tagfocus).
+   *   - The binary has no stdin/signal command channel (only D-runtime
+   *     stdin refs, no getline/fgets/SIGUSR handlers).
+   *   - MonsoonReader has --override but it routes through the Pi
+   *     deployment's separate --monsoon_cport. Our WIZnet bridges
+   *     expose ONLY port 10002 in SERVER(2) single-client mode — no
+   *     control port to send overrides to without first kicking the
+   *     inventory client out.
+   * So kill+respawn is the only achievable path. The work below is
+   * about NOT thrashing that path: rate-limit, coalesce, and treat
+   * cashier-driven kills as the intentional events they are (no
+   * backoff growth, on-exit fast-respawn).
    */
   setPosPowerOverrides(overrides: Map<string, number>): void {
     const prev = this.posPowerOverrides;
@@ -871,14 +941,101 @@ export class MonsoonSupervisor {
       // Don't disrupt an in-flight antenna test — the operator owns
       // the slot's power via the test page in that case.
       if (slot.testSession !== null) continue;
-      log.info("supervisor: POS power override changed — respawning", {
-        readerId,
-        readerName: slot.spec.name,
-        newOverrideDbm: overrides.get(readerId) ?? null,
-      });
-      slot.intendedKill = true;
-      this.killSlotChildHard(slot);
+      const newDbm = overrides.get(readerId) ?? null;
+      this.applyPosPowerChange(slot, newDbm);
     }
+  }
+
+  /**
+   * Decide what to do about a single reader's POS power value (whole dBm,
+   * or null when the override is cleared). Three paths:
+   *
+   *   1. NO-OP: newDbm equals the currently-running binary's spawned
+   *      power. Common after a slider undo. Skip the kill entirely.
+   *
+   *   2. COALESCE: less than MIN_POS_RESPAWN_INTERVAL_MS since the last
+   *      POS-driven kill. Stash newDbm on the slot, schedule (or leave
+   *      existing) a timer that re-enters this method when the cooldown
+   *      expires. Subsequent PATCHes inside the same cooldown just
+   *      overwrite the stashed value — latest-wins — without resetting
+   *      the timer.
+   *
+   *   3. APPLY: outside cooldown. Reset backoffMs to 1000 (cashier
+   *      changes are intentional, not chip failures — must not feed
+   *      the no-bytes backoff doubler), stamp lastIntendedRespawnAt,
+   *      mark intendedKill, kill the child. On-exit respawns with the
+   *      new posOverride value at ~75 ms delay (treatAsClean).
+   *
+   * Called from setPosPowerOverrides for fresh PATCHes and recursively
+   * from the queued-flush timer with the latest queued value.
+   */
+  private applyPosPowerChange(slot: ReaderSlot, newDbm: number | null): void {
+    // Slot is being torn down — drop the change silently. The next
+    // adoption of this reader will re-establish power from the bundle.
+    if (slot.shuttingDown) return;
+    // No-op: queued/incoming value matches what the running binary was
+    // spawned with. Happens when the cashier nudges the slider and ends
+    // back at the start, or when two PATCHes coalesce to the same value
+    // as the spawn already in flight.
+    if (newDbm !== null && slot.lastSpawnedPowerDbm === newDbm) {
+      log.info("supervisor: POS power change no-op (queued value == running)", {
+        readerId: slot.spec.id,
+        readerName: slot.spec.name,
+        dbm: newDbm,
+      });
+      return;
+    }
+    const now = Date.now();
+    const sinceLast = now - slot.lastIntendedRespawnAt;
+    if (slot.lastIntendedRespawnAt > 0 && sinceLast < MIN_POS_RESPAWN_INTERVAL_MS) {
+      // Cooldown window — coalesce. Latest-wins on queuedPosPowerDbm,
+      // single timer to drain it when the cooldown actually expires.
+      slot.queuedPosPowerDbm = newDbm;
+      const msUntilFlush = MIN_POS_RESPAWN_INTERVAL_MS - sinceLast;
+      if (slot.queuedPosPowerTimer === null) {
+        slot.queuedPosPowerTimer = setTimeout(() => {
+          // Drain phase: read the latest queued value, clear the queue
+          // + timer handle, then re-enter applyPosPowerChange with the
+          // value. Re-entry hits either the no-op branch (queued ==
+          // running) or the apply branch (cooldown now expired).
+          slot.queuedPosPowerTimer = null;
+          const queued = slot.queuedPosPowerDbm;
+          slot.queuedPosPowerDbm = null;
+          log.info("supervisor: POS power coalesced flush — applying queued value", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            queuedDbm: queued,
+          });
+          this.applyPosPowerChange(slot, queued);
+        }, msUntilFlush);
+      }
+      log.info("supervisor: POS power change coalesced — queued", {
+        readerId: slot.spec.id,
+        readerName: slot.spec.name,
+        queuedDbm: newDbm,
+        msUntilFlush,
+      });
+      return;
+    }
+    // Apply path: outside cooldown. Kill + respawn.
+    log.info("supervisor: POS power override changed — respawning", {
+      readerId: slot.spec.id,
+      readerName: slot.spec.name,
+      newOverrideDbm: newDbm,
+      prevSpawnedDbm: slot.lastSpawnedPowerDbm,
+    });
+    // Cashier slider drag is an INTENTIONAL operator action, not a chip
+    // failure. The on-exit handler's `treatAsClean ? 1000 : *2` line
+    // resets when wasIntendedKill is true, but only AFTER the child
+    // actually exits — meanwhile any code path that mutates backoffMs
+    // before that exit (e.g. a watchdog tick that lands on this slot
+    // mid-SIGTERM) would still see the old doubled value. Resetting
+    // here is the belt to that suspender — closes the small race
+    // window AND makes the intent of POS-driven kills explicit.
+    slot.backoffMs = 1000;
+    slot.lastIntendedRespawnAt = now;
+    slot.intendedKill = true;
+    this.killSlotChildHard(slot);
   }
 
   /**
@@ -1855,6 +2012,10 @@ export class MonsoonSupervisor {
         sweepPowerOverrideArg: null,
         lastSweepAttemptAt: 0,
         sweepStepStartedAt: 0,
+        lastIntendedRespawnAt: 0,
+        queuedPosPowerDbm: null,
+        queuedPosPowerTimer: null,
+        lastSpawnedPowerDbm: null,
         muxAntennaSequence: spec.antennas
           .filter((a) => a.enabled)
           .map((a) => a.antenna_number)
@@ -2301,6 +2462,10 @@ export class MonsoonSupervisor {
       slot.candidatePorts[0] ??
       Number(spec.monsoon_serial_port);
     slot.bytesSinceSpawn = false;
+    // Track the dBm we're actually spawning at. powerArg is tenths-dBm
+    // (e.g. 250 = 25 dBm); whole-dBm is what the POS slider PATCHes and
+    // what applyPosPowerChange compares against to detect no-op re-PATCHes.
+    slot.lastSpawnedPowerDbm = Math.round(powerArg / 10);
     // Antenna selection. Three modes, bench-tested live against .16 on
     // 2026-05-07:
     //   1. Single antenna #1: no flag (binary default)
@@ -2718,6 +2883,10 @@ export class MonsoonSupervisor {
     slot.lastByteAt = Date.now();
     // Reset forced-respawn timer so the next interval counts from THIS spawn.
     slot.lastForcedRespawnAt = 0;
+    // Track the dBm we're spawning at. powerArg is tenths-dBm (e.g. 250
+    // = 25 dBm); whole-dBm is what the POS slider PATCHes and what
+    // applyPosPowerChange compares against for no-op detection.
+    slot.lastSpawnedPowerDbm = Math.round(powerArg / 10);
 
     // Capture spawn time so the on-exit handler can measure how fast the
     // child died. Sub-FAST_CLEAN_EXIT_THRESHOLD_MS cleanExit:true exits
