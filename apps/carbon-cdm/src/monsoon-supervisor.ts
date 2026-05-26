@@ -1108,23 +1108,25 @@ export class MonsoonSupervisor {
     // this flag the kill would compound exponential backoff.
     slot.intendedKill = true;
     this.killSlotChildHard(slot);
-    // Settle window so the bridge fully releases its TCP slot and the
-    // chip's radio is reachable when the next binary RFID_RadioOpen's.
+    // Settle window so the bridge fully releases its TCP slot AND the
+    // chip drops out of console mode the supervisor's --console child
+    // had it in. Live evidence 2026-05-26:
     //
-    // Normal LAN readers: GRACEFUL_KILL_GRACE_MS + 250 ms = 1.75 s is
-    // enough (bridge frees the slot ~200 ms after FIN, radio stays warm).
+    //   - .34 (skip_arp_pin): every encode failed with
+    //     RFID_ERROR_RADIO_NOT_PRESENT at 1.75 s. 8 s settle still
+    //     wasn't enough on its own; needed proxy approach later.
+    //   - .30 (normal LAN, console driver): every encode failed with
+    //     "No radios found in enumeration" at 1.75 s. The chip was
+    //     still in console mode from the supervisor's just-killed
+    //     `new_monsoonreader --console` child; MR1 stream-mode
+    //     enumerate returned zero radios.
     //
-    // skip_arp_pin (WiFi-extender) readers: 1.75 s is NOT enough. Live
-    // evidence 2026-05-26 on .34 — every encode failed with
-    // RFID_ERROR_RADIO_NOT_PRESENT because the binary hit RFID_RadioOpen
-    // before the extender + chip path had stabilized. 8 s clears the
-    // failure window with margin (the supervisor's own SLOW_WARMUP
-    // tolerance for these readers is 90 s, so 8 s is conservative
-    // without being painfully slow).
-    const settleMs =
-      slot.spec.skip_arp_pin === true
-        ? 8_000
-        : GRACEFUL_KILL_GRACE_MS + 250;
+    // The 1.75-s value comes from a time when readers used stream
+    // mode and didn't have the console-mode residue problem. Modern
+    // single-antenna readers all run --console, so the residue affects
+    // every reader. 8 s for everyone — bridge slot + chip mode reset
+    // settle with margin.
+    const settleMs = 8_000;
     await new Promise<void>((resolve) => setTimeout(resolve, settleMs));
     return { host, serialPort };
   }

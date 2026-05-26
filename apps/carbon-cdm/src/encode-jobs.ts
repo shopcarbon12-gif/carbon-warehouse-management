@@ -176,12 +176,56 @@ type WriteOutcome =
  *   -p / --power  → Tx power in tenths-dBm (300 = 30 dBm)
  *   --num 1       → Reader index (single reader)
  */
+/**
+ * Run a single MR1 `--reset` against the bridge before the actual write.
+ * RFID_MacReset clears any leftover chip state from the supervisor's
+ * just-killed `new_monsoonreader --console` child. Without it, MR1's
+ * stream-mode enumerate returns zero radios because the chip is still
+ * in console mode from the previous binary (live evidence 2026-05-26
+ * on .30: every encode failed `no_radios_found in enumeration`).
+ *
+ * ~1 s wall-clock; we don't care about the exit code, only that it
+ * sends the chip-MAC reset opcode and exits cleanly. Returns the
+ * captured stdout for the meta block in case operators need to debug.
+ */
+async function preFlightChipReset(
+  host: string,
+  serialPort: number,
+): Promise<string> {
+  return new Promise<string>((resolve) => {
+    let stdout = "";
+    const child = spawn(
+      MONSOON_BINARY,
+      ["--serial_host", host, "--serial_port", String(serialPort), "--reset"],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    const killTimer = setTimeout(() => {
+      try { child.kill("SIGKILL"); } catch { /* already gone */ }
+    }, 5_000);
+    child.stdout?.on("data", (b: Buffer) => { stdout += b.toString("utf8"); });
+    child.on("close", () => {
+      clearTimeout(killTimer);
+      resolve(stdout.slice(-200));
+    });
+    child.on("error", () => {
+      clearTimeout(killTimer);
+      resolve("");
+    });
+  });
+}
+
 async function runWriteTag(
   host: string,
   serialPort: number,
   oldEpc: string,
   newEpc: string,
 ): Promise<WriteOutcome> {
+  // Pre-flight: RFID_MacReset to clear chip mode from the supervisor's
+  // console-driver child. See preFlightChipReset comment.
+  const resetOut = await preFlightChipReset(host, serialPort);
+  // Brief settle so the chip MAC layer comes back up.
+  await new Promise<void>((r) => setTimeout(r, 500));
+
   // For C-prefix targets we route MR1 through a local TCP proxy that
   // substitutes the SELECT-mask register bytes mid-flight. MR1 thinks
   // it's targeting a parser-safe F0A0B placeholder; the bridge sees
@@ -265,6 +309,7 @@ async function runWriteTag(
         stdout_tail: stdout.slice(-400),
         stderr_tail: stderr.slice(-400),
         proxy_used: cPrefix,
+        preflight_reset_tail: resetOut,
         ...(proxyStats ? { proxy_stats: proxyStats } : {}),
       };
       if (timedOut) {
