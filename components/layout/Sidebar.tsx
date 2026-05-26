@@ -69,6 +69,7 @@ const sections: NavSection[] = [
     isActiveSection: (p) =>
       p.startsWith("/inventory/catalog") ||
       p.startsWith("/inventory/bulk-status") ||
+      p.startsWith("/inventory/bulk-import") ||
       p.startsWith("/overview/locations") ||
       p.startsWith("/rfid/cycle-counts") ||
       p.startsWith("/operations/transfers"),
@@ -79,6 +80,7 @@ const sections: NavSection[] = [
       { href: "/operations/transfers/out", label: "Transfer Out", icon: ArrowRightLeft },
       { href: "/operations/transfers/in", label: "Transfer In", icon: FolderInput },
       { href: "/inventory/bulk-status", label: "Bulk status", icon: SlidersHorizontal },
+      { href: "/inventory/bulk-import", label: "Bulk Import", icon: PackagePlus },
     ],
   },
   {
