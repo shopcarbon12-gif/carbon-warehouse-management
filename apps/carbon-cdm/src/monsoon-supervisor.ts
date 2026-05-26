@@ -1138,14 +1138,58 @@ export class MonsoonSupervisor {
   public releaseBridgeForExternalOp(readerId: string): void {
     this.externalBridgeHold.delete(readerId);
     const slot = this.slots.get(readerId);
-    if (slot) {
-      slot.sweepPowerOverrideArg = null;
-      slot.sweepStepStartedAt = 0;
-      slot.lastSweepAttemptAt = 0;
-      slot.consecutiveFastCleanExits = 0;
-      slot.fastStuckCycles = 0;
-      slot.consecutiveZeroByteKicks = 0;
-    }
+    if (!slot || slot.shuttingDown) return;
+
+    slot.sweepPowerOverrideArg = null;
+    slot.sweepStepStartedAt = 0;
+    slot.lastSweepAttemptAt = 0;
+    slot.consecutiveFastCleanExits = 0;
+    slot.fastStuckCycles = 0;
+    slot.consecutiveZeroByteKicks = 0;
+
+    // 2026-05-26 part 2: explicitly trigger bridge reset + schedule
+    // respawn here.
+    //
+    // Two real bugs combine into the "stuck after encode" symptom:
+    //
+    //   1. acquireBridgeForExternalOp killed the child; the on-exit
+    //      handler scheduled a respawn that ran while the slot was
+    //      still in `externalBridgeHold`, hit the guard in spawnReader,
+    //      and silently bailed. NOTHING re-schedules a spawn when the
+    //      hold lifts — reconcile only fires on active-scan-session
+    //      changes, not periodically. Live evidence on .70 today:
+    //      11:28:10 write success → 11:29:26 first activity (operator
+    //      manually opened antenna test). 76 s of dead air, no spawn
+    //      logs, watchdog inert because there was no child to watch.
+    //
+    //   2. Post-WRITE_TAG the chip sits in a Gen2 access state that a
+    //      vanilla `RFID_RadioOpen` from the next inventory binary
+    //      can't always clear. The chip then "reads" as alive (emits
+    //      a trickle of control bytes so `lastByteAt` stays fresh and
+    //      the silence watchdog never fires) but produces zero tag
+    //      records. The only software cure that's worked in practice
+    //      is the WIZnet-bridge cold reset (`wiznet-cli --reset`) —
+    //      which Hard Reset already does, and which is why the
+    //      operator had to click Hard Reset after every C-prefix
+    //      encode to get reads back.
+    //
+    // Fix: bridge-reset the slot (stamps `bridgeResetAt`, supervisor
+    // spawn-path enforces POST_BRIDGE_RESET_QUIET_MS = 5 s) and
+    // schedule the respawn ourselves. The 5.5 s delay clears the
+    // quiet window plus a buffer; the spawn path's own check still
+    // owns the gate so it self-corrects if the timing slips.
+    log.info("supervisor: external-op release — bridge reset + scheduled respawn", {
+      readerId,
+      readerName: slot.spec.name,
+    });
+    this.tryBridgeReset(slot.spec);
+    setTimeout(() => {
+      if (this.externalBridgeHold.has(readerId)) return; // re-acquired
+      const s = this.slots.get(readerId);
+      if (!s || s.shuttingDown) return;
+      if (s.child && s.child.exitCode === null) return; // someone else won
+      void this.spawnReader(s);
+    }, POST_BRIDGE_RESET_QUIET_MS + 500);
   }
 
   /** Internal — used by the reconcile / on-exit paths to skip spawn. */
