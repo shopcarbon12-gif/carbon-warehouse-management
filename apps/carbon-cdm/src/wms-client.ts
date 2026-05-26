@@ -59,13 +59,20 @@ export type AgentConfigReader = {
    *  the supervisor falls back to `ip neigh show IP` to resolve MAC
    *  on-demand from the kernel ARP table. */
   mac_address?: string | null;
-  /** When true, the supervisor's `maintainArpPins` skips this reader and
-   *  leaves the kernel ARP entry alone. The pin defends against rogue
-   *  proxy-ARP (added 2026-05-21 for the `.9` POS hijack), but a bridge
-   *  legitimately wired behind the WiFi extender REQUIRES the extender's
-   *  proxy-ARP to reach it — pinning the bridge's true MAC sends frames
-   *  into a switch port that doesn't know it. Pulled from
-   *  `devices.config.skip_arp_pin`. Missing/false = pin as usual. */
+  /** Marks the reader as living behind a proxy-ARP gateway (WiFi extender).
+   *  Two supervisor behaviors change when set:
+   *   1. `maintainArpPins` SKIPS this reader so the extender's proxy-ARP
+   *      can win the kernel ARP race. Pinning the bridge's true MAC sends
+   *      frames into a switch port that doesn't know it. Defense added
+   *      2026-05-21 for the `.9` POS hijack — correct for wired bridges,
+   *      wrong for bridges legitimately behind the extender.
+   *   2. Silence timeout extends from 20 s to 90 s. TCP slow-start +
+   *      chip-stream warm-up over the extender's high-latency WiFi
+   *      backhaul takes 30-90 s; the default 20 s kick killed the binary
+   *      mid-warmup. Verified 2026-05-26 on .34 POS — a 102 s manual
+   *      antenna-test produced 14,474 records on a chip that gave zero
+   *      records under default sweep/silence behavior.
+   *  Pulled from `devices.config.skip_arp_pin`. Missing/false = normal. */
   skip_arp_pin?: boolean;
   /** Per-reader forced respawn cadence (milliseconds). When set, the
    *  supervisor kills + respawns the binary every N ms in normal scanning,

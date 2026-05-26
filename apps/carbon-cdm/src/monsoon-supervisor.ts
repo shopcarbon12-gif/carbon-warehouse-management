@@ -630,6 +630,19 @@ const TEST_SWEEP_INTERVAL_MS = 1_000;
  * once tags re-enter the antenna's field, so the cost is invisible.
  */
 const STREAM_SILENCE_TIMEOUT_MS = 20_000;
+/**
+ * Slow-warmup silence threshold for readers flagged `skip_arp_pin = true`
+ * (bridges legitimately downstream of a proxy-ARP gateway, i.e. a WiFi
+ * extender). Live evidence 2026-05-26 on .34 POS: TCP slow-start + the
+ * chip's inventory stream need 30-90 s of uninterrupted runtime before
+ * records flow over the WiFi backhaul. The default 20 s silence-kick
+ * killed the binary mid-warmup every spawn (0 records, cleanExit:true,
+ * spawnDurationMs:25000). When an operator manually held a 102-s
+ * antenna-test session, the binary produced 14,474 records — proving
+ * warm-up was the only thing missing. 90 s gives the binary breathing
+ * room while still catching genuinely dead chips within ~2 min.
+ */
+const SLOW_WARMUP_SILENCE_TIMEOUT_MS = 90_000;
 const WATCHDOG_INTERVAL_MS = 5_000;
 /**
  * Throttle for /api/cdm-agents/reader-offline pushes. A reader sitting
@@ -1071,7 +1084,15 @@ export class MonsoonSupervisor {
       // mux cycle); 15 s silence threshold leaves headroom while keeping
       // dead-cycle waste minimal.
       const muxSlot = slot.spec.antennas.filter((a) => a.enabled).length >= 2;
-      const silenceTimeout = muxSlot ? 15_000 : STREAM_SILENCE_TIMEOUT_MS;
+      // skip_arp_pin readers are behind a proxy-ARP gateway (WiFi extender).
+      // TCP slow-start + chip stream warm-up takes 30-90 s on that path;
+      // the default 20 s silence-kick would tear the binary down mid-warmup
+      // and re-trigger the same warm-up forever. 90 s gives them headroom.
+      const silenceTimeout = muxSlot
+        ? 15_000
+        : slot.spec.skip_arp_pin === true
+          ? SLOW_WARMUP_SILENCE_TIMEOUT_MS
+          : STREAM_SILENCE_TIMEOUT_MS;
       const rateDropTimeout = muxSlot ? 12_000 : READ_RATE_DROP_TIMEOUT_MS;
 
       // For mux readers, suppress the "rotate ports on zero-bytes" branch.
