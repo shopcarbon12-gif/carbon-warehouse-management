@@ -47,6 +47,15 @@ export function LiveScanWidget() {
   // was looking at when they hit Pause.
   const [frozenPerAntenna, setFrozenPerAntenna] = useState<PerAntennaRow[] | null>(null);
 
+  // Per-reader toggle: set of reader_ids the operator has turned OFF in
+  // this session. A disabled reader's tiles still poll/SSE-receive
+  // updates in the background (so re-enabling pops the current count
+  // back instantly), but its contribution is subtracted from the
+  // displayed headline and its tile is visually muted. Cleared on
+  // Start. Survives Pause (so a paused freeze respects the operator's
+  // filter choices).
+  const [disabledReaders, setDisabledReaders] = useState<Set<string>>(() => new Set());
+
   // SSE-driven incremental tick state. Mirrors dashboard CommandCenter so
   // the headline + per-antenna tiles climb 1-by-1 (~250 ms end-to-end from
   // reader stdout) instead of waiting for the 500 ms / 1 s poll cycle to
@@ -263,11 +272,28 @@ export function LiveScanWidget() {
       setCount(0);
       setFrozenCount(null);
       setFrozenPerAntenna(null);
+      setDisabledReaders(new Set()); // fresh session = all readers enabled
       setState("running");
     } finally {
       setBusy(false);
     }
   }, [busy]);
+
+  // Toggle one reader's contribution in/out of the headline. Mutates
+  // disabledReaders only; per-antenna polling/SSE keep filling the
+  // background data so flipping back on instantly restores the tile's
+  // current count.
+  const toggleReader = useCallback((readerId: string) => {
+    setDisabledReaders((prev) => {
+      const next = new Set(prev);
+      if (next.has(readerId)) {
+        next.delete(readerId);
+      } else {
+        next.add(readerId);
+      }
+      return next;
+    });
+  }, []);
 
   const onPause = useCallback(async () => {
     if (busy) return;
@@ -328,7 +354,6 @@ export function LiveScanWidget() {
   }, [busy, state, count, frozenCount]);
 
   const live = state === "running";
-  const displayCount = live ? count : (frozenCount ?? count);
   // RUNNING shows the live grid; PAUSED shows the frozen grid; STOPPED/IDLE
   // show nothing.
   const gridRows: PerAntennaRow[] =
@@ -337,6 +362,17 @@ export function LiveScanWidget() {
       : state === "paused"
         ? (frozenPerAntenna ?? [])
         : [];
+  // Sum of disabled readers' EPC contributions — subtracted from the
+  // server-authoritative headline so the displayed count reflects only
+  // the tiles the operator has left ON. Disabled tiles still tick in
+  // the background (re-enabling restores instantly) but don't add to
+  // the displayed total.
+  const disabledEpcSum = gridRows
+    .filter((a) => disabledReaders.has(a.reader_id))
+    .reduce((sum, a) => sum + a.unique_epcs, 0);
+  const baseCount = live ? count : (frozenCount ?? count);
+  const displayCount = Math.max(0, baseCount - disabledEpcSum);
+  const disabledCount = disabledReaders.size;
 
   return (
     <div className="mb-4 rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-4 shadow-sm">
@@ -373,6 +409,11 @@ export function LiveScanWidget() {
           <span className="font-mono text-xs uppercase tracking-wide text-[var(--wms-muted)]">
             {state === "stopped" ? "EPCs (final)" : "unique EPCs"}
           </span>
+          {disabledCount > 0 && state !== "stopped" ? (
+            <span className="font-mono text-[0.6rem] uppercase tracking-wide text-amber-400/80">
+              · {disabledCount} reader{disabledCount === 1 ? "" : "s"} off (−{disabledEpcSum.toLocaleString()})
+            </span>
+          ) : null}
         </div>
         <div className="ml-auto flex items-center gap-2">
           {state !== "running" ? (
@@ -412,25 +453,62 @@ export function LiveScanWidget() {
       </div>
       {gridRows.length > 0 ? (
         <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4">
-          {gridRows.map((a) => (
-            <div
-              key={a.antenna_id}
-              className="flex items-center justify-between rounded border border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/60 px-2 py-1.5"
-            >
-              <div className="min-w-0">
-                <div className="truncate font-mono text-[0.7rem] text-[var(--wms-fg)]">
-                  {a.reader_name}
+          {gridRows.map((a) => {
+            const off = disabledReaders.has(a.reader_id);
+            // STOPPED state: tiles are not interactive (session ended,
+            // toggling has no meaning). Otherwise click toggles the
+            // reader's contribution in/out of the displayed headline.
+            const interactive = state !== "stopped";
+            return (
+              <button
+                key={a.antenna_id}
+                type="button"
+                onClick={() => interactive && toggleReader(a.reader_id)}
+                disabled={!interactive}
+                aria-pressed={off}
+                title={
+                  interactive
+                    ? off
+                      ? `Click to include ${a.reader_name} in the total`
+                      : `Click to exclude ${a.reader_name} from the total`
+                    : undefined
+                }
+                className={
+                  "flex items-center justify-between rounded border px-2 py-1.5 text-left transition-colors " +
+                  (off
+                    ? "border-[var(--wms-border)]/40 bg-[var(--wms-surface-elevated)]/30 opacity-50"
+                    : "border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/60") +
+                  (interactive
+                    ? " cursor-pointer hover:bg-[var(--wms-surface-elevated)]"
+                    : " cursor-default")
+                }
+              >
+                <div className="min-w-0">
+                  <div
+                    className={
+                      "truncate font-mono text-[0.7rem] " +
+                      (off ? "text-[var(--wms-muted)] line-through" : "text-[var(--wms-fg)]")
+                    }
+                  >
+                    {a.reader_name}
+                  </div>
+                  <div className="truncate font-mono text-[0.55rem] text-[var(--wms-muted)]">
+                    {off ? "OFF · " : ""}
+                    ant #{a.antenna_number}
+                    {a.network_address ? ` · ${a.network_address}` : ""}
+                  </div>
                 </div>
-                <div className="truncate font-mono text-[0.55rem] text-[var(--wms-muted)]">
-                  ant #{a.antenna_number}
-                  {a.network_address ? ` · ${a.network_address}` : ""}
+                <div
+                  className={
+                    "ml-2 font-mono text-base font-semibold tabular-nums " +
+                    (off ? "text-[var(--wms-muted)] line-through" : "text-[var(--wms-accent)]")
+                  }
+                >
+                  {a.unique_epcs}
                 </div>
-              </div>
-              <div className="ml-2 font-mono text-base font-semibold text-[var(--wms-accent)]">
-                {a.unique_epcs}
-              </div>
-            </div>
-          ))}
+              </button>
+            );
+          })}
         </div>
       ) : null}
     </div>
