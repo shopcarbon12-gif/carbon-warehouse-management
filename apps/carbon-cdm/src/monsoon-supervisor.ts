@@ -172,6 +172,46 @@ const FAST_STUCK_CHIP_RESET_AFTER_CYCLES = 5;
 const CHIP_RESET_COOLDOWN_MS = 2 * 60 * 1000;
 
 /**
+ * Long-stuck detection — companion to fast-stuck above.
+ *
+ * Fast-stuck = child exits in < 1 s with 0 records (chip refusing TCP /
+ * radio init outright). Caught above.
+ *
+ * Long-stuck = child runs for the full silence-watchdog window
+ * (20-90 s depending on reader type) and gets SIGKILL'd by the
+ * watchdog with 0 records. The TCP layer is fine, the binary is
+ * running, but the chip's MCU is in a state where it accepts
+ * commands but emits no tag-read frames. Live evidence 2026-05-26
+ * on .34: every supervisor child after the operator's encode-job
+ * burst ran for 90+ s and got SIGKILL'd with 0 records; direct
+ * MR1 --reset returned the `00 00 FF FF FF FF FF FF` UART break
+ * signature, same as .82 in May. Manual recovery sequence:
+ * wiznet-cli --reset → 30 s wait → new_monsoonreader --hard-reset
+ * → --clear-error → MR1 --reset → inventory.
+ *
+ * The supervisor needs to escalate through this sequence on its own
+ * so the operator doesn't have to file a debug session every time
+ * a chip wedges this way. Escalation ladder (cooldown-protected):
+ *
+ *   cycles 0-2: just respawn (silence watchdog already kicked the
+ *               last child; let the normal respawn path try)
+ *   cycle 3:    tryChipReset (--buffer-reset / --reset / --hard-reset)
+ *   cycle 4:    tryBridgeReset (wiznet-cli --reset, full bridge cold reboot)
+ *   cycle 5+:   transition to wedgeLevel 3 → push chassis_wedged_at to WMS
+ *
+ * Each escalation is gated by LONG_STUCK_RECOVERY_COOLDOWN_MS so a
+ * chronically-bad chip doesn't get pummeled — same lesson the
+ * fast-stuck path learned earlier today (cascading bridge resets
+ * pushed both .30 and .34 deeper into stuck instead of recovering
+ * them).
+ */
+const LONG_STUCK_MIN_RUNTIME_MS = 15_000;
+const LONG_STUCK_CHIP_RESET_AFTER_CYCLES = 3;
+const LONG_STUCK_BRIDGE_RESET_AFTER_CYCLES = 4;
+const LONG_STUCK_WEDGED_AFTER_CYCLES = 5;
+const LONG_STUCK_RECOVERY_COOLDOWN_MS = 60_000;
+
+/**
  * Grace window between SIGTERM and SIGKILL when stopping a slot's child.
  * `new_monsoonreader` catches SIGTERM and FINs its bridge TCP socket
  * within ~300 ms; we wait a touch longer for safety. SIGKILL fallback
@@ -453,6 +493,15 @@ type ReaderSlot = {
    *  reset alone hasn't cleared the fast-stuck pattern after multiple
    *  attempts. */
   chipResetAt: number;
+  /** Consecutive on-exit cycles where the child ran for at least
+   *  LONG_STUCK_MIN_RUNTIME_MS but produced 0 totalRecords. The .34
+   *  failure mode 2026-05-26: TCP fine, binary running, chip silent. */
+  consecutiveLongStuckCycles: number;
+  /** ms timestamp of the most recent long-stuck recovery escalation
+   *  (chip reset / bridge reset). 0 = never. Rate-limit via
+   *  LONG_STUCK_RECOVERY_COOLDOWN_MS so a bad chip can't trigger a
+   *  cascade. */
+  lastLongStuckRecoveryAt: number;
   /** ms timestamp of the most recent push to /api/cdm-agents/reader-offline.
    *  Throttle so a chronically-silent reader posts offline once per minute,
    *  not on every watchdog tick. Reset to 0 on first-byte (online) so the
@@ -2206,6 +2255,8 @@ export class MonsoonSupervisor {
         lastDeepRecoveryAt: 0,
         bridgeResetAt: 0,
         chipResetAt: 0,
+        consecutiveLongStuckCycles: 0,
+        lastLongStuckRecoveryAt: 0,
         suggestedPowerDbm: null,
         lastForcedRespawnAt: 0,
         lastUpwardProbeAt: 0,
@@ -3300,6 +3351,88 @@ export class MonsoonSupervisor {
         slot.consecutiveFastCleanExits = 0;
         if (slot.bytesSinceSpawn) slot.fastStuckCycles = 0;
       }
+
+      // LONG-STUCK DETECTION 2026-05-26: companion to fast-stuck above.
+      //
+      // Pattern: child ran for at least LONG_STUCK_MIN_RUNTIME_MS (15 s)
+      // and produced 0 totalRecords. The chip's MCU accepted TCP and is
+      // emitting framing bytes (else the silence watchdog would have
+      // SIGKILL'd much earlier and we'd be in the fast-stuck branch),
+      // but no actual tag-read frames are coming out. Live evidence
+      // 2026-05-26 on .34 after the operator's encode-job burst:
+      // direct MR1 --reset returned `00 00 FF FF FF FF FF FF` (UART
+      // break signature) — chip MCU is in a stuck state where it
+      // responds to commands but produces no inventory output.
+      //
+      // The fast-stuck path doesn't catch this because spawnDurationMs
+      // is in the 60-100 s range (not sub-1 s). The silence watchdog
+      // can't fix it because every fresh spawn resets the relevant
+      // counters. We escalate explicitly:
+      //
+      //   cycles 0-2: respawn normally (silence watchdog already
+      //               kicked; let port rotation try)
+      //   cycle 3:    tryChipReset — buffer-reset, reset, hard-reset
+      //   cycle 4:    tryBridgeReset — wiznet-cli --reset bridge cold reboot
+      //   cycle 5+:   transition to wedgeLevel 3, push chassis_wedged_at
+      //
+      // Each escalation step is gated by LONG_STUCK_RECOVERY_COOLDOWN_MS
+      // (60 s) so we don't cascade. Counter resets the moment ANY tag
+      // read flows.
+      if (
+        !wasIntendedKill &&
+        totalRecords === 0 &&
+        spawnDurationMs >= LONG_STUCK_MIN_RUNTIME_MS
+      ) {
+        slot.consecutiveLongStuckCycles += 1;
+        const cycles = slot.consecutiveLongStuckCycles;
+        const sinceLast = Date.now() - slot.lastLongStuckRecoveryAt;
+        const cooldownPassed = sinceLast >= LONG_STUCK_RECOVERY_COOLDOWN_MS;
+        const baseInfo = {
+          readerId: spec.id,
+          readerName: spec.name,
+          host: String(spec.network_address ?? ""),
+          cycles,
+          spawnDurationMs,
+          cooldownAgoMs: slot.lastLongStuckRecoveryAt === 0 ? null : sinceLast,
+        };
+        if (cycles >= LONG_STUCK_WEDGED_AFTER_CYCLES && slot.wedgeLevel < 3) {
+          // Software-exhausted. Mark chassis_wedged so the operator UI
+          // surfaces "needs hardware service" and stop hammering the chip.
+          log.error("supervisor: long-stuck cycles exhausted — marking chassis_wedged", baseInfo);
+          slot.wedgeLevel = 3;
+          slot.wedgedSinceMs = Date.now();
+          // Counter stays — the supervisor will keep counting cycles but
+          // won't issue any more recovery escalations (cooldown check
+          // below also gates this).
+        } else if (cycles === LONG_STUCK_BRIDGE_RESET_AFTER_CYCLES && cooldownPassed) {
+          log.warn("supervisor: long-stuck — escalating to bridge reset", baseInfo);
+          slot.lastLongStuckRecoveryAt = Date.now();
+          this.tryBridgeReset(spec);
+        } else if (cycles === LONG_STUCK_CHIP_RESET_AFTER_CYCLES && cooldownPassed) {
+          log.warn("supervisor: long-stuck — escalating to chip reset", baseInfo);
+          slot.lastLongStuckRecoveryAt = Date.now();
+          this.tryChipReset(spec);
+        } else if (cycles >= LONG_STUCK_CHIP_RESET_AFTER_CYCLES && !cooldownPassed) {
+          log.info("supervisor: long-stuck — recovery on cooldown, waiting", baseInfo);
+        } else {
+          log.info("supervisor: long-stuck cycle observed (no escalation yet)", baseInfo);
+        }
+      } else if (totalRecords > 0) {
+        // ANY real tag read clears the long-stuck streak and exits any
+        // wedged-level if we were below 3 (level 3 is sticky until WMS
+        // resets it via reader_recover_requested_at).
+        if (slot.consecutiveLongStuckCycles > 0 || slot.lastLongStuckRecoveryAt > 0) {
+          log.info("supervisor: long-stuck cleared by real tag reads", {
+            readerId: spec.id,
+            readerName: spec.name,
+            wasCycles: slot.consecutiveLongStuckCycles,
+            recordsThisSpawn: totalRecords,
+          });
+        }
+        slot.consecutiveLongStuckCycles = 0;
+        slot.lastLongStuckRecoveryAt = 0;
+      }
+
       // Rapid-respawn pattern (cleanExit:true, totalRecords:0, child exited
       // without ever producing a byte) means the chip is silent — typically
       // bridge port mismatch or the chassis isn't running its RFID firmware.
