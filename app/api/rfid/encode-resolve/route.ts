@@ -107,6 +107,7 @@ export async function POST(req: Request) {
     name: string | null;
     color: string | null;
     size: string | null;
+    upc: string | null;
     bin_code: string | null;
     last_seen_at: string | null;
   }>(
@@ -116,6 +117,10 @@ export async function POST(req: Request) {
     // cs.color directly; that's been broken under PG since the
     // column rename and was surfacing as "Server error" on every
     // encode-resolve call (visible in the workspace's enrichEpc fail).
+    // UPC: cs.upc wins when populated; otherwise fall back to the
+    // matrix-level upc (matrices.upc). Same COALESCE pattern as
+    // /api/inventory/catalog/search and lib/server/catalog-enrich —
+    // some SKUs only carry their UPC at the matrix level.
     `SELECT
        i.id::text                               AS id,
        i.status                                 AS status,
@@ -124,6 +129,7 @@ export async function POST(req: Request) {
        m.description                            AS name,
        cs.color_code                            AS color,
        cs.size                                  AS size,
+       COALESCE(cs.upc, m.upc)                  AS upc,
        b.code                                   AS bin_code,
        i.last_seen_at::text                     AS last_seen_at
      FROM items i
@@ -170,6 +176,7 @@ export async function POST(req: Request) {
         name: row.name ?? "",
         color: row.color ?? "",
         size: row.size ?? "",
+        upc: row.upc,
         bin_code: row.bin_code,
         last_seen_at: row.last_seen_at,
       },

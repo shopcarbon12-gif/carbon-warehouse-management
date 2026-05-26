@@ -76,6 +76,7 @@ type EncodeResolveResponse =
         name: string;
         color: string;
         size: string;
+        upc: string | null;
         bin_code: string | null;
         last_seen_at: string | null;
       };
@@ -355,7 +356,7 @@ export function EncodeItemsWorkspace() {
         next.set(epc, {
           ...row,
           sku: it.sku,
-          upc: null, // encode-resolve doesn't return UPC; left blank
+          upc: it.upc ?? row.upc,
           name: it.name,
           size: it.size,
           color: it.color,
