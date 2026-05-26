@@ -1121,9 +1121,31 @@ export class MonsoonSupervisor {
    * Release a reader id previously borrowed via `acquireBridgeForExternalOp`.
    * The supervisor's next reconcile tick (or any on-exit handler that
    * had been parked) will spawn a fresh child.
+   *
+   * 2026-05-26: also reset the slot's sweep-recovery state. Live
+   * evidence — operator encoded a tag on .70 while the supervisor's
+   * auto-sweep had landed on 10 dBm (the lowest sweep step). After
+   * the chip-write released the bridge, the next inventory spawn
+   * came up at 10 dBm again because sweepPowerOverrideArg was still
+   * 100. Tags more than a few inches away were undetectable; the
+   * operator saw "0 reads" / "stuck" with no obvious cause and had
+   * to manually run sweep + hard reset on the antenna-test page to
+   * recover. Clearing the sweep state here means the post-write
+   * spawn uses the configured ceiling power (typically 33 dBm), and
+   * any genuine chip-stuck state will rediscover itself naturally
+   * via the silence-watchdog → sweep escalation if it returns.
    */
   public releaseBridgeForExternalOp(readerId: string): void {
     this.externalBridgeHold.delete(readerId);
+    const slot = this.slots.get(readerId);
+    if (slot) {
+      slot.sweepPowerOverrideArg = null;
+      slot.sweepStepStartedAt = 0;
+      slot.lastSweepAttemptAt = 0;
+      slot.consecutiveFastCleanExits = 0;
+      slot.fastStuckCycles = 0;
+      slot.consecutiveZeroByteKicks = 0;
+    }
   }
 
   /** Internal — used by the reconcile / on-exit paths to skip spawn. */
