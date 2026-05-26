@@ -241,21 +241,32 @@ function runWriteTag(
         resolve({ ok: false, error_msg: "write_timeout", meta });
         return;
       }
-      // Heuristic success: exit 0 AND no obvious failure string in stderr.
-      // The binary doesn't print a JSON status; the legacy Senitron path
-      // treats exit 0 as success. Common error keywords:
-      //   "Tag not found" — target_tag wasn't in field
-      //   "Write failed"   — chip refused the write
-      //   "Unable to connect" — bridge TCP refused
+      // Success requires POSITIVE evidence: at least one
+      // `TAG_ACCESS : cmd = WRITE, write_bytes = ...` line from the
+      // binary. The 2016 MR1 binary emits this exactly once per
+      // 12-byte word actually written to the chip; absent the line,
+      // no Gen2 ACCESS write hit the air, regardless of exit code.
+      //
+      // Live evidence 2026-05-26: MR2 routinely exits 0 with output
+      // like "Failed to connect to remote serial host / No radios
+      // found in enumeration" — exit-code-based heuristic logged
+      // those as success and the UI showed "Wrote ✓" while chips
+      // stayed C-prefix. New heuristic refuses any outcome that
+      // can't produce a TAG_ACCESS WRITE line.
       const lc = (stderr + stdout).toLowerCase();
-      if (code === 0 && !/tag not found|write fail|unable to connect|error/i.test(lc)) {
+      const sawWrite = /tag_access\s*:\s*cmd\s*=\s*write/i.test(stdout);
+      if (code === 0 && sawWrite) {
         resolve({ ok: true, meta });
         return;
       }
       let errSummary = "binary_exit_" + String(code);
-      if (/unable to connect/i.test(lc)) errSummary = "bridge_unreachable";
+      if (/radio_not_present|radio not present/i.test(lc)) errSummary = "radio_not_present";
+      else if (/no radios found/i.test(lc)) errSummary = "no_radios_found";
+      else if (/failed to connect/i.test(lc)) errSummary = "bridge_unreachable";
+      else if (/unable to connect/i.test(lc)) errSummary = "bridge_unreachable";
       else if (/tag not found/i.test(lc)) errSummary = "tag_not_in_field";
       else if (/write fail/i.test(lc)) errSummary = "write_rejected_by_chip";
+      else if (code === 0 && !sawWrite) errSummary = "no_tag_access_write_line";
       resolve({ ok: false, error_msg: errSummary, meta });
     });
   });
