@@ -28,7 +28,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Pencil, Play, Radio, Search, Square } from "lucide-react";
+import { Pencil, Play, Radio, RefreshCw, Search, Square, Trash2 } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
 
@@ -162,6 +162,13 @@ export function EncodeItemsWorkspace() {
 
   // Enrich newly-seen EPCs via /api/rfid/encode-resolve. Once per EPC.
   const resolvedRef = useRef<Set<string>>(new Set());
+
+  // EPCs the operator has explicitly trash-iconed during this session.
+  // The SSE handler skips re-adding any EPC in this set so the table
+  // doesn't reanimate something the operator just removed. Cleared by
+  // the Clear session button (treats the session as fresh — re-scanning
+  // a previously-trashed tag puts it back in the table).
+  const suppressedRef = useRef<Set<string>>(new Set());
 
   // C1/C2 auto-resolve. The first 13 chars of these EPCs (the leading
   // "C1"/"C2" + 11 following chars) form the destination `custom_skus.sku`
@@ -305,7 +312,10 @@ export function EncodeItemsWorkspace() {
       if (filterDeviceIds && p.deviceId && !filterDeviceIds.has(p.deviceId)) return;
       const list = (p.epcs ?? [])
         .map((e) => e.replace(/\s/g, "").toUpperCase())
-        .filter((e) => /^[0-9A-F]{24}$/.test(e));
+        .filter((e) => /^[0-9A-F]{24}$/.test(e))
+        // Drop EPCs the operator has trash-iconed during this session.
+        // Clear session resets the suppression so a re-scan re-surfaces them.
+        .filter((e) => !suppressedRef.current.has(e));
       if (list.length === 0) return;
       // Add new EPCs as empty rows; enrich each via encode-resolve.
       setRowsByEpc((prev) => {
@@ -665,6 +675,44 @@ export function EncodeItemsWorkspace() {
     });
   }, []);
 
+  // Trash icon on a row → remove the EPC from this session's table AND
+  // add it to suppressedRef so the SSE handler won't bring it back.
+  // Survives until Clear session.
+  const trashEpc = useCallback((epc: string) => {
+    suppressedRef.current.add(epc);
+    setRowsByEpc((prev) => {
+      const next = new Map(prev);
+      next.delete(epc);
+      return next;
+    });
+    setChecked((prev) => {
+      if (!prev.has(epc)) return prev;
+      const next = new Set(prev);
+      next.delete(epc);
+      return next;
+    });
+  }, []);
+
+  // Clear session resets all the per-session state:
+  //   • the suppressed Set (so a re-scanned previously-trashed EPC is
+  //     surfaced again — operator's "fresh start" semantics)
+  //   • the enrichment dedup ref (so EPCs that re-appear get their
+  //     encode-resolve call again)
+  //   • the table, the per-row check set, the manual search target,
+  //     and any banner messages
+  // The reader stays awake — Clear session is a state reset, not a
+  // scan stop. Operator clicks Stop separately to release the reader.
+  const onClearSession = useCallback(() => {
+    suppressedRef.current = new Set();
+    resolvedRef.current = new Set();
+    setRowsByEpc(new Map());
+    setChecked(new Set());
+    setTarget(null);
+    setSearchQuery("");
+    setHits([]);
+    setErrorMsg(null);
+  }, []);
+
   const allChecked = rows.length > 0 && rows.every((r) => checked.has(r.epc));
   // True if any checked row carries an auto-resolved SKU id — used to
   // enable the Encode button even when the operator hasn't picked a
@@ -710,6 +758,14 @@ export function EncodeItemsWorkspace() {
           )}
         </button>
 
+        {/* Reader picker sits right next to the Read button — operator
+            picks the reader, then hits Read. Moved here from the
+            far-right per operator request 2026-05-26. */}
+        <div className="flex min-w-[220px] items-center gap-2">
+          <Radio className="h-3.5 w-3.5 text-[var(--wms-muted)]" />
+          <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} hidePosDedicated />
+        </div>
+
         <button
           type="button"
           onClick={() => void onEncode()}
@@ -718,6 +774,21 @@ export function EncodeItemsWorkspace() {
         >
           <Pencil className="h-3.5 w-3.5" />
           Encode ({checked.size})
+        </button>
+
+        {/* Clear session: wipes the per-session local state (table,
+            suppression set, dedup refs, target/search) but does NOT
+            stop scanning. Re-scanning surfaces previously-trashed
+            EPCs again. */}
+        <button
+          type="button"
+          onClick={onClearSession}
+          disabled={busy || (rows.length === 0 && suppressedRef.current.size === 0)}
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-sm text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] disabled:cursor-not-allowed disabled:opacity-50"
+          title="Wipe this session's table + suppression list. Reader stays awake."
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Clear session
         </button>
 
         <div className="relative flex flex-1 items-center">
@@ -768,10 +839,6 @@ export function EncodeItemsWorkspace() {
           ) : null}
         </div>
 
-        <div className="flex min-w-[220px] items-center gap-2">
-          <Radio className="h-3.5 w-3.5 text-[var(--wms-muted)]" />
-          <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} hidePosDedicated />
-        </div>
       </div>
 
       {errorMsg ? (
@@ -809,12 +876,13 @@ export function EncodeItemsWorkspace() {
               <th className="px-3 py-2 text-left">Size</th>
               <th className="px-3 py-2 text-left">Color</th>
               <th className="px-3 py-2 text-left">Status</th>
+              <th className="px-3 py-2 text-left w-10"></th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+                <td colSpan={9} className="px-3 py-8 text-center text-[var(--wms-muted)]">
                   {reading ? "Listening… scan some tags." : "Click Read to start streaming EPCs."}
                 </td>
               </tr>
@@ -868,6 +936,17 @@ export function EncodeItemsWorkspace() {
                       ) : (
                         <span className="text-[var(--wms-muted)]">{r.status}</span>
                       )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => trashEpc(r.epc)}
+                        disabled={r.busy}
+                        title="Remove from this session (will reappear after Clear session if re-scanned)"
+                        className="inline-flex items-center rounded border border-red-400/30 bg-red-400/5 px-1.5 py-0.5 text-red-300 hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
                     </td>
                   </tr>
                 );
