@@ -1108,28 +1108,13 @@ export class MonsoonSupervisor {
     // this flag the kill would compound exponential backoff.
     slot.intendedKill = true;
     this.killSlotChildHard(slot);
-
-    // Bridge cold reset to forcibly drop the chip out of whatever mode
-    // the supervisor's just-killed `new_monsoonreader --console` child
-    // left it in. Without this, MR1's stream-mode RFID_RadioEnumerate
-    // returns zero radios because the chip's UART is still framing
-    // console-mode responses. Live evidence 2026-05-26 on .30: even
-    // MR1 `--reset` (RFID_MacReset) couldn't enumerate the radio
-    // afterward — the chip needs a physical UART power cycle, which
-    // `wiznet-cli --reset` provides by rebooting the bridge.
-    //
-    // Stamps `bridgeResetAt` on the slot so any future supervisor
-    // spawn-path enforces POST_BRIDGE_RESET_QUIET_MS too. The bridge
-    // takes ~5 s to fully come back; we wait POST_BRIDGE_RESET_QUIET_MS
-    // + 1 s margin before returning to the caller.
-    log.info("supervisor: external-op acquire — bridge reset for clean chip state", {
-      readerId,
-      readerName: slot.spec.name,
-    });
-    this.tryBridgeReset(slot.spec);
-    await new Promise<void>((resolve) =>
-      setTimeout(resolve, POST_BRIDGE_RESET_QUIET_MS + 1_000),
-    );
+    // Settle window. The bridge takes ~200 ms to free its TCP slot after
+    // FIN; the bumped 4 s gives the chip's UART time to flush any
+    // console-mode framing the supervisor's just-killed child was
+    // emitting, without resorting to a bridge cold-reset (which makes
+    // .30 worse, not better — chip enters a "reader unreachable, all
+    // ports exhausted" recovery cooldown when bridge resets cascade).
+    await new Promise<void>((resolve) => setTimeout(resolve, 4_000));
     return { host, serialPort };
   }
 
@@ -1205,32 +1190,32 @@ export class MonsoonSupervisor {
     // For these readers we skip the reset and just respawn quickly;
     // the supervisor's normal slow-warmup tolerance covers the
     // chip's post-write state without needing a cold reset.
-    if (slot.spec.skip_arp_pin === true) {
-      log.info("supervisor: external-op release — scheduled respawn (no bridge reset, skip_arp_pin)", {
-        readerId,
-        readerName: slot.spec.name,
-      });
-      setTimeout(() => {
-        if (this.externalBridgeHold.has(readerId)) return;
-        const s = this.slots.get(readerId);
-        if (!s || s.shuttingDown) return;
-        if (s.child && s.child.exitCode === null) return;
-        void this.spawnReader(s);
-      }, 750);
-      return;
-    }
-    log.info("supervisor: external-op release — bridge reset + scheduled respawn", {
+    // 2026-05-26 evening: revert the "bridge reset on every release"
+    // logic — it cascades when encode-jobs queues multiple failed
+    // writes back-to-back. Each failed write triggered a bridge
+    // reset, the next acquire's settle was much shorter than the
+    // reset's 5-s reboot window, MR1 connected to a still-rebooting
+    // bridge, failed again, triggered another reset. Live evidence
+    // on .30: chip ended up in "all candidate ports exhausted" with
+    // a 2-minute supervisor recovery cooldown after a 9-encode
+    // burst.
+    //
+    // New rule: release just schedules a normal respawn. The
+    // post-WRITE_TAG chip-stuck state on .70 that the original
+    // bridge-reset-on-release targeted is rare; when it happens the
+    // operator can hit Hard Reset, which still does the bridge
+    // reset path explicitly.
+    log.info("supervisor: external-op release — scheduled respawn (no bridge reset)", {
       readerId,
       readerName: slot.spec.name,
     });
-    this.tryBridgeReset(slot.spec);
     setTimeout(() => {
       if (this.externalBridgeHold.has(readerId)) return; // re-acquired
       const s = this.slots.get(readerId);
       if (!s || s.shuttingDown) return;
       if (s.child && s.child.exitCode === null) return; // someone else won
       void this.spawnReader(s);
-    }, POST_BRIDGE_RESET_QUIET_MS + 500);
+    }, 750);
   }
 
   /** Internal — used by the reconcile / on-exit paths to skip spawn. */
