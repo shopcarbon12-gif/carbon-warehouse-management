@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { Eye, EyeOff, Radio, Send, Tag, X } from "lucide-react";
+import { Eye, EyeOff, Pin, Radio, Send, Tag, X } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import type { CatalogItemRow } from "@/lib/queries/catalog";
 
@@ -295,6 +295,15 @@ export function RfidTagsModal({
                           <span className="truncate font-semibold tracking-tight text-teal-400/90">
                             {it.epc}
                           </span>
+                          {it.pinned_bin_code ? (
+                            <span
+                              className="inline-flex items-center gap-1 rounded border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-wide text-emerald-300"
+                              title={`Pinned to "${it.pinned_bin_code.toLowerCase()}" bin via cycle count`}
+                            >
+                              <Pin className="h-2.5 w-2.5" />
+                              {it.pinned_bin_code.toLowerCase()}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--wms-muted)]">
                           <span>

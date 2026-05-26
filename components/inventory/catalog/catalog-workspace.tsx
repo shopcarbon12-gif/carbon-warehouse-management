@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, PackageOpen, Radio } from "lucide-react";
+import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, PackageOpen, Pin, Radio } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { computeSkuPrefix } from "@/lib/queries/bin-code";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
@@ -769,6 +769,15 @@ export function CatalogWorkspace({
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5">{r.sku}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
+                        {r.pinned_bin_code ? (
+                          <span
+                            className="mr-1.5 inline-block align-[-2px] text-emerald-400"
+                            title={`item in "${r.pinned_bin_code.toLowerCase()}" bin`}
+                            aria-label={`pinned to ${r.pinned_bin_code} bin`}
+                          >
+                            <Pin className="inline h-3.5 w-3.5" />
+                          </span>
+                        ) : null}
                         {r.name}
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>

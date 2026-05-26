@@ -67,6 +67,35 @@ export async function POST(req: Request, { params }: Ctx) {
       receivedAt: new Date(),
     });
 
+    // Per-EPC "store" pin: when the operator opened this cycle count
+    // against the bin whose code is 'store' (case-insensitive), every
+    // EPC that lands here in-stock gets `items.pinned_bin_id` set to the
+    // session's bin. Per-EPC by design — siblings under the same SKU do
+    // NOT auto-pin. Idempotent (`IS DISTINCT FROM`). Spec lives in
+    // memory entry [[store-bin-pin-2026-05-26]]; cycle count of 'store'
+    // is the ONLY trigger that sets the pin (overrides current zone
+    // state at scan time). Clear paths run elsewhere: a non-store-zone
+    // fixed-reader read in lib/server/cdm-agents.ts, status-change via
+    // the BEFORE UPDATE trigger from migration 0082.
+    if (
+      results.length > 0 &&
+      cur.bin_id &&
+      (cur.bin_code ?? "").toLowerCase() === "store"
+    ) {
+      const scannedEpcs = results.map((r) => r.epc);
+      await client.query(
+        `UPDATE items i
+            SET pinned_bin_id = $2::uuid
+           FROM locations loc
+          WHERE i.epc = ANY($1::text[])
+            AND i.location_id = loc.id
+            AND loc.tenant_id = $3::uuid
+            AND i.status = 'in-stock'
+            AND i.pinned_bin_id IS DISTINCT FROM $2::uuid`,
+        [scannedEpcs, cur.bin_id, session.tid],
+      );
+    }
+
     // Append new EPCs to the session's running scanned_epcs list so the
     // expected/variance views (and the commit step) see them. Dedup happens
     // in updateSession via dedupeEpcs.

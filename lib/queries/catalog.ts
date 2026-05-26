@@ -34,6 +34,11 @@ export type CatalogItemRow = {
   size: string | null;
   color: string | null;
   sku: string;
+  /** Code of the bin this EPC is pinned to via the "store" pin
+   *  (items.pinned_bin_id), or null when no pin is set. The RFID Tags
+   *  modal renders a small colored chip next to the EPC when this is
+   *  non-null. See migration 0082 + the cycle-count scan handler. */
+  pinned_bin_code: string | null;
 };
 
 /** Matrix (UPC) rows with custom SKU / EPC totals for the active location. */
@@ -134,6 +139,7 @@ export async function listCatalogItemsForCustomSku(
     size: string | null;
     color: string | null;
     sku: string;
+    pinned_bin_code: string | null;
   }>(
     `SELECT
        i.serial_number::text AS serial_number,
@@ -144,11 +150,13 @@ export async function listCatalogItemsForCustomSku(
        m.description AS name,
        cs.size,
        cs.color_code AS color,
-       cs.sku
+       cs.sku,
+       pb.code AS pinned_bin_code
      FROM items i
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
      INNER JOIN matrices m ON m.id = cs.matrix_id
      LEFT JOIN bins b ON b.id = i.bin_id
+     LEFT JOIN bins pb ON pb.id = i.pinned_bin_id
      WHERE i.custom_sku_id = $1::uuid AND i.location_id = $2::uuid
      ORDER BY i.serial_number ASC`,
     [customSkuId, locationId],
@@ -163,5 +171,6 @@ export async function listCatalogItemsForCustomSku(
     size: row.size,
     color: row.color,
     sku: row.sku,
+    pinned_bin_code: row.pinned_bin_code ?? null,
   }));
 }

@@ -1097,6 +1097,58 @@ export async function ingestAgentReads(
     }
   }
 
+  // "store" bin pin auto-clear: when a fixed reader in a zone OTHER
+  // than the "store" zone reads an EPC currently pinned to a bin
+  // coded "store", drop the pin. This is the physical-evidence path:
+  // the tag was just read elsewhere, so it can't still be in store.
+  // No-op when reads come from a store-zone reader (pin stays) or
+  // when the EPC has no pin. Cycle count of store + status-change
+  // are the other CLEAR paths (the status path is enforced by a
+  // BEFORE UPDATE trigger from migration 0082).
+  //
+  // Handhelds: this function is `ingestAgentReads` — driven by the
+  // Carbon CDM agent which only handles fixed readers. Handheld
+  // reads never reach this path, so they are inherently invisible
+  // to the pin rules per the spec.
+  //
+  // SAVEPOINT-wrapped: any failure (missing column on a partially-
+  // migrated DB, FK problem, etc.) must NOT take down the rest of
+  // the ingest. Same defense as the zone-change tracker above.
+  if (newZoneId && dedupedEpcs.length > 0) {
+    try {
+      await client.query("SAVEPOINT pin_clear_on_non_store_zone");
+      // Look up the reader's zone name once. We don't bake "store" into
+      // the schema — the match is whatever zone happens to share its
+      // name (case-insensitive) with the bin code 'store'. Keeps the
+      // mechanism generic and reusable for any future special bin.
+      const zoneNameRow = await client.query<{ name: string }>(
+        `SELECT name FROM zones WHERE id = $1::uuid`,
+        [newZoneId],
+      );
+      const zoneName = (zoneNameRow.rows[0]?.name ?? "").toLowerCase();
+      if (zoneName !== "store") {
+        await client.query(
+          `UPDATE items i
+              SET pinned_bin_id = NULL
+             FROM bins b, locations l
+            WHERE i.epc = ANY($2::text[])
+              AND i.location_id = l.id AND l.tenant_id = $1::uuid
+              AND i.pinned_bin_id = b.id
+              AND LOWER(b.code) = 'store'`,
+          [auth.tenantId, dedupedEpcs],
+        );
+      }
+      await client.query("RELEASE SAVEPOINT pin_clear_on_non_store_zone");
+    } catch (e) {
+      try {
+        await client.query("ROLLBACK TO SAVEPOINT pin_clear_on_non_store_zone");
+      } catch {
+        /* savepoint may already be invalidated */
+      }
+      console.warn("[ingestAgentReads] pin-clear error (continuing)", e);
+    }
+  }
+
   // Bump `last_read_at` on every antenna that produced a read in this batch.
   // Hardware Config derives the antenna online dot from `last_read_at` (with
   // a 60s freshness threshold) joined with the parent reader's pause state,

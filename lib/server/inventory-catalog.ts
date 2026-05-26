@@ -31,6 +31,15 @@ export type CatalogGridRow = {
    * for a "Manual" badge.
    */
   is_manual_only: boolean;
+  /**
+   * Code of a bin that has at least ONE EPC under this SKU pinned to it
+   * via the per-EPC "store" pin (items.pinned_bin_id). Null when no EPC
+   * is pinned. The catalog row UI shows a green pin icon left of the
+   * item name when this is non-null; tooltip says `item in "<code>" bin`.
+   * See migration 0082 + the cycle-count scan handler for how the pin
+   * gets set.
+   */
+  pinned_bin_code: string | null;
 };
 
 export type CatalogGridResult = {
@@ -230,6 +239,7 @@ export async function listCatalogGrid(
     matrix_archived: boolean;
     is_manual_only: boolean;
     manual_qty: number | null;
+    pinned_bin_code: string | null;
   }>(
     `SELECT
        cs.id::text AS custom_sku_id,
@@ -270,7 +280,23 @@ export async function listCatalogGrid(
            AND i.status = 'in-stock'
            AND i.bin_id IS NOT NULL
            AND b.archived_at IS NULL
-       ) AS bin_location
+       ) AS bin_location,
+       -- "store" pin indicator: first (alphabetically) bin code with a
+       -- pinned EPC under this SKU. Null when no EPC is pinned. The UI
+       -- shows a green pin icon left of the item name when this is set.
+       -- LIMIT 1 + ORDER BY keeps it deterministic if multiple bins are
+       -- in play (rare — current spec is store-only).
+       (
+         SELECT b.code
+         FROM items i
+         INNER JOIN bins b ON b.id = i.pinned_bin_id
+         WHERE i.custom_sku_id = cs.id
+           AND i.location_id = $${locIdx}::uuid
+           AND i.status = 'in-stock'
+           AND i.pinned_bin_id IS NOT NULL
+         ORDER BY b.code ASC
+         LIMIT 1
+       ) AS pinned_bin_code
      FROM custom_skus cs
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE ${whereSql}
@@ -352,6 +378,7 @@ export async function listCatalogGrid(
         archived: row.archived === true,
         matrix_archived: row.matrix_archived === true,
         is_manual_only: manual,
+        pinned_bin_code: row.pinned_bin_code ?? null,
       };
     }),
     total,
