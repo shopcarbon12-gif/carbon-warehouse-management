@@ -608,6 +608,19 @@ function ActiveSessionView({
   }, [sessionId, mutate]);
 
   // SSE feed — only acts when status is "active". When paused, ignore reads.
+  //
+  // HOT-PATH POLICY: the SSE handler MUST NOT call setState. It only writes
+  // to refs (pendingScanRef, lastReadAtRef, readsThisMinuteRef). A separate
+  // 200 ms ticker (effect below) drains those refs into React state exactly
+  // ONCE per tick — meaning at most ~5 renders/sec regardless of SSE rate.
+  //
+  // Why: the previous handler did 4 setStates + a Set-rebuild + a flush
+  // (which mutate()'d the entire SessionDetail) on EVERY SSE event. During
+  // a fast scan that's 8+ renders/sec with payloads that grow linearly
+  // with session size — eventually the React render queue backlogs (page
+  // freeze), then the cumulative session-detail payloads blow memory
+  // (tab crash). The freeze + crash + counts-stuck triad reported by
+  // the operator matches this exact pattern.
   useEffect(() => {
     if (!detail) return;
     if (detail.status !== "active") return;
@@ -633,50 +646,73 @@ function ActiveSessionView({
       if (list.length === 0) return;
       const now = Date.now();
       lastReadAtRef.current = now;
-      setLastReadAt(now);
       readsThisMinuteRef.current.push(now);
-      // prune > 60s
+      // prune > 60 s, with a hard cap as a safety net in case prune misses
+      // bursts (e.g. system clock jump). 6000 = 100 reads/sec for 60s ceiling.
       const cutoff = now - 60_000;
       while (readsThisMinuteRef.current[0] !== undefined && readsThisMinuteRef.current[0] < cutoff) {
         readsThisMinuteRef.current.shift();
       }
-      setReadsPerMin(readsThisMinuteRef.current.length);
-      setLocalScanned((prev) => {
-        const next = new Set(prev);
-        for (const epc of list) next.add(epc);
-        return next;
-      });
+      if (readsThisMinuteRef.current.length > 6000) {
+        readsThisMinuteRef.current.splice(0, readsThisMinuteRef.current.length - 6000);
+      }
       for (const epc of list) pendingScanRef.current.add(epc);
-      // Fire immediately — flushingRef gates pile-up. Drain loop in the
-      // flusher keeps draining as events arrive during the in-flight POST.
-      void flushPendingScans();
+      // NO setState here — the 200 ms ticker drains everything as one batch.
     };
     return () => es.close();
-  }, [detail?.id, detail?.status, flushPendingScans]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [detail?.id, detail?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Read-rate refresher even when no new reads arrive (decay to 0).
+  // Unified 200 ms tick: drains pendingScanRef into localScanned + UI rate
+  // counters + kicks the network flush. Replaces the old per-SSE-event
+  // setStates and the separate 750 ms safety net (this tick is faster than
+  // that net so it subsumes the role). 5 renders/sec is the UI ceiling.
+  // Always runs (not gated on status) so the UI continues to "decay to 0"
+  // for read-rate even when paused.
   useEffect(() => {
     const t = setInterval(() => {
-      const cutoff = Date.now() - 60_000;
+      const now = Date.now();
+      // Decay rate even if no new SSE events arrived.
+      const cutoff = now - 60_000;
       while (readsThisMinuteRef.current[0] !== undefined && readsThisMinuteRef.current[0] < cutoff) {
         readsThisMinuteRef.current.shift();
       }
-      setReadsPerMin(readsThisMinuteRef.current.length);
-    }, 1500);
+      setReadsPerMin((prev) => {
+        const next = readsThisMinuteRef.current.length;
+        return next === prev ? prev : next;
+      });
+      const lastRead = lastReadAtRef.current;
+      if (lastRead !== null) {
+        setLastReadAt((prev) => (prev === lastRead ? prev : lastRead));
+      }
+      // Drain pending EPCs into localScanned IF the session is active AND
+      // there's anything new to add.
+      if (
+        detail?.status === "active" &&
+        pendingScanRef.current.size > 0
+      ) {
+        // Snapshot the batch BUT don't clear pendingScanRef yet — the
+        // network flush needs them too. flushPendingScans clears its own
+        // copy on successful POST.
+        const batch = [...pendingScanRef.current];
+        setLocalScanned((prev) => {
+          // Only allocate a new Set if at least one EPC is genuinely new.
+          let added = false;
+          for (const epc of batch) {
+            if (!prev.has(epc)) {
+              added = true;
+              break;
+            }
+          }
+          if (!added) return prev;
+          const next = new Set(prev);
+          for (const epc of batch) next.add(epc);
+          return next;
+        });
+        void flushPendingScans();
+      }
+    }, 200);
     return () => clearInterval(t);
-  }, []);
-
-  // Safety-net interval — picks up anything that piled up while a flush was
-  // already running. Short cadence so the UI stays current even if the
-  // SSE-triggered flush is gated.
-  useEffect(() => {
-    if (!detail) return;
-    if (detail.status !== "active") return;
-    const t = setInterval(() => {
-      void flushPendingScans();
-    }, 750);
-    return () => clearInterval(t);
-  }, [detail?.id, detail?.status, flushPendingScans]);
+  }, [detail?.status, flushPendingScans]);
 
   const flatRows = useMemo(
     () => (detail ? buildFlatRows(detail.expected, variance) : []),
