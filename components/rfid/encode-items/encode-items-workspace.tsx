@@ -28,7 +28,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Pencil, Play, Radio, RefreshCw, Search, Square, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Filter,
+  Pencil,
+  Play,
+  Radio,
+  RefreshCw,
+  Search,
+  Square,
+  Trash2,
+} from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
 
@@ -156,7 +168,67 @@ export function EncodeItemsWorkspace() {
 
   // Rows are keyed by EPC (unique); a Map keeps insertion order.
   const [rowsByEpc, setRowsByEpc] = useState<Map<string, Row>>(() => new Map());
-  const rows = useMemo(() => Array.from(rowsByEpc.values()), [rowsByEpc]);
+
+  // C-prefix filter: when true, only EPCs starting with C (the Senitron
+  // legacy pool — the ones the operator most often wants to re-encode in
+  // bulk) are shown. Default off so the table shows everything by default.
+  const [cPrefixOnly, setCPrefixOnly] = useState(false);
+
+  // Column sort. null = insertion order (oldest first), which is the
+  // default and matches how reads arrive over SSE. asc = A→Z / numeric
+  // small→large; desc = Z→A / large→small. Strings sort case-insensitive
+  // via localeCompare; the EPC and status columns sort lexicographically.
+  type SortKey = "epc" | "sku" | "upc" | "name" | "size" | "color" | "status";
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const onHeaderClick = useCallback((key: SortKey) => {
+    setSortKey((prevKey) => {
+      if (prevKey !== key) {
+        setSortDir("asc");
+        return key;
+      }
+      // Same column tapped again: asc → desc → off.
+      let nextKey: SortKey | null = key;
+      setSortDir((prevDir) => {
+        if (prevDir === "asc") return "desc";
+        nextKey = null;
+        return "asc";
+      });
+      return nextKey;
+    });
+  }, []);
+
+  const rows = useMemo(() => {
+    let arr = Array.from(rowsByEpc.values());
+    if (cPrefixOnly) {
+      arr = arr.filter((r) => /^[Cc]/.test(r.epc));
+    }
+    if (sortKey) {
+      const dir = sortDir === "asc" ? 1 : -1;
+      const get = (r: Row): string => {
+        switch (sortKey) {
+          case "epc":
+            return r.epc;
+          case "sku":
+            return r.sku ?? "";
+          case "upc":
+            return r.upc ?? "";
+          case "name":
+            return r.name ?? "";
+          case "size":
+            return r.size ?? "";
+          case "color":
+            return r.color ?? "";
+          case "status":
+            return r.encodeStatus ?? r.status ?? "";
+        }
+      };
+      arr = [...arr].sort((a, b) =>
+        dir * get(a).localeCompare(get(b), undefined, { sensitivity: "base", numeric: true }),
+      );
+    }
+    return arr;
+  }, [rowsByEpc, cPrefixOnly, sortKey, sortDir]);
 
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
 
@@ -796,6 +868,25 @@ export function EncodeItemsWorkspace() {
           Clear session
         </button>
 
+        {/* C-prefix filter toggle. When on, only EPCs starting with C (the
+            Senitron legacy pool) are shown. Pure view filter — doesn't
+            touch the underlying rowsByEpc Map, so toggling off restores
+            everything that's been read. */}
+        <button
+          type="button"
+          onClick={() => setCPrefixOnly((v) => !v)}
+          className={
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-sm " +
+            (cPrefixOnly
+              ? "border-amber-400/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+              : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]")
+          }
+          title="Show only EPCs starting with C (Senitron legacy pool)"
+        >
+          <Filter className="h-3.5 w-3.5" />
+          C only
+        </button>
+
         <div className="relative flex flex-1 items-center">
           <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-[var(--wms-muted)]" />
           <input
@@ -874,13 +965,13 @@ export function EncodeItemsWorkspace() {
                   className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)]"
                 />
               </th>
-              <th className="px-3 py-2 text-left">EPC</th>
-              <th className="px-3 py-2 text-left">SKU</th>
-              <th className="px-3 py-2 text-left">UPC</th>
-              <th className="px-3 py-2 text-left">Name</th>
-              <th className="px-3 py-2 text-left">Size</th>
-              <th className="px-3 py-2 text-left">Color</th>
-              <th className="px-3 py-2 text-left">Status</th>
+              <SortableTh label="EPC" sortKeyName="epc" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
+              <SortableTh label="SKU" sortKeyName="sku" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
+              <SortableTh label="UPC" sortKeyName="upc" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
+              <SortableTh label="Name" sortKeyName="name" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
+              <SortableTh label="Size" sortKeyName="size" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
+              <SortableTh label="Color" sortKeyName="color" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
+              <SortableTh label="Status" sortKeyName="status" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
               <th className="px-3 py-2 text-left w-10"></th>
             </tr>
           </thead>
@@ -970,5 +1061,43 @@ export function EncodeItemsWorkspace() {
         Keep the tag in the antenna&apos;s field while the write is in flight.
       </div>
     </div>
+  );
+}
+
+/**
+ * Clickable column header. asc/desc toggle on repeat clicks, third click
+ * clears sort (insertion order). Arrow icon shows current state.
+ */
+function SortableTh<K extends string>({
+  label,
+  sortKeyName,
+  activeKey,
+  dir,
+  onClick,
+}: {
+  label: string;
+  sortKeyName: K;
+  activeKey: K | null;
+  dir: "asc" | "desc";
+  onClick: (key: K) => void;
+}) {
+  const isActive = activeKey === sortKeyName;
+  const Icon = !isActive ? ArrowUpDown : dir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <th
+      className={
+        "px-3 py-2 text-left select-none cursor-pointer transition-colors " +
+        (isActive
+          ? "text-[var(--wms-accent)]"
+          : "hover:text-[var(--wms-fg)]")
+      }
+      onClick={() => onClick(sortKeyName)}
+      title={`Sort by ${label} (click to toggle A→Z / Z→A / off)`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        <Icon className="h-3 w-3 opacity-70" />
+      </span>
+    </th>
   );
 }
