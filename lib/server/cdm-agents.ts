@@ -601,6 +601,11 @@ export type AgentConfigReader = {
    *  from `devices.config.force_respawn_interval_ms`. NULL/missing =
    *  no forced respawn (default for healthy chassis). */
   force_respawn_interval_ms?: number | null;
+  /** True for readers dedicated to Carbon-POS (.34). Supervisor keeps
+   *  these always-warm — POS cashier clicks expect reads within a
+   *  couple seconds, so the chip can't be stopped between POS
+   *  sessions. Pulled from `devices.is_pos_dedicated`. */
+  is_pos_dedicated?: boolean;
 };
 
 export type AgentConfigBundle = {
@@ -654,6 +659,7 @@ export async function getAgentConfigBundle(
     scan_schedule: ScanSchedule | null;
     reader_recover_requested_at: string | null;
     mac_address: string | null;
+    is_pos_dedicated: boolean | null;
   }>(
     `SELECT
        d.id::text,
@@ -668,7 +674,8 @@ export async function getAgentConfigBundle(
        d.scan_paused_at::text AS scan_paused_at,
        d.scan_schedule,
        d.reader_recover_requested_at::text AS reader_recover_requested_at,
-       d.mac_address
+       d.mac_address,
+       d.is_pos_dedicated
      FROM devices d
      LEFT JOIN zones z ON z.id = d.zone_id
      WHERE d.cdm_agent_id = $1::uuid
@@ -759,6 +766,7 @@ export async function getAgentConfigBundle(
           : null,
       mac_address: d.mac_address,
       skip_arp_pin: cfg.skip_arp_pin === true,
+      is_pos_dedicated: d.is_pos_dedicated === true,
     });
   }
 

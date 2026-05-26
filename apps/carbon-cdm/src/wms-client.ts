@@ -85,6 +85,14 @@ export type AgentConfigReader = {
    *  behaviour in normal scanning. Pulled from `devices.config.force_
    *  respawn_interval_ms`. NULL/missing → no forced respawn (default). */
   force_respawn_interval_ms?: number | null;
+  /** True for readers dedicated to Carbon-POS (.34). The supervisor's
+   *  `desired` filter keeps these always-warm — POS cashier clicks
+   *  ("Update Status Item") expect reads within a couple seconds, so
+   *  the chip can't be stopped between POS sessions. Without this
+   *  flag the supervisor toggled stop/start every ~1 min as the POS
+   *  scan-session came and went, costing 45 s of cold-start per
+   *  click. Pulled from `devices.is_pos_dedicated`. */
+  is_pos_dedicated?: boolean;
 };
 
 export type AgentConfigBundle = {

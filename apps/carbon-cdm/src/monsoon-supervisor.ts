@@ -1999,18 +1999,29 @@ export class MonsoonSupervisor {
     //   2. activeScanSessionReaders.has(reader.id) — a workflow page
     //      (Transfer Out / Cycle Counts / Print-Commission) has an open
     //      scan-session for this reader. The session-end POST will revert.
+    //   3. testWakeReaders.has(reader.id) — antenna-test session has woken
+    //      the reader for the duration of the test.
+    //   4. reader.is_pos_dedicated === true — POS readers (.34) MUST stay
+    //      always-warm. Carbon-POS calls "Update Status Item" expecting
+    //      reads within a couple seconds; if the supervisor has stopped
+    //      the chip between calls, the cashier pays the full chip cold-
+    //      start window (live evidence 2026-05-26 on .34: 45 s before
+    //      first read on every click, because the supervisor was
+    //      toggling stop/start every minute as the POS scan-session came
+    //      and went). Always-desired removes the cold-start tax — the
+    //      child runs continuously, ready on the very next read.
     //
-    // Previously this filter only checked effective_paused. The new wake-
-    // for-workflow path overrides paused state for the duration of the
-    // session, then default-paused readers stop scanning the moment the
-    // operator commits or navigates away.
+    // Previously this filter only checked effective_paused + active
+    // sessions. The new pos_dedicated bypass is opt-in via the per-
+    // reader flag.
     const desiredById = new Map(
       bundle.readers
         .filter(
           (r) =>
             !(r.effective_paused ?? false) ||
             this.activeScanSessionReaders.has(r.id) ||
-            this.testWakeReaders.has(r.id),
+            this.testWakeReaders.has(r.id) ||
+            r.is_pos_dedicated === true,
         )
         .map((r) => [r.id, r] as const),
     );
