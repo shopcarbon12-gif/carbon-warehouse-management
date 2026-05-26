@@ -1903,6 +1903,11 @@ export class MonsoonSupervisor {
   private async maintainArpPins(bundle: AgentConfigBundle): Promise<void> {
     const tasks: Promise<void>[] = [];
     for (const reader of bundle.readers) {
+      // Per-reader opt-out for bridges legitimately downstream of a proxy-ARP
+      // gateway (e.g. WiFi extender). Pinning the bridge's true MAC on this
+      // topology makes the IP unreachable — the switch has no port for that
+      // MAC, so frames vanish. Set via `devices.config.skip_arp_pin = true`.
+      if (reader.skip_arp_pin === true) continue;
       const ip = (reader.network_address ?? "").trim();
       const macRaw = (reader.mac_address ?? "").replace(/[^0-9A-Fa-f]/g, "");
       if (!ip || macRaw.length !== 12) continue;

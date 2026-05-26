@@ -59,6 +59,14 @@ export type AgentConfigReader = {
    *  the supervisor falls back to `ip neigh show IP` to resolve MAC
    *  on-demand from the kernel ARP table. */
   mac_address?: string | null;
+  /** When true, the supervisor's `maintainArpPins` skips this reader and
+   *  leaves the kernel ARP entry alone. The pin defends against rogue
+   *  proxy-ARP (added 2026-05-21 for the `.9` POS hijack), but a bridge
+   *  legitimately wired behind the WiFi extender REQUIRES the extender's
+   *  proxy-ARP to reach it — pinning the bridge's true MAC sends frames
+   *  into a switch port that doesn't know it. Pulled from
+   *  `devices.config.skip_arp_pin`. Missing/false = pin as usual. */
+  skip_arp_pin?: boolean;
   /** Per-reader forced respawn cadence (milliseconds). When set, the
    *  supervisor kills + respawns the binary every N ms in normal scanning,
    *  mimicking what the antenna-test sweep mode does naturally between

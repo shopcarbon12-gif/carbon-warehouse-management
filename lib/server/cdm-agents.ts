@@ -587,6 +587,13 @@ export type AgentConfigReader = {
    *  for `wiznet-cli --reset` recovery calls. Older bundles may omit;
    *  agent falls back to `ip neigh` ARP lookup. */
   mac_address?: string | null;
+  /** When true, the supervisor's `maintainArpPins` skips this reader and
+   *  leaves the kernel ARP entry alone. Pulled from
+   *  `devices.config.skip_arp_pin`. Set for bridges legitimately wired
+   *  downstream of the WiFi extender — the extender's proxy-ARP is the
+   *  ONLY path to those bridges, so pinning the true bridge MAC sends
+   *  frames into a switch port that doesn't know it. */
+  skip_arp_pin?: boolean;
   /** Per-reader forced respawn cadence (ms). When > 0, the supervisor
    *  kills+respawns the binary every N ms in normal scanning to refresh
    *  the chip's session state — used on chassis that exhibit Gen2
@@ -722,6 +729,7 @@ export async function getAgentConfigBundle(
       epc_prefix?: string;
       monsoon_driver?: string;
       force_respawn_interval_ms?: number;
+      skip_arp_pin?: boolean;
     };
     const list = antennasByParent.get(d.id) ?? [];
     list.sort((a, b) => a.antenna_number - b.antenna_number);
@@ -750,6 +758,7 @@ export async function getAgentConfigBundle(
           ? Number(cfg.force_respawn_interval_ms)
           : null,
       mac_address: d.mac_address,
+      skip_arp_pin: cfg.skip_arp_pin === true,
     });
   }
 
