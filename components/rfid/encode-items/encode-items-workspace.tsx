@@ -46,12 +46,28 @@ import { ReaderPicker } from "@/components/shared/reader-picker";
 
 const DEFAULT_READER_IP = "192.168.1.70";
 
+type HardwareConfigReader = {
+  id: string;
+  network_address: string | null;
+  /**
+   * Set true for the WiFi-extender POS reader (.34). The legacy
+   * MonsoonReader (2019) segfaults on C-prefix --target_tag values;
+   * MonsoonReader2 (2020) doesn't segfault but fails RFID_RadioOpen
+   * with -9983 RADIO_NOT_PRESENT on this reader's chip path. So
+   * C-prefix chip-writes are NOT POSSIBLE on is_pos_dedicated
+   * readers — we block the Encode button instead of letting the
+   * operator queue 5 doomed jobs that rotate the DB without
+   * touching the chip.
+   */
+  is_pos_dedicated?: boolean;
+};
 type HardwareConfigZone = {
-  readers?: Array<{ id: string; network_address: string | null }>;
+  readers?: HardwareConfigReader[];
 };
 type HardwareConfigLocation = {
   zones?: HardwareConfigZone[];
-  unzoned_readers?: Array<{ id: string; network_address: string | null }>;
+  unzoned_readers?: HardwareConfigReader[];
+  unzonedReaders?: HardwareConfigReader[];
 };
 type HardwareConfigTree = {
   locations?: HardwareConfigLocation[];
@@ -623,6 +639,33 @@ export function EncodeItemsWorkspace() {
       setErrorMsg("Check at least one EPC to re-encode.");
       return;
     }
+    // Pre-flight: C-prefix chip writes physically don't work on
+    // is_pos_dedicated readers (.34 specifically, the WiFi-extender
+    // POS reader). MR1 segfaults on C-prefix targets; MR2 fails
+    // RFID_RadioOpen on this chip path (verified bench 2026-05-26).
+    // Block the queue rather than let the DB rotate 5 rows whose
+    // physical chips will never be rewritten.
+    const cPrefixCheckedEpcs = epcs.filter((e) => /^[Cc]/.test(e));
+    if (cPrefixCheckedEpcs.length > 0) {
+      const allReaders: HardwareConfigReader[] = [];
+      for (const loc of hcData?.locations ?? []) {
+        for (const z of loc.zones ?? []) for (const r of z.readers ?? []) allReaders.push(r);
+        for (const r of loc.unzonedReaders ?? []) allReaders.push(r);
+        for (const r of loc.unzoned_readers ?? []) allReaders.push(r);
+      }
+      const posDedicatedSelected = allReaders.filter(
+        (r) => selectedReaders.has(r.id) && r.is_pos_dedicated === true,
+      );
+      if (posDedicatedSelected.length > 0) {
+        setErrorMsg(
+          `C-prefix tags can't be encoded through the POS reader ` +
+            `(${posDedicatedSelected.map((r) => r.network_address ?? r.id).join(", ")}) — ` +
+            `the chip path on the WiFi extender doesn't support our write binary. ` +
+            `Pick a non-extender reader (e.g. 192.168.1.70) and bring the tag to its antenna.`,
+        );
+        return;
+      }
+    }
     // Pre-flight: do any checked rows lack BOTH an auto-resolve and a
     // manual target? If so, surface a single banner — but still try the
     // rows that CAN encode so the operator isn't blocked end-to-end.
@@ -737,7 +780,7 @@ export function EncodeItemsWorkspace() {
     } finally {
       setBusy(false);
     }
-  }, [busy, checked, target, rowsByEpc, selectedReaders, pollEncodeJob]);
+  }, [busy, checked, target, rowsByEpc, selectedReaders, hcData, pollEncodeJob]);
 
   const toggleCheck = useCallback((epc: string) => {
     setChecked((prev) => {
