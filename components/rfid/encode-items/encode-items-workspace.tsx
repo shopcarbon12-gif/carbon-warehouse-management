@@ -95,6 +95,21 @@ type Row = {
   encodeStatus: string | null;
   /** True while an in-flight POST /encode-claim is updating this row. */
   busy: boolean;
+  /**
+   * AUTO-RESOLVED target SKU id for EPCs that start with "C1"/"C2".
+   *
+   * Semantics (per operator spec): C1/C2 tags carry the destination SKU
+   * in their first 13 hex chars (e.g. "C217016334845") — that 13-char
+   * string IS the `custom_skus.sku` code. Encoding this kind of tag
+   * doesn't need a manually-picked target from the search box: we look
+   * up the SKU automatically when the row is enriched and stash its id
+   * here. The Encode button reads this first, falling back to the
+   * manually-picked target only when null.
+   *
+   * null = either not a C1/C2 EPC, or the 13-char code didn't resolve
+   * to any catalog row.
+   */
+  autoCustomSkuId: string | null;
 };
 
 export function EncodeItemsWorkspace() {
@@ -147,9 +162,67 @@ export function EncodeItemsWorkspace() {
 
   // Enrich newly-seen EPCs via /api/rfid/encode-resolve. Once per EPC.
   const resolvedRef = useRef<Set<string>>(new Set());
+
+  // C1/C2 auto-resolve. The first 13 chars of these EPCs (the leading
+  // "C1"/"C2" + 11 following chars) form the destination `custom_skus.sku`
+  // code. We resolve it via /api/inventory/catalog/search and use the
+  // matched custom_sku_id when the operator hits Encode — no manual
+  // search-box pick required for these. The lookup runs in addition to
+  // (not instead of) encode-resolve so the operator sees the resolved
+  // SKU/name/color/size in the row preview before encoding.
+  const tryAutoResolveC1C2 = useCallback(async (epc: string) => {
+    if (!/^[Cc][12]/.test(epc)) return null;
+    const code = epc.slice(0, 13).toUpperCase();
+    try {
+      const r = await fetch(
+        `/api/inventory/catalog/search?q=${encodeURIComponent(code)}`,
+        { cache: "no-store" },
+      );
+      if (!r.ok) return null;
+      const j = (await r.json()) as { rows?: CatalogSearchHit[] };
+      // Exact match on the sku code only — substring matches against
+      // unrelated SKUs would silently wrong-encode tags. The catalog
+      // /search endpoint does ILIKE so we filter client-side.
+      const exact = (j.rows ?? []).find(
+        (h) => (h.sku ?? "").toUpperCase() === code,
+      );
+      return exact ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const enrichEpc = useCallback(async (epc: string) => {
     if (resolvedRef.current.has(epc)) return;
     resolvedRef.current.add(epc);
+    // Kick the C1/C2 auto-resolve in parallel with encode-resolve. Both
+    // updates are upserts on the same row; whichever finishes second wins
+    // on its fields. encode-resolve sets sku/upc/etc; auto-resolve sets
+    // autoCustomSkuId AND fills the preview fields when the EPC is foreign
+    // to the Carbon prefix (encode-resolve will return "foreign" for
+    // C1/C2 EPCs because they don't carry F0A0B).
+    void (async () => {
+      const hit = await tryAutoResolveC1C2(epc);
+      if (!hit) return;
+      setRowsByEpc((prev) => {
+        const next = new Map(prev);
+        const row = next.get(epc);
+        if (!row) return prev;
+        next.set(epc, {
+          ...row,
+          autoCustomSkuId: hit.custom_sku_id,
+          // Only fill preview fields when encode-resolve hasn't already
+          // populated them with items-table data (rare for C1/C2 since
+          // those are typically orphan).
+          sku: row.sku ?? hit.sku,
+          upc: row.upc ?? hit.upc,
+          name: row.name ?? hit.name,
+          size: row.size ?? hit.size,
+          color: row.color ?? hit.color,
+        });
+        return next;
+      });
+    })();
     try {
       const r = await fetch("/api/rfid/encode-resolve", {
         method: "POST",
@@ -214,7 +287,7 @@ export function EncodeItemsWorkspace() {
     } catch {
       /* transient; the operator can re-Read to retry */
     }
-  }, []);
+  }, [tryAutoResolveC1C2]);
 
   // --- SSE: stream EPCs into the table while reading -------------------
   useEffect(() => {
@@ -249,6 +322,7 @@ export function EncodeItemsWorkspace() {
             status: "—",
             encodeStatus: null,
             busy: false,
+            autoCustomSkuId: null,
           });
         }
         return next;
@@ -382,26 +456,59 @@ export function EncodeItemsWorkspace() {
   }, []);
 
   // --- Encode button: rotate each checked tag's identity --------------
+  //
+  // For each checked EPC, derive the destination customSkuId in this order:
+  //   1. Row's auto-resolved SKU (C1/C2 → first-13 → cs.sku lookup)
+  //   2. Manually-picked target from the search box
+  // If neither is available for a given row, the row fails with a clear
+  // message — the operator can pick a target and re-click Encode for the
+  // failed rows only (checked state and row data are preserved).
   const onEncode = useCallback(async () => {
     if (busy) return;
     setErrorMsg(null);
-    if (!target) {
-      setErrorMsg("Pick a target SKU first (use the search box).");
-      return;
-    }
     const epcs = Array.from(checked);
     if (epcs.length === 0) {
       setErrorMsg("Check at least one EPC to re-encode.");
       return;
     }
+    // Pre-flight: do any checked rows lack BOTH an auto-resolve and a
+    // manual target? If so, surface a single banner — but still try the
+    // rows that CAN encode so the operator isn't blocked end-to-end.
+    const orphans = epcs.filter((epc) => {
+      const row = rowsByEpc.get(epc);
+      return !row?.autoCustomSkuId && !target;
+    });
+    if (orphans.length > 0 && !target) {
+      setErrorMsg(
+        `Pick a target SKU first — ${orphans.length} checked row${
+          orphans.length === 1 ? "" : "s"
+        } isn't a C1/C2 auto-resolve match.`,
+      );
+      return;
+    }
     setBusy(true);
     try {
       for (const epc of epcs) {
+        const row = rowsByEpc.get(epc);
+        const customSkuId = row?.autoCustomSkuId ?? target?.custom_sku_id ?? null;
+        if (!customSkuId) {
+          setRowsByEpc((prev) => {
+            const next = new Map(prev);
+            const r = next.get(epc);
+            if (!r) return prev;
+            next.set(epc, {
+              ...r,
+              encodeStatus: "Failed: no target SKU (manual or auto)",
+            });
+            return next;
+          });
+          continue;
+        }
         // Mark row busy while its claim is in flight.
         setRowsByEpc((prev) => {
           const next = new Map(prev);
-          const row = next.get(epc);
-          if (row) next.set(epc, { ...row, busy: true, encodeStatus: "Encoding…" });
+          const r = next.get(epc);
+          if (r) next.set(epc, { ...r, busy: true, encodeStatus: "Encoding…" });
           return next;
         });
         try {
@@ -409,7 +516,7 @@ export function EncodeItemsWorkspace() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              customSkuId: target.custom_sku_id,
+              customSkuId,
               oldEpc: epc,
             }),
           });
@@ -455,7 +562,7 @@ export function EncodeItemsWorkspace() {
     } finally {
       setBusy(false);
     }
-  }, [busy, checked, target]);
+  }, [busy, checked, target, rowsByEpc]);
 
   const toggleCheck = useCallback((epc: string) => {
     setChecked((prev) => {
@@ -467,6 +574,13 @@ export function EncodeItemsWorkspace() {
   }, []);
 
   const allChecked = rows.length > 0 && rows.every((r) => checked.has(r.epc));
+  // True if any checked row carries an auto-resolved SKU id — used to
+  // enable the Encode button even when the operator hasn't picked a
+  // manual target. (C1/C2 EPCs carry their own destination.)
+  const checkedHasAutoResolve = useMemo(
+    () => rows.some((r) => checked.has(r.epc) && r.autoCustomSkuId !== null),
+    [rows, checked],
+  );
   const toggleAll = useCallback(() => {
     setChecked((prev) => {
       if (allChecked) return new Set();
@@ -507,7 +621,7 @@ export function EncodeItemsWorkspace() {
         <button
           type="button"
           onClick={() => void onEncode()}
-          disabled={busy || !target || checked.size === 0}
+          disabled={busy || checked.size === 0 || (!target && !checkedHasAutoResolve)}
           className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/40 bg-[var(--wms-accent)]/10 px-3 py-1.5 font-mono text-sm font-semibold text-[var(--wms-accent)] hover:bg-[var(--wms-accent)]/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Pencil className="h-3.5 w-3.5" />
