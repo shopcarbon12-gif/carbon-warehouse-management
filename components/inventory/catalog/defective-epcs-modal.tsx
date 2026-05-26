@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { AlertTriangle, Download, EyeOff, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Download, EyeOff, RefreshCw, Search, X } from "lucide-react";
 import {
   cellTruncate,
   pickTableLayout,
@@ -86,20 +86,125 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.epc));
-  const someChecked = rows.some((r) => selected.has(r.epc));
+  // Search + sort UI state. Both client-side — applies to the in-memory
+  // rows pulled from the modal's single GET. Cheap on the modal's typical
+  // page size (server-side cap is in the thousands).
+  const [search, setSearch] = useState("");
+  // Sort key matches one of the column keys below; `null` = no sort
+  // applied (server-default order shown). Clicking a column header
+  // cycles: <none> → asc → desc → asc → desc … (column switch resets
+  // to asc on the new column).
+  type SortKey =
+    | "epc"
+    | "system_id"
+    | "first_scanned_at"
+    | "last_seen_at"
+    | "age"
+    | "source"
+    | "device"
+    | "status";
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = useCallback((key: SortKey) => {
+    setSortKey((prev) => {
+      if (prev !== key) {
+        // Switching column — start fresh at asc.
+        setSortDir("asc");
+        return key;
+      }
+      // Same column — flip direction.
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      return prev;
+    });
+  }, []);
+
+  // Filtered + sorted rows. Search is case-insensitive substring across
+  // the columns the operator can see (epc / system id / decode reason /
+  // serial / source label / device label / status label). Sorting uses
+  // a column-appropriate comparator (string vs date).
+  const displayRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let out = rows;
+    if (q) {
+      out = rows.filter((r) => {
+        const haystack = [
+          r.epc,
+          r.system_id_padded,
+          r.system_id_raw ?? "",
+          r.serial_raw ?? "",
+          r.decode_reason ?? "",
+          sourceLabel(r.source),
+          r.source_device_label ?? "",
+          r.status_label,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+    if (sortKey) {
+      const dir = sortDir === "asc" ? 1 : -1;
+      const cmp = (a: DefectiveRow, b: DefectiveRow): number => {
+        const k = sortKey;
+        // Date columns — both first_scanned_at and last_seen_at are
+        // ISO strings; "" / null sorts last regardless of direction.
+        if (k === "first_scanned_at" || k === "last_seen_at" || k === "age") {
+          // `age` is derived from first_scanned_at and is just the
+          // reverse-time view (newer = lower age); reusing first_scanned_at
+          // as the sort key with the same direction gives the operator
+          // exactly what they expect when they sort the Age column.
+          const fa = k === "last_seen_at" ? a.last_seen_at : a.first_scanned_at;
+          const fb = k === "last_seen_at" ? b.last_seen_at : b.first_scanned_at;
+          const ta = fa ? new Date(fa).getTime() : Number.NaN;
+          const tb = fb ? new Date(fb).getTime() : Number.NaN;
+          const aMissing = Number.isNaN(ta);
+          const bMissing = Number.isNaN(tb);
+          if (aMissing && bMissing) return 0;
+          if (aMissing) return 1; // missing → after present, regardless of dir
+          if (bMissing) return -1;
+          return (ta - tb) * dir;
+        }
+        // String comparators.
+        const pick = (r: DefectiveRow): string => {
+          switch (k) {
+            case "epc": return r.epc;
+            case "system_id": return r.decode_reason ?? r.system_id_padded ?? "";
+            case "source": return sourceLabel(r.source);
+            case "device": return r.source_device_label ?? "";
+            case "status": return r.status_label;
+          }
+        };
+        const sa = pick(a).toLowerCase();
+        const sb = pick(b).toLowerCase();
+        if (sa < sb) return -1 * dir;
+        if (sa > sb) return 1 * dir;
+        return 0;
+      };
+      // toSorted would be cleaner but lib.es2023 isn't guaranteed here;
+      // copy + in-place sort for compatibility.
+      out = [...out].sort(cmp);
+    }
+    return out;
+  }, [rows, search, sortKey, sortDir]);
+
+  // Select-all operates on the VISIBLE rows (post-search, post-sort) so
+  // typing in the search box and hitting Select-all only picks up the
+  // matches the operator is looking at.
+  const allChecked = displayRows.length > 0 && displayRows.every((r) => selected.has(r.epc));
+  const someChecked = displayRows.some((r) => selected.has(r.epc));
 
   const toggleAll = useCallback(() => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (allChecked) {
-        for (const r of rows) next.delete(r.epc);
+        for (const r of displayRows) next.delete(r.epc);
       } else {
-        for (const r of rows) next.add(r.epc);
+        for (const r of displayRows) next.add(r.epc);
       }
       return next;
     });
-  }, [allChecked, rows]);
+  }, [allChecked, displayRows]);
 
   const toggleOne = useCallback((epc: string) => {
     setSelected((prev) => {
@@ -232,6 +337,22 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
             <span className="ml-2 font-mono text-xs text-[var(--wms-muted)]">
               {selected.size > 0 ? `${selected.size} selected` : " "}
             </span>
+            <div className="relative flex items-center">
+              <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-[var(--wms-muted)]" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search EPC, system ID, device, status…"
+                className="w-64 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] py-1.5 pl-7 pr-2 font-mono text-xs text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] focus:border-[var(--wms-accent)] focus:outline-none"
+                aria-label="Search defective EPCs"
+              />
+            </div>
+            {search ? (
+              <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                {displayRows.length} of {rows.length} shown
+              </span>
+            ) : null}
             <div className="ml-auto flex gap-2">
               <button
                 type="button"
@@ -277,6 +398,10 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
               <div className="px-5 py-12 text-center font-mono text-sm text-[var(--wms-muted)]">
                 No defective EPCs.
               </div>
+            ) : displayRows.length === 0 ? (
+              <div className="px-5 py-12 text-center font-mono text-sm text-[var(--wms-muted)]">
+                No matches for &ldquo;{search}&rdquo;.
+              </div>
             ) : (
               <table
                 ref={tableRef}
@@ -285,25 +410,59 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
               >
                 <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
                   <tr>
-                    {[
-                      { label: "", noResize: true },
-                      { label: "EPC" },
-                      { label: "System ID" },
-                      { label: "First scanned" },
-                      { label: "Last seen" },
-                      { label: "Age" },
-                      { label: "Source" },
-                      { label: "Device" },
-                      { label: "Status" },
-                    ].map((c, i) => {
+                    {([
+                      { label: "", noResize: true, sortKey: null as SortKey | null },
+                      { label: "EPC", noResize: false, sortKey: "epc" as SortKey | null },
+                      { label: "System ID", noResize: false, sortKey: "system_id" as SortKey | null },
+                      { label: "First scanned", noResize: false, sortKey: "first_scanned_at" as SortKey | null },
+                      { label: "Last seen", noResize: false, sortKey: "last_seen_at" as SortKey | null },
+                      { label: "Age", noResize: false, sortKey: "age" as SortKey | null },
+                      { label: "Source", noResize: false, sortKey: "source" as SortKey | null },
+                      { label: "Device", noResize: false, sortKey: "device" as SortKey | null },
+                      { label: "Status", noResize: false, sortKey: "status" as SortKey | null },
+                    ]).map((c, i) => {
                       const w = colWidths[i];
+                      const sortable = c.sortKey !== null;
+                      const isActive = sortable && sortKey === c.sortKey;
                       return (
                         <th
                           key={c.label || `col-${i}`}
                           style={w !== null ? { width: w, minWidth: w } : undefined}
                           className="relative overflow-hidden px-3 py-2 text-left"
+                          aria-sort={
+                            isActive
+                              ? sortDir === "asc"
+                                ? "ascending"
+                                : "descending"
+                              : sortable
+                                ? "none"
+                                : undefined
+                          }
                         >
-                          <span>{c.label}</span>
+                          {sortable && c.sortKey !== null ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleSort(c.sortKey as SortKey)}
+                              className={
+                                "inline-flex items-center gap-1 select-none hover:text-[var(--wms-fg)] " +
+                                (isActive ? "text-[var(--wms-accent)]" : "")
+                              }
+                              title={`Sort by ${c.label}`}
+                            >
+                              <span>{c.label}</span>
+                              {isActive ? (
+                                sortDir === "asc" ? (
+                                  <ArrowUp className="h-3 w-3" />
+                                ) : (
+                                  <ArrowDown className="h-3 w-3" />
+                                )
+                              ) : (
+                                <ArrowUpDown className="h-3 w-3 opacity-30" />
+                              )}
+                            </button>
+                          ) : (
+                            <span>{c.label}</span>
+                          )}
                           {c.noResize ? null : (
                             <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
                           )}
@@ -313,7 +472,7 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => {
+                  {displayRows.map((r) => {
                     const checked = selected.has(r.epc);
                     const age = ageDaysFrom(r.first_scanned_at);
                     return (
