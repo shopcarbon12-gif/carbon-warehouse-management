@@ -40,6 +40,14 @@ function isPublicPath(pathname: string): boolean {
    * Same path responds to admin GET (session-authed) — that branch goes through
    * isAdminOnlyPath instead of this allowlist. */
   if (pathname === "/api/cdm-agents/wiznet-discoveries") return true;
+  /* Encode-jobs queue (Phase 2 of Encode Items). Agent polls GET /encode-jobs
+   * to claim pending chip-write rows, POSTs /encode-jobs/[id]/result when
+   * MonsoonReader --target_tag/--write_tag finishes. Both Bearer-authed
+   * inside the routes; needed here or proxy short-circuits with 401 before
+   * the handler ever runs (the workspace surfaces this as "chip-write
+   * status unknown (no agent response in 60s)"). */
+  if (pathname === "/api/cdm-agents/encode-jobs") return true;
+  if (pathname.startsWith("/api/cdm-agents/encode-jobs/") && pathname.endsWith("/result")) return true;
   /* Public prewarm endpoint — fires on /login page mount. Reads source
    * public IP, matches agent, starts tenant's live-scan session early
    * so readers warm up while the operator types their password. No auth:
