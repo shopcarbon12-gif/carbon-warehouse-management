@@ -416,6 +416,25 @@ export async function buildHardwareConfigTree(
     peerCountByGroup.set(key, activeRates.length);
   }
 
+  // "Recently proved working" lookup, keyed by parent reader id. A
+  // reader counts as proved if ANY of its antennas has last_test_passed
+  // === true AND the bridge is currently reachable (i.e. the test result
+  // is from a context where the chip could still be the same physical
+  // hardware). Used below to suppress the "stuck" badge when the chip
+  // has demonstrably worked via Antenna Test — operators at low
+  // configured power (e.g. .70 @ 10 dBm) legitimately see 0 reads on
+  // the cdm_reads ingest path because nothing is in range of the
+  // narrow field, but the chip itself isn't broken; the stuck badge
+  // here was misleading them after a clean sweep test passed.
+  const readerProvedByTest = new Map<string, boolean>();
+  for (const d of devices.rows) {
+    if (d.device_type !== "antenna" || !d.parent_device_id) continue;
+    if (d.last_test_passed === true) {
+      const parentReachable = parentBridgeReachable.get(d.parent_device_id) ?? false;
+      if (parentReachable) readerProvedByTest.set(d.parent_device_id, true);
+    }
+  }
+
   const readersByZone = new Map<string, HardwareReaderRow[]>();
   const readersByLocationUnzoned = new Map<string, HardwareReaderRow[]>();
   for (const d of devices.rows) {
@@ -457,7 +476,8 @@ export async function buildHardwareConfigTree(
       bridgeState === "online" &&
       reads60s === 0 &&
       d.device_type === "fixed_reader" &&
-      d.is_pos_dedicated !== true
+      d.is_pos_dedicated !== true &&
+      readerProvedByTest.get(d.id) !== true
     ) {
       // Bridge alive on the LAN but the chip has produced zero reads for
       // the last 60 s. Live evidence 2026-05-26 on .70 — operator encoded
