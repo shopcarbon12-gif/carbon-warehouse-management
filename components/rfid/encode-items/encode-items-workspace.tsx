@@ -763,7 +763,12 @@ export function EncodeItemsWorkspace() {
             far-right per operator request 2026-05-26. */}
         <div className="flex min-w-[220px] items-center gap-2">
           <Radio className="h-3.5 w-3.5 text-[var(--wms-muted)]" />
-          <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} hidePosDedicated />
+          {/* Show every reader incl. is_pos_dedicated ones — Encode Items is the
+              operator's "rewrite this specific chip through this specific reader"
+              page, and the POS reader (.34) is exactly the kind of reader they
+              physically place a tag in front of. Mirrors Cycle Counts + Hardware
+              Config behavior. */}
+          <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} />
         </div>
 
         <button
