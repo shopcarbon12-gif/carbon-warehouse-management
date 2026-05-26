@@ -41,6 +41,17 @@ const bodySchema = z.object({
     .string()
     .regex(/^[0-9A-Fa-f]{24}$/u, "oldEpc must be 24 hex chars")
     .optional(),
+  /**
+   * Optional fixed-reader UUID. When provided AND `oldEpc` is also
+   * provided, the endpoint queues an encode_jobs row so the carbon-cdm
+   * agent will physically rewrite the chip's EPC via `MonsoonReader
+   * --target_tag <oldEpc> --write_tag <newEpc>`. The response includes
+   * the new job id; the caller (Encode Items page) polls /api/rfid/
+   * encode-jobs/[id] for status. Handheld callers don't pass this —
+   * they perform the physical write themselves via the C72E SDK and
+   * just need the DB rotation.
+   */
+  readerId: z.string().uuid().optional(),
 });
 
 export async function POST(req: Request) {
@@ -69,6 +80,7 @@ export async function POST(req: Request) {
   }
   const { customSkuId } = parsed.data;
   const oldEpc = parsed.data.oldEpc?.toUpperCase();
+  const readerIdForWrite = parsed.data.readerId;
 
   // Resolve the encoding handheld so source_device_id is set on the
   // items row. Mobile sends the alias via `x-wms-device-id` (same
@@ -191,12 +203,36 @@ export async function POST(req: Request) {
       [oldEpc ?? null, newEpc, lsId, nextSerial, session.lid],
     );
 
+    // When the caller wants a physical chip write (Encode Items page),
+    // queue an encode_jobs row. The carbon-cdm agent polls /api/cdm-
+    // agents/encode-jobs every few seconds, picks up pending rows for
+    // its tenant's readers, runs MonsoonReader --target_tag <old>
+    // --write_tag <new>, and reports the result via POST /api/cdm-
+    // agents/encode-jobs/[id]/result. The UI polls /api/rfid/encode-
+    // jobs/[id] for status. The job is OPTIONAL — handheld callers
+    // (Carbon WMS mobile encode screen) perform the write themselves
+    // via the C72E SDK and don't pass `readerId`, so no row is queued.
+    let jobId: string | null = null;
+    if (readerIdForWrite && oldEpc) {
+      const job = await client.query<{ id: string }>(
+        `INSERT INTO encode_jobs (
+           tenant_id, reader_id, requested_by,
+           old_epc, new_epc, custom_sku_id, status
+         )
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::uuid, 'pending')
+         RETURNING id::text`,
+        [session.tid, readerIdForWrite, session.sub, oldEpc, newEpc, customSkuId],
+      );
+      jobId = job.rows[0]?.id ?? null;
+    }
+
     await client.query("COMMIT");
     return NextResponse.json({
       ok: true,
       epc: newEpc,
       serial: nextSerial,
       system_id: lsId,
+      jobId,
     });
   } catch (e) {
     try {

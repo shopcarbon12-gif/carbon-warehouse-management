@@ -785,6 +785,19 @@ export class MonsoonSupervisor {
    *  payload. Wins over WMS-configured power at spawn time. Empty map =
    *  no overrides; revert to configured power. Updated every ~100 ms. */
   private posPowerOverrides = new Map<string, number>();
+
+  /**
+   * Reader IDs that the encode-jobs worker has temporarily borrowed the
+   * bridge slot from. While a reader id is in this set the reconcile
+   * loop and on-exit respawn handlers both refuse to spawn its child —
+   * the worker is mid-write and any concurrent inventory connect would
+   * lose the single-client SERVER(2) bridge slot. The worker adds the
+   * id via `acquireBridgeForExternalOp`, kills the existing child,
+   * runs MonsoonReader --write_tag, and removes the id via
+   * `releaseBridgeForExternalOp`. The supervisor's normal respawn
+   * cadence picks up after release.
+   */
+  private externalBridgeHold = new Set<string>();
   /** Last-bundle reference so setActiveScanSessionReaders can reconcile
    *  immediately on session change without waiting for the next config-pull. */
   private lastBundle: AgentConfigBundle | null = null;
@@ -1057,6 +1070,67 @@ export class MonsoonSupervisor {
    * Old MonsoonReader (stream driver) and wiznet-cli ignore SIGTERM (per
    * 2026-05-07 evidence) — the SIGKILL fallback handles them.
    */
+
+  /**
+   * Encode-jobs worker entry point. Borrow the bridge slot of the named
+   * reader so the worker can run MonsoonReader --target_tag <old>
+   * --write_tag <new>. Marks the reader's id in `externalBridgeHold`
+   * (the reconcile + on-exit paths refuse to spawn while present),
+   * graceful-kills any current child so the bridge releases its TCP
+   * slot, then returns the bridge IP/port so the worker can invoke
+   * MonsoonReader.
+   *
+   * Returns null when:
+   *   • the reader isn't currently managed by this supervisor
+   *   • the slot is shutting down
+   *   • the reader has an open testSession (operator owns the slot)
+   *
+   * Caller MUST call `releaseBridgeForExternalOp` in a finally{} so
+   * the supervisor resumes spawning even when the write throws.
+   */
+  public async acquireBridgeForExternalOp(readerId: string): Promise<
+    { host: string; serialPort: number } | null
+  > {
+    const slot = this.slots.get(readerId);
+    if (!slot) return null;
+    if (slot.shuttingDown) return null;
+    if (slot.testSession !== null) return null;
+    const host = String(slot.spec.network_address ?? "").trim();
+    if (!host) return null;
+    const serialPort =
+      slot.candidatePorts[slot.candidatePortIdx] ??
+      slot.candidatePorts[0] ??
+      Number(slot.spec.monsoon_serial_port ?? 10002);
+
+    this.externalBridgeHold.add(readerId);
+    // Mark the kill as intentional so the on-exit handler treats it as
+    // a clean exit (75ms baseDelay, backoffMs reset to 1000). Without
+    // this flag the kill would compound exponential backoff.
+    slot.intendedKill = true;
+    this.killSlotChildHard(slot);
+    // Brief settle window so the bridge fully releases its TCP slot
+    // before the worker connects. GRACEFUL_KILL_GRACE_MS + small
+    // buffer. The bridge takes ~200ms after the FIN to free the slot.
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, GRACEFUL_KILL_GRACE_MS + 250),
+    );
+    return { host, serialPort };
+  }
+
+  /**
+   * Release a reader id previously borrowed via `acquireBridgeForExternalOp`.
+   * The supervisor's next reconcile tick (or any on-exit handler that
+   * had been parked) will spawn a fresh child.
+   */
+  public releaseBridgeForExternalOp(readerId: string): void {
+    this.externalBridgeHold.delete(readerId);
+  }
+
+  /** Internal — used by the reconcile / on-exit paths to skip spawn. */
+  public isReaderHeldByExternalOp(readerId: string): boolean {
+    return this.externalBridgeHold.has(readerId);
+  }
+
   private killSlotChildHard(slot: ReaderSlot): void {
     const pid = slot.child?.pid;
     if (!pid) return;
@@ -2379,6 +2453,13 @@ export class MonsoonSupervisor {
 
   private spawnReader(slot: ReaderSlot): void {
     if (slot.shuttingDown) return;
+    // Encode-jobs worker is holding this slot for a chip-write op —
+    // refuse to spawn until releaseBridgeForExternalOp is called. The
+    // worker also kills any in-flight child via killSlotChildHard
+    // BEFORE adding to the hold set, so the slot is already empty
+    // here; this guard prevents on-exit respawns from racing the
+    // worker's MonsoonReader process for the same TCP slot.
+    if (this.externalBridgeHold.has(slot.spec.id)) return;
     // If a prior stopSlot scheduled an 11-s ensureRadioStopped that hasn't
     // fired yet, cancel it now — we're about to put a fresh inventory
     // process on this slot's chip, and that stale abort would sabotage

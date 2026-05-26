@@ -455,6 +455,75 @@ export function EncodeItemsWorkspace() {
     setSearchQuery("");
   }, []);
 
+  // Poll an encode-job's status until it's terminal (done | failed) or
+  // the hard cap is hit. Flips the row's Status cell to "Wrote ✓ → ..."
+  // / "Write failed: ..." so the operator sees whether the chip actually
+  // got rewritten. The DB rotation is independent — that's already done
+  // by /api/rfid/encode-claim before this poller starts.
+  const pollEncodeJob = useCallback(
+    async (epcKey: string, jobId: string, newEpc: string, serial: number) => {
+      const startedAt = Date.now();
+      const HARD_CAP_MS = 60_000;
+      const POLL_MS = 1_500;
+      while (Date.now() - startedAt < HARD_CAP_MS) {
+        await new Promise((r) => setTimeout(r, POLL_MS));
+        try {
+          const r = await fetch(`/api/rfid/encode-jobs/${jobId}`, { cache: "no-store" });
+          if (!r.ok) continue;
+          const j = (await r.json()) as {
+            ok: true;
+            job: { status: string; error_msg: string | null; attempts: number };
+          };
+          if (j.job.status === "done") {
+            setRowsByEpc((prev) => {
+              const next = new Map(prev);
+              const row = next.get(epcKey);
+              if (!row) return prev;
+              next.set(epcKey, {
+                ...row,
+                busy: false,
+                encodeStatus: `Wrote ✓ → ${newEpc} (sn ${serial})`,
+              });
+              return next;
+            });
+            return;
+          }
+          if (j.job.status === "failed") {
+            const reason = j.job.error_msg ?? "unknown";
+            setRowsByEpc((prev) => {
+              const next = new Map(prev);
+              const row = next.get(epcKey);
+              if (!row) return prev;
+              next.set(epcKey, {
+                ...row,
+                busy: false,
+                encodeStatus: `Write failed: ${reason} — DB rotated, retry from handheld`,
+              });
+              return next;
+            });
+            return;
+          }
+        } catch {
+          /* transient network — keep polling */
+        }
+      }
+      // Timed out waiting for the agent to report. The job may still
+      // be running on the agent; the operator can refresh later.
+      setRowsByEpc((prev) => {
+        const next = new Map(prev);
+        const row = next.get(epcKey);
+        if (!row) return prev;
+        next.set(epcKey, {
+          ...row,
+          busy: false,
+          encodeStatus: `DB rotated → ${newEpc}. Chip-write status unknown (no agent response in 60s)`,
+        });
+        return next;
+      });
+    },
+    [],
+  );
+
   // --- Encode button: rotate each checked tag's identity --------------
   //
   // For each checked EPC, derive the destination customSkuId in this order:
@@ -512,32 +581,55 @@ export function EncodeItemsWorkspace() {
           return next;
         });
         try {
+          // First reader id from the picker — the agent will use this
+          // bridge to physically write the chip. When the picker is
+          // empty (shouldn't normally happen, the Read button required
+          // it) we still post without readerId; encode-claim falls
+          // back to DB-only behavior (no chip-write queued).
+          const readerForWrite =
+            selectedReaders.size > 0 ? Array.from(selectedReaders)[0] : undefined;
           const r = await fetch("/api/rfid/encode-claim", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               customSkuId,
               oldEpc: epc,
+              readerId: readerForWrite,
             }),
           });
           const j = (await r.json().catch(() => null)) as
-            | { ok: true; epc: string; serial: number; system_id: number }
+            | {
+                ok: true;
+                epc: string;
+                serial: number;
+                system_id: number;
+                jobId: string | null;
+              }
             | { error?: string; code?: string }
             | null;
           if (j && "ok" in j && j.ok) {
+            // DB rotation succeeded. If a chip-write job was queued,
+            // surface "Writing chip…" and start polling its status;
+            // otherwise just show the new EPC and stop.
             setRowsByEpc((prev) => {
               const next = new Map(prev);
               const row = next.get(epc);
               if (!row) return prev;
               next.set(epc, {
                 ...row,
-                busy: false,
-                encodeStatus: `Encoded → ${j.epc} (sn ${j.serial})`,
-                // Old EPC is now tag_killed in items; reflect that.
+                busy: !!j.jobId,
+                encodeStatus: j.jobId
+                  ? `DB rotated → ${j.epc}. Writing chip…`
+                  : `Encoded → ${j.epc} (sn ${j.serial})`,
                 status: "tag_killed",
               });
               return next;
             });
+            if (j.jobId) {
+              // Poll the job status until done/failed. 1.5s cadence;
+              // 60s hard cap so a stuck job doesn't loop forever.
+              void pollEncodeJob(epc, j.jobId, j.epc, j.serial);
+            }
           } else {
             const errMsg = (j as { error?: string } | null)?.error ?? "failed";
             setRowsByEpc((prev) => {
@@ -562,7 +654,7 @@ export function EncodeItemsWorkspace() {
     } finally {
       setBusy(false);
     }
-  }, [busy, checked, target, rowsByEpc]);
+  }, [busy, checked, target, rowsByEpc, selectedReaders, pollEncodeJob]);
 
   const toggleCheck = useCallback((epc: string) => {
     setChecked((prev) => {
@@ -786,13 +878,12 @@ export function EncodeItemsWorkspace() {
       </div>
 
       <div className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
-        Phase 1: clicking Encode rotates the WMS items rows (old → tag_killed,
-        new → in-stock at fresh serial) and returns the new EPC. The fixed
-        reader does NOT yet physically write the new EPC onto the chip — that
-        wire-up requires agent-side work to drive MonsoonReader --target_tag
-        / --write_tag. Until that lands, finish the re-encode by physically
-        rewriting the tag with the C72E handheld using the new EPC shown in
-        the Status column.
+        Clicking Encode rotates the WMS items row (old → tag_killed, new →
+        in-stock at fresh serial) AND queues a chip-write job on the picked
+        reader. The agent borrows the bridge slot, runs MonsoonReader
+        --target_tag &lt;old&gt; --write_tag &lt;new&gt;, then reports back.
+        Status column shows "Writing chip…" → "Wrote ✓" / "Write failed: …".
+        Keep the tag in the antenna&apos;s field while the write is in flight.
       </div>
     </div>
   );

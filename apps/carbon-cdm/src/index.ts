@@ -11,6 +11,7 @@ import { MonsoonSupervisor } from "./monsoon-supervisor.js";
 import { AntennaTestController } from "./antenna-test-mode.js";
 import { postAntennaTestResult, postReaderOnline, postReaderOffline } from "./wms-client.js";
 import { startWiznetDiscovery, findOrphanStaticBridges, wipeBridgeToDhcp } from "./wiznet-discovery.js";
+import { startEncodeJobsWorker } from "./encode-jobs.js";
 
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
 /** 2024 Mojix binary; selected per-reader via devices.config.monsoon_driver = "console". */
@@ -146,6 +147,12 @@ async function main(): Promise<void> {
     () => supervisor.getPowerSuggestions(),
   );
   const stopWiznetDiscovery = startWiznetDiscovery(env);
+  // Encode Items worker — polls /api/cdm-agents/encode-jobs every few
+  // seconds. When the operator clicks Encode on the page, WMS queues a
+  // row; this worker borrows the reader's bridge slot, runs MonsoonReader
+  // --target_tag <old> --write_tag <new>, reports result. See encode-
+  // jobs.ts for the failure-mode taxonomy.
+  const encodeJobsWorker = startEncodeJobsWorker(env, supervisor);
 
   const pullConfig = async () => {
     try {
@@ -237,6 +244,7 @@ async function main(): Promise<void> {
     clearInterval(statsHandle);
     stopHeartbeat();
     stopWiznetDiscovery();
+    encodeJobsWorker.stop();
     antennaTest.stop();
     aggregator.stop();
     supervisor.shutdown();

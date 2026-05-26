@@ -372,3 +372,45 @@ export async function postAntennaTestReads(
 ): Promise<void> {
   await request(env, "POST", "/api/antenna-test/ingest", body);
 }
+
+// ─── Encode jobs ────────────────────────────────────────────────────
+// Operator clicks Encode on the Encode Items page → WMS queues a job
+// → agent polls fetchPendingEncodeJobs → runs MonsoonReader --target_tag
+// <old> --write_tag <new> against the bridge → reports outcome via
+// postEncodeJobResult. Schema lives at scripts/migrations/0083_encode_
+// jobs.sql; full HTTP contract is in /app/api/cdm-agents/encode-jobs/.
+
+export type PendingEncodeJob = {
+  id: string;
+  reader_id: string;
+  reader_network_address: string | null;
+  reader_monsoon_serial_port: number;
+  old_epc: string;
+  new_epc: string;
+  custom_sku_id: string;
+  attempts: number;
+};
+
+export async function fetchPendingEncodeJobs(
+  env: AgentEnv,
+  limit = 5,
+): Promise<PendingEncodeJob[]> {
+  const r = await request<{ ok: true; jobs: PendingEncodeJob[] }>(
+    env,
+    "GET",
+    `/api/cdm-agents/encode-jobs?limit=${limit}`,
+  );
+  return r.jobs;
+}
+
+export async function postEncodeJobResult(
+  env: AgentEnv,
+  jobId: string,
+  body: {
+    status: "done" | "failed";
+    error_msg?: string;
+    meta?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await request(env, "POST", `/api/cdm-agents/encode-jobs/${jobId}/result`, body);
+}
