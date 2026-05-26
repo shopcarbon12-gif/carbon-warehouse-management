@@ -269,16 +269,24 @@ export async function buildHardwareConfigTree(
     ),
     // Per-reader read counts over the last 5 min. Drives the "slow" and
     // "stuck" badges. Aggregated client-side per location (median of peers).
-    pool.query<{ reader_id: string; reads_5m: number }>(
+    pool.query<{ reader_id: string; reads_5m: number; reads_60s: number }>(
       scoped
-        ? `SELECT cr.reader_id::text AS reader_id, COUNT(*)::int AS reads_5m
+        ? `SELECT cr.reader_id::text AS reader_id,
+                  COUNT(*)::int AS reads_5m,
+                  COUNT(*) FILTER (
+                    WHERE cr.read_at > now() - interval '60 seconds'
+                  )::int AS reads_60s
              FROM cdm_reads cr
              JOIN devices d ON d.id = cr.reader_id
             WHERE cr.tenant_id = $1::uuid
               AND d.location_id = $2::uuid
               AND cr.read_at > now() - interval '5 minutes'
             GROUP BY cr.reader_id`
-        : `SELECT cr.reader_id::text AS reader_id, COUNT(*)::int AS reads_5m
+        : `SELECT cr.reader_id::text AS reader_id,
+                  COUNT(*)::int AS reads_5m,
+                  COUNT(*) FILTER (
+                    WHERE cr.read_at > now() - interval '60 seconds'
+                  )::int AS reads_60s
              FROM cdm_reads cr
             WHERE cr.tenant_id = $1::uuid
               AND cr.read_at > now() - interval '5 minutes'
@@ -288,8 +296,10 @@ export async function buildHardwareConfigTree(
   ]);
 
   const readsByReaderId = new Map<string, number>();
+  const reads60sByReaderId = new Map<string, number>();
   for (const r of readsByReader.rows) {
     readsByReaderId.set(r.reader_id, r.reads_5m);
+    reads60sByReaderId.set(r.reader_id, r.reads_60s);
   }
 
   // Reader paused/stopped state used to short-circuit antenna status to
@@ -428,6 +438,7 @@ export async function buildHardwareConfigTree(
 
     const paused = parentPaused.get(d.id) ?? false;
     const reads5m = readsByReaderId.get(d.id) ?? 0;
+    const reads60s = reads60sByReaderId.get(d.id) ?? 0;
     const groupId = `${d.location_id}|${d.device_type}`;
     const peerMedian = peerMedianByGroup.get(groupId) ?? 0;
     const peerCount = peerCountByGroup.get(groupId) ?? 0;
@@ -444,15 +455,32 @@ export async function buildHardwareConfigTree(
       healthStatus = "offline";
     } else if (
       bridgeState === "online" &&
-      reads5m === 0 &&
-      !d.status_online
+      reads60s === 0 &&
+      d.device_type === "fixed_reader" &&
+      d.is_pos_dedicated !== true
     ) {
-      // Bridge alive on the LAN but the chip is silent (no status_online
-      // push from the agent + zero reads in 5 min). Chassis firmware
-      // wedged → "stuck" badge. The dot stays green so the operator's eye
-      // isn't drawn away from a network-healthy reader; the badge carries
-      // the chip-level diagnostic. Was previously gated on the now-removed
-      // bridge_state === "reachable" branch.
+      // Bridge alive on the LAN but the chip has produced zero reads for
+      // the last 60 s. Live evidence 2026-05-26 on .70 — operator encoded
+      // a tag, supervisor auto-sweep had landed the chip at 10 dBm, on
+      // bridge release every subsequent spawn came up at 10 dBm and saw
+      // ~zero tags. Hardware Config still showed the reader "online" with
+      // no badge because the agent's `status_online` flag was still true
+      // (the binary was running, bytes were flowing, just no inventory).
+      //
+      // We deliberately do NOT gate on `d.status_online` anymore — that
+      // flag is the agent's optimistic view (binary alive) and mis-fires
+      // exactly in the case we want to catch (silent chassis, healthy
+      // process). Reads-over-the-wire is the only ground truth.
+      //
+      // Scoped to fixed_reader + not pos_dedicated to avoid false
+      // positives on transaction_reader / door_reader / POS slots that
+      // legitimately go idle between customer interactions.
+      //
+      // 60 s window is short enough to reflect "stuck right now" — paired
+      // with the supervisor's 20 s silence watchdog this surfaces a real
+      // stuck within 60-80 s of onset. Default-paused readers and
+      // wake-on-demand readers outside their window are filtered by the
+      // paused gate above so they don't false-positive overnight.
       healthStatus = "stuck";
     } else if (
       peerCount >= SLOW_MIN_PEERS &&
