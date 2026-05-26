@@ -31,7 +31,32 @@ import {
 
 const POLL_INTERVAL_MS = 3_000;
 const WRITE_TIMEOUT_MS = 25_000;
+/**
+ * Default write binary — Senitron MonsoonReader (2019 build). Handles
+ * F0A0B-prefix Carbon Gen2 SGTIN-96 EPCs cleanly.
+ */
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
+/**
+ * Alternate write binary — Senitron MonsoonReader2 (Feb 2020 build). Used
+ * only when the *target* EPC starts with C1/C2 (the Senitron-era custom
+ * non-SGTIN pool). The 2019 binary segfaults parsing those targets
+ * (live evidence 2026-05-26: SIGSEGV before banner output on .70 with
+ * target_tag=C1...). The 2020 binary's parser was rewritten and accepts
+ * non-SGTIN targets — confirmed end-to-end with TAG_ACCESS write_bytes=12
+ * against the same chip. Same protocol, same wire format, just a fixed
+ * argument-parse path. Kept as a separate constant so the F0A0B happy
+ * path is untouched (operator preference: don't migrate working tags). */
+const MONSOON_BINARY_C_PREFIX = "/opt/legacy-rfid/MonsoonReader2";
+
+/**
+ * Pick which binary to spawn based on the target_tag (the EPC currently
+ * burned into the chip). The new write EPC is always F0A0B-prefix, so
+ * `--write_tag` doesn't influence binary selection — only the target
+ * matters for the parser-crash decision.
+ */
+function pickWriteBinary(targetEpc: string): string {
+  return /^[Cc][12]/.test(targetEpc) ? MONSOON_BINARY_C_PREFIX : MONSOON_BINARY;
+}
 
 export type EncodeJobsWorkerHandle = { stop: () => void };
 
@@ -177,7 +202,8 @@ function runWriteTag(
     let stderr = "";
     let stdout = "";
     let timedOut = false;
-    const child = spawn(MONSOON_BINARY, args, {
+    const binary = pickWriteBinary(oldEpc);
+    const child = spawn(binary, args, {
       stdio: ["ignore", "pipe", "pipe"],
       // detached so we can SIGKILL the whole process group on timeout
       detached: true,
@@ -205,6 +231,7 @@ function runWriteTag(
     child.on("exit", (code, signal) => {
       clearTimeout(killTimer);
       const meta: Record<string, unknown> = {
+        binary,
         exit_code: code,
         signal,
         stdout_tail: stdout.slice(-400),
