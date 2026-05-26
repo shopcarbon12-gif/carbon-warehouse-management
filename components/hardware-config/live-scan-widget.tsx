@@ -47,6 +47,24 @@ export function LiveScanWidget() {
   // was looking at when they hit Pause.
   const [frozenPerAntenna, setFrozenPerAntenna] = useState<PerAntennaRow[] | null>(null);
 
+  // SSE-driven incremental tick state. Mirrors dashboard CommandCenter so
+  // the headline + per-antenna tiles climb 1-by-1 (~250 ms end-to-end from
+  // reader stdout) instead of waiting for the 500 ms / 1 s poll cycle to
+  // batch-update them. The 500 ms /state poll AND the 1 s /per-antenna
+  // poll still run — they cap the SSE-driven counts via upward-only
+  // reconciliation, so SSE can never inflate beyond what the server's
+  // passes_formula=true count actually is. (The earlier "remove SSE
+  // because it over-counts" decision documented in the comment above
+  // is preserved as a hazard: the cap is what makes it safe now, and
+  // Pause/Stop re-fetch the server count to snap the frozen value.)
+  const liveScanEpcsRef = useRef<Set<string>>(new Set());
+  const perAntennaEpcsRef = useRef<Map<string, Set<string>>>(new Map());
+  // EPC → antenna_id of first SSE sighting this session. Each EPC is
+  // attributed to AT MOST ONE antenna's tile (the first one we see for
+  // it). Mirrors the server CTE in /api/dashboard/live-scan/per-antenna
+  // so SSE ticks and the 1-s poll never disagree on attribution.
+  const epcFirstAntennaRef = useRef<Map<string, string>>(new Map());
+
   // Resume detection on mount.
   useEffect(() => {
     let cancelled = false;
@@ -72,10 +90,12 @@ export function LiveScanWidget() {
     };
   }, []);
 
-  // Headline counter poll — uses ONLY the server-side count (which filters
-  // passes_formula=true). No SSE-based tick anymore: it was the cause of
-  // the post-Stop "live shows 12k, final says 4k" gap operators reported.
-  // 500ms is plenty fast for an inventory feel.
+  // Headline counter poll — server-side count (filters passes_formula=true)
+  // is authoritative. SSE (effect below) adds smooth 1-by-1 ticks between
+  // poll cycles but is capped UPWARD-ONLY against the server count, so SSE
+  // can't inflate the headline beyond what's actually formula-passing.
+  // Pause/Stop explicitly re-snap to the server count to defend against
+  // the historical "live shows 12k, final says 4k" gap.
   useEffect(() => {
     if (state !== "running") return;
     let cancelled = false;
@@ -108,6 +128,10 @@ export function LiveScanWidget() {
   }, [state]);
 
   // Per-antenna breakdown poll — same filter as headline. 1s cadence.
+  // Upward-only merge: if SSE has already pushed a row past the server
+  // value (briefly, during a burst before the SQL query catches up),
+  // keep the SSE value. The server's count(DISTINCT) is the true high-
+  // water mark and SSE never exceeds it once the poll catches up.
   useEffect(() => {
     if (state !== "running") {
       // Don't blow away the breakdown on Pause — frozenPerAntenna preserves it.
@@ -124,7 +148,16 @@ export function LiveScanWidget() {
           setPerAntenna([]);
           return;
         }
-        setPerAntenna(j.antennas ?? []);
+        const serverRows = j.antennas ?? [];
+        setPerAntenna((prev) => {
+          const prevByAnt = new Map(prev.map((r) => [r.antenna_id, r.unique_epcs]));
+          return serverRows.map((row) => {
+            const prevCount = prevByAnt.get(row.antenna_id) ?? 0;
+            // Keep whichever side is higher — SSE may be momentarily ahead
+            // mid-burst; server is authoritative high-water at steady state.
+            return row.unique_epcs >= prevCount ? row : { ...row, unique_epcs: prevCount };
+          });
+        });
       } catch {
         /* transient */
       }
@@ -134,6 +167,90 @@ export function LiveScanWidget() {
     return () => {
       cancelled = true;
       clearInterval(id);
+    };
+  }, [state]);
+
+  // SSE-driven incremental ticks for both the headline counter AND each
+  // per-antenna tile. Subscribes to /api/edge/stream, the same hub the
+  // dashboard CommandCenter uses. Each event carries a deduped batch of
+  // EPCs from fixed-reader ingest (scanContext "TRANSFER") plus an
+  // epcAntennaMap for per-antenna attribution. End-to-end latency from
+  // reader stdout to UI tick is ~250 ms vs ~500-1000 ms via polls.
+  //
+  // Safety: all SSE updates are upward-only relative to prior state.
+  // The /state poll above is the source of truth and caps SSE eventually.
+  useEffect(() => {
+    if (state !== "running") {
+      liveScanEpcsRef.current = new Set();
+      perAntennaEpcsRef.current = new Map();
+      epcFirstAntennaRef.current = new Map();
+      return;
+    }
+    const es = new EventSource("/api/edge/stream");
+    const onMessage = (ev: MessageEvent) => {
+      if (!ev.data || ev.data.startsWith(":")) return;
+      let parsed: {
+        scanContext?: string;
+        epcs?: string[];
+        epcAntennaMap?: Record<string, string>;
+      } | null = null;
+      try {
+        parsed = JSON.parse(ev.data) as {
+          scanContext?: string;
+          epcs?: string[];
+          epcAntennaMap?: Record<string, string>;
+        };
+      } catch {
+        return;
+      }
+      if (!parsed?.epcs?.length) return;
+      // Fixed-reader agent ingest publishes scanContext "TRANSFER".
+      // Handheld scans use other contexts; ignore them (this widget is
+      // the master toggle for FIXED readers).
+      if (parsed.scanContext && parsed.scanContext !== "TRANSFER") return;
+      // Accumulate session-unique EPCs into the headline set, push the
+      // size as the new candidate count (upward-only at the setter).
+      const set = liveScanEpcsRef.current;
+      const beforeSize = set.size;
+      for (const e of parsed.epcs) {
+        if (typeof e === "string" && e.length > 0) set.add(e.toUpperCase());
+      }
+      if (set.size !== beforeSize) {
+        const newSize = set.size;
+        setCount((prev) => (newSize > prev ? newSize : prev));
+      }
+      // Per-antenna SSE: first-antenna attribution per EPC.
+      const map = parsed.epcAntennaMap;
+      if (!map) return;
+      const touched = new Set<string>();
+      for (const epcRaw of Object.keys(map)) {
+        const antId = map[epcRaw];
+        if (!antId) continue;
+        const epc = epcRaw.toUpperCase();
+        if (epcFirstAntennaRef.current.has(epc)) continue; // already attributed
+        epcFirstAntennaRef.current.set(epc, antId);
+        let s = perAntennaEpcsRef.current.get(antId);
+        if (!s) {
+          s = new Set<string>();
+          perAntennaEpcsRef.current.set(antId, s);
+        }
+        const before = s.size;
+        s.add(epc);
+        if (s.size !== before) touched.add(antId);
+      }
+      if (touched.size === 0) return;
+      setPerAntenna((prev) =>
+        prev.map((row) => {
+          if (!touched.has(row.antenna_id)) return row;
+          const sseCount = perAntennaEpcsRef.current.get(row.antenna_id)?.size ?? 0;
+          return sseCount > row.unique_epcs ? { ...row, unique_epcs: sseCount } : row;
+        }),
+      );
+    };
+    es.addEventListener("message", onMessage);
+    return () => {
+      es.removeEventListener("message", onMessage);
+      es.close();
     };
   }, [state]);
 
@@ -156,9 +273,25 @@ export function LiveScanWidget() {
     if (busy) return;
     setBusy(true);
     try {
-      // Snapshot current counts before ending the server session.
-      setFrozenCount(count);
-      setFrozenPerAntenna(perAntenna);
+      // Snapshot the AUTHORITATIVE server counts before ending the session.
+      // We re-fetch here (instead of trusting the in-state values) because
+      // SSE may have ticked the headline / per-antenna tiles slightly ahead
+      // of the server's passes_formula=true count. Freezing the server
+      // value avoids the "live shows X, frozen shows Y, they disagree" gap.
+      let serverCount = count;
+      let serverPerAnt = perAntenna;
+      try {
+        const [s, pa] = await Promise.all([
+          fetch("/api/dashboard/live-scan/state").then((r) => (r.ok ? r.json() : null)),
+          fetch("/api/dashboard/live-scan/per-antenna").then((r) => (r.ok ? r.json() : null)),
+        ]);
+        if (s && typeof s.reads_since_start === "number") serverCount = s.reads_since_start;
+        if (pa && Array.isArray(pa.antennas)) serverPerAnt = pa.antennas;
+      } catch {
+        /* fall back to in-state values if poll fails */
+      }
+      setFrozenCount(serverCount);
+      setFrozenPerAntenna(serverPerAnt);
       await fetch("/api/dashboard/live-scan/stop", { method: "POST" });
       setState("paused");
     } finally {
@@ -170,11 +303,22 @@ export function LiveScanWidget() {
     if (busy) return;
     setBusy(true);
     try {
-      // If we're paused (already stopped server-side) just collapse.
+      // Re-fetch the authoritative server count before stopping (only when
+      // still running — paused state already snapped on Pause). Same
+      // reasoning as onPause: SSE may be ahead of passes_formula=true count.
+      let finalCount = count > 0 ? count : (frozenCount ?? 0);
       if (state === "running") {
+        try {
+          const s = await fetch("/api/dashboard/live-scan/state").then((r) =>
+            r.ok ? r.json() : null,
+          );
+          if (s && typeof s.reads_since_start === "number") finalCount = s.reads_since_start;
+        } catch {
+          /* fall back to in-state value */
+        }
         await fetch("/api/dashboard/live-scan/stop", { method: "POST" });
       }
-      setFrozenCount(count > 0 ? count : frozenCount);
+      setFrozenCount(finalCount);
       setFrozenPerAntenna(null); // collapse the grid
       setPerAntenna([]);
       setState("stopped");
