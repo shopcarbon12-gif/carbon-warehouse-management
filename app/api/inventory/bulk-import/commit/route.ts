@@ -71,13 +71,20 @@ export async function POST(req: Request) {
   try {
     await client.query("BEGIN");
     for (const [customSkuId, epcs] of bySku.entries()) {
-      // Lock the per-(sku, location) serial range so two concurrent
-      // commits can't race to the same MAX(serial) value.
+      // Per-(sku, location) advisory lock to serialize concurrent
+      // commits. Postgres forbids `FOR UPDATE` on an aggregate, so
+      // we serialize via pg_advisory_xact_lock (txn-scoped) instead.
+      // See encode-claim for the full rationale.
+      await client.query(
+        `SELECT pg_advisory_xact_lock(
+           hashtextextended('items_serial:' || $1::text || ':' || $2::text, 0)
+         )`,
+        [customSkuId, session.lid],
+      );
       const maxRow = await client.query<{ m: string | null }>(
         `SELECT COALESCE(MAX(serial_number), 0)::text AS m
            FROM items
-          WHERE custom_sku_id = $1::uuid AND location_id = $2::uuid
-          FOR UPDATE`,
+          WHERE custom_sku_id = $1::uuid AND location_id = $2::uuid`,
         [customSkuId, session.lid],
       );
       const currentMax = Number(maxRow.rows[0]?.m ?? 0);

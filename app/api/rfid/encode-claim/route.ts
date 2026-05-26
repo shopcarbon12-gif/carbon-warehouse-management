@@ -129,14 +129,26 @@ export async function POST(req: Request) {
       );
     }
 
-    // Serial selection. SELECT … FOR UPDATE on the SKU's existing items at
-    // this location locks the per-SKU serial range so two concurrent
-    // encode-claim calls can't race to the same MAX value.
+    // Serial selection — serialize concurrent encode-claims for the
+    // same (sku, location) so they can't race to the same MAX value.
+    // Postgres forbids `FOR UPDATE` on a query containing aggregates
+    // (`MAX(serial_number) … FOR UPDATE` errors with "FOR UPDATE is
+    // not allowed with aggregate functions"). The original code did
+    // exactly that; live evidence 2026-05-26 — every encode attempt
+    // came back as "Server error". Switch to a per-(sku, location)
+    // advisory transaction lock: cheap, transaction-scoped, releases
+    // on COMMIT/ROLLBACK, and lets us read MAX without an extra
+    // SELECT … FOR UPDATE.
+    await client.query(
+      `SELECT pg_advisory_xact_lock(
+         hashtextextended('items_serial:' || $1::text || ':' || $2::text, 0)
+       )`,
+      [customSkuId, session.lid],
+    );
     const maxRow = await client.query<{ m: string | null }>(
       `SELECT COALESCE(MAX(serial_number), 0)::text AS m
          FROM items
-         WHERE custom_sku_id = $1::uuid AND location_id = $2::uuid
-         FOR UPDATE`,
+         WHERE custom_sku_id = $1::uuid AND location_id = $2::uuid`,
       [customSkuId, session.lid],
     );
     const currentMax = Number(maxRow.rows[0]?.m ?? 0);

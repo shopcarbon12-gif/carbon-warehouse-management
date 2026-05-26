@@ -110,18 +110,25 @@ export async function POST(req: Request) {
     bin_code: string | null;
     last_seen_at: string | null;
   }>(
+    // custom_skus has no `name`, `color`, or other display columns —
+    // those live on matrices (matrix-level name) + cs.color_code +
+    // cs.size. Older revisions of this route referenced cs.name and
+    // cs.color directly; that's been broken under PG since the
+    // column rename and was surfacing as "Server error" on every
+    // encode-resolve call (visible in the workspace's enrichEpc fail).
     `SELECT
        i.id::text                               AS id,
        i.status                                 AS status,
        i.custom_sku_id::text                    AS custom_sku_id,
        cs.sku                                   AS sku,
-       cs.name                                  AS name,
-       cs.color                                 AS color,
+       m.description                            AS name,
+       cs.color_code                            AS color,
        cs.size                                  AS size,
        b.code                                   AS bin_code,
        i.last_seen_at::text                     AS last_seen_at
      FROM items i
      LEFT JOIN custom_skus cs ON cs.id = i.custom_sku_id
+     LEFT JOIN matrices    m  ON m.id = cs.matrix_id
      LEFT JOIN bins        b  ON b.id = i.bin_id
      WHERE i.epc = $1 AND i.location_id = $2::uuid
      LIMIT 1`,

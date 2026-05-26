@@ -141,11 +141,15 @@ export async function enrichEpcsByCatalog(
     // status when the EPC has already been ingested. NO writes — keeps the
     // diagnostic-safe contract intact (cf. transfers/lookup which auto-creates
     // items rows). Tenant-scoped to prevent cross-tenant leakage.
+    // items has no `epc_hex` column (just `epc`) and no `tenant_id`
+    // column — tenant scope flows through the locations join. The
+    // query previously referenced both nonexistent columns and threw
+    // "column i.epc_hex does not exist" on every catalog-enrich call.
     const itemsByEpc = norm.length
       ? new Map(
           (
             await client.query<{
-              epc_hex: string;
+              epc: string;
               status: string | null;
               location_code: string | null;
               location_id: string | null;
@@ -153,25 +157,25 @@ export async function enrichEpcsByCatalog(
               bin_id: string | null;
             }>(
               `SELECT
-                 i.epc_hex,
+                 i.epc,
                  i.status,
                  i.location_id::text AS location_id,
                  l.code            AS location_code,
                  i.bin_id::text    AS bin_id,
                  b.code            AS bin_code
                FROM items i
-               LEFT JOIN locations l ON l.id = i.location_id
+               INNER JOIN locations l ON l.id = i.location_id
                LEFT JOIN bins      b ON b.id = i.bin_id
-               WHERE i.tenant_id = $1::uuid
-                 AND UPPER(i.epc_hex) = ANY($2::text[])`,
+               WHERE l.tenant_id = $1::uuid
+                 AND UPPER(i.epc) = ANY($2::text[])`,
               [tenantId, norm],
             )
-          ).rows.map((r) => [r.epc_hex.toUpperCase(), r] as const),
+          ).rows.map((r) => [r.epc.toUpperCase(), r] as const),
         )
       : new Map<
           string,
           {
-            epc_hex: string;
+            epc: string;
             status: string | null;
             location_code: string | null;
             location_id: string | null;
