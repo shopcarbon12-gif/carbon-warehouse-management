@@ -272,6 +272,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                       <Row label="Attributes" value="Color / Size" />
                     </Section>
                     <Section title="Default Values">
+                      <PriceHeader />
                       <PriceRow label="Default" amount={defaults.price} markup={markup} margin={margin} />
                       <PriceRow label="Online" amount={onlinePrice} markup={markup} margin={margin} />
                       <Row label="Default Cost" value={fmtMoney(defaults.cost)} mono />
@@ -399,6 +400,17 @@ function Row({
       <span className={`${mono ? "font-mono" : ""} text-xs text-[var(--wms-fg)]`}>
         {value}
       </span>
+    </div>
+  );
+}
+
+function PriceHeader() {
+  return (
+    <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 bg-[var(--wms-surface-elevated)]/60 px-3 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <span>Name</span>
+      <span className="text-right">Price</span>
+      <span className="text-right">Markup</span>
+      <span className="text-right">Margin</span>
     </div>
   );
 }

@@ -342,6 +342,7 @@ function DetailsTab({
       {/* Column 2 — Pricing + Inventory Defaults */}
       <div className="space-y-3">
         <Section title="Pricing">
+          <PriceHeader />
           <PriceRow label="Default" amount={price} markup={markup} margin={margin} />
           <PriceRow label="Online" amount={onlinePrice} markup={markup} margin={margin} />
         </Section>
@@ -417,6 +418,17 @@ function Row({
       >
         {value}
       </span>
+    </div>
+  );
+}
+
+function PriceHeader() {
+  return (
+    <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 bg-[var(--wms-surface-elevated)]/60 px-3 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <span>Name</span>
+      <span className="text-right">Price</span>
+      <span className="text-right">Markup</span>
+      <span className="text-right">Margin</span>
     </div>
   );
 }
