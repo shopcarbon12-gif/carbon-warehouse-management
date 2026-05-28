@@ -697,7 +697,7 @@ export function CatalogWorkspace({
             <table
               ref={tableRef}
               className="w-full min-w-[1200px] border-collapse text-left"
-              style={{ tableLayout: colWidths.some((w) => w !== null) ? "fixed" : "auto" }}
+              style={{ tableLayout: "auto" }}
             >
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
@@ -707,10 +707,10 @@ export function CatalogWorkspace({
                       // hidden from UI per stakeholder request — still pulled
                       // by the API and present on every row object.
                       { key: "system_id", label: "System ID", cls: "text-teal-400/80", hidden: true },
-                      { key: "sku", label: "Custom SKU" },
-                      { key: "upc", label: "UPC" },
-                      { key: "name", label: "Item name" },
-                      { key: "color", label: "Color" },
+                      { key: "sku", label: "Custom SKU", noClip: true },
+                      { key: "upc", label: "UPC", noClip: true },
+                      { key: "name", label: "Item name", noClip: true },
+                      { key: "color", label: "Color", noClip: true },
                       { key: "size", label: "Size" },
                       { key: "default_cost", label: "Default cost" },
                       { key: "retail_price", label: "Retail price" },
@@ -719,18 +719,28 @@ export function CatalogWorkspace({
                       { key: "rfid", label: "RFID", sortable: false },
                       { key: "category", label: "Category" },
                       { key: "subcategory_1", label: "Subcategory 1" },
-                    ] as { key: SortKey | "rfid"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean }[]
-                  ).map(({ key, label, cls, align, sortable, hidden }, colIdx) => {
+                    ] as { key: SortKey | "rfid"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean; noClip?: boolean }[]
+                  ).map(({ key, label, cls, align, sortable, hidden, noClip }, colIdx) => {
                     const isSortable = sortable !== false;
                     const active = isSortable && sortBy === key;
                     const next = active && sortDir === "asc" ? "desc" : "asc";
                     const Icon = active ? (sortDir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
                     const w = colWidths[colIdx];
+                    /* noClip columns (Custom SKU, UPC, Item name, Color): operator
+                       wants full text always visible. We give them minWidth (so
+                       defaults still apply) but no width cap, and drop the
+                       overflow-hidden so content can push the column wider in
+                       table-layout: auto. */
+                    const widthStyle = w !== null
+                      ? noClip
+                        ? { minWidth: w }
+                        : { width: w, minWidth: w }
+                      : undefined;
                     return (
                       <th
                         key={key}
-                        style={w !== null ? { width: w, minWidth: w } : undefined}
-                        className={`relative overflow-hidden px-2 py-2 ${align === "right" ? "text-right" : align === "center" ? "text-center" : ""} ${cls ?? ""} ${hidden ? "hidden" : ""}`}
+                        style={widthStyle}
+                        className={`relative px-2 py-2 ${noClip ? "" : "overflow-hidden"} ${align === "right" ? "text-right" : align === "center" ? "text-center" : ""} ${cls ?? ""} ${hidden ? "hidden" : ""}`}
                       >
                         {isSortable ? (
                           <button
@@ -778,9 +788,9 @@ export function CatalogWorkspace({
                       <td className="hidden overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-teal-400/85">
                         {r.sku_ls_system_id ?? "—"}
                       </td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5">{r.sku}</td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
+                      <td className="whitespace-nowrap px-2 py-1.5">{r.sku}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
                         {r.pinned_bin_code ? (
                           <span
                             className="mr-1.5 inline-block align-[-2px] text-emerald-400"
@@ -792,7 +802,7 @@ export function CatalogWorkspace({
                         ) : null}
                         {r.name}
                       </td>
-                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.size?.trim() || "—"}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-[var(--wms-fg)]">
                         {formatPrice(r.default_cost)}
