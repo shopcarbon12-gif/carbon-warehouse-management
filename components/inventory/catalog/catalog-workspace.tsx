@@ -10,6 +10,7 @@ import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
 import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epcs-modal";
 import { ManualItemsModal } from "@/components/inventory/catalog/manual-items-modal";
 import { ItemHistoryModal } from "@/components/inventory/catalog/item-history-modal";
+import { CatalogItemDetailsModal } from "@/components/inventory/catalog/catalog-item-details-modal";
 import { CatalogBinMoveDialog } from "@/components/inventory/catalog/catalog-bin-move-dialog";
 import { SyncPreviewModal } from "@/components/inventory/sync/sync-preview-modal";
 import { startSyncJobTracking } from "@/components/inventory/sync/sync-progress-floater";
@@ -183,6 +184,7 @@ export function CatalogWorkspace({
   const [defectiveOpen, setDefectiveOpen] = useState(false);
   const [manualItemsOpen, setManualItemsOpen] = useState(false);
   const [historyForSku, setHistoryForSku] = useState<string | null>(null);
+  const [detailsRow, setDetailsRow] = useState<CatalogGridRow | null>(null);
   const [movingRow, setMovingRow] = useState<CatalogGridRow | null>(null);
   const [manualMatrixUpc, setManualMatrixUpc] = useState("");
   const [manualDesc, setManualDesc] = useState("");
@@ -788,7 +790,16 @@ export function CatalogWorkspace({
                       <td className="hidden overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-teal-400/85">
                         {r.sku_ls_system_id ?? "—"}
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5">{r.sku}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setDetailsRow(r)}
+                          className="text-left text-[var(--wms-accent)] underline-offset-2 hover:underline"
+                          title="View item details"
+                        >
+                          {r.sku}
+                        </button>
+                      </td>
                       <td className="whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
                       <td className="whitespace-nowrap px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
                         {r.pinned_bin_code ? (
@@ -800,7 +811,14 @@ export function CatalogWorkspace({
                             <Pin className="inline h-3.5 w-3.5" />
                           </span>
                         ) : null}
-                        {r.name}
+                        <button
+                          type="button"
+                          onClick={() => setDetailsRow(r)}
+                          className="text-left text-[var(--wms-fg)] underline-offset-2 hover:underline"
+                          title="View item details"
+                        >
+                          {r.name}
+                        </button>
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.size?.trim() || "—"}</td>
@@ -1075,6 +1093,15 @@ export function CatalogWorkspace({
         <ItemHistoryModal
           customSkuId={historyForSku}
           onClose={() => setHistoryForSku(null)}
+          onMutated={() => void mutate()}
+        />
+      ) : null}
+
+      {detailsRow ? (
+        <CatalogItemDetailsModal
+          row={detailsRow}
+          canManage={canManageCatalog}
+          onClose={() => setDetailsRow(null)}
           onMutated={() => void mutate()}
         />
       ) : null}

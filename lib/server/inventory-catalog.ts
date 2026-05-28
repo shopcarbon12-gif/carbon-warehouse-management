@@ -13,6 +13,8 @@ export type CatalogGridRow = {
   matrix_upc: string | null;
   name: string;
   vendor: string | null;
+  /** Matrix-level merchandise brand (e.g. "CARBON"). */
+  brand: string | null;
   color: string | null;
   size: string | null;
   /** Variant-level landed/wholesale unit cost (NUMERIC(12,4) on custom_skus). */
@@ -238,6 +240,7 @@ export async function listCatalogGrid(
     matrix_upc: string | null;
     name: string;
     vendor: string | null;
+    brand: string | null;
     color: string | null;
     size: string | null;
     default_cost: string | null;
@@ -263,6 +266,7 @@ export async function listCatalogGrid(
        m.upc AS matrix_upc,
        m.description AS name,
        m.vendor,
+       m.brand,
        cs.color_code AS color,
        cs.size,
        cs.default_cost::text AS default_cost,
@@ -384,6 +388,7 @@ export async function listCatalogGrid(
         matrix_upc: row.matrix_upc,
         name: row.name,
         vendor: row.vendor,
+        brand: row.brand,
         color: row.color,
         size: row.size,
         default_cost: row.default_cost,
