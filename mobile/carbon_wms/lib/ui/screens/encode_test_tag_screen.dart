@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
@@ -44,7 +42,13 @@ class EncodeTestTagScreen extends StatefulWidget {
 }
 
 class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
-  static const int _powerDbm = 10;
+  static const int _defaultPowerDbm = 1;
+  static const int _powerMinDbm = 0;
+  static const int _powerMaxDbm = 33;
+  static const Duration _powerDebounce = Duration(milliseconds: 250);
+
+  int _powerDbm = _defaultPowerDbm;
+  Timer? _powerPushTimer;
 
   bool _scanning = false;
   bool _resolving = false;
@@ -52,9 +56,6 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
   Map<String, dynamic>? _resolveResult;
   String? _error;
 
-  /// Local card-expansion state for the resolved item. Defaults to true
-  /// on this screen — the operator opened the test screen specifically
-  /// to verify details, so we show them up front.
   bool _expanded = true;
 
   StreamSubscription<RfidTagRead>? _tagSub;
@@ -64,6 +65,9 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
   void initState() {
     super.initState();
     unawaited(ScanSounds.instance.init());
+    // Silence native per-tag beep — on this screen we only want the
+    // SUCCESS chime when the target EPC is matched, not a beep per read.
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _activate();
     });
@@ -73,9 +77,11 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
   void dispose() {
     _tagSub?.cancel();
     _triggerSub?.cancel();
+    _powerPushTimer?.cancel();
     unawaited(RfidVendorChannel.stopChainwayInventory());
     unawaited(RfidVendorChannel.stopZebraInventory());
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
     super.dispose();
   }
 
@@ -88,6 +94,20 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
     unawaited(RfidVendorChannel.setAntennaPowerDbm(_powerDbm));
     _tagSub = RfidVendorChannel.tagReadStream().listen(_onRead);
     _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen(_onTrigger);
+  }
+
+  void _onPowerSliderChanged(int dbm) {
+    if (_powerDbm == dbm) return;
+    setState(() => _powerDbm = dbm);
+    _powerPushTimer?.cancel();
+    _powerPushTimer = Timer(_powerDebounce, () {
+      unawaited(RfidVendorChannel.setAntennaPowerDbm(dbm));
+    });
+  }
+
+  void _onPowerSliderEnded(int dbm) {
+    _powerPushTimer?.cancel();
+    unawaited(RfidVendorChannel.setAntennaPowerDbm(dbm));
   }
 
   void _onTrigger(String event) {
@@ -138,9 +158,19 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
     if (!_scanning) return;
     final epc = read.epcHex24;
     if (epc.length != 24) return;
-    // First read wins. Stop the radio immediately so we don't keep
-    // accumulating reads while we resolve.
+    // When the caller passed an expectedEpc, ignore every other tag the
+    // antenna hears — operator only wants to verify that the chip they
+    // just encoded is broadcasting the new EPC. No partial UI for foreign
+    // tags, no per-tag beep, no resolve roundtrip. Keep scanning until
+    // the target arrives (or the operator pulls the trigger again).
+    final expected = widget.expectedEpc?.toUpperCase();
+    if (expected != null && epc.toUpperCase() != expected) return;
+    // Match — stop the radio so we don't keep accumulating reads while
+    // we resolve. Play the success chime exactly once, here.
     unawaited(_stopScan());
+    try {
+      ScanSounds.instance.play(ScanCue.success);
+    } catch (_) {}
     setState(() {
       _lastEpc = epc;
       _resolveResult = null;
@@ -160,9 +190,8 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
         _resolveResult = r;
         _resolving = false;
       });
-      try {
-        ScanSounds.instance.play(ScanCue.success);
-      } catch (_) {}
+      // Success chime already played in _onRead the moment the matching
+      // EPC arrived — don't double-play. Resolve is just enrichment.
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -189,15 +218,22 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final hasResolve = _lastEpc != null;
     return CarbonScaffold(
       pageTitle: 'TEST TAG',
       bottomBar: _buildBottomBar(),
-      body: ColoredBox(
+      body: Container(
         color: Colors.white,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(bottom: 16.h),
-          child: _buildContent(),
-        ),
+        width: double.infinity,
+        // When we have no result yet (or we're still resolving / errored),
+        // stretch the white card across the whole body so the prompt sits
+        // dead-centre instead of floating at the top.
+        child: hasResolve
+            ? SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _buildContent(),
+              )
+            : Center(child: _buildContent()),
       ),
     );
   }
@@ -205,18 +241,20 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
   Widget _buildContent() {
     if (_lastEpc == null) {
       return Padding(
-        padding: EdgeInsets.symmetric(vertical: 80.h),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.testTube2,
-                size: 36.r, color: const Color(0xFF8FA1A1)),
-            SizedBox(height: 12.h),
+            const Icon(LucideIcons.testTube2,
+                size: 48, color: Color(0xFF8FA1A1)),
+            const SizedBox(height: 14),
             Text(
               'Pull the trigger to read your encoded tag.\nRadio is at $_powerDbm dBm.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.manrope(
-                fontSize: 12.sp,
-                color: const Color(0xFF6D7979),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF6D7979),
               ),
             ),
           ],
@@ -225,16 +263,18 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
     }
     if (_resolving) {
       return Padding(
-        padding: EdgeInsets.symmetric(vertical: 60.h),
+        padding: const EdgeInsets.symmetric(vertical: 60),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             const CircularProgressIndicator(strokeWidth: 2),
-            SizedBox(height: 10.h),
+            const SizedBox(height: 10),
             Text(
-              'Looking up $_lastEpc …',
-              style: GoogleFonts.spaceMono(
-                fontSize: 11.sp,
-                color: const Color(0xFF6D7979),
+              'Looking up $_lastEpc ...',
+              style: const TextStyle(
+                fontSize: 14,
+                fontFamily: 'monospace',
+                color: Color(0xFF6D7979),
               ),
             ),
           ],
@@ -243,21 +283,19 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
     }
     if (_error != null) {
       return Padding(
-        padding: EdgeInsets.symmetric(vertical: 24.h),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.alertTriangle, color: _kErrorRed, size: 32.r),
-            SizedBox(height: 8.h),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20.w),
-              child: Text(
-                'Lookup failed: $_error',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.w700,
-                  color: _kErrorRed,
-                ),
+            const Icon(LucideIcons.alertTriangle, color: _kErrorRed, size: 32),
+            const SizedBox(height: 8),
+            Text(
+              'Lookup failed: $_error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: _kErrorRed,
               ),
             ),
           ],
@@ -272,7 +310,7 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
         _buildEpcSection(),
         _buildDecodedSection(),
         _buildResolveSection(),
-        SizedBox(height: 12.h),
+        const SizedBox(height: 12),
         _buildItemContainer(),
       ],
     );
@@ -290,25 +328,25 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
         ? 'MATCHES THE NEW EPC YOU JUST ENCODED'
         : 'DIFFERENT TAG — expected $expected';
     return Container(
-      margin: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 0),
-      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+      margin: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(4.r),
+        borderRadius: BorderRadius.circular(4),
         border: matched ? null : Border.all(color: _kAmber),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(icon, size: 16.sp, color: fg),
-          SizedBox(width: 10.w),
+          Icon(icon, size: 18, color: fg),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               label,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 12.sp,
+              style: TextStyle(
+                fontSize: 13,
                 fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
+                letterSpacing: 1.0,
                 color: fg,
                 height: 1.3,
               ),
@@ -321,7 +359,6 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
 
   Widget _buildEpcSection() {
     final epc = _lastEpc ?? '';
-    // Format as "E280 6894 0000 ..." — spaces every 4 chars.
     final pretty = StringBuffer();
     for (var i = 0; i < epc.length; i++) {
       if (i > 0 && i % 4 == 0) pretty.write(' ');
@@ -331,10 +368,11 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
       label: 'EPC',
       child: SelectableText(
         pretty.toString(),
-        style: GoogleFonts.spaceMono(
-          fontSize: 16.sp,
+        style: const TextStyle(
+          fontSize: 16,
           fontWeight: FontWeight.w700,
-          color: AppColors.textMain,
+          color: Color(0xFF171D1D),
+          fontFamily: 'monospace',
           letterSpacing: 0.5,
         ),
       ),
@@ -347,13 +385,14 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
     final prefix = decoded['prefix']?.toString() ?? '';
     final systemId = decoded['system_id']?.toString() ?? '';
     final serial = decoded['serial']?.toString() ?? '';
-    final monoBlack = GoogleFonts.robotoMono(
-      fontSize: 13.sp,
+    const monoBlack = TextStyle(
+      fontSize: 13,
       fontWeight: FontWeight.w800,
-      color: AppColors.textMain,
+      color: Color(0xFF171D1D),
+      fontFamily: 'monospace',
     );
-    final body = GoogleFonts.manrope(
-      fontSize: 13.sp,
+    const body = TextStyle(
+      fontSize: 13,
       fontWeight: FontWeight.w600,
       color: _kTextSlate,
       height: 1.5,
@@ -395,25 +434,25 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
           Container(
             decoration: BoxDecoration(
               color: AppColors.primary,
-              borderRadius: BorderRadius.circular(3.r),
+              borderRadius: BorderRadius.circular(3),
             ),
-            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             child: Text(
               pillLabel,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 10.sp,
+              style: const TextStyle(
+                fontSize: 11,
                 fontWeight: FontWeight.w800,
-                letterSpacing: 1.4,
+                letterSpacing: 1.2,
                 color: Colors.white,
               ),
             ),
           ),
-          SizedBox(width: 10.w),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               prose,
-              style: GoogleFonts.manrope(
-                fontSize: 13.sp,
+              style: const TextStyle(
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: _kTextSlate,
               ),
@@ -433,7 +472,7 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
         actual != null &&
         expected.toUpperCase() == actual.toUpperCase();
     return Padding(
-      padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: _TestItemContainer(
         item: item,
         matched: matched,
@@ -447,9 +486,15 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _TestPowerSlider(powerDbm: _powerDbm),
+        _TestPowerSlider(
+          powerDbm: _powerDbm,
+          minDbm: _powerMinDbm,
+          maxDbm: _powerMaxDbm,
+          onChanged: _onPowerSliderChanged,
+          onChangeEnd: _onPowerSliderEnded,
+        ),
         Container(
-          height: 88.h,
+          height: 88,
           decoration: const BoxDecoration(
             color: Colors.white,
             boxShadow: [
@@ -460,7 +505,7 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
               ),
             ],
           ),
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
               Expanded(
@@ -472,7 +517,7 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ),
-              SizedBox(width: 8.w),
+              const SizedBox(width: 8),
               Expanded(
                 flex: 2,
                 child: _TtToolbarButton(
@@ -501,8 +546,8 @@ class _TtSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 20.w),
-      padding: EdgeInsets.symmetric(vertical: 10.h),
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: const BoxDecoration(
         border: Border(
           bottom: BorderSide(color: _kSectionHairline, width: 1),
@@ -513,14 +558,14 @@ class _TtSection extends StatelessWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 10.sp,
+            style: const TextStyle(
+              fontSize: 11,
               fontWeight: FontWeight.w800,
-              letterSpacing: 1.6,
+              letterSpacing: 1.4,
               color: _kTextMuted,
             ),
           ),
-          SizedBox(height: 5.h),
+          const SizedBox(height: 5),
           child,
         ],
       ),
@@ -581,101 +626,102 @@ class _TestItemContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final kvs = expanded ? _kvs() : const <String, String>{};
-    return Material(
-      color: _kCardGrey,
-      child: InkWell(
-        onTap: onTap,
-        child: Stack(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(14.w, 10.h, 8.w, 10.h),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _skuLine(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.robotoMono(
-                                  fontSize: 19.sp,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textMain,
-                                  height: 1.2,
-                                ),
+    // Plain Container + GestureDetector. Same simplification as encode_screen
+    // — Material > InkWell > Stack + Positioned + Align(no widthFactor) was
+    // fragile in release builds and could blank the whole card.
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        color: _kCardGrey,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 4,
+                color: matched ? _kSuccessGreen : _kCardGrey,
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _skuLine(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF171D1D),
+                                fontFamily: 'monospace',
+                                height: 1.2,
                               ),
                             ),
-                            SizedBox(width: 6.w),
-                            Transform.rotate(
-                              angle: expanded ? 3.14159 : 0,
-                              child: Icon(
-                                Icons.keyboard_arrow_down,
-                                size: 16.sp,
-                                color: _kTextMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 4.h),
-                        Text(
-                          _descLine(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.manrope(
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textMain,
-                            height: 1.2,
                           ),
-                        ),
-                        if (kvs.isNotEmpty) ...[
-                          SizedBox(height: 8.h),
-                          Container(
-                            decoration: const BoxDecoration(
-                              border: Border(
-                                top: BorderSide(color: _kHairline, width: 1),
-                              ),
+                          const SizedBox(width: 6),
+                          Transform.rotate(
+                            angle: expanded ? 3.14159 : 0,
+                            child: const Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 18,
+                              color: _kTextMuted,
                             ),
-                            padding: EdgeInsets.only(top: 8.h, bottom: 2.h),
-                            child: _TtKvGrid(entries: kvs),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _descLine(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF171D1D),
+                          height: 1.2,
+                        ),
+                      ),
+                      if (kvs.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: const BoxDecoration(
+                            border: Border(
+                              top: BorderSide(color: _kHairline, width: 1),
+                            ),
+                          ),
+                          padding: const EdgeInsets.only(top: 8, bottom: 2),
+                          child: _TtKvGrid(entries: kvs),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(8.w, 0, 12.w, 0),
-                  child: Align(
-                    widthFactor: 1,
-                    alignment:
-                        expanded ? Alignment.topCenter : Alignment.center,
-                    child: Padding(
-                      padding: EdgeInsets.only(top: expanded ? 10.h : 0),
-                      child: matched
-                          ? _MatchPill.match()
-                          : _MatchPill.mismatch(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (matched)
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                child: Container(width: 4, color: _kSuccessGreen),
               ),
-          ],
+              Padding(
+                padding: EdgeInsets.only(
+                  left: 8,
+                  right: 12,
+                  top: expanded ? 10 : 0,
+                ),
+                child: Align(
+                  widthFactor: 1,
+                  alignment:
+                      expanded ? Alignment.topCenter : Alignment.center,
+                  child: matched
+                      ? _MatchPill.match()
+                      : _MatchPill.mismatch(),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -706,15 +752,15 @@ class _MatchPill extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(4.r),
+        borderRadius: BorderRadius.circular(4),
       ),
-      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Text(
         label,
-        style: GoogleFonts.spaceGrotesk(
-          fontSize: 14.sp,
+        style: TextStyle(
+          fontSize: 12,
           fontWeight: FontWeight.w800,
-          letterSpacing: 1.4,
+          letterSpacing: 1.2,
           color: fg,
         ),
       ),
@@ -735,12 +781,12 @@ class _TtKvGrid extends StatelessWidget {
       final left = list[i];
       final right = i + 1 < list.length ? list[i + 1] : null;
       rows.add(Padding(
-        padding: EdgeInsets.only(bottom: 6.h),
+        padding: const EdgeInsets.only(bottom: 6),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(child: _kv(left.key, left.value)),
-            SizedBox(width: 14.w),
+            const SizedBox(width: 14),
             Expanded(
               child: right == null
                   ? const SizedBox.shrink()
@@ -764,22 +810,23 @@ class _TtKvGrid extends StatelessWidget {
       children: [
         Text(
           k.toUpperCase(),
-          style: GoogleFonts.spaceGrotesk(
-            fontSize: 9.sp,
+          style: const TextStyle(
+            fontSize: 10,
             fontWeight: FontWeight.w800,
-            letterSpacing: 1.4,
+            letterSpacing: 1.2,
             color: _kTextMuted,
           ),
         ),
-        SizedBox(height: 1.h),
+        const SizedBox(height: 1),
         Text(
           v,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.robotoMono(
-            fontSize: 13.sp,
+          style: const TextStyle(
+            fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: AppColors.textMain,
+            color: Color(0xFF171D1D),
+            fontFamily: 'monospace',
           ),
         ),
       ],
@@ -804,66 +851,77 @@ class _TtToolbarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: background,
-      borderRadius: BorderRadius.circular(2.r),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(2.r),
-        onTap: onPressed,
-        child: Container(
-          alignment: Alignment.center,
-          padding: EdgeInsets.symmetric(horizontal: 8.w),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.white, size: 22.sp),
-              SizedBox(width: 10.w),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 15.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
-                    color: Colors.white,
-                  ),
+    return GestureDetector(
+      onTap: onPressed,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(2),
+        ),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 22),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                  color: Colors.white,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// ── Power strip (display-only on this screen — power is fixed at 10) ────
+// ── Power strip — live, debounced push to chip ──────────────────────────
 
 class _TestPowerSlider extends StatelessWidget {
-  const _TestPowerSlider({required this.powerDbm});
+  const _TestPowerSlider({
+    required this.powerDbm,
+    required this.minDbm,
+    required this.maxDbm,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
 
   final int powerDbm;
+  final int minDbm;
+  final int maxDbm;
+  final ValueChanged<int> onChanged;
+  final ValueChanged<int> onChangeEnd;
 
   @override
   Widget build(BuildContext context) {
+    final clamped = powerDbm.clamp(minDbm, maxDbm);
     return Container(
       color: _kPwrStripBg,
-      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
-          Text(
+          const Text(
             'PWR',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 11.sp,
+            style: TextStyle(
+              fontSize: 12,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.4,
               color: _kTextSlate,
             ),
           ),
-          SizedBox(width: 12.w),
+          const SizedBox(width: 12),
           Expanded(
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
@@ -878,38 +936,39 @@ class _TestPowerSlider extends StatelessWidget {
                     const RoundSliderOverlayShape(overlayRadius: 22),
               ),
               child: Slider(
-                value: powerDbm.toDouble(),
-                min: 0,
-                max: 33,
-                divisions: 33,
-                onChanged: (_) {},
+                value: clamped.toDouble(),
+                min: minDbm.toDouble(),
+                max: maxDbm.toDouble(),
+                divisions: maxDbm - minDbm,
+                onChanged: (v) => onChanged(v.round()),
+                onChangeEnd: (v) => onChangeEnd(v.round()),
               ),
             ),
           ),
-          SizedBox(width: 8.w),
+          const SizedBox(width: 8),
           SizedBox(
-            width: 64.w,
+            width: 64,
             child: Text(
               '$powerDbm dBm',
               textAlign: TextAlign.right,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 14.sp,
+              style: const TextStyle(
+                fontSize: 14,
                 fontWeight: FontWeight.w800,
-                color: AppColors.textMain,
+                color: Color(0xFF171D1D),
               ),
             ),
           ),
-          SizedBox(width: 8.w),
+          const SizedBox(width: 8),
           Container(
             decoration: BoxDecoration(
               color: AppColors.primary,
-              borderRadius: BorderRadius.circular(3.r),
+              borderRadius: BorderRadius.circular(3),
             ),
-            padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-            child: Text(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: const Text(
               'LIVE',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 9.sp,
+              style: TextStyle(
+                fontSize: 10,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.2,
                 color: Colors.white,

@@ -96,7 +96,7 @@ class _Tag {
 }
 
 class _EncodeScreenState extends State<EncodeScreen> {
-  static const int _defaultPowerDbm = 10;
+  static const int _defaultPowerDbm = 1;
   // Slider bounds for THIS screen only (the global RfidPowerSlider stops at
   // kAntennaPowerDbmMax=30). Operator asked for 0-33 here so the encode
   // workspace can dial above the global cap when needed. Native clamps
@@ -697,11 +697,16 @@ class _EncodeScreenState extends State<EncodeScreen> {
     }
   }
 
-  void _resetToScan() {
-    // Tear down 2D imager mode if the pickSku phase enabled it, then
-    // re-arm RFID. Clear the working list — operator asked REFRESH to
-    // give them a fresh session, not preserve a half-done one.
-    unawaited(_disableSearchScanner());
+  Future<void> _resetToScan() async {
+    // Tear down 2D imager mode if the pickSku phase enabled it, re-arm
+    // RFID, clear the working list, and start a fresh inventory pass.
+    // Operator asked REFRESH to be a true "new session": fresh state +
+    // radio already running, so the next chip in range gets read without
+    // a separate trigger pull.
+    await _disableSearchScanner();
+    // Make sure any inflight inventory is stopped before we restart it.
+    await _stopInventory();
+    if (!mounted) return;
     setState(() {
       _phase = _Phase.scan;
       _selectedSku = null;
@@ -713,11 +718,19 @@ class _EncodeScreenState extends State<EncodeScreen> {
       _encodePassDone = false;
       _encodeModeDisabled = false;
       _banner = null;
+      _isScanning = false;
       _tags.clear();
     });
-    // Push the slider's current dBm back to the chip in case 2D-imager
-    // setup or post-encode teardown left it elsewhere.
+    // Re-assert RFID-only trigger mode + push the slider's dBm so the
+    // radio starts at the operator's chosen power, not whatever the
+    // 2D-imager setup or post-encode teardown left it at.
+    unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+    unawaited(RfidVendorChannel.close2dBarcode());
+    unawaited(RfidVendorChannel.enableRfidFunctionMode());
+    unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     unawaited(RfidVendorChannel.setAntennaPowerDbm(_powerDbm));
+    _attachTagAndTriggerStreams();
+    await _startInventory();
   }
 
   void _goToPickSku() {
@@ -798,27 +811,27 @@ class _EncodeScreenState extends State<EncodeScreen> {
 
   Widget _buildTagListBody() {
     if (_tags.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 32.w),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(LucideIcons.radio,
-                  size: 36.r, color: const Color(0xFF8FA1A1)),
-              SizedBox(height: 12.h),
-              Text(
-                _phase == _Phase.scan
-                    ? 'Pull the trigger to start scanning. Pull again to stop.\nRadio is at $_powerDbm dBm (slider below).'
-                    : 'No tags in this session.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.manrope(
-                  fontSize: 12.sp,
-                  color: const Color(0xFF6D7979),
-                ),
+      return Container(
+        alignment: Alignment.center,
+        padding: EdgeInsets.symmetric(horizontal: 32.w),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.radio,
+                size: 40, color: const Color(0xFF8FA1A1)),
+            const SizedBox(height: 12),
+            Text(
+              _phase == _Phase.scan
+                  ? 'Pull the trigger to start scanning.\nRadio is at $_powerDbm dBm.'
+                  : 'No tags in this session.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF6D7979),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
@@ -1146,104 +1159,104 @@ class _CountItemContainer extends StatelessWidget {
     final kvs = tag.expanded ? _kvs() : const <String, String>{};
     final descColor = recognized ? AppColors.textMain : _kTextMuted;
 
-    return Material(
-      color: _kCardGrey,
-      child: InkWell(
-        onTap: onTap,
-        child: Stack(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(14.w, 10.h, 8.w, 10.h),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _skuLine(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.robotoMono(
-                                  fontSize: 19.sp,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textMain,
-                                  height: 1.2,
-                                ),
+    // Plain Container + GestureDetector — no Material/InkWell/Stack.
+    // Earlier shape used Material > InkWell > Stack with a Positioned
+    // accent strip + Align in the slot; layout was fragile in release
+    // builds and a single broken constraint blanked the whole card.
+    // This version makes the accent strip just be the leading child of
+    // the Row and gives the right slot a fixed width.
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        color: _kCardGrey,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 4,
+                color: accent == Colors.transparent ? _kCardGrey : accent,
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _skuLine(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF171D1D),
+                                fontFamily: 'monospace',
+                                height: 1.2,
                               ),
                             ),
-                            SizedBox(width: 6.w),
-                            Transform.rotate(
-                              angle: tag.expanded ? 3.14159 : 0,
-                              child: Icon(
-                                Icons.keyboard_arrow_down,
-                                size: 16.sp,
-                                color: _kTextMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 4.h),
-                        Text(
-                          _descLine(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.manrope(
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w700,
-                            color: descColor,
-                            height: 1.2,
                           ),
-                        ),
-                        if (kvs.isNotEmpty) ...[
-                          SizedBox(height: 8.h),
-                          Container(
-                            decoration: const BoxDecoration(
-                              border: Border(
-                                top: BorderSide(color: _kHairline, width: 1),
-                              ),
+                          const SizedBox(width: 6),
+                          Transform.rotate(
+                            angle: tag.expanded ? 3.14159 : 0,
+                            child: const Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 18,
+                              color: _kTextMuted,
                             ),
-                            padding: EdgeInsets.only(top: 8.h, bottom: 2.h),
-                            child: _KvGrid(entries: kvs),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _descLine(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: descColor,
+                          height: 1.2,
+                        ),
+                      ),
+                      if (kvs.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: const BoxDecoration(
+                            border: Border(
+                              top: BorderSide(color: _kHairline, width: 1),
+                            ),
+                          ),
+                          padding: const EdgeInsets.only(top: 8, bottom: 2),
+                          child: _KvGrid(entries: kvs),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(8.w, 0, 12.w, 0),
-                  // widthFactor: 1 so Align sizes to its child instead of
-                  // trying to fill the Row's unbounded main axis (without
-                  // this, the slot triggers an "infinite size during layout"
-                  // assert → release-mode error widget paints white).
-                  child: Align(
-                    widthFactor: 1,
-                    alignment: tag.expanded
-                        ? Alignment.topCenter
-                        : Alignment.center,
-                    child: Padding(
-                      padding: EdgeInsets.only(top: tag.expanded ? 10.h : 0),
-                      child: _buildSlot(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (accent != Colors.transparent)
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                child: Container(width: 4, color: accent),
               ),
-          ],
+              Padding(
+                padding: EdgeInsets.only(
+                  left: 8,
+                  right: 12,
+                  top: tag.expanded ? 10 : 0,
+                ),
+                child: Align(
+                  widthFactor: 1,
+                  alignment: tag.expanded
+                      ? Alignment.topCenter
+                      : Alignment.center,
+                  child: _buildSlot(),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1252,16 +1265,15 @@ class _CountItemContainer extends StatelessWidget {
   Widget _buildSlot() {
     if (phase == _Phase.encoding) {
       if (isActive) {
-        return SizedBox(
-          width: 22.r,
-          height: 22.r,
-          child: const CircularProgressIndicator(
+        return const SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
             strokeWidth: 2.5,
             valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
           ),
         );
       }
-      // Queued / unencoded row in the middle of an encode pass.
       return const _ResultPill(
         label: 'QUEUED',
         bg: _kPillQueuedBg,
@@ -1282,20 +1294,18 @@ class _CountItemContainer extends StatelessWidget {
         fg: _kErrorRed,
       );
     }
-    // Phase.scan / Phase.pickSku → trash button.
     if (onRemove == null) return const SizedBox.shrink();
-    return SizedBox(
-      width: 42.w,
-      height: 42.w,
-      child: Material(
+    return GestureDetector(
+      onTap: onRemove,
+      child: Container(
+        width: 42,
+        height: 42,
         color: _kTrashRed,
-        child: InkWell(
-          onTap: onRemove,
-          child: Icon(
-            Icons.delete_outline,
-            size: 22.sp,
-            color: Colors.white,
-          ),
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.delete_outline,
+          size: 22,
+          color: Colors.white,
         ),
       ),
     );
@@ -1383,15 +1393,15 @@ class _ResultPill extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(4.r),
+        borderRadius: BorderRadius.circular(4),
       ),
-      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Text(
         label,
-        style: GoogleFonts.spaceGrotesk(
-          fontSize: 14.sp,
+        style: TextStyle(
+          fontSize: 12,
           fontWeight: FontWeight.w800,
-          letterSpacing: 1.4,
+          letterSpacing: 1.2,
           color: fg,
         ),
       ),

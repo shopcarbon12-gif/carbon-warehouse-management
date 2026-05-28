@@ -224,11 +224,6 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     final m = _rfid;
     if (m == null || !_epcValid) return;
     ScanSounds.instance.play(ScanCue.start);
-    // Re-assert the geiger routing flag every start. If the operator
-    // navigated through another scan-using screen (Count, Putaway) and
-    // came back, the manager's _scanContext could have been flipped to
-    // a non-geiger context — that would silently send reads only to the
-    // unified sink and leave this screen on 0%.
     m.scanContext = 'GEIGER_FIND';
     setState(() {
       _scanning = true;
@@ -248,12 +243,20 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       ..reset()
       ..repeat();
     _bloom.value = 0;
-    // Attach the listener BEFORE starting the inventory so the very first
-    // tag-read after sled bring-up is captured. Pre-fix, attach happened
-    // after startLocateScanning, which on fast Zebras meant the first ~50ms
-    // of reads bypassed _onGeigerRead entirely.
     await _readSub?.cancel();
-    _readSub = m.geigerTagReads.listen(_onGeigerRead);
+    // Subscribe to the RAW vendor tag stream as well as the RfidManager's
+    // geiger stream. The manager path goes through `_active.startScanning`
+    // which silently fails when the manager's active-driver state is out
+    // of sync with the actual sled (seen after the encode screen drove the
+    // radio via RfidVendorChannel directly). Listening to the vendor
+    // stream guarantees reads reach _onGeigerRead regardless of manager
+    // state.
+    _readSub = RfidVendorChannel.tagReadStream().listen(_onGeigerRead);
+    // Start the radio via BOTH paths — the vendor channel is idempotent
+    // and the manager path keeps the manager's internal state consistent
+    // for other screens.
+    unawaited(RfidVendorChannel.startChainwayInventory());
+    unawaited(RfidVendorChannel.startZebraInventory());
     await m.startLocateScanning();
     _scheduleBeeps();
     _scheduleStaleSweep();
@@ -269,6 +272,8 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     _bloom.animateTo(0, duration: const Duration(milliseconds: 220));
     await _readSub?.cancel();
     _readSub = null;
+    unawaited(RfidVendorChannel.stopChainwayInventory());
+    unawaited(RfidVendorChannel.stopZebraInventory());
     await _rfid?.stopLocateScanning();
     if (!mounted) return;
     setState(() {
