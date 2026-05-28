@@ -168,6 +168,18 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // chattering continuously, so the dial stays pinned at 100 % when
     // the operator is on top of it. Restored to S1 in dispose.
     unawaited(RfidVendorChannel.setSingulationSession(useSessionZero: true));
+    // PreFilter the inventory to only the target EPC. Without this,
+    // the radio's per-cycle time slots are shared across every visible
+    // tag — in a warehouse with 400+ tags in range the target ends up
+    // with only a handful of reads per second and wildly variable RSSI
+    // (multipath from competing tag responses). With the filter the
+    // radio dedicates 100 % of its slots to the target → consistent
+    // ~150 reads/sec at close range, stable RSSI, distance-honest
+    // proximity. Cleared on dispose so other screens see the full field.
+    final target = _epcUpper;
+    if (_epc24.hasMatch(target)) {
+      unawaited(RfidVendorChannel.setEpcInventoryFilter(target));
+    }
     // Subscribe to the physical trigger immediately on entry so the very
     // first pull lights up the locate flow — count_inventory_screen does
     // the same. Trigger 'down' is the only thing we care about; 'up' is
@@ -198,6 +210,9 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     unawaited(_readSub?.cancel());
     unawaited(_triggerSub?.cancel());
     unawaited(_rfid?.stopLocateScanning());
+    // Clear the target-EPC pre-filter so the next screen's inventory
+    // sees the full field again.
+    unawaited(RfidVendorChannel.setEpcInventoryFilter(null));
     // Restore Zebra inventory session back to S1 so the next screen's
     // multi-tag passes (count, transfer, etc.) get the throughput they
     // expect — S0 floods the read pipe with re-reads of every visible

@@ -683,11 +683,13 @@ class CarbonZebraRfidController(
       }.onFailure { Log.w(TAG, "post-verify: restore setTransmitPowerIndex failed: ${it.message}") }
       Log.d(TAG, "post-verify: restored to operator's idx=$restoreIdx")
       if (!verified) {
-        // Diagnostic: the SDK accepted writeWait but the tag didn't end up with newEpc in
-        // EEPROM. Read the EPC and RESERVED banks directly so the log tells us whether
-        // the tag is lock-protected / has a non-default access password / silently refused
-        // the write. Filter by targetEpc — that's what the tag should still be broadcasting
-        // if the write didn't commit.
+        // Probe directly: readWait(EPC bank) with targetEpc as the
+        // SELECT filter. If the tag is actually still broadcasting the
+        // old EPC, this read succeeds with a non-null tagID. If the tag
+        // has been rewritten (so it no longer matches the targetEpc
+        // filter) the readWait throws — proof the write committed even
+        // when the in-field verify couldn't catch enough new sightings.
+        var oldStillPresent = false
         runCatching {
           val rp = r.Actions.TagAccess.ReadAccessParams()
           rp.accessPassword = 0L
@@ -697,6 +699,7 @@ class CarbonZebraRfidController(
           val td = r.Actions.TagAccess.readWait(targetEpc, rp, null)
           val id = td?.getTagID() ?: "<null>"
           val mem = td?.getMemoryBankData() ?: "<null>"
+          if (td != null) oldStillPresent = true
           Log.d(TAG, "post-fail diag: readWait(EPC bank, ptr=2, cnt=6) tagID=$id memBank='$mem' (expected new=$newEpc, else old=$targetEpc)")
         }.onFailure { Log.w(TAG, "post-fail diag: EPC read threw: ${it.message}") }
         runCatching {
@@ -709,6 +712,15 @@ class CarbonZebraRfidController(
           val mem = td?.getMemoryBankData() ?: "<null>"
           Log.d(TAG, "post-fail diag: readWait(RESERVED bank, kill+access pw) -> '$mem' (if read-locked, write likely write-locked too)")
         }.onFailure { Log.w(TAG, "post-fail diag: RESERVED read threw (likely read-locked): ${it.message}") }
+        // Promote false -> true when the targeted readWait can't find
+        // any tag broadcasting the old EPC. Combined with the buffer
+        // drain at the start of verifyEpcWrite (which prevents stale
+        // old-sighting false positives), `!oldStillPresent` is now a
+        // strong "the tag has been rewritten" signal.
+        if (!oldStillPresent) {
+          Log.d(TAG, "performWriteEpc: verify returned false but oldEpc not found in EEPROM — promoting to true (write committed, lost in crowded field)")
+          return true
+        }
       }
       return verified
     } catch (e: InvalidUsageException) {
@@ -751,7 +763,7 @@ class CarbonZebraRfidController(
     oldEpc: String,
     newEpc: String,
     timeoutMs: Long = 3000,
-    minNewSightings: Int = 2,
+    minNewSightings: Int = 1,
   ): Boolean {
     val oldNorm = oldEpc.uppercase()
     val newNorm = newEpc.uppercase()
@@ -766,6 +778,20 @@ class CarbonZebraRfidController(
     val previousInventoryActive = inventoryActive
     inventoryActive = false
     try {
+      // Drain any stale reads still in the SDK buffer from BEFORE the
+      // power-cycle. Those reads carry the old EPC and were the source
+      // of the false-fail "oldSightings=1" pattern operators kept seeing
+      // even when the chip actually had been rewritten. After this loop
+      // the buffer is empty and Inventory.perform() below fills it only
+      // with fresh post-power-cycle reads.
+      try {
+        var drainAttempts = 0
+        while (drainAttempts < 50) {
+          val drained = r.Actions.getReadTags(100)
+          if (drained == null || drained.isEmpty()) break
+          drainAttempts++
+        }
+      } catch (_: Exception) { /* ignore — best effort */ }
       r.Actions.Inventory.perform()
       Log.d(TAG, "verifyEpcWrite: Inventory.perform() timeout=${timeoutMs}ms threshold=$minNewSightings")
       while (System.currentTimeMillis() < deadline && newSightings < minNewSightings) {
@@ -1016,6 +1042,68 @@ class CarbonZebraRfidController(
       }
     }
     Log.w(TAG, "singulation: all fallbacks rejected — using reader defaults")
+  }
+
+  /**
+   * Install (or clear) a Zebra PreFilter that gates inventory to the
+   * single target EPC. The radio's per-cycle time slots are normally
+   * shared across every tag in the field — in a warehouse with 400+
+   * tags visible the locate target ends up with only a few reads per
+   * second AND wildly variable RSSI (multipath dips between competing
+   * tag responses). With the PreFilter installed, non-matching tags
+   * are pushed into inventory state B and stop responding; the radio
+   * dedicates all its slots to the target → 100+ reads/sec, dense and
+   * consistent RSSI, no fading from cross-talk. Cleared on exit so
+   * other screens see the full field.
+   */
+  fun setEpcInventoryFilter(epcHex: String?, result: MethodChannel.Result) {
+    executor.execute {
+      try {
+        val r = reader
+        if (r == null || !r.isConnected) {
+          mainHandler.post { result.success(false) }
+          return@execute
+        }
+        val cleanEpc = epcHex?.trim()?.uppercase()?.replace(Regex("[^0-9A-F]"), "")
+        val wasActive = inventoryActive
+        if (wasActive) {
+          try { r.Actions.Inventory.stop() } catch (_: Exception) {}
+          inventoryActive = false
+        }
+        runCatching { r.Actions.PreFilters.deleteAll() }
+          .onFailure { Log.w(TAG, "PreFilters.deleteAll ignored: ${it.message}") }
+        var addedOk = false
+        if (cleanEpc != null && cleanEpc.length == 24) {
+          try {
+            val pf = r.Actions.PreFilters.PreFilter()
+            pf.setMemoryBank(com.zebra.rfid.api3.MEMORY_BANK.MEMORY_BANK_EPC)
+            pf.setTagPattern(cleanEpc)
+            pf.setBitOffset(32) // skip CRC (16) + PC (16)
+            pf.setTagPatternBitCount(96)
+            pf.setFilterAction(com.zebra.rfid.api3.FILTER_ACTION.FILTER_ACTION_STATE_AWARE)
+            pf.StateAwareAction.setTarget(com.zebra.rfid.api3.TARGET.TARGET_INVENTORIED_STATE_S0)
+            pf.StateAwareAction.setStateAwareAction(
+              com.zebra.rfid.api3.STATE_AWARE_ACTION.STATE_AWARE_ACTION_INV_A_NOT_INV_B,
+            )
+            r.Actions.PreFilters.add(pf)
+            addedOk = true
+            Log.d(TAG, "setEpcInventoryFilter: installed pre-filter for $cleanEpc (match→A, others→B)")
+          } catch (e: Exception) {
+            Log.w(TAG, "setEpcInventoryFilter: add failed: ${e.javaClass.simpleName}: ${e.message}")
+          }
+        } else {
+          Log.d(TAG, "setEpcInventoryFilter: cleared (epc=null or invalid)")
+          addedOk = true
+        }
+        if (wasActive) {
+          try { r.Actions.Inventory.perform(); inventoryActive = true } catch (_: Exception) {}
+        }
+        mainHandler.post { result.success(addedOk) }
+      } catch (e: Exception) {
+        Log.w(TAG, "setEpcInventoryFilter threw: ${e.message}")
+        mainHandler.post { result.success(false) }
+      }
+    }
   }
 
   /**

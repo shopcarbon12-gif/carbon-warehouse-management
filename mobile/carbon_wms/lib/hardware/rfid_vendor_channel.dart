@@ -315,6 +315,27 @@ class RfidVendorChannel {
     }
   }
 
+  /// Install a Zebra PreFilter so the radio only responds to the given
+  /// EPC. Matching tags go to inventory state A (responsive), everyone
+  /// else goes to state B (silent) — radio dedicates all its time slots
+  /// to the target. Pass `null` to clear the filter.
+  ///
+  /// Used by Locate-Tag on entry to make RSSI stable when the warehouse
+  /// has hundreds of other tags in the field, and cleared on exit so
+  /// other screens see normal inventory.
+  static Future<bool> setEpcInventoryFilter(String? epc) async {
+    if (!_isAndroid) return false;
+    try {
+      final ok = await _method.invokeMethod<bool>(
+        'rfid.setEpcInventoryFilter',
+        <String, dynamic>{'epc': epc},
+      );
+      return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Tag reads from native layer (`epc` hex string, optional `rssi`).
   static Stream<RfidTagRead> tagReadStream() {
     return _events
