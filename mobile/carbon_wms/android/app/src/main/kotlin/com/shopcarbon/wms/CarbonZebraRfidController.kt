@@ -470,6 +470,21 @@ class CarbonZebraRfidController(
           mainHandler.post { result.error("NOT_CONNECTED", "Zebra reader not connected", null) }
           return@execute
         }
+        // Idempotent — Dart sometimes drives both
+        // RfidVendorChannel.startZebraInventory() AND
+        // RfidManager.startLocateScanning() back-to-back (locate-tag
+        // does this defensively). Without this check the second call
+        // tries to apply power + set beeper volume AFTER the first call
+        // has already started Inventory.perform(), which throws
+        // OperationFailureException (BUSY) because the radio is now
+        // streaming. The visible symptom on the floor was a "the slider
+        // does nothing" / "scan beep is wrong" log pattern with the
+        // operator's previous power index stuck.
+        if (inventoryActive) {
+          Log.d(TAG, "startInventoryFlutterResult: already active, no-op")
+          mainHandler.post { result.success(null) }
+          return@execute
+        }
         applyTransmitPowerDbm(r)
         // Silence the sled's per-tag beeper ONLY during this active
         // inventory burst. Restored to HIGH in stopInventoryAsync so
