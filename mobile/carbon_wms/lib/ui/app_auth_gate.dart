@@ -26,7 +26,7 @@ class AppAuthGate extends StatefulWidget {
   State<AppAuthGate> createState() => _AppAuthGateState();
 }
 
-class _AppAuthGateState extends State<AppAuthGate> with WidgetsBindingObserver {
+class _AppAuthGateState extends State<AppAuthGate> {
   _Phase _phase = _Phase.booting;
   String _androidId = '';
   bool _pending = false;
@@ -34,34 +34,30 @@ class _AppAuthGateState extends State<AppAuthGate> with WidgetsBindingObserver {
   String? _otaLatestVersion;
   bool _otaDismissed = false;
   int _loginKey = 0;
-  WmsApiClient? _apiForLifecycle;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _apiForLifecycle = context.read<WmsApiClient>();
       _boot();
     });
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached) {
-      final api = _apiForLifecycle;
-      if (api != null) {
-        unawaited(api.setSessionToken(null));
-      }
-    }
-  }
+  // Note: no AppLifecycleState.detached handler. The previous version cleared
+  // the session token on .detached as "belt-and-suspenders" for the swipe-
+  // away-from-recents logout. On rugged kiosks (Chainway C72E) this was
+  // harmless because the OS rarely transitions through .detached during
+  // normal use. On consumer Android (Samsung S938U, Motorola Edge), .detached
+  // can fire during transient lifecycle events — biometric system UI,
+  // notification drawer, low-memory activity-restart, configuration changes —
+  // and the token clear would race the dashboard's first API call, surfacing
+  // as "Dashboard: http 401 — try Refresh / re-sign-in" right after a
+  // successful login. The Kotlin `TaskRemovedSessionService.onTaskRemoved`
+  // (registered with stopWithTask=false in AndroidManifest) AND
+  // `MainActivity.onDestroy(isFinishing && !isChangingConfigurations)`
+  // already cover the actual "user killed the app" cases, with synchronous
+  // `commit()` so the token is gone before the process exits.
 
   Future<String> _resolveAndroidId() async {
     if (kIsWeb) return '';
