@@ -79,11 +79,23 @@ class _Tag {
 }
 
 class _EncodeScreenState extends State<EncodeScreen> {
-  static const int _scanPowerDbm = 10;
+  static const int _defaultPowerDbm = 10;
+  // Slider bounds for THIS screen only (the global RfidPowerSlider stops at
+  // kAntennaPowerDbmMax=30). Operator asked for 0-33 here so the encode
+  // workspace can dial above the global cap when needed. Native clamps
+  // internally — Chainway C72E hard-caps at 23 (thermal), Zebra RFD8500
+  // at 30 — so a 33 here lands at the chip's real max.
+  static const int _powerMinDbm = 0;
+  static const int _powerMaxDbm = 33;
+  static const Duration _powerDebounce = Duration(milliseconds: 250);
   static const Duration _searchDebounce = Duration(milliseconds: 300);
   static const int _minQueryLen = 2;
 
   _Phase _phase = _Phase.scan;
+
+  // Power slider (local to this screen)
+  int _powerDbm = _defaultPowerDbm;
+  Timer? _powerPushTimer;
 
   // Phase 1
   final List<_Tag> _tags = [];
@@ -102,6 +114,10 @@ class _EncodeScreenState extends State<EncodeScreen> {
   // Phase 3
   int _encodingIndex = -1;
   bool _encodePassDone = false;
+  // True after the post-encode teardown ran, blocks further trigger pulls
+  // from re-firing the encode loop (operator asked: "turn off automatically
+  // the encode mode" once the pass completes).
+  bool _encodeModeDisabled = false;
 
   // Phase banner / error toast
   String? _banner;
@@ -109,6 +125,7 @@ class _EncodeScreenState extends State<EncodeScreen> {
   // Streams
   StreamSubscription<RfidTagRead>? _tagSub;
   StreamSubscription<String>? _triggerSub;
+  StreamSubscription<String>? _barcodeSub;
 
   @override
   void initState() {
@@ -123,11 +140,19 @@ class _EncodeScreenState extends State<EncodeScreen> {
   void dispose() {
     _tagSub?.cancel();
     _triggerSub?.cancel();
+    _barcodeSub?.cancel();
     _searchDebounceTimer?.cancel();
+    _powerPushTimer?.cancel();
     _searchCtrl.dispose();
     // Stop any active inventory so the next screen doesn't inherit it.
     unawaited(RfidVendorChannel.stopChainwayInventory());
     unawaited(RfidVendorChannel.stopZebraInventory());
+    // Also collapse the 2D imager — if the operator unmounts while
+    // pickSku is still open, the imager would otherwise stay armed and
+    // the next screen's trigger pull would fire a barcode scan instead
+    // of whatever it expects.
+    unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+    unawaited(RfidVendorChannel.close2dBarcode());
     // Restore default RFID trigger mode for downstream screens.
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     super.dispose();
@@ -146,30 +171,36 @@ class _EncodeScreenState extends State<EncodeScreen> {
     unawaited(RfidVendorChannel.close2dBarcode());
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
-    // Force the radio to 10 dBm for this screen — close-range only so
-    // a foreign tag in the next bin can't accidentally join the list.
-    unawaited(RfidVendorChannel.setAntennaPowerDbm(_scanPowerDbm));
-    // Wire streams once. _attach guards against re-subscribing.
-    _attachStreams();
+    // Push the slider's current dBm to the chip on entry. Default is
+    // _defaultPowerDbm (10) — close-range so a foreign tag in the next
+    // bin can't accidentally join the list — but the operator can drag
+    // the on-screen slider to anywhere in 0..33 dBm at any time.
+    unawaited(RfidVendorChannel.setAntennaPowerDbm(_powerDbm));
+    _attachTagAndTriggerStreams();
   }
 
-  void _attachStreams() {
-    if (_tagSub != null) return;
-    _tagSub = RfidVendorChannel.tagReadStream().listen(_onRawTagRead);
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen(_onTrigger);
+  void _attachTagAndTriggerStreams() {
+    _tagSub ??= RfidVendorChannel.tagReadStream().listen(_onRawTagRead);
+    _triggerSub ??=
+        RfidVendorChannel.hardwareTriggerStream().listen(_onTrigger);
   }
 
   // ── Trigger handling ──────────────────────────────────────────────────
 
   void _onTrigger(String event) {
     if (!mounted) return;
+    // Edge: only act on 'down' for every phase. Operator asked for
+    // pull-to-start / pull-to-stop on Phase 1 (toggle), and a single
+    // pull to fire the encode loop in Phase 3. We never react to 'up'
+    // so a quick double-tap can't get the radio out of sync.
+    if (event != 'down') return;
     switch (_phase) {
       case _Phase.scan:
-        // Hold-to-read at 10 dBm. Down → start inventory; up → stop.
-        if (event == 'down') {
-          unawaited(_startInventory());
-        } else if (event == 'up') {
+        // Toggle: first pull starts inventory, next pull stops it.
+        if (_isScanning) {
           unawaited(_stopInventory());
+        } else {
+          unawaited(_startInventory());
         }
         break;
       case _Phase.pickSku:
@@ -177,10 +208,11 @@ class _EncodeScreenState extends State<EncodeScreen> {
         // target SKU. They use the text field + tap.
         break;
       case _Phase.encoding:
-        // The encode pass starts on the first 'down' after the SKU pick
-        // and runs sequentially to completion. We ignore further trigger
-        // events while in flight.
-        if (event == 'down' && _encodingIndex < 0 && !_encodePassDone) {
+        // Single trigger pull fires the encode pass. _encodeModeDisabled
+        // is flipped true in _runEncodePass's finally so a stray pull
+        // after completion can't re-fire — operator asked the encode
+        // mode to "turn off automatically" once the pass is done.
+        if (_encodingIndex < 0 && !_encodePassDone && !_encodeModeDisabled) {
           unawaited(_runEncodePass());
         }
         break;
@@ -305,13 +337,20 @@ class _EncodeScreenState extends State<EncodeScreen> {
   }
 
   void _selectSku(Map<String, dynamic> row) {
+    // Leaving pickSku → close the 2D imager + restore RFID trigger so the
+    // operator's next trigger pull fires the encode pass, not the imager.
+    unawaited(_disableSearchScanner());
     setState(() {
       _selectedSku = row;
       _phase = _Phase.encoding;
       _encodingIndex = -1;
       _encodePassDone = false;
+      _encodeModeDisabled = false;
       _banner = null;
     });
+    // The 2D-imager setup briefly switched the radio config — push the
+    // slider's dBm back so the encode runs at the operator's chosen power.
+    unawaited(RfidVendorChannel.setAntennaPowerDbm(_powerDbm));
   }
 
   // ── Phase 3: sequential encode pass ───────────────────────────────────
@@ -401,11 +440,38 @@ class _EncodeScreenState extends State<EncodeScreen> {
     }
 
     if (!mounted) return;
+    // Post-pass teardown: tally results, turn off "encode mode" so any
+    // remaining trigger pulls do nothing, surface a summary banner with
+    // every EPC the operator just touched.
+    final succeeded = _tags.where((t) => t.newEpc != null).toList();
+    final failed = _tags.where((t) => t.encodeError != null).toList();
+    final summary = StringBuffer()
+      ..write('Encode complete · ')
+      ..write('${succeeded.length} succeeded · ')
+      ..write('${failed.length} failed');
+    if (succeeded.isNotEmpty) {
+      summary.write(
+        '\nNew EPCs: ${succeeded.map((t) => t.newEpc).join(', ')}',
+      );
+    }
+    if (failed.isNotEmpty) {
+      summary.write(
+        '\nFailed: ${failed.map((t) => t.oldEpc).join(', ')}',
+      );
+    }
+    // Also stop the radio outright — between writes the chip wasn't doing
+    // continuous inventory, but the trigger-relay (for the 2D imager) and
+    // any background scan should be quiesced so the operator can step
+    // back without firing anything.
+    unawaited(RfidVendorChannel.stopChainwayInventory());
+    unawaited(RfidVendorChannel.stopZebraInventory());
     setState(() {
       _encodingIndex = -1;
       _encodePassDone = true;
+      _encodeModeDisabled = true;
       _phase = _Phase.post;
-      _banner = null;
+      _banner = summary.toString();
+      _isScanning = false;
     });
   }
 
@@ -463,6 +529,13 @@ class _EncodeScreenState extends State<EncodeScreen> {
   Widget build(BuildContext context) {
     return CarbonScaffold(
       pageTitle: 'ENCODE',
+      bottomBar: _EncodePowerSlider(
+        powerDbm: _powerDbm,
+        minDbm: _powerMinDbm,
+        maxDbm: _powerMaxDbm,
+        onChanged: _onPowerSliderChanged,
+        onChangeEnd: _onPowerSliderEnded,
+      ),
       body: ColoredBox(
         color: const Color(0xFFF7FAFA),
         child: Column(
@@ -511,6 +584,12 @@ class _EncodeScreenState extends State<EncodeScreen> {
   }
 
   void _resetToScan() {
+    // Tear down 2D imager mode if the pickSku phase enabled it, then
+    // re-arm RFID. We don't clear _tags here — operator may want to
+    // keep their list and re-pick a SKU; the BACK TO SCAN button is
+    // mostly for re-scanning, but we leave the cards in place so a
+    // mistake doesn't lose work.
+    unawaited(_disableSearchScanner());
     setState(() {
       _phase = _Phase.scan;
       _selectedSku = null;
@@ -520,9 +599,12 @@ class _EncodeScreenState extends State<EncodeScreen> {
       _searchError = null;
       _encodingIndex = -1;
       _encodePassDone = false;
+      _encodeModeDisabled = false;
       _banner = null;
     });
-    unawaited(RfidVendorChannel.setAntennaPowerDbm(_scanPowerDbm));
+    // Push the slider's current dBm back to the chip in case 2D-imager
+    // setup or post-encode teardown left it elsewhere.
+    unawaited(RfidVendorChannel.setAntennaPowerDbm(_powerDbm));
   }
 
   void _goToPickSku() {
@@ -530,9 +612,75 @@ class _EncodeScreenState extends State<EncodeScreen> {
       _phase = _Phase.pickSku;
       _banner = null;
     });
-    // Searching is text-driven — keep radio at 10 dBm but stop inventory
-    // so a stray scan doesn't add a tag mid-search.
+    // Search-phase ergonomics: open the 2D imager + barcode broadcast so
+    // a trigger pull or a separate hardware key scans a barcode straight
+    // into the search field. Keep typing as an alternative (the text
+    // field is autofocused in _buildPickSkuBody).
     unawaited(_stopInventory());
+    unawaited(_enableSearchScanner());
+  }
+
+  // ── Power slider (0-33 dBm, debounced push to chip) ───────────────────
+
+  /// Called on every Slider onChanged tick. Updates the visible value
+  /// immediately so the label tracks the finger, but debounces the
+  /// native chip push by [_powerDebounce]. Final value is also flushed
+  /// on onChangeEnd so finger-up feels instant. Same coalesce pattern
+  /// the global RfidPowerSlider uses (see project_pos_power_rate_limit
+  /// memory for the why).
+  void _onPowerSliderChanged(int dbm) {
+    if (_powerDbm == dbm) return;
+    setState(() => _powerDbm = dbm);
+    _powerPushTimer?.cancel();
+    _powerPushTimer = Timer(_powerDebounce, () => _pushPowerToChip(dbm));
+  }
+
+  void _onPowerSliderEnded(int dbm) {
+    _powerPushTimer?.cancel();
+    _pushPowerToChip(dbm);
+  }
+
+  void _pushPowerToChip(int dbm) {
+    // Native controllers clamp internally — Chainway to 5..23, Zebra to
+    // 0..30 — so a 33 here lands at whichever chip's actual max. We
+    // still display 0..33 because the operator asked to see the full
+    // theoretical band on this screen.
+    unawaited(RfidVendorChannel.setAntennaPowerDbm(dbm));
+  }
+
+  // ── 2D imager wiring for the pickSku phase ────────────────────────────
+
+  Future<void> _enableSearchScanner() async {
+    // Chainway: enable the trigger-relay so a hardware trigger pull fires
+    // the imager. Zebra: flip the sled's trigger from RFID to barcode.
+    unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
+    unawaited(RfidVendorChannel.open2dBarcode());
+    unawaited(RfidVendorChannel.setZebraTriggerMode2D());
+    _barcodeSub ??=
+        RfidVendorChannel.hardwareBarcodeStream().listen(_onBarcode);
+  }
+
+  Future<void> _disableSearchScanner() async {
+    await _barcodeSub?.cancel();
+    _barcodeSub = null;
+    unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
+    unawaited(RfidVendorChannel.close2dBarcode());
+    unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
+  }
+
+  void _onBarcode(String raw) {
+    if (!mounted) return;
+    if (_phase != _Phase.pickSku) return;
+    final v = raw.trim();
+    if (v.isEmpty) return;
+    // Don't auto-fire encode when a UHF 24-hex value happens to slip
+    // through the imager broadcast — only treat it as a search term if
+    // it's something the catalog can actually match.
+    if (RegExp(r'^[0-9A-Fa-f]{24}$').hasMatch(v)) return;
+    _searchCtrl.text = v;
+    _searchCtrl.selection =
+        TextSelection.collapsed(offset: _searchCtrl.text.length);
+    _onSearchChanged(v);
   }
 
   Widget _buildTagListBody() {
@@ -548,7 +696,7 @@ class _EncodeScreenState extends State<EncodeScreen> {
               SizedBox(height: 12.h),
               Text(
                 _phase == _Phase.scan
-                    ? 'Pull and hold the trigger to scan tags.\nRadio is at $_scanPowerDbm dBm (close range only).'
+                    ? 'Pull the trigger to start scanning. Pull again to stop.\nRadio is at $_powerDbm dBm (slider below).'
                     : 'No tags in this session.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.manrope(
@@ -1138,6 +1286,96 @@ class _ResolvedPanel extends StatelessWidget {
               fontSize: 10.sp,
               fontWeight: FontWeight.w600,
               color: const Color(0xFF6D7979),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Local 0-33 dBm power slider ─────────────────────────────────────────
+//
+// Encode workspace gets its own slider rather than reusing the global
+// RfidPowerSlider widget because:
+//   - The operator asked for 0..33 dBm on THIS screen. The global widget
+//     stops at kAntennaPowerDbmMax (30).
+//   - The encode screen needs the slider's value at hand (the inserted
+//     items row + the chip-write power-cycle both reference it), and
+//     it's clearer to keep it as local state than to read back from
+//     MobileSettingsRepository every time.
+//
+// Native controllers clamp internally (Chainway 5..23, Zebra 0..30) so
+// 24..33 effectively pin at whatever the chip's real ceiling is. The
+// display still shows what the operator picked.
+
+class _EncodePowerSlider extends StatelessWidget {
+  const _EncodePowerSlider({
+    required this.powerDbm,
+    required this.minDbm,
+    required this.maxDbm,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
+
+  final int powerDbm;
+  final int minDbm;
+  final int maxDbm;
+  final ValueChanged<int> onChanged;
+  final ValueChanged<int> onChangeEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final clamped = powerDbm.clamp(minDbm, maxDbm);
+    return Container(
+      color: const Color(0xFFF0F5F4),
+      padding: EdgeInsets.fromLTRB(14.w, 4.h, 14.w, 4.h),
+      child: Row(
+        children: [
+          Text(
+            'PWR',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
+              color: const Color(0xFF6D7979),
+            ),
+          ),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                activeTrackColor: AppColors.primary,
+                inactiveTrackColor: const Color(0xFFCDD7D7),
+                thumbColor: AppColors.primary,
+                overlayColor: AppColors.primary.withValues(alpha: 0.10),
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 8),
+                overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 16),
+              ),
+              child: Slider(
+                value: clamped.toDouble(),
+                min: minDbm.toDouble(),
+                max: maxDbm.toDouble(),
+                divisions: maxDbm - minDbm,
+                onChanged: (v) => onChanged(v.round()),
+                onChangeEnd: (v) => onChangeEnd(v.round()),
+              ),
+            ),
+          ),
+          SizedBox(width: 8.w),
+          SizedBox(
+            width: 56.w,
+            child: Text(
+              '$clamped dBm',
+              textAlign: TextAlign.right,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textMain,
+              ),
             ),
           ),
         ],
