@@ -15,7 +15,13 @@ export type CatalogGridRow = {
   vendor: string | null;
   color: string | null;
   size: string | null;
+  /** Variant-level landed/wholesale unit cost (NUMERIC(12,4) on custom_skus). */
+  default_cost: string | null;
   retail_price: string | null;
+  /** Matrix-level merchandise category (e.g. "WOMEN"). */
+  category: string | null;
+  /** Matrix-level second-tier merchandise tag (e.g. "DRESS"). */
+  subcategory_1: string | null;
   /** Last total on-hand from Lightspeed catalog sync (not RFID). */
   ls_on_hand_total: number | null;
   active_epc_count: number;
@@ -172,9 +178,12 @@ const SORT_COLUMNS: Record<string, string> = {
   vendor: "m.vendor",
   color: "cs.color_code",
   size: "cs.size",
+  default_cost: "cs.default_cost",
   retail_price: "cs.retail_price",
   bin: "bin_location",
   qty_epc: "active_epc_count",
+  category: "m.category",
+  subcategory_1: "m.subcategory_1",
 };
 
 export async function listCatalogGrid(
@@ -231,7 +240,10 @@ export async function listCatalogGrid(
     vendor: string | null;
     color: string | null;
     size: string | null;
+    default_cost: string | null;
     retail_price: string | null;
+    category: string | null;
+    subcategory_1: string | null;
     ls_on_hand_total: string | null;
     active_epc_count: number;
     bin_location: string | null;
@@ -253,7 +265,10 @@ export async function listCatalogGrid(
        m.vendor,
        cs.color_code AS color,
        cs.size,
+       cs.default_cost::text AS default_cost,
        cs.retail_price::text AS retail_price,
+       m.category AS category,
+       m.subcategory_1 AS subcategory_1,
        cs.ls_on_hand_total::text AS ls_on_hand_total,
        cs.archived AS archived,
        bool_and(cs.archived) OVER (PARTITION BY cs.matrix_id) AS matrix_archived,
@@ -371,7 +386,10 @@ export async function listCatalogGrid(
         vendor: row.vendor,
         color: row.color,
         size: row.size,
+        default_cost: row.default_cost,
         retail_price: row.retail_price,
+        category: row.category,
+        subcategory_1: row.subcategory_1,
         ls_on_hand_total: lsOnHand,
         active_epc_count: displayQty,
         bin_location: row.bin_location ?? null,

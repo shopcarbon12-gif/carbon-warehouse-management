@@ -82,9 +82,12 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
     "Vendor",
     "Color",
     "Size",
+    "Default Cost",
     "Retail Price",
     "Bin",
     "Qty (EPC)",
+    "Category",
+    "Subcategory 1",
   ];
   const lines = [
     headers.map(escapeCsvCell).join(","),
@@ -97,9 +100,12 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
         r.vendor?.trim() ?? "",
         r.color?.trim() ?? "",
         r.size?.trim() ?? "",
+        r.default_cost?.trim() ?? "",
         r.retail_price?.trim() ?? "",
         r.bin_location ?? "",
         String(r.active_epc_count ?? 0),
+        r.category?.trim() ?? "",
+        r.subcategory_1?.trim() ?? "",
       ]
         .map((c) => escapeCsvCell(String(c)))
         .join(","),
@@ -118,10 +124,10 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
 
 type SortKey =
   | "system_id" | "name" | "sku" | "upc"
-  | "color" | "size" | "retail_price" | "bin"
-  | "qty_epc";
+  | "color" | "size" | "default_cost" | "retail_price" | "bin"
+  | "qty_epc" | "category" | "subcategory_1";
 
-const COL_COUNT = 10;
+const COL_COUNT = 13;
 
 /**
  * Default column widths — same order as the header config below
@@ -140,10 +146,13 @@ const DEFAULT_COL_WIDTHS: (number | null)[] = [
   200,  // name
   130,  // color (fits "GREY WASHED" + chevron)
   70,   // size
+  100,  // default cost (fits header + "$XXX.XX")
   100,  // retail price (fits header + "$XXX.XX")
   80,   // bin
   90,   // qty (epc) — centered numerals
   90,   // rfid (fits 78px badge + table padding)
+  110,  // category
+  120,  // subcategory 1
 ];
 
 function useColResize(tableRef: React.RefObject<HTMLTableElement | null>) {
@@ -703,10 +712,13 @@ export function CatalogWorkspace({
                       { key: "name", label: "Item name" },
                       { key: "color", label: "Color" },
                       { key: "size", label: "Size" },
+                      { key: "default_cost", label: "Default cost" },
                       { key: "retail_price", label: "Retail price" },
                       { key: "bin", label: "Bin" },
                       { key: "qty_epc", label: "Qty (EPC)", align: "center" },
                       { key: "rfid", label: "RFID", sortable: false },
+                      { key: "category", label: "Category" },
+                      { key: "subcategory_1", label: "Subcategory 1" },
                     ] as { key: SortKey | "rfid"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean }[]
                   ).map(({ key, label, cls, align, sortable, hidden }, colIdx) => {
                     const isSortable = sortable !== false;
@@ -741,13 +753,13 @@ export function CatalogWorkspace({
               <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-10 text-center text-[var(--wms-muted)]">
+                    <td colSpan={13} className="px-4 py-10 text-center text-[var(--wms-muted)]">
                       Loading catalog…
                     </td>
                   </tr>
                 ) : showNoMatches ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-14 text-center text-[var(--wms-muted)]">
+                    <td colSpan={13} className="px-4 py-14 text-center text-[var(--wms-muted)]">
                       <p className="font-mono text-sm text-[var(--wms-muted)]">No rows match your search.</p>
                     </td>
                   </tr>
@@ -782,6 +794,9 @@ export function CatalogWorkspace({
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.color?.trim() || "—"}</td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{r.size?.trim() || "—"}</td>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-[var(--wms-fg)]">
+                        {formatPrice(r.default_cost)}
+                      </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-[var(--wms-fg)]">
                         {formatPrice(r.retail_price)}
                       </td>
@@ -827,6 +842,12 @@ export function CatalogWorkspace({
                             EPCs
                           </button>
                         )}
+                      </td>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]" title={r.category ?? undefined}>
+                        {r.category?.trim() || "—"}
+                      </td>
+                      <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]" title={r.subcategory_1 ?? undefined}>
+                        {r.subcategory_1?.trim() || "—"}
                       </td>
                     </tr>
                     );
