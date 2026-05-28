@@ -162,16 +162,44 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   fun setAntennaPowerDbm(dbm: Int) {
     executor.execute {
-      // Update the cached preference but DO NOT push to the chip. On C72E
-      // MTK firmware any setPower call after the initial one wedges the
-      // chip — startInventoryTag returns true but the firmware never
-      // transmits (0 hits / N null reads symptom). The SDK accepts a single
-      // setPower at init and that value sticks until the chip is freed.
-      // applyPower() targets the reflective uhfClass path (uartOwned=true)
-      // which we don't take, so it stays a no-op. The slider's value will
-      // apply on the next app launch.
-      requestedPowerDbm.set(dbm.coerceIn(5, 23))
+      val clamped = dbm.coerceIn(5, 23)
+      val prior = requestedPowerDbm.getAndSet(clamped)
+      // Caller (RfidPowerSlider) already debounces, so this runs once per
+      // drag — safe to actually push to the chip here. The earlier
+      // "no-op" comment was a workaround for the C72E MTK firmware wedge
+      // that fires when setPower is called while inventory is streaming.
+      // The encode-write path proved setPower works post-init AS LONG AS
+      // inventory is stopped first (see performWriteEpc's setCW(0) →
+      // setPower(low) → setPower(slider) sequence). Mirror that here so
+      // the slider actually moves the chip.
+      val reader = uhfReader
+      if (reader == null) {
+        Log.d(TAG, "setAntennaPowerDbm($clamped) deferred: uhfReader not initialised (will apply on next chip init)")
+        return@execute
+      }
+      val wasScanning = scanning.get()
+      if (wasScanning) {
+        // Stop inventory first — Chainway MTK rejects setPower mid-stream
+        // with an apparent success that wedges the chip into "transmits
+        // nothing" mode (the original 1.2.16 symptom this fn was put in
+        // place to avoid). stopInventory + setPower + restart is the
+        // safe pattern.
+        runCatching { reader.stopInventory() }
+      }
+      val powerOk = runCatching { reader.setPower(clamped) }.getOrDefault(false)
+      Log.d(TAG, "setAntennaPowerDbm($clamped) prior=$prior chipApplied=$powerOk wasScanning=$wasScanning")
+      // Also keep the reflective-UART path in sync for the uartOwned
+      // branch (no-op when uhfClass/uhfInstance are null, which is the
+      // default SDK path).
       applyPower()
+      if (wasScanning) {
+        // Restart inventory so the operator's active scan doesn't
+        // permanently die because they touched the slider. Use the
+        // no-arg form to match the surrounding code (line 577, 964,
+        // 1023) — the (0,0,0) overload exists on this SDK but the
+        // no-arg variant is the one the working scan paths take.
+        runCatching { reader.startInventoryTag() }
+      }
     }
   }
 
@@ -1678,10 +1706,21 @@ class CarbonChainwayRfidController(private val context: Context) {
       Log.w(TAG, "TRACE emitEpc: tagSink is NULL — Dart never subscribed to rfid_tag_stream OR setTagSink(null) was called")
       return
     }
+    // CRITICAL: send rssi=null (not 0) when the SDK couldn't parse RSSI.
+    // The Locate-Tag screen treats rssi=0 as a valid -0 dBm reading, which
+    // its rssiToProximity01 formula clamps to 100%, pinning the proximity
+    // bar at full regardless of distance. Passing null through lets the
+    // Dart-side fallback (fallbackRssiOnNull = -65) compute a sensible
+    // mid-range proximity until a real RSSI lands.
+    val payload: Map<String, Any?> = if (rssi != null) {
+      mapOf("epc" to up, "rssi" to rssi)
+    } else {
+      mapOf("epc" to up, "rssi" to null)
+    }
     mainHandler.post {
       try {
-        sink.success(mapOf("epc" to up, "rssi" to (rssi ?: 0)))
-        Log.d(TAG, "TRACE emitEpc: SINK POSTED epc=$up")
+        sink.success(payload)
+        Log.d(TAG, "TRACE emitEpc: SINK POSTED epc=$up rssi=${rssi ?: "null"}")
       } catch (e: Throwable) {
         Log.w(TAG, "TRACE emitEpc: sink.success threw: ${e.message}")
       }

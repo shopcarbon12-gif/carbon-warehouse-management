@@ -1030,12 +1030,20 @@ class CarbonZebraRfidController(
   private fun emitTag(epc: String, rssi: Short?) {
     val sink = tagSink ?: return
     val clean = epc.trim().uppercase()
-    Log.d("LAT", "NATIVE_EPC ts=${System.currentTimeMillis()} epc=$clean")
-    val rssiInt = rssi?.toInt() ?: -56
+    Log.d("LAT", "NATIVE_EPC ts=${System.currentTimeMillis()} epc=$clean rssi=$rssi")
+    val rssiInt = rssi?.toInt()
     // Native-originated per-tag beep — fire before sink post so audio feedback
-    // does not wait for Dart scheduling.
-    ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssiInt))
-    val payload = mapOf("epc" to clean, "rssi" to rssiInt)
+    // does not wait for Dart scheduling. The beep falls back to -56 when RSSI
+    // is missing (mid-range volume), but the WIRE payload to Dart must keep
+    // `null` so the Locate-Tag screen's fallbackRssiOnNull path can fire
+    // instead of pinning the proximity bar near 69% (the value a -56 dBm
+    // reading would produce on the rssiToProximity01 formula).
+    ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssiInt ?: -56))
+    val payload: Map<String, Any?> = if (rssiInt != null) {
+      mapOf("epc" to clean, "rssi" to rssiInt)
+    } else {
+      mapOf("epc" to clean, "rssi" to null)
+    }
     mainHandler.post { sink.success(payload) }
   }
 

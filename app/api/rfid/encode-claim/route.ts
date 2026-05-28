@@ -162,12 +162,23 @@ export async function POST(req: Request) {
 
     // Insert the new items row. ON CONFLICT (epc) is a defensive guard —
     // the FOR UPDATE lock above already prevents same-tenant collisions.
+    //
+    // Status: 'unknown' on creation (was 'in-stock' pre-2026-05-28). The
+    // handheld Encode screen has just told the chip to broadcast a new
+    // EPC — but the WMS has no proof yet that the chip actually committed
+    // the write to EEPROM (re-scanning to verify happens AFTER this row
+    // is inserted, via the "Test New Tag" screen which routes through
+    // ingestEpcs). UNKNOWN is the semantically correct staging state per
+    // migration 0080: "we lost track but the tag may still exist" — the
+    // handheld can recover it back to 'in-stock' on a subsequent
+    // successful re-read, and the operator can flip it manually via the
+    // post-encode dropdown (LIVE / TAG KILLED / UNKNOWN).
     const ins = await client.query<{ id: string }>(
       `INSERT INTO items (
          epc, serial_number, custom_sku_id, location_id, status,
          source, source_device_label, source_device_id, created_by_user_id
        ) VALUES (
-         $1, $2::bigint, $3::uuid, $4::uuid, 'in-stock',
+         $1, $2::bigint, $3::uuid, $4::uuid, 'unknown',
          'handheld', $6, $7::uuid, $5::uuid
        )
        ON CONFLICT (epc) DO NOTHING
