@@ -387,33 +387,20 @@ export async function markSourceCompleted(
   sourceId: string,
   userId: string | null,
 ): Promise<void> {
-  const table = sourceType === "mobile_count"
-    ? "inventory_reports"
-    : sourceType === "cycle_count"
-      ? "cycle_count_sessions"
-      : "device_upload_logs";
-  const idCast = sourceType === "csv_import" ? "::int" : "::uuid";
-
   if (sourceType === "cycle_count") {
-    // Cycle count: the mobile add-on upload is the canonical closer
-    // (2026-05-12 policy). Flip status → committed AND stamp completed_at
-    // so the session shows up under "History" in the cycle counts page
-    // instead of staying in the "Active / Paused" list forever.
-    // Reconcile (cycle-count-missing − add-on-found → tag_killed) is
-    // handled by the caller after scan-finalize's per-EPC ingest already
-    // flipped the add-on-found EPCs to in-stock.
-    await pool.query(
-      `UPDATE cycle_count_sessions
-          SET add_on_locked_by    = NULL,
-              add_on_completed_at = now(),
-              add_on_completed_by = $1::uuid,
-              status              = 'committed',
-              completed_at        = COALESCE(completed_at, now())
-        WHERE id = $2::uuid AND tenant_id = $3::uuid`,
-      [userId, sourceId, tenantId],
-    );
+    // Cycle-count close from a mobile add-on UPLOAD is handled by
+    // closeCycleCountFromAddOn (called separately by scan-finalize). That
+    // path needs the add-on's EPC list to compute variance_summary and
+    // close the open scan_periods entry, which markSourceCompleted on its
+    // own doesn't have. Keeping the cycle_count branch out of here avoids
+    // a double-UPDATE that would otherwise stamp a half-closed session.
     return;
   }
+
+  const table = sourceType === "mobile_count"
+    ? "inventory_reports"
+    : "device_upload_logs";
+  const idCast = sourceType === "csv_import" ? "::int" : "::uuid";
 
   await pool.query(
     `UPDATE ${table}
@@ -437,22 +424,53 @@ export async function markSourceCompleted(
  * inventory. Defective EPCs are already in tag_killed via the ingest's
  * formula-fail branch and surface in Catalog → Defective EPCs.
  */
-export async function reconcileCycleCountWithAddOn(
+/**
+ * Full close of a cycle-count session triggered by the mobile add-on UPLOAD.
+ *
+ * Replaces the prior `markSourceCompleted` + `reconcileCycleCountWithAddOn`
+ * two-step. In one transaction we:
+ *
+ *   - Flip status → 'committed' and stamp completed_at + add_on_*.
+ *   - Close any still-open `scan_periods` entry (the operator's last
+ *     active/paused→committed transition would otherwise leave an
+ *     entry with ended_at=null and the workspace timeline would render
+ *     it as "still scanning").
+ *   - Compute `variance_summary` so the workspace Variance tab is
+ *     populated when the operator opens it from History. `matched` is
+ *     the union of cycle-pass-found and add-on-pass-found EPCs that
+ *     were in expected; `missing` is what neither pass located. `misplaced`
+ *     stays 0 (the mobile add-on can't classify misplaced — that's a
+ *     fixed-reader bin-scope concept). `unrecognized` stays 0 here —
+ *     defective EPCs are tracked separately in items.status='tag_killed'
+ *     and surface in Catalog → Defective EPCs.
+ *   - Flip the truly-missing EPCs (expected but not found in EITHER pass)
+ *     to items.status='unknown'. Not 'tag_killed' — the physical tag may
+ *     still exist, just out of antenna range. 'unknown' keeps it visible
+ *     to a future scan; tag_killed is reserved for destroyed tags.
+ *
+ * Returns the `{killed}` count so the caller can log it.
+ */
+export async function closeCycleCountFromAddOn(
   pool: Pool,
   tenantId: string,
   cycleCountSessionId: string,
   addOnFoundEpcs: string[],
-): Promise<{ killed: number }> {
+  userId: string | null,
+): Promise<{ killed: number; matched: number; missing: number }> {
   const foundUpper = new Set(
     addOnFoundEpcs.map((e) => e.replace(/\s/g, "").toUpperCase()),
   );
-  const r = await pool.query<{ expected_snapshot: unknown; scanned_epcs: unknown }>(
-    `SELECT expected_snapshot, scanned_epcs
+  const r = await pool.query<{
+    expected_snapshot: unknown;
+    scanned_epcs: unknown;
+    scan_periods: unknown;
+  }>(
+    `SELECT expected_snapshot, scanned_epcs, scan_periods
        FROM cycle_count_sessions
       WHERE id = $1::uuid AND tenant_id = $2::uuid`,
     [cycleCountSessionId, tenantId],
   );
-  if (r.rowCount === 0) return { killed: 0 };
+  if (r.rowCount === 0) return { killed: 0, matched: 0, missing: 0 };
   const row = r.rows[0]!;
   const expected = Array.isArray(row.expected_snapshot)
     ? (row.expected_snapshot as Array<{ epc?: string }>)
@@ -462,19 +480,63 @@ export async function reconcileCycleCountWithAddOn(
       e.toUpperCase(),
     ),
   );
+
+  let matchedCount = 0;
   const reallyMissing: string[] = [];
   for (const e of expected) {
     const epc = e.epc?.toUpperCase();
     if (!epc) continue;
-    if (cycleScanned.has(epc)) continue;
-    if (foundUpper.has(epc)) continue;
-    reallyMissing.push(epc);
+    if (cycleScanned.has(epc) || foundUpper.has(epc)) {
+      matchedCount += 1;
+    } else {
+      reallyMissing.push(epc);
+    }
   }
-  if (reallyMissing.length === 0) return { killed: 0 };
-  // Missing from BOTH the fixed-reader pass AND the mobile add-on pass → 'unknown'.
-  // Not tag_killed: the tag may still physically exist, just out of reader sight.
-  // 'unknown' keeps it visible to handheld antennas so a future scan can recover
-  // it. tag_killed is reserved for genuinely-destroyed tags.
+
+  // Close any still-open scan_periods entry. Mirrors the same closer
+  // used by commitSession (`closeOpenPeriods` in rfid-cycle-count-sessions).
+  // Kept inline to avoid a circular import between scan-sources and the
+  // cycle-count session module.
+  const rawPeriods = Array.isArray(row.scan_periods)
+    ? (row.scan_periods as Array<{ started_at?: string; ended_at?: string | null }>)
+    : [];
+  const nowIso = new Date().toISOString();
+  const closedPeriods = rawPeriods.map((p) =>
+    p && p.ended_at == null && typeof p.started_at === "string"
+      ? { started_at: p.started_at, ended_at: nowIso }
+      : p,
+  );
+
+  const varianceSummary = {
+    matched: matchedCount,
+    missing: reallyMissing.length,
+    misplaced: 0,
+    unrecognized: 0,
+  };
+
+  await pool.query(
+    `UPDATE cycle_count_sessions
+        SET status              = 'committed',
+            completed_at        = COALESCE(completed_at, now()),
+            add_on_locked_by    = NULL,
+            add_on_completed_at = now(),
+            add_on_completed_by = $1::uuid,
+            scan_periods        = $2::jsonb,
+            variance_summary    = COALESCE(variance_summary, $3::jsonb)
+      WHERE id = $4::uuid AND tenant_id = $5::uuid`,
+    [
+      userId,
+      JSON.stringify(closedPeriods),
+      JSON.stringify(varianceSummary),
+      cycleCountSessionId,
+      tenantId,
+    ],
+  );
+
+  if (reallyMissing.length === 0) {
+    return { killed: 0, matched: matchedCount, missing: 0 };
+  }
+
   const k = await pool.query(
     `UPDATE items i
         SET status = 'unknown', updated_at = now()
@@ -485,7 +547,28 @@ export async function reconcileCycleCountWithAddOn(
         AND i.status = 'in-stock'`,
     [reallyMissing, tenantId],
   );
-  return { killed: k.rowCount ?? 0 };
+  return {
+    killed: k.rowCount ?? 0,
+    matched: matchedCount,
+    missing: reallyMissing.length,
+  };
+}
+
+/** @deprecated use closeCycleCountFromAddOn — it fully closes the session. */
+export async function reconcileCycleCountWithAddOn(
+  pool: Pool,
+  tenantId: string,
+  cycleCountSessionId: string,
+  addOnFoundEpcs: string[],
+): Promise<{ killed: number }> {
+  const { killed } = await closeCycleCountFromAddOn(
+    pool,
+    tenantId,
+    cycleCountSessionId,
+    addOnFoundEpcs,
+    null,
+  );
+  return { killed };
 }
 
 /** Super-admin re-open: clears completion (Q29 lock — events table preserves history). */

@@ -7,8 +7,8 @@ import {
   type DefectiveEpcRow,
 } from "@/lib/server/upload-defective-epcs";
 import {
+  closeCycleCountFromAddOn,
   markSourceCompleted,
-  reconcileCycleCountWithAddOn,
   type ScanSourceType,
 } from "@/lib/queries/scan-sources";
 
@@ -522,38 +522,53 @@ export async function finalizeScanSession(
 
     /* ---- 6. Mark Add-On source completed + link session → report ---- */
     if (input.screen === "add_on_count" && input.addOnSourceId && input.addOnSourceType) {
-      await markSourceCompleted(
-        pool,
-        input.tenantId,
-        input.addOnSourceType,
-        input.addOnSourceId,
-        input.userId,
-      );
-      // Cycle count reconcile: when the source was a cycle_count session,
-      // close it AND kill anything still-missing after both passes (the
-      // fixed-reader cycle count + this handheld add-on). markSourceCompleted
-      // already flipped status → committed; this step handles the items
-      // table mutation for EPCs that BOTH passes failed to find.
-      // Add-on-found EPCs are already in-stock from the per-EPC ingest above.
       if (input.addOnSourceType === "cycle_count") {
+        // Cycle-count: one combined close that flips status → committed,
+        // stamps completed_at + add_on_completed_*, closes any open
+        // scan_periods entry (otherwise the workspace timeline keeps
+        // showing the count as "still scanning"), populates
+        // variance_summary (so the workspace Variance tab is filled in
+        // when the operator opens it from History), and kills the truly-
+        // missing EPCs (in expected but found in neither pass) by
+        // flipping them to items.status='unknown'.
         try {
-          const { killed } = await reconcileCycleCountWithAddOn(
+          const result = await closeCycleCountFromAddOn(
             pool,
             input.tenantId,
             input.addOnSourceId,
             epcsScanned,
+            input.userId,
           );
-          if (killed > 0) {
+          if (result.killed > 0) {
             console.info(
-              "[scan-finalize] reconcile killed",
-              killed,
+              "[scan-finalize] cycle-count add-on close killed",
+              result.killed,
               "EPCs still missing after cycle-count + add-on",
-              { cycleCountSessionId: input.addOnSourceId },
+              {
+                cycleCountSessionId: input.addOnSourceId,
+                matched: result.matched,
+                missing: result.missing,
+              },
             );
           }
         } catch (e) {
-          console.warn("[scan-finalize] reconcile failed (continuing)", e);
+          // Don't fail the whole upload if the close fails; the items
+          // ingest above already committed and the inventory_reports row
+          // is in. Log loud so this is visible in Coolify logs.
+          console.error(
+            "[scan-finalize] cycle-count add-on close failed",
+            e,
+            { cycleCountSessionId: input.addOnSourceId },
+          );
         }
+      } else {
+        await markSourceCompleted(
+          pool,
+          input.tenantId,
+          input.addOnSourceType,
+          input.addOnSourceId,
+          input.userId,
+        );
       }
     }
     if (input.addOnSessionId) {
