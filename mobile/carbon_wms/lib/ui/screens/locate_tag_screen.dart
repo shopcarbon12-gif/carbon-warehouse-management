@@ -151,6 +151,18 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // sink. Setting it here closes that window — and we re-assert it on
     // every scan toggle for belt-and-braces safety.
     unawaited(ScanSounds.instance.init());
+    // CRITICAL for Locate UX: silence the native per-tag-read beep that
+    // ScanSoundPool fires from inside CarbonChainwayRfidController.emitEpc
+    // / CarbonZebraRfidController.emitTag. Without this, every tag in the
+    // antenna's field fires a beep — at 8 dBm in a packed bin area the
+    // operator gets a constant rattle that swamps the proximity beep
+    // _playBeep() drives. Result the operator sees today: "beeping like
+    // crazy without logic, doesn't slow/speed when I pull away." With
+    // this suppressed the only beep is _scheduleBeeps' proximity-driven
+    // cadence (target match only), which actually correlates with the %
+    // bar. Restored on dispose so Count / Status Change / Encode still
+    // get their per-tag beep.
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     // Lock the device to RFID-only mode on entry. Geiger search uses 2D;
     // when the operator picks a result and lands here we must flip the
     // trigger back to UHF and physically close the 2D engine on Chainway
@@ -189,6 +201,9 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     unawaited(_triggerSub?.cancel());
     unawaited(_rfid?.stopLocateScanning());
     unawaited(_audio.dispose());
+    // Restore the per-tag native beep so Count / Status Change / etc.
+    // get their feedback back on the next screen.
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
     // Re-open the 2D engine so the next screen (which may need barcode
     // scanning) doesn't inherit a powered-off imager.
     unawaited(RfidVendorChannel.open2dBarcode());

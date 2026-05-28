@@ -405,19 +405,34 @@ class CarbonZebraRfidController(
   fun setAntennaPowerDbm(dbm: Int) {
     executor.execute {
       val clamped = dbm.coerceIn(0, 30)
-      requestedPowerDbm.set(clamped)
+      val prior = requestedPowerDbm.getAndSet(clamped)
+      if (prior == clamped) {
+        // Idempotent dedupe. MobileSettingsRepository.setGlobalAntennaPower
+        // double-fires this (direct push AND notifyListeners → RfidManager
+        // .reapplyHandheldHardwareSettings → setAntennaPowerDbm again).
+        // Without the dedupe, a single Dart slider release queues TWO
+        // full stop+setAntennaRfConfig+perform cycles. Each cycle drops
+        // ~1 s of buffered tags (line 1075 drainage), so the operator
+        // gets a stutter + extra beep flurry every drag.
+        return@execute
+      }
       val r = reader
       if (r == null || !r.isConnected) {
-        Log.d(TAG, "setAntennaPowerDbm($clamped) deferred: reader not connected")
+        Log.d(TAG, "setAntennaPowerDbm($clamped) deferred: reader not connected (will apply on next start)")
         return@execute
       }
       // RFD8500 firmware rejects setAntennaRfConfig while Inventory is
-      // streaming with OperationFailureException → the previous
-      // applyTransmitPowerDbm swallowed that error, so the operator could
-      // drag the slider in-screen with scan ON and see no change in dBm at
-      // the radio. Pause + apply + resume around the config write.
+      // streaming with OperationFailureException, so we pause + apply +
+      // resume around the config write. CRITICAL: flip inventoryActive
+      // false BEFORE Actions.Inventory.stop() so the up-to-1 s of
+      // buffered tags the SDK drains post-stop (see line 1075's "buffered
+      // tags for up to 1s after .stop()" comment) get gated off by the
+      // eventReadNotify guard at line 1077. Without this the operator
+      // sees a beep flurry every slider change even though they think
+      // they're pausing. Flip back true AFTER successful perform.
       val wasRunning = inventoryActive
       if (wasRunning) {
+        inventoryActive = false
         try {
           r.Actions.Inventory.stop()
         } catch (e: Exception) {
@@ -425,10 +440,16 @@ class CarbonZebraRfidController(
         }
       }
       val ok = applyTransmitPowerDbm(r)
-      Log.d(TAG, "setAntennaPowerDbm($clamped) appliedOk=$ok wasRunning=$wasRunning")
+      Log.d(TAG, "setAntennaPowerDbm($clamped) prior=$prior appliedOk=$ok wasRunning=$wasRunning")
       if (wasRunning) {
         try {
           r.Actions.Inventory.perform()
+          // Only flip the gate back true AFTER perform returns without
+          // throwing. The old code left this to "inventoryActive stays
+          // whatever it was", relying on the variable never having been
+          // touched — that broke as soon as we (correctly) cleared it
+          // before stop above. Be explicit.
+          inventoryActive = true
         } catch (e: Exception) {
           Log.w(TAG, "setAntennaPowerDbm: post-apply Inventory.perform failed: ${e.message}")
           // Surfaces in lastError so the diagnostics card and the count

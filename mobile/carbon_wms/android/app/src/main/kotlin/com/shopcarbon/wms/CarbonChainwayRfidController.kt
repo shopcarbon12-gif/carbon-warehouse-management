@@ -164,42 +164,43 @@ class CarbonChainwayRfidController(private val context: Context) {
     executor.execute {
       val clamped = dbm.coerceIn(5, 23)
       val prior = requestedPowerDbm.getAndSet(clamped)
-      // Caller (RfidPowerSlider) already debounces, so this runs once per
-      // drag — safe to actually push to the chip here. The earlier
-      // "no-op" comment was a workaround for the C72E MTK firmware wedge
-      // that fires when setPower is called while inventory is streaming.
-      // The encode-write path proved setPower works post-init AS LONG AS
-      // inventory is stopped first (see performWriteEpc's setCW(0) →
-      // setPower(low) → setPower(slider) sequence). Mirror that here so
-      // the slider actually moves the chip.
-      val reader = uhfReader
-      if (reader == null) {
-        Log.d(TAG, "setAntennaPowerDbm($clamped) deferred: uhfReader not initialised (will apply on next chip init)")
+      if (prior == clamped) {
+        // Idempotent. Dedupe the double-fire that MobileSettingsRepository
+        // .setGlobalAntennaPower causes (it both writes prefs+native AND
+        // calls notifyListeners which triggers RfidManager.reapplyHandheld
+        // HardwareSettings → another setAntennaPowerDbm). With the Dart-
+        // side slider already debounced to 250 ms, the only remaining
+        // doubling is this listener path — skip when the value didn't
+        // actually change.
         return@execute
       }
-      val wasScanning = scanning.get()
-      if (wasScanning) {
-        // Stop inventory first — Chainway MTK rejects setPower mid-stream
-        // with an apparent success that wedges the chip into "transmits
-        // nothing" mode (the original 1.2.16 symptom this fn was put in
-        // place to avoid). stopInventory + setPower + restart is the
-        // safe pattern.
-        runCatching { reader.stopInventory() }
-      }
-      val powerOk = runCatching { reader.setPower(clamped) }.getOrDefault(false)
-      Log.d(TAG, "setAntennaPowerDbm($clamped) prior=$prior chipApplied=$powerOk wasScanning=$wasScanning")
-      // Also keep the reflective-UART path in sync for the uartOwned
-      // branch (no-op when uhfClass/uhfInstance are null, which is the
-      // default SDK path).
+      // REVERTED 2026-05-29: cache-only update. The 1.2.80 "fix" inserted
+      // a stop + setPower + startInventoryTag sandwich here, which looked
+      // safe but actually re-introduced the C72E MTK firmware wedge that
+      // line 530-533 (dead-air watchdog comment) explicitly warns against:
+      // "The cycle does NOT touch setPower (which is the path that wedges
+      // this chip)". Symptom matches what the operator reported on
+      // 1.2.80 — at "8 dBm" the radio keeps reading like nothing changed,
+      // then mid-trigger the beeping stops (chip wedged into
+      // "startInventoryTag returns true but firmware never transmits"
+      // state). The dead-air kicker (stop → 40 ms sleep → start, no
+      // setPower) CANNOT recover from a setPower wedge — only
+      // reader.free() + a full re-init does, and we don't run that on
+      // every slider tick.
+      //
+      // Where the cached value gets applied: initUhfReaderDirect() reads
+      // requestedPowerDbm.get() at line 312 and calls instance.setPower
+      // once on chip init. So a slider change here takes effect at the
+      // next init boundary — app restart or RfidManager.useChainway()
+      // re-swap. Not ideal UX-wise, but the alternative is a wedged
+      // radio mid-locate.
+      //
+      // applyPower() exists for the reflective-UART branch (uartOwned =
+      // true). It returns early when uhfClass / uhfInstance are null,
+      // which is the default SDK path on this device — so it's a no-op
+      // in practice. Kept for completeness.
+      Log.d(TAG, "setAntennaPowerDbm($clamped) cached prior=$prior (chip apply deferred to next init — MTK setPower-wedge guard)")
       applyPower()
-      if (wasScanning) {
-        // Restart inventory so the operator's active scan doesn't
-        // permanently die because they touched the slider. Use the
-        // no-arg form to match the surrounding code (line 577, 964,
-        // 1023) — the (0,0,0) overload exists on this SDK but the
-        // no-arg variant is the one the working scan paths take.
-        runCatching { reader.startInventoryTag() }
-      }
     }
   }
 
