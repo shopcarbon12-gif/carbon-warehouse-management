@@ -2,14 +2,11 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:math' as math;
 
-import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import 'package:carbon_wms/audio/geiger_beep_wav.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
@@ -84,9 +81,6 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     with TickerProviderStateMixin {
   static final RegExp _epc24 = RegExp(r'^[0-9A-F]{24}$');
 
-  late final AudioPlayer _audio;
-  Uint8List? _beepBytes;
-
   RfidManager? _rfid;
   StreamSubscription<RfidTagRead>? _readSub;
   StreamSubscription<String>? _triggerSub;
@@ -131,10 +125,6 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   @override
   void initState() {
     super.initState();
-    _audio = AudioPlayer()
-      ..setReleaseMode(ReleaseMode.stop)
-      ..setPlayerMode(PlayerMode.lowLatency);
-    _beepBytes = buildGeigerBeepWav();
     _sweep = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
@@ -200,7 +190,6 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     unawaited(_readSub?.cancel());
     unawaited(_triggerSub?.cancel());
     unawaited(_rfid?.stopLocateScanning());
-    unawaited(_audio.dispose());
     // Restore the per-tag native beep so Count / Status Change / etc.
     // get their feedback back on the next screen.
     unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
@@ -341,10 +330,11 @@ class _LocateTagScreenState extends State<LocateTagScreen>
         _targetReads += 1;
         if (read.rssi == null) _nullRssiReads += 1;
       });
-      // Drive the proximity bloom — animates 0..1 → halo grows / glow gets
-      // brighter as the operator closes in. Smoother than direct setState
-      // because the controller eases between values.
-      _bloom.animateTo(_proximity01, duration: const Duration(milliseconds: 180));
+      // Drive the proximity bloom — halo grows / glow gets brighter as
+      // the operator closes in. Tightened from 180 -> 100 ms so the halo
+      // tracks aim changes within roughly two RFD8500 read frames, which
+      // is what gives the screen its "live" feel during sweeps.
+      _bloom.animateTo(_proximity01, duration: const Duration(milliseconds: 100));
       return;
     }
     setState(() => _otherReads += 1);
@@ -361,26 +351,25 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   }
 
   /// Decay the target proximity if we haven't heard from the tag in a while.
-  /// Pre-1.2.39 used a 750 ms window which made the meter look broken when
-  /// the reader's tag-rate dipped to 1 Hz on weak signals. 1500 ms keeps
-  /// the dial steady on real-world reads.
+  /// 120 ms tick + 700 ms staleness window means the meter starts fading
+  /// within one beat of the operator pointing away — the previous 250 ms
+  /// tick + 1500 ms threshold felt "sticky" because the bar held its old
+  /// value while the operator was already searching elsewhere.
   void _scheduleStaleSweep() {
     _staleTimer?.cancel();
-    _staleTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+    _staleTimer = Timer.periodic(const Duration(milliseconds: 120), (_) {
       if (!mounted || !_scanning) return;
       final last = _lastTargetReadAt;
       if (last == null) return;
       final age = DateTime.now().difference(last).inMilliseconds;
-      if (age > 1500 && _proximity01 > 0) {
-        // Smooth decay rather than hard reset to 0 — 0.85x per tick → reaches
-        // ~0.05 in 1.5s of silence, feels like the signal "fading out".
-        final next = (_proximity01 * 0.85);
+      if (age > 700 && _proximity01 > 0) {
+        final next = (_proximity01 * 0.80);
         setState(() {
           _proximity01 = next < 0.04 ? 0 : next;
           if (_proximity01 == 0) _liveRssi = null;
         });
         _bloom.animateTo(_proximity01,
-            duration: const Duration(milliseconds: 220));
+            duration: const Duration(milliseconds: 120));
       }
     });
   }
@@ -390,32 +379,45 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     void tick() {
       if (!_scanning || !mounted) return;
       if (_proximity01 <= 0.02) {
-        // Out of range — silent, only the radar sweep continues.
-        _beepTimer = Timer(const Duration(milliseconds: 220), tick);
+        // Out of range — silent, only the radar sweep continues. Re-check
+        // soon so the first matched read fires a beep with minimal lag.
+        _beepTimer = Timer(const Duration(milliseconds: 180), tick);
         return;
       }
-      unawaited(_playBeep(_proximity01));
-      const minMs = 60;
-      const maxMs = 820;
-      final delayMs =
-          (maxMs - _proximity01 * (maxMs - minMs)).round().clamp(minMs, maxMs);
-      _beepTimer = Timer(Duration(milliseconds: delayMs), tick);
+      _playProximityBeep(_proximity01);
+      _beepTimer = Timer(
+        Duration(milliseconds: _beepDelayMs(_proximity01)),
+        tick,
+      );
     }
 
     tick();
   }
 
-  Future<void> _playBeep(double proximity) async {
-    final bytes = _beepBytes;
-    if (bytes == null) return;
-    final volume = (0.30 + 0.70 * proximity).clamp(0.0, 1.0);
-    try {
-      await _audio.stop();
-      await _audio.setVolume(volume);
-      await _audio.play(BytesSource(bytes));
-    } catch (_) {
-      /* audio unavailable — silent fallback */
+  /// Piecewise cadence per operator design:
+  ///   * `[0, 0.9)`   slow band — linear 700 -> 350 ms. A steady "blip
+  ///     blip" that doesn't feel frantic until the operator is genuinely
+  ///     close.
+  ///   * `[0.9, 1.0]` fast band — linear 200 -> 60 ms. Reserved for the
+  ///     last 10 % of proximity so the rapid chirp is the unambiguous
+  ///     "you're on top of the tag" cue.
+  int _beepDelayMs(double p) {
+    if (p < 0.9) {
+      return (700 - (p / 0.9) * 350).round().clamp(350, 700);
     }
+    return (200 - ((p - 0.9) / 0.1) * 140).round().clamp(60, 200);
+  }
+
+  /// Proximity beep routed through the native SoundPool (same path that
+  /// already drives start/stop/success/error cues reliably). The
+  /// audioplayers BytesSource path the screen used pre-1.2.87 was
+  /// silently no-oping in release builds on some devices — the native
+  /// SoundPool sample (registered as ScanCue.read) is short, low-latency,
+  /// and unaffected by `setTagBeepSuppressed`, which only gates the
+  /// auto-beep the SDK fires per raw tag read.
+  void _playProximityBeep(double proximity) {
+    final volume = (0.35 + 0.65 * proximity).clamp(0.0, 1.0);
+    ScanSounds.instance.play(ScanCue.read, volume: volume);
   }
 
   // ── UI ────────────────────────────────────────────────────────────────────
@@ -811,7 +813,6 @@ class _RadarVisualizer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pct = (proximity01 * 100).round();
     return AspectRatio(
       aspectRatio: 1,
       child: LayoutBuilder(
@@ -823,16 +824,13 @@ class _RadarVisualizer extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Outer faint disc — establishes the radar "field"
                 Container(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: AppColors.primary.withValues(alpha: 0.04),
                   ),
                 ),
-                // Three faint range circles (no animation, subtle reference)
                 ..._rangeCircles(size),
-                // Bloom halo — scales + glows with proximity
                 AnimatedBuilder(
                   animation: bloom,
                   builder: (_, __) {
@@ -856,7 +854,6 @@ class _RadarVisualizer extends StatelessWidget {
                     );
                   },
                 ),
-                // Rotating sweep cone
                 if (scanning)
                   AnimatedBuilder(
                     animation: sweep,
@@ -868,8 +865,22 @@ class _RadarVisualizer extends StatelessWidget {
                       ),
                     ),
                   ),
-                // Central dial
-                _CoreDial(percent: pct),
+                // Central dial — TweenAnimationBuilder catches the displayed
+                // percent up smoothly between RFID reads instead of jumping
+                // step-by-step. End updates on every rebuild; Flutter
+                // continues the tween from the current animated value, so
+                // the number counts up/down through every intermediate
+                // integer instead of batching from 30 % straight to 60 %.
+                TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0, end: proximity01),
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  builder: (_, animatedProximity, __) {
+                    return _CoreDial(
+                      percent: (animatedProximity * 100).round(),
+                    );
+                  },
+                ),
               ],
             ),
           );

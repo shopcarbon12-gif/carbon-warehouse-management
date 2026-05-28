@@ -699,12 +699,10 @@ class _EncodeScreenState extends State<EncodeScreen> {
 
   Future<void> _resetToScan() async {
     // Tear down 2D imager mode if the pickSku phase enabled it, re-arm
-    // RFID, clear the working list, and start a fresh inventory pass.
-    // Operator asked REFRESH to be a true "new session": fresh state +
-    // radio already running, so the next chip in range gets read without
-    // a separate trigger pull.
+    // RFID, clear the working list. The radio is left STOPPED and the
+    // streams re-attached so the operator's next trigger pull starts
+    // a fresh inventory pass — REFRESH should not be a hidden trigger.
     await _disableSearchScanner();
-    // Make sure any inflight inventory is stopped before we restart it.
     await _stopInventory();
     if (!mounted) return;
     setState(() {
@@ -722,15 +720,14 @@ class _EncodeScreenState extends State<EncodeScreen> {
       _tags.clear();
     });
     // Re-assert RFID-only trigger mode + push the slider's dBm so the
-    // radio starts at the operator's chosen power, not whatever the
-    // 2D-imager setup or post-encode teardown left it at.
+    // radio is ready the moment the operator pulls the trigger, not
+    // whatever the 2D-imager setup or post-encode teardown left it at.
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(RfidVendorChannel.close2dBarcode());
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     unawaited(RfidVendorChannel.setAntennaPowerDbm(_powerDbm));
     _attachTagAndTriggerStreams();
-    await _startInventory();
   }
 
   void _goToPickSku() {

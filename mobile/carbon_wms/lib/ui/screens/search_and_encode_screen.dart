@@ -75,6 +75,11 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
   @override
   void initState() {
     super.initState();
+    // Silence the native per-tag beep — re-encode is only supposed to
+    // beep on success/fail of the actual rewrite, never on raw reads
+    // (and especially not on the foreign EPCs we silently drop in
+    // _onTagRead's C-prefix filter).
+    unawaited(_sounds.setTagBeepSuppressed(true));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       context.read<RfidManager>().scanContext = 'RE_ENCODE';
@@ -162,6 +167,9 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     unawaited(_triggerSub?.cancel());
     unawaited(_rfid?.stopLocateScanning());
     _sounds.stopAll();
+    // Restore the per-tag native beep for downstream screens (count /
+    // status change / etc rely on it firing for every read).
+    unawaited(_sounds.setTagBeepSuppressed(false));
     // Reopen the 2D engine for the next screen, but don't pre-enable the
     // trigger relay — Bin Assign / Fast Putaway own their own setup, and
     // pre-enabling it here lit the 2D laser on the next RFID-only screen's
@@ -364,14 +372,23 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     if (!_running || _paused) return;
     final epc = read.epcHex24;
     if (epc.isEmpty) return;
+    // STRICT re-encode filter: only legacy C-prefix tags (C1*/C2*/C3*)
+    // are eligible to be rewritten. Every other EPC is silently dropped —
+    // no rebuild, no beep, no light, no _seen entry, no _readCount bump,
+    // no processTag. With native per-tag beep already suppressed in
+    // initState, this means a Carbon-prefix or foreign tag in the
+    // antenna's field is invisible to the operator on this screen.
+    final upper = epc.toUpperCase();
+    if (!(upper.startsWith('C1') ||
+        upper.startsWith('C2') ||
+        upper.startsWith('C3'))) {
+      return;
+    }
     if (read.rssi != null) _liveRssi = read.rssi;
     if (!_seen.add(epc)) {
-      // Duplicate sighting — no UI change needed, skip the rebuild entirely.
       return;
     }
     setState(() => _readCount += 1);
-    // Re-Encode screen is intentionally silent per-EPC; only start/stop/success/error
-    // cues play here. Count still beeps per tag.
     unawaited(_processTag(epc));
   }
 
@@ -681,7 +698,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     const summaryBoxHeight = 60.0;
 
     return CarbonScaffold(
-      pageTitle: 'encode',
+      pageTitle: 'reencode',
       actions: [
         IconButton(
           icon: const Icon(Icons.settings_outlined),
