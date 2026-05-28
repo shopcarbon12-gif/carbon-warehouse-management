@@ -354,9 +354,16 @@ class MainActivity : FlutterFragmentActivity() {
   }
 
   override fun onDestroy() {
-    if (!isChangingConfigurations && isFinishing) {
-      SessionPrefsBridge.clearWmsSessionToken(this)
-    }
+    // Intentionally no SessionPrefsBridge.clearWmsSessionToken call here.
+    // The previous condition (`!isChangingConfigurations && isFinishing`) was
+    // intended to log the operator out only on explicit back-press / finish().
+    // On Samsung One UI the activity can finish for reasons that look benign
+    // to the user (system memory pressure, foreground service handoff), and
+    // wiping the token there racks up "Dashboard: http 401" right after the
+    // next launch because /api/mobile/status is androidId-keyed and doesn't
+    // require the Bearer to answer authorized:true. The explicit Logout
+    // buttons in DeviceLockScreen / DashboardScreen are the supported way to
+    // end the session; the JWT's own 7-day TTL bounds the worst case.
     ScanSoundPool.shared = null
     zebraController?.dispose()
     chainwayController?.dispose()

@@ -57,10 +57,18 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <service
-            android:name=".TaskRemovedSessionService"
-            android:exported="false"
-            android:stopWithTask="false" />
+        <!-- TaskRemovedSessionService used to clear the WMS session token via
+             SessionPrefsBridge whenever Android marked the task as removed.
+             That behaved well on the Chainway C72E (kiosk launcher pins the
+             app, onTaskRemoved only ever fires on a real swipe-from-recents),
+             but on consumer Android (Samsung One UI, Motorola) the OS routinely
+             "remove task" / kills the backgrounded app under memory pressure —
+             ActivityManager fires onTaskRemoved, the bridge wipes the token,
+             and the next launch lands the operator on the Dashboard with no
+             Bearer (because /api/mobile/status is public and answers
+             authorized:true by androidId alone), so every /api/* call below
+             returns 401. Logout button + explicit DeviceLockScreen still
+             clear the token through the Dart side. -->
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
