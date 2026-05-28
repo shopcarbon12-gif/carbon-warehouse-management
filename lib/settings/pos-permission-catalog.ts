@@ -48,7 +48,18 @@ export const POS_PERMISSION_PAGES: PermissionPageDef[] = [
     label: "Customers",
     sections: [
       { id: "view", label: "View customers" },
-      { id: "edit", label: "Add / edit customers" },
+      // `edit` historically covered both add and edit; split per operator
+      // request 2026-05-28 so cashier roles can be granted "add new
+      // customer at checkout" without granting "edit existing customer
+      // records" (which can touch loyalty / store-credit balances).
+      //
+      // Existing role rows that have edit:"view" continue to be treated
+      // as granting both add and edit on the POS side — the role-modal
+      // hydrator surfaces them as such until an admin re-saves. New
+      // roles start with both add + edit defaulting to "view" the same
+      // way the merged section did.
+      { id: "add", label: "Add customer" },
+      { id: "edit", label: "Edit customer" },
       { id: "store_credit", label: "Adjust store credit" },
     ],
   },
