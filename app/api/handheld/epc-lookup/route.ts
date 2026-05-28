@@ -106,6 +106,31 @@ export async function POST(req: Request) {
     for (const row of r.rows) catalog.set(row.ls_system_id, row);
   }
 
+  // Per-EPC current items.status. Null = no items row exists yet, which
+  // is the "fresh EPC, will be ingested as in-stock on upload" case the
+  // mobile Count Inventory screen treats as a valid container (matches
+  // the LIVE-or-no-row classification documented in
+  // 019_clean_10_status_architecture.sql + 0080_unknown_status.sql).
+  //
+  // Scoped only by tenant — multiple locations of the same tenant can
+  // share an EPC over time (chip moves, gets re-encoded). Caller is
+  // responsible for treating "in-stock at another location" however they
+  // want; we just return the status string.
+  type ItemRow = { epc: string; status: string };
+  const itemStatus = new Map<string, string>();
+  const epcsForLookup = decoded.map((d) => d.epcHex);
+  if (epcsForLookup.length > 0) {
+    const r = await pool.query<ItemRow>(
+      `SELECT i.epc, i.status
+         FROM items i
+         INNER JOIN locations l ON l.id = i.location_id
+        WHERE l.tenant_id = $1::uuid
+          AND i.epc = ANY($2::text[])`,
+      [auth.tenantId, epcsForLookup],
+    );
+    for (const row of r.rows) itemStatus.set(row.epc, row.status);
+  }
+
   const rows = decoded.map((d) => {
     const cat = d.systemId ? catalog.get(d.systemId) : undefined;
     return {
@@ -118,6 +143,10 @@ export async function POST(req: Request) {
       color: cat?.color_code ?? null,
       size: cat?.size ?? null,
       productName: cat?.product_name ?? null,
+      // items.status for the chip. null when no items row exists for
+      // this EPC under this tenant — handheld treats that as "fresh,
+      // count as valid (upload promotes to in-stock)".
+      status: itemStatus.get(d.epcHex) ?? null,
     };
   });
 

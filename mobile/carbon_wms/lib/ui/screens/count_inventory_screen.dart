@@ -164,6 +164,27 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   /// to [_defectiveEpcs] without firing another lookup. Reset on session
   /// reset.
   final Set<String> _catalogMissingSystemIds = <String>{};
+  /// Per-EPC items.status returned by /api/handheld/epc-lookup. Stores
+  /// `null` when there's no items row for the EPC under this tenant —
+  /// which the user explicitly asked we treat as a valid container (the
+  /// upload will create the row at status='in-stock', see
+  /// 019_clean_10_status_architecture.sql + 0080_unknown_status.sql).
+  /// Any string value present here that is NOT 'in-stock' moves the EPC
+  /// out of its group and into [_defectiveEpcs] — only LIVE counts.
+  final Map<String, String?> _epcStatus = <String, String?>{};
+  /// EPCs that were added to a tentative group but whose items.status
+  /// hasn't been fetched yet. The status-batch timer drains this set in
+  /// chunks of up to 300.
+  final Set<String> _epcStatusPending = <String>{};
+  /// EPCs we've already resolved status for, so the timer doesn't loop
+  /// forever asking the server about them on every tick.
+  final Set<String> _epcStatusFetched = <String>{};
+  /// Periodic batch fetch for per-EPC items.status. 2 s cadence keeps
+  /// the round-trip count low while still classifying defectives within
+  /// a couple of beats of a scan landing.
+  Timer? _statusFetchTimer;
+  static const Duration _statusFetchInterval = Duration(seconds: 2);
+  static const int _statusFetchBatchMax = 300;
   final Map<String, Map<String, dynamic>> _assetCache =
       <String, Map<String, dynamic>>{};
   List<Map<String, String>> _locations = [];
@@ -261,6 +282,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _countAnimateTimer?.cancel();
     _uiFlushTimer?.cancel();
     _assetCachePersistTimer?.cancel();
+    _statusFetchTimer?.cancel();
     final rfid = _rfidManager;
     if (rfid != null) {
       rfid.suppressEdgeStreaming = false;
@@ -585,7 +607,85 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         unawaited(_resolveCatalog(sysIdStr, group));
       }
     }
+    // Enqueue this EPC for the per-EPC items.status check. The batch
+    // timer drains this set every 2 s. If status comes back as anything
+    // other than null (no row) or 'in-stock', the EPC gets pulled out
+    // of its group and dropped into _defectiveEpcs. This matches the
+    // user's rule: "only LIVE status counts; other statuses fall through
+    // the direction in 019 + 0080; no items row = include (upload will
+    // create as LIVE)."
+    if (!_epcStatusFetched.contains(normalized)) {
+      _epcStatusPending.add(normalized);
+    }
     // UI update happens via _uiFlushTimer at 150ms cadence; no per-tag setState.
+  }
+
+  // ── Per-EPC status batch fetch ─────────────────────────────────────────
+
+  /// Periodic batch lookup of items.status for the EPCs we've ingested
+  /// this session. The bulk endpoint (extended 2026-05-29) returns
+  /// `status: string | null` per EPC; null = no items row exists yet,
+  /// which we keep in the valid group (upload will create it at
+  /// status='in-stock').
+  void _scheduleStatusFetchTimer() {
+    _statusFetchTimer?.cancel();
+    _statusFetchTimer =
+        Timer.periodic(_statusFetchInterval, (_) => _fetchEpcStatusesBatch());
+  }
+
+  Future<void> _fetchEpcStatusesBatch() async {
+    if (!mounted) return;
+    if (_epcStatusPending.isEmpty) return;
+    // Take a chunk, leave the rest for the next tick. The server caps
+    // each call at 500 EPCs (lib/api/handheld/epc-lookup body schema).
+    final batch = _epcStatusPending.take(_statusFetchBatchMax).toList();
+    _epcStatusPending.removeAll(batch);
+    final api = context.read<WmsApiClient>();
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await api.lookupEpcs(batch);
+    } catch (_) {
+      // Network/transient — put them back and retry next tick.
+      _epcStatusPending.addAll(batch);
+      return;
+    }
+    if (!mounted) return;
+    final reclassify = <String>[];
+    for (final r in rows) {
+      final epc = (r['epcHex'] as String?)?.toUpperCase();
+      if (epc == null || epc.isEmpty) continue;
+      final raw = r['status'];
+      final status = raw is String && raw.trim().isNotEmpty ? raw : null;
+      _epcStatus[epc] = status;
+      _epcStatusFetched.add(epc);
+      // The user's classification rule: null (no items row) and 'in-stock'
+      // (LIVE) both count as valid containers; everything else is a
+      // defective scan that should drop out of the SKU group.
+      if (status != null && status != 'in-stock') {
+        reclassify.add(epc);
+      }
+    }
+    if (reclassify.isEmpty) return;
+    // Move the now-known-defective EPCs out of whatever group they were
+    // in. The set is small (typically 0..few per tick) so a linear scan
+    // across _groupedRows is fine. If a group ends up empty after the
+    // removal, drop the group entirely so the UI list stays clean.
+    setState(() {
+      for (final epc in reclassify) {
+        _defectiveEpcs.add(epc);
+        final emptiedGroups = <String>[];
+        _groupedRows.forEach((sysId, g) {
+          if (g.epcs.remove(epc)) {
+            g.qty = g.epcs.length;
+            if (g.epcs.isEmpty) emptiedGroups.add(sysId);
+          }
+        });
+        for (final id in emptiedGroups) {
+          _groupedRows.remove(id);
+        }
+      }
+    });
+    _syncDisplayedCounters();
   }
 
   Future<void> _resolveCatalog(String sysIdStr, _GroupedRow group) async {
@@ -800,6 +900,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!mounted) return;
     setState(() { _scanOn = true; });
     _startUiFlushTimer();
+    // Begin draining accumulated EPCs through the bulk
+    // /api/handheld/epc-lookup so we learn each EPC's items.status as
+    // they're scanned. Reclassifies any EPC whose status is something
+    // other than null or 'in-stock' into the defective bucket.
+    _scheduleStatusFetchTimer();
   }
 
   String? _extractHardwareEpc(String raw) {
@@ -825,6 +930,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!mounted) return;
     setState(() { _scanOn = false; });
     unawaited(_playStopTone());
+    // Final pass on whatever was still pending in the status queue, so
+    // the Continue / Upload screen sees the operator's final defective
+    // count rather than a partially-classified intermediate state.
+    _statusFetchTimer?.cancel();
+    _statusFetchTimer = null;
+    unawaited(_fetchEpcStatusesBatch());
   }
 
   Future<bool> _confirmDeleteItem() async {
@@ -856,6 +967,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       _groupedRows.clear();
       _defectiveEpcs.clear();
       _catalogMissingSystemIds.clear();
+      _epcStatus.clear();
+      _epcStatusPending.clear();
+      _epcStatusFetched.clear();
     });
     _syncDisplayedCounters();
     unawaited(RfidVendorChannel.clearChainwaySeenEpcs());
