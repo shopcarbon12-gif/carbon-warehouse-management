@@ -374,21 +374,29 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     });
   }
 
+  /// Fast-poll cadence engine. The earlier design slept for the FULL
+  /// computed beep interval, so if the operator's aim closed from 30 %
+  /// to 95 % during a 700 ms slow-band wait the cadence didn't speed up
+  /// until the next beep fired — felt sluggish. This tick runs every
+  /// 40 ms and decides on each pass whether enough time has elapsed
+  /// since the previous beep at the CURRENT proximity. That keeps
+  /// cadence locked to actual proximity at ~40 ms granularity instead
+  /// of being a step behind.
+  DateTime _lastBeepAt = DateTime.fromMillisecondsSinceEpoch(0);
   void _scheduleBeeps() {
     _beepTimer?.cancel();
+    _lastBeepAt = DateTime.fromMillisecondsSinceEpoch(0);
     void tick() {
       if (!_scanning || !mounted) return;
-      if (_proximity01 <= 0.02) {
-        // Out of range — silent, only the radar sweep continues. Re-check
-        // soon so the first matched read fires a beep with minimal lag.
-        _beepTimer = Timer(const Duration(milliseconds: 180), tick);
-        return;
+      if (_proximity01 > 0.02) {
+        final now = DateTime.now();
+        final sinceLast = now.difference(_lastBeepAt).inMilliseconds;
+        if (sinceLast >= _beepDelayMs(_proximity01)) {
+          _playProximityBeep(_proximity01);
+          _lastBeepAt = now;
+        }
       }
-      _playProximityBeep(_proximity01);
-      _beepTimer = Timer(
-        Duration(milliseconds: _beepDelayMs(_proximity01)),
-        tick,
-      );
+      _beepTimer = Timer(const Duration(milliseconds: 40), tick);
     }
 
     tick();
@@ -865,16 +873,15 @@ class _RadarVisualizer extends StatelessWidget {
                       ),
                     ),
                   ),
-                // Central dial — TweenAnimationBuilder catches the displayed
-                // percent up smoothly between RFID reads instead of jumping
-                // step-by-step. End updates on every rebuild; Flutter
-                // continues the tween from the current animated value, so
-                // the number counts up/down through every intermediate
-                // integer instead of batching from 30 % straight to 60 %.
+                // Central dial — short 80 ms linear tween so the percent
+                // counts smoothly between reads without adding visible
+                // lag. The previous 220 ms easeOut felt sluggish on
+                // RFD8500 sweeps where the operator wants the number to
+                // track the radio in near-real-time.
                 TweenAnimationBuilder<double>(
                   tween: Tween<double>(begin: 0, end: proximity01),
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
+                  duration: const Duration(milliseconds: 80),
+                  curve: Curves.linear,
                   builder: (_, animatedProximity, __) {
                     return _CoreDial(
                       percent: (animatedProximity * 100).round(),
