@@ -513,6 +513,22 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         }
         return;
       }
+      // 1.2.79: drop expired vault tokens before saving them. Without this,
+      // a biometric "sign-in" silently restored a JWT past its 7-day TTL,
+      // the auth gate routed to the Dashboard (because /api/mobile/status
+      // is androidId-gated, not Bearer-gated), and every subsequent call
+      // 401-ed. Make the operator do one password sign-in to mint a fresh
+      // 7-day token; biometric setup re-fires automatically afterward.
+      if (WmsApiClient.jwtIsExpired(token)) {
+        await LoginCredentialsStore.clearVault();
+        await LoginCredentialsStore.setBiometricLoginEnabled(false);
+        if (mounted) {
+          _showLoginSnack(
+            'Your saved fingerprint session has expired. Sign in with password to restore biometric sign-in.',
+          );
+        }
+        return;
+      }
       await api.setBaseUrl(WmsApiClient.lockedServerUrl);
       await api.setSessionToken(token);
       // Biometric resume is also a "fresh login" boundary for the

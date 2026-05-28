@@ -176,9 +176,54 @@ class WmsApiClient {
   }
 
   /// Must match server `WMS_EDGE_INGEST_KEY` or `WMS_DEVICE_KEY`.
+  /// Returns the stored session JWT, or null if absent/empty/expired.
+  ///
+  /// Critical: also returns null (and wipes the prefs entry) when the JWT's
+  /// `exp` claim is in the past. Without this, a stale token from a prior
+  /// install survives the package upgrade (Android keeps SharedPreferences
+  /// across reinstalls of the same package name) and the auth gate routes
+  /// the operator to the Dashboard because `/api/mobile/status` is a
+  /// public endpoint that authorizes by `androidId` — it doesn't actually
+  /// verify the Bearer. Every session-gated call on the Dashboard then
+  /// rejects 401, surfacing as the "Dashboard: http 401" snackbar cascade
+  /// reported on Samsung S938U / Motorola Edge after the 1.2.7x reinstalls.
   Future<String?> getSessionToken() async {
     final p = await SharedPreferences.getInstance();
-    return p.getString(_prefsKeySession)?.trim();
+    final raw = p.getString(_prefsKeySession)?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    if (_jwtIsExpired(raw)) {
+      await p.remove(_prefsKeySession);
+      return null;
+    }
+    return raw;
+  }
+
+  /// True when the JWT's `exp` claim is at or before the current wall time.
+  /// Malformed/un-parseable tokens are treated as expired so the caller falls
+  /// back to a fresh login rather than sending a known-bad Bearer forever.
+  /// Signature is the server's responsibility; this is a pure local guard.
+  ///
+  /// Exposed publicly so the biometric login flow can drop expired vaulted
+  /// tokens with the same predicate the boot-time guard uses.
+  static bool jwtIsExpired(String token) => _jwtIsExpired(token);
+
+  static bool _jwtIsExpired(String token) {
+    final parts = token.split('.');
+    if (parts.length != 3) return true;
+    try {
+      var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      while (payload.length % 4 != 0) {
+        payload = '$payload=';
+      }
+      final json = jsonDecode(utf8.decode(base64.decode(payload)));
+      if (json is! Map<String, dynamic>) return true;
+      final exp = json['exp'];
+      if (exp is! num) return false; // No exp claim — treat as non-expiring.
+      final nowS = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      return exp.toInt() <= nowS;
+    } catch (_) {
+      return true;
+    }
   }
 
   Future<void> setSessionToken(String? token) async {
@@ -1340,9 +1385,11 @@ class WmsApiClient {
     try {
       final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
       final uri = Uri.parse('$base/api/dashboard/summary');
-      final res = await _http.get(uri, headers: await sessionAuthHeaders());
+      final headers = await sessionAuthHeaders();
+      final hasAuth = headers.containsKey('Authorization');
+      final res = await _http.get(uri, headers: headers);
       if (res.statusCode < 200 || res.statusCode >= 300) {
-        return {'__error': 'http ${res.statusCode}'};
+        return {'__error': 'http ${res.statusCode}${hasAuth ? '' : ' (no auth header)'}'};
       }
       final decoded = jsonDecode(res.body);
       if (decoded is Map<String, dynamic>) return decoded;

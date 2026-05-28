@@ -135,6 +135,24 @@ class _AppAuthGateState extends State<AppAuthGate> {
     }
 
     if (authorized || bypass) {
+      // 1.2.79: `/api/mobile/status` is in proxy.ts public-allowlist and can
+      // answer authorized:true by `androidId` alone (no Bearer required) when
+      // the device row is pre-authorized in WMS → Settings → Devices. That's
+      // intentional — it's the device gate, not the session gate. But it
+      // means we can reach this branch with a missing or expired JWT, in
+      // which case every session-gated Dashboard call below will 401. So
+      // re-check the token here; if it's gone (getSessionToken wipes
+      // expired tokens), force the operator back through login.
+      final tokenAfter = await api.getSessionToken();
+      if (tokenAfter == null || tokenAfter.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _loginKey++;
+            _phase = _Phase.login;
+          });
+        }
+        return;
+      }
       if (mounted) {
         setState(() => _phase = _Phase.dashboard);
         if (updateAvailable && downloadUrl != null && downloadUrl.isNotEmpty) {
