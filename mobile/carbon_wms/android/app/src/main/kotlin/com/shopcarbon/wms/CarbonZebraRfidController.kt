@@ -815,13 +815,29 @@ class CarbonZebraRfidController(
       val tgt = requestedPowerDbm.get().coerceIn(0, 30)
       val idx = indexClosestToDbm(levels, tgt).coerceIn(0, levels.size - 1)
       val maxRaw = levels.maxOrNull() ?: 0
-      val unit = if (maxRaw > 33) "centi-dBm" else "dBm"
+      // Three known scalings for RFIDReader.ReaderCapabilities.transmitPowerLevelValues:
+      //   maxRaw <=   33   →  values are dBm directly (RFD-x40 firmware).
+      //   maxRaw   ~ 300   →  values are deci-dBm — RFD8500 sled (1 unit = 0.1 dB,
+      //                       300 = 30.0 dBm). The previous heuristic lumped this
+      //                       in with centi-dBm and reported "3 dBm" picked while
+      //                       actually sending idx 300 to the radio → operator
+      //                       saw the slider do nothing at low values and the
+      //                       diagnostic line confused everything.
+      //   maxRaw >  330    →  values are centi-dBm (1 unit = 0.01 dB, 3000 = 30 dBm).
+      val (divisor, unit) = when {
+        maxRaw <= 33 -> 1 to "dBm"
+        maxRaw <= 330 -> 10 to "deci-dBm"
+        else -> 100 to "centi-dBm"
+      }
       val pickedRaw = levels[idx]
-      val pickedDbm = if (maxRaw > 33) pickedRaw / 100 else pickedRaw
+      val pickedDbm = pickedRaw / divisor
       val config = r.Config.Antennas.getAntennaRfConfig(1)
       config.setTransmitPowerIndex(idx)
-      config.setTari(0L)
-      config.setrfModeTableIndex(0L)
+      // Do NOT touch Tari or rfModeTableIndex on RFD8500 — setTari(0) was
+      // throwing OperationFailureException and rolling back the whole
+      // config write (the operator's power change with it). Leave both
+      // fields at whatever the radio's region profile chose at connect
+      // time; we only want the power index here.
       r.Config.Antennas.setAntennaRfConfig(1, config)
       Log.d(
         TAG,
@@ -829,10 +845,6 @@ class CarbonZebraRfidController(
       )
       true
     } catch (e: Exception) {
-      // Most common cause: setAntennaRfConfig called while inventory is
-      // streaming → BUSY / OperationFailureException. setAntennaPowerDbm
-      // now stops inventory before calling this, so a failure here means
-      // something else (lost BT link, region locked, etc.).
       Log.w(TAG, "applyTransmitPowerDbm failed: ${e.javaClass.simpleName}: ${e.message}")
       lastError = e.message ?: e.javaClass.simpleName
       false
@@ -842,12 +854,16 @@ class CarbonZebraRfidController(
   private fun indexClosestToDbm(levels: IntArray, targetDbm: Int): Int {
     val tgt = targetDbm.coerceIn(0, 30)
     val maxRaw = levels.maxOrNull() ?: return 0
-    val useCenti = maxRaw > 33
+    val divisor = when {
+      maxRaw <= 33 -> 1
+      maxRaw <= 330 -> 10
+      else -> 100
+    }
     var bestIdx = 0
     var bestErr = Int.MAX_VALUE
     for (i in levels.indices) {
       val v = levels[i]
-      val dbm = if (useCenti) v / 100 else v
+      val dbm = v / divisor
       val err = abs(dbm - tgt)
       if (err < bestErr) {
         bestErr = err
