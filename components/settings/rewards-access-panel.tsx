@@ -128,6 +128,7 @@ function RewardsUsersTab() {
         <table className="w-full min-w-[640px] border-collapse text-left">
           <thead>
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono uppercase tracking-wide">
+              <th className="px-3 py-3">Name</th>
               <th className="px-3 py-3">Email</th>
               <th className="px-3 py-3">Role</th>
               <th className="px-3 py-3">Password</th>
@@ -138,13 +139,13 @@ function RewardsUsersTab() {
           <tbody className="divide-y divide-[var(--wms-border)]/90">
             {!users ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
+                <td colSpan={6} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
                   Loading…
                 </td>
               </tr>
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
+                <td colSpan={6} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
                   No rewards users yet. Click&nbsp;
                   <span className="text-[var(--wms-fg)]">Add rewards user</span> to provision
                   the first one.
@@ -153,6 +154,11 @@ function RewardsUsersTab() {
             ) : (
               users.map((u) => (
                 <tr key={u.id} className="text-[var(--wms-fg)]">
+                  <td className="px-3 py-2.5 text-[var(--wms-fg)]">
+                    {[u.first_name, u.last_name].filter(Boolean).join(" ") || (
+                      <span className="text-[var(--wms-muted)]">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 font-mono text-xs">{u.email}</td>
                   <td className="px-3 py-2.5 text-[var(--wms-muted)]">
                     {u.rewards_role_name ?? "—"}
@@ -233,6 +239,8 @@ function RewardsUserCreateModal({
   onSaved: () => void;
 }) {
   const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
   const [roleName, setRoleName] = useState<"Super Admin" | "Manager">("Manager");
   const [busy, setBusy] = useState(false);
@@ -249,7 +257,13 @@ function RewardsUserCreateModal({
       const res = await fetch("/api/settings/access/rewards-users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, roleName }),
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          roleName,
+          firstName: firstName.trim() || undefined,
+          lastName: lastName.trim() || undefined,
+        }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(j.error ?? "Create failed");
@@ -288,6 +302,26 @@ function RewardsUserCreateModal({
                 className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
               />
             </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="grid gap-1">
+                <span className="text-[var(--wms-muted)]">First name</span>
+                <input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  maxLength={80}
+                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-[var(--wms-muted)]">Last name</span>
+                <input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  maxLength={80}
+                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                />
+              </label>
+            </div>
             <label className="grid gap-1">
               <span className="text-[var(--wms-muted)]">Password (min 6 chars)</span>
               <input
@@ -353,6 +387,8 @@ function RewardsUserEditModal({
 }) {
   const [rewardsRoleId, setRewardsRoleId] = useState<number | null>(user.rewards_role_id);
   const [isActive, setIsActive] = useState<boolean>(user.is_active);
+  const [firstName, setFirstName] = useState(user.first_name ?? "");
+  const [lastName, setLastName] = useState(user.last_name ?? "");
   const [resetPassword, setResetPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -372,6 +408,8 @@ function RewardsUserEditModal({
           rewardsRoleId,
           isActive,
           resetPassword: resetPassword || undefined,
+          firstName: firstName.trim() || null,
+          lastName: lastName.trim() || null,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -401,6 +439,26 @@ function RewardsUserEditModal({
             <span className="font-mono text-[var(--wms-fg)]">{user.email}</span>
           </p>
           <div className="mt-4 grid gap-3 font-mono text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="grid gap-1">
+                <span className="text-[var(--wms-muted)]">First name</span>
+                <input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  maxLength={80}
+                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-[var(--wms-muted)]">Last name</span>
+                <input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  maxLength={80}
+                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                />
+              </label>
+            </div>
             <label className="grid gap-1">
               <span className="text-[var(--wms-muted)]">Role</span>
               <select

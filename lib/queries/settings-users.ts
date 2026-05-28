@@ -5,6 +5,8 @@ import { sessionRoleFromUserRoleName } from "@/lib/auth/user-role-map";
 export type TenantUserListRow = {
   id: string;
   email: string;
+  first_name: string | null;
+  last_name: string | null;
   role_id: number | null;
   role_name: string | null;
   locations: { id: string; code: string; name: string }[];
@@ -17,6 +19,8 @@ export async function listTenantUsers(
   const r = await pool.query<{
     id: string;
     email: string;
+    first_name: string | null;
+    last_name: string | null;
     role_id: string | null;
     role_name: string | null;
     locations: unknown;
@@ -24,6 +28,8 @@ export async function listTenantUsers(
     `SELECT
        u.id::text,
        u.email,
+       u.first_name,
+       u.last_name,
        u.role_id::text,
        ur.name AS role_name,
        COALESCE(
@@ -41,13 +47,15 @@ export async function listTenantUsers(
      LEFT JOIN user_roles ur ON ur.id = u.role_id
      LEFT JOIN user_locations ul ON ul.user_id = u.id
      LEFT JOIN locations l ON l.id = ul.location_id AND l.tenant_id = $1::uuid
-     GROUP BY u.id, u.email, u.role_id, ur.name
+     GROUP BY u.id, u.email, u.first_name, u.last_name, u.role_id, ur.name
      ORDER BY lower(u.email) ASC`,
     [tenantId],
   );
   return r.rows.map((row) => ({
     id: row.id,
     email: row.email,
+    first_name: row.first_name,
+    last_name: row.last_name,
     role_id: row.role_id != null ? Number(row.role_id) : null,
     role_name: row.role_name,
     locations: Array.isArray(row.locations)
@@ -64,9 +72,13 @@ export async function createTenantUser(
     password: string;
     roleId: number;
     locationIds: string[];
+    firstName?: string | null;
+    lastName?: string | null;
   },
 ): Promise<{ ok: true; id: string; generatedPassword?: string } | { ok: false; code: "email_taken" }> {
   const email = input.email.trim().toLowerCase();
+  const firstName = input.firstName?.trim() || null;
+  const lastName = input.lastName?.trim() || null;
   const dup = await pool.query(`SELECT 1 FROM users WHERE lower(email) = lower($1) LIMIT 1`, [email]);
   if (dup.rows[0]) return { ok: false, code: "email_taken" };
 
@@ -75,10 +87,10 @@ export async function createTenantUser(
   try {
     await client.query("BEGIN");
     const ins = await client.query<{ id: string }>(
-      `INSERT INTO users (email, password_hash, role_id)
-       VALUES ($1, $2, $3::int)
+      `INSERT INTO users (email, password_hash, role_id, first_name, last_name)
+       VALUES ($1, $2, $3::int, $4, $5)
        RETURNING id::text`,
-      [email, hash, input.roleId],
+      [email, hash, input.roleId, firstName, lastName],
     );
     const uid = ins.rows[0]?.id;
     if (!uid) throw new Error("user insert failed");
@@ -125,7 +137,13 @@ export async function updateTenantUser(
   pool: Pool,
   tenantId: string,
   userId: string,
-  input: { roleId: number; locationIds: string[]; email?: string },
+  input: {
+    roleId: number;
+    locationIds: string[];
+    email?: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  },
 ): Promise<void> {
   const client = await pool.connect();
   try {
@@ -143,6 +161,18 @@ export async function updateTenantUser(
         userId,
         input.email.trim().toLowerCase(),
       ]);
+    }
+
+    // first/last name are independent of role/email — only write when the
+    // caller actually passed them (undefined = leave the column alone;
+    // explicit null/empty-string = clear it).
+    if (input.firstName !== undefined) {
+      const fn = input.firstName?.trim() || null;
+      await client.query(`UPDATE users SET first_name = $2 WHERE id = $1::uuid`, [userId, fn]);
+    }
+    if (input.lastName !== undefined) {
+      const ln = input.lastName?.trim() || null;
+      await client.query(`UPDATE users SET last_name = $2 WHERE id = $1::uuid`, [userId, ln]);
     }
 
     await client.query(`UPDATE users SET role_id = $2::int WHERE id = $1::uuid`, [

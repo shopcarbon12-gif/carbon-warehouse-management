@@ -267,6 +267,7 @@ function PosUsersTab() {
                   className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
                 />
               </th>
+              <th className="px-3 py-3">Name</th>
               <th className="px-3 py-3">Email</th>
               <th className="px-3 py-3">POS role</th>
               <th className="px-3 py-3">PIN</th>
@@ -278,13 +279,13 @@ function PosUsersTab() {
           <tbody className="divide-y divide-[var(--wms-border)]/90">
             {!users ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
+                <td colSpan={8} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
                   Loading…
                 </td>
               </tr>
             ) : users.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
+                <td colSpan={8} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
                   No POS users. Create employees in the POS back-office to populate this list.
                 </td>
               </tr>
@@ -299,6 +300,11 @@ function PosUsersTab() {
                       onChange={() => toggleSelect(u.id)}
                       className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
                     />
+                  </td>
+                  <td className="px-3 py-2.5 text-[var(--wms-fg)]">
+                    {[u.first_name, u.last_name].filter(Boolean).join(" ") || (
+                      <span className="text-[var(--wms-muted)]">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 font-mono text-xs">{u.email}</td>
                   <td className="px-3 py-2.5 text-[var(--wms-muted)]">
@@ -379,6 +385,8 @@ function PosManagerCreateModal({
   onSaved: () => void;
 }) {
   const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
   const [pin, setPin] = useState("");
   const [locationId, setLocationId] = useState<string>(locations[0]?.id ?? "");
@@ -388,7 +396,7 @@ function PosManagerCreateModal({
   const submit = async () => {
     setErr(null);
     if (!email.trim() || !password.trim() || !pin.trim() || !locationId) {
-      setErr("All fields are required");
+      setErr("Email, password, PIN, and location are required");
       return;
     }
     if (!/^\d{4}$/.test(pin)) {
@@ -409,6 +417,8 @@ function PosManagerCreateModal({
           password,
           pin,
           locationId,
+          firstName: firstName.trim() || undefined,
+          lastName: lastName.trim() || undefined,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -442,6 +452,26 @@ function PosManagerCreateModal({
               placeholder="store@shopcarbon.com"
             />
           </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-[var(--wms-muted)]">
+              First name
+              <input
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                maxLength={80}
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+              />
+            </label>
+            <label className="block text-[var(--wms-muted)]">
+              Last name
+              <input
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                maxLength={80}
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+              />
+            </label>
+          </div>
           <label className="block text-[var(--wms-muted)]">
             Password (min 6 chars)
             <input
@@ -523,6 +553,8 @@ function PosUserEditModal({
   const [isActive, setIsActive] = useState(user.is_active);
   const [pin, setPin] = useState("");
   const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState(user.first_name ?? "");
+  const [lastName, setLastName] = useState(user.last_name ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -541,6 +573,8 @@ function PosUserEditModal({
       const body: Record<string, unknown> = {
         posRoleId: posRoleId,
         isActive: isActive,
+        firstName: firstName.trim() || null,
+        lastName: lastName.trim() || null,
       };
       if (pin) body.resetPin = pin;
       if (password) body.resetPassword = password;
@@ -566,6 +600,26 @@ function PosUserEditModal({
         <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Edit POS user</h3>
         <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">{user.email}</p>
         <div className="mt-4 space-y-3 font-mono text-xs">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-[var(--wms-muted)]">
+              First name
+              <input
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                maxLength={80}
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+              />
+            </label>
+            <label className="block text-[var(--wms-muted)]">
+              Last name
+              <input
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                maxLength={80}
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+              />
+            </label>
+          </div>
           <label className="block text-[var(--wms-muted)]">
             POS role
             <select

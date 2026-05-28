@@ -10,6 +10,8 @@ const patchSchema = z.object({
   email: z.string().email().optional(),
   roleId: z.number().int().positive(),
   locationIds: z.array(z.string().uuid()),
+  firstName: z.string().trim().max(80).nullable().optional(),
+  lastName: z.string().trim().max(80).nullable().optional(),
 });
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -41,6 +43,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       email: parsed.data.email,
       roleId: parsed.data.roleId,
       locationIds: parsed.data.locationIds,
+      firstName: parsed.data.firstName,
+      lastName: parsed.data.lastName,
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

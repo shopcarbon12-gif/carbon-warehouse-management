@@ -81,9 +81,11 @@ export function UsersSettingsWorkspace() {
     if (!users?.length) return;
     const esc = (s: string) => (/[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
     const lines = [
-      ["Email", "Role", "Locations"].map(esc).join(","),
+      ["First name", "Last name", "Email", "Role", "Locations"].map(esc).join(","),
       ...users.map((u) =>
         [
+          u.first_name ?? "",
+          u.last_name ?? "",
           u.email,
           u.role_name ?? "—",
           u.locations.map((l) => `${l.code} ${l.name}`).join("; "),
@@ -300,6 +302,7 @@ export function UsersSettingsWorkspace() {
                       className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
                     />
                   </th>
+                  <th className="px-3 py-3">Name</th>
                   <th className="px-3 py-3">Email</th>
                   <th className="px-3 py-3">Role</th>
                   <th className="px-3 py-3">Locations</th>
@@ -309,7 +312,7 @@ export function UsersSettingsWorkspace() {
               <tbody className="divide-y divide-[var(--wms-border)]/90">
                 {!users ? (
                   <tr>
-                    <td colSpan={5} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
+                    <td colSpan={6} className="px-3 py-8 text-center font-mono text-xs text-[var(--wms-muted)]">
                       Loading…
                     </td>
                   </tr>
@@ -324,6 +327,11 @@ export function UsersSettingsWorkspace() {
                           onChange={() => toggleSelect(u.id)}
                           className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
                         />
+                      </td>
+                      <td className="px-3 py-2.5 text-[var(--wms-fg)]">
+                        {[u.first_name, u.last_name].filter(Boolean).join(" ") || (
+                          <span className="text-[var(--wms-muted)]">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 font-mono text-xs text-[var(--wms-fg)]">{u.email}</td>
                       <td className="px-3 py-2.5 text-[var(--wms-muted)]">{u.role_name ?? "—"}</td>
@@ -473,6 +481,8 @@ function UserFormModal({
   onSaved: () => void;
 }) {
   const [email, setEmail] = useState(initial?.email ?? "");
+  const [firstName, setFirstName] = useState(initial?.first_name ?? "");
+  const [lastName, setLastName] = useState(initial?.last_name ?? "");
   const [password, setPassword] = useState("");
   const [roleId, setRoleId] = useState<number>(initial?.role_id ?? roles[0]?.id ?? 0);
   const [locIds, setLocIds] = useState<Set<string>>(
@@ -518,6 +528,8 @@ function UserFormModal({
             email: email.trim(),
             roleId,
             locationIds: [...locIds],
+            firstName: firstName.trim() || null,
+            lastName: lastName.trim() || null,
           }),
         });
         const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -531,6 +543,8 @@ function UserFormModal({
             password: password.trim() || undefined,
             roleId,
             locationIds: [...locIds],
+            firstName: firstName.trim() || undefined,
+            lastName: lastName.trim() || undefined,
           }),
         });
         const j = (await res.json().catch(() => ({}))) as {
@@ -571,6 +585,28 @@ function UserFormModal({
               className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)] disabled:opacity-60"
             />
           </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-[var(--wms-muted)]">
+              First name
+              <input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                maxLength={80}
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+              />
+            </label>
+            <label className="block text-[var(--wms-muted)]">
+              Last name
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                maxLength={80}
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+              />
+            </label>
+          </div>
           {!initial ? (
             <label className="block text-[var(--wms-muted)]">
               Password (optional — auto-generated if empty)

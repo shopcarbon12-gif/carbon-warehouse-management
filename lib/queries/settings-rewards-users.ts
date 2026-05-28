@@ -17,6 +17,10 @@ export type RewardsUserListRow = {
   /** users.id (UUID, text). */
   id: string;
   email: string;
+  /** Identity columns shared with the WMS + POS user list (lives on the
+   *  shared `users` table, migration 040). */
+  first_name: string | null;
+  last_name: string | null;
   /** rewards_employees.id (SERIAL). Null means no rewards row yet. */
   rewards_employee_id: number | null;
   rewards_role_id: number | null;
@@ -38,6 +42,8 @@ export async function listTenantRewardsUsers(
   const r = await pool.query<{
     id: string;
     email: string;
+    first_name: string | null;
+    last_name: string | null;
     rewards_employee_id: number | null;
     rewards_role_id: number | null;
     rewards_role_name: string | null;
@@ -48,6 +54,8 @@ export async function listTenantRewardsUsers(
     `SELECT
        u.id::text,
        u.email,
+       u.first_name,
+       u.last_name,
        re.id                  AS rewards_employee_id,
        re.rewards_role_id,
        ur.name                AS rewards_role_name,
@@ -73,6 +81,8 @@ export async function updateTenantRewardsUser(
     rewardsRoleId: number | null;
     isActive: boolean;
     resetPassword?: string;
+    firstName?: string | null;
+    lastName?: string | null;
   },
 ): Promise<boolean> {
   const exists = await pool.query<{ exists: boolean }>(
@@ -104,6 +114,20 @@ export async function updateTenantRewardsUser(
     `UPDATE rewards_employees SET ${fields.join(", ")} WHERE user_id = $1::uuid`,
     params,
   );
+  // first/last name on the shared `users` table — kept in sync across the
+  // three Settings panels regardless of which one edited the row.
+  if (input.firstName !== undefined) {
+    await pool.query(`UPDATE users SET first_name = $2 WHERE id = $1::uuid`, [
+      userId,
+      input.firstName?.trim() || null,
+    ]);
+  }
+  if (input.lastName !== undefined) {
+    await pool.query(`UPDATE users SET last_name = $2 WHERE id = $1::uuid`, [
+      userId,
+      input.lastName?.trim() || null,
+    ]);
+  }
   return (r.rowCount ?? 0) > 0;
 }
 
@@ -123,6 +147,8 @@ export async function createTenantRewardsUser(
     email: string;
     password: string;
     roleName?: "Super Admin" | "Manager";
+    firstName?: string | null;
+    lastName?: string | null;
   },
 ): Promise<
   | { ok: true; id: string }
@@ -166,10 +192,15 @@ export async function createTenantRewardsUser(
     await client.query("BEGIN");
 
     const ins = await client.query<{ id: string }>(
-      `INSERT INTO users (email, password_hash)
-       VALUES ($1, $2)
+      `INSERT INTO users (email, password_hash, first_name, last_name)
+       VALUES ($1, $2, $3, $4)
        RETURNING id::text`,
-      [email, passwordHash],
+      [
+        email,
+        passwordHash,
+        input.firstName?.trim() || null,
+        input.lastName?.trim() || null,
+      ],
     );
     const uid = ins.rows[0]?.id;
     if (!uid) throw new Error("user insert failed");

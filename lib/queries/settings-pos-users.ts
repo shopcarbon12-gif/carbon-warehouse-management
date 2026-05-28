@@ -5,6 +5,10 @@ export type PosUserListRow = {
   /** users.id (UUID, text). The "POS user" is identified by user_id. */
   id: string;
   email: string;
+  /** Identity columns shared with the WMS + Rewards user list (lives on the
+   *  shared `users` table, migration 040). NULL = admin hasn't filled it in. */
+  first_name: string | null;
+  last_name: string | null;
   /** pos_employees.id (SERIAL). Null if the user has no pos_employees row yet. */
   pos_employee_id: number | null;
   pos_role_id: number | null;
@@ -73,6 +77,8 @@ export async function listTenantPosUsers(
   const r = await pool.query<{
     id: string;
     email: string;
+    first_name: string | null;
+    last_name: string | null;
     pos_employee_id: number | null;
     pos_role_id: number | null;
     pos_role_name: string | null;
@@ -85,6 +91,8 @@ export async function listTenantPosUsers(
     `SELECT
        u.id::text,
        u.email,
+       u.first_name,
+       u.last_name,
        pe.id           AS pos_employee_id,
        ${posRoleSelect},
        ${posRoleNameSelect} AS pos_role_name,
@@ -108,13 +116,15 @@ export async function listTenantPosUsers(
      ${posRoleJoin}
      LEFT JOIN user_locations ul ON ul.user_id = u.id
      LEFT JOIN locations l       ON l.id = ul.location_id AND l.tenant_id = $1::uuid
-     GROUP BY u.id, u.email, pe.id, ${groupExtras ? groupExtras + "," : ""} pe.role, pe.is_active, pe.pin_hash
+     GROUP BY u.id, u.email, u.first_name, u.last_name, pe.id, ${groupExtras ? groupExtras + "," : ""} pe.role, pe.is_active, pe.pin_hash
      ORDER BY lower(u.email) ASC`,
     [tenantId],
   );
   return r.rows.map((row) => ({
     id: row.id,
     email: row.email,
+    first_name: row.first_name,
+    last_name: row.last_name,
     pos_employee_id: row.pos_employee_id,
     pos_role_id: row.pos_role_id,
     pos_role_name: row.pos_role_name,
@@ -147,6 +157,8 @@ export async function updateTenantPosUser(
     isActive: boolean;
     resetPin?: string;
     resetPassword?: string;
+    firstName?: string | null;
+    lastName?: string | null;
   },
 ): Promise<boolean> {
   const exists = await pool.query<{ exists: boolean }>(
@@ -203,6 +215,20 @@ export async function updateTenantPosUser(
     `UPDATE pos_employees SET ${fields.join(", ")} WHERE user_id = $1::uuid`,
     params,
   );
+  // First/last name live on the shared `users` table — update independently
+  // of pos_employees so the WMS + Rewards panels see the same value.
+  if (input.firstName !== undefined) {
+    await pool.query(`UPDATE users SET first_name = $2 WHERE id = $1::uuid`, [
+      userId,
+      input.firstName?.trim() || null,
+    ]);
+  }
+  if (input.lastName !== undefined) {
+    await pool.query(`UPDATE users SET last_name = $2 WHERE id = $1::uuid`, [
+      userId,
+      input.lastName?.trim() || null,
+    ]);
+  }
   return (r.rowCount ?? 0) > 0;
 }
 
@@ -221,6 +247,8 @@ export async function createTenantPosManager(
     password: string;
     pin: string;
     locationId: string;
+    firstName?: string | null;
+    lastName?: string | null;
   },
 ): Promise<
   | { ok: true; id: string }
@@ -264,10 +292,15 @@ export async function createTenantPosManager(
     await client.query("BEGIN");
 
     const ins = await client.query<{ id: string }>(
-      `INSERT INTO users (email, password_hash)
-       VALUES ($1, $2)
+      `INSERT INTO users (email, password_hash, first_name, last_name)
+       VALUES ($1, $2, $3, $4)
        RETURNING id::text`,
-      [email, passwordHash],
+      [
+        email,
+        passwordHash,
+        input.firstName?.trim() || null,
+        input.lastName?.trim() || null,
+      ],
     );
     const uid = ins.rows[0]?.id;
     if (!uid) throw new Error("user insert failed");

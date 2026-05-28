@@ -35,6 +35,8 @@ const postSchema = z.object({
   password: z.string().min(6).max(128),
   pin: z.string().regex(/^\d{4}$/, "PIN must be 4 digits"),
   locationId: z.string().uuid(),
+  firstName: z.string().trim().max(80).optional(),
+  lastName: z.string().trim().max(80).optional(),
 });
 
 /**

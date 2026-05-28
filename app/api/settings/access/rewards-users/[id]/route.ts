@@ -13,6 +13,8 @@ const patchSchema = z.object({
   rewardsRoleId: z.number().int().positive().nullable(),
   isActive: z.boolean(),
   resetPassword: z.string().min(6).max(128).optional(),
+  firstName: z.string().trim().max(80).nullable().optional(),
+  lastName: z.string().trim().max(80).nullable().optional(),
 });
 
 /**

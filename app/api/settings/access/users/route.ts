@@ -28,6 +28,8 @@ const postSchema = z.object({
   password: z.string().min(8).optional(),
   roleId: z.number().int().positive(),
   locationIds: z.array(z.string().uuid()).default([]),
+  firstName: z.string().trim().max(80).optional(),
+  lastName: z.string().trim().max(80).optional(),
 });
 
 export async function POST(req: Request) {
@@ -55,6 +57,8 @@ export async function POST(req: Request) {
       password,
       roleId: parsed.data.roleId,
       locationIds: parsed.data.locationIds,
+      firstName: parsed.data.firstName ?? null,
+      lastName: parsed.data.lastName ?? null,
     });
     if (!result.ok) {
       return NextResponse.json({ error: "Email already in use" }, { status: 409 });

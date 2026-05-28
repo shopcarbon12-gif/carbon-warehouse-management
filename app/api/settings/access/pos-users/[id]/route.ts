@@ -19,6 +19,8 @@ const patchSchema = z.object({
   /** POS-specific password reset. Writes only to pos_employees.pos_password_hash;
    *  the user's WMS login (users.password_hash) is left alone. */
   resetPassword: z.string().min(6).max(128).optional(),
+  firstName: z.string().trim().max(80).nullable().optional(),
+  lastName: z.string().trim().max(80).nullable().optional(),
 });
 
 /**
@@ -56,6 +58,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       isActive: parsed.data.isActive,
       resetPin: parsed.data.resetPin,
       resetPassword: parsed.data.resetPassword,
+      firstName: parsed.data.firstName,
+      lastName: parsed.data.lastName,
     });
     if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ ok: true });

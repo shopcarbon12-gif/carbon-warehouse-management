@@ -35,6 +35,8 @@ const postSchema = z.object({
   email: z.string().email().max(256),
   password: z.string().min(6).max(128),
   roleName: z.enum(["Super Admin", "Manager"]).optional(),
+  firstName: z.string().trim().max(80).optional(),
+  lastName: z.string().trim().max(80).optional(),
 });
 
 /**
