@@ -1,7 +1,7 @@
 name: carbon_wms
 description: Carbon WMS rugged handheld client (Chainway & Zebra HAL).
 publish_to: "none"
-version: 1.2.81
+version: 1.2.82
 
 environment:
   sdk: ^3.5.0

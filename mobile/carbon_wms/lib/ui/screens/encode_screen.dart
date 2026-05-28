@@ -1219,7 +1219,12 @@ class _CountItemContainer extends StatelessWidget {
                 ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(8.w, 0, 12.w, 0),
+                  // widthFactor: 1 so Align sizes to its child instead of
+                  // trying to fill the Row's unbounded main axis (without
+                  // this, the slot triggers an "infinite size during layout"
+                  // assert → release-mode error widget paints white).
                   child: Align(
+                    widthFactor: 1,
                     alignment: tag.expanded
                         ? Alignment.topCenter
                         : Alignment.center,

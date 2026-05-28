@@ -655,6 +655,7 @@ class _TestItemContainer extends StatelessWidget {
                 Padding(
                   padding: EdgeInsets.fromLTRB(8.w, 0, 12.w, 0),
                   child: Align(
+                    widthFactor: 1,
                     alignment:
                         expanded ? Alignment.topCenter : Alignment.center,
                     child: Padding(
