@@ -1019,6 +1019,55 @@ class CarbonZebraRfidController(
   }
 
   /**
+   * Runtime session flip. Locate-Tag needs SESSION_S0 (tag responds on
+   * every query, no B-state quiet period) so the proximity meter
+   * actually tracks distance instead of bouncing every few seconds
+   * while the tag is in S1's silent state. All other screens use the
+   * default S1 picked at connect (better inventory throughput for
+   * multi-tag passes).
+   *
+   * Stops in-flight inventory before reconfiguring — Zebra throws
+   * OperationFailureException if you setSingulationControl while a
+   * stream is running.
+   */
+  fun setSingulationSession(useSessionZero: Boolean, result: MethodChannel.Result) {
+    executor.execute {
+      try {
+        val r = reader
+        if (r == null || !r.isConnected) {
+          mainHandler.post { result.success(false) }
+          return@execute
+        }
+        val wasActive = inventoryActive
+        if (wasActive) {
+          try { r.Actions.Inventory.stop() } catch (_: Exception) {}
+          inventoryActive = false
+        }
+        val target = if (useSessionZero) SESSION.SESSION_S0 else SESSION.SESSION_S1
+        var ok = false
+        try {
+          val sing = r.Config.Antennas.getSingulationControl(1)
+          sing.setSession(target)
+          sing.Action.setInventoryState(INVENTORY_STATE.INVENTORY_STATE_A)
+          sing.Action.setSLFlag(SL_FLAG.SL_ALL)
+          r.Config.Antennas.setSingulationControl(1, sing)
+          Log.d(TAG, "setSingulationSession: $target accepted")
+          ok = true
+        } catch (e: Exception) {
+          Log.w(TAG, "setSingulationSession: $target rejected (${e.javaClass.simpleName}: ${e.message})")
+        }
+        if (wasActive) {
+          try { r.Actions.Inventory.perform(); inventoryActive = true } catch (_: Exception) {}
+        }
+        mainHandler.post { result.success(ok) }
+      } catch (e: Exception) {
+        Log.w(TAG, "setSingulationSession threw: ${e.message}")
+        mainHandler.post { result.success(false) }
+      }
+    }
+  }
+
+  /**
    * Best-effort full teardown. Every step is guarded and every step is always
    * attempted, regardless of [RFIDReader.isConnected] — the earlier "only
    * disconnect if connected" gate left a half-open SPP socket on failed connects

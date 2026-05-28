@@ -160,6 +160,14 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
     unawaited(RfidVendorChannel.close2dBarcode());
+    // Flip Zebra radio to SESSION_S0 so the target tag re-responds on
+    // every inventory cycle. With the default S1 the tag goes silent
+    // for several seconds after the first read — at touching distance
+    // the proximity meter dropped to 80, 64, 51 % during those quiet
+    // periods even though nothing physically moved. S0 keeps the tag
+    // chattering continuously, so the dial stays pinned at 100 % when
+    // the operator is on top of it. Restored to S1 in dispose.
+    unawaited(RfidVendorChannel.setSingulationSession(useSessionZero: true));
     // Subscribe to the physical trigger immediately on entry so the very
     // first pull lights up the locate flow — count_inventory_screen does
     // the same. Trigger 'down' is the only thing we care about; 'up' is
@@ -190,6 +198,11 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     unawaited(_readSub?.cancel());
     unawaited(_triggerSub?.cancel());
     unawaited(_rfid?.stopLocateScanning());
+    // Restore Zebra inventory session back to S1 so the next screen's
+    // multi-tag passes (count, transfer, etc.) get the throughput they
+    // expect — S0 floods the read pipe with re-reads of every visible
+    // tag, which is the right thing for locate but wrong for inventory.
+    unawaited(RfidVendorChannel.setSingulationSession(useSessionZero: false));
     // Restore the per-tag native beep so Count / Status Change / etc.
     // get their feedback back on the next screen.
     unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
@@ -314,26 +327,26 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       }
     });
     if (matched) {
-      // RSSI fallback: some Zebra firmware streams matches with rssi=null
-      // for a few ticks before settling. Pre-fix, that meant the % stayed
-      // at 0 even though the tag was clearly in range. We now treat
-      // "matched EPC but rssi unknown" as a mid-strength signal
-      // (~-65 dBm → ~43%) so the operator gets immediate feedback that
-      // the radio has heard the target — and the value updates as soon
-      // as a real RSSI arrives.
       const fallbackRssiOnNull = -65;
       final effectiveRssi = read.rssi ?? _liveRssi ?? fallbackRssiOnNull;
+      final raw = rssiToProximity01(effectiveRssi);
+      // Adaptive EMA: when the operator closes in on the tag (raw goes
+      // UP), track fast — 70 % weight on the new read — so the dial
+      // responds quickly to genuine approach. When RSSI dips (raw goes
+      // DOWN), only 40 % weight, which damps the natural ±2-3 dB read
+      // jitter at touching range that the pre-1.2.92 raw mapping made
+      // look like instability on screen. Net effect: dial leaps up
+      // toward the tag, settles steady when held in place.
+      final delta = raw - _proximity01;
+      final alpha = delta >= 0 ? 0.7 : 0.4;
+      final smoothed = (_proximity01 + delta * alpha).clamp(0.0, 1.0);
       setState(() {
         _liveRssi = effectiveRssi;
-        _proximity01 = rssiToProximity01(effectiveRssi);
+        _proximity01 = smoothed;
         _lastTargetReadAt = DateTime.now();
         _targetReads += 1;
         if (read.rssi == null) _nullRssiReads += 1;
       });
-      // Drive the proximity bloom — halo grows / glow gets brighter as
-      // the operator closes in. Tightened from 180 -> 100 ms so the halo
-      // tracks aim changes within roughly two RFD8500 read frames, which
-      // is what gives the screen its "live" feel during sweeps.
       _bloom.animateTo(_proximity01, duration: const Duration(milliseconds: 100));
       return;
     }
@@ -350,26 +363,27 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     }
   }
 
-  /// Decay the target proximity if we haven't heard from the tag in a while.
-  /// 120 ms tick + 700 ms staleness window means the meter starts fading
-  /// within one beat of the operator pointing away — the previous 250 ms
-  /// tick + 1500 ms threshold felt "sticky" because the bar held its old
-  /// value while the operator was already searching elsewhere.
+  /// Decay the target proximity if we haven't heard from the tag in a
+  /// while. RFD8500 routinely gaps for 400-800 ms when the antenna is
+  /// off-axis even though the operator hasn't moved, so the previous
+  /// 700 ms threshold made the meter flicker downward in place. 1300 ms
+  /// gives the radio a couple of natural read frames to recover before
+  /// we start decaying.
   void _scheduleStaleSweep() {
     _staleTimer?.cancel();
-    _staleTimer = Timer.periodic(const Duration(milliseconds: 120), (_) {
+    _staleTimer = Timer.periodic(const Duration(milliseconds: 150), (_) {
       if (!mounted || !_scanning) return;
       final last = _lastTargetReadAt;
       if (last == null) return;
       final age = DateTime.now().difference(last).inMilliseconds;
-      if (age > 700 && _proximity01 > 0) {
-        final next = (_proximity01 * 0.80);
+      if (age > 1300 && _proximity01 > 0) {
+        final next = (_proximity01 * 0.85);
         setState(() {
           _proximity01 = next < 0.04 ? 0 : next;
           if (_proximity01 == 0) _liveRssi = null;
         });
         _bloom.animateTo(_proximity01,
-            duration: const Duration(milliseconds: 120));
+            duration: const Duration(milliseconds: 150));
       }
     });
   }

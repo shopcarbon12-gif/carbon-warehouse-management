@@ -331,6 +331,11 @@ class MainActivity : FlutterFragmentActivity() {
           chainway.setAntennaPowerDbm(p)
           result.success(null)
         }
+        "rfid.setSingulationSession" -> {
+          val args = call.arguments as? Map<*, *>
+          val useS0 = (args?.get("useSessionZero") as? Boolean) ?: false
+          zebra.setSingulationSession(useS0, result)
+        }
         "rfid.writeEpc" -> {
           val args = call.arguments as? Map<*, *>
           val target = (args?.get("targetEpc") as? String).orEmpty()

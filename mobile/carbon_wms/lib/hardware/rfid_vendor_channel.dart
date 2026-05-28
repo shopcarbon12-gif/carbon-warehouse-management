@@ -297,6 +297,24 @@ class RfidVendorChannel {
     }
   }
 
+  /// Switch the Zebra radio's singulation session at runtime. Locate-Tag
+  /// uses S0 (tag responds on every query — continuous proximity) on
+  /// entry; every other screen sticks with the connect-time S1 (better
+  /// inventory throughput for multi-tag passes). Returns true if the
+  /// flip was accepted by the radio.
+  static Future<bool> setSingulationSession({required bool useSessionZero}) async {
+    if (!_isAndroid) return false;
+    try {
+      final ok = await _method.invokeMethod<bool>(
+        'rfid.setSingulationSession',
+        <String, dynamic>{'useSessionZero': useSessionZero},
+      );
+      return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Tag reads from native layer (`epc` hex string, optional `rssi`).
   static Stream<RfidTagRead> tagReadStream() {
     return _events
