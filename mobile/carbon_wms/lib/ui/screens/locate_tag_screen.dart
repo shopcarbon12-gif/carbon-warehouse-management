@@ -402,18 +402,17 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     tick();
   }
 
-  /// Piecewise cadence per operator design:
-  ///   * `[0, 0.9)`   slow band — linear 700 -> 350 ms. A steady "blip
-  ///     blip" that doesn't feel frantic until the operator is genuinely
-  ///     close.
-  ///   * `[0.9, 1.0]` fast band — linear 200 -> 60 ms. Reserved for the
-  ///     last 10 % of proximity so the rapid chirp is the unambiguous
-  ///     "you're on top of the tag" cue.
+  /// Piecewise cadence with a deliberately wider slow-band gradient so
+  /// the operator can hear distance change inside the lower 90 %:
+  ///   * `[0, 0.9)`   linear 900 -> 350 ms (≈ 2.5x speedup, 1.1 -> 2.9 Hz)
+  ///   * `[0.9, 1.0]` linear 180 -> 50 ms  (frantic chirp, 5.5 -> 20 Hz)
+  /// The 90 % boundary intentionally jumps from 350 ms straight to 180 ms
+  /// — that abrupt acceleration is the "you're on top of it" cue.
   int _beepDelayMs(double p) {
     if (p < 0.9) {
-      return (700 - (p / 0.9) * 350).round().clamp(350, 700);
+      return (900 - (p / 0.9) * 550).round().clamp(350, 900);
     }
-    return (200 - ((p - 0.9) / 0.1) * 140).round().clamp(60, 200);
+    return (180 - ((p - 0.9) / 0.1) * 130).round().clamp(50, 180);
   }
 
   /// Proximity beep routed through the native SoundPool (same path that
@@ -873,21 +872,13 @@ class _RadarVisualizer extends StatelessWidget {
                       ),
                     ),
                   ),
-                // Central dial — short 80 ms linear tween so the percent
-                // counts smoothly between reads without adding visible
-                // lag. The previous 220 ms easeOut felt sluggish on
-                // RFD8500 sweeps where the operator wants the number to
-                // track the radio in near-real-time.
-                TweenAnimationBuilder<double>(
-                  tween: Tween<double>(begin: 0, end: proximity01),
-                  duration: const Duration(milliseconds: 80),
-                  curve: Curves.linear,
-                  builder: (_, animatedProximity, __) {
-                    return _CoreDial(
-                      percent: (animatedProximity * 100).round(),
-                    );
-                  },
-                ),
+                // Central dial — raw value, no tween. RFD8500 reads land
+                // every ~100-150 ms; any artificial smoothing on top of
+                // that adds visible lag between the operator's aim and
+                // the percentage on screen. The bloom halo (animated
+                // separately via _bloom) still eases for visual polish;
+                // the number itself just tracks _proximity01.
+                _CoreDial(percent: (proximity01 * 100).round()),
               ],
             ),
           );

@@ -635,23 +635,38 @@ class CarbonZebraRfidController(
       }.onFailure { Log.w(TAG, "power-cycle: setTransmitPowerIndex($minIdx) failed: ${it.message}") }
       Log.d(TAG, "power-cycle: dropped from boosted idx=$maxPowerIdx to idx=$minIdx (levels.size=${levels?.size ?: -1}); sleeping 600ms")
       Thread.sleep(600)
-      // Restore to the operator's pre-boost power, NOT the boosted max we
-      // were at right before this drop. That way encode returns the radio
-      // to whatever the slider had — verify scans the tag at the user's
-      // chosen power, and the next read after encode behaves like the
-      // operator expected.
+      // Bring power BACK UP to max for the verify window. The earlier
+      // design restored to the operator's slider before verifying, on
+      // the theory that "verify should match the read setting." In
+      // practice it false-failed: operators encoding at 5-15 dBm with
+      // the tag literally touching the antenna got writeFailed because
+      // the verify loop's 3-second window couldn't gather 3 sightings
+      // at low power, even though the tag had successfully been
+      // rewritten. Verify at max so a touching tag is unambiguous; we
+      // restore the operator's power AFTER verify completes, regardless
+      // of outcome (see finally block).
       val restoreIdx = if (prevPowerIdx >= 0) prevPowerIdx
         else indexClosestToDbm(levels ?: IntArray(0), requestedPowerDbm.get())
       runCatching {
         val cfg = r.Config.Antennas.getAntennaRfConfig(1)
-        cfg.setTransmitPowerIndex(restoreIdx)
+        cfg.setTransmitPowerIndex(maxPowerIdx)
         r.Config.Antennas.setAntennaRfConfig(1, cfg)
-      }.onFailure { Log.w(TAG, "power-cycle: restore setTransmitPowerIndex failed: ${it.message}") }
-      Log.d(TAG, "power-cycle: restored to operator's idx=$restoreIdx (was $prevPowerIdx pre-boost); tag should have rebooted from EEPROM")
+      }.onFailure { Log.w(TAG, "verify-prep: setTransmitPowerIndex(max) failed: ${it.message}") }
+      Log.d(TAG, "verify-prep: boosted to max idx=$maxPowerIdx for verify window (operator's idx=$restoreIdx will be restored after)")
 
       // Multi-sighting verify after power cycle. Additionally requires oldSightings==0 —
       // see verifyEpcWrite for rationale.
       val verified = verifyEpcWrite(r, targetEpc, newEpc)
+
+      // Always restore the operator's power, whether verify succeeded
+      // or not, so the next inventory in this screen behaves as the
+      // operator expects.
+      runCatching {
+        val cfg = r.Config.Antennas.getAntennaRfConfig(1)
+        cfg.setTransmitPowerIndex(restoreIdx)
+        r.Config.Antennas.setAntennaRfConfig(1, cfg)
+      }.onFailure { Log.w(TAG, "post-verify: restore setTransmitPowerIndex failed: ${it.message}") }
+      Log.d(TAG, "post-verify: restored to operator's idx=$restoreIdx")
       if (!verified) {
         // Diagnostic: the SDK accepted writeWait but the tag didn't end up with newEpc in
         // EEPROM. Read the EPC and RESERVED banks directly so the log tells us whether
@@ -721,7 +736,7 @@ class CarbonZebraRfidController(
     oldEpc: String,
     newEpc: String,
     timeoutMs: Long = 3000,
-    minNewSightings: Int = 3,
+    minNewSightings: Int = 2,
   ): Boolean {
     val oldNorm = oldEpc.uppercase()
     val newNorm = newEpc.uppercase()
