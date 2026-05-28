@@ -140,8 +140,30 @@ class CountInventoryScreen extends StatefulWidget {
 }
 
 class _CountInventoryScreenState extends State<CountInventoryScreen> {
+  /// Every EPC the radio reports in this session, keyed by EPC. Includes
+  /// defective ones (formula-fail or catalog-miss) — the upload pipeline
+  /// reads from here so the server still receives the full read set and
+  /// runs its own classification through ingestEpcs. The UI side only
+  /// renders [_groupedRows], which after the 2026-05-29 redesign holds
+  /// VALID groups only.
   final Map<String, _SessionEpcRow> _epcRows = <String, _SessionEpcRow>{};
+  /// SKU-aggregated rows shown as containers in the live scan list.
+  /// Defective EPCs do NOT land here — mirrors the desktop cycle-counts
+  /// /api/rfid/cycle-counts workspace where `defective` is a separate
+  /// variance bucket from `added_here` (see classifyVarianceLive in
+  /// lib/server/rfid-cycle-count-sessions.ts:444).
   final Map<String, _GroupedRow> _groupedRows = <String, _GroupedRow>{};
+  /// EPCs that fail the company-prefix formula OR resolve to a system_id
+  /// the catalog has no row for. Surfaced as a single "DEFECTIVE: N" tile
+  /// in the live scan; never rendered as a per-item container. Still in
+  /// [_epcRows] so the upload payload carries them — the server bucket-
+  /// sorts them into items.status='tag_killed' via ingestEpcs.
+  final Set<String> _defectiveEpcs = <String>{};
+  /// In-memory cache of system_ids the catalog returned 404 for during
+  /// this session. Subsequent scans of the same system_id route straight
+  /// to [_defectiveEpcs] without firing another lookup. Reset on session
+  /// reset.
+  final Set<String> _catalogMissingSystemIds = <String>{};
   final Map<String, Map<String, dynamic>> _assetCache =
       <String, Map<String, dynamic>>{};
   List<Map<String, String>> _locations = [];
@@ -170,6 +192,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   RfidManager? _rfidManager;
   int _displayEpcCount = 0;
   int _displaySkuCount = 0;
+  /// Animated counter for the DEFECTIVE tile. Drives separately from the
+  /// valid counters; ramps with the same 35 ms step pace.
+  int _displayDefectiveCount = 0;
   String? _previousScanContext;
 
   /// Saved login email — used to derive the operator's first name for
@@ -514,31 +539,50 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // Read beep is now native-originated: CarbonChainwayRfidController.emitEpc /
     // CarbonZebraRfidController.emitTag call ScanSoundPool.playTagBeep directly.
     // Dart no longer fires per-tag beeps — saves a Dart→native round-trip.
-    // Group by system_id so repeated scans of the same SKU accumulate into one row.
-    // Fall back to the raw EPC for tags we can't decode (legacy/foreign).
+    //
+    // Classify per-EPC to mirror the desktop cycle-counts variance buckets
+    // (lib/server/rfid-cycle-count-sessions.ts:444 classifyVarianceLive):
+    //
+    //   formula-fail (decode null)  → defective bucket, NO container
+    //   catalog-miss (known 404)    → defective bucket, NO container
+    //   decoded + catalog-known     → valid container (existing path)
+    //   decoded + catalog-unknown   → tentative container, may flip to
+    //                                  defective when _resolveCatalog
+    //                                  resolves to null
+    //
+    // Defective EPCs stay in [_epcRows] so the upload payload carries
+    // them; the server's ingestEpcs decoder runs the same classification
+    // and writes them to items.status='tag_killed', which is what makes
+    // them show up under Catalog → Defective EPCs on the desktop.
     final cfg = context.read<MobileSettingsRepository>().epcConfig;
     final systemId = decodeSystemId(normalized, cfg);
-    final groupKey = systemId?.toString() ?? normalized;
-    final isNewGroup = !_groupedRows.containsKey(groupKey);
+    if (systemId == null) {
+      // Formula-fail (company prefix mismatch, undecodable bits, etc.).
+      // Counts as defective; no container.
+      _defectiveEpcs.add(normalized);
+      return;
+    }
+    final sysIdStr = systemId.toString();
+    if (_catalogMissingSystemIds.contains(sysIdStr)) {
+      // We already learned this system_id has no catalog row this session.
+      // Skip the container, route straight to defective.
+      _defectiveEpcs.add(normalized);
+      return;
+    }
+    final isNewGroup = !_groupedRows.containsKey(sysIdStr);
     final group = _groupedRows.putIfAbsent(
-      groupKey,
-      () => _GroupedRow(assetId: groupKey),
+      sysIdStr,
+      () => _GroupedRow(assetId: sysIdStr),
     );
     group.epcs.add(normalized);
     group.qty = group.epcs.length;
     group.lastRssi = rssi;
     if (isNewGroup) {
-      if (systemId == null) {
-        group.epcInvalid = true;
-        group.sku = normalized;
+      final cached = _assetCache[sysIdStr];
+      if (cached != null) {
+        _applyCatalogToGroup(group, cached);
       } else {
-        final sysIdStr = systemId.toString();
-        final cached = _assetCache[sysIdStr];
-        if (cached != null) {
-          _applyCatalogToGroup(group, cached);
-        } else {
-          unawaited(_resolveCatalog(sysIdStr, group));
-        }
+        unawaited(_resolveCatalog(sysIdStr, group));
       }
     }
     // UI update happens via _uiFlushTimer at 150ms cadence; no per-tag setState.
@@ -551,8 +595,23 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       final row = await api.catalogLookupBySystemId(sysIdStr);
       if (!mounted) return;
       if (row == null) {
-        group.catalogMissing = true;
-        group.catalogResolved = true;
+        // Confirmed catalog miss. Route this system_id's EPCs out of the
+        // container list into the defective bucket — mirrors the desktop
+        // classifyVarianceLive `defective` branch where any extra-scanned
+        // EPC whose items row is tag_killed (or for which no items row
+        // exists) is bucketed separately from `added_here`. Without this
+        // step the operator would see an "Unknown Item · system_id …"
+        // card mid-scan, which is exactly what the change request asked
+        // to stop doing.
+        _catalogMissingSystemIds.add(sysIdStr);
+        final removed = _groupedRows.remove(sysIdStr);
+        if (removed != null) {
+          for (final e in removed.epcs) {
+            _defectiveEpcs.add(e);
+          }
+        }
+        // No setState here — the _uiFlushTimer (150 ms) repaints from
+        // _groupedRows + the new _defectiveEpcs total.
       } else {
         final mapped = <String, dynamic>{
           'sku': (row['sku'] as String?) ?? '',
@@ -568,7 +627,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       }
     } catch (_) {
       // Network error: leave unresolved so a future scan retries.
-      // Do NOT set catalogMissing — that's reserved for confirmed 404.
+      // Do NOT add to _catalogMissingSystemIds — that's reserved for
+      // confirmed 404. The group stays as a tentative container.
     }
   }
 
@@ -676,9 +736,15 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   void _syncDisplayedCounters() {
     if (!mounted) return;
-    final targetEpc = _epcRows.length;
+    // Total EPCs displayed = valid only (containers shown to operator).
+    // Defective ones get their own animated tally so the operator can
+    // see both numbers without doing the subtraction in their head.
+    final targetEpc = _epcRows.length - _defectiveEpcs.length;
     final targetSku = _groupedRows.length;
-    if (_displayEpcCount == targetEpc && _displaySkuCount == targetSku) {
+    final targetDefective = _defectiveEpcs.length;
+    if (_displayEpcCount == targetEpc &&
+        _displaySkuCount == targetSku &&
+        _displayDefectiveCount == targetDefective) {
       _countAnimateTimer?.cancel();
       _countAnimateTimer = null;
       return;
@@ -692,8 +758,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         _countAnimateTimer = null;
         return;
       }
-      final epcTarget = _epcRows.length;
+      final epcTarget = _epcRows.length - _defectiveEpcs.length;
       final skuTarget = _groupedRows.length;
+      final defTarget = _defectiveEpcs.length;
       setState(() {
         if (_displayEpcCount < epcTarget) {
           _displayEpcCount += 1;
@@ -705,8 +772,15 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         } else if (_displaySkuCount > skuTarget) {
           _displaySkuCount -= 1;
         }
+        if (_displayDefectiveCount < defTarget) {
+          _displayDefectiveCount += 1;
+        } else if (_displayDefectiveCount > defTarget) {
+          _displayDefectiveCount -= 1;
+        }
       });
-      if (_displayEpcCount == epcTarget && _displaySkuCount == skuTarget) {
+      if (_displayEpcCount == epcTarget &&
+          _displaySkuCount == skuTarget &&
+          _displayDefectiveCount == defTarget) {
         t.cancel();
         _countAnimateTimer = null;
       }
@@ -780,6 +854,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     setState(() {
       _epcRows.clear();
       _groupedRows.clear();
+      _defectiveEpcs.clear();
+      _catalogMissingSystemIds.clear();
     });
     _syncDisplayedCounters();
     unawaited(RfidVendorChannel.clearChainwaySeenEpcs());
@@ -803,6 +879,19 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           '${g.assetId},${_csv(g.sku)},${_csv(g.name)},${_csv(g.color)},${_csv(g.size)},${g.qty},${row.epc},${row.prefixHex},${row.serial},${row.firstSeen.toUtc().toIso8601String()},${row.lastSeen.toUtc().toIso8601String()},$source',
         );
       }
+    }
+    // Append defective EPCs (formula-fail or catalog-miss) with empty
+    // catalog fields. They aren't shown as containers in the live UI but
+    // the upload still carries them so the server's ingestEpcs decoder
+    // gets a chance to bucket them into items.status='tag_killed' (which
+    // is what surfaces them on Catalog → Defective EPCs on the desktop).
+    final sortedDefective = _defectiveEpcs.toList()..sort();
+    for (final epc in sortedDefective) {
+      final row = _epcRows[epc];
+      if (row == null) continue;
+      b.writeln(
+        ',,,,,1,${row.epc},${row.prefixHex},${row.serial},${row.firstSeen.toUtc().toIso8601String()},${row.lastSeen.toUtc().toIso8601String()},defective',
+      );
     }
     final baseDir = await getExternalStorageDirectory() ??
         await getApplicationDocumentsDirectory();
@@ -830,7 +919,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       ..sort((a, b) => a.assetId.compareTo(b.assetId));
     final out = <Map<String, dynamic>>[];
     for (final g in groups) {
-      final systemId = g.epcInvalid ? null : int.tryParse(g.assetId);
+      // Post-redesign (2026-05-29): _groupedRows only holds VALID groups
+      // (formula-decoded AND catalog-known). The defective branch lower
+      // in this function appends the rest.
+      final systemId = int.tryParse(g.assetId);
       final bin = (g.binLocation != null && g.binLocation!.trim().isNotEmpty)
           ? _formatBinCode(g.binLocation!)
           : '';
@@ -854,6 +946,30 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           'last_seen_iso': row.lastSeen.toUtc().toIso8601String(),
         });
       }
+    }
+    // Defective EPCs (formula-fail or catalog-miss). Emit with null
+    // system_id + empty catalog fields. Server's scan-finalize re-decodes
+    // each EPC and writes either items.status='in-stock' (catalog catches
+    // up between scan and upload) or items.status='tag_killed' (still
+    // defective at commit time). Either way, the client just needs to
+    // hand over the EPC list — server is authoritative for classification.
+    final sortedDefective = _defectiveEpcs.toList()..sort();
+    for (final epc in sortedDefective) {
+      final row = _epcRows[epc];
+      if (row == null) continue;
+      out.add(<String, dynamic>{
+        'epc': row.epc,
+        'system_id': null,
+        'custom_sku': '',
+        'item_name': '',
+        'color': '',
+        'size': '',
+        'retail_price': null,
+        'bin': '',
+        'seen_count': row.scans,
+        'first_seen_iso': row.firstSeen.toUtc().toIso8601String(),
+        'last_seen_iso': row.lastSeen.toUtc().toIso8601String(),
+      });
     }
     return out;
   }
@@ -965,6 +1081,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       MaterialPageRoute<void>(
         builder: (_) => _CountInventoryContinueScreen(
           groupedRows: groups,
+          // Defective EPCs aren't in `groups` (per the 2026-05-29 redesign
+          // — formula-fail and catalog-miss are routed straight to the
+          // _defectiveEpcs set, never to _groupedRows). The Continue
+          // screen needs the count separately so its "+ N DEFECTIVE
+          // (uploaded separately)" label is correct.
+          defectiveCount: _defectiveEpcs.length,
           locationName: _currentLocationName,
           userEmail: _userEmail,
           onSaveCsv: _saveSessionCsvToDevice,
@@ -1058,7 +1180,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                   padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0.h),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      final tileWidth = (constraints.maxWidth - 8) / 2;
+                      // DEFECTIVE tile only when > 0. Three tiles share the
+                      // row width when defectives are present, two split it
+                      // 50/50 otherwise. Mirrors the desktop cycle-counts
+                      // workspace which only shows the `defective` bucket
+                      // counter when there's something in it.
+                      final showDefective = _displayDefectiveCount > 0;
+                      final tileCount = showDefective ? 3 : 2;
+                      final gapTotal = 8.0 * (tileCount - 1);
+                      final tileWidth =
+                          (constraints.maxWidth - gapTotal) / tileCount;
                       return Row(
                         children: [
                           _CountSummaryTile(
@@ -1084,6 +1215,24 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                             labelColor: summaryLabelColor,
                             watermarkColor: watermarkColor,
                           ),
+                          if (showDefective) ...[
+                            SizedBox(width: 8.w),
+                            _CountSummaryTile(
+                              label: 'Defective',
+                              value: '$_displayDefectiveCount',
+                              icon: Icons.warning_amber_outlined,
+                              boxWidth: tileWidth,
+                              boxHeight: summaryBoxHeight,
+                              // Red-ish accent so the tile is visibly distinct
+                              // from the valid counters — matches the
+                              // `+ N DEFECTIVE (uploaded separately)` color in
+                              // the Continue/Upload modal.
+                              tileColor: const Color(0xFFFDECEA),
+                              textColor: const Color(0xFF8A2C28),
+                              labelColor: const Color(0xFFC04A40),
+                              watermarkColor: const Color(0x33D9534F),
+                            ),
+                          ],
                         ],
                       );
                     },
@@ -1884,6 +2033,7 @@ class _CountEpcListScreen extends StatelessWidget {
 class _CountInventoryContinueScreen extends StatefulWidget {
   const _CountInventoryContinueScreen({
     required this.groupedRows,
+    required this.defectiveCount,
     required this.locationName,
     required this.userEmail,
     required this.onSaveCsv,
@@ -1893,6 +2043,12 @@ class _CountInventoryContinueScreen extends StatefulWidget {
   });
 
   final List<_GroupedRow> groupedRows;
+
+  /// Number of defective EPCs scanned this session (formula-fail + catalog-
+  /// miss). After the 2026-05-29 live-scan redesign these aren't in
+  /// [groupedRows] anymore, so we pass the count alongside. The
+  /// "+ N DEFECTIVE (uploaded separately)" line in build() reads from here.
+  final int defectiveCount;
   final String locationName;
 
   /// Saved login email for the operator. Used to derive the first-name
@@ -2007,18 +2163,17 @@ class _CountInventoryContinueScreenState
 
   @override
   Widget build(BuildContext context) {
-    final totalItems =
+    // After the 2026-05-29 live-scan redesign:
+    //   - widget.groupedRows holds ONLY valid SKU groups (formula-decoded
+    //     + catalog-known). Sum-of-qty equals validEpcs directly.
+    //   - widget.defectiveCount is the count of formula-fail + catalog-
+    //     miss EPCs the parent kept in its _defectiveEpcs set. They still
+    //     get uploaded in the rows payload (server classifies authoritatively
+    //     via ingestEpcs into items.status='tag_killed').
+    final validEpcs =
         widget.groupedRows.fold<int>(0, (sum, row) => sum + row.qty);
-
-    // VALID-only EPC count: rows whose EPC decoded successfully against
-    // the company prefix AND resolved to a real custom_sku/system_id.
-    // The defective tags (epcInvalid OR catalogMissing) still ride along
-    // in the CSV upload — server splits them into the defective_epcs
-    // table — but they are NOT shown in the operator-facing total.
-    final validEpcs = widget.groupedRows
-        .where((g) => !g.epcInvalid && !g.catalogMissing)
-        .fold<int>(0, (sum, row) => sum + row.qty);
-    final defectiveEpcs = totalItems - validEpcs;
+    final defectiveEpcs = widget.defectiveCount;
+    final totalItems = validEpcs + defectiveEpcs;
 
     final canUpload = totalItems > 0;
 
