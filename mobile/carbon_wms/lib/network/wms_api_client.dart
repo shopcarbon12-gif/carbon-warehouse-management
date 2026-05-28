@@ -617,7 +617,12 @@ class WmsApiClient {
     return h;
   }
 
-  /// Active locations for the signed-in user (`GET /api/locations`) — returns [{code, name}].
+  /// Active locations for the signed-in user (`GET /api/locations`) — returns
+  /// [{id, code, name}]. Server response already carries `id`; older
+  /// revisions of this method stripped it, which silently broke the
+  /// Dashboard location switcher (the bottom-sheet picker only fires
+  /// `_applyLocationSwitch` when `id.isNotEmpty`, so taps on a different
+  /// location did nothing).
   Future<List<Map<String, String>>> fetchSessionLocations() async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/locations');
@@ -629,9 +634,16 @@ class WmsApiClient {
     final out = <Map<String, String>>[];
     for (final item in decoded) {
       if (item is Map) {
+        final id = item['id']?.toString() ?? '';
         final code = item['code']?.toString() ?? '';
         final name = item['name']?.toString() ?? code;
-        if (code.isNotEmpty) out.add({'code': code, 'name': name});
+        if (code.isNotEmpty) {
+          out.add({
+            if (id.isNotEmpty) 'id': id,
+            'code': code,
+            'name': name,
+          });
+        }
       }
     }
     return out;
