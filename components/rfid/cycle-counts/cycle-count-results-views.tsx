@@ -122,6 +122,16 @@ export function buildFlatRows(
 }
 
 /** ───────────── All EPCs view (filterable, searchable flat table) ───────────── */
+/* Initial / incremental row caps. The full flat list can be 5K–10K rows on
+   a big count, and rendering all of them blows up the DOM (the parent gets
+   stuck on layout). We render the first PAGE_SIZE rows, with a button to
+   reveal more on demand. Sessions are usually navigated by SKU / bin / a
+   targeted search, so the operator hits the limit only when they actually
+   want to scroll. Filter changes reset the cap so the first page of every
+   new filter is always visible. */
+const PAGE_SIZE = 200;
+const PAGE_STEP = 500;
+
 export function AllEpcsTable({
   rows,
   search,
@@ -148,6 +158,18 @@ export function AllEpcsTable({
     });
   }, [rows, search, stateFilter]);
 
+  /* Reset the visible cap whenever the filter set changes so the operator
+     always lands on the first page of the new query. */
+  const [visibleCap, setVisibleCap] = useState(PAGE_SIZE);
+  useEffect(() => {
+    setVisibleCap(PAGE_SIZE);
+  }, [search, stateFilter, rows]);
+  const visibleRows = useMemo(
+    () => filtered.slice(0, visibleCap),
+    [filtered, visibleCap],
+  );
+  const hiddenCount = Math.max(0, filtered.length - visibleRows.length);
+
   const [openEpc, setOpenEpc] = useState<string | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
@@ -165,7 +187,13 @@ export function AllEpcsTable({
 
   return (
     <>
-      <DataTableContainer caption={`Showing ${filtered.length} of ${rows.length}`}>
+      <DataTableContainer
+        caption={
+          hiddenCount > 0
+            ? `Showing ${visibleRows.length} of ${filtered.length} (${rows.length} total) — ${hiddenCount} hidden for speed`
+            : `Showing ${filtered.length} of ${rows.length}`
+        }
+      >
         <table
           ref={tableRef}
           className="w-full min-w-[1100px] border-collapse text-left"
@@ -191,7 +219,7 @@ export function AllEpcsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
-            {filtered.map((r) => (
+            {visibleRows.map((r) => (
               <tr key={r.epc + r.state}>
                 <td className={`${cellTruncate} px-3 py-2`} title={r.sku}>{r.sku}</td>
                 <td
@@ -234,6 +262,29 @@ export function AllEpcsTable({
           </tbody>
         </table>
       </DataTableContainer>
+      {hiddenCount > 0 ? (
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+          <span>
+            {hiddenCount} more row{hiddenCount === 1 ? "" : "s"} match — refine
+            search or load below.
+          </span>
+          <button
+            type="button"
+            onClick={() => setVisibleCap((n) => n + PAGE_STEP)}
+            className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1 text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+          >
+            Show {Math.min(PAGE_STEP, hiddenCount)} more
+          </button>
+          <button
+            type="button"
+            onClick={() => setVisibleCap(filtered.length)}
+            title="Render every matching row — slow on big counts (intentional)."
+            className="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-1 text-amber-200 hover:bg-amber-900/40"
+          >
+            Show all ({filtered.length})
+          </button>
+        </div>
+      ) : null}
       {openEpc ? (
         <EpcHistoryModal epc={openEpc} onClose={() => setOpenEpc(null)} />
       ) : null}
@@ -471,7 +522,14 @@ export function BySkuTable({
   variance: Variance;
   search: string;
 }) {
-  const matchedSet = new Set(variance.matched.map((m) => m.epc));
+  /* matchedSet MUST be memoized — the agg useMemo below depends on it, and
+     without this wrap the Set was reconstructed on every parent render,
+     busting agg's cache and re-aggregating thousands of expected rows on
+     every 200 ms scan-tick. */
+  const matchedSet = useMemo(
+    () => new Set(variance.matched.map((m) => m.epc)),
+    [variance.matched],
+  );
   type SkuAgg = {
     sku: string;
     description: string;
@@ -671,7 +729,12 @@ export function ByBinTable({
   expected: ExpectedRow[];
   variance: Variance;
 }) {
-  const matchedSet = new Set(variance.matched.map((m) => m.epc));
+  /* Same memoization concern as BySkuTable — without this wrap, agg's
+     useMemo cache is busted on every parent render. */
+  const matchedSet = useMemo(
+    () => new Set(variance.matched.map((m) => m.epc)),
+    [variance.matched],
+  );
   type BinAgg = {
     bin_code: string;
     expected: number;

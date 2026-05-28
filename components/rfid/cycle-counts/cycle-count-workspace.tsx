@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import {
@@ -508,6 +508,48 @@ function ActiveSessionView({
        server-side 20s backfill throttle keeps the session view responsive
        without hammering the DB. */
     refreshInterval: 10_000,
+    /* The GET response is a freshly-parsed object every poll. Default SWR
+       compare uses === on the whole payload — that always says "different",
+       which busts every downstream useMemo and reconciles the 5K-row table
+       on every 10 s tick even when nothing changed.
+
+       This compare is a cheap structural fingerprint: same status + same
+       counts in every bucket + same scan-period count + same latest period
+       endpoint ⇒ same content. When equal, SWR keeps the OLD reference, so
+       `detail` and `variance` identities are stable and downstream memos
+       (flatRows, expectedEpcSet) hold their cache.
+
+       Writes via mutate() with genuinely new data still update the cache
+       normally — the compare is consulted, sees a delta (e.g. a new EPC
+       grew variance.matched.length), and SWR adopts the new object. */
+    compare: (a, b) => {
+      if (a === b) return true;
+      if (!a || !b) return false;
+      const sa = a.session;
+      const sb = b.session;
+      if (sa === sb && a.variance === b.variance) return true;
+      const va = a.variance;
+      const vb = b.variance;
+      const lastA = sa.scan_periods[sa.scan_periods.length - 1];
+      const lastB = sb.scan_periods[sb.scan_periods.length - 1];
+      return (
+        sa.id === sb.id &&
+        sa.status === sb.status &&
+        sa.completed_at === sb.completed_at &&
+        sa.scanned_count === sb.scanned_count &&
+        sa.expected_count === sb.expected_count &&
+        sa.expected.length === sb.expected.length &&
+        sa.scanned_epcs.length === sb.scanned_epcs.length &&
+        sa.scan_periods.length === sb.scan_periods.length &&
+        (lastA?.started_at ?? null) === (lastB?.started_at ?? null) &&
+        (lastA?.ended_at ?? null) === (lastB?.ended_at ?? null) &&
+        va.matched.length === vb.matched.length &&
+        va.missing.length === vb.missing.length &&
+        va.added_here.length === vb.added_here.length &&
+        va.defective.length === vb.defective.length &&
+        va.locked.length === vb.locked.length
+      );
+    },
   });
 
   const detail = data?.session;
@@ -899,26 +941,10 @@ function ActiveSessionView({
       : liveMissingCount === 0
         ? 100
         : Math.min(99, Math.floor((liveMatchedCount / liveExpectedCount) * 100));
-  const animCoverage = useCountUp(liveCoverage);
-  const animMatched = useCountUp(liveMatchedCount);
-  const animMissing = useCountUp(liveMissingCount);
-  const animAdded = useCountUp(variance.added_here.length);
-  const animDefective = useCountUp(variance.defective.length);
-  const animLocked = useCountUp(variance.locked.length);
-  const animReadsPerMin = useCountUp(readsPerMin);
-
-  // Live-ticking scan time. When the session is active, the open period's
-  // contribution grows in real time, so tick every second.
-  const [scanClockTick, setScanClockTick] = useState(0);
-  useEffect(() => {
-    if (detail?.status !== "active") return;
-    const t = setInterval(() => setScanClockTick((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, [detail?.status]);
-  const scanMs = detail
-    ? totalScanMs(detail.scan_periods, Date.now())
-    : 0;
-  void scanClockTick;
+  /* Each KPI tile holds its own useCountUp internally (see AnimKpiTile) so
+     the 7 RAF animations don't reconcile this whole subtree — including the
+     5K-row results table — on every animation frame. ScanTimeTile holds its
+     own 1 s ticker for the same reason. */
 
   if (error) {
     return (
@@ -1026,21 +1052,28 @@ function ActiveSessionView({
 
       {/* KPI strip with coverage + read rate */}
       <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-8">
-        <KpiTile big label="Coverage" value={`${animCoverage}%`} cls={coverage === 100 ? "wms-status-success" : coverage >= 80 ? "text-amber-400" : "text-red-400"} />
-        <KpiTile label="Matched" value={`${animMatched} / ${expectedCount}`} cls="wms-status-success" />
-        <KpiTile label="Missing" value={String(animMissing)} cls="text-amber-400" />
-        <KpiTile label="Added here" value={String(animAdded)} cls="text-sky-300" />
-        <KpiTile label="Defective" value={String(animDefective)} cls="text-red-400" />
-        <KpiTile label="Locked" value={String(animLocked)} cls="text-fuchsia-300" />
-        <KpiTile
-          label="Scan time"
-          value={formatHms(scanMs)}
-          sub={`${detail.scan_periods.length} period${detail.scan_periods.length === 1 ? "" : "s"}`}
-          cls={detail.status === "active" ? "text-emerald-300" : "text-[var(--wms-muted)]"}
+        <AnimKpiTile
+          big
+          label="Coverage"
+          target={liveCoverage}
+          format={(n) => `${n}%`}
+          cls={coverage === 100 ? "wms-status-success" : coverage >= 80 ? "text-amber-400" : "text-red-400"}
         />
-        <KpiTile
+        <AnimKpiTile
+          label="Matched"
+          target={liveMatchedCount}
+          format={(n) => `${n} / ${expectedCount}`}
+          cls="wms-status-success"
+        />
+        <AnimKpiTile label="Missing" target={liveMissingCount} cls="text-amber-400" />
+        <AnimKpiTile label="Added here" target={variance.added_here.length} cls="text-sky-300" />
+        <AnimKpiTile label="Defective" target={variance.defective.length} cls="text-red-400" />
+        <AnimKpiTile label="Locked" target={variance.locked.length} cls="text-fuchsia-300" />
+        <ScanTimeTile scanPeriods={detail.scan_periods} status={detail.status} />
+        <AnimKpiTile
           label="Read rate"
-          value={`${animReadsPerMin}/min`}
+          target={readsPerMin}
+          format={(n) => `${n}/min`}
           sub={`last read ${lastReadStr}`}
           cls={readsPerMin > 0 ? "text-emerald-300" : "text-[var(--wms-muted)]"}
         />
@@ -1347,6 +1380,68 @@ function Field({
     </label>
   );
 }
+
+/* AnimKpiTile + ScanTimeTile are deliberately defined as memo()'d standalone
+   components. The reason is the cycle-count workspace renders a results table
+   with potentially thousands of rows. If we hold useCountUp / setInterval in
+   the parent (ActiveSessionView), every animation frame and every clock tick
+   re-renders the whole subtree, including that table — which is the root
+   cause of the "barely moving / computer stuck" symptom on big sessions.
+   Pushing the animation state into these small memoized children keeps each
+   tile's re-renders local to itself. */
+
+const AnimKpiTile = memo(function AnimKpiTile({
+  label,
+  target,
+  cls,
+  big,
+  sub,
+  format,
+}: {
+  label: string;
+  target: number;
+  cls: string;
+  big?: boolean;
+  sub?: string;
+  format?: (n: number) => string;
+}) {
+  const v = useCountUp(target);
+  return (
+    <KpiTile
+      label={label}
+      value={format ? format(v) : String(v)}
+      cls={cls}
+      big={big}
+      sub={sub}
+    />
+  );
+});
+
+const ScanTimeTile = memo(function ScanTimeTile({
+  scanPeriods,
+  status,
+}: {
+  scanPeriods: ScanPeriod[];
+  status: SessionDetail["status"];
+}) {
+  /* Local 1 s ticker — runs only when the session is active. Decoupled from
+     the parent so the per-second re-render never reaches the results table. */
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (status !== "active") return;
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [status]);
+  const ms = totalScanMs(scanPeriods, Date.now());
+  return (
+    <KpiTile
+      label="Scan time"
+      value={formatHms(ms)}
+      sub={`${scanPeriods.length} period${scanPeriods.length === 1 ? "" : "s"}`}
+      cls={status === "active" ? "text-emerald-300" : "text-[var(--wms-muted)]"}
+    />
+  );
+});
 
 function KpiTile({
   label,
