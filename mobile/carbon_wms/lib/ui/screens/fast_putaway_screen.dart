@@ -3242,11 +3242,13 @@ class _StoredItemRow extends StatelessWidget {
                 ),
                 if (description.isNotEmpty || variantSuffix.isNotEmpty) ...[
                   SizedBox(height: 4.h),
+                  // 2026-05-28: bigger + black description per operator design pass
                   Text(
                     '$description$variantSuffix'.trim(),
                     style: GoogleFonts.manrope(
-                      fontSize: 14.sp,
-                      color: AppColors.textMuted,
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textMain,
                     ),
                   ),
                 ],

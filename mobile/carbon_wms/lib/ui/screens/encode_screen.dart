@@ -27,7 +27,7 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 ///                 Server inserts the new items row with status='unknown'
 ///                 (the operator can re-check after the Test New Tag flow).
 ///   4. POST     — Each card gets a status dropdown (LIVE / TAG KILLED /
-///                 UNKNOWN) with a save icon (bulk-status) and a button
+///                 UNKNOWN) with a save button (bulk-status) and a button
 ///                 to open the Test New Tag screen.
 ///
 /// Reads bypass [RfidManager] and listen directly to
@@ -41,9 +41,23 @@ class EncodeScreen extends StatefulWidget {
 }
 
 /// Standard error red used across the mobile (add_on_count uses the same).
-/// Local constant so the file doesn't depend on a not-yet-defined
-/// `AppColors.error` member.
 const Color _kErrorRed = Color(0xFFD9534F);
+const Color _kSuccessGreen = Color(0xFF2A8E2A);
+const Color _kCardGrey = Color(0xFFECECEC);
+const Color _kTrashRed = Color(0xFFBF2E2E);
+const Color _kTealLight = Color(0xFF2BA3A3);
+const Color _kTextMuted = Color(0xFF8A9090);
+const Color _kTextSlate = Color(0xFF3F4A4A);
+const Color _kPwrStripBg = Color(0xFFEEF4F3);
+const Color _kTrayBg = Color(0xFFF4F7F7);
+const Color _kHairline = Color(0x14000000);
+const Color _kBtnDisabled = Color(0xFFBCC9C9);
+const Color _kSaveDisabledBg = Color(0xFFE0E6E6);
+const Color _kErrLineBg = Color(0xFFFFF4F4);
+const Color _kPillOkBg = Color(0xFFD6F5E6);
+const Color _kPillBadBg = Color(0x24D9534F); // ≈ rgba(217,83,79,0.14)
+const Color _kPillQueuedBg = Color(0x268A9090);
+const Color _kAmber = Color(0xFFE08A2C);
 
 enum _Phase { scan, pickSku, encoding, post }
 
@@ -70,12 +84,15 @@ class _Tag {
 
   /// Current items.status as the operator sees it after encode. Defaults
   /// to 'unknown' (matches the server's encode-claim insert). Operator
-  /// can flip via dropdown + save icon.
+  /// can flip via dropdown + save button.
   String currentStatus = 'unknown';
 
   /// True when [currentStatus] has been persisted via bulk-status since
-  /// the last change. Save icon only enabled when this is false.
+  /// the last change. Save button only enabled when this is false.
   bool statusSaved = true;
+
+  /// Expanded card chrome (shows the 2-col key/value grid). Tap toggles.
+  bool expanded = false;
 }
 
 class _EncodeScreenState extends State<EncodeScreen> {
@@ -297,6 +314,10 @@ class _EncodeScreenState extends State<EncodeScreen> {
     setState(() => _tags.remove(tag));
   }
 
+  void _toggleExpand(_Tag tag) {
+    setState(() => tag.expanded = !tag.expanded);
+  }
+
   // ── Phase 2: SKU search ───────────────────────────────────────────────
 
   void _onSearchChanged(String v) {
@@ -422,7 +443,7 @@ class _EncodeScreenState extends State<EncodeScreen> {
         tag.newEpc = newEpc;
         tag.encodeError = null;
         // Server inserted at 'unknown' — mirror that on the client so the
-        // dropdown defaults correctly and the save icon stays disabled
+        // dropdown defaults correctly and the save button stays disabled
         // until the operator picks a different status.
         tag.currentStatus = 'unknown';
         tag.statusSaved = true;
@@ -523,51 +544,65 @@ class _EncodeScreenState extends State<EncodeScreen> {
     );
   }
 
+  /// State accent strip color for the 4 px left edge of a card.
+  /// Teal during encode, green on success, red on failure, transparent otherwise.
+  Color _resolveAccent(_Tag tag) {
+    if (tag.encodeError != null) return _kErrorRed;
+    if (tag.newEpc != null) return _kSuccessGreen;
+    final idx = _tags.indexOf(tag);
+    if (_encodingIndex == idx && _encodingIndex >= 0) return AppColors.primary;
+    return Colors.transparent;
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
       pageTitle: 'ENCODE',
-      bottomBar: _EncodePowerSlider(
-        powerDbm: _powerDbm,
-        minDbm: _powerMinDbm,
-        maxDbm: _powerMaxDbm,
-        onChanged: _onPowerSliderChanged,
-        onChangeEnd: _onPowerSliderEnded,
-      ),
+      bottomBar: _buildBottomBar(),
       body: ColoredBox(
-        color: const Color(0xFFF7FAFA),
+        color: Colors.white,
         child: Column(
           children: [
-            _PhaseHeader(
-              phase: _phase,
-              selectedSku: _selectedSku,
-              isScanning: _isScanning,
-              encodingIndex: _encodingIndex,
-              total: _tags.length,
-              onResetToScan: _phase != _Phase.scan ? _resetToScan : null,
-              onGoToPickSku: _phase == _Phase.scan && _tags.isNotEmpty
-                  ? _goToPickSku
-                  : null,
-            ),
             if (_banner != null)
               Padding(
-                padding: EdgeInsets.fromLTRB(14.w, 6.h, 14.w, 0),
+                padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 0),
                 child: Container(
                   width: double.infinity,
-                  padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+                  padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFF4E5),
-                    border: Border.all(color: const Color(0xFFE08A2C)),
+                    border: Border.all(color: _kAmber),
                     borderRadius: BorderRadius.circular(4.r),
                   ),
                   child: Text(
                     _banner!,
                     style: GoogleFonts.spaceGrotesk(
-                      fontSize: 11.sp,
+                      fontSize: 12.sp,
                       fontWeight: FontWeight.w700,
                       color: const Color(0xFF8A4E12),
+                    ),
+                  ),
+                ),
+              ),
+            if (_phase == _Phase.encoding && _selectedSku != null)
+              Padding(
+                padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 0),
+                child: Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(4.r),
+                  ),
+                  child: Text(
+                    'TARGET: ${_skuSummary(_selectedSku!)}',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                      color: const Color(0xFF0F5757),
                     ),
                   ),
                 ),
@@ -583,12 +618,89 @@ class _EncodeScreenState extends State<EncodeScreen> {
     );
   }
 
+  Widget _buildBottomBar() {
+    final showPwr = _phase == _Phase.scan || _phase == _Phase.encoding;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showPwr)
+          _EncodePowerSlider(
+            powerDbm: _powerDbm,
+            minDbm: _powerMinDbm,
+            maxDbm: _powerMaxDbm,
+            onChanged: _onPowerSliderChanged,
+            onChangeEnd: _onPowerSliderEnded,
+          ),
+        _buildToolbar(),
+      ],
+    );
+  }
+
+  Widget _buildToolbar() {
+    return Container(
+      height: 88.h,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x14000000),
+            offset: Offset(0, -8),
+            blurRadius: 24,
+          ),
+        ],
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 1,
+            child: _ToolbarButton(
+              label: 'REFRESH',
+              icon: Icons.refresh,
+              background: _kTealLight,
+              onPressed: _resetToScan,
+            ),
+          ),
+          SizedBox(width: 8.w),
+          Expanded(
+            flex: 2,
+            child: _buildRightToolbarButton(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRightToolbarButton() {
+    switch (_phase) {
+      case _Phase.scan:
+        final disabled = _tags.isEmpty || _isScanning;
+        return _ToolbarButton(
+          label: 'SEARCH SKU',
+          icon: LucideIcons.search,
+          background: disabled ? _kBtnDisabled : AppColors.primary,
+          onPressed: disabled ? null : _goToPickSku,
+        );
+      case _Phase.pickSku:
+        // Per spec: hide the right button while picking. Render a
+        // zero-sized placeholder so the flex slot stays.
+        return const SizedBox.shrink();
+      case _Phase.encoding:
+        return const SizedBox.shrink();
+      case _Phase.post:
+        return _ToolbarButton(
+          label: 'NEW SESSION',
+          icon: Icons.add,
+          background: AppColors.primary,
+          onPressed: _resetToScan,
+        );
+    }
+  }
+
   void _resetToScan() {
     // Tear down 2D imager mode if the pickSku phase enabled it, then
-    // re-arm RFID. We don't clear _tags here — operator may want to
-    // keep their list and re-pick a SKU; the BACK TO SCAN button is
-    // mostly for re-scanning, but we leave the cards in place so a
-    // mistake doesn't lose work.
+    // re-arm RFID. Clear the working list — operator asked REFRESH to
+    // give them a fresh session, not preserve a half-done one.
     unawaited(_disableSearchScanner());
     setState(() {
       _phase = _Phase.scan;
@@ -601,6 +713,7 @@ class _EncodeScreenState extends State<EncodeScreen> {
       _encodePassDone = false;
       _encodeModeDisabled = false;
       _banner = null;
+      _tags.clear();
     });
     // Push the slider's current dBm back to the chip in case 2D-imager
     // setup or post-encode teardown left it elsewhere.
@@ -710,55 +823,129 @@ class _EncodeScreenState extends State<EncodeScreen> {
       );
     }
     return ListView.separated(
-      padding: EdgeInsets.fromLTRB(12.w, 10.h, 12.w, 16.h),
+      padding: EdgeInsets.fromLTRB(20.w, 6.h, 20.w, 12.h),
       itemCount: _tags.length,
-      separatorBuilder: (_, __) => SizedBox(height: 8.h),
+      separatorBuilder: (_, __) => SizedBox(height: 12.h),
       itemBuilder: (_, i) {
         final tag = _tags[i];
-        final highlighted = _encodingIndex == i;
-        return _TagCard(
-          tag: tag,
-          highlighted: highlighted,
-          phase: _phase,
-          encodeRunning: _encodingIndex >= 0,
-          onRemove: _phase == _Phase.scan ||
-                  _phase == _Phase.pickSku ||
-                  _phase == _Phase.post
-              ? () => _removeTag(tag)
-              : null,
-          onStatusChanged: _phase == _Phase.post && tag.newEpc != null
-              ? (s) => _setStatusForTag(tag, s)
-              : null,
-          onSaveStatus: _phase == _Phase.post && tag.newEpc != null && !tag.statusSaved
-              ? () => _saveStatus(tag)
-              : null,
-          onTestNewTag: _phase == _Phase.post && tag.newEpc != null
-              ? () => _openTestNewTag(tag)
-              : null,
+        final isActive = _encodingIndex == i && _phase == _Phase.encoding;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _CountItemContainer(
+              tag: tag,
+              phase: _phase,
+              isActive: isActive,
+              encodeRunning: _encodingIndex >= 0,
+              accent: _resolveAccent(tag),
+              onTap: () => _toggleExpand(tag),
+              onRemove: (_phase == _Phase.scan || _phase == _Phase.pickSku) &&
+                      _encodingIndex < 0
+                  ? () => _removeTag(tag)
+                  : null,
+            ),
+            if (_phase == _Phase.post && tag.newEpc != null) ...[
+              _StatusTray(
+                tag: tag,
+                onStatusChanged: (s) => _setStatusForTag(tag, s),
+                onSave: tag.statusSaved ? null : () => _saveStatus(tag),
+              ),
+              _TestNewTagRow(onPressed: () => _openTestNewTag(tag)),
+            ],
+            if (_phase == _Phase.post && tag.encodeError != null)
+              Container(
+                color: _kErrLineBg,
+                padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                width: double.infinity,
+                child: Text(
+                  'Encode failed: ${tag.encodeError}',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w700,
+                    color: _kErrorRed,
+                  ),
+                ),
+              ),
+          ],
         );
       },
     );
   }
 
   Widget _buildPickSkuBody() {
+    final imagerArmed = _barcodeSub != null;
     return Column(
       children: [
         Padding(
-          padding: EdgeInsets.fromLTRB(14.w, 12.h, 14.w, 6.h),
-          child: TextField(
-            controller: _searchCtrl,
-            autofocus: true,
-            decoration: InputDecoration(
-              hintText: 'Search SKU / UPC / name',
-              prefixIcon: const Icon(LucideIcons.search, size: 18),
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6.r),
-                borderSide: const BorderSide(color: Color(0xFFCDD7D7)),
+          padding: EdgeInsets.fromLTRB(20.w, 14.h, 20.w, 6.h),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: AppColors.primary, width: 2),
+                  borderRadius: BorderRadius.circular(2.r),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+                child: TextField(
+                  controller: _searchCtrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                    hintText: '',
+                  ),
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 22.sp,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMain,
+                  ),
+                  onChanged: _onSearchChanged,
+                ),
               ),
-            ),
-            onChanged: _onSearchChanged,
+              Positioned(
+                top: -10.h,
+                left: 12.w,
+                child: Container(
+                  color: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 6.w),
+                  child: Text(
+                    'Search item',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      color: _kTextSlate,
+                    ),
+                  ),
+                ),
+              ),
+              if (imagerArmed)
+                Positioned(
+                  top: -10.h,
+                  right: 12.w,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(3.r),
+                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 1.h),
+                    child: Text(
+                      '2D',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         if (_searchLoading)
@@ -768,7 +955,7 @@ class _EncodeScreenState extends State<EncodeScreen> {
           ),
         if (_searchError != null)
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
+            padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 6.h),
             child: Text(
               'Search failed: $_searchError',
               style: GoogleFonts.spaceGrotesk(
@@ -790,151 +977,30 @@ class _EncodeScreenState extends State<EncodeScreen> {
                     ),
                   ),
                 )
-              : ListView.separated(
-                  padding: EdgeInsets.fromLTRB(12.w, 6.h, 12.w, 16.h),
-                  itemCount: _searchResults.length,
-                  separatorBuilder: (_, __) => SizedBox(height: 6.h),
-                  itemBuilder: (_, i) {
-                    final row = _searchResults[i];
-                    return _SkuResultTile(row: row, onTap: () => _selectSku(row));
-                  },
+              : Container(
+                  margin: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 16.h),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: const Color(0xFFD7DEDE)),
+                    borderRadius: BorderRadius.circular(2.r),
+                  ),
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: _searchResults.length,
+                    separatorBuilder: (_, __) => const Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: Color(0xFFF0F2F2),
+                    ),
+                    itemBuilder: (_, i) {
+                      final row = _searchResults[i];
+                      return _SkuResultTile(
+                          row: row, onTap: () => _selectSku(row));
+                    },
+                  ),
                 ),
         ),
       ],
-    );
-  }
-}
-
-// ── Phase header ────────────────────────────────────────────────────────
-
-class _PhaseHeader extends StatelessWidget {
-  const _PhaseHeader({
-    required this.phase,
-    required this.selectedSku,
-    required this.isScanning,
-    required this.encodingIndex,
-    required this.total,
-    required this.onResetToScan,
-    required this.onGoToPickSku,
-  });
-
-  final _Phase phase;
-  final Map<String, dynamic>? selectedSku;
-  final bool isScanning;
-  final int encodingIndex;
-  final int total;
-  final VoidCallback? onResetToScan;
-  final VoidCallback? onGoToPickSku;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, hint) = switch (phase) {
-      _Phase.scan => (
-          'SCAN',
-          isScanning
-              ? 'Reading at 10 dBm — release trigger to stop'
-              : 'Hold trigger to read tags · $total in list',
-        ),
-      _Phase.pickSku => (
-          'PICK SKU',
-          'Type to search. Tap a result to lock the target.',
-        ),
-      _Phase.encoding => (
-          'ENCODE',
-          encodingIndex >= 0
-              ? 'Writing chip ${encodingIndex + 1} of $total…'
-              : 'Pull trigger to encode $total tag${total == 1 ? '' : 's'}',
-        ),
-      _Phase.post => ('REVIEW', 'Set status per tag, save, then test.'),
-    };
-
-    return Container(
-      width: double.infinity,
-      color: const Color(0xFF1F2A2A),
-      padding: EdgeInsets.fromLTRB(14.w, 10.h, 14.w, 10.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.6,
-                  color: AppColors.primary,
-                ),
-              ),
-              const Spacer(),
-              if (onResetToScan != null)
-                TextButton(
-                  onPressed: onResetToScan,
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white70,
-                    padding: EdgeInsets.symmetric(horizontal: 8.w),
-                    minimumSize: Size(0, 28.h),
-                  ),
-                  child: Text(
-                    'BACK TO SCAN',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ),
-              if (onGoToPickSku != null)
-                ElevatedButton(
-                  onPressed: onGoToPickSku,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(horizontal: 12.w),
-                    minimumSize: Size(0, 30.h),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4.r),
-                    ),
-                  ),
-                  child: Text(
-                    'SEARCH SKU →',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          SizedBox(height: 4.h),
-          Text(
-            hint,
-            style: GoogleFonts.manrope(
-              fontSize: 11.sp,
-              color: Colors.white70,
-            ),
-          ),
-          if (selectedSku != null && phase != _Phase.scan && phase != _Phase.pickSku) ...[
-            SizedBox(height: 6.h),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-              decoration: BoxDecoration(
-                color: Colors.white12,
-                borderRadius: BorderRadius.circular(3.r),
-              ),
-              child: Text(
-                'TARGET: ${_skuSummary(selectedSku!)}',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }
@@ -965,47 +1031,265 @@ class _SkuResultTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final sku = row['sku']?.toString() ?? row['custom_sku']?.toString() ?? '';
     final name = row['name']?.toString() ?? row['item_name']?.toString() ?? '';
-    final upc = row['upc']?.toString() ?? '';
     final color = row['color']?.toString() ?? '';
     final size = row['size']?.toString() ?? '';
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(6.r),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6.r),
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(12.w, 10.h, 12.w, 10.h),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    final descParts = <String>[
+      if (name.isNotEmpty) name,
+      if (color.isNotEmpty) color,
+      if (size.isNotEmpty) size,
+    ];
+    final desc = descParts.join(' · ').toUpperCase();
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(18.w, 12.h, 18.w, 12.h),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              sku.isEmpty ? '—' : sku,
+              style: GoogleFonts.robotoMono(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (desc.isNotEmpty) ...[
+              SizedBox(height: 4.h),
+              // 2026-05-28: bigger + black description per operator design pass
               Text(
-                name.isEmpty ? '(unnamed)' : name,
+                desc,
                 style: GoogleFonts.manrope(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textMain,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              SizedBox(height: 2.h),
-              Text(
-                [
-                  if (sku.isNotEmpty) 'SKU $sku',
-                  if (upc.isNotEmpty) 'UPC $upc',
-                  if (color.isNotEmpty) color,
-                  if (size.isNotEmpty) size,
-                ].join('  ·  '),
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF6D7979),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Count-style item container ──────────────────────────────────────────
+
+class _CountItemContainer extends StatelessWidget {
+  const _CountItemContainer({
+    required this.tag,
+    required this.phase,
+    required this.isActive,
+    required this.encodeRunning,
+    required this.accent,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  final _Tag tag;
+  final _Phase phase;
+  final bool isActive;
+  final bool encodeRunning;
+  final Color accent;
+  final VoidCallback onTap;
+  final VoidCallback? onRemove;
+
+  String _skuLine() {
+    final r = tag.resolved;
+    if (r != null) {
+      final sku = r['sku']?.toString() ?? r['custom_sku']?.toString() ?? '';
+      if (sku.isNotEmpty) return 'SKU: $sku';
+    }
+    return tag.oldEpc;
+  }
+
+  String _descLine() {
+    final r = tag.resolved;
+    if (r == null) return 'Foreign / not in catalog';
+    final name = r['name']?.toString() ?? r['item_name']?.toString() ?? '';
+    final color = r['color']?.toString() ?? '';
+    final size = r['size']?.toString() ?? '';
+    final parts = <String>[
+      if (name.isNotEmpty) name,
+      if (color.isNotEmpty) color,
+      if (size.isNotEmpty) size,
+    ];
+    return parts.isEmpty ? '—' : parts.join(' · ').toUpperCase();
+  }
+
+  Map<String, String> _kvs() {
+    final r = tag.resolved;
+    if (r == null) return const {};
+    final out = <String, String>{};
+    final upc = r['upc']?.toString() ?? '';
+    final color = r['color']?.toString() ?? '';
+    final size = r['size']?.toString() ?? '';
+    final bin = r['bin_code']?.toString() ?? r['bin']?.toString() ?? '';
+    final status = r['status']?.toString() ?? '';
+    final matrix = r['matrix']?.toString() ?? r['matrix_id']?.toString() ?? '';
+    if (upc.isNotEmpty) out['UPC'] = upc;
+    if (color.isNotEmpty) out['COLOR'] = color;
+    if (size.isNotEmpty) out['SIZE'] = size;
+    if (bin.isNotEmpty) out['BIN'] = bin;
+    if (status.isNotEmpty) out['STATUS'] = status;
+    if (matrix.isNotEmpty) out['MATRIX'] = matrix;
+    return out;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recognized = tag.resolved != null;
+    final kvs = tag.expanded ? _kvs() : const <String, String>{};
+    final descColor = recognized ? AppColors.textMain : _kTextMuted;
+
+    return Material(
+      color: _kCardGrey,
+      child: InkWell(
+        onTap: onTap,
+        child: Stack(
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(14.w, 10.h, 8.w, 10.h),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _skuLine(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.robotoMono(
+                                  fontSize: 19.sp,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textMain,
+                                  height: 1.2,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 6.w),
+                            Transform.rotate(
+                              angle: tag.expanded ? 3.14159 : 0,
+                              child: Icon(
+                                Icons.keyboard_arrow_down,
+                                size: 16.sp,
+                                color: _kTextMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 4.h),
+                        Text(
+                          _descLine(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.manrope(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w700,
+                            color: descColor,
+                            height: 1.2,
+                          ),
+                        ),
+                        if (kvs.isNotEmpty) ...[
+                          SizedBox(height: 8.h),
+                          Container(
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                top: BorderSide(color: _kHairline, width: 1),
+                              ),
+                            ),
+                            padding: EdgeInsets.only(top: 8.h, bottom: 2.h),
+                            child: _KvGrid(entries: kvs),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(8.w, 0, 12.w, 0),
+                  child: Align(
+                    alignment: tag.expanded
+                        ? Alignment.topCenter
+                        : Alignment.center,
+                    child: Padding(
+                      padding: EdgeInsets.only(top: tag.expanded ? 10.h : 0),
+                      child: _buildSlot(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (accent != Colors.transparent)
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                child: Container(width: 4, color: accent),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlot() {
+    if (phase == _Phase.encoding) {
+      if (isActive) {
+        return SizedBox(
+          width: 22.r,
+          height: 22.r,
+          child: const CircularProgressIndicator(
+            strokeWidth: 2.5,
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+          ),
+        );
+      }
+      // Queued / unencoded row in the middle of an encode pass.
+      return const _ResultPill(
+        label: 'QUEUED',
+        bg: _kPillQueuedBg,
+        fg: _kTextMuted,
+      );
+    }
+    if (phase == _Phase.post) {
+      if (tag.newEpc != null) {
+        return const _ResultPill(
+          label: 'ENCODED',
+          bg: _kPillOkBg,
+          fg: _kSuccessGreen,
+        );
+      }
+      return const _ResultPill(
+        label: 'FAILED',
+        bg: _kPillBadBg,
+        fg: _kErrorRed,
+      );
+    }
+    // Phase.scan / Phase.pickSku → trash button.
+    if (onRemove == null) return const SizedBox.shrink();
+    return SizedBox(
+      width: 42.w,
+      height: 42.w,
+      child: Material(
+        color: _kTrashRed,
+        child: InkWell(
+          onTap: onRemove,
+          child: Icon(
+            Icons.delete_outline,
+            size: 22.sp,
+            color: Colors.white,
           ),
         ),
       ),
@@ -1013,223 +1297,225 @@ class _SkuResultTile extends StatelessWidget {
   }
 }
 
-// ── Per-tag card ────────────────────────────────────────────────────────
+class _KvGrid extends StatelessWidget {
+  const _KvGrid({required this.entries});
 
-class _TagCard extends StatelessWidget {
-  const _TagCard({
+  final Map<String, String> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final list = entries.entries.toList();
+    final rows = <Widget>[];
+    for (var i = 0; i < list.length; i += 2) {
+      final left = list[i];
+      final right = i + 1 < list.length ? list[i + 1] : null;
+      rows.add(Padding(
+        padding: EdgeInsets.only(bottom: 6.h),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _kv(left.key, left.value)),
+            SizedBox(width: 14.w),
+            Expanded(
+              child: right == null
+                  ? const SizedBox.shrink()
+                  : _kv(right.key, right.value),
+            ),
+          ],
+        ),
+      ));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: rows,
+    );
+  }
+
+  Widget _kv(String k, String v) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          k.toUpperCase(),
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 9.sp,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.4,
+            color: _kTextMuted,
+          ),
+        ),
+        SizedBox(height: 1.h),
+        Text(
+          v,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.robotoMono(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textMain,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ResultPill extends StatelessWidget {
+  const _ResultPill({
+    required this.label,
+    required this.bg,
+    required this.fg,
+  });
+
+  final String label;
+  final Color bg;
+  final Color fg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4.r),
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+      child: Text(
+        label,
+        style: GoogleFonts.spaceGrotesk(
+          fontSize: 14.sp,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.4,
+          color: fg,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Phase-4 status tray ─────────────────────────────────────────────────
+
+class _StatusTray extends StatelessWidget {
+  const _StatusTray({
     required this.tag,
-    required this.highlighted,
-    required this.phase,
-    required this.encodeRunning,
-    required this.onRemove,
     required this.onStatusChanged,
-    required this.onSaveStatus,
-    required this.onTestNewTag,
+    required this.onSave,
   });
 
   final _Tag tag;
-  final bool highlighted;
-  final _Phase phase;
-  final bool encodeRunning;
-  final VoidCallback? onRemove;
-  final ValueChanged<String>? onStatusChanged;
-  final VoidCallback? onSaveStatus;
-  final VoidCallback? onTestNewTag;
+  final ValueChanged<String> onStatusChanged;
+  final VoidCallback? onSave;
 
-  static const _statusOptions = <_StatusOption>[
+  static const _options = <_StatusOption>[
+    _StatusOption(value: 'unknown', label: 'UNKNOWN'),
     _StatusOption(value: 'in-stock', label: 'LIVE'),
     _StatusOption(value: 'tag_killed', label: 'TAG KILLED'),
-    _StatusOption(value: 'unknown', label: 'UNKNOWN'),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final recognized = tag.resolved != null;
-    final isEncoding = highlighted && encodeRunning;
-    final hasNewEpc = tag.newEpc != null;
-    final hasError = tag.encodeError != null;
+    final disabled = tag.statusSaved && onSave == null;
+    final Color saveBg;
+    final Color saveFg;
+    final String saveLabel;
+    if (tag.statusSaved) {
+      saveBg = _kSuccessGreen;
+      saveFg = Colors.white;
+      saveLabel = 'SAVED';
+    } else if (onSave != null) {
+      saveBg = _kAmber;
+      saveFg = Colors.white;
+      saveLabel = 'SAVE';
+    } else {
+      saveBg = _kSaveDisabledBg;
+      saveFg = _kTextMuted;
+      saveLabel = 'SAVE';
+    }
 
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6.r),
-        border: Border.all(
-          color: isEncoding
-              ? AppColors.primary
-              : hasError
-                  ? _kErrorRed
-                  : hasNewEpc
-                      ? const Color(0xFFB7E2B7)
-                      : const Color(0xFFD7DEDE),
-          width: isEncoding ? 1.5 : 1,
-        ),
-      ),
-      padding: EdgeInsets.fromLTRB(12.w, 10.h, 8.w, 10.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      color: _kTrayBg,
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+      child: Row(
         children: [
-          // Top row: EPC + (encoding spinner or trash)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      hasNewEpc ? 'NEW EPC' : 'EPC',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 9.sp,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.4,
-                        color: const Color(0xFF6D7979),
-                      ),
-                    ),
-                    SizedBox(height: 2.h),
-                    SelectableText(
-                      hasNewEpc ? tag.newEpc! : tag.oldEpc,
-                      style: GoogleFonts.spaceMono(
-                        fontSize: 11.sp,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textMain,
-                      ),
-                    ),
-                    if (hasNewEpc) ...[
-                      SizedBox(height: 4.h),
-                      Text(
-                        'was ${tag.oldEpc}',
-                        style: GoogleFonts.spaceMono(
-                          fontSize: 9.sp,
-                          color: const Color(0xFF8FA1A1),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (isEncoding)
-                Padding(
-                  padding: EdgeInsets.only(right: 4.w, top: 4.h),
-                  child: SizedBox(
-                    width: 16.r,
-                    height: 16.r,
-                    child: const CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              else if (onRemove != null)
-                IconButton(
-                  icon: const Icon(LucideIcons.trash2, size: 18),
-                  color: const Color(0xFF6D7979),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: BoxConstraints(
-                    minWidth: 32.w,
-                    minHeight: 32.h,
-                  ),
-                  onPressed: onRemove,
-                ),
-            ],
+          Text(
+            'STATUS',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
+              color: _kTextMuted,
+            ),
           ),
-          if (recognized && !hasNewEpc) ...[
-            SizedBox(height: 6.h),
-            _ResolvedPanel(item: tag.resolved!),
-          ],
-          if (hasError) ...[
-            SizedBox(height: 6.h),
-            Text(
-              'Encode failed: ${tag.encodeError}',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 10.sp,
-                fontWeight: FontWeight.w700,
-                color: _kErrorRed,
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: const Color(0xFFD7DEDE)),
+                borderRadius: BorderRadius.circular(4.r),
               ),
-            ),
-          ],
-          if (hasNewEpc && phase == _Phase.post) ...[
-            SizedBox(height: 8.h),
-            Row(
-              children: [
-                Text(
-                  'STATUS',
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 9.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.4,
-                    color: const Color(0xFF6D7979),
-                  ),
-                ),
-                SizedBox(width: 8.w),
-                Expanded(
-                  child: DropdownButton<String>(
-                    isExpanded: true,
-                    isDense: true,
-                    value: tag.currentStatus,
-                    items: _statusOptions
-                        .map((o) => DropdownMenuItem<String>(
-                              value: o.value,
-                              child: Text(
-                                o.label,
-                                style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 11.sp,
-                                  fontWeight: FontWeight.w700,
-                                ),
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  isDense: true,
+                  value: _normalize(tag.currentStatus),
+                  items: _options
+                      .map((o) => DropdownMenuItem<String>(
+                            value: o.value,
+                            child: Text(
+                              o.label,
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textMain,
                               ),
-                            ))
-                        .toList(),
-                    onChanged: onStatusChanged == null
-                        ? null
-                        : (v) {
-                            if (v != null) onStatusChanged!(v);
-                          },
-                  ),
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) onStatusChanged(v);
+                  },
                 ),
-                IconButton(
-                  icon: Icon(
-                    LucideIcons.save,
-                    size: 18,
-                    color: onSaveStatus == null
-                        ? const Color(0xFFB7C2C2)
-                        : AppColors.primary,
-                  ),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: BoxConstraints(
-                    minWidth: 32.w,
-                    minHeight: 32.h,
-                  ),
-                  tooltip: tag.statusSaved ? 'Saved' : 'Save status',
-                  onPressed: onSaveStatus,
-                ),
-              ],
-            ),
-            SizedBox(height: 6.h),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: const Icon(LucideIcons.testTube2, size: 16),
-                label: Text(
-                  'TEST NEW TAG',
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: AppColors.primary),
-                  minimumSize: Size(0, 32.h),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4.r),
-                  ),
-                ),
-                onPressed: onTestNewTag,
               ),
             ),
-          ],
+          ),
+          SizedBox(width: 10.w),
+          SizedBox(
+            height: 36.h,
+            child: Material(
+              color: saveBg,
+              borderRadius: BorderRadius.circular(4.r),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(4.r),
+                onTap: disabled ? null : onSave,
+                child: Container(
+                  constraints: BoxConstraints(minWidth: 92.w),
+                  alignment: Alignment.center,
+                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                  child: Text(
+                    saveLabel,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                      color: saveFg,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  String _normalize(String s) {
+    // Accept legacy values + fold to the three options the dropdown shows.
+    if (s == 'in-stock' || s == 'tag_killed' || s == 'unknown') return s;
+    return 'unknown';
   }
 }
 
@@ -1239,56 +1525,93 @@ class _StatusOption {
   final String label;
 }
 
-class _ResolvedPanel extends StatelessWidget {
-  const _ResolvedPanel({required this.item});
+class _TestNewTagRow extends StatelessWidget {
+  const _TestNewTagRow({required this.onPressed});
 
-  final Map<String, dynamic> item;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final sku = item['sku']?.toString() ?? '';
-    final name = item['name']?.toString() ?? '';
-    final color = item['color']?.toString() ?? '';
-    final size = item['size']?.toString() ?? '';
-    final upc = item['upc']?.toString() ?? '';
-    final status = item['status']?.toString() ?? '';
-    final bin = item['bin_code']?.toString() ?? '';
     return Container(
-      padding: EdgeInsets.fromLTRB(8.w, 6.h, 8.w, 6.h),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEEF4F3),
-        borderRadius: BorderRadius.circular(4.r),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            name.isEmpty ? '(no name)' : name,
-            style: GoogleFonts.manrope(
-              fontSize: 11.sp,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textMain,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          SizedBox(height: 2.h),
-          Text(
-            [
-              if (sku.isNotEmpty) 'SKU $sku',
-              if (upc.isNotEmpty) 'UPC $upc',
-              if (color.isNotEmpty) color,
-              if (size.isNotEmpty) size,
-              if (status.isNotEmpty) 'status: $status',
-              if (bin.isNotEmpty) 'bin: $bin',
-            ].join('  ·  '),
+      color: _kTrayBg,
+      padding: EdgeInsets.fromLTRB(14.w, 0, 14.w, 14.h),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          icon: const Icon(LucideIcons.testTube2, size: 18, color: AppColors.primary),
+          label: Text(
+            'TEST NEW TAG',
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 10.sp,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF6D7979),
+              fontSize: 14.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
+              color: AppColors.primary,
             ),
           ),
-        ],
+          style: OutlinedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: AppColors.primary,
+            side: const BorderSide(color: AppColors.primary, width: 1.5),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6.r),
+            ),
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+          ),
+          onPressed: onPressed,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Bottom toolbar button ───────────────────────────────────────────────
+
+class _ToolbarButton extends StatelessWidget {
+  const _ToolbarButton({
+    required this.label,
+    required this.icon,
+    required this.background,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color background;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(2.r),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(2.r),
+        onTap: onPressed,
+        child: Container(
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(horizontal: 8.w),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.white, size: 22.sp),
+              SizedBox(width: 10.w),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1328,32 +1651,32 @@ class _EncodePowerSlider extends StatelessWidget {
   Widget build(BuildContext context) {
     final clamped = powerDbm.clamp(minDbm, maxDbm);
     return Container(
-      color: const Color(0xFFF0F5F4),
-      padding: EdgeInsets.fromLTRB(14.w, 4.h, 14.w, 4.h),
+      color: _kPwrStripBg,
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
       child: Row(
         children: [
           Text(
             'PWR',
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 10.sp,
+              fontSize: 11.sp,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.4,
-              color: const Color(0xFF6D7979),
+              color: _kTextSlate,
             ),
           ),
-          SizedBox(width: 8.w),
+          SizedBox(width: 12.w),
           Expanded(
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
+                trackHeight: 8,
                 activeTrackColor: AppColors.primary,
                 inactiveTrackColor: const Color(0xFFCDD7D7),
                 thumbColor: AppColors.primary,
                 overlayColor: AppColors.primary.withValues(alpha: 0.10),
                 thumbShape:
-                    const RoundSliderThumbShape(enabledThumbRadius: 8),
+                    const RoundSliderThumbShape(enabledThumbRadius: 13),
                 overlayShape:
-                    const RoundSliderOverlayShape(overlayRadius: 16),
+                    const RoundSliderOverlayShape(overlayRadius: 22),
               ),
               child: Slider(
                 value: clamped.toDouble(),
@@ -1367,14 +1690,31 @@ class _EncodePowerSlider extends StatelessWidget {
           ),
           SizedBox(width: 8.w),
           SizedBox(
-            width: 56.w,
+            width: 64.w,
             child: Text(
               '$clamped dBm',
               textAlign: TextAlign.right,
               style: GoogleFonts.spaceGrotesk(
-                fontSize: 12.sp,
+                fontSize: 14.sp,
                 fontWeight: FontWeight.w800,
                 color: AppColors.textMain,
+              ),
+            ),
+          ),
+          SizedBox(width: 8.w),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(3.r),
+            ),
+            padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+            child: Text(
+              'LIVE',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 9.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: Colors.white,
               ),
             ),
           ),

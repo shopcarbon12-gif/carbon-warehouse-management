@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Encode Screen — Redesign Preview v3</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700;800&family=Manrope:wght@500;600;700;800&family=Roboto+Mono:wght@500;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --teal:        #1B7D7D;
+    --teal-light:  #2BA3A3;  /* count's "SAVE TO FILE" button */
+    --teal-dark:   #0F5757;
+    --bg-page:     #FFFFFF;
+    --bg-card:     #ECECEC;  /* count's _CountItemContainer */
+    --bg-pwr:      #EEF4F3;
+    --text-main:   #171D1D;
+    --text-muted:  #8A9090;
+    --text-slate:  #3F4A4A;
+    --border-soft: #D7DEDE;
+    --error:       #D9534F;
+    --trash-red:   #BF2E2E;
+    --success:     #34D399;
+    --success-dark:#2A8E2A;
+    --amber:       #E08A2C;
+    --amber-soft:  #FFF4E5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #1a1d27;
+    color: #e2e8f0;
+    font-family: 'Manrope', system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  .doc-wrap { max-width: 1840px; margin: 0 auto; padding: 32px 24px 64px; }
+  .doc-header { margin-bottom: 28px; }
+  .doc-header h1 {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 28px; letter-spacing: -0.5px;
+  }
+  .doc-header .sub { color: #9aa3b2; margin-top: 6px; font-size: 14px; line-height: 1.5; }
+  .doc-header .sub code {
+    background: #2d3148; padding: 1px 6px; border-radius: 3px;
+    font-size: 12px; color: #c5d5f5;
+  }
+  .legend {
+    background: #22263a; border: 1px solid #2d3148; border-radius: 8px;
+    padding: 14px 16px; margin: 14px 0 28px; display: flex;
+    flex-wrap: wrap; gap: 14px; font-size: 12px; color: #c5d5f5;
+  }
+  .legend b { color: #f1f6ff; font-weight: 700; }
+  .phase-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 24px; align-items: start;
+  }
+  .phase-card {
+    background: #22263a; border: 1px solid #2d3148;
+    border-radius: 12px; padding: 18px;
+  }
+  .phase-card h2 {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 14px; letter-spacing: 1.8px; text-transform: uppercase;
+    margin-bottom: 4px; color: #f1f6ff;
+  }
+  .phase-card h2 .num { color: #3dd6ac; margin-right: 8px; }
+  .phase-card .phase-sub {
+    color: #9aa3b2; font-size: 12px; line-height: 1.5; margin-bottom: 14px;
+  }
+
+  /* ── Phone frame ─────────────────────────────────────────────── */
+  .phone {
+    width: 100%; max-width: 412px; margin: 0 auto;
+    background: var(--bg-page);
+    border-radius: 28px; overflow: hidden;
+    box-shadow: 0 6px 30px rgba(0,0,0,0.35);
+    border: 3px solid #2d3148;
+    color: var(--text-main);
+    font-family: 'Manrope', sans-serif;
+    display: flex; flex-direction: column;
+    height: 860px;
+  }
+  /* ── App bar ─────────────────────────────────────────────────── */
+  .appbar {
+    background: #FFFFFF;
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid #F0F2F2;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .appbar .logo-dot {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--teal), var(--teal-dark));
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-family: 'Space Grotesk'; font-weight: 800; font-size: 13px;
+  }
+  .appbar .title {
+    flex: 1;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 14px; letter-spacing: 1.4px; color: var(--text-main);
+  }
+  .appbar .title .slash { color: var(--text-muted); margin: 0 4px; }
+  .appbar .title .page  { color: var(--teal); letter-spacing: 2.4px; }
+  .appbar .icon {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-slate); cursor: pointer;
+  }
+  .appbar .icon svg {
+    width: 22px; height: 22px;
+    fill: none; stroke: var(--text-slate);
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* ── Location line ───────────────────────────────────────────── */
+  .loc-line {
+    padding: 10px 20px 8px;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 14px; letter-spacing: 2.4px;
+    color: var(--teal);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .loc-line svg {
+    width: 18px; height: 18px;
+    fill: none; stroke: var(--teal);
+    stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* ── List area ───────────────────────────────────────────────── */
+  .list-area {
+    flex: 1; overflow-y: auto;
+    padding: 6px 20px 12px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+
+  /* ── Item container (count _CountItemContainer 1:1) ──────────── */
+  .container {
+    background: var(--bg-card);
+    border-radius: 0;
+    display: flex; align-items: stretch;
+    position: relative;
+    min-height: 72px;
+  }
+  /* state accent strip */
+  .container.encoding::before,
+  .container.success::before,
+  .container.failed::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    width: 4px;
+  }
+  .container.encoding::before { background: var(--teal); }
+  .container.success::before  { background: var(--success-dark); }
+  .container.failed::before   { background: var(--error); }
+
+  .container .body {
+    flex: 1;
+    padding: 10px 8px 10px 14px;
+    display: flex; flex-direction: column; justify-content: center; gap: 4px;
+    min-width: 0;
+  }
+  .container .sku-row {
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .container .sku {
+    flex: 1;
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 700; font-size: 19px;
+    color: var(--text-main); line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .container .desc {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700; font-size: 14px; color: var(--text-main);
+    line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Right slot — small red square trash button + (Phase 3) spinner.
+     The button uses the exact Material delete_outline glyph the count
+     screen renders (Icons.delete_outline) and the exact #BF2E2E red
+     count uses, but at compact 40×40 size so it sits inside the
+     container as a square button rather than a full-height strip. */
+  .container .right {
+    display: flex; flex-direction: row; align-items: center;
+    gap: 8px; padding: 0 12px 0 8px;
+  }
+  .container .right .spinner {
+    width: 22px; height: 22px;
+    border: 2.5px solid rgba(27,125,125,0.22);
+    border-top-color: var(--teal);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .container .right .trash {
+    width: 42px; height: 42px;
+    background: var(--trash-red);
+    color: #fff;
+    border: 0; border-radius: 0;     /* true square, sharp corners */
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0;
+  }
+  .container .right .trash svg {
+    width: 22px; height: 22px;
+    fill: none; stroke: #fff;
+    stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .container .right .trash:hover { background: #A82626; }
+  .container .right .trash:disabled,
+  .container .right .trash[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+  /* Expand-on-tap: container header stays the same; tapping reveals
+     the hairline-divided key/value grid below. In Dart this is a
+     setState() that toggles the .expanded class; preview shows one
+     row per screen in the expanded state to convey the design. */
+  .container { cursor: pointer; }
+  .container .kvs { display: none; }
+  .container.expanded { padding-bottom: 0; }
+  .container.expanded .kvs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 14px;
+    margin-top: 8px;
+    padding: 8px 0 2px;
+    border-top: 1px solid rgba(0,0,0,0.08);
+  }
+  .container.expanded .right { align-items: flex-start; padding-top: 8px; }
+  .container .kv { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .container .kv .k {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 9px;
+    letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .container .kv .v {
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 700; font-size: 12px;
+    color: var(--text-main);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* tiny chevron in the body row indicating tap-to-expand */
+  .container .caret {
+    display: inline-flex; width: 14px; height: 14px;
+    color: var(--text-muted);
+    transition: transform 0.18s ease;
+  }
+  .container .caret svg {
+    width: 14px; height: 14px;
+    fill: none; stroke: currentColor;
+    stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .container.expanded .caret { transform: rotate(180deg); }
+  /* Phase-4 review pill — replaces the trash icon. Tells the operator
+     at a glance which row landed (ENCODED) vs which one didn't (FAILED).
+     Same dimensions / typography as the count screen's qty number so
+     the slot still feels balanced visually with the body column. */
+  .container .right .result-pill {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 14px;
+    letter-spacing: 1.4px; text-transform: uppercase;
+    padding: 8px 14px; border-radius: 4px;
+    white-space: nowrap; line-height: 1;
+  }
+  .container .right .result-pill.ok     { background: #D6F5E6; color: var(--success-dark); }
+  .container .right .result-pill.bad    { background: rgba(217,83,79,0.14); color: var(--error); }
+  .container .right .result-pill.queued { background: rgba(138,144,144,0.15); color: var(--text-muted); }
+
+  /* Phase-4 status tray attached BELOW the container.
+     Bigger SAVE button (no longer an icon) + bigger TEST NEW TAG block. */
+  .tray {
+    background: #F4F7F7;
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .tray .lbl {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 10px;
+    letter-spacing: 1.4px; color: var(--text-muted);
+  }
+  .tray select {
+    flex: 1;
+    border: 1px solid var(--border-soft); border-radius: 4px;
+    padding: 8px 26px 8px 10px;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 800;
+    font-size: 14px; color: var(--text-main);
+    background: #fff
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='%231F2A2A' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z'/%3E%3C/svg%3E")
+      no-repeat right 10px center; appearance: none;
+  }
+  .tray .save-btn {
+    border: 0; border-radius: 4px;
+    padding: 8px 16px;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 800;
+    font-size: 13px; letter-spacing: 1.2px; text-transform: uppercase;
+    cursor: pointer; min-width: 92px;
+  }
+  .tray .save-btn.dirty   { background: var(--amber);   color: #fff; }
+  .tray .save-btn.saved   { background: var(--success-dark); color: #fff; opacity: 0.9; }
+  .tray .save-btn.disabled{ background: #E0E6E6; color: var(--text-muted); cursor: default; }
+
+  .test-row {
+    background: #F4F7F7;
+    padding: 0 14px 14px;
+  }
+  .test-btn {
+    width: 100%;
+    border: 1.5px solid var(--teal);
+    background: #fff; color: var(--teal);
+    border-radius: 6px; padding: 12px 14px;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 800;
+    font-size: 14px; letter-spacing: 1.4px; text-transform: uppercase;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  .test-btn svg {
+    width: 18px; height: 18px;
+    fill: none; stroke: var(--teal);
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .err-line {
+    background: #FFF4F4;
+    padding: 8px 14px;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 12px; color: var(--error);
+  }
+
+  /* ── Phase 5: Test New Tag ───────────────────────────────────── */
+  /* Green/amber banner just under the loc-line. OK = banner is teal-
+     green (matches encode), MISMATCH = amber (matches phase-1 warn). */
+  .match-banner {
+    margin: 10px 20px 0;
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 12px;
+    letter-spacing: 1.2px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 10px;
+    line-height: 1.3;
+  }
+  .match-banner svg {
+    width: 16px; height: 16px; flex-shrink: 0;
+    fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .match-banner.ok      { background: #D6F5E6; color: var(--success-dark); }
+  .match-banner.ok svg  { stroke: var(--success-dark); }
+  .match-banner.bad     { background: var(--amber-soft); color: #8A4E12; border: 1px solid var(--amber); }
+  .match-banner.bad svg { stroke: var(--amber); }
+
+  /* EPC / DECODED / RESOLVE label-plus-value blocks. Tight stack, no
+     card chrome — they live directly on the page background like the
+     loc-line, separated only by a 1 px hairline. */
+  .tt-section {
+    margin: 0 20px;
+    padding: 10px 0;
+    border-bottom: 1px solid #EEF1F1;
+  }
+  .tt-section:first-of-type { padding-top: 12px; }
+  .tt-lbl {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 10px;
+    letter-spacing: 1.6px; text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+  }
+  .tt-mono {
+    font-family: 'Space Mono', monospace;
+    font-weight: 700; font-size: 16px;
+    color: var(--text-main); letter-spacing: 0.5px;
+    word-break: break-all;
+  }
+  .tt-row {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 600; font-size: 13px;
+    color: var(--text-slate);
+    line-height: 1.5;
+  }
+  .tt-row b {
+    color: var(--text-main); font-weight: 800;
+    font-family: 'Roboto Mono', monospace;
+  }
+  .tt-status { display: flex; align-items: center; gap: 8px; }
+  .tt-status-pill {
+    background: var(--teal); color: #fff;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 10px;
+    letter-spacing: 1.4px; padding: 3px 8px;
+    border-radius: 3px; text-transform: uppercase;
+  }
+
+  /* Full item detail panel — count-style grey card (no border-radius)
+     hosting the product name plus a 2-column key/value grid. */
+  .tt-item {
+    margin: 12px 20px 0;
+    background: var(--bg-card);
+    padding: 12px 14px;
+  }
+  .tt-name {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 800; font-size: 16px;
+    color: var(--text-main);
+    margin-bottom: 8px;
+    line-height: 1.25;
+  }
+  .tt-kvs {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 6px 14px;
+  }
+  .tt-kv {
+    display: flex; flex-direction: column; gap: 1px;
+    min-width: 0;
+  }
+  .tt-kv .k {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 9px;
+    letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .tt-kv .v {
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 700; font-size: 13px;
+    color: var(--text-main);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ── Search field (Phase 2) — bin-assign style ───────────────── */
+  /* Matches Screenshot_20260528_080735.jpg:
+       teal-outlined rectangle, floating "Search item" label,
+       large input value text. */
+  .ba-search {
+    margin: 14px 20px 0;
+    border: 2px solid var(--teal);
+    border-radius: 2px;
+    padding: 10px 14px 10px;
+    position: relative;
+    background: #fff;
+  }
+  .ba-search .floating-lbl {
+    position: absolute;
+    top: -10px; left: 12px;
+    background: #fff;
+    padding: 0 6px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700; font-size: 12px;
+    letter-spacing: 0.6px; color: var(--text-slate);
+  }
+  .ba-search .imager-tag {
+    position: absolute;
+    top: -10px; right: 12px;
+    background: var(--teal);
+    color: #fff;
+    padding: 1px 8px;
+    border-radius: 3px;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 800;
+    font-size: 10px; letter-spacing: 1.2px;
+  }
+  .ba-search input {
+    width: 100%;
+    border: 0; outline: 0;
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 700; font-size: 22px;
+    color: var(--text-main);
+    background: transparent;
+  }
+
+  /* Search results — same dropdown geometry as bin assign,
+     but with the user's font fix: description bigger and BLACK
+     (was small grey before). Same fix to be applied in bin assign. */
+  .ba-result {
+    background: #fff;
+    border-bottom: 1px solid #F0F2F2;
+    padding: 12px 18px;
+    cursor: pointer;
+  }
+  .ba-result:last-child { border-bottom: 0; }
+  .ba-result .sku {
+    font-family: 'Roboto Mono', monospace;
+    font-weight: 700; font-size: 18px;
+    color: var(--teal); line-height: 1.2;
+  }
+  .ba-result .desc {
+    /* USER-REQUESTED FIX: was grey ~13px; now black + 15px so the
+       description reads as a peer of the SKU instead of an afterthought.
+       Applies to bin assign search dropdown as well. */
+    margin-top: 4px;
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700; font-size: 15px;
+    color: var(--text-main);
+    line-height: 1.3;
+  }
+  .ba-result-wrap {
+    margin: 12px 20px 0;
+    background: #fff;
+    border: 1px solid var(--border-soft);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  /* ── Power slider (THICKER for finger use) ───────────────────── */
+  .pwr-bar {
+    background: var(--bg-pwr);
+    padding: 12px 20px;
+    border-top: 1px solid #E2E8E6;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .pwr-bar .pwr-lbl {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 11px;
+    letter-spacing: 1.4px; color: var(--text-slate);
+  }
+  .pwr-bar .track {
+    flex: 1; height: 8px;   /* was 3 → now 8, thicker */
+    background: #CDD7D7;
+    position: relative; border-radius: 4px;
+  }
+  .pwr-bar .track .fill {
+    position: absolute; top: 0; left: 0; bottom: 0;
+    background: var(--teal); border-radius: 4px;
+  }
+  .pwr-bar .track .thumb {
+    position: absolute; width: 26px; height: 26px;  /* fingertip-sized */
+    border-radius: 50%; background: var(--teal);
+    top: 50%; transform: translate(-50%, -50%);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.20);
+    border: 3px solid #fff;
+  }
+  .pwr-bar .pwr-val {
+    width: 64px; text-align: right;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 14px; color: var(--text-main);
+  }
+  .pwr-bar .live-pill {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 9px;
+    letter-spacing: 1.2px;
+    background: var(--teal); color: #fff;
+    padding: 2px 6px; border-radius: 3px;
+  }
+
+  /* ── Bottom toolbar (count-style: 80px white bar + 2 buttons) ── */
+  .bottom-bar {
+    height: 88px;
+    background: #fff;
+    box-shadow: 0 -8px 24px rgba(0,0,0,0.08);
+    padding: 8px 16px;
+    display: flex; gap: 8px;
+  }
+  .bbtn {
+    height: 100%;
+    border-radius: 2px;
+    border: 0;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 800; font-size: 15px;
+    letter-spacing: 0.5px;
+    color: #fff;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    text-transform: uppercase;
+  }
+  .bbtn .icon { display: flex; align-items: center; justify-content: center; line-height: 1; }
+  .bbtn .icon svg {
+    width: 22px; height: 22px;
+    fill: none; stroke: #fff;       /* operator asked for white */
+    stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* Tiny spin for the ENCODING… inline glyph (Phase-3 disabled button) */
+  .bbtn .icon.spinning svg { animation: spin 1.1s linear infinite; }
+  .bbtn.refresh { flex: 1;  background: var(--teal-light); }
+  .bbtn.search  { flex: 2;  background: var(--teal); }
+  .bbtn.disabled {
+    background: #BCC9C9; cursor: not-allowed; opacity: 0.85;
+  }
+
+  /* ── Misc ─────────────────────────────────────────────────────── */
+  .result-banner {
+    margin: 8px 20px 0;
+    background: var(--amber-soft);
+    border: 1px solid var(--amber);
+    color: #8A4E12; padding: 10px 12px; border-radius: 4px;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 12px; line-height: 1.5;
+  }
+  .target-banner {
+    margin: 8px 20px 0;
+    background: rgba(27,125,125,0.10);
+    color: var(--teal-dark);
+    padding: 8px 12px; border-radius: 4px;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 12px; line-height: 1.4;
+  }
+
+  .notes {
+    background: #22263a; border: 1px solid #2d3148;
+    border-radius: 12px; padding: 18px 22px; margin-top: 36px;
+  }
+  .notes h2 {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 18px; color: #f1f6ff; margin-bottom: 12px;
+  }
+  .notes ul {
+    padding-left: 18px; line-height: 1.7;
+    color: #c5d5f5; font-size: 13px;
+  }
+  .notes ul li code {
+    background: #2d3148; padding: 1px 6px; border-radius: 3px;
+    font-family: 'Roboto Mono', monospace; font-size: 11px;
+    color: #b9e5d8;
+  }
+  .pill {
+    display: inline-block;
+    padding: 1px 6px; border-radius: 3px;
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 10px; letter-spacing: 0.8px; text-transform: uppercase;
+  }
+  .pill.teal    { background: #1B7D7D; color: #fff; }
+  .pill.success { background: #D6F5E6; color: var(--success-dark); }
+  .pill.amber   { background: #FFE3BD; color: #8A4E12; }
+</style>
+</head>
+<body>
+<div class="doc-wrap">
+  <div class="doc-header">
+    <h1>Carbon WMS · Encode redesign preview v3</h1>
+    <div class="sub">
+      Phase banner removed. Buttons live at the bottom (count-style 88 px
+      white bar): <b>REFRESH</b> 1/3 width left, <b>SEARCH SKU</b> 2/3 right.
+      Search SKU is disabled until at least one EPC has been scanned
+      AND the operator toggles inventory off. Power slider sits directly
+      above the buttons, thicker (8 px track, 26 px thumb) and pushes
+      live to the chip. Item container drops price and bin; trash icon
+      lives inside the container — no swipe.
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><b>Phase 1</b> Scan — trigger toggles inventory · raw EPC reads</span>
+    <span><b>Phase 2</b> Pick SKU — bin-assign-style search box · 2D imager + typing</span>
+    <span><b>Phase 3</b> Encode — single pull → sequential chip write</span>
+    <span><b>Phase 4</b> Review — bigger status dropdown · SAVE button · big TEST NEW TAG</span>
+  </div>
+
+  <div class="phase-grid">
+
+    <!-- ─────────────────────────────────────────── PHASE 1: SCAN -->
+    <div class="phase-card">
+      <h2><span class="num">01</span>SCAN</h2>
+      <div class="phase-sub">
+        No top banner. Trigger toggles inventory on/off. Each unique EPC
+        renders as a count-style container. Right side holds the
+        bigger / thicker status pill plus a visible trash icon (no swipe).
+        <code>SEARCH SKU</code> at the bottom is disabled while
+        scanning is active and/or zero EPCs have landed.
+      </div>
+      <div class="phone">
+        <div class="appbar">
+          <div class="logo-dot">CW</div>
+          <div class="title">CarbonWMS<span class="slash">/</span><span class="page">ENCODE</span></div>
+          <div class="icon" aria-label="Settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </div>
+        </div>
+        <div class="loc-line">ORLANDO WAREHOUSE
+          <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="list-area">
+
+          <div class="container">
+            <div class="body">
+              <div class="sku-row"><div class="sku">SKU: 12345-FW</div></div>
+              <div class="desc">CARBON SLIM FIT · INDIGO · 30</div>
+            </div>
+            <div class="right">
+              <button class="trash" title="Remove from list" aria-label="Delete">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="container">
+            <div class="body">
+              <div class="sku-row"><div class="sku">SKU: 12345-FW</div></div>
+              <div class="desc">CARBON SLIM FIT · INDIGO · 30</div>
+            </div>
+            <div class="right">
+              <button class="trash" aria-label="Delete">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="container">
+            <div class="body">
+              <div class="sku-row"><div class="sku">F1AB1234 5678 9ABC DEF0 1234</div></div>
+              <div class="desc" style="color: var(--text-muted);">Foreign / not in catalog</div>
+            </div>
+            <div class="right">
+              <button class="trash" aria-label="Delete">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- power slider (above bottom buttons) -->
+        <div class="pwr-bar">
+          <span class="pwr-lbl">PWR</span>
+          <div class="track">
+            <div class="fill" style="width: 30%;"></div>
+            <div class="thumb" style="left: 30%;"></div>
+          </div>
+          <span class="pwr-val">10 dBm</span>
+          <span class="live-pill">LIVE</span>
+        </div>
+
+        <!-- bottom toolbar -->
+        <div class="bottom-bar">
+          <button class="bbtn refresh">
+            <span class="icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>
+            REFRESH
+          </button>
+          <!-- still scanning OR zero EPCs → disabled. This frame shows it disabled. -->
+          <button class="bbtn search disabled">
+            <span class="icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+            SEARCH SKU
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────── PHASE 1b: ready to search -->
+    <div class="phase-card">
+      <h2><span class="num">01b</span>SCAN — trigger off, ≥1 EPC</h2>
+      <div class="phase-sub">
+        Same screen, but the operator has toggled inventory off (second
+        trigger pull). <code>SEARCH SKU</code> is now enabled, lit
+        teal. Trash icons stay inside each container; no swipe motion.
+      </div>
+      <div class="phone">
+        <div class="appbar">
+          <div class="logo-dot">CW</div>
+          <div class="title">CarbonWMS<span class="slash">/</span><span class="page">ENCODE</span></div>
+          <div class="icon" aria-label="Settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </div>
+        </div>
+        <div class="loc-line">ORLANDO WAREHOUSE
+          <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="list-area">
+          <div class="container expanded">
+            <div class="body">
+              <div class="sku-row">
+                <div class="sku">SKU: 12345-FW</div>
+                <span class="caret"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+              </div>
+              <div class="desc">CARBON SLIM FIT · INDIGO · 30</div>
+              <div class="kvs">
+                <div class="kv"><span class="k">UPC</span><span class="v">0840117622123</span></div>
+                <div class="kv"><span class="k">Color</span><span class="v">INDIGO</span></div>
+                <div class="kv"><span class="k">Size</span><span class="v">30</span></div>
+                <div class="kv"><span class="k">Bin</span><span class="v">A3-12</span></div>
+              </div>
+            </div>
+            <div class="right">
+              <button class="trash" aria-label="Delete">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="container">
+            <div class="body">
+              <div class="sku-row"><div class="sku">SKU: 12345-FW</div></div>
+              <div class="desc">CARBON SLIM FIT · INDIGO · 30</div>
+            </div>
+            <div class="right">
+              <button class="trash" aria-label="Delete">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="container">
+            <div class="body">
+              <div class="sku-row"><div class="sku">F1AB1234 5678 9ABC DEF0 1234</div></div>
+              <div class="desc" style="color: var(--text-muted);">Foreign / not in catalog</div>
+            </div>
+            <div class="right">
+              <button class="trash" aria-label="Delete">
+                <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="pwr-bar">
+          <span class="pwr-lbl">PWR</span>
+          <div class="track">
+            <div class="fill" style="width: 30%;"></div>
+            <div class="thumb" style="left: 30%;"></div>
+          </div>
+          <span class="pwr-val">10 dBm</span>
+          <span class="live-pill">LIVE</span>
+        </div>
+        <div class="bottom-bar">
+          <button class="bbtn refresh">
+            <span class="icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>
+            REFRESH
+          </button>
+          <button class="bbtn search">
+            <span class="icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+            SEARCH SKU
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────── PHASE 2: PICK SKU -->
+    <div class="phase-card">
+      <h2><span class="num">02</span>PICK SKU — bin-assign-style search</h2>
+      <div class="phase-sub">
+        SEARCH SKU pressed → 2D imager armed (green pill in the input's
+        top-right corner). Search box copies the bin-assign UI verbatim
+        — teal-outlined rectangle, floating "Search item" label, large
+        mono input. <b>USER-REQUESTED FIX</b>: the dropdown's description
+        font is now bigger (15 px) and BLACK (was 13 px grey). Same fix
+        applies to the bin assign screen itself.
+      </div>
+      <div class="phone">
+        <div class="appbar">
+          <div class="logo-dot">CW</div>
+          <div class="title">CarbonWMS<span class="slash">/</span><span class="page">ENCODE</span></div>
+          <div class="icon" aria-label="Settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </div>
+        </div>
+        <div class="loc-line">ORLANDO WAREHOUSE
+          <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+
+        <div class="ba-search">
+          <span class="floating-lbl">Search item</span>
+          <input value="1124"/>
+        </div>
+
+        <div class="ba-result-wrap">
+          <div class="ba-result">
+            <div class="sku">112406902</div>
+            <div class="desc">FELIX JEANS · BLUE</div>
+          </div>
+          <div class="ba-result">
+            <div class="sku">112407007</div>
+            <div class="desc">GLEANN · BLACK</div>
+          </div>
+          <div class="ba-result">
+            <div class="sku">112407109</div>
+            <div class="desc">JIM JEANS · LIGHT BLUE</div>
+          </div>
+          <div class="ba-result">
+            <div class="sku">112407202</div>
+            <div class="desc">JOEL JEANS · BLUE</div>
+          </div>
+        </div>
+
+        <div style="flex:1;"></div>
+        <div class="bottom-bar">
+          <button class="bbtn refresh">
+            <span class="icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>
+            REFRESH
+          </button>
+          <button class="bbtn search">
+            <span class="icon"><svg viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></span>
+            BACK
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────── PHASE 3: ENCODE -->
+    <div class="phase-card">
+      <h2><span class="num">03</span>ENCODE</h2>
+      <div class="phase-sub">
+        Single trigger pull writes new EPCs sequentially. Each card's
+        right slot flips to a spinner during the write+verify, then to
+        the bigger green ✓ ENCODED pill on success or red ✗ FAIL on
+        verify-miss. Locked target shown in the slim teal banner under
+        the location.
+      </div>
+      <div class="phone">
+        <div class="appbar">
+          <div class="logo-dot">CW</div>
+          <div class="title">CarbonWMS<span class="slash">/</span><span class="page">ENCODE</span></div>
+          <div class="icon" aria-label="Settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </div>
+        </div>
+        <div class="loc-line">ORLANDO WAREHOUSE
+          <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="target-banner">TARGET: SKU 12345-FW · CARBON SLIM FIT · INDIGO · 30 · 2 of 3</div>
+        <div class="list-area">
+
+          <div class="container success expanded">
+            <div class="body">
+              <div class="sku-row">
+                <div class="sku">SKU: 12345-FW</div>
+                <span class="caret"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+              </div>
+              <div class="desc">CARBON SLIM FIT · INDIGO · 30</div>
+              <div class="kvs">
+                <div class="kv"><span class="k">UPC</span><span class="v">0840117622123</span></div>
+                <div class="kv"><span class="k">Color</span><span class="v">INDIGO</span></div>
+                <div class="kv"><span class="k">Size</span><span class="v">30</span></div>
+                <div class="kv"><span class="k">Bin</span><span class="v">A3-12</span></div>
+              </div>
+            </div>
+            <div class="right">
+              <span class="result-pill ok">ENCODED</span>
+            </div>
+          </div>
+
+          <div class="container encoding">
+            <div class="body">
+              <div class="sku-row"><div class="sku">SKU: 12345-FW</div></div>
+              <div class="desc">CARBON SLIM FIT · INDIGO · 30</div>
+            </div>
+            <div class="right">
+              <div class="spinner"></div>
+            </div>
+          </div>
+
+          <div class="container">
+            <div class="body">
+              <div class="sku-row"><div class="sku">F1AB1234 5678 9ABC DEF0 1234</div></div>
+              <div class="desc" style="color: var(--text-muted);">Foreign / not in catalog</div>
+            </div>
+            <div class="right">
+              <span class="result-pill queued">QUEUED</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pwr-bar">
+          <span class="pwr-lbl">PWR</span>
+          <div class="track">
+            <div class="fill" style="width: 30%;"></div>
+            <div class="thumb" style="left: 30%;"></div>
+          </div>
+          <span class="pwr-val">10 dBm</span>
+          <span class="live-pill">LIVE</span>
+        </div>
+        <div class="bottom-bar">
+          <button class="bbtn refresh">
+            <span class="icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>
+            REFRESH
+          </button>
+          <button class="bbtn search disabled">
+            <span class="icon spinning"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>
+            ENCODING…
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────── PHASE 4: REVIEW -->
+    <div class="phase-card">
+      <h2><span class="num">04</span>REVIEW</h2>
+      <div class="phase-sub">
+        Per-card status dropdown grew (Space Grotesk · 14 px · w800 ·
+        black). The save icon is now a proper <b>SAVE</b> button — amber
+        when the dropdown is dirty, green when persisted, grey when
+        disabled. TEST NEW TAG button is now a full-width tile, ~12 px
+        padded, 14 px label.
+      </div>
+      <div class="phone">
+        <div class="appbar">
+          <div class="logo-dot">CW</div>
+          <div class="title">CarbonWMS<span class="slash">/</span><span class="page">ENCODE</span></div>
+          <div class="icon" aria-label="Settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </div>
+        </div>
+        <div class="loc-line">ORLANDO WAREHOUSE
+          <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="list-area">
+
+          <div>
+            <div class="container success expanded">
+              <div class="body">
+                <div class="sku-row">
+                  <div class="sku">SKU: 12345-FW</div>
+                  <span class="caret"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+                </div>
+                <div class="desc">CARBON SLIM FIT · INDIGO · 30</div>
+                <div class="kvs">
+                  <div class="kv"><span class="k">UPC</span><span class="v">0840117622123</span></div>
+                  <div class="kv"><span class="k">Color</span><span class="v">INDIGO</span></div>
+                  <div class="kv"><span class="k">Size</span><span class="v">30</span></div>
+                  <div class="kv"><span class="k">Bin</span><span class="v">A3-12</span></div>
+                </div>
+              </div>
+              <div class="right">
+                <span class="result-pill ok">ENCODED</span>
+              </div>
+            </div>
+            <div class="tray">
+              <span class="lbl">STATUS</span>
+              <select><option>UNKNOWN</option><option>LIVE</option><option>TAG KILLED</option></select>
+              <button class="save-btn saved">SAVED</button>
+            </div>
+            <div class="test-row">
+              <button class="test-btn">
+                <svg viewBox="0 0 24 24"><path d="M9 2v15a3 3 0 0 0 6 0V2"/><line x1="8" y1="2" x2="16" y2="2"/><line x1="9" y1="10" x2="15" y2="10"/></svg>
+                TEST NEW TAG
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div class="container success">
+              <div class="body">
+                <div class="sku-row"><div class="sku">SKU: 12345-FW</div></div>
+                <div class="desc">CARBON SLIM FIT · INDIGO · 30</div>
+              </div>
+              <div class="right">
+                <span class="result-pill ok">ENCODED</span>
+              </div>
+            </div>
+            <div class="tray">
+              <span class="lbl">STATUS</span>
+              <select style="background-color:#FFF7E5;"><option>LIVE</option><option>UNKNOWN</option><option>TAG KILLED</option></select>
+              <button class="save-btn dirty">SAVE</button>
+            </div>
+            <div class="test-row">
+              <button class="test-btn">
+                <svg viewBox="0 0 24 24"><path d="M9 2v15a3 3 0 0 0 6 0V2"/><line x1="8" y1="2" x2="16" y2="2"/><line x1="9" y1="10" x2="15" y2="10"/></svg>
+                TEST NEW TAG
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div class="container failed">
+              <div class="body">
+                <div class="sku-row"><div class="sku">F1AB1234 5678 9ABC DEF0 1234</div></div>
+                <div class="desc" style="color: var(--text-muted);">Foreign / not in catalog</div>
+              </div>
+              <div class="right">
+                <span class="result-pill bad">FAILED</span>
+              </div>
+            </div>
+            <div class="err-line">Encode failed: write did not verify</div>
+          </div>
+        </div>
+        <div class="bottom-bar">
+          <button class="bbtn refresh">
+            <span class="icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>
+            REFRESH
+          </button>
+          <button class="bbtn search">
+            <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+            NEW SESSION
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────── PHASE 5: TEST NEW TAG -->
+    <div class="phase-card">
+      <h2><span class="num">05</span>TEST NEW TAG</h2>
+      <div class="phase-sub">
+        Opened from a Phase-4 card's <b>TEST NEW TAG</b> button (or
+        anywhere the operator wants to verify a freshly-written chip).
+        Single-pull-toggle scan at 10 dBm — first matching EPC wins,
+        the radio stops immediately, and the screen calls
+        <code>/api/rfid/encode-resolve</code> on that EPC. Green banner
+        when the read matches the expected EPC passed in by the caller,
+        amber when it's a different tag. <b>TEST ANOTHER</b> resets the
+        panel for a fresh pull.
+      </div>
+      <div class="phone">
+        <div class="appbar">
+          <div class="logo-dot">CW</div>
+          <div class="title">CarbonWMS<span class="slash">/</span><span class="page">TEST TAG</span></div>
+          <div class="icon" aria-label="Settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </div>
+        </div>
+        <div class="loc-line">ORLANDO WAREHOUSE
+          <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+
+        <div class="match-banner ok">
+          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          MATCHES THE NEW EPC YOU JUST ENCODED
+        </div>
+
+        <div class="tt-section">
+          <div class="tt-lbl">EPC</div>
+          <div class="tt-mono">E280 6894 0000 C001 0010 0007</div>
+        </div>
+
+        <div class="tt-section">
+          <div class="tt-lbl">DECODED</div>
+          <div class="tt-row">prefix <b>985611</b> · system_id <b>100007</b> · serial <b>1</b></div>
+        </div>
+
+        <div class="tt-section">
+          <div class="tt-lbl">RESOLVE</div>
+          <div class="tt-row tt-status">
+            <span class="tt-status-pill">KNOWN</span>
+            items row found at this location
+          </div>
+        </div>
+
+        <div class="list-area">
+          <div class="container success expanded">
+            <div class="body">
+              <div class="sku-row">
+                <div class="sku">SKU: 12345-FW</div>
+                <span class="caret"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+              </div>
+              <div class="desc">CARBON SLIM FIT · INDIGO · 30</div>
+              <div class="kvs">
+                <div class="kv"><span class="k">UPC</span><span class="v">0840117622123</span></div>
+                <div class="kv"><span class="k">Color</span><span class="v">INDIGO</span></div>
+                <div class="kv"><span class="k">Size</span><span class="v">30</span></div>
+                <div class="kv"><span class="k">Status</span><span class="v">unknown</span></div>
+                <div class="kv"><span class="k">Bin</span><span class="v">A3-12</span></div>
+                <div class="kv"><span class="k">Matrix</span><span class="v">M-4071</span></div>
+              </div>
+            </div>
+            <div class="right">
+              <span class="result-pill ok">MATCH</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pwr-bar">
+          <span class="pwr-lbl">PWR</span>
+          <div class="track">
+            <div class="fill" style="width: 30%;"></div>
+            <div class="thumb" style="left: 30%;"></div>
+          </div>
+          <span class="pwr-val">10 dBm</span>
+          <span class="live-pill">LIVE</span>
+        </div>
+        <div class="bottom-bar">
+          <button class="bbtn refresh">
+            <span class="icon"><svg viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></span>
+            BACK
+          </button>
+          <button class="bbtn search">
+            <span class="icon"><svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span>
+            TEST ANOTHER
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="notes">
+    <h2>Bottom toolbar — same buttons + geometry as the count screen</h2>
+    <ul>
+      <li><span class="pill teal">Bar</span> 88 px white container with a soft top shadow, identical to <code>count_inventory_screen.dart:2320</code>'s <code>bottomBar</code>.</li>
+      <li><span class="pill teal">Refresh (1/3)</span> <code>FilledButton</code> · <code>#2BA3A3</code> (same lighter teal count uses for SAVE TO FILE) · circular ⟳ icon · "REFRESH" label · <code>flex: 1</code>. Resets the session, drops back to fresh RFID-scan mode.</li>
+      <li><span class="pill teal">Search SKU (2/3)</span> <code>FilledButton</code> · <code>#1B7D7D</code> Carbon teal · 🔍 icon · "SEARCH SKU" label · <code>flex: 2</code>. <b>Disabled until</b> <code>_tags.isNotEmpty &amp;&amp; !_isScanning</code> — operator must scan at least one EPC, then toggle inventory off with a second trigger pull. While disabled the button greys to <code>#BCC9C9</code>.</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h2>Item container — count's <code>_CountItemContainer</code> with two trims</h2>
+    <ul>
+      <li><span class="pill teal">Removed</span> price row, bin row. The operator doesn't need those during the encode pass; the SKU + name·color·size line is enough to confirm what's being rewritten.</li>
+      <li><span class="pill teal">Right slot</span> bigger status pill: <code>Space Grotesk · 13 px · w800 · ls 1.3</code>, with <code>6 × 12 px</code> padding. Stacked above a visible 1 px outlined red trash button (no swipe). For Phase 3 the spinner is 22 px (was 14).</li>
+      <li><span class="pill teal">No swipe</span> the trash sits inside the container; the container does not slide. Tap-to-confirm via the same dialog count uses for delete.</li>
+      <li><span class="pill teal">State accent</span> 4 px left-edge strip — teal mid-encode, green ✓, red ✗.</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h2>Search box + dropdown — bin-assign parity (with the font fix)</h2>
+    <ul>
+      <li><span class="pill teal">Search box</span> teal-outlined 2 px rectangle, floating "Search item" label, large mono input (Roboto Mono · 22 px · w700) — identical geometry to <code>Screenshot_20260528_080735.jpg</code>.</li>
+      <li><span class="pill amber">Font fix</span> dropdown rows: SKU stays teal (Roboto Mono · 18 px · w700). <b>Description was 13 px grey → now 15 px black</b> per request. <b>Apply the same fix to the bin assign screen</b> (<code>fast_putaway_screen.dart</code>'s search dropdown rows).</li>
+      <li><span class="pill teal">2D imager pill</span> floats in the input's top-right corner, mirrors bin assign's existing trigger-relay indicator.</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h2>Power slider — thicker + live</h2>
+    <ul>
+      <li><span class="pill teal">Track</span> 8 px tall (was 3 px). Easier to drop a finger on without missing.</li>
+      <li><span class="pill teal">Thumb</span> 26 px circle with a 3 px white ring, 2 px drop shadow — large enough to grab with the operator's thumb while holding the device.</li>
+      <li><span class="pill teal">Value</span> <code>Space Grotesk · 14 px · w800</code>; a small green <b>LIVE</b> pill confirms the new value pushes to the chip mid-scan (calls <code>RfidVendorChannel.setAntennaPowerDbm</code> through the 250 ms debounce, Zebra apply-mid-inventory with the <code>inventoryActive</code> race fix shipped in 1.2.80).</li>
+    </ul>
+  </div>
+
+  <div class="notes">
+    <h2>Phase 4 detail — bigger SAVE button + bigger TEST NEW TAG</h2>
+    <ul>
+      <li><span class="pill success">SAVE button</span> replaces the icon. <code>Space Grotesk · 13 px · w800 · ls 1.2 · uppercase</code>, 8×16 padding. Three states:
+        <span class="pill amber">SAVE</span> dirty (amber background, prompts the operator to commit),
+        <span class="pill success">SAVED</span> persisted (green),
+        and a disabled grey when the dropdown matches what's already in the items table.
+      </li>
+      <li><span class="pill success">TEST NEW TAG</span> a 1.5 px teal-outlined tile with 12×14 padding · <code>Space Grotesk · 14 px · w800 · ls 1.4 · uppercase</code> — significantly larger than the previous icon-row variant. Opens <code>encode_test_tag_screen</code> with the new EPC pre-loaded.</li>
+      <li><span class="pill success">Status dropdown</span> font scaled to <code>14 px · w800 · black</code>; consistent with the bigger SAVE button.</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>

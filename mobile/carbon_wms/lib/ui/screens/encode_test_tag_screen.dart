@@ -15,24 +15,21 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 const Color _kErrorRed = Color(0xFFD9534F);
 const Color _kSuccessGreen = Color(0xFF2A8E2A);
+const Color _kCardGrey = Color(0xFFECECEC);
+const Color _kTealLight = Color(0xFF2BA3A3);
+const Color _kTextMuted = Color(0xFF8A9090);
+const Color _kTextSlate = Color(0xFF3F4A4A);
+const Color _kPwrStripBg = Color(0xFFEEF4F3);
+const Color _kHairline = Color(0x14000000);
+const Color _kSectionHairline = Color(0x10000000);
+const Color _kPillOkBg = Color(0xFFD6F5E6);
+const Color _kPillBadBg = Color(0xFFFFE3BD);
+const Color _kAmberSoft = Color(0xFFFFF4E5);
+const Color _kAmber = Color(0xFFE08A2C);
+const Color _kAmberText = Color(0xFF8A4E12);
 
 /// "Test your new tag" — pull-trigger to verify that a freshly-encoded
 /// chip is broadcasting an EPC the WMS recognises.
-///
-/// Flow:
-///   1. Operator opens this screen from the Encode review (or anywhere).
-///   2. Pull trigger (single-pull-toggle: down starts, second down stops).
-///   3. The radio reads at 10 dBm (close-range so a stray rack tag can't
-///      hijack the result).
-///   4. First EPC read: POST /api/rfid/encode-resolve to get item info,
-///      then show the enriched panel. ingestEpcs runs server-side as part
-///      of the resolve path so the items row updates (e.g. status flip
-///      from 'unknown' → 'in-stock' if the catalog matches).
-///   5. "Test another" resets the panel for the next read.
-///
-/// When [expectedEpc] is non-null, the screen highlights a match vs
-/// mismatch — green for "this is the chip you just encoded", amber for
-/// "the radio heard a different EPC instead".
 class EncodeTestTagScreen extends StatefulWidget {
   const EncodeTestTagScreen({super.key, this.expectedEpc});
 
@@ -54,6 +51,11 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
   String? _lastEpc;
   Map<String, dynamic>? _resolveResult;
   String? _error;
+
+  /// Local card-expansion state for the resolved item. Defaults to true
+  /// on this screen — the operator opened the test screen specifically
+  /// to verify details, so we show them up front.
+  bool _expanded = true;
 
   StreamSubscription<RfidTagRead>? _tagSub;
   StreamSubscription<String>? _triggerSub;
@@ -144,6 +146,7 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
       _resolveResult = null;
       _resolving = true;
       _error = null;
+      _expanded = true;
     });
     unawaited(_resolve(epc));
   }
@@ -180,27 +183,20 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
     });
   }
 
+  void _toggleExpand() {
+    setState(() => _expanded = !_expanded);
+  }
+
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
       pageTitle: 'TEST TAG',
+      bottomBar: _buildBottomBar(),
       body: ColoredBox(
-        color: const Color(0xFFF7FAFA),
-        child: Column(
-          children: [
-            _TestTagHeader(
-              scanning: _scanning,
-              hasResult: _resolveResult != null,
-              expectedEpc: widget.expectedEpc,
-              actualEpc: _lastEpc,
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(14.w, 14.h, 14.w, 24.h),
-                child: _buildContent(),
-              ),
-            ),
-          ],
+        color: Colors.white,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(bottom: 16.h),
+          child: _buildContent(),
         ),
       ),
     );
@@ -252,327 +248,671 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
           children: [
             Icon(LucideIcons.alertTriangle, color: _kErrorRed, size: 32.r),
             SizedBox(height: 8.h),
-            Text(
-              'Lookup failed: $_error',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w700,
-                color: _kErrorRed,
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20.w),
+              child: Text(
+                'Lookup failed: $_error',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w700,
+                  color: _kErrorRed,
+                ),
               ),
             ),
-            SizedBox(height: 16.h),
-            _testAnotherButton(),
           ],
         ),
       );
     }
+    // Resolved + no error — show the banner + sections + item container.
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ResultPanel(
-          epc: _lastEpc!,
-          expectedEpc: widget.expectedEpc,
-          result: _resolveResult!,
-        ),
-        SizedBox(height: 14.h),
-        _testAnotherButton(),
+        _buildMatchBanner(),
+        _buildEpcSection(),
+        _buildDecodedSection(),
+        _buildResolveSection(),
+        SizedBox(height: 12.h),
+        _buildItemContainer(),
       ],
     );
   }
 
-  Widget _testAnotherButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        icon: const Icon(LucideIcons.refreshCw, size: 16),
-        label: Text(
-          'TEST ANOTHER',
-          style: GoogleFonts.spaceGrotesk(
-            fontSize: 11.sp,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.2,
+  Widget _buildMatchBanner() {
+    final expected = widget.expectedEpc;
+    final actual = _lastEpc;
+    if (expected == null || actual == null) return const SizedBox.shrink();
+    final matched = expected.toUpperCase() == actual.toUpperCase();
+    final bg = matched ? _kPillOkBg : _kAmberSoft;
+    final fg = matched ? _kSuccessGreen : _kAmberText;
+    final icon = matched ? Icons.check : Icons.priority_high;
+    final label = matched
+        ? 'MATCHES THE NEW EPC YOU JUST ENCODED'
+        : 'DIFFERENT TAG — expected $expected';
+    return Container(
+      margin: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 0),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4.r),
+        border: matched ? null : Border.all(color: _kAmber),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16.sp, color: fg),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: fg,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEpcSection() {
+    final epc = _lastEpc ?? '';
+    // Format as "E280 6894 0000 ..." — spaces every 4 chars.
+    final pretty = StringBuffer();
+    for (var i = 0; i < epc.length; i++) {
+      if (i > 0 && i % 4 == 0) pretty.write(' ');
+      pretty.write(epc[i]);
+    }
+    return _TtSection(
+      label: 'EPC',
+      child: SelectableText(
+        pretty.toString(),
+        style: GoogleFonts.spaceMono(
+          fontSize: 16.sp,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textMain,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDecodedSection() {
+    final decoded = _resolveResult?['decoded'];
+    if (decoded is! Map<String, dynamic>) return const SizedBox.shrink();
+    final prefix = decoded['prefix']?.toString() ?? '';
+    final systemId = decoded['system_id']?.toString() ?? '';
+    final serial = decoded['serial']?.toString() ?? '';
+    final monoBlack = GoogleFonts.robotoMono(
+      fontSize: 13.sp,
+      fontWeight: FontWeight.w800,
+      color: AppColors.textMain,
+    );
+    final body = GoogleFonts.manrope(
+      fontSize: 13.sp,
+      fontWeight: FontWeight.w600,
+      color: _kTextSlate,
+      height: 1.5,
+    );
+    return _TtSection(
+      label: 'DECODED',
+      child: RichText(
+        text: TextSpan(
+          style: body,
+          children: [
+            const TextSpan(text: 'prefix '),
+            TextSpan(text: prefix, style: monoBlack),
+            const TextSpan(text: ' · system_id '),
+            TextSpan(text: systemId, style: monoBlack),
+            const TextSpan(text: ' · serial '),
+            TextSpan(text: serial, style: monoBlack),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResolveSection() {
+    final status = _resolveResult?['status']?.toString() ?? '';
+    final (pillLabel, prose) = switch (status) {
+      'known' => ('KNOWN', 'items row found at this location'),
+      'valid_orphan' => (
+          'ORPHAN',
+          'valid Carbon EPC, no items row in catalog yet',
+        ),
+      'foreign' => ('FOREIGN', 'EPC is not a Carbon-prefix tag'),
+      _ => (status.isEmpty ? 'UNKNOWN' : status.toUpperCase(), ''),
+    };
+    return _TtSection(
+      label: 'RESOLVE',
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(3.r),
+            ),
+            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+            child: Text(
+              pillLabel,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 10.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.4,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Text(
+              prose,
+              style: GoogleFonts.manrope(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w600,
+                color: _kTextSlate,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemContainer() {
+    final item = _resolveResult?['item'];
+    if (item is! Map<String, dynamic>) return const SizedBox.shrink();
+    final expected = widget.expectedEpc;
+    final actual = _lastEpc;
+    final matched = expected != null &&
+        actual != null &&
+        expected.toUpperCase() == actual.toUpperCase();
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 0),
+      child: _TestItemContainer(
+        item: item,
+        matched: matched,
+        expanded: _expanded,
+        onTap: _toggleExpand,
+      ),
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _TestPowerSlider(powerDbm: _powerDbm),
+        Container(
+          height: 88.h,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x14000000),
+                offset: Offset(0, -8),
+                blurRadius: 24,
+              ),
+            ],
+          ),
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 1,
+                child: _TtToolbarButton(
+                  label: 'BACK',
+                  icon: Icons.arrow_back,
+                  background: _kTealLight,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                flex: 2,
+                child: _TtToolbarButton(
+                  label: 'TEST ANOTHER',
+                  icon: Icons.refresh,
+                  background: AppColors.primary,
+                  onPressed: _testAnother,
+                ),
+              ),
+            ],
           ),
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          minimumSize: Size(0, 36.h),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(4.r),
-          ),
+      ],
+    );
+  }
+}
+
+// ── Section block (EPC / DECODED / RESOLVE) ─────────────────────────────
+
+class _TtSection extends StatelessWidget {
+  const _TtSection({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 20.w),
+      padding: EdgeInsets.symmetric(vertical: 10.h),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: _kSectionHairline, width: 1),
         ),
-        onPressed: _testAnother,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.6,
+              color: _kTextMuted,
+            ),
+          ),
+          SizedBox(height: 5.h),
+          child,
+        ],
       ),
     );
   }
 }
 
-class _TestTagHeader extends StatelessWidget {
-  const _TestTagHeader({
-    required this.scanning,
-    required this.hasResult,
-    required this.expectedEpc,
-    required this.actualEpc,
+// ── Item container (count-style grey, parallel to encode_screen's) ──────
+
+class _TestItemContainer extends StatelessWidget {
+  const _TestItemContainer({
+    required this.item,
+    required this.matched,
+    required this.expanded,
+    required this.onTap,
   });
 
-  final bool scanning;
-  final bool hasResult;
-  final String? expectedEpc;
-  final String? actualEpc;
+  final Map<String, dynamic> item;
+  final bool matched;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  String _skuLine() {
+    final sku = item['sku']?.toString() ?? item['custom_sku']?.toString() ?? '';
+    return sku.isEmpty ? '—' : 'SKU: $sku';
+  }
+
+  String _descLine() {
+    final name = item['name']?.toString() ?? item['item_name']?.toString() ?? '';
+    final color = item['color']?.toString() ?? '';
+    final size = item['size']?.toString() ?? '';
+    final parts = <String>[
+      if (name.isNotEmpty) name,
+      if (color.isNotEmpty) color,
+      if (size.isNotEmpty) size,
+    ];
+    return parts.isEmpty ? '—' : parts.join(' · ').toUpperCase();
+  }
+
+  Map<String, String> _kvs() {
+    final out = <String, String>{};
+    final upc = item['upc']?.toString() ?? '';
+    final color = item['color']?.toString() ?? '';
+    final size = item['size']?.toString() ?? '';
+    final bin = item['bin_code']?.toString() ?? item['bin']?.toString() ?? '';
+    final status = item['status']?.toString() ?? '';
+    final matrix =
+        item['matrix']?.toString() ?? item['matrix_id']?.toString() ?? '';
+    if (upc.isNotEmpty) out['UPC'] = upc;
+    if (color.isNotEmpty) out['COLOR'] = color;
+    if (size.isNotEmpty) out['SIZE'] = size;
+    if (bin.isNotEmpty) out['BIN'] = bin;
+    if (status.isNotEmpty) out['STATUS'] = status;
+    if (matrix.isNotEmpty) out['MATRIX'] = matrix;
+    return out;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final hint = scanning
-        ? 'Reading at 10 dBm — first matching tag wins.'
-        : (hasResult
-            ? 'Result below. Pull trigger to test another tag.'
-            : 'Pull trigger to test a tag.');
-    final showMatch = expectedEpc != null && actualEpc != null;
-    final matched = showMatch && expectedEpc!.toUpperCase() == actualEpc!.toUpperCase();
-    return Container(
-      width: double.infinity,
-      color: const Color(0xFF1F2A2A),
-      padding: EdgeInsets.fromLTRB(14.w, 10.h, 14.w, 10.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'TEST TAG',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.6,
-                  color: AppColors.primary,
-                ),
-              ),
-              const Spacer(),
-              if (scanning)
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
-                  decoration: BoxDecoration(
-                    color: Colors.white12,
-                    borderRadius: BorderRadius.circular(3.r),
-                  ),
-                  child: Text(
-                    'READING…',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                      color: Colors.white,
+    final kvs = expanded ? _kvs() : const <String, String>{};
+    return Material(
+      color: _kCardGrey,
+      child: InkWell(
+        onTap: onTap,
+        child: Stack(
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(14.w, 10.h, 8.w, 10.h),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _skuLine(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.robotoMono(
+                                  fontSize: 19.sp,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textMain,
+                                  height: 1.2,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 6.w),
+                            Transform.rotate(
+                              angle: expanded ? 3.14159 : 0,
+                              child: Icon(
+                                Icons.keyboard_arrow_down,
+                                size: 16.sp,
+                                color: _kTextMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 4.h),
+                        Text(
+                          _descLine(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.manrope(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textMain,
+                            height: 1.2,
+                          ),
+                        ),
+                        if (kvs.isNotEmpty) ...[
+                          SizedBox(height: 8.h),
+                          Container(
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                top: BorderSide(color: _kHairline, width: 1),
+                              ),
+                            ),
+                            padding: EdgeInsets.only(top: 8.h, bottom: 2.h),
+                            child: _TtKvGrid(entries: kvs),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
-            ],
-          ),
-          SizedBox(height: 4.h),
-          Text(
-            hint,
-            style: GoogleFonts.manrope(
-              fontSize: 11.sp,
-              color: Colors.white70,
-            ),
-          ),
-          if (showMatch) ...[
-            SizedBox(height: 6.h),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-              decoration: BoxDecoration(
-                color: matched ? _kSuccessGreen : const Color(0xFFE08A2C),
-                borderRadius: BorderRadius.circular(3.r),
-              ),
-              child: Text(
-                matched
-                    ? 'MATCHES THE NEW EPC YOU JUST ENCODED'
-                    : 'DIFFERENT TAG — expected $expectedEpc',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.0,
-                  color: Colors.white,
+                Padding(
+                  padding: EdgeInsets.fromLTRB(8.w, 0, 12.w, 0),
+                  child: Align(
+                    alignment:
+                        expanded ? Alignment.topCenter : Alignment.center,
+                    child: Padding(
+                      padding: EdgeInsets.only(top: expanded ? 10.h : 0),
+                      child: matched
+                          ? _MatchPill.match()
+                          : _MatchPill.mismatch(),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
+            if (matched)
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                child: Container(width: 4, color: _kSuccessGreen),
+              ),
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
-class _ResultPanel extends StatelessWidget {
-  const _ResultPanel({
-    required this.epc,
-    required this.expectedEpc,
-    required this.result,
-  });
+class _MatchPill extends StatelessWidget {
+  const _MatchPill({required this.label, required this.bg, required this.fg});
 
-  final String epc;
-  final String? expectedEpc;
-  final Map<String, dynamic> result;
+  factory _MatchPill.match() => const _MatchPill(
+        label: 'MATCH',
+        bg: _kPillOkBg,
+        fg: _kSuccessGreen,
+      );
 
-  @override
-  Widget build(BuildContext context) {
-    final status = result['status']?.toString() ?? '';
-    final decoded = result['decoded'];
-    final item = result['item'];
+  factory _MatchPill.mismatch() => const _MatchPill(
+        label: 'MISMATCH',
+        bg: _kPillBadBg,
+        fg: _kAmberText,
+      );
 
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(14.w, 12.h, 14.w, 12.h),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6.r),
-        border: Border.all(color: const Color(0xFFD7DEDE)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'EPC',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 9.sp,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.4,
-              color: const Color(0xFF6D7979),
-            ),
-          ),
-          SizedBox(height: 2.h),
-          SelectableText(
-            epc,
-            style: GoogleFonts.spaceMono(
-              fontSize: 12.sp,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textMain,
-            ),
-          ),
-          SizedBox(height: 10.h),
-          if (decoded is Map<String, dynamic>) ...[
-            Text(
-              'DECODED',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 9.sp,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.4,
-                color: const Color(0xFF6D7979),
-              ),
-            ),
-            SizedBox(height: 2.h),
-            Text(
-              'prefix ${decoded['prefix']} · system_id ${decoded['system_id']} · serial ${decoded['serial']}',
-              style: GoogleFonts.spaceMono(
-                fontSize: 10.sp,
-                color: AppColors.textMain,
-              ),
-            ),
-            SizedBox(height: 10.h),
-          ],
-          Text(
-            'RESOLVE',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 9.sp,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.4,
-              color: const Color(0xFF6D7979),
-            ),
-          ),
-          SizedBox(height: 2.h),
-          Text(
-            switch (status) {
-              'known' => 'KNOWN — items row found at this location',
-              'valid_orphan' =>
-                'VALID FORMULA, NO ITEMS ROW — chip has a Carbon EPC but the catalog doesn\'t have it yet',
-              'foreign' =>
-                'FOREIGN — EPC isn\'t a Carbon-prefix tag (or undecodable)',
-              _ => status.isEmpty ? '(no status returned)' : status,
-            },
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 11.sp,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textMain,
-            ),
-          ),
-          if (item is Map<String, dynamic>) ...[
-            SizedBox(height: 10.h),
-            _ItemPanel(item: item),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _ItemPanel extends StatelessWidget {
-  const _ItemPanel({required this.item});
-
-  final Map<String, dynamic> item;
+  final String label;
+  final Color bg;
+  final Color fg;
 
   @override
   Widget build(BuildContext context) {
-    final sku = item['sku']?.toString() ?? '';
-    final name = item['name']?.toString() ?? '';
-    final color = item['color']?.toString() ?? '';
-    final size = item['size']?.toString() ?? '';
-    final upc = item['upc']?.toString() ?? '';
-    final status = item['status']?.toString() ?? '';
-    final bin = item['bin_code']?.toString() ?? '';
     return Container(
-      padding: EdgeInsets.fromLTRB(10.w, 8.h, 10.w, 8.h),
       decoration: BoxDecoration(
-        color: const Color(0xFFEEF4F3),
+        color: bg,
         borderRadius: BorderRadius.circular(4.r),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            name.isEmpty ? '(no name)' : name,
-            style: GoogleFonts.manrope(
-              fontSize: 12.sp,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textMain,
-            ),
-          ),
-          SizedBox(height: 4.h),
-          Wrap(
-            spacing: 10.w,
-            runSpacing: 2.h,
-            children: [
-              if (sku.isNotEmpty) _kv('SKU', sku),
-              if (upc.isNotEmpty) _kv('UPC', upc),
-              if (color.isNotEmpty) _kv('Color', color),
-              if (size.isNotEmpty) _kv('Size', size),
-              if (status.isNotEmpty) _kv('Status', status),
-              if (bin.isNotEmpty) _kv('Bin', bin),
-            ],
-          ),
-        ],
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+      child: Text(
+        label,
+        style: GoogleFonts.spaceGrotesk(
+          fontSize: 14.sp,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.4,
+          color: fg,
+        ),
       ),
+    );
+  }
+}
+
+class _TtKvGrid extends StatelessWidget {
+  const _TtKvGrid({required this.entries});
+
+  final Map<String, String> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final list = entries.entries.toList();
+    final rows = <Widget>[];
+    for (var i = 0; i < list.length; i += 2) {
+      final left = list[i];
+      final right = i + 1 < list.length ? list[i + 1] : null;
+      rows.add(Padding(
+        padding: EdgeInsets.only(bottom: 6.h),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _kv(left.key, left.value)),
+            SizedBox(width: 14.w),
+            Expanded(
+              child: right == null
+                  ? const SizedBox.shrink()
+                  : _kv(right.key, right.value),
+            ),
+          ],
+        ),
+      ));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: rows,
     );
   }
 
   Widget _kv(String k, String v) {
-    return RichText(
-      text: TextSpan(
-        children: [
-          TextSpan(
-            text: '$k ',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 9.sp,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.2,
-              color: const Color(0xFF6D7979),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          k.toUpperCase(),
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 9.sp,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.4,
+            color: _kTextMuted,
           ),
-          TextSpan(
-            text: v,
+        ),
+        SizedBox(height: 1.h),
+        Text(
+          v,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.robotoMono(
+            fontSize: 13.sp,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textMain,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Toolbar button (parallel to encode_screen's) ────────────────────────
+
+class _TtToolbarButton extends StatelessWidget {
+  const _TtToolbarButton({
+    required this.label,
+    required this.icon,
+    required this.background,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color background;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(2.r),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(2.r),
+        onTap: onPressed,
+        child: Container(
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(horizontal: 8.w),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.white, size: 22.sp),
+              SizedBox(width: 10.w),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Power strip (display-only on this screen — power is fixed at 10) ────
+
+class _TestPowerSlider extends StatelessWidget {
+  const _TestPowerSlider({required this.powerDbm});
+
+  final int powerDbm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: _kPwrStripBg,
+      padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 12.h),
+      child: Row(
+        children: [
+          Text(
+            'PWR',
             style: GoogleFonts.spaceGrotesk(
               fontSize: 11.sp,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textMain,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
+              color: _kTextSlate,
+            ),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 8,
+                activeTrackColor: AppColors.primary,
+                inactiveTrackColor: const Color(0xFFCDD7D7),
+                thumbColor: AppColors.primary,
+                overlayColor: AppColors.primary.withValues(alpha: 0.10),
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 13),
+                overlayShape:
+                    const RoundSliderOverlayShape(overlayRadius: 22),
+              ),
+              child: Slider(
+                value: powerDbm.toDouble(),
+                min: 0,
+                max: 33,
+                divisions: 33,
+                onChanged: (_) {},
+              ),
+            ),
+          ),
+          SizedBox(width: 8.w),
+          SizedBox(
+            width: 64.w,
+            child: Text(
+              '$powerDbm dBm',
+              textAlign: TextAlign.right,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textMain,
+              ),
+            ),
+          ),
+          SizedBox(width: 8.w),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(3.r),
+            ),
+            padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+            child: Text(
+              'LIVE',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 9.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: Colors.white,
+              ),
             ),
           ),
         ],
