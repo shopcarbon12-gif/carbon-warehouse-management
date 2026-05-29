@@ -127,8 +127,15 @@ export default async function RewardsCustomers({
         `SELECT COUNT(*)::text AS n FROM pos_customers pc ${whereSql}`,
         args.slice(0, idx0),
       );
+      // pos_locations has no name column — resolve names via the WMS-owned
+      // locations table (same join the main query uses). Option value is the
+      // pos_locations.id (what pc.pos_location_id points at).
       const locs = await pool.query<{ id: number; name: string }>(
-        `SELECT id, name FROM pos_locations ORDER BY name`,
+        `SELECT pl.id,
+                COALESCE(l.name, 'Location ' || pl.id::text) AS name
+           FROM pos_locations pl
+           LEFT JOIN locations l ON l.id = pl.wms_location_id
+          ORDER BY name`,
       );
       rows = r.rows;
       total = Number(c.rows[0]?.n ?? 0);
