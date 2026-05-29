@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { Radio, ScanLine } from "lucide-react";
 
@@ -32,7 +32,6 @@ const hcFetcher = async (url: string): Promise<HardwareConfigTree> => {
   return r.json() as Promise<HardwareConfigTree>;
 };
 import {
-  cellTruncate,
   DataTableContainer,
   pickTableLayout,
   ResizeHandle,
@@ -107,9 +106,63 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     hcFetcher,
     { revalidateOnFocus: false },
   );
-  // Active scan-session id for the auto-woken default reader (.70). Held in a
-  // ref so the unmount cleanup can end it without re-running on every render.
-  const scanSessionIdRef = useRef<string | null>(null);
+  // Active scan-session ids (one per woken reader). Ref so the unmount cleanup
+  // can end them all without re-running on every render.
+  const scanSessionIdsRef = useRef<string[]>([]);
+
+  const stopScan = useCallback(() => {
+    const ids = scanSessionIdsRef.current;
+    scanSessionIdsRef.current = [];
+    setScanning(false);
+    for (const id of ids) {
+      void fetch("/api/scan-sessions/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: id }),
+        keepalive: true,
+      }).catch(() => {});
+    }
+  }, []);
+
+  // Wake the given readers via scan-sessions (kind=bulk-status). The agent
+  // supervisor spawns each reader within ~250ms, overriding scan_paused_at,
+  // and Hardware Config shows them as "scanning".
+  const startScan = useCallback(async (readerIds: string[]) => {
+    if (readerIds.length === 0) {
+      setMsg("Pick at least one reader first.");
+      return;
+    }
+    setMsg(null);
+    const newIds: string[] = [];
+    for (const readerId of readerIds) {
+      try {
+        const res = await fetch("/api/scan-sessions/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ readerId, kind: "bulk-status", context: { page: "bulk-status" } }),
+        });
+        const j = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          sessionId?: string;
+          reason?: string;
+          error?: string;
+        };
+        if (res.ok && j.ok && j.sessionId) newIds.push(j.sessionId);
+        else setMsg(`Could not start a reader (${j.reason ?? j.error ?? "unknown"}).`);
+      } catch {
+        setMsg("Network error starting reader.");
+      }
+    }
+    if (newIds.length > 0) {
+      scanSessionIdsRef.current = [...scanSessionIdsRef.current, ...newIds];
+      setScanning(true);
+    }
+  }, []);
+
+  const onScanToggle = useCallback(() => {
+    if (scanning) stopScan();
+    else void startScan(Array.from(selectedReadersRef.current));
+  }, [scanning, startScan, stopScan]);
 
   const appliedDefaultRef = useRef(false);
   useEffect(() => {
@@ -139,55 +192,23 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     appliedDefaultRef.current = true; // mark applied either way — no retry
     if (defaultId) {
       setSelectedReaders(new Set([defaultId]));
-      // Operator request 2026-05-29: entering this page should START the .70
-      // reader, not just pre-select it. Wake it via a scan-session and begin
-      // populating the table. The session is released on unmount (below).
-      void (async () => {
-        try {
-          const res = await fetch("/api/scan-sessions/start", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              readerId: defaultId,
-              kind: "bulk-status",
-              context: { page: "bulk-status" },
-            }),
-          });
-          const j = (await res.json().catch(() => ({}))) as {
-            ok?: boolean;
-            sessionId?: string;
-            reason?: string;
-          };
-          if (res.ok && j.ok && j.sessionId) {
-            scanSessionIdRef.current = j.sessionId;
-            setScanning(true);
-          } else if (j.reason === "reader_busy") {
-            setMsg("Reader .70 is already in use by another workflow — start it manually if needed.");
-          }
-        } catch {
-          /* non-fatal: operator can still click Start scan */
-        }
-      })();
+      // Operator request: entering the page auto-starts the default reader (.70).
+      void startScan([defaultId]);
     }
-  }, [hcData]);
+  }, [hcData, startScan]);
 
-  // Release the auto-woken .70 session when leaving the page so the reader
-  // returns to its default-paused state. keepalive lets the request finish
-  // even as the tab navigates/closes.
+  // End all sessions when leaving the page so readers return to default-paused.
   useEffect(() => {
     return () => {
-      const sid = scanSessionIdRef.current;
-      if (!sid) return;
-      scanSessionIdRef.current = null;
-      try {
+      const ids = scanSessionIdsRef.current;
+      scanSessionIdsRef.current = [];
+      for (const id of ids) {
         void fetch("/api/scan-sessions/end", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: sid }),
+          body: JSON.stringify({ sessionId: id }),
           keepalive: true,
-        });
-      } catch {
-        /* best-effort */
+        }).catch(() => {});
       }
     };
   }, []);
@@ -429,8 +450,9 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-3">
         <button
           type="button"
-          onClick={() => setScanning((s) => !s)}
-          className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors ${
+          onClick={() => onScanToggle()}
+          disabled={!scanning && selectedReaders.size === 0}
+          className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
             scanning
               ? "border-amber-500/60 bg-amber-950/40 text-amber-100"
               : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-teal-500/40"
@@ -441,7 +463,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
               scanning ? "text-amber-400" : "text-[var(--wms-muted)]"
             }`}
           />
-          {scanning ? "Scanning… (click to pause)" : "Start scan"}
+          {scanning ? "Scanning… (click to stop)" : "Start scan"}
         </button>
         <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} hidePosDedicated />
         <button

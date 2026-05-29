@@ -781,7 +781,14 @@ function ReaderCard({
           <span className="font-mono text-[0.6rem] text-yellow-400/70">unmanaged</span>
         )}
         <StatusPill status={reader.bridge_state} />
-        {isManualPaused ? (
+        {reader.actively_scanning ? (
+          <span
+            title="A workflow page (Bulk Status / Bulk Import / Transfer Out / etc.) is scanning this reader right now"
+            className="rounded border border-emerald-400/50 bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-emerald-300"
+          >
+            scanning
+          </span>
+        ) : isManualPaused ? (
           <span className="rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300">
             stopped
           </span>

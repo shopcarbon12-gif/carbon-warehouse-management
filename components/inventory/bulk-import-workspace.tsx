@@ -122,7 +122,30 @@ export function BulkImportWorkspace() {
       if (defaultId) break;
     }
     appliedDefaultRef.current = true;
-    if (defaultId) setSelectedReaders(new Set([defaultId]));
+    if (defaultId) {
+      setSelectedReaders(new Set([defaultId]));
+      // Operator request: entering the page auto-starts the default reader (.16),
+      // matching Bulk Status. Releases on unmount via the existing cleanup.
+      const startId = defaultId;
+      void (async () => {
+        try {
+          const r = await fetch("/api/scan-sessions/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ readerId: startId, kind: "bulk-import" }),
+          });
+          const j = (await r.json().catch(() => null)) as
+            | { ok?: boolean; sessionId?: string }
+            | null;
+          if (j?.ok && j.sessionId) {
+            setScanSessionId(j.sessionId);
+            setScanning(true);
+          }
+        } catch {
+          /* non-fatal: operator can still click Start scanning */
+        }
+      })();
+    }
   }, [hcData]);
 
   // --- Scan state ------------------------------------------------------

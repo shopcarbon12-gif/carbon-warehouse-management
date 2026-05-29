@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { isReaderEffectivelyPaused, type ScanSchedule } from "./scan-schedule";
+import { isReaderActivelyScanning } from "./scan-sessions";
 
 export type HardwareAntennaRow = {
   id: string;
@@ -57,6 +58,12 @@ export type HardwareReaderRow = {
   /** Surfaced so the hardware-config UI can render pause state + schedule. */
   scan_paused_at: string | null;
   scan_schedule: unknown | null;
+  /** True when a workflow scan-session (Transfer Out / Cycle Count /
+   *  Print-Commission / Encode / Bulk Import / Bulk Status) is currently
+   *  waking this reader — the supervisor is scanning it RIGHT NOW even though
+   *  scan_paused_at may still be set. Lets Hardware Config show "scanning"
+   *  instead of "stopped" while a page holds the reader awake. */
+  actively_scanning: boolean;
   /** Per-reader health derived from the last 5 minutes of cdm_reads + bridge
    *  reachability. Drives the Hardware Config badge next to the reader name.
    *  Effectively-paused readers always report "ok" — pause state is its
@@ -524,6 +531,7 @@ export async function buildHardwareConfigTree(
       zone_id: d.zone_id,
       scan_paused_at: d.scan_paused_at,
       scan_schedule: d.scan_schedule,
+      actively_scanning: isReaderActivelyScanning(d.id),
       health: {
         status: healthStatus,
         reads_5m: reads5m,
