@@ -41,7 +41,10 @@ const postSchema = z.object({
 
 /**
  * POST /api/settings/access/rewards-users
- * Provision a rewards user (default role = Manager). No PIN, no per-location.
+ * Grant rewards access by email (default role = Manager). Attaches a
+ * rewards_employees row to the EXISTING user when the email is already a
+ * WMS/POS user; creates the user only when the email is brand-new. Idempotent
+ * re-grant — never errors with "email already exists". No PIN, no per-location.
  */
 export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -69,7 +72,10 @@ export async function POST(req: Request) {
     const result = await createTenantRewardsUser(pool, session.tid, parsed.data);
     if (!result.ok) {
       const map: Record<typeof result.code, { status: number; msg: string }> = {
-        email_taken: { status: 409, msg: "A user with that email already exists" },
+        password_required: {
+          status: 400,
+          msg: "A password is required to create a new rewards user.",
+        },
         rewards_employees_missing: {
           status: 503,
           msg: "Rewards schema not applied. Run migration 0079_rewards_access.sql.",
@@ -86,7 +92,12 @@ export async function POST(req: Request) {
       const m = map[result.code];
       return NextResponse.json({ error: m.msg }, { status: m.status });
     }
-    return NextResponse.json({ id: result.id }, { status: 201 });
+    // 201 when rewards access was newly attached; 200 when it was an
+    // idempotent re-grant (role/reactivate/optional password reset).
+    return NextResponse.json(
+      { id: result.id, userCreated: result.userCreated, rewardsCreated: result.rewardsCreated },
+      { status: result.rewardsCreated ? 201 : 200 },
+    );
   } catch (e) {
     console.error("[access/rewards-users POST]", e);
     return NextResponse.json({ error: "Create failed" }, { status: 500 });
