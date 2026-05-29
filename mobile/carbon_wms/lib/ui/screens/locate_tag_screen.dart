@@ -279,6 +279,19 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // stream guarantees reads reach _onGeigerRead regardless of manager
     // state.
     _readSub = RfidVendorChannel.tagReadStream().listen(_onGeigerRead);
+    // Re-apply the locate-specific radio config every trigger pull. These
+    // are also set in initState, but the action-picker handOff (Status
+    // change / Encode / Re-encode) intentionally clears them so the
+    // destination screen sees the full RF field. When the operator pops
+    // back here and pulls the trigger, the radio would otherwise be in
+    // SESSION_S1 with no filter — proximity dies and the % bar floats.
+    // Vendor-channel calls are idempotent, so re-asserting is cheap.
+    final target = _epcUpper;
+    if (_epc24.hasMatch(target)) {
+      unawaited(RfidVendorChannel.setEpcInventoryFilter(target));
+    }
+    unawaited(RfidVendorChannel.setSingulationSession(useSessionZero: true));
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     // Start the radio via BOTH paths — the vendor channel is idempotent
     // and the manager path keeps the manager's internal state consistent
     // for other screens.
