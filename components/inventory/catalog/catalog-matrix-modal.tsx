@@ -56,7 +56,6 @@ type Props = {
 type MatrixForm = {
   description: string;
   brand: string;
-  vendor: string;
   category: string;
   subcategory_1: string;
   upc: string;
@@ -90,6 +89,13 @@ function moneyOrNull(s: string): number | null {
   const n = Number.parseFloat(t);
   return Number.isFinite(n) ? n : null;
 }
+/** Normalize a money string to fixed 2-decimal form (blank stays blank). */
+function money2(s: string | null): string {
+  const t = (s ?? "").trim();
+  if (t === "") return "";
+  const n = Number.parseFloat(t);
+  return Number.isFinite(n) ? n.toFixed(2) : (s ?? "");
+}
 function fmtMoney(n: number | null): string {
   if (n == null) return "—";
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(n);
@@ -103,7 +109,6 @@ function matrixForm(m: Matrix): MatrixForm {
   return {
     description: m.description ?? "",
     brand: m.brand ?? "",
-    vendor: m.vendor ?? "",
     category: m.category ?? "",
     subcategory_1: m.subcategory_1 ?? "",
     upc: m.upc ?? "",
@@ -115,7 +120,7 @@ function variantForm(v: Variant): VariantForm {
     size: v.size ?? "",
     upc: v.upc ?? "",
     retail_price: v.retail_price ?? "",
-    default_cost: v.default_cost ?? "",
+    default_cost: money2(v.default_cost),
     sku: v.sku ?? "",
   };
 }
@@ -220,7 +225,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
     const matrixBody: Record<string, unknown> = {};
     if (mForm.description !== m0.description) matrixBody.description = mForm.description.trim();
     if (mForm.brand !== m0.brand) matrixBody.brand = mForm.brand.trim();
-    if (mForm.vendor !== m0.vendor) matrixBody.vendor = mForm.vendor.trim();
     if (mForm.category !== m0.category) matrixBody.category = mForm.category.trim();
     if (mForm.subcategory_1 !== m0.subcategory_1)
       matrixBody.subcategory_1 = mForm.subcategory_1.trim();
@@ -417,12 +421,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                       editable={canManage}
                     />
                     <EditRow
-                      label="Vendor"
-                      value={mForm.vendor}
-                      onChange={(v) => patchMatrix({ vendor: v })}
-                      editable={canManage}
-                    />
-                    <EditRow
                       label="UPC"
                       value={mForm.upc}
                       onChange={(v) => patchMatrix({ upc: v })}
@@ -484,12 +482,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                     Group Items
                   </div>
                   <div className="overflow-x-auto">
-                  <div className="min-w-[660px]">
-                  <div className="grid grid-cols-[90px_70px_100px_100px_150px_1fr] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                  <div className="min-w-[740px]">
+                  <div className="grid grid-cols-[150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
                     <span>Color</span>
                     <span>Size</span>
-                    <span className="text-right">Price</span>
-                    <span className="text-right">Cost</span>
+                    <span className="text-left">Price</span>
+                    <span className="text-left">Cost</span>
                     <span>UPC</span>
                     <span>Custom SKU</span>
                   </div>
@@ -498,12 +496,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                     return (
                       <div
                         key={v.id}
-                        className="grid grid-cols-[90px_70px_100px_100px_150px_1fr] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-xs text-[var(--wms-fg)] last:border-b-0"
+                        className="grid grid-cols-[150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-xs text-[var(--wms-fg)] last:border-b-0"
                       >
                         <Cell value={f.color} onChange={(x) => patchVariant(v.id, { color: x })} editable={canManage} />
                         <Cell value={f.size} onChange={(x) => patchVariant(v.id, { size: x })} editable={canManage} />
                         <Cell value={f.retail_price} onChange={(x) => patchVariant(v.id, { retail_price: x })} editable={canManage} numeric align="right" />
-                        <Cell value={f.default_cost} onChange={(x) => patchVariant(v.id, { default_cost: x })} editable={canManage} numeric align="right" />
+                        <Cell value={f.default_cost} onChange={(x) => patchVariant(v.id, { default_cost: x })} editable={canManage} money align="right" />
                         <Cell value={f.upc} onChange={(x) => patchVariant(v.id, { upc: x })} editable={canManage} />
                         <div className="flex items-center gap-2">
                           <Cell value={f.sku} onChange={(x) => patchVariant(v.id, { sku: x })} editable={canManage} grow />
@@ -533,6 +531,7 @@ function Cell({
   onChange,
   editable,
   numeric,
+  money,
   align,
   grow,
 }: {
@@ -540,13 +539,14 @@ function Cell({
   onChange: (v: string) => void;
   editable: boolean;
   numeric?: boolean;
+  money?: boolean;
   align?: "right";
   grow?: boolean;
 }) {
   if (!editable) {
     return (
       <span
-        className={`truncate ${align === "right" ? "text-right tabular-nums" : ""} ${grow ? "min-w-0 flex-1" : ""}`}
+        className={`truncate ${align === "right" ? "text-left tabular-nums" : ""} ${grow ? "min-w-0 flex-1" : ""}`}
         title={value}
       >
         {value.trim() || "—"}
@@ -556,11 +556,12 @@ function Cell({
   return (
     <input
       type="text"
-      inputMode={numeric ? "decimal" : undefined}
+      inputMode={numeric || money ? "decimal" : undefined}
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onBlur={money ? () => onChange(money2(value)) : undefined}
       className={`w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-1 text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none ${
-        align === "right" ? "text-right tabular-nums" : ""
+        align === "right" ? "text-left tabular-nums" : ""
       } ${grow ? "min-w-0 flex-1" : ""}`}
     />
   );
@@ -613,7 +614,7 @@ function EditRow({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-44 ${
+        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-left text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-44 ${
           mono ? "font-mono" : ""
         }`}
       />
@@ -625,9 +626,9 @@ function PriceHeader() {
   return (
     <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 bg-[var(--wms-surface-elevated)]/60 px-3 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
       <span>Name</span>
-      <span className="text-right">Price</span>
-      <span className="text-right">Markup</span>
-      <span className="text-right">Margin</span>
+      <span className="text-left">Price</span>
+      <span className="text-left">Markup</span>
+      <span className="text-left">Margin</span>
     </div>
   );
 }
@@ -648,9 +649,9 @@ function PriceRow({
       <span className="text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
         {label}
       </span>
-      <span className="text-right text-[var(--wms-fg)]">{fmtMoney(amount)}</span>
-      <span className="text-right text-[var(--wms-muted)]">{fmtPct(markup)}</span>
-      <span className="text-right text-[var(--wms-muted)]">{fmtPct(margin)}</span>
+      <span className="text-left text-[var(--wms-fg)]">{fmtMoney(amount)}</span>
+      <span className="text-left text-[var(--wms-muted)]">{fmtPct(markup)}</span>
+      <span className="text-left text-[var(--wms-muted)]">{fmtPct(margin)}</span>
     </div>
   );
 }

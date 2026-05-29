@@ -43,6 +43,14 @@ function parseMoney(raw: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Normalize a money string to fixed 2-decimal form (blank stays blank). */
+function money2(s: string | null): string {
+  const t = (s ?? "").trim();
+  if (t === "") return "";
+  const n = Number.parseFloat(t);
+  return Number.isFinite(n) ? n.toFixed(2) : (s ?? "");
+}
+
 function fmtMoney(n: number | null): string {
   if (n == null) return "—";
   return new Intl.NumberFormat(undefined, {
@@ -81,7 +89,7 @@ function formFromRow(row: CatalogGridRow): Form {
     sku: row.sku ?? "",
     upc: row.sku_upc ?? "",
     retail_price: row.retail_price ?? "",
-    default_cost: row.default_cost ?? "",
+    default_cost: money2(row.default_cost),
   };
 }
 
@@ -518,7 +526,7 @@ function DetailsTab({
             onChange={(v) => patch({ default_cost: v })}
             editable={editable}
             mono
-            numeric
+            money
           />
         </Section>
       </div>
@@ -600,6 +608,7 @@ function EditRow({
   editable,
   mono,
   numeric,
+  money,
   hint,
 }: {
   label: string;
@@ -608,6 +617,7 @@ function EditRow({
   editable: boolean;
   mono?: boolean;
   numeric?: boolean;
+  money?: boolean;
   hint?: string;
 }) {
   if (!editable) {
@@ -623,10 +633,11 @@ function EditRow({
       </span>
       <input
         type="text"
-        inputMode={numeric ? "decimal" : undefined}
+        inputMode={numeric || money ? "decimal" : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-40 ${
+        onBlur={money ? () => onChange(money2(value)) : undefined}
+        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-left text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-40 ${
           mono ? "font-mono" : ""
         }`}
       />
@@ -638,9 +649,9 @@ function PriceHeader() {
   return (
     <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 bg-[var(--wms-surface-elevated)]/60 px-3 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
       <span>Name</span>
-      <span className="text-right">Price</span>
-      <span className="text-right">Markup</span>
-      <span className="text-right">Margin</span>
+      <span className="text-left">Price</span>
+      <span className="text-left">Markup</span>
+      <span className="text-left">Margin</span>
     </div>
   );
 }
@@ -661,9 +672,9 @@ function PriceRow({
       <span className="text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
         {label}
       </span>
-      <span className="text-right text-[var(--wms-fg)]">{fmtMoney(amount)}</span>
-      <span className="text-right text-[var(--wms-muted)]">{fmtPct(markup)}</span>
-      <span className="text-right text-[var(--wms-muted)]">{fmtPct(margin)}</span>
+      <span className="text-left text-[var(--wms-fg)]">{fmtMoney(amount)}</span>
+      <span className="text-left text-[var(--wms-muted)]">{fmtPct(markup)}</span>
+      <span className="text-left text-[var(--wms-muted)]">{fmtPct(margin)}</span>
     </div>
   );
 }
@@ -696,10 +707,10 @@ function EditPriceRow({
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
+        className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-left text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
       />
-      <span className="text-right text-[var(--wms-muted)]">{fmtPct(markup)}</span>
-      <span className="text-right text-[var(--wms-muted)]">{fmtPct(margin)}</span>
+      <span className="text-left text-[var(--wms-muted)]">{fmtPct(markup)}</span>
+      <span className="text-left text-[var(--wms-muted)]">{fmtPct(margin)}</span>
     </div>
   );
 }
