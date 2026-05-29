@@ -317,6 +317,35 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   /// after taking the action.
   void _showActionPicker() {
     if (!mounted) return;
+
+    // Hand the radio off to the next screen in a clean state. Locate's
+    // initState sets a single-EPC PreFilter, flips Zebra to SESSION_S0 and
+    // suppresses the per-tag native beep — all correct for proximity work,
+    // all WRONG for a screen the operator is about to scan many fresh
+    // tags on. Because we navigate via Navigator.push, locate stays in
+    // the stack and its dispose() doesn't run, so those settings would
+    // persist into Status Change / Encode / Re-encode and silently filter
+    // the inventory down to one tag. Reset them here so the next screen
+    // sees the full RF field, and stop any inventory that might still be
+    // running.
+    Future<void> handOffRadio() async {
+      try {
+        await RfidVendorChannel.stopChainwayInventory();
+      } catch (_) {}
+      try {
+        await RfidVendorChannel.stopZebraInventory();
+      } catch (_) {}
+      try {
+        await RfidVendorChannel.setEpcInventoryFilter(null);
+      } catch (_) {}
+      try {
+        await RfidVendorChannel.setSingulationSession(useSessionZero: false);
+      } catch (_) {}
+      try {
+        await ScanSounds.instance.setTagBeepSuppressed(false);
+      } catch (_) {}
+    }
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
@@ -373,9 +402,11 @@ class _LocateTagScreenState extends State<LocateTagScreen>
               tile(
                 icon: Icons.swap_horiz,
                 label: 'Status change',
-                onTap: () {
+                onTap: () async {
                   Navigator.of(sheetCtx).pop();
-                  Navigator.of(context).push<void>(
+                  await handOffRadio();
+                  if (!mounted) return;
+                  await Navigator.of(context).push<void>(
                     MaterialPageRoute(
                       builder: (_) => const StatusChangeScreen(),
                     ),
@@ -386,9 +417,11 @@ class _LocateTagScreenState extends State<LocateTagScreen>
               tile(
                 icon: Icons.tag,
                 label: 'Encode',
-                onTap: () {
+                onTap: () async {
                   Navigator.of(sheetCtx).pop();
-                  Navigator.of(context).push<void>(
+                  await handOffRadio();
+                  if (!mounted) return;
+                  await Navigator.of(context).push<void>(
                     MaterialPageRoute(builder: (_) => const EncodeScreen()),
                   );
                 },
@@ -397,9 +430,11 @@ class _LocateTagScreenState extends State<LocateTagScreen>
               tile(
                 icon: Icons.refresh,
                 label: 'Re-encode',
-                onTap: () {
+                onTap: () async {
                   Navigator.of(sheetCtx).pop();
-                  Navigator.of(context).push<void>(
+                  await handOffRadio();
+                  if (!mounted) return;
+                  await Navigator.of(context).push<void>(
                     MaterialPageRoute(
                       builder: (_) => const SearchAndEncodeScreen(),
                     ),
