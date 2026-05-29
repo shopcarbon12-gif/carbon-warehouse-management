@@ -12,6 +12,9 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/screens/encode_screen.dart';
+import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
+import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 
@@ -57,6 +60,7 @@ class LocateTagScreen extends StatefulWidget {
     this.targetColor,
     this.targetSize,
     this.targetPriceText,
+    this.cloudGeigerMode = false,
   });
 
   final String? targetEpc;
@@ -72,6 +76,12 @@ class LocateTagScreen extends StatefulWidget {
   final String? targetColor;
   final String? targetSize;
   final String? targetPriceText;
+
+  /// True when launched from the Cloud+Geiger screen for a specific EPC.
+  /// Enables the "TAKE AN ACTION" button above the trigger affordance
+  /// (visible only while NOT scanning) which routes to Status Change /
+  /// Encode / Re-encode for that tag.
+  final bool cloudGeigerMode;
 
   @override
   State<LocateTagScreen> createState() => _LocateTagScreenState();
@@ -301,6 +311,109 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     });
   }
 
+  /// Cloud+Geiger only — show a bottom sheet with the action choices
+  /// (Status Change / Encode / Re-encode) and route to the picked screen.
+  /// EPC stays on the Cloud+Geiger list; the operator decides what to do
+  /// after taking the action.
+  void _showActionPicker() {
+    if (!mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) {
+        Widget tile({
+          required IconData icon,
+          required String label,
+          required VoidCallback onTap,
+        }) {
+          return InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              child: Row(
+                children: [
+                  Icon(icon, size: 24, color: AppColors.primary),
+                  const SizedBox(width: 14),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF171D1D),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Text(
+                  'TAKE AN ACTION',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.6,
+                    color: Color(0xFF6D7979),
+                  ),
+                ),
+              ),
+              const Divider(height: 1),
+              tile(
+                icon: Icons.swap_horiz,
+                label: 'Status change',
+                onTap: () {
+                  Navigator.of(sheetCtx).pop();
+                  Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => const StatusChangeScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              tile(
+                icon: Icons.tag,
+                label: 'Encode',
+                onTap: () {
+                  Navigator.of(sheetCtx).pop();
+                  Navigator.of(context).push<void>(
+                    MaterialPageRoute(builder: (_) => const EncodeScreen()),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              tile(
+                icon: Icons.refresh,
+                label: 'Re-encode',
+                onTap: () {
+                  Navigator.of(sheetCtx).pop();
+                  Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => const SearchAndEncodeScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   /// Match the live read EPC against the target. Exact equality first;
   /// if that fails, fall back to a suffix match on the last 16 hex
   /// chars (item + serial bits — the company-prefix bits sometimes
@@ -522,6 +635,15 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                   liveProximity01: _proximity01,
                 ),
               SizedBox(height: 12.h),
+              // Cloud+Geiger mode only: "Take an action" routes the operator
+              // straight from this located tag into Status Change / Encode /
+              // Re-encode. Hidden while scanning so the trigger flow is
+              // never ambiguous (and the operator can't accidentally tap
+              // while the radio is sweeping).
+              if (widget.cloudGeigerMode && !_scanning) ...[
+                _TakeActionButton(onPressed: _showActionPicker),
+                SizedBox(height: 8.h),
+              ],
               _ToggleScanButton(
                 scanning: _scanning,
                 enabled: _epcValid,
@@ -1127,6 +1249,43 @@ class _ToggleScanButton extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Cloud+Geiger-only secondary affordance shown above the scan toggle
+/// while the radio is idle. Opens a bottom sheet with Status Change /
+/// Encode / Re-encode so the operator can act on the located tag
+/// without backing out to the dashboard.
+class _TakeActionButton extends StatelessWidget {
+  const _TakeActionButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: const Icon(Icons.bolt, size: 20, color: AppColors.primary),
+        label: const Text(
+          'TAKE AN ACTION',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.6,
+            color: AppColors.primary,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: AppColors.primary, width: 1.5),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
       ),
     );
   }
