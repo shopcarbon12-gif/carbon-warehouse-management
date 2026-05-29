@@ -12,7 +12,12 @@ label as it existed on **2026-05-28**, before any edits.
 > restore.
 
 ## Files
-- `template-2026-05-28.zpl.erb` — the exact ERB/ZPL template (verbatim paste).
+- `external-editor-alu-code39-2026-05-28.zpl.erb` — **CURRENT live external-editor
+  template.** Uses `@alu` (not `@custom_sku`) and **Code 39** (`^B3B`) at `^BY2,3`,
+  matching the WMS-printed label. This is what's pasted into the vendor editor now.
+- `external-editor-alu-code128-2026-05-28.zpl.erb` — the `@alu` template BEFORE the
+  Code 39 switch (Code 128 `^BCB`, `^BY2,2`). Restore point for the `@alu` variant.
+- `template-2026-05-28.zpl.erb` — the original `@custom_sku` Code 128 template (verbatim paste).
   - sha256: `765e4d1ddd5fd5ce20e4be6ecd3fae6599473de9d8a4357e96ca0e787f97126f`
   - Note: 4 lines in the original paste had cosmetic *trailing spaces* (after
     `^FS` on the two `lines[...]` rows, and after the two `@item_attr3/4` ruby
@@ -23,8 +28,13 @@ label as it existed on **2026-05-28**, before any edits.
 
 ## RESTORE CONTRACT
 When the operator says **"restore the label"**, the target state is EXACTLY:
-1. Replace the platform's label template with the full contents of
-   `template-2026-05-28.zpl.erb`.
+0. Confirm which template they mean — the live external editor uses the `@alu`
+   variant. Default restore for the external editor =
+   `external-editor-alu-code128-2026-05-28.zpl.erb` (pre-Code-39 `@alu`), or
+   `external-editor-alu-code39-2026-05-28.zpl.erb` if they want the Code 39 state.
+   The `@custom_sku` files below are the older original.
+1. Replace the platform's label template with the full contents of the chosen file
+   (`template-2026-05-28.zpl.erb` for the original `@custom_sku` baseline).
 2. Set the print controls back to `settings-2026-05-28.md`:
    - Darkness OFF / 0
    - Control Label Y Pos ON / 50
