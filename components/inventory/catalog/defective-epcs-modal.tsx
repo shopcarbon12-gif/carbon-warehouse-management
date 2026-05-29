@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Download, EyeOff, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Download, EyeOff, RefreshCw, Search, Send, X } from "lucide-react";
 import {
   cellTruncate,
   pickTableLayout,
@@ -242,6 +242,53 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
     }
   }, [selected, busy, rows, mutate]);
 
+  /* Fan the selected EPCs out to every authorized handheld at the active
+     location. Operator confirms once — under the hood we POST to the
+     location-scoped queue (server inserts one row per handheld so each
+     device's Cloud + Geiger screen surfaces the same EPCs). */
+  const handleSendToHandheld = useCallback(async () => {
+    if (selected.size === 0 || busy) return;
+    const epcs = [...selected];
+    const ok = window.confirm(
+      `Send ${epcs.length} EPC${epcs.length === 1 ? "" : "s"} to every handheld at your active location?\n\nThey'll appear on each handheld's Cloud + Geiger screen.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/handhelds/epc-queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ epcs }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        enqueued?: number;
+        handhelds?: number;
+        location?: { code?: string; name?: string };
+        warning?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(j.error ?? "Send failed");
+      if (j.warning) {
+        setMsg(j.warning);
+      } else {
+        const where = j.location?.code
+          ? `${j.location.code}${j.location.name ? ` — ${j.location.name}` : ""}`
+          : "this location";
+        setMsg(
+          `Sent ${epcs.length} EPC${epcs.length === 1 ? "" : "s"} to ${j.handhelds ?? 0} handheld${
+            (j.handhelds ?? 0) === 1 ? "" : "s"
+          } at ${where} (${j.enqueued ?? 0} queue row${(j.enqueued ?? 0) === 1 ? "" : "s"}).`,
+        );
+        setSelected(new Set());
+      }
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Send failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [selected, busy]);
+
   const handleExportCsv = useCallback(() => {
     const picked = rows.filter((r) => selected.has(r.epc));
     if (picked.length === 0) return;
@@ -371,6 +418,16 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
               >
                 <Download className="h-3.5 w-3.5" />
                 Export CSV
+              </button>
+              <button
+                type="button"
+                disabled={selected.size === 0 || busy}
+                onClick={() => void handleSendToHandheld()}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-accent)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                title="Push these EPCs to every handheld at your active location (Cloud + Geiger screen)"
+              >
+                <Send className="h-3.5 w-3.5" />
+                Send to handheld
               </button>
               <button
                 type="button"
