@@ -137,7 +137,7 @@ const sections: NavSection[] = [
     isActiveSection: (p) => p.startsWith("/rewards"),
     items: [
       { href: "/rewards", label: "Overview", icon: Star },
-      { href: "/rewards/customers", label: "Members", icon: UserSearch },
+      { href: "/rewards/customers", label: "Customers", icon: UserSearch },
       { href: "/rewards/ledger", label: "Ledger", icon: Activity },
       { href: "/rewards/tiers", label: "Tiers", icon: Layers },
       { href: "/rewards/referrals", label: "Referrals", icon: Share2 },

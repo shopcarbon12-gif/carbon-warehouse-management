@@ -20,25 +20,26 @@ type Row = {
   id: number;
   first_name: string | null;
   last_name: string | null;
-  email: string | null;
-  mobile_phone: string | null;
   phone: string | null;
-  balance: string;
-  last_event_at: string | null;
-  shopify_customer_gid: string | null;
+  phone_2: string | null;
+  email: string | null;
+  email_2: string | null;
+  sales: string;
+  points: string;
+  store_credit_balance: string;
   created_at: string;
-  created_via: string;
   created_at_geo: string | null;
   pos_location_name: string | null;
   created_by_email: string | null;
 };
 
 /**
- * Loyalty → Members. Pooled customer list — every member shows in
- * every location. New provenance columns answer who/when/where added
- * each customer for analytics + audit, but DO NOT scope visibility.
+ * Rewards → Customers. Pooled customer list backed by the same shared
+ * `pos_customers` table the POS customer screens read. Every customer shows
+ * in every location; the provenance columns (created / created by / location
+ * created) answer who/when/where added, but DO NOT scope visibility.
  */
-export default async function LoyaltyMembers({
+export default async function RewardsCustomers({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string; via?: string; loc?: string; page?: string }>;
@@ -71,8 +72,9 @@ export default async function LoyaltyMembers({
           `(pc.first_name ILIKE $${args.length}
               OR pc.last_name ILIKE $${args.length}
               OR pc.email ILIKE $${args.length}
-              OR pc.mobile_phone ILIKE $${args.length}
-              OR pc.phone ILIKE $${args.length})`,
+              OR pc.email_2 ILIKE $${args.length}
+              OR pc.phone ILIKE $${args.length}
+              OR pc.phone_2 ILIKE $${args.length})`,
         );
       }
       if (via) {
@@ -91,14 +93,21 @@ export default async function LoyaltyMembers({
         `SELECT pc.id,
                 pc.first_name,
                 pc.last_name,
-                pc.email,
-                pc.mobile_phone,
                 pc.phone,
-                COALESCE(lb.balance, 0)::text AS balance,
-                lb.last_event_at,
-                pc.shopify_customer_gid,
+                pc.phone_2,
+                pc.email,
+                pc.email_2,
+                -- lifetime sales: sum of this customer's completed pos_sales
+                COALESCE((
+                  SELECT SUM(s.total_amount)
+                    FROM pos_sales s
+                   WHERE s.customer_id = pc.id
+                     AND s.status = 'completed'
+                     AND s.voided_at IS NULL
+                ), 0)::text                   AS sales,
+                COALESCE(lb.balance, 0)::text AS points,
+                COALESCE(pc.store_credit_balance, 0)::text AS store_credit_balance,
                 pc.created_at,
-                pc.created_via,
                 pc.created_at_geo,
                 -- pos_locations has no name column; resolve via the
                 -- WMS-owned locations table
@@ -144,7 +153,7 @@ export default async function LoyaltyMembers({
             <UserSearch className="h-3.5 w-3.5" />
             Rewards
           </div>
-          <h1 className="text-2xl font-bold mt-1">Members</h1>
+          <h1 className="text-2xl font-bold mt-1">Customers</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Every <code>pos_customers</code> row, pooled across all locations.
             Click a row for the full ledger and to reward / adjust points.
@@ -209,14 +218,14 @@ export default async function LoyaltyMembers({
         <div className="mb-4 flex items-start gap-2 border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-bold">Couldn&rsquo;t load members.</p>
+            <p className="font-bold">Couldn&rsquo;t load customers.</p>
             <p className="mt-1 font-mono text-xs">{dbError}</p>
           </div>
         </div>
       ) : null}
 
       <div className="border border-border bg-card">
-        <LoyaltyCustomersTable rows={rows} sourceLabels={SOURCE_LABELS} />
+        <LoyaltyCustomersTable rows={rows} />
         <div className="px-3 py-2 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
           <span>Showing {showFrom}–{showTo} of {total.toLocaleString()}</span>
           <div className="flex gap-2">
