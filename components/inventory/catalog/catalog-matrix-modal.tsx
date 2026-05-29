@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { X as XIcon } from "lucide-react";
+import { Plus, X as XIcon, RotateCcw } from "lucide-react";
 
 /**
- * Lightspeed-style matrix popup. Opens from CatalogItemDetailsModal's "Matrix"
- * button. Shows shared (matrix-level) values, derived default pricing, color +
- * size lists, and a Group Items row per variant.
- *
- * Fully editable — Lightspeed is being retired and the WMS is the source of
- * truth. Shared Values save to the matrices row (apply to all variants);
- * Group Items save per-variant to custom_skus. Save is admin-only.
- *   - Archive : flips archived on EVERY custom_sku under this matrix.
+ * Lightspeed-style matrix EDITOR. Opens from CatalogItemDetailsModal's "Matrix"
+ * button. Fully WMS-owned (Lightspeed retiring), so the operator can:
+ *   - edit Shared Values (description / brand / category / subcategory / upc)
+ *   - edit Default Values (price + cost) which CASCADE into every variant's
+ *     price/cost; the Shared UPC also cascades into every variant's UPC
+ *   - add a Color → generates a new variant row per existing size (and v.v.)
+ *   - edit / delete (archive) any variant row
+ * New rows get blank SKUs the operator fills in; Save blocks empty/dup SKUs.
+ * Existing rows save via PATCH; new rows POST; deletes archive. Admin-only.
  */
 
 type Matrix = {
@@ -40,10 +41,7 @@ type Variant = {
   active_epc_count: number;
 };
 
-type MatrixDetailResp = {
-  matrix: Matrix;
-  variants: Variant[];
-};
+type MatrixDetailResp = { matrix: Matrix; variants: Variant[] };
 
 type Props = {
   matrixId: string;
@@ -52,7 +50,6 @@ type Props = {
   onMutated?: () => void;
 };
 
-/** Editable mirrors (strings for free typing). */
 type MatrixForm = {
   description: string;
   brand: string;
@@ -60,13 +57,22 @@ type MatrixForm = {
   subcategory_1: string;
   upc: string;
 };
-type VariantForm = {
+
+/** Editable Group-Items row (existing or staged-new). */
+type RowState = {
+  key: string;
+  id: string | null; // existing custom_sku id, null when new
+  isNew: boolean;
+  markedDelete: boolean; // archive-on-save (existing) — new rows are dropped instead
+  origArchived: boolean;
+  hasStock: boolean;
   color: string;
   size: string;
   upc: string;
   retail_price: string;
   default_cost: string;
   sku: string;
+  orig: { color: string; size: string; upc: string; retail_price: string; default_cost: string; sku: string } | null;
 };
 
 const fetcher = async (url: string) => {
@@ -89,16 +95,11 @@ function moneyOrNull(s: string): number | null {
   const n = Number.parseFloat(t);
   return Number.isFinite(n) ? n : null;
 }
-/** Normalize a money string to fixed 2-decimal form (blank stays blank). */
 function money2(s: string | null): string {
   const t = (s ?? "").trim();
   if (t === "") return "";
   const n = Number.parseFloat(t);
   return Number.isFinite(n) ? n.toFixed(2) : (s ?? "");
-}
-function fmtMoney(n: number | null): string {
-  if (n == null) return "—";
-  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(n);
 }
 function fmtPct(n: number | null, digits = 1): string {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -114,8 +115,8 @@ function matrixForm(m: Matrix): MatrixForm {
     upc: m.upc ?? "",
   };
 }
-function variantForm(v: Variant): VariantForm {
-  return {
+function rowFromVariant(v: Variant): RowState {
+  const base = {
     color: v.color ?? "",
     size: v.size ?? "",
     upc: v.upc ?? "",
@@ -123,7 +124,20 @@ function variantForm(v: Variant): VariantForm {
     default_cost: money2(v.default_cost),
     sku: v.sku ?? "",
   };
+  return {
+    key: v.id,
+    id: v.id,
+    isNew: false,
+    markedDelete: false,
+    origArchived: v.archived,
+    hasStock: v.active_epc_count > 0,
+    ...base,
+    orig: { ...base },
+  };
 }
+
+let tempSeq = 0;
+const nextTempKey = () => `new-${(tempSeq += 1)}`;
 
 export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: Props) {
   const { data, error, mutate, isLoading } = useSWR<MatrixDetailResp>(
@@ -135,80 +149,167 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
-  // Editable local state — seeded from the fetched data and re-seeded after
-  // a successful save (mutate() changes `data`, which this effect observes).
   const [mForm, setMForm] = useState<MatrixForm | null>(null);
-  const [vForms, setVForms] = useState<Record<string, VariantForm>>({});
+  const [rows, setRows] = useState<RowState[]>([]);
+  const [defPrice, setDefPrice] = useState("");
+  const [defCost, setDefCost] = useState("");
+  const [newColor, setNewColor] = useState("");
+  const [newSize, setNewSize] = useState("");
 
+  // Seed local editable state from the fetched data (and after each save).
   useEffect(() => {
     if (!data) return;
     setMForm(matrixForm(data.matrix));
-    setVForms(Object.fromEntries(data.variants.map((v) => [v.id, variantForm(v)])));
+    setRows(data.variants.map(rowFromVariant));
+    let p: number | null = null;
+    let c: number | null = null;
+    for (const v of data.variants) {
+      const pp = parseMoney(v.retail_price);
+      const cc = parseMoney(v.default_cost);
+      if (pp != null) p = p == null ? pp : Math.min(p, pp);
+      if (cc != null) c = c == null ? cc : Math.min(c, cc);
+    }
+    setDefPrice(p == null ? "" : money2(String(p)));
+    setDefCost(c == null ? "" : money2(String(c)));
+    setNewColor("");
+    setNewSize("");
   }, [data]);
 
-  const patchMatrix = (p: Partial<MatrixForm>) => {
+  const clearMsgs = () => {
     setOkMsg(null);
+  };
+  const patchMatrix = (p: Partial<MatrixForm>) => {
+    clearMsgs();
     setMForm((f) => (f ? { ...f, ...p } : f));
   };
-  const patchVariant = (id: string, p: Partial<VariantForm>) => {
-    setOkMsg(null);
-    setVForms((m) => ({ ...m, [id]: { ...m[id], ...p } }));
+  const patchRow = (key: string, p: Partial<RowState>) => {
+    clearMsgs();
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...p } : r)));
   };
+
+  // Cascades — Default price/cost and Shared UPC fill every live row.
+  const cascadePrice = (v: string) => {
+    clearMsgs();
+    setDefPrice(v);
+    setRows((rs) => rs.map((r) => (r.markedDelete ? r : { ...r, retail_price: v })));
+  };
+  const cascadeCost = (v: string) => {
+    clearMsgs();
+    setDefCost(v);
+    setRows((rs) => rs.map((r) => (r.markedDelete ? r : { ...r, default_cost: v })));
+  };
+  const cascadeUpc = (v: string) => {
+    patchMatrix({ upc: v });
+    setRows((rs) => rs.map((r) => (r.markedDelete ? r : { ...r, upc: v })));
+  };
+
+  const colors = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (r.markedDelete) continue;
+      const c = r.color.trim();
+      if (c && !seen.has(c)) {
+        seen.add(c);
+        out.push(c);
+      }
+    }
+    return out;
+  }, [rows]);
+  const sizes = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (r.markedDelete) continue;
+      const s = r.size.trim();
+      if (s && !seen.has(s)) {
+        seen.add(s);
+        out.push(s);
+      }
+    }
+    return out;
+  }, [rows]);
+
+  const blankRow = (color: string, size: string): RowState => ({
+    key: nextTempKey(),
+    id: null,
+    isNew: true,
+    markedDelete: false,
+    origArchived: false,
+    hasStock: false,
+    color,
+    size,
+    upc: mForm?.upc ?? "",
+    retail_price: defPrice,
+    default_cost: defCost,
+    sku: "",
+    orig: null,
+  });
+
+  const addColor = () => {
+    const name = newColor.trim();
+    if (!name) return;
+    if (colors.some((c) => c.toLowerCase() === name.toLowerCase())) {
+      setErr(`Color "${name}" already exists.`);
+      return;
+    }
+    setErr(null);
+    const targetSizes = sizes.length > 0 ? sizes : [""];
+    setRows((rs) => [...rs, ...targetSizes.map((s) => blankRow(name, s))]);
+    setNewColor("");
+  };
+  const addSize = () => {
+    const name = newSize.trim();
+    if (!name) return;
+    if (sizes.some((s) => s.toLowerCase() === name.toLowerCase())) {
+      setErr(`Size "${name}" already exists.`);
+      return;
+    }
+    setErr(null);
+    const targetColors = colors.length > 0 ? colors : [""];
+    setRows((rs) => [...rs, ...targetColors.map((c) => blankRow(c, name))]);
+    setNewSize("");
+  };
+
+  const deleteRow = (key: string) => {
+    clearMsgs();
+    setRows((rs) =>
+      rs.flatMap((r) => {
+        if (r.key !== key) return [r];
+        if (r.isNew) return []; // drop unsaved rows outright
+        return [{ ...r, markedDelete: !r.markedDelete }];
+      }),
+    );
+  };
+
+  const defPriceN = parseMoney(defPrice);
+  const defCostN = parseMoney(defCost);
+  const margin =
+    defPriceN != null && defCostN != null && defPriceN > 0
+      ? ((defPriceN - defCostN) / defPriceN) * 100
+      : null;
+  const markup =
+    defCostN != null && defCostN > 0 && defPriceN != null
+      ? ((defPriceN - defCostN) / defCostN) * 100
+      : null;
 
   const dirty = useMemo(() => {
     if (!data || !mForm) return false;
     const m0 = matrixForm(data.matrix);
-    if ((Object.keys(mForm) as (keyof MatrixForm)[]).some((k) => mForm[k] !== m0[k])) {
-      return true;
-    }
-    return data.variants.some((v) => {
-      const f = vForms[v.id];
-      if (!f) return false;
-      const v0 = variantForm(v);
-      return (Object.keys(f) as (keyof VariantForm)[]).some((k) => f[k] !== v0[k]);
+    if ((Object.keys(mForm) as (keyof MatrixForm)[]).some((k) => mForm[k] !== m0[k])) return true;
+    return rows.some((r) => {
+      if (r.isNew || r.markedDelete) return true;
+      if (!r.orig) return false;
+      return (
+        r.color !== r.orig.color ||
+        r.size !== r.orig.size ||
+        r.upc !== r.orig.upc ||
+        r.retail_price !== r.orig.retail_price ||
+        r.default_cost !== r.orig.default_cost ||
+        r.sku !== r.orig.sku
+      );
     });
-  }, [data, mForm, vForms]);
-
-  /* Default Values surface the most representative price + cost across all
-     variants (LS-style) — MIN of the live edited variant prices/costs. */
-  const defaults = useMemo(() => {
-    let price: number | null = null;
-    let cost: number | null = null;
-    for (const f of Object.values(vForms)) {
-      const p = parseMoney(f.retail_price);
-      const c = parseMoney(f.default_cost);
-      if (p != null) price = price == null ? p : Math.min(price, p);
-      if (c != null) cost = cost == null ? c : Math.min(cost, c);
-    }
-    return { price, cost };
-  }, [vForms]);
-
-  const onlinePrice = defaults.price;
-  const margin =
-    defaults.price != null && defaults.cost != null && defaults.price > 0
-      ? ((defaults.price - defaults.cost) / defaults.price) * 100
-      : null;
-  const markup =
-    defaults.cost != null && defaults.cost > 0 && defaults.price != null
-      ? ((defaults.price - defaults.cost) / defaults.cost) * 100
-      : null;
-
-  const colors = useMemo(() => {
-    const seen = new Set<string>();
-    for (const f of Object.values(vForms)) {
-      const c = f.color?.trim();
-      if (c) seen.add(c);
-    }
-    return [...seen];
-  }, [vForms]);
-  const sizes = useMemo(() => {
-    const seen = new Set<string>();
-    for (const f of Object.values(vForms)) {
-      const s = f.size?.trim();
-      if (s) seen.add(s);
-    }
-    return [...seen];
-  }, [vForms]);
+  }, [data, mForm, rows]);
 
   const save = useCallback(async () => {
     if (!canManage || !data || !mForm || !dirty) return;
@@ -216,11 +317,17 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
       setErr("Description can't be empty.");
       return;
     }
+    for (const r of rows) {
+      if (!r.markedDelete && r.sku.trim() === "") {
+        setErr("Every variant row needs a Custom SKU before saving.");
+        return;
+      }
+    }
+
     setBusy("save");
     setErr(null);
     setOkMsg(null);
 
-    // Matrix-header diff
     const m0 = matrixForm(data.matrix);
     const matrixBody: Record<string, unknown> = {};
     if (mForm.description !== m0.description) matrixBody.description = mForm.description.trim();
@@ -229,22 +336,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
     if (mForm.subcategory_1 !== m0.subcategory_1)
       matrixBody.subcategory_1 = mForm.subcategory_1.trim();
     if (mForm.upc !== m0.upc) matrixBody.upc = mForm.upc.trim();
-
-    // Per-variant diffs
-    const variantPatches: { id: string; body: Record<string, unknown> }[] = [];
-    for (const v of data.variants) {
-      const f = vForms[v.id];
-      if (!f) continue;
-      const v0 = variantForm(v);
-      const body: Record<string, unknown> = {};
-      if (f.sku.trim() !== v0.sku) body.sku = f.sku.trim();
-      if (f.color !== v0.color) body.color_code = f.color.trim();
-      if (f.size !== v0.size) body.size = f.size.trim();
-      if (f.upc !== v0.upc) body.upc = f.upc.trim();
-      if (f.retail_price !== v0.retail_price) body.retail_price = moneyOrNull(f.retail_price);
-      if (f.default_cost !== v0.default_cost) body.default_cost = moneyOrNull(f.default_cost);
-      if (Object.keys(body).length > 0) variantPatches.push({ id: v.id, body });
-    }
 
     try {
       if (Object.keys(matrixBody).length > 0) {
@@ -256,15 +347,58 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(j.error ?? "Matrix save failed");
       }
-      for (const vp of variantPatches) {
-        const res = await fetch(`/api/inventory/catalog/custom-skus/${vp.id}`, {
+
+      for (const r of rows) {
+        if (r.isNew) {
+          const res = await fetch(`/api/inventory/catalog/matrices/${matrixId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sku: r.sku.trim(),
+              color_code: r.color.trim(),
+              size: r.size.trim(),
+              upc: r.upc.trim(),
+              retail_price: moneyOrNull(r.retail_price),
+              default_cost: moneyOrNull(r.default_cost),
+            }),
+          });
+          const j = (await res.json().catch(() => ({}))) as { error?: string };
+          if (!res.ok) throw new Error(j.error ?? `Create "${r.sku}" failed`);
+          continue;
+        }
+        if (r.markedDelete) {
+          if (!r.origArchived && r.id) {
+            const res = await fetch(`/api/inventory/catalog/custom-skus/${r.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ archived: true }),
+            });
+            const j = (await res.json().catch(() => ({}))) as { error?: string };
+            if (!res.ok) throw new Error(j.error ?? "Archive failed");
+          }
+          continue;
+        }
+        // existing, changed
+        if (!r.orig || !r.id) continue;
+        const body: Record<string, unknown> = {};
+        if (r.sku.trim() !== r.orig.sku) body.sku = r.sku.trim();
+        if (r.color !== r.orig.color) body.color_code = r.color.trim();
+        if (r.size !== r.orig.size) body.size = r.size.trim();
+        if (r.upc !== r.orig.upc) body.upc = r.upc.trim();
+        if (r.retail_price !== r.orig.retail_price)
+          body.retail_price = moneyOrNull(r.retail_price);
+        if (r.default_cost !== r.orig.default_cost)
+          body.default_cost = moneyOrNull(r.default_cost);
+        if (Object.keys(body).length === 0) continue;
+        const res = await fetch(`/api/inventory/catalog/custom-skus/${r.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(vp.body),
+          body: JSON.stringify(body),
         });
         const j = (await res.json().catch(() => ({}))) as { error?: string };
-        if (!res.ok) throw new Error(j.error ?? `Variant ${vp.id.slice(0, 8)} save failed`);
+        if (!res.ok) throw new Error(j.error ?? "Variant save failed");
       }
+
       await mutate();
       onMutated?.();
       setOkMsg("Saved.");
@@ -273,7 +407,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
     } finally {
       setBusy(null);
     }
-  }, [canManage, data, mForm, vForms, dirty, matrixId, mutate, onMutated]);
+  }, [canManage, data, mForm, rows, dirty, matrixId, mutate, onMutated]);
 
   const archiveAll = useCallback(async () => {
     if (!canManage || !data) return;
@@ -309,7 +443,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
       />
       <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-2 sm:p-4">
         <div className="my-4 w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8">
-          {/* Top bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5">
             <div className="flex items-center gap-2">
               <button
@@ -323,14 +456,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
               </button>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled
-                className="rounded-md border border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] opacity-50"
-                title="Duplicate not wired yet"
-              >
-                Duplicate
-              </button>
               <button
                 type="button"
                 disabled={!canManage || busy !== null || !data}
@@ -393,8 +518,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
               </nav>
 
               <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5">
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_0.5fr_0.5fr]">
-                  {/* Shared Values — matrix-level, editable */}
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_0.6fr_0.6fr]">
+                  {/* Shared Values */}
                   <Section title="Shared Values · applied to all items in this matrix">
                     <EditRow
                       label="Description"
@@ -423,9 +548,10 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                     <EditRow
                       label="UPC"
                       value={mForm.upc}
-                      onChange={(v) => patchMatrix({ upc: v })}
+                      onChange={cascadeUpc}
                       editable={canManage}
                       mono
+                      hint="Fills every variant's UPC"
                     />
                   </Section>
 
@@ -433,19 +559,34 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                     <Section title="Matrix Type">
                       <Row label="Attributes" value="Color / Size" />
                     </Section>
-                    <Section title="Default Values · derived from variants">
-                      <PriceHeader />
-                      <PriceRow label="Default" amount={defaults.price} markup={markup} margin={margin} />
-                      <PriceRow label="Online" amount={onlinePrice} markup={markup} margin={margin} />
-                      <Row label="Default Cost" value={fmtMoney(defaults.cost)} mono />
+                    <Section title="Default Values · fill every variant">
+                      <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-2 bg-[var(--wms-surface-elevated)]/60 px-3 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                        <span>Name</span>
+                        <span>Price</span>
+                        <span>Markup</span>
+                        <span>Margin</span>
+                      </div>
+                      <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-2 px-3 py-1.5 font-mono text-xs">
+                        <span className="text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                          Default
+                        </span>
+                        <MoneyInput value={defPrice} onChange={cascadePrice} editable={canManage} />
+                        <span className="text-left text-[var(--wms-muted)]">{fmtPct(markup)}</span>
+                        <span className="text-left text-[var(--wms-muted)]">{fmtPct(margin)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+                        <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                          Default Cost
+                        </span>
+                        <MoneyInput value={defCost} onChange={cascadeCost} editable={canManage} wide />
+                      </div>
                     </Section>
                   </div>
 
+                  {/* Color list + add */}
                   <Section title="Color">
                     {colors.length === 0 ? (
-                      <p className="px-3 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                        (none)
-                      </p>
+                      <p className="px-3 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">(none)</p>
                     ) : (
                       colors.map((c) => (
                         <div
@@ -456,13 +597,20 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                         </div>
                       ))
                     )}
+                    {canManage ? (
+                      <AddInput
+                        value={newColor}
+                        onChange={setNewColor}
+                        onAdd={addColor}
+                        placeholder="New color…"
+                      />
+                    ) : null}
                   </Section>
 
+                  {/* Size list + add */}
                   <Section title="Size">
                     {sizes.length === 0 ? (
-                      <p className="px-3 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                        (none)
-                      </p>
+                      <p className="px-3 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">(none)</p>
                     ) : (
                       sizes.map((s) => (
                         <div
@@ -473,48 +621,74 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                         </div>
                       ))
                     )}
+                    {canManage ? (
+                      <AddInput
+                        value={newSize}
+                        onChange={setNewSize}
+                        onAdd={addSize}
+                        placeholder="New size…"
+                      />
+                    ) : null}
                   </Section>
                 </div>
 
-                {/* Group Items — per-variant, editable */}
+                {/* Group Items */}
                 <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
                   <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
                     Group Items
                   </div>
                   <div className="overflow-x-auto">
-                  <div className="min-w-[740px]">
-                  <div className="grid grid-cols-[150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
-                    <span>Color</span>
-                    <span>Size</span>
-                    <span className="text-left">Price</span>
-                    <span className="text-left">Cost</span>
-                    <span>UPC</span>
-                    <span>Custom SKU</span>
-                  </div>
-                  {data.variants.map((v) => {
-                    const f = vForms[v.id] ?? variantForm(v);
-                    return (
-                      <div
-                        key={v.id}
-                        className="grid grid-cols-[150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-xs text-[var(--wms-fg)] last:border-b-0"
-                      >
-                        <Cell value={f.color} onChange={(x) => patchVariant(v.id, { color: x })} editable={canManage} />
-                        <Cell value={f.size} onChange={(x) => patchVariant(v.id, { size: x })} editable={canManage} />
-                        <Cell value={f.retail_price} onChange={(x) => patchVariant(v.id, { retail_price: x })} editable={canManage} numeric align="right" />
-                        <Cell value={f.default_cost} onChange={(x) => patchVariant(v.id, { default_cost: x })} editable={canManage} money align="right" />
-                        <Cell value={f.upc} onChange={(x) => patchVariant(v.id, { upc: x })} editable={canManage} />
-                        <div className="flex items-center gap-2">
-                          <Cell value={f.sku} onChange={(x) => patchVariant(v.id, { sku: x })} editable={canManage} grow />
-                          {v.archived ? (
-                            <span className="shrink-0 rounded border border-amber-500/40 bg-amber-950/40 px-1.5 py-0.5 text-[0.5rem] uppercase tracking-wide text-amber-200">
-                              archived
-                            </span>
-                          ) : null}
-                        </div>
+                    <div className="min-w-[760px]">
+                      <div className="grid grid-cols-[36px_150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                        <span />
+                        <span>Color</span>
+                        <span>Size</span>
+                        <span>Price</span>
+                        <span>Cost</span>
+                        <span>UPC</span>
+                        <span>Custom SKU</span>
                       </div>
-                    );
-                  })}
-                  </div>
+                      {rows.map((r) => (
+                        <div
+                          key={r.key}
+                          className={`grid grid-cols-[36px_150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-xs last:border-b-0 ${
+                            r.markedDelete ? "opacity-40" : ""
+                          } ${r.isNew ? "bg-[var(--wms-accent)]/5" : ""}`}
+                        >
+                          <button
+                            type="button"
+                            disabled={!canManage}
+                            onClick={() => deleteRow(r.key)}
+                            title={
+                              r.isNew
+                                ? "Remove this new row"
+                                : r.markedDelete
+                                  ? "Undo delete"
+                                  : r.hasStock
+                                    ? "Archive row (has live stock — history kept)"
+                                    : "Delete (archive) row"
+                            }
+                            className={`flex h-6 w-6 items-center justify-center rounded border text-[var(--wms-muted)] disabled:opacity-40 ${
+                              r.markedDelete
+                                ? "border-[var(--wms-border)] hover:bg-[var(--wms-surface)]"
+                                : "border-red-500/40 hover:bg-red-950/40 hover:text-red-200"
+                            }`}
+                          >
+                            {r.markedDelete ? (
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            ) : (
+                              <XIcon className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                          <Cell value={r.color} onChange={(x) => patchRow(r.key, { color: x })} editable={canManage} />
+                          <Cell value={r.size} onChange={(x) => patchRow(r.key, { size: x })} editable={canManage} />
+                          <Cell value={r.retail_price} onChange={(x) => patchRow(r.key, { retail_price: x })} editable={canManage} numeric />
+                          <Cell value={r.default_cost} onChange={(x) => patchRow(r.key, { default_cost: x })} editable={canManage} money />
+                          <Cell value={r.upc} onChange={(x) => patchRow(r.key, { upc: x })} editable={canManage} />
+                          <Cell value={r.sku} onChange={(x) => patchRow(r.key, { sku: x })} editable={canManage} placeholder={r.isNew ? "SKU…" : undefined} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -526,29 +700,62 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
   );
 }
 
+function AddInput({
+  value,
+  onChange,
+  onAdd,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onAdd: () => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="flex items-center gap-1 px-2 py-1.5">
+      <input
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onAdd();
+          }
+        }}
+        className="min-w-0 flex-1 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
+      />
+      <button
+        type="button"
+        onClick={onAdd}
+        title="Add"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)]/15 text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25"
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
 function Cell({
   value,
   onChange,
   editable,
   numeric,
   money,
-  align,
-  grow,
+  placeholder,
 }: {
   value: string;
   onChange: (v: string) => void;
   editable: boolean;
   numeric?: boolean;
   money?: boolean;
-  align?: "right";
-  grow?: boolean;
+  placeholder?: string;
 }) {
   if (!editable) {
     return (
-      <span
-        className={`truncate ${align === "right" ? "text-left tabular-nums" : ""} ${grow ? "min-w-0 flex-1" : ""}`}
-        title={value}
-      >
+      <span className="truncate" title={value}>
         {value.trim() || "—"}
       </span>
     );
@@ -558,11 +765,40 @@ function Cell({
       type="text"
       inputMode={numeric || money ? "decimal" : undefined}
       value={value}
+      placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
       onBlur={money ? () => onChange(money2(value)) : undefined}
-      className={`w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-1 text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none ${
-        align === "right" ? "text-left tabular-nums" : ""
-      } ${grow ? "min-w-0 flex-1" : ""}`}
+      className="w-full min-w-0 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-1 text-left text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
+    />
+  );
+}
+
+function MoneyInput({
+  value,
+  onChange,
+  editable,
+  wide,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  editable: boolean;
+  wide?: boolean;
+}) {
+  if (!editable) {
+    return (
+      <span className="text-left font-mono text-xs text-[var(--wms-fg)]">
+        {value.trim() === "" ? "—" : `$${money2(value)}`}
+      </span>
+    );
+  }
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={() => onChange(money2(value))}
+      className={`${wide ? "w-28" : "w-full"} rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-left font-mono text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none`}
     />
   );
 }
@@ -595,19 +831,24 @@ function EditRow({
   onChange,
   editable,
   mono,
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   editable: boolean;
   mono?: boolean;
+  hint?: string;
 }) {
   if (!editable) {
     return <Row label={label} value={value.trim() || "—"} mono={mono} />;
   }
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-1.5">
-      <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <span
+        className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]"
+        title={hint}
+      >
         {label}
       </span>
       <input
@@ -618,40 +859,6 @@ function EditRow({
           mono ? "font-mono" : ""
         }`}
       />
-    </div>
-  );
-}
-
-function PriceHeader() {
-  return (
-    <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 bg-[var(--wms-surface-elevated)]/60 px-3 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
-      <span>Name</span>
-      <span className="text-left">Price</span>
-      <span className="text-left">Markup</span>
-      <span className="text-left">Margin</span>
-    </div>
-  );
-}
-
-function PriceRow({
-  label,
-  amount,
-  markup,
-  margin,
-}: {
-  label: string;
-  amount: number | null;
-  markup: number | null;
-  margin: number | null;
-}) {
-  return (
-    <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 px-3 py-1.5 font-mono text-xs">
-      <span className="text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
-        {label}
-      </span>
-      <span className="text-left text-[var(--wms-fg)]">{fmtMoney(amount)}</span>
-      <span className="text-left text-[var(--wms-muted)]">{fmtPct(markup)}</span>
-      <span className="text-left text-[var(--wms-muted)]">{fmtPct(margin)}</span>
     </div>
   );
 }
