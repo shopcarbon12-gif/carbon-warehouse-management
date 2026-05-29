@@ -34,9 +34,17 @@ extension _TargetFieldLabel on _TargetField {
 }
 
 class SearchAndEncodeScreen extends StatefulWidget {
-  const SearchAndEncodeScreen({super.key});
+  const SearchAndEncodeScreen({super.key, this.cloudGeigerResolveEpc});
 
   static const String routeName = '/search-and-encode';
+
+  /// When opened from Cloud + Geiger → Take an Action, this is the EPC
+  /// that was sent to the handheld. After a successful chip-write on
+  /// that specific tag (first attempt OR retry) we POST to
+  /// `/api/handheld/epc-queue` to dismiss the drop server-side so it
+  /// disappears across every device. Null on the dashboard Re-Encode
+  /// tile entry path.
+  final String? cloudGeigerResolveEpc;
 
   @override
   State<SearchAndEncodeScreen> createState() => _SearchAndEncodeScreenState();
@@ -650,7 +658,27 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     ));
   }
 
+  Future<void> _dismissCloudGeiger(String epc) async {
+    try {
+      final api = context.read<WmsApiClient>();
+      final deviceId = _deviceId ??
+          await HandheldDeviceIdentity.primaryDeviceIdForServer();
+      await api.dismissEpcQueueItems(deviceId: deviceId, epcs: [epc]);
+    } catch (_) {
+      /* best-effort — slide-delete on Cloud+Geiger still works */
+    }
+  }
+
   Future<void> _finalizeWrite({required String oldEpc, required String newEpc}) async {
+    // Cloud + Geiger auto-resolve: if this re-encode happened against
+    // the exact EPC that was sent to the handheld, dismiss the queue
+    // row server-side so the Cloud + Geiger screen drops it on every
+    // device. The /api/handheld/epc-queue POST is best-effort and
+    // independent of the finalize call below.
+    final resolveEpc = widget.cloudGeigerResolveEpc?.trim().toUpperCase();
+    if (resolveEpc != null && resolveEpc == oldEpc.toUpperCase()) {
+      unawaited(_dismissCloudGeiger(resolveEpc));
+    }
     try {
       await context.read<WmsApiClient>().postEncodeFinalize(
             newEpc: newEpc,

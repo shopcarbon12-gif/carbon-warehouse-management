@@ -10,6 +10,7 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/status_pick_screen.dart';
@@ -30,7 +31,15 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 /// that row (it does NOT change the radio, drop the EPC from the radio's
 /// internal de-dupe, or hit the network).
 class StatusChangeScreen extends StatefulWidget {
-  const StatusChangeScreen({super.key});
+  const StatusChangeScreen({super.key, this.cloudGeigerResolveEpc});
+
+  /// When opened from Cloud + Geiger → Take an Action, this is the EPC
+  /// that was sent to the handheld. After a successful commit that
+  /// included this EPC we POST `/api/handheld/epc-queue` to mark the
+  /// drop as resolved so the row disappears across every device on
+  /// the next poll. Null on the dashboard Status tile entry path.
+  final String? cloudGeigerResolveEpc;
+
   @override
   State<StatusChangeScreen> createState() => _StatusChangeScreenState();
 }
@@ -329,6 +338,15 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     }
     if (!mounted) return;
     final epcs = _scanned.map((e) => e.epc).toList(growable: false);
+    // Resolve-source EPC for the Cloud + Geiger auto-dismiss path.
+    // Empty string sentinel keeps the closure null-clean; we only
+    // dismiss when both (a) the operator entered from Cloud + Geiger
+    // (resolveEpc non-empty) AND (b) the dropped EPC is in the
+    // committed batch.
+    final resolveEpc =
+        widget.cloudGeigerResolveEpc?.trim().toUpperCase() ?? '';
+    final committedSource =
+        resolveEpc.isNotEmpty && epcs.contains(resolveEpc);
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => StatusPickScreen(
@@ -341,10 +359,24 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
               _scanned.clear();
               _seenEpcs.clear();
             });
+            if (committedSource) {
+              unawaited(_dismissCloudGeiger(resolveEpc));
+            }
           },
         ),
       ),
     );
+  }
+
+  Future<void> _dismissCloudGeiger(String epc) async {
+    try {
+      final api = context.read<WmsApiClient>();
+      final deviceId =
+          await HandheldDeviceIdentity.primaryDeviceIdForServer();
+      await api.dismissEpcQueueItems(deviceId: deviceId, epcs: [epc]);
+    } catch (_) {
+      /* best-effort — slide-delete still works on the cloud screen */
+    }
   }
 
   // ── ui ───────────────────────────────────────────────────────────────

@@ -5,8 +5,8 @@ import { extractEdgeApiKey, verifyEdgeApiKey } from "@/lib/auth/edge-auth";
 import { resolveEdgeDeviceCached } from "@/lib/server/edge-device-cache";
 import { getPool } from "@/lib/db";
 import {
-  consumePendingEpcsForDevice,
   enqueueEpcsForDevice,
+  listPendingEpcsForDevice,
   peekPendingEpcsForDevice,
 } from "@/lib/queries/device-epc-queue";
 
@@ -140,9 +140,14 @@ export async function GET(
   }
 
   try {
+    // 2026-05-29 — both `peek` and the default path are read-only.
+    // The mobile Cloud+Geiger contract now persists drops until the
+    // operator explicitly dismisses (slide-delete or action-resolve),
+    // so a poll that silently consumed items is no longer correct for
+    // any caller. `peek` is kept as an alias for backwards-compat.
     const rows = peek
       ? await peekPendingEpcsForDevice(pool, deviceId)
-      : await consumePendingEpcsForDevice(pool, deviceId);
+      : await listPendingEpcsForDevice(pool, deviceId);
     return NextResponse.json(rows, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error("[devices/[id]/epc-queue GET]", e);

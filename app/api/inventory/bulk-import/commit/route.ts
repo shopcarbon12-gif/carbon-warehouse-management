@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
+import { decodeSGTIN96 } from "@/lib/utils/epc";
+import { pickRandomUniqueSerial } from "@/lib/server/rfid-serial-allocator";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +34,6 @@ const bodySchema = z.object({
   items: z.array(itemSchema).min(1).max(2000),
 });
 
-const SERIAL_FLOOR_FOR_FRESH_SKU = 100_000; // next will be >= 100_001
 
 export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -71,29 +72,19 @@ export async function POST(req: Request) {
   try {
     await client.query("BEGIN");
     for (const [customSkuId, epcs] of bySku.entries()) {
-      // Per-(sku, location) advisory lock to serialize concurrent
-      // commits. Postgres forbids `FOR UPDATE` on an aggregate, so
-      // we serialize via pg_advisory_xact_lock (txn-scoped) instead.
-      // See encode-claim for the full rationale.
-      await client.query(
-        `SELECT pg_advisory_xact_lock(
-           hashtextextended('items_serial:' || $1::text || ':' || $2::text, 0)
-         )`,
-        [customSkuId, session.lid],
-      );
-      const maxRow = await client.query<{ m: string | null }>(
-        `SELECT COALESCE(MAX(serial_number), 0)::text AS m
-           FROM items
-          WHERE custom_sku_id = $1::uuid AND location_id = $2::uuid`,
-        [customSkuId, session.lid],
-      );
-      const currentMax = Number(maxRow.rows[0]?.m ?? 0);
-      let nextSerial =
-        currentMax > SERIAL_FLOOR_FOR_FRESH_SKU
-          ? currentMax + 1
-          : SERIAL_FLOOR_FOR_FRESH_SKU + 1;
-
       for (const epc of epcs) {
+        // Carbon-Jeans policy 2026-05-29: each items row carries a
+        // 6-digit serial. For bulk-import we PREFER the serial encoded
+        // in the EPC itself (the physical chip already broadcasts it
+        // and the catalog should match), and fall back to a freshly
+        // allocated random unique 6-digit only when the EPC's encoded
+        // serial is outside [100_000, 999_999] (e.g. legacy Senitron
+        // tags whose serials sit in a different range).
+        const decoded = decodeSGTIN96(epc);
+        let serial = decoded?.serialNumber ?? 0;
+        if (!(serial >= 100_000 && serial <= 999_999)) {
+          serial = await pickRandomUniqueSerial(client, customSkuId);
+        }
         const r = await client.query<{ id: string }>(
           `INSERT INTO items (
              epc, serial_number, custom_sku_id, location_id, status,
@@ -105,11 +96,10 @@ export async function POST(req: Request) {
            )
            ON CONFLICT (epc) DO NOTHING
            RETURNING id::text`,
-          [epc, nextSerial, customSkuId, session.lid, session.sub],
+          [epc, serial, customSkuId, session.lid, session.sub],
         );
         if (r.rows[0]) {
           inserted++;
-          nextSerial++;
         } else {
           // Race: someone else inserted this EPC between our scan and
           // commit. Skip silently — the row exists, the operator's

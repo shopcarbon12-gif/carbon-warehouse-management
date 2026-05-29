@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
@@ -36,7 +37,13 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 /// [RfidVendorChannel.tagReadStream] so the screen sees every EPC the
 /// radio reports regardless of WMS visibility / ghost-filter state.
 class EncodeScreen extends StatefulWidget {
-  const EncodeScreen({super.key});
+  const EncodeScreen({super.key, this.cloudGeigerResolveEpc});
+
+  /// When opened from Cloud + Geiger → Take an Action, this is the EPC
+  /// that was sent to the handheld. After we successfully encode that
+  /// specific tag we POST to /api/handheld/epc-queue to dismiss the
+  /// drop. Null on every other entry path.
+  final String? cloudGeigerResolveEpc;
 
   @override
   State<EncodeScreen> createState() => _EncodeScreenState();
@@ -452,6 +459,12 @@ class _EncodeScreenState extends State<EncodeScreen> {
         try {
           ScanSounds.instance.play(ScanCue.success);
         } catch (_) {}
+        // Cloud + Geiger auto-resolve: dismiss the queue row if this
+        // tag's OLD EPC was the one we were sent to deal with.
+        final resolveEpc = widget.cloudGeigerResolveEpc?.trim().toUpperCase();
+        if (resolveEpc != null && resolveEpc == tag.oldEpc.toUpperCase()) {
+          unawaited(_dismissCloudGeiger(resolveEpc));
+        }
       } else {
         tag.encodeError = 'write did not verify';
         try {
@@ -533,6 +546,17 @@ class _EncodeScreenState extends State<EncodeScreen> {
       try {
         ScanSounds.instance.play(ScanCue.error);
       } catch (_) {}
+    }
+  }
+
+  Future<void> _dismissCloudGeiger(String epc) async {
+    try {
+      final api = context.read<WmsApiClient>();
+      final deviceId =
+          await HandheldDeviceIdentity.primaryDeviceIdForServer();
+      await api.dismissEpcQueueItems(deviceId: deviceId, epcs: [epc]);
+    } catch (_) {
+      /* best-effort — slide-delete on Cloud+Geiger still works */
     }
   }
 

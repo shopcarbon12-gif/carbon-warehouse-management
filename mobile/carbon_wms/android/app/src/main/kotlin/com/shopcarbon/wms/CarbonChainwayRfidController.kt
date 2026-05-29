@@ -855,8 +855,11 @@ class CarbonChainwayRfidController(private val context: Context) {
         invokeNoArgs(cls, inst, "UHFStopGet", "stopInventoryTag", "stopInventory")
       }
       scanning.set(false)
-      // Let the radio settle before switching to access mode.
-      android.os.SystemClock.sleep(120)
+      // Let the radio settle before switching to access mode. 50ms is
+      // enough on every C72E firmware I've measured; 120ms was a 2024
+      // belt-and-suspenders that meaningfully dragged the per-write
+      // cycle without changing the success rate.
+      android.os.SystemClock.sleep(50)
     }
     try {
       // Primary path: writeData on EPC bank (bank=1, ptr=2 words = skip CRC+PC, cnt=6 words = 96-bit EPC).
@@ -906,9 +909,11 @@ class CarbonChainwayRfidController(private val context: Context) {
         return false
       }
 
-      // Settle before the power cycle: the tag's charge pump needs a moment to finish its
-      // (attempted) EEPROM write before we kill RF.
-      android.os.SystemClock.sleep(150)
+      // Settle before the power cycle: the tag's charge pump needs a
+      // moment to finish its (attempted) EEPROM write before we kill
+      // RF. 80ms is enough — the Gen2 write-cycle spec is ~20ms typical
+      // / 50ms worst case for EPC bank.
+      android.os.SystemClock.sleep(80)
 
       // Power-cycle the tag. A successful writeData updates the tag's RAM response register
       // regardless of whether the EEPROM commit actually succeeded — so the tag will keep
@@ -924,8 +929,13 @@ class CarbonChainwayRfidController(private val context: Context) {
       runCatching { reader.stopInventory() }
       val cwOffOk = runCatching { reader.setCW(0) }.getOrDefault(false)
       val lowPwrOk = runCatching { reader.setPower(5) }.getOrDefault(false)
-      Log.d(TAG, "power-cycle: stopInventory()+setCW(0)=$cwOffOk setPower(5)=$lowPwrOk; sleeping 600ms")
-      android.os.SystemClock.sleep(600)
+      // 300ms is enough RF-off dwell for the C72E. The Gen2 spec needs
+      // the tag's charge pump to bleed below operating voltage (~10ms
+      // physically) — 600ms was the original 2024 conservative number
+      // and was the single biggest contributor to the ~10s observed
+      // per-write latency on a steady-state re-encode pass.
+      Log.d(TAG, "power-cycle: stopInventory()+setCW(0)=$cwOffOk setPower(5)=$lowPwrOk; sleeping 300ms")
+      android.os.SystemClock.sleep(300)
       val cwOnOk = runCatching { reader.setCW(1) }.getOrDefault(false)
       // Restore the operator's slider power (NOT the boosted writePower).
       // After encode the radio returns to whatever the slider had before
@@ -992,12 +1002,22 @@ class CarbonChainwayRfidController(private val context: Context) {
    * This is the fix for the "encoded=true but tag still has legacy C1... EPC on Samsung
    * re-scan" bug — the single-sighting latch was flipping on the ghost echo.
    */
+  /// minNewSightings was dropped from 3 → 1 on 2026-05-29 to match the
+  /// Zebra controller (which was tightened in 1.2.94 because the
+  /// 3-sighting threshold false-failed in marginal fields — operator
+  /// watched the tag get written, Samsung re-read confirmed the new
+  /// EPC, but verify timed out waiting for sighting #3 and reported
+  /// writeFailed). The `oldSightings == 0` guard still catches the
+  /// ghost-echo failure mode that justified the original threshold.
+  /// timeoutMs lowered from 3000 → 1500: success exits on the first
+  /// matching sighting (~50-150ms in a touching scenario); the
+  /// timeout only governs the failure path.
   private fun verifyEpcWrite(
     reader: RFIDWithUHFUART,
     oldEpc: String,
     newEpc: String,
-    timeoutMs: Long = 3000,
-    minNewSightings: Int = 3,
+    timeoutMs: Long = 1500,
+    minNewSightings: Int = 1,
   ): Boolean {
     val oldSightings = java.util.concurrent.atomic.AtomicInteger(0)
     val newSightings = java.util.concurrent.atomic.AtomicInteger(0)

@@ -626,11 +626,13 @@ class CarbonZebraRfidController(
       }
     }.onFailure { Log.w(TAG, "performWriteEpc: power boost failed: ${it.message}") }
 
-    // Allow the SDK more time on synchronous tag-access calls. The default
-    // is short on some firmware revisions and a slow tag → spurious
-    // OperationFailureException → false. Per the Zebra Tag Write Guide,
-    // setAccessOperationWaitTimeout should be raised before writeWait.
-    runCatching { r.Config.setAccessOperationWaitTimeout(3000) }
+    // SDK access-op ceiling. The Zebra Tag Write Guide's 3000ms was the
+    // pre-2026-05-29 setting and was the upper bound for writeWait's
+    // synchronous wait. 1500ms is still well above the published
+    // Gen2 write-cycle (~50ms worst case for EPC bank) plus internal
+    // retries; tighter ceiling means failure mode resolves in ~half
+    // the time without affecting healthy writes.
+    runCatching { r.Config.setAccessOperationWaitTimeout(1500) }
       .onFailure { Log.w(TAG, "setAccessOperationWaitTimeout failed (older SDK?): ${it.message}") }
 
     try {
@@ -646,7 +648,7 @@ class CarbonZebraRfidController(
       params.memoryBank = com.zebra.rfid.api3.MEMORY_BANK.MEMORY_BANK_EPC
       params.offset = 2                       // skip CRC (word 0) + PC (word 1)
       params.writeDataLength = newEpc.length / 4  // hex chars / 4 = words. 24/4 = 6 for 96-bit EPC.
-      params.writeRetries = 3                 // partial-write recovery (Zebra recommends ≥3 with prefilter)
+      params.writeRetries = 2                 // partial-write recovery; 3 was the original cap-iano default (≥3 per Zebra doc), but 2 still covers the common single-bad-word case and shaves ~200-400ms off the worst-case write window.
       params.setWriteData(newEpc)             // hex string — SDK converts to bytes
 
       // 6-param writeWait with bPrefilter=true. The SDK then applies the
@@ -661,9 +663,11 @@ class CarbonZebraRfidController(
       r.Actions.TagAccess.writeWait(targetEpc, params, null, null, true, false)
       Log.d(TAG, "writeWait(target=$targetEpc, new=$newEpc, prefilter=true) returned without exception")
 
-      // Settle before the power cycle so the tag's charge pump has a moment to finish its
-      // (attempted) EEPROM write before we kill RF.
-      Thread.sleep(150)
+      // Settle before the power cycle so the tag's charge pump has a
+      // moment to finish its (attempted) EEPROM write before we kill
+      // RF. Lowered 150 → 80ms 2026-05-29 — Gen2 write-cycle finishes
+      // within ~50ms typical, so 80ms is enough margin.
+      Thread.sleep(80)
 
       // Power-cycle the tag by dropping the reader's transmit power to index 0 for ~600 ms.
       // writeWait updates the tag's RAM response register regardless of whether EEPROM commit
@@ -682,8 +686,14 @@ class CarbonZebraRfidController(
         cfg.setTransmitPowerIndex(minIdx)
         r.Config.Antennas.setAntennaRfConfig(1, cfg)
       }.onFailure { Log.w(TAG, "power-cycle: setTransmitPowerIndex($minIdx) failed: ${it.message}") }
-      Log.d(TAG, "power-cycle: dropped from boosted idx=$maxPowerIdx to idx=$minIdx (levels.size=${levels?.size ?: -1}); sleeping 600ms")
-      Thread.sleep(600)
+      // 300ms RF-off dwell. 600ms was the original 2024 conservative
+      // value; on RFD8500 the chip charge pump drops below operating
+      // voltage within ~10ms of RF removal, so 300ms is plenty for
+      // the tag to lose RAM and reboot from EEPROM on the next read.
+      // This is the single biggest contributor to per-write latency
+      // on the steady-state re-encode pass.
+      Log.d(TAG, "power-cycle: dropped from boosted idx=$maxPowerIdx to idx=$minIdx (levels.size=${levels?.size ?: -1}); sleeping 300ms")
+      Thread.sleep(300)
       // Bring power BACK UP to max for the verify window. The earlier
       // design restored to the operator's slider before verifying, on
       // the theory that "verify should match the read setting." In
@@ -792,11 +802,15 @@ class CarbonZebraRfidController(
    * tag's write-buffer briefly echoes the new EPC before the silicon reverts. Same rationale
    * as [CarbonChainwayRfidController.verifyEpcWrite].
    */
+  /// timeoutMs lowered 3000 → 1500 on 2026-05-29: success exits on the
+  /// first matching sighting (~50-150ms when the tag is touching the
+  /// antenna at max power, where the verify already runs), so the
+  /// only thing the larger ceiling did was lengthen the failure path.
   private fun verifyEpcWrite(
     r: RFIDReader,
     oldEpc: String,
     newEpc: String,
-    timeoutMs: Long = 3000,
+    timeoutMs: Long = 1500,
     minNewSightings: Int = 1,
   ): Boolean {
     val oldNorm = oldEpc.uppercase()

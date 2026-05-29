@@ -5,6 +5,7 @@ import { getPool } from "@/lib/db";
 import { envCompanyPrefix } from "@/lib/server/rfid-commission";
 import { generateSGTIN96 } from "@/lib/utils/epc";
 import { resolveHandheldDeviceId } from "@/lib/server/devices-lookup";
+import { pickRandomUniqueSerial } from "@/lib/server/rfid-serial-allocator";
 
 /**
  * Atomic "claim next serial + insert items row + return the new EPC".
@@ -14,12 +15,20 @@ import { resolveHandheldDeviceId } from "@/lib/server/devices-lookup";
  * with explicit old-EPC kill semantics so the operator can rewrite a tag
  * in one trigger pull.
  *
- * Serial allocation — Scheme C ("hybrid"):
- *   • Per-(custom_sku, location) MAX(serial)+1.
- *   • Floor at 100,001 for SKUs the WMS has never tagged before, so freshly
- *     handheld-encoded tags don't visually stand out next to Senitron's
- *     6-digit serial pool. Once the floor is crossed (max ≥ 100,001) it
- *     keeps incrementing normally.
+ * Serial allocation — Random 6-digit, per-custom_sku unique
+ * (Carbon-Jeans policy 2026-05-29):
+ *   • Pick a random integer in [100_000, 999_999]; reject draws that
+ *     already exist for this custom_sku.
+ *   • The sequential MAX+1 scheme is gone: a single stuck row (e.g.
+ *     serial=12 from an old import) used to wedge every later write
+ *     because the next allocation would collide on EPC. Random draws
+ *     are agnostic to existing serial layout and produce truly 6-digit
+ *     values from day one.
+ *   • The advisory_xact_lock on (sku, location) below is now redundant
+ *     for the random path but kept for the EPC INSERT step's safety —
+ *     two simultaneous tabs picking the same random serial still get
+ *     stopped by the `items.epc` UNIQUE constraint (caller retries on
+ *     23505 by re-invoking encode-claim).
  *
  * Auth: session OR edge-key (handheld). Manager scope or above (matches
  * /api/inventory/bulk-status).
@@ -32,8 +41,6 @@ import { resolveHandheldDeviceId } from "@/lib/server/devices-lookup";
  *   { error: string, code?: string }
  */
 export const dynamic = "force-dynamic";
-
-const SERIAL_FLOOR_FOR_FRESH_SKU = 100_000; // next will be >= 100_001
 
 const bodySchema = z.object({
   customSkuId: z.string().uuid(),
@@ -129,32 +136,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // Serial selection — serialize concurrent encode-claims for the
-    // same (sku, location) so they can't race to the same MAX value.
-    // Postgres forbids `FOR UPDATE` on a query containing aggregates
-    // (`MAX(serial_number) … FOR UPDATE` errors with "FOR UPDATE is
-    // not allowed with aggregate functions"). The original code did
-    // exactly that; live evidence 2026-05-26 — every encode attempt
-    // came back as "Server error". Switch to a per-(sku, location)
-    // advisory transaction lock: cheap, transaction-scoped, releases
-    // on COMMIT/ROLLBACK, and lets us read MAX without an extra
-    // SELECT … FOR UPDATE.
-    await client.query(
-      `SELECT pg_advisory_xact_lock(
-         hashtextextended('items_serial:' || $1::text || ':' || $2::text, 0)
-       )`,
-      [customSkuId, session.lid],
-    );
-    const maxRow = await client.query<{ m: string | null }>(
-      `SELECT COALESCE(MAX(serial_number), 0)::text AS m
-         FROM items
-         WHERE custom_sku_id = $1::uuid AND location_id = $2::uuid`,
-      [customSkuId, session.lid],
-    );
-    const currentMax = Number(maxRow.rows[0]?.m ?? 0);
-    const baseline =
-      currentMax > SERIAL_FLOOR_FOR_FRESH_SKU ? currentMax : SERIAL_FLOOR_FOR_FRESH_SKU;
-    const nextSerial = baseline + 1;
+    // Random 6-digit serial unique within this custom_sku (across all
+    // locations — items.epc is globally UNIQUE so two locations writing
+    // the same (sku, serial) would collide on INSERT anyway). The
+    // advisory lock that used to serialize concurrent claims for the
+    // sequential MAX+1 scheme is no longer needed; the constraint
+    // catches the rare two-tabs-pick-same-random case and the caller
+    // retries.
+    const nextSerial = await pickRandomUniqueSerial(client, customSkuId);
 
     // Build the new EPC. Uses the tenant prefix (env override or 985611).
     const cp = envCompanyPrefix();

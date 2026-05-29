@@ -67,6 +67,25 @@ export async function POST(req: Request) {
       raw_csv: parsed.data.csvData,
     });
 
+    // 'cloud-geiger-find' is an audit-only upload: the mobile screen
+    // records which of the dropped EPCs were physically found via a
+    // bulk-find trigger pull. It MUST NOT mutate items.last_seen_at /
+    // status — that would silently flip every found EPC to in-stock at
+    // the operator's active location even when the operator hadn't
+    // intended to update inventory. We log the raw CSV so /reports/
+    // uploads still has the full record; the desktop reports view
+    // parses it for human display.
+    if (parsed.data.mode === "cloud-geiger-find") {
+      return NextResponse.json({
+        ok: true,
+        logId,
+        rowsProcessed: 0,
+        rowsUpdated: 0,
+        ingestErrors: [] as string[],
+        skipped: "ingest skipped: audit-only mode",
+      });
+    }
+
     const result = await applyInventoryCsvToItems(
       pool,
       tenantId,

@@ -1658,9 +1658,45 @@ class WmsApiClient {
     }
   }
 
+  /// Dismiss one or more EPCs from this handheld's Cloud + Geiger queue.
+  /// Called when the operator slide-deletes a row OR when a Take-an-
+  /// Action flow resolves the EPC (re-encode success on the same chip,
+  /// etc.). Server marks the row `consumed` so subsequent polls no
+  /// longer return it. Idempotent (already-consumed → dismissed=0).
+  Future<int> dismissEpcQueueItems({
+    required String deviceId,
+    required List<String> epcs,
+  }) async {
+    final cleaned = epcs
+        .map((e) => e.trim().toUpperCase())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+    if (cleaned.isEmpty) return 0;
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/handheld/epc-queue');
+    final body = jsonEncode({'deviceId': deviceId, 'epcs': cleaned});
+    final headers = <String, String>{
+      ...await handheldAuthHeaders(),
+      'Content-Type': 'application/json',
+      'x-wms-device-id': deviceId,
+    };
+    final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      return (decoded['dismissed'] as num?)?.toInt() ?? 0;
+    }
+    return 0;
+  }
+
   /// Mobile poller for this handheld's EPC drop queue (Cloud + Geiger).
-  /// Server marks rows `consumed` atomically; subsequent polls return only
-  /// new drops. Returns `{ deviceUuid, epcs, count }`.
+  /// Read-only since 2026-05-29 — server keeps every queued EPC until
+  /// it's explicitly dismissed via `dismissEpcQueueItems`, so each poll
+  /// returns the full pending set (operator's working list survives
+  /// app relaunches and shift handovers). Returns `{ deviceUuid,
+  /// epcs, count }`.
   Future<({String deviceUuid, List<String> epcs, int count})>
       pollMyEpcQueue({required String deviceId}) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');

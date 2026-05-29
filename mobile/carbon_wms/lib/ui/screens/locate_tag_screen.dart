@@ -416,6 +416,11 @@ class _LocateTagScreenState extends State<LocateTagScreen>
               // Phase 2 — drop tiles for actions the operator's role can't
               // open. context.read is safe inside the modal builder since
               // it doesn't subscribe to rebuilds.
+              // Cloud + Geiger contract: when the operator opens an action
+              // from here, the target EPC is the row that was sent to
+              // them — we pass it down so the destination can call the
+              // dismiss endpoint after the action completes, removing
+              // the row from the Cloud + Geiger list across all devices.
               if (context.read<MobilePermissions>().canView(ScreenIds.statusChange)) ...[
                 const Divider(height: 1),
                 tile(
@@ -427,7 +432,10 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                     if (!mounted) return;
                     await context.pushGuarded<void>(
                       ScreenIds.statusChange,
-                      (_) => const StatusChangeScreen(),
+                      (_) => StatusChangeScreen(
+                        cloudGeigerResolveEpc:
+                            widget.cloudGeigerMode ? _epcUpper : null,
+                      ),
                     );
                   },
                 ),
@@ -443,7 +451,10 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                     if (!mounted) return;
                     await context.pushGuarded<void>(
                       ScreenIds.encode,
-                      (_) => const EncodeScreen(),
+                      (_) => EncodeScreen(
+                        cloudGeigerResolveEpc:
+                            widget.cloudGeigerMode ? _epcUpper : null,
+                      ),
                     );
                   },
                 ),
@@ -459,7 +470,10 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                     if (!mounted) return;
                     await context.pushGuarded<void>(
                       ScreenIds.searchAndEncode,
-                      (_) => const SearchAndEncodeScreen(),
+                      (_) => SearchAndEncodeScreen(
+                        cloudGeigerResolveEpc:
+                            widget.cloudGeigerMode ? _epcUpper : null,
+                      ),
                     );
                   },
                 ),

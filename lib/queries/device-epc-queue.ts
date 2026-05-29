@@ -43,13 +43,22 @@ export async function enqueueEpcsForDevice(
 }
 
 /**
- * Pull pending EPCs for a device and atomically mark them consumed.
- * Mobile clients call this once per Cloud + Geiger screen open / refresh.
+ * Read-only list of pending EPCs for the device. Mobile Cloud + Geiger
+ * polls this and DOES NOT consume — items stay on the screen until the
+ * operator either resolves them via Take an Action (which calls
+ * [dismissEpcForDevice] on the resolved EPC) or slide-deletes a row
+ * (same dismiss call). Pre-2026-05-29 the poller used to atomically
+ * mark all returned EPCs as `consumed`, which meant a single poll
+ * permanently silenced rows and an app relaunch lost everything. The
+ * persistent-queue contract lets dropped tags survive app restarts and
+ * shift handovers.
  */
-export async function consumePendingEpcsForDevice(
+export async function listPendingEpcsForDevice(
   pool: Pool,
   deviceId: string,
+  limit = 500,
 ): Promise<DeviceEpcQueueRow[]> {
+  const safeLimit = Math.min(Math.max(1, limit), 2000);
   const r = await pool.query<{
     id: string;
     device_id: string;
@@ -58,16 +67,12 @@ export async function consumePendingEpcsForDevice(
     enqueued_at: Date;
     consumed_at: Date | null;
   }>(
-    `UPDATE device_epc_queue
-     SET status = 'consumed', consumed_at = now()
-     WHERE id IN (
-       SELECT id FROM device_epc_queue
-       WHERE device_id = $1::uuid AND status = 'pending'
-       ORDER BY enqueued_at ASC
-       FOR UPDATE SKIP LOCKED
-     )
-     RETURNING id::text, device_id::text, epc, status, enqueued_at, consumed_at`,
-    [deviceId],
+    `SELECT id::text, device_id::text, epc, status, enqueued_at, consumed_at
+       FROM device_epc_queue
+      WHERE device_id = $1::uuid AND status = 'pending'
+      ORDER BY enqueued_at ASC
+      LIMIT $2`,
+    [deviceId, safeLimit],
   );
   return r.rows.map((row) => ({
     id: row.id,
@@ -77,6 +82,36 @@ export async function consumePendingEpcsForDevice(
     enqueued_at: row.enqueued_at.toISOString(),
     consumed_at: row.consumed_at ? row.consumed_at.toISOString() : null,
   }));
+}
+
+/**
+ * Mark one or more EPCs as resolved for this device — either because
+ * the operator slide-deleted the row, or because they completed a
+ * Take an Action flow that processed the EPC. Idempotent: rows already
+ * consumed (e.g. a second tab dismissed first) just no-op.
+ */
+export async function dismissEpcsForDevice(
+  pool: Pool,
+  deviceId: string,
+  epcs: string[],
+): Promise<{ dismissed: number }> {
+  const cleaned = Array.from(
+    new Set(
+      epcs
+        .map((e) => e?.trim().toUpperCase())
+        .filter((e): e is string => !!e && e.length > 0),
+    ),
+  );
+  if (cleaned.length === 0) return { dismissed: 0 };
+  const r = await pool.query(
+    `UPDATE device_epc_queue
+        SET status = 'consumed', consumed_at = now()
+      WHERE device_id = $1::uuid
+        AND status = 'pending'
+        AND epc = ANY($2::text[])`,
+    [deviceId, cleaned],
+  );
+  return { dismissed: r.rowCount ?? 0 };
 }
 
 /** Read-only peek (no state change) — used by web for status display. */

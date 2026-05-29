@@ -11,6 +11,7 @@ import {
   envCompanyPrefix,
   rfidCommissionPrintAndAudit,
 } from "@/lib/server/rfid-commission";
+import { decodeSGTIN96 } from "@/lib/utils/epc";
 
 /**
  * POST /api/rfid/reprint — reprint an existing item's label without inserting
@@ -158,7 +159,17 @@ export async function POST(req: Request) {
 
   const cp = envCompanyPrefix();
   const lsId = Number(item.sku_ls_system_id ?? "0");
-  const serial = Number(item.serial_number ?? "0");
+  // 2026-05-29 — derive the serial from the EPC's SGTIN-96 payload, not
+  // items.serial_number. The catalog-sanitization migration (random
+  // 6-digit unique) updates items.serial_number for rows whose value
+  // didn't fit the new policy, but it deliberately doesn't touch
+  // items.epc (the physical chip can't be remotely edited). Pulling
+  // the serial from the EPC guarantees the reprinted label encodes the
+  // SAME EPC the chip already broadcasts. Falls back to the column on
+  // a parse failure so legacy 24-hex EPCs that don't decode cleanly
+  // still produce a label.
+  const decoded = decodeSGTIN96(item.epc);
+  const serial = decoded?.serialNumber ?? Number(item.serial_number ?? "0");
 
   const zpl = generateCarbonTagZpl({
     input: {
