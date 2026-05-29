@@ -15,7 +15,7 @@
  *   • Description split into two vertical lines (carbon-gen layout
  *     puts the matrix description in two rotated columns)
  *   • Color
- *   • Code 128 barcode in VERTICAL orientation (^BCB) of the custom SKU
+ *   • Code 39 barcode in VERTICAL orientation (^B3B) of the custom SKU
  *   • SKU text
  *   • Retail price
  *   • Sizes-available column (e.g. "XS, S, M, L")
@@ -265,7 +265,7 @@ function normalizeSizesColumn(value: string): string {
 /**
  * Build a single Carbon price-tag ZPL. The output layout matches the
  * carbon-gen Studio renderer (vertical columns, ^GB graphic boxes,
- * ^FT/^AKB rotated text, ^BCB vertical Code 128 of the SKU, ^RFW,E
+ * ^FT/^AKB rotated text, ^B3B vertical Code 39 of the SKU, ^RFW,E
  * decimal-triplet EPC encoding).
  */
 export function generateCarbonTagZpl(opts: {
@@ -294,12 +294,17 @@ export function generateCarbonTagZpl(opts: {
   //   • Removed the divider line between description line 1 and line 2
   //     (carbon-gen had ^FO325,80^GB0,425,3 — the operator wanted both
   //     description lines in the same merged cell).
-  //   • Vertical Code 128 ^BCB at FO 455,79 in the gap column. ^BY3
-  //     module width, height 112. Numeric-only barcode payload (strip
-  //     trailing letter from SKU) so Code 128 picks subset C and renders
-  //     dense bars that scan clean.
-  //   • Code 128 SUBSET B explicit prefix `>:` removed — for the
-  //     numeric-only stripped SKU, auto subset C is the right choice.
+  //   • Vertical Code 39 ^B3B at FO 436,86 in the gap column. ^BY2,3
+  //     (narrow-bar 2 dots, wide:narrow ratio 3 for the bold Code 39
+  //     look), height 112. Switched from Code 128 (^BCB) 2026-05-28 at
+  //     operator request to match the physical reference tag's barcode
+  //     symbology. Code 39 has no subsets, so the subset-C-density
+  //     rationale no longer applies — but we KEEP the trailing-letter
+  //     strip below purely for width consistency (see next comment).
+  //   • Code 39 is ~40% longer than Code 128 for the same payload. At
+  //     ^BY2 a long (~14–15 char) payload can run past the ^FO593 price
+  //     box; if a test print overflows, drop the first ^BY number to 1
+  //     (^BY1,3) — thinner narrow bars, guaranteed fit.
   // The static `TALLA/SIZE` label is hardcoded.
   // Strip ALL trailing letters from the SKU and replace the run with a
   // single "1" so the encoded barcode is numeric-only and Code 128
@@ -339,7 +344,7 @@ export function generateCarbonTagZpl(opts: {
 ^FT294,559^AKB,34^FB550,1,0,C^FD${line1}^FS
 ^FT354,559^AKB,34^FB550,1,0,C^FD${line2}^FS
 ^FT413,559^AKB,36^FB550,1,0,C^FD${safeColorResolved}^FS
-^FO436,86^BY3,2^BCB,112,N,N,N^FD${barcodeData}^FS
+^FO436,86^BY2,3^B3B,N,112,N,N^FD${barcodeData}^FS
 ^FT581,559^AKB,32^FB550,1,0,C^FD${safeSku}^FS
 ^FT668,559^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
 ^FT669,559^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
