@@ -303,8 +303,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
         className="fixed inset-0 z-[80] bg-black/75"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-4">
-        <div className="my-8 w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+      <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-2 sm:p-4">
+        <div className="my-4 w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8">
           {/* Top bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5">
             <div className="flex items-center gap-2">
@@ -378,17 +378,17 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
               Loading matrix…
             </p>
           ) : (
-            <div className="flex">
-              <nav className="w-32 shrink-0 border-r border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-3">
-                <div className="border-l-2 border-transparent px-4 py-1.5 font-mono text-xs text-[var(--wms-muted)]">
+            <div className="flex flex-col sm:flex-row">
+              <nav className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3">
+                <div className="whitespace-nowrap border-transparent px-4 py-1.5 font-mono text-xs text-[var(--wms-muted)] sm:border-l-2">
                   Setup
                 </div>
-                <div className="border-l-2 border-[var(--wms-accent)] bg-[var(--wms-surface)] px-4 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)]">
+                <div className="whitespace-nowrap border-[var(--wms-accent)] bg-[var(--wms-surface)] px-4 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] sm:border-l-2">
                   Matrix
                 </div>
               </nav>
 
-              <div className="min-w-0 flex-1 space-y-4 p-5">
+              <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5">
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_0.5fr_0.5fr]">
                   {/* Shared Values — matrix-level, editable */}
                   <Section title="Shared Values · applied to all items in this matrix">
@@ -483,6 +483,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                   <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
                     Group Items
                   </div>
+                  <div className="overflow-x-auto">
+                  <div className="min-w-[660px]">
                   <div className="grid grid-cols-[90px_70px_100px_100px_150px_1fr] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
                     <span>Color</span>
                     <span>Size</span>
@@ -514,6 +516,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                       </div>
                     );
                   })}
+                  </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -609,7 +613,7 @@ function EditRow({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-44 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none ${
+        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-44 ${
           mono ? "font-mono" : ""
         }`}
       />

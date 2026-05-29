@@ -246,8 +246,8 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
         className="fixed inset-0 z-[60] bg-black/70"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto p-4">
-        <div className="my-8 w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+      <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto p-2 sm:p-4">
+        <div className="my-4 w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8">
           {/* Top bar — Save Changes · Matrix · Print Label · Archive */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5">
             <div className="flex items-center gap-2">
@@ -318,17 +318,17 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
             </p>
           ) : null}
 
-          <div className="flex">
-            <nav className="w-44 shrink-0 border-r border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-3">
+          <div className="flex flex-col sm:flex-row">
+            <nav className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-44 sm:border-b-0 sm:border-r sm:py-3">
               {NAV_ITEMS.map((n) => (
                 <button
                   key={n.key}
                   type="button"
                   onClick={() => setTab(n.key)}
-                  className={`block w-full px-4 py-1.5 text-left font-mono text-xs ${
+                  className={`block whitespace-nowrap px-4 py-1.5 text-left font-mono text-xs sm:w-full ${
                     tab === n.key
-                      ? "border-l-2 border-[var(--wms-accent)] bg-[var(--wms-surface)] font-semibold text-[var(--wms-fg)]"
-                      : "border-l-2 border-transparent text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)]"
+                      ? "border-[var(--wms-accent)] bg-[var(--wms-surface)] font-semibold text-[var(--wms-fg)] sm:border-l-2"
+                      : "border-transparent text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)] sm:border-l-2"
                   }`}
                 >
                   {n.label}
@@ -336,7 +336,7 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
               ))}
             </nav>
 
-            <div className="min-w-0 flex-1 p-5">
+            <div className="min-w-0 flex-1 p-3 sm:p-5">
               <h2
                 className="mb-4 truncate text-base font-semibold text-[var(--wms-fg)]"
                 title={headerLabel}
@@ -626,7 +626,7 @@ function EditRow({
         inputMode={numeric ? "decimal" : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-40 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none ${
+        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-40 ${
           mono ? "font-mono" : ""
         }`}
       />
