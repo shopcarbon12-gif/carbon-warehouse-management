@@ -15,7 +15,7 @@
  *   • Description split into two vertical lines (carbon-gen layout
  *     puts the matrix description in two rotated columns)
  *   • Color
- *   • Code 39 barcode in VERTICAL orientation (^B3B) of the custom SKU
+ *   • Code 128 barcode in VERTICAL orientation (^BCB) of the custom SKU
  *   • SKU text
  *   • Retail price
  *   • Sizes-available column (e.g. "XS, S, M, L")
@@ -172,27 +172,53 @@ export function buildEpc(opts: {
   };
 }
 
-function splitVerticalColumns(
+/**
+ * ERB-faithful description word-wrap, ported from the operator's external
+ * label-editor template. Splits the description on whitespace, removes every
+ * word that also appears in color (attr3) or size (attr4), then greedily packs
+ * words into up to two lines — each line takes words until the running length
+ * exceeds 15 chars; the overflowing word starts the next line. Mirrors the
+ * Ruby `number_of_lines.times { ... }` block. One safe deviation from the ERB:
+ * a single word longer than 15 chars is emitted alone rather than dropped
+ * (the ERB would have rendered an empty line).
+ */
+function wrapDescriptionErb(
   description: string,
   color: string,
   size: string,
 ): readonly [string, string] {
-  const words = sanitizeZpl(description).toUpperCase().split(/\s+/).filter(Boolean);
-  const excluded = [sanitizeZpl(color), sanitizeZpl(size)]
-    .join(" ")
+  const remove = new Set(
+    [sanitizeZpl(color), sanitizeZpl(size)]
+      .join(" ")
+      .toUpperCase()
+      .split(/\s+/)
+      .filter(Boolean),
+  );
+  let words = sanitizeZpl(description)
     .toUpperCase()
     .split(/\s+/)
-    .filter(Boolean);
-  const filteredWords = words.filter((word) => !excluded.includes(word));
-  if (filteredWords.length === 0) return ["ITEM", ""] as const;
-  if (filteredWords.length === 1) return [sanitizeZpl(filteredWords[0]), ""] as const;
-  if (filteredWords.length === 2) {
-    return [sanitizeZpl(filteredWords[0]), sanitizeZpl(filteredWords[1])] as const;
+    .filter(Boolean)
+    .filter((w) => !remove.has(w));
+  const charsPerLine = 15;
+  const out: string[] = [];
+  for (let n = 0; n < 2; n += 1) {
+    let line = "";
+    let temp = "";
+    for (const r of words) {
+      temp += `${r} `;
+      if (temp.length > charsPerLine) break;
+      line = temp;
+    }
+    let consumed = line.trim() ? line.trim().split(/\s+/).length : 0;
+    if (consumed === 0 && words.length > 0) {
+      line = words[0];
+      consumed = 1;
+    }
+    out.push(line.trim());
+    words = words.slice(consumed);
+    if (words.length === 0) break;
   }
-  const half = Math.ceil(filteredWords.length / 2);
-  const line1 = sanitizeZpl(filteredWords.slice(0, half).join(" "));
-  const line2 = sanitizeZpl(filteredWords.slice(half).join(" "));
-  return [line1, line2] as const;
+  return [out[0] ?? "", out[1] ?? ""] as const;
 }
 
 export function inferSizeFromDescription(description: string): string {
@@ -233,16 +259,6 @@ export function inferColorFromDescription(description: string, inferredSize: str
   return tokens[lastIdx] || "";
 }
 
-function formatDisplayPrice(value: string): string {
-  const raw = sanitizeZpl(value);
-  const num = Number.parseFloat(raw);
-  if (Number.isFinite(num)) {
-    if (Number.isInteger(num)) return String(num);
-    return num.toFixed(2).replace(/\.00$/, "");
-  }
-  return raw || "0";
-}
-
 function normalizeSizesColumn(value: string): string {
   const tokens = sanitizeZpl(value)
     .toUpperCase()
@@ -264,8 +280,8 @@ function normalizeSizesColumn(value: string): string {
 
 /**
  * Build a single Carbon price-tag ZPL. The output layout matches the
- * carbon-gen Studio renderer (vertical columns, ^GB graphic boxes,
- * ^FT/^AKB rotated text, ^B3B vertical Code 39 of the SKU, ^RFW,E
+ * external label-editor ERB template (vertical columns, ^GB graphic boxes,
+ * ^FT/^AKB rotated text, ^BCB vertical Code 128 of the SKU, ^RFW,E
  * decimal-triplet EPC encoding).
  */
 export function generateCarbonTagZpl(opts: {
@@ -282,47 +298,30 @@ export function generateCarbonTagZpl(opts: {
   ).toUpperCase();
   const safeUpc = sanitizeZpl(input.upc).toUpperCase();
   const safeSku = sanitizeZpl(input.customSku).toUpperCase();
-  const safePrice = formatDisplayPrice(input.retailPrice);
+  // ERB renders `$<%=@retail_price.to_i %>` — integer dollars, truncated.
+  const safePrice = String(Math.trunc(Number.parseFloat(sanitizeZpl(input.retailPrice)) || 0));
   const safeSizes = normalizeSizesColumn(input.sizesAvailable ?? "");
-  const [line1, line2] = splitVerticalColumns(input.itemName, safeColorResolved, safeSize);
+  const [line1, line2] = wrapDescriptionErb(input.itemName, safeColorResolved, safeSize);
   const epcLength = epcBitTotal(settings);
-  // 1.2.50 — landscape Carbon hang-tag matching the warehouse stock and
-  // operator-approved physical reference (Dropbox 20260505_065405.jpg).
-  // Key changes vs the carbon-gen-port (1.2.49):
-  //   • Bold for UPC + retail price via E:ARI000.TTF (mapped as font B).
-  //     Confirmed bold by side-by-side print test on the warehouse Zebra.
-  //   • Removed the divider line between description line 1 and line 2
-  //     (carbon-gen had ^FO325,80^GB0,425,3 — the operator wanted both
-  //     description lines in the same merged cell).
-  //   • Vertical Code 39 ^B3B at FO 436,86 in the gap column. ^BY2,3
-  //     (narrow-bar 2 dots, wide:narrow ratio 3 for the bold Code 39
-  //     look), height 112. Switched from Code 128 (^BCB) 2026-05-28 at
-  //     operator request to match the physical reference tag's barcode
-  //     symbology. Code 39 has no subsets, so the subset-C-density
-  //     rationale no longer applies — but we KEEP the trailing-letter
-  //     strip below purely for width consistency (see next comment).
-  //   • Code 39 is ~40% longer than Code 128 for the same payload. At
-  //     ^BY2 a long (~14–15 char) payload can run past the ^FO593 price
-  //     box; if a test print overflows, drop the first ^BY number to 1
-  //     (^BY1,3) — thinner narrow bars, guaranteed fit.
-  // The static `TALLA/SIZE` label is hardcoded.
-  // Strip ALL trailing letters from the SKU and replace the run with a
-  // single "1" so the encoded barcode is numeric-only and Code 128
-  // picks subset C (dense bars). For single-letter sizes the regex
-  // `/[A-Z]$/` was sufficient; multi-letter sizes (XXL, XXXL) left
-  // letters in the payload, forced subset B, and pushed the rendered
-  // barcode ~75–95 % wider — overflowing the right table border on
-  // the printed label. The `+` quantifier captures the full trailing
-  // letter run regardless of size length. Verified on the warehouse
-  // sample sheet (L / M / XXL / XXXL) — all four sizes now share the
-  // same 10-digit `1222207111` payload, identical bar width.
-  const barcodeData = safeSku.replace(/[A-Z]+$/, "1");
+  // 2026-05-28 — WMS commission/reprint label re-aligned to MATCH the
+  // operator's external label-editor ERB template 1:1: the ERB's exact
+  // ^GB box/divider coordinates, ^FT field positions, plain Arial (no bold
+  // font B), integer price (`.to_i`-equivalent truncation), and the ERB's
+  // 15-char/2-line description wrap (wrapDescriptionErb above).
+  //   • Barcode REVERTED to Code 128 (^BCB,110) at ^BY2,2 per operator
+  //     request, encoding the RAW SKU/ALU — the prior trailing-letter
+  //     strip ("subset C width hack") is intentionally GONE so the bars
+  //     mirror the ERB's `<%=@alu%>`. If a SKU that ends in letters
+  //     overflows the right border again, revisit the encode here.
+  //   • The ERB `@item_attr12` slot (^FT765) is mapped to the sizes-run
+  //     column (safeSizes). Change that token if attr12 should hold a
+  //     different field.
+  // The static `TALLA/SIZE` label is hardcoded. ^PW/^LL/^LH/^LS/^LT remain
+  // (the ERB omits them — the external editor injects size/offset; the WMS
+  // must supply them itself for raw-port printing). ^CI28 kept for UTF-8.
 
   return `^XA
 ^CI28
-^PON
-^FWN
-^MNY
 ^PW${settings.labelWidthDots}
 ^LL${settings.labelHeightDots}
 ^MD20
@@ -330,25 +329,24 @@ export function generateCarbonTagZpl(opts: {
 ^LS${settings.labelShiftX}
 ^LT${settings.labelShiftY}
 ^CWK,E:ARIAL.TTF
-^CWB,E:ARI000.TTF
-^FO15,86^GB410,427,2^FS
-^FO64,84^GB0,423,3^FS
-^FO188,87^GB0,425,3^FS
-^FO247,87^GB0,425,3^FS
-^FO368,87^GB0,425,3^FS
-^FO593,86^GB107,426,3^FS
-^FO764,64^GB0,477,3^FS
-^FT54,497^AKB,38,^FDTALLA/SIZE^FS
-^FT175,529^AKB,134^FB515,1,0,C^FD${safeSize}^FS
-^FT234,597^ABB,36^FB600,1,0,C^FD${safeUpc}^FS
-^FT294,559^AKB,34^FB550,1,0,C^FD${line1}^FS
-^FT354,559^AKB,34^FB550,1,0,C^FD${line2}^FS
-^FT413,559^AKB,36^FB550,1,0,C^FD${safeColorResolved}^FS
-^FO436,86^BY2,3^B3B,N,112,N,N^FD${barcodeData}^FS
-^FT581,559^AKB,32^FB550,1,0,C^FD${safeSku}^FS
-^FT668,559^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
-^FT669,559^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
-^FT746,559^AKB,34^FB550,1,0,C^FD${safeSizes}^FS
+^FT73,490^AKB,38,^FDTALLA/SIZE^FS
+^FT194,522^AKB,134^FB515,1,0,C^FD${safeSize}^FS
+^FT253,590^AKB,36^FB600,1,0,C^FD${safeUpc}^FS
+^FT313,552^AKB,36^FB550,1,0,C^FD${line1}^FS
+^FT373,552^AKB,36^FB550,1,0,C^FD${line2}^FS
+^FT432,552^AKB,36^FB550,1,0,C^FD${safeColorResolved}^FS
+^FO455,${safeSku.length === 13 ? "95" : "125"}^BY2,2^BCB,110,N,N,N^FD${safeSku}^FS
+^FT600,552^AKB,32^FB550,1,0,C^FD${safeSku}^FS
+^FT687,552^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
+^FT765,552^AKB,38^FB550,1,0,C^FD${safeSizes}^FS
+^FO34,79^GB410,427,2^FS
+^FO83,77^GB0,423,3^FS
+^FO325,80^GB0,425,3^FS
+^FO387,80^GB0,425,3^FS
+^FO612,79^GB107,426,3^FS
+^FO783,57^GB0,477,3^FS
+^FO266,80^GB0,425,3^FS
+^FO207,80^GB0,425,3^FS
 ^RB${epcLength},${settings.companyPrefixBits},${settings.itemNumberBits},${settings.serialBits}^FS
 ^RFW,E^FD${epcWrite.companyPrefix},${epcWrite.itemNumber},${epcWrite.serialNumber}^FS
 ^PQ1,0,1,Y
