@@ -68,6 +68,7 @@ const sections: NavSection[] = [
     label: "Inventory",
     isActiveSection: (p) =>
       p.startsWith("/inventory/catalog") ||
+      p.startsWith("/inventory/categories") ||
       p.startsWith("/inventory/bulk-status") ||
       p.startsWith("/inventory/bulk-import") ||
       p.startsWith("/overview/locations") ||
@@ -75,6 +76,7 @@ const sections: NavSection[] = [
       p.startsWith("/operations/transfers"),
     items: [
       { href: "/inventory/catalog", label: "Catalog", icon: Package },
+      { href: "/inventory/categories", label: "Categories", icon: Layers },
       { href: "/overview/locations", label: "Bin Locations", icon: Map },
       { href: "/rfid/cycle-counts", label: "Cycle Counts", icon: ScanLine },
       { href: "/operations/transfers/out", label: "Transfer Out", icon: ArrowRightLeft },

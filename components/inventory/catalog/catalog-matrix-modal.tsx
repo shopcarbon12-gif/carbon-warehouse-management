@@ -560,25 +560,26 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                       <Row label="Attributes" value="Color / Size" />
                     </Section>
                     <Section title="Default Values · fill every variant">
-                      <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-2 bg-[var(--wms-surface-elevated)]/60 px-3 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
-                        <span>Name</span>
-                        <span>Price</span>
-                        <span>Markup</span>
-                        <span>Margin</span>
-                      </div>
-                      <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-2 px-3 py-1.5 font-mono text-xs">
-                        <span className="text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
-                          Default
-                        </span>
-                        <MoneyInput value={defPrice} onChange={cascadePrice} editable={canManage} />
-                        <span className="text-left text-[var(--wms-muted)]">{fmtPct(markup)}</span>
-                        <span className="text-left text-[var(--wms-muted)]">{fmtPct(margin)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3 px-3 py-1.5">
-                        <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
-                          Default Cost
-                        </span>
-                        <MoneyInput value={defCost} onChange={cascadeCost} editable={canManage} wide />
+                      <div className="space-y-2 px-3 py-2 font-mono text-xs">
+                        <div>
+                          <span className="block text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                            Default Price
+                          </span>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <MoneyInput value={defPrice} onChange={cascadePrice} editable={canManage} wide />
+                            <span className="text-[0.6rem] text-[var(--wms-muted)]">
+                              MU {fmtPct(markup)} · MG {fmtPct(margin)}
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="block text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                            Default Cost
+                          </span>
+                          <div className="mt-1">
+                            <MoneyInput value={defCost} onChange={cascadeCost} editable={canManage} wide />
+                          </div>
+                        </div>
                       </div>
                     </Section>
                   </div>
