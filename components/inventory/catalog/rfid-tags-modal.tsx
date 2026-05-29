@@ -15,16 +15,6 @@ type StatusLabelRow = {
   is_system_only: boolean;
 };
 
-type HandheldRow = {
-  id: string;
-  name: string;
-  device_type: string;
-  location_id: string;
-  location_code: string;
-  location_name: string;
-  status_online: boolean;
-};
-
 const fetcher = async (url: string) => {
   const res = await fetch(url);
   if (!res.ok) {
@@ -113,10 +103,56 @@ export function RfidTagsModal({
 
   const [showAllStatuses, setShowAllStatuses] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [sendDrawerOpen, setSendDrawerOpen] = useState(false);
   const [statusDrawerOpen, setStatusDrawerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  /* One-click fan-out to every authorized handheld at the operator's active
+     location. Unified with the Defective EPCs modal — no more per-device
+     picker drawer; EPCs land on every handheld's Cloud + Geiger screen via
+     POST /api/handhelds/epc-queue. */
+  const handleSendToHandheld = useCallback(async () => {
+    if (selected.size === 0 || busy) return;
+    const epcs = [...selected];
+    const ok = window.confirm(
+      `Send ${epcs.length} EPC${epcs.length === 1 ? "" : "s"} to every handheld at your active location?\n\nThey'll appear on each handheld's Cloud + Geiger screen.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/handhelds/epc-queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ epcs }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        enqueued?: number;
+        handhelds?: number;
+        location?: { code?: string; name?: string };
+        warning?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(j.error ?? "Send failed");
+      if (j.warning) {
+        setMsg(j.warning);
+      } else {
+        const where = j.location?.code
+          ? `${j.location.code}${j.location.name ? ` — ${j.location.name}` : ""}`
+          : "this location";
+        setMsg(
+          `Sent ${epcs.length} EPC${epcs.length === 1 ? "" : "s"} to ${j.handhelds ?? 0} handheld${
+            (j.handhelds ?? 0) === 1 ? "" : "s"
+          } at ${where}.`,
+        );
+        setSelected(new Set());
+      }
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Send failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [selected, busy]);
 
   /* Default visible: only items whose status maps to LIVE (in-stock). */
   const visibleItems = useMemo(() => {
@@ -153,7 +189,7 @@ export function RfidTagsModal({
   /* Esc closes the outer modal. */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !sendDrawerOpen && !statusDrawerOpen) onClose();
+      if (e.key === "Escape" && !statusDrawerOpen) onClose();
     };
     window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
@@ -162,7 +198,7 @@ export function RfidTagsModal({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose, sendDrawerOpen, statusDrawerOpen]);
+  }, [onClose, statusDrawerOpen]);
 
   const headerLine = useMemo(() => {
     const head = visibleItems[0] ?? itemData?.[0];
@@ -239,9 +275,10 @@ export function RfidTagsModal({
               </button>
               <button
                 type="button"
-                disabled={selectedCount === 0}
-                onClick={() => setSendDrawerOpen(true)}
+                disabled={selectedCount === 0 || busy}
+                onClick={() => void handleSendToHandheld()}
                 className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-accent)] hover:opacity-90 disabled:opacity-40"
+                title="Push these EPCs to every handheld at your active location (Cloud + Geiger screen)"
               >
                 <Send className="h-3.5 w-3.5" />
                 Send to handheld
@@ -343,18 +380,6 @@ export function RfidTagsModal({
         </div>
       </div>
 
-      {sendDrawerOpen ? (
-        <SendToHandheldDrawer
-          epcs={[...selected]}
-          onClose={() => setSendDrawerOpen(false)}
-          onSent={(n) => {
-            setMsg(`Sent ${n} EPC(s) to handheld.`);
-            setSendDrawerOpen(false);
-            setSelected(new Set());
-          }}
-        />
-      ) : null}
-
       {statusDrawerOpen ? (
         <ChangeStatusDrawer
           epcs={[...selected]}
@@ -370,123 +395,6 @@ export function RfidTagsModal({
           }}
         />
       ) : null}
-    </>
-  );
-}
-
-function SendToHandheldDrawer({
-  epcs,
-  onClose,
-  onSent,
-}: {
-  epcs: string[];
-  onClose: () => void;
-  onSent: (n: number) => void;
-}) {
-  const { data, error, isLoading } = useSWR<HandheldRow[]>(
-    "/api/infrastructure/devices/handhelds",
-    fetcher,
-    { revalidateOnFocus: false },
-  );
-  const [busy, setBusy] = useState(false);
-  const [errMsg, setErrMsg] = useState<string | null>(null);
-
-  const send = useCallback(
-    async (deviceId: string) => {
-      setBusy(true);
-      setErrMsg(null);
-      try {
-        const res = await fetch(`/api/devices/${deviceId}/epc-queue`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ epcs }),
-        });
-        const j = (await res.json().catch(() => ({}))) as {
-          error?: string;
-          enqueued?: number;
-        };
-        if (!res.ok) throw new Error(j.error ?? "Send failed");
-        onSent(j.enqueued ?? epcs.length);
-      } catch (e) {
-        setErrMsg(e instanceof Error ? e.message : "Send failed");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [epcs, onSent],
-  );
-
-  return (
-    <>
-      <button
-        type="button"
-        aria-label="Close drawer"
-        className="fixed inset-0 z-[80] bg-black/60"
-        onClick={onClose}
-      />
-      <div className="fixed inset-y-0 right-0 z-[81] flex w-full max-w-md flex-col border-l border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-5 py-4">
-          <div>
-            <h3 className="text-base font-semibold text-[var(--wms-fg)]">Send to handheld</h3>
-            <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
-              {epcs.length} EPC(s) will land on the device&apos;s Cloud + Geiger screen.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          {isLoading ? (
-            <p className="font-mono text-sm text-[var(--wms-muted)]">Loading handhelds…</p>
-          ) : error ? (
-            <p className="font-mono text-sm text-red-400/90">{String(error.message ?? error)}</p>
-          ) : !data || data.length === 0 ? (
-            <p className="py-10 text-center font-mono text-sm text-[var(--wms-muted)]">
-              No authorized handhelds. Approve a handheld in Infrastructure → Devices.
-            </p>
-          ) : (
-            <ul className="space-y-2 font-mono">
-              {data.map((d) => (
-                <li key={d.id}>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void send(d.id)}
-                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 px-4 py-3 text-left hover:border-[var(--wms-accent)]/45 hover:bg-[color-mix(in_srgb,var(--wms-accent)_8%,var(--wms-surface-elevated))] disabled:opacity-50"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-[var(--wms-fg)]">{d.name}</div>
-                      <div className="mt-1 truncate text-xs text-[var(--wms-muted)]">
-                        {d.location_code} · {d.location_name}
-                      </div>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide ${
-                        d.status_online
-                          ? "bg-emerald-500/15 text-emerald-400"
-                          : "bg-zinc-600/25 text-zinc-300"
-                      }`}
-                    >
-                      {d.status_online ? "Online" : "Offline"}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {errMsg ? (
-            <p className="mt-3 font-mono text-xs text-red-400/90" role="status">
-              {errMsg}
-            </p>
-          ) : null}
-        </div>
-      </div>
     </>
   );
 }
