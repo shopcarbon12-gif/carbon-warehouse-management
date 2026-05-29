@@ -135,14 +135,14 @@ const sections: NavSection[] = [
   {
     id: "loyalty",
     label: "Rewards",
-    isActiveSection: (p) => p.startsWith("/loyalty"),
+    isActiveSection: (p) => p.startsWith("/rewards"),
     items: [
-      { href: "/loyalty", label: "Overview", icon: Star },
-      { href: "/loyalty/customers", label: "Members", icon: UserSearch },
-      { href: "/loyalty/ledger", label: "Ledger", icon: Activity },
-      { href: "/loyalty/tiers", label: "Tiers", icon: Layers },
-      { href: "/loyalty/referrals", label: "Referrals", icon: Share2 },
-      { href: "/loyalty/rewards", label: "Rewards", icon: Gift },
+      { href: "/rewards", label: "Overview", icon: Star },
+      { href: "/rewards/customers", label: "Members", icon: UserSearch },
+      { href: "/rewards/ledger", label: "Ledger", icon: Activity },
+      { href: "/rewards/tiers", label: "Tiers", icon: Layers },
+      { href: "/rewards/referrals", label: "Referrals", icon: Share2 },
+      { href: "/rewards/rewards", label: "Rewards", icon: Gift },
     ],
   },
   {

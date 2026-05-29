@@ -73,7 +73,7 @@ export function LoyaltyLedgerTable({ rows }: { rows: LedgerTableRow[] }) {
                 </td>
                 <td className={`${cellTruncate} px-3 py-2`} title={row.customer_name}>
                   {row.customer_id ? (
-                    <Link className="underline" href={`/loyalty/customers/${row.customer_id}`}>
+                    <Link className="underline" href={`/rewards/customers/${row.customer_id}`}>
                       {row.customer_name}
                     </Link>
                   ) : (

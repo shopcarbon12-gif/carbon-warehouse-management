@@ -142,7 +142,7 @@ export default async function LoyaltyMembers({
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
             <UserSearch className="h-3.5 w-3.5" />
-            Loyalty
+            Rewards
           </div>
           <h1 className="text-2xl font-bold mt-1">Members</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -152,14 +152,14 @@ export default async function LoyaltyMembers({
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
           <Link
-            href="/loyalty/customers/new"
+            href="/rewards/customers/new"
             className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-card hover:bg-muted text-sm font-semibold"
           >
             <UserPlus className="h-3.5 w-3.5" />
             Add customer
           </Link>
           <Link
-            href="/loyalty/customers/import"
+            href="/rewards/customers/import"
             className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-foreground text-background hover:opacity-90 text-sm font-bold"
           >
             <Upload className="h-3.5 w-3.5" />
@@ -200,7 +200,7 @@ export default async function LoyaltyMembers({
         <button type="submit" className="border border-border bg-card hover:bg-muted px-4 py-2 text-sm font-semibold">
           Filter
         </button>
-        <Link href="/loyalty/customers" className="px-4 py-2 text-sm text-muted-foreground hover:underline">
+        <Link href="/rewards/customers" className="px-4 py-2 text-sm text-muted-foreground hover:underline">
           Clear
         </Link>
       </form>

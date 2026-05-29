@@ -27,7 +27,7 @@ export default async function CustomerImportPage({
   searchParams: Promise<{ done?: string }>;
 }) {
   const session = await getSession();
-  if (!session?.sub) redirect("/login?next=/loyalty/customers/import");
+  if (!session?.sub) redirect("/login?next=/rewards/customers/import");
 
   const sp = await searchParams;
   const cookieJar = await cookies();
@@ -53,7 +53,7 @@ export default async function CustomerImportPage({
     const c = await cookies();
     if (!text) {
       c.delete("wms_csv_import_preview");
-      revalidatePath("/loyalty/customers/import");
+      revalidatePath("/rewards/customers/import");
       return;
     }
     const { rows, errors } = parseCsv(text);
@@ -66,9 +66,9 @@ export default async function CustomerImportPage({
         text,
         locId,
       }),
-      { httpOnly: true, path: "/loyalty/customers/import", maxAge: 60 * 10 },
+      { httpOnly: true, path: "/rewards/customers/import", maxAge: 60 * 10 },
     );
-    revalidatePath("/loyalty/customers/import");
+    revalidatePath("/rewards/customers/import");
   }
 
   async function commitAction() {
@@ -88,11 +88,11 @@ export default async function CustomerImportPage({
     c.delete("wms_csv_import_preview");
     c.set("wms_csv_import_summary", JSON.stringify(summary), {
       httpOnly: true,
-      path: "/loyalty/customers/import",
+      path: "/rewards/customers/import",
       maxAge: 60 * 10,
     });
-    revalidatePath("/loyalty/customers/import");
-    redirect("/loyalty/customers/import?done=1");
+    revalidatePath("/rewards/customers/import");
+    redirect("/rewards/customers/import?done=1");
   }
 
   async function clearAction() {
@@ -100,8 +100,8 @@ export default async function CustomerImportPage({
     const c = await cookies();
     c.delete("wms_csv_import_preview");
     c.delete("wms_csv_import_summary");
-    revalidatePath("/loyalty/customers/import");
-    redirect("/loyalty/customers/import");
+    revalidatePath("/rewards/customers/import");
+    redirect("/rewards/customers/import");
   }
 
   return (
@@ -109,7 +109,7 @@ export default async function CustomerImportPage({
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <Upload className="h-3.5 w-3.5" />
-          Loyalty · <Link className="underline" href="/loyalty/customers">Members</Link>
+          Rewards · <Link className="underline" href="/rewards/customers">Members</Link>
         </div>
         <h1 className="text-2xl font-bold mt-1">Bulk import customers</h1>
         <p className="text-sm text-muted-foreground mt-1">

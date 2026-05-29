@@ -12,7 +12,7 @@ import { UserPlus } from "lucide-react";
  */
 export default async function AddCustomerPage() {
   const session = await getSession();
-  if (!session?.sub) redirect("/login?next=/loyalty/customers/new");
+  if (!session?.sub) redirect("/login?next=/rewards/customers/new");
 
   const locations = await withDb(
     async (pool) => {
@@ -75,8 +75,8 @@ export default async function AddCustomerPage() {
       },
       0,
     );
-    if (newId) redirect(`/loyalty/customers/${newId}`);
-    redirect("/loyalty/customers");
+    if (newId) redirect(`/rewards/customers/${newId}`);
+    redirect("/rewards/customers");
   }
 
   return (
@@ -84,7 +84,7 @@ export default async function AddCustomerPage() {
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <UserPlus className="h-3.5 w-3.5" />
-          Loyalty · <Link className="underline" href="/loyalty/customers">Members</Link>
+          Rewards · <Link className="underline" href="/rewards/customers">Members</Link>
         </div>
         <h1 className="text-2xl font-bold mt-1">Add customer</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -123,7 +123,7 @@ export default async function AddCustomerPage() {
           <textarea name="notes" rows={3} className="border border-border bg-card px-3 py-2" />
         </label>
         <div className="flex justify-end gap-2 pt-2">
-          <Link href="/loyalty/customers" className="px-4 py-2 border border-border text-sm">Cancel</Link>
+          <Link href="/rewards/customers" className="px-4 py-2 border border-border text-sm">Cancel</Link>
           <button type="submit" className="px-4 py-2 border border-border bg-foreground text-background text-sm font-bold hover:opacity-90">
             Add customer
           </button>

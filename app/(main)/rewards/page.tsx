@@ -83,7 +83,7 @@ export default async function LoyaltyOverview() {
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <Star className="h-3.5 w-3.5" />
-          Loyalty
+          Rewards
         </div>
         <h1 className="text-2xl font-bold mt-1">Overview</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -125,17 +125,17 @@ export default async function LoyaltyOverview() {
       ) : (
         <div className="border border-border bg-card p-6 max-w-3xl">
           <p className="text-sm text-muted-foreground">
-            Loyalty schema is not yet present in this database — the
+            Rewards schema is not yet present in this database — the
             loyalty service hasn&rsquo;t deployed its first migration.
           </p>
         </div>
       )}
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <Link href="/loyalty/customers" className="px-4 py-2 border border-border bg-card hover:bg-muted text-sm font-semibold">
+        <Link href="/rewards/customers" className="px-4 py-2 border border-border bg-card hover:bg-muted text-sm font-semibold">
           Browse members →
         </Link>
-        <Link href="/loyalty/ledger" className="px-4 py-2 border border-border bg-card hover:bg-muted text-sm font-semibold">
+        <Link href="/rewards/ledger" className="px-4 py-2 border border-border bg-card hover:bg-muted text-sm font-semibold">
           Recent ledger →
         </Link>
         <a
@@ -144,7 +144,7 @@ export default async function LoyaltyOverview() {
           rel="noreferrer"
           className="px-4 py-2 border border-border bg-card hover:bg-muted text-sm font-semibold"
         >
-          Loyalty admin ↗
+          Rewards admin ↗
         </a>
       </div>
     </main>

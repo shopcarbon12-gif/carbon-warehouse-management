@@ -79,7 +79,7 @@ export default async function LoyaltyReferrals() {
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <Share2 className="h-3.5 w-3.5" />
-          Loyalty
+          Rewards
         </div>
         <h1 className="text-2xl font-bold mt-1">Referrals</h1>
         <p className="text-sm text-muted-foreground mt-1">

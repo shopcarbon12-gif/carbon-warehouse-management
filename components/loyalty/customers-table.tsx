@@ -89,7 +89,7 @@ export function LoyaltyCustomersTable({
               return (
                 <tr key={r.id}>
                   <td className={`${cellTruncate} px-3 py-2 font-semibold`} title={fullName}>
-                    <Link href={`/loyalty/customers/${r.id}`} className="hover:underline">
+                    <Link href={`/rewards/customers/${r.id}`} className="hover:underline">
                       {fullName}
                     </Link>
                   </td>
@@ -128,7 +128,7 @@ export function LoyaltyCustomersTable({
                     })}
                   </td>
                   <td className="overflow-hidden px-3 py-2">
-                    <Link className="text-xs underline" href={`/loyalty/customers/${r.id}`}>
+                    <Link className="text-xs underline" href={`/rewards/customers/${r.id}`}>
                       View
                     </Link>
                   </td>

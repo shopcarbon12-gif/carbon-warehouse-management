@@ -158,8 +158,8 @@ export default async function CustomerDetail({
       reason_text: note || "manual",
       acted_by_user_id: s.sub,
     });
-    revalidatePath(`/loyalty/customers/${customerId}`);
-    redirect(`/loyalty/customers/${customerId}`);
+    revalidatePath(`/rewards/customers/${customerId}`);
+    redirect(`/rewards/customers/${customerId}`);
   }
 
   async function deductAction(formData: FormData) {
@@ -175,8 +175,8 @@ export default async function CustomerDetail({
       reason_text: note || "manual",
       acted_by_user_id: s.sub,
     });
-    revalidatePath(`/loyalty/customers/${customerId}`);
-    redirect(`/loyalty/customers/${customerId}`);
+    revalidatePath(`/rewards/customers/${customerId}`);
+    redirect(`/rewards/customers/${customerId}`);
   }
 
   const c = customer;
@@ -186,7 +186,7 @@ export default async function CustomerDetail({
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <UserSearch className="h-3.5 w-3.5" />
-          Loyalty · <Link className="underline" href="/loyalty/customers">Members</Link>
+          Rewards · <Link className="underline" href="/rewards/customers">Members</Link>
         </div>
         <h1 className="text-2xl font-bold mt-1">
           {c ? [c.first_name, c.last_name].filter(Boolean).join(" ") || "(no name)" : "—"}
@@ -238,7 +238,7 @@ export default async function CustomerDetail({
           <div className="border border-border bg-card p-5 mb-4">
             <div className="flex items-baseline justify-between gap-3">
               <div>
-                <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Loyalty balance</div>
+                <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Rewards balance</div>
                 <div className="text-4xl font-bold tabular-nums mt-1">{balance.toLocaleString()}</div>
                 <div className="text-xs text-muted-foreground mt-1">points · ≈ ${(balance / 10).toFixed(2)} to spend</div>
               </div>
@@ -388,7 +388,7 @@ export default async function CustomerDetail({
             <ul className="text-sm space-y-1">
               <li>
                 <a className="underline" href={`https://rewards.shopcarbon.com/admin/ledger?customer_id=${customerId}`} target="_blank" rel="noreferrer">
-                  Loyalty admin ledger ↗
+                  Rewards admin ledger ↗
                 </a>
               </li>
               {c?.shopify_customer_gid ? (
