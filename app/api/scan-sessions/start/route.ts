@@ -32,7 +32,14 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
   readerId: z.string().uuid(),
-  kind: z.enum(["transfer-out", "cycle-count", "print-commission", "encode-items", "bulk-import"]),
+  kind: z.enum([
+    "transfer-out",
+    "cycle-count",
+    "print-commission",
+    "encode-items",
+    "bulk-import",
+    "bulk-status",
+  ]),
   context: z.record(z.string(), z.unknown()).optional(),
 });
 

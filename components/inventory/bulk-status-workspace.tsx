@@ -107,6 +107,10 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     hcFetcher,
     { revalidateOnFocus: false },
   );
+  // Active scan-session id for the auto-woken default reader (.70). Held in a
+  // ref so the unmount cleanup can end it without re-running on every render.
+  const scanSessionIdRef = useRef<string | null>(null);
+
   const appliedDefaultRef = useRef(false);
   useEffect(() => {
     if (appliedDefaultRef.current) return;
@@ -135,8 +139,58 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     appliedDefaultRef.current = true; // mark applied either way — no retry
     if (defaultId) {
       setSelectedReaders(new Set([defaultId]));
+      // Operator request 2026-05-29: entering this page should START the .70
+      // reader, not just pre-select it. Wake it via a scan-session and begin
+      // populating the table. The session is released on unmount (below).
+      void (async () => {
+        try {
+          const res = await fetch("/api/scan-sessions/start", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              readerId: defaultId,
+              kind: "bulk-status",
+              context: { page: "bulk-status" },
+            }),
+          });
+          const j = (await res.json().catch(() => ({}))) as {
+            ok?: boolean;
+            sessionId?: string;
+            reason?: string;
+          };
+          if (res.ok && j.ok && j.sessionId) {
+            scanSessionIdRef.current = j.sessionId;
+            setScanning(true);
+          } else if (j.reason === "reader_busy") {
+            setMsg("Reader .70 is already in use by another workflow — start it manually if needed.");
+          }
+        } catch {
+          /* non-fatal: operator can still click Start scan */
+        }
+      })();
     }
   }, [hcData]);
+
+  // Release the auto-woken .70 session when leaving the page so the reader
+  // returns to its default-paused state. keepalive lets the request finish
+  // even as the tab navigates/closes.
+  useEffect(() => {
+    return () => {
+      const sid = scanSessionIdRef.current;
+      if (!sid) return;
+      scanSessionIdRef.current = null;
+      try {
+        void fetch("/api/scan-sessions/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: sid }),
+          keepalive: true,
+        });
+      } catch {
+        /* best-effort */
+      }
+    };
+  }, []);
 
   // Table state — Map keyed by EPC so duplicate reads collapse to one row.
   const [rows, setRows] = useState<Map<string, ScannedRow>>(new Map());

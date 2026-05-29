@@ -52,8 +52,14 @@
 
 import { randomUUID } from "node:crypto";
 
-/** The three pages that may wake a reader. */
-export type ScanSessionKind = "transfer-out" | "cycle-count" | "print-commission" | "encode-items" | "bulk-import";
+/** The pages that may wake a reader. */
+export type ScanSessionKind =
+  | "transfer-out"
+  | "cycle-count"
+  | "print-commission"
+  | "encode-items"
+  | "bulk-import"
+  | "bulk-status";
 
 export type ScanSession = {
   /** Stable opaque id; used as the lifecycle handle. */
