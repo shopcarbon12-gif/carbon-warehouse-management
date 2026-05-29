@@ -377,7 +377,7 @@ export function generateCarbonTagZpl(opts: {
 ^FO455,${safeSku.length === 13 ? "95" : "125"}^BY2,2^BCB,110,N,N,N^FD${safeSku}^FS
 ^FT600,552^AKB,32^FB550,1,0,C^FD${safeSku}^FS
 ^FT687,552^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
-^FT765,552^AKB,40^FB550,1,0,C^FD${safeSizes}^FS
+^FT765,552^AKB,44^FB550,1,0,C^FD${safeSizes}^FS
 ^FO34,79^GB410,427,2^FS
 ^FO83,77^GB0,423,3^FS
 ^FO325,80^GB0,425,3^FS
