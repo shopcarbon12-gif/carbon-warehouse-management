@@ -9,8 +9,10 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/encode_test_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -537,10 +539,9 @@ class _EncodeScreenState extends State<EncodeScreen> {
   void _openTestNewTag(_Tag tag) {
     final newEpc = tag.newEpc;
     if (newEpc == null) return;
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => EncodeTestTagScreen(expectedEpc: newEpc),
-      ),
+    context.pushGuarded<void>(
+      ScreenIds.encodeTestTag,
+      (_) => EncodeTestTagScreen(expectedEpc: newEpc),
     );
   }
 

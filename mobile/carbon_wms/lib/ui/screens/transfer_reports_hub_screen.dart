@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/transfer_in_pending_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_out_reports_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
@@ -21,6 +24,9 @@ class TransferReportsHubScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final perms = context.watch<MobilePermissions>();
+    final showIn = perms.canView(ScreenIds.transferInPending);
+    final showOut = perms.canView(ScreenIds.transferOutReports);
     return CarbonScaffold(
       pageTitle: 'transfers',
       body: ColoredBox(
@@ -42,38 +48,38 @@ class TransferReportsHubScreen extends StatelessWidget {
               SizedBox(height: 12.h),
               Expanded(
                 child: Column(
-                  children: [
-                    Expanded(
-                      child: _DirectionLane(
-                        label: 'TRANSFER IN',
-                        sublabel: 'INCOMING SHIPMENTS',
-                        accent: _inAccent,
-                        leadingIcon: LucideIcons.arrowDownToLine,
-                        trailingIcon: LucideIcons.packageOpen,
-                        direction: _LaneDirection.inbound,
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const TransferInPendingScreen(),
+                  children: <Widget>[
+                    if (showIn)
+                      Expanded(
+                        child: _DirectionLane(
+                          label: 'TRANSFER IN',
+                          sublabel: 'INCOMING SHIPMENTS',
+                          accent: _inAccent,
+                          leadingIcon: LucideIcons.arrowDownToLine,
+                          trailingIcon: LucideIcons.packageOpen,
+                          direction: _LaneDirection.inbound,
+                          onTap: () => context.pushGuarded<void>(
+                            ScreenIds.transferInPending,
+                            (_) => const TransferInPendingScreen(),
                           ),
                         ),
                       ),
-                    ),
-                    SizedBox(height: 12.h),
-                    Expanded(
-                      child: _DirectionLane(
-                        label: 'TRANSFER OUT',
-                        sublabel: 'OUTGOING SHIPMENTS',
-                        accent: _outAccent,
-                        leadingIcon: LucideIcons.arrowUpFromLine,
-                        trailingIcon: LucideIcons.package,
-                        direction: _LaneDirection.outbound,
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const TransferOutReportsScreen(),
+                    if (showIn && showOut) SizedBox(height: 12.h),
+                    if (showOut)
+                      Expanded(
+                        child: _DirectionLane(
+                          label: 'TRANSFER OUT',
+                          sublabel: 'OUTGOING SHIPMENTS',
+                          accent: _outAccent,
+                          leadingIcon: LucideIcons.arrowUpFromLine,
+                          trailingIcon: LucideIcons.package,
+                          direction: _LaneDirection.outbound,
+                          onTap: () => context.pushGuarded<void>(
+                            ScreenIds.transferOutReports,
+                            (_) => const TransferOutReportsScreen(),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),

@@ -15,7 +15,9 @@ import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
 import 'package:carbon_wms/services/bin_assign_session.dart';
@@ -2050,11 +2052,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   }
 
   Future<void> _openSettings() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (_) => const BinAssignSettingsScreen(),
-      ),
+    await context.pushGuarded<void>(
+      ScreenIds.binAssignSettings,
+      (_) => const BinAssignSettingsScreen(),
     );
     if (!mounted) return;
     await _load();
@@ -2214,14 +2214,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                               color: Colors.white, size: 26.sp),
                         ),
                         child: GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => EpcDetailScreen(
-                                sku: item.sku,
-                                description: item.description,
-                                epcs: item.epcs,
-                              ),
+                          onTap: () => context.pushGuarded<void>(
+                            ScreenIds.epcDetail,
+                            (_) => EpcDetailScreen(
+                              sku: item.sku,
+                              description: item.description,
+                              epcs: item.epcs,
                             ),
                           ),
                           child: _StoredItemRow(

@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/count_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/damages_reports_screen.dart';
+import 'package:carbon_wms/ui/screens/re_encode_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/status_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_reports_hub_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
@@ -24,6 +28,7 @@ class ReportsHubScreen extends StatelessWidget {
         isDark ? const Color(0xFF1C2828) : const Color(0xFFEEF4F3);
     final iconColor = isDark ? const Color(0xFF7A9090) : AppColors.slateAction;
     final textColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
+    final perms = context.watch<MobilePermissions>();
 
     return CarbonScaffold(
       pageTitle: 'reports',
@@ -36,51 +41,67 @@ class ReportsHubScreen extends StatelessWidget {
             mainAxisSpacing: 8,
             crossAxisSpacing: 8,
             childAspectRatio: 1.1,
-            children: [
-              _ReportTile(
-                label: 'COUNTS',
-                icon: LucideIcons.layers,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-                onTap: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                      builder: (_) => const CountReportsScreen()),
+            children: <Widget>[
+              if (perms.canView(ScreenIds.countReports))
+                _ReportTile(
+                  label: 'COUNTS',
+                  icon: LucideIcons.layers,
+                  tileColor: tileColor,
+                  iconColor: iconColor,
+                  textColor: textColor,
+                  onTap: () => context.pushGuarded<void>(
+                    ScreenIds.countReports,
+                    (_) => const CountReportsScreen(),
+                  ),
                 ),
-              ),
-              _ReportTile(
-                label: 'TRANSFERS',
-                icon: LucideIcons.arrowLeftRight,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-                onTap: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                      builder: (_) => const TransferReportsHubScreen()),
+              if (perms.canView(ScreenIds.transferReportsHub))
+                _ReportTile(
+                  label: 'TRANSFERS',
+                  icon: LucideIcons.arrowLeftRight,
+                  tileColor: tileColor,
+                  iconColor: iconColor,
+                  textColor: textColor,
+                  onTap: () => context.pushGuarded<void>(
+                    ScreenIds.transferReportsHub,
+                    (_) => const TransferReportsHubScreen(),
+                  ),
                 ),
-              ),
-              _ReportTile(
-                label: 'STATUS',
-                icon: LucideIcons.activity,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-                onTap: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                      builder: (_) => const StatusReportsScreen()),
+              if (perms.canView(ScreenIds.statusReports))
+                _ReportTile(
+                  label: 'STATUS',
+                  icon: LucideIcons.activity,
+                  tileColor: tileColor,
+                  iconColor: iconColor,
+                  textColor: textColor,
+                  onTap: () => context.pushGuarded<void>(
+                    ScreenIds.statusReports,
+                    (_) => const StatusReportsScreen(),
+                  ),
                 ),
-              ),
-              _ReportTile(
-                label: 'DAMAGES',
-                icon: LucideIcons.alertTriangle,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-                onTap: () => Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                      builder: (_) => const DamagesReportsScreen()),
+              if (perms.canView(ScreenIds.damagesReports))
+                _ReportTile(
+                  label: 'DAMAGES',
+                  icon: LucideIcons.alertTriangle,
+                  tileColor: tileColor,
+                  iconColor: iconColor,
+                  textColor: textColor,
+                  onTap: () => context.pushGuarded<void>(
+                    ScreenIds.damagesReports,
+                    (_) => const DamagesReportsScreen(),
+                  ),
                 ),
-              ),
+              if (perms.canView(ScreenIds.reEncodeReports))
+                _ReportTile(
+                  label: 'RE-ENCODE',
+                  icon: LucideIcons.refreshCw,
+                  tileColor: tileColor,
+                  iconColor: iconColor,
+                  textColor: textColor,
+                  onTap: () => context.pushGuarded<void>(
+                    ScreenIds.reEncodeReports,
+                    (_) => const ReEncodeReportsScreen(),
+                  ),
+                ),
             ],
           ),
         ),

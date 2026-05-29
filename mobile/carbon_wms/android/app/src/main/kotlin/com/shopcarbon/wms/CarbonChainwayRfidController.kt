@@ -1784,6 +1784,18 @@ class CarbonChainwayRfidController(private val context: Context) {
 
   fun isReady(): Boolean = uhfReader != null || (uhfInstance != null && uartOwned)
 
+  /**
+   * Achievable power range in integer dBm for the Chainway C72E radio.
+   * Matches the clamp in [setAntennaPowerDbm] above (5..23) — the chip's
+   * firmware silently rejects anything outside this window. Used by the
+   * status-change slider so the operator can't drag to a value the radio
+   * can't honour. Returns null when the radio isn't initialised.
+   */
+  fun getPowerRangeDbm(): Pair<Int, Int>? {
+    if (!isReady()) return null
+    return 5 to 23
+  }
+
   companion object {
     private const val TAG = "CarbonChainway"
     private const val FUNCTION_UHF = 11

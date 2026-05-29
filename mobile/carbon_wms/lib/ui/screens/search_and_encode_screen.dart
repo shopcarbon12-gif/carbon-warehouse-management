@@ -43,15 +43,12 @@ class SearchAndEncodeScreen extends StatefulWidget {
 }
 
 class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
-  static const Duration _kPopupDuration = Duration(seconds: 10);
-
   _TargetField _targetField = _TargetField.customSku;
   int _positionStart = 1;
   int _positionEnd = 13;
   int _powerDbm = 30;
 
   bool _running = false;
-  bool _paused = false;
   int? _liveRssi;
 
   int _readCount = 0;
@@ -60,6 +57,19 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
 
   final List<EncodeTagResult> _history = <EncodeTagResult>[];
   final Set<String> _seen = <String>{};
+
+  /// Cards whose chip-write failed (operator moved away, RF dropout, etc.)
+  /// keyed by the old C-prefix EPC. When the operator scans the same tag
+  /// again, [_onTagRead] retries the write against the previously-claimed
+  /// `newEpc` instead of allocating a fresh serial server-side (which
+  /// would leak the first claim's items row). Cleared on a successful
+  /// retry or when the operator removes the row.
+  final Map<String, EncodeTagResult> _failedCards = <String, EncodeTagResult>{};
+
+  /// Guard against re-entry while a retry write is still in flight — the
+  /// vendor channel takes ~100-400 ms to come back and the radio keeps
+  /// streaming reads of the still-unwritten tag during that window.
+  final Set<String> _retryInFlight = <String>{};
 
   RfidManager? _rfid;
   StreamSubscription<RfidTagRead>? _directTagSub;
@@ -347,29 +357,10 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     _sounds.play(ScanCue.stop);
   }
 
-  Future<void> _pauseForPopup() async {
-    _paused = true;
-    // No stopAll here: Re-Encode doesn't beep per tag, so there are no queued
-    // read clicks to silence. Calling stopAll() was also killing the error
-    // player's internal state and swallowing the subsequent play(error) call.
-    await _rfid?.pauseScanning();
-  }
-
-  Future<void> _resumeAfterPopup() async {
-    if (!_running) {
-      _paused = false;
-      return;
-    }
-    try {
-      await _rfid?.startLocateScanning();
-    } catch (_) {/* ignore */}
-    _paused = false;
-  }
-
   // ── Incoming reads ────────────────────────────────────────────────────────
 
   void _onTagRead(RfidTagRead read) {
-    if (!_running || _paused) return;
+    if (!_running) return;
     final epc = read.epcHex24;
     if (epc.isEmpty) return;
     // STRICT re-encode filter: only legacy C-prefix tags (C1*/C2*/C3*)
@@ -385,11 +376,87 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       return;
     }
     if (read.rssi != null) _liveRssi = read.rssi;
+
+    // Retry path: a previous write for this exact chip failed (operator
+    // moved too far / RF dropout). The server already burned a serial
+    // via /api/rfid/encode-claim, so just re-issue the chip write with
+    // the same newEpc instead of claiming again — claiming again leaves
+    // the first allocation orphaned in items.
+    final failed = _failedCards[epc];
+    if (failed != null) {
+      if (_retryInFlight.contains(epc)) return;
+      _sounds.play(ScanCue.read);
+      unawaited(_retryWrite(failed));
+      return;
+    }
+
     if (!_seen.add(epc)) {
       return;
     }
     setState(() => _readCount += 1);
+    // Operator asked for a single beep on every relevant (C-prefix) read.
+    // Native per-tag beep stays suppressed (silences the foreign-tag drop
+    // path above); this explicit Dart cue fires only after the C-prefix
+    // filter passes, so the operator hears exactly the tags they care
+    // about and nothing else.
+    _sounds.play(ScanCue.read);
     unawaited(_processTag(epc));
+  }
+
+  /// Re-run the chip write for a card whose previous write failed.
+  /// Re-uses `card.newEpc` from the prior `postEncodeClaim` — the serial
+  /// is already burned server-side and the items row already exists.
+  Future<void> _retryWrite(EncodeTagResult card) async {
+    final newEpc = card.newEpc;
+    if (newEpc == null || newEpc.length != 24) return;
+    if (_retryInFlight.contains(card.oldEpc)) return;
+    _retryInFlight.add(card.oldEpc);
+    _updateCard(card, (c) {
+      // Flip back to "in progress" so the badge reflects the new attempt.
+      c.status = EncodeStatus.detected;
+      c.failureReason = EncodeFailureReason.none;
+    });
+    bool written = false;
+    try {
+      written = await RfidVendorChannel.writeEpcTag(
+        targetEpc: card.oldEpc,
+        newEpc: newEpc,
+      );
+    } catch (_) {
+      written = false;
+    }
+    if (!mounted) {
+      _retryInFlight.remove(card.oldEpc);
+      return;
+    }
+    if (!written) {
+      _updateCard(card, (c) {
+        c.status = EncodeStatus.tagIssue;
+        c.failureReason = EncodeFailureReason.writeFailed;
+      });
+      _sounds.play(ScanCue.error);
+      _retryInFlight.remove(card.oldEpc);
+      return;
+    }
+    _updateCard(card, (c) {
+      c.status = EncodeStatus.encoded;
+      c.failureReason = EncodeFailureReason.none;
+    });
+    _failedCards.remove(card.oldEpc);
+    _retryInFlight.remove(card.oldEpc);
+    setState(() => _encodedCount += 1);
+    _sounds.play(ScanCue.success);
+    // Same finalisation as the first-attempt success path — the server's
+    // encode-claim left the items row at 'unknown' even though the chip
+    // is now confirmed to carry [newEpc].
+    unawaited(_finalizeWrite(oldEpc: card.oldEpc, newEpc: newEpc));
+    unawaited(_reportEvent(
+      oldEpc: card.oldEpc,
+      newEpc: newEpc,
+      systemId: card.systemId,
+      serial: card.serial,
+      customSku: card.customSku ?? '',
+    ));
   }
 
   Future<void> _processTag(String epc) async {
@@ -422,7 +489,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
         c.status = EncodeStatus.foreignCurrent;
         c.failureReason = EncodeFailureReason.foreignEpc;
       });
-      await _openForeignTagPopup(card);
+      _sounds.play(ScanCue.error);
       return;
     }
 
@@ -434,7 +501,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
         at: DateTime.now(),
       );
       _pushHistory(card);
-      await _openForeignTagPopup(card);
+      _sounds.play(ScanCue.error);
       return;
     }
 
@@ -474,8 +541,8 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
         c.status = EncodeStatus.notFound;
         c.failureReason = EncodeFailureReason.notInCatalog;
       });
+      _sounds.play(ScanCue.error);
       unawaited(_reportEvent(oldEpc: epc, customSku: customSku, status: 'not_found'));
-      await _openForeignTagPopup(card);
       return;
     }
 
@@ -494,7 +561,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
         c.status = EncodeStatus.tagIssue;
         c.failureReason = EncodeFailureReason.badSystemId;
       });
-      await _openForeignTagPopup(card);
+      _sounds.play(ScanCue.error);
       return;
     }
 
@@ -518,7 +585,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
         c.status = EncodeStatus.tagIssue;
         c.failureReason = EncodeFailureReason.serialFetchFailed;
       });
-      await _openForeignTagPopup(card);
+      _sounds.play(ScanCue.error);
       return;
     }
     final newEpc = (claim['epc'] as String?)?.toUpperCase() ?? '';
@@ -528,7 +595,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
         c.status = EncodeStatus.tagIssue;
         c.failureReason = EncodeFailureReason.serialFetchFailed;
       });
-      await _openForeignTagPopup(card);
+      _sounds.play(ScanCue.error);
       return;
     }
     _updateCard(card, (c) {
@@ -549,11 +616,17 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
         c.status = EncodeStatus.tagIssue;
         c.failureReason = EncodeFailureReason.writeFailed;
       });
+      // Arm retry — same C-prefix EPC scanned again pulls this card out
+      // of [_failedCards] and re-runs writeEpcTag with the existing
+      // [newEpc] instead of claiming a fresh serial. The server-side
+      // claim already happened above, so allocating again here would
+      // leak the first serial as an orphan items row.
+      _failedCards[epc] = card;
+      _sounds.play(ScanCue.error);
       unawaited(_reportEvent(
         oldEpc: epc, newEpc: newEpc, systemId: systemId, serial: serial,
         customSku: customSku, status: 'write_failed',
       ));
-      await _openForeignTagPopup(card);
       return;
     }
 
@@ -563,10 +636,29 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     });
     setState(() => _encodedCount += 1);
     _sounds.play(ScanCue.success);
+    // Phase 3 — server-side finalisation. encode-claim left the new EPC's
+    // items row at status='unknown' (the WMS can't trust the chip wrote
+    // until the handheld confirms). Now that writeEpcTag returned true we
+    // know the chip committed → flip to 'in-stock' (LIVE) and dismiss the
+    // old EPC from the Defective EPCs modal. Best-effort: a finalize
+    // failure doesn't undo the chip write, so we don't surface it as a
+    // tag error — just log via the event report below.
+    unawaited(_finalizeWrite(oldEpc: epc, newEpc: newEpc));
     unawaited(_reportEvent(
       oldEpc: epc, newEpc: newEpc, systemId: systemId, serial: serial,
       customSku: customSku,
     ));
+  }
+
+  Future<void> _finalizeWrite({required String oldEpc, required String newEpc}) async {
+    try {
+      await context.read<WmsApiClient>().postEncodeFinalize(
+            newEpc: newEpc,
+            oldEpc: oldEpc,
+          );
+    } catch (_) {
+      /* swallow — chip is written, finalize is best-effort */
+    }
   }
 
   Future<Map<String, dynamic>?> _lookupItemBySystemId(int systemId) async {
@@ -599,23 +691,6 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     } catch (_) {/* best-effort */}
   }
 
-  Future<void> _openForeignTagPopup(EncodeTagResult card) async {
-    if (!mounted) return;
-    await _pauseForPopup();
-    if (!mounted) return;
-    _sounds.play(ScanCue.error);
-    final closedBy = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _ForeignTagDialog(card: card, duration: _kPopupDuration),
-    );
-    if (kDebugMode) {
-      // ignore: avoid_print
-      print('[SearchEncode] popup closed by=$closedBy card=${card.oldEpc}');
-    }
-    await _resumeAfterPopup();
-  }
-
   void _pushHistory(EncodeTagResult r) {
     if (!mounted) return;
     setState(() => _history.insert(0, r));
@@ -630,6 +705,8 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     setState(() {
       _history.clear();
       _seen.clear();
+      _failedCards.clear();
+      _retryInFlight.clear();
       _readCount = 0;
       _detectedCount = 0;
       _encodedCount = 0;
@@ -771,6 +848,8 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
                               setState(() {
                                 _history.removeAt(i);
                                 _seen.remove(r.oldEpc);
+                                _failedCards.remove(r.oldEpc);
+                                _retryInFlight.remove(r.oldEpc);
                               });
                             },
                             confirmDelete: () async {
@@ -944,7 +1023,7 @@ class _SummaryTile extends StatelessWidget {
 
 // ── Scanned-tag row (with subtle left status stripe) ────────────────────────
 
-class _EncodeRow extends StatelessWidget {
+class _EncodeRow extends StatefulWidget {
   const _EncodeRow({
     required this.rowKey, required this.row,
     this.onDelete, this.confirmDelete,
@@ -955,10 +1034,16 @@ class _EncodeRow extends StatelessWidget {
   final VoidCallback? onDelete;
   final Future<bool> Function()? confirmDelete;
 
-  static const double _fixedContainerHeight = 68.0;
+  @override
+  State<_EncodeRow> createState() => _EncodeRowState();
+}
+
+class _EncodeRowState extends State<_EncodeRow> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
+    final row = widget.row;
     final descStyle = GoogleFonts.manrope(
       fontSize: 15.sp, fontWeight: FontWeight.w700,
       color: AppColors.textMain, height: 1.2,
@@ -967,70 +1052,60 @@ class _EncodeRow extends StatelessWidget {
     final content = Material(
       color: const Color(0xFFECECEC),
       borderRadius: BorderRadius.zero,
-      child: SizedBox(
-        height: _fixedContainerHeight,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Left stripe: subtle status color, 4px wide.
-            Container(width: 4.w, color: row.status.chipColor),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+      child: InkWell(
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 4.w, color: row.status.chipColor),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 12.w),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            row.oldEpc,
-                            style: GoogleFonts.robotoMono(
-                              fontSize: 14.sp, fontWeight: FontWeight.w700,
-                              color: AppColors.textMain, height: 1.2,
+                          Expanded(
+                            child: Text(
+                              _describe(row),
+                              style: descStyle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1, overflow: TextOverflow.ellipsis,
                           ),
-                          if (row.newEpc != null && row.newEpc != row.oldEpc)
-                            Padding(
-                              padding: EdgeInsets.only(top: 2.h),
-                              child: Text(
-                                '→ ${row.newEpc}',
-                                style: GoogleFonts.robotoMono(
-                                  fontSize: 12.sp, fontWeight: FontWeight.w700,
-                                  color: AppColors.primary, height: 1.2,
-                                ),
-                                maxLines: 1, overflow: TextOverflow.ellipsis,
-                              ),
-                            )
-                          else
-                            Padding(
-                              padding: EdgeInsets.only(top: 2.h),
-                              child: Text(
-                                _describe(row), style: descStyle,
-                                maxLines: 1, overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
+                          SizedBox(width: 10.w),
+                          _StatusBadge(status: row.status),
                         ],
                       ),
-                    ),
-                    SizedBox(width: 10.w),
-                    _StatusBadge(status: row.status),
-                  ],
+                      if (_expanded) ...[
+                        SizedBox(height: 8.h),
+                        _EpcKv(label: 'OLD', value: row.oldEpc),
+                        SizedBox(height: 4.h),
+                        _EpcKv(
+                          label: 'NEW',
+                          value: (row.newEpc ?? '').isEmpty ? '—' : row.newEpc!,
+                          accent: (row.newEpc != null && row.newEpc != row.oldEpc),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
 
+    final onDelete = widget.onDelete;
+    final confirmDelete = widget.confirmDelete;
     if (onDelete == null || confirmDelete == null) return content;
     return Dismissible(
-      key: ValueKey<String>(rowKey),
+      key: ValueKey<String>(widget.rowKey),
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
@@ -1039,8 +1114,8 @@ class _EncodeRow extends StatelessWidget {
         child: Icon(Icons.delete_outline, color: Colors.white, size: 26.sp),
       ),
       confirmDismiss: (_) async {
-        final ok = await confirmDelete!.call();
-        if (ok) onDelete!.call();
+        final ok = await confirmDelete();
+        if (ok) onDelete();
         return ok;
       },
       child: content,
@@ -1058,6 +1133,46 @@ class _EncodeRow extends StatelessWidget {
     if (parts.isNotEmpty) return parts.join(' · ');
     if ((r.customSku ?? '').isNotEmpty) return 'Custom SKU: ${r.customSku}';
     return r.status.label;
+  }
+}
+
+class _EpcKv extends StatelessWidget {
+  const _EpcKv({required this.label, required this.value, this.accent = false});
+  final String label;
+  final String value;
+  final bool accent;
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 38.w,
+          child: Text(
+            label,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+              color: const Color(0xFF6D7979),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: GoogleFonts.robotoMono(
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w700,
+              color: accent ? AppColors.primary : AppColors.textMain,
+              height: 1.2,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1084,126 +1199,3 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-// ── Popup with 10s countdown ────────────────────────────────────────────────
-
-class _ForeignTagDialog extends StatefulWidget {
-  const _ForeignTagDialog({required this.card, required this.duration});
-  final EncodeTagResult card;
-  final Duration duration;
-
-  @override
-  State<_ForeignTagDialog> createState() => _ForeignTagDialogState();
-}
-
-class _ForeignTagDialogState extends State<_ForeignTagDialog> {
-  late Timer _ticker;
-  late DateTime _deadline;
-  int _remaining = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _deadline = DateTime.now().add(widget.duration);
-    _remaining = widget.duration.inSeconds;
-    _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) {
-      final left = _deadline.difference(DateTime.now()).inMilliseconds;
-      if (left <= 0) {
-        _ticker.cancel();
-        if (mounted) Navigator.of(context).pop('timeout');
-        return;
-      }
-      final secs = (left / 1000).ceil();
-      if (secs != _remaining && mounted) setState(() => _remaining = secs);
-    });
-  }
-
-  @override
-  void dispose() {
-    _ticker.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = widget.card;
-    final reasonText = c.failureReason.display.isNotEmpty
-        ? c.failureReason.display
-        : c.status.label;
-    return AlertDialog(
-      titlePadding: EdgeInsets.fromLTRB(20.w, 16.h, 16.w, 8.h),
-      contentPadding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 4.h),
-      title: Row(children: [
-        Icon(Icons.report_gmailerrorred, color: const Color(0xFFDC2626), size: 24.sp),
-        SizedBox(width: 8.w),
-        Expanded(
-          child: Text(
-            'Foreign / failed tag',
-            style: GoogleFonts.spaceGrotesk(fontSize: 16.sp, fontWeight: FontWeight.w900),
-          ),
-        ),
-        Text(
-          '${_remaining}s',
-          style: GoogleFonts.manrope(
-            fontSize: 14.sp, fontWeight: FontWeight.w800, color: AppColors.textMuted,
-          ),
-        ),
-      ]),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _kv('EPC', c.oldEpc, mono: true),
-            if ((c.customSku ?? '').isNotEmpty) _kv('Custom SKU', c.customSku!),
-            if (c.systemId != null) _kv('System ID', '${c.systemId}'),
-            if ((c.itemName ?? '').isNotEmpty) _kv('Item', c.itemName!),
-            if (c.serial != null) _kv('Serial', '${c.serial}'),
-            Padding(
-              padding: EdgeInsets.only(top: 8.h),
-              child: Text(
-                reasonText,
-                style: GoogleFonts.manrope(
-                  color: const Color(0xFFDC2626),
-                  fontWeight: FontWeight.w800, fontSize: 13.sp,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop('user'),
-          child: const Text('Close'),
-        ),
-      ],
-    );
-  }
-
-  Widget _kv(String k, String v, {bool mono = false}) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 2.h),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 90.w,
-            child: Text(k, style: GoogleFonts.manrope(
-              fontSize: 11.sp, color: AppColors.textMuted,
-              fontWeight: FontWeight.w700, letterSpacing: 0.6,
-            )),
-          ),
-          Expanded(
-            child: mono
-                ? Text(v, style: GoogleFonts.robotoMono(
-                    fontSize: 12.sp, color: AppColors.textMain,
-                    fontWeight: FontWeight.w700))
-                : Text(v, style: GoogleFonts.manrope(
-                    fontSize: 12.sp, color: AppColors.textMain,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
-  }
-}

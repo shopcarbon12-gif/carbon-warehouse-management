@@ -283,6 +283,30 @@ class RfidVendorChannel {
     }
   }
 
+  /// Read the active radio's achievable power range in integer dBm. Used
+  /// by the Status Change slider to clamp itself to what the connected
+  /// reader can actually accept. RFD8500 transmitPowerLevelValues bottoms
+  /// out at ~5 dBm; Chainway C72E is hard-capped at 5..23 dBm. Pre-fix
+  /// the slider went 1..30 regardless of hardware, so values below the
+  /// radio floor were silently lifted and the operator saw "3 dBm" on
+  /// the bar while the radio was at 5 dBm. Returns null when no reader
+  /// is ready (caller should fall back to a safe default).
+  static Future<({int minDbm, int maxDbm})?> getPowerRangeDbm() async {
+    if (!_isAndroid) return null;
+    try {
+      final r = await _method.invokeMapMethod<String, dynamic>('rfid.getPowerRangeDbm');
+      if (r == null) return null;
+      final mn = (r['minDbm'] as num?)?.toInt();
+      final mx = (r['maxDbm'] as num?)?.toInt();
+      if (mn == null || mx == null || mx < mn) return null;
+      return (minDbm: mn, maxDbm: mx);
+    } on MissingPluginException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Forward **0–30 dBm** to native Zebra/Chainway controllers (no scaling).
   static Future<void> setAntennaPowerDbm(int dbm) async {
     if (!_isAndroid) return;

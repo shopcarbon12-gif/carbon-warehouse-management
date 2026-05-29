@@ -15,9 +15,11 @@ import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/add_on_session_realtime.dart';
 import 'package:carbon_wms/services/add_on_session_state.dart';
 import 'package:carbon_wms/services/epc/epc_codec.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/add_on_count_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/add_on_count_review_screen.dart';
 import 'package:carbon_wms/ui/widgets/add_on_epc_card.dart';
@@ -349,16 +351,15 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       _session.setScanning(false);
     }
     if (!mounted) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => AddOnCountReviewScreen(
-          sessionId: widget.sessionId,
-          sourceType: widget.sourceType,
-          sourceId: widget.sourceId,
-          sourceSlip: widget.sourceSlip,
-          newEntries: _session.newEntries,
-          failedEntries: _session.failedEntries,
-        ),
+    await context.pushGuarded<void>(
+      ScreenIds.addOnCountReview,
+      (_) => AddOnCountReviewScreen(
+        sessionId: widget.sessionId,
+        sourceType: widget.sourceType,
+        sourceId: widget.sourceId,
+        sourceSlip: widget.sourceSlip,
+        newEntries: _session.newEntries,
+        failedEntries: _session.failedEntries,
       ),
     );
   }

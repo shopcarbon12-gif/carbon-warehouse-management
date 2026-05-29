@@ -12,111 +12,73 @@ import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/screens/status_pick_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 /// Status Change — RFID-only handheld flow.
 ///
-///   Step 1: SCAN  — operator pulls the UHF trigger; every unique EPC
-///                   read is resolved against the catalog and dropped
-///                   into a vertical list as a container card. Each
-///                   card shows the item's SKU + name + color + size
-///                   (same shape Count Inventory uses). The EPC string
-///                   itself is intentionally hidden — operators
-///                   identify items by the matrix metadata, not the
-///                   24-hex EPC.
-///   Step 2: PICK STATUS — tap any card to drill into status pick for
-///                         that single EPC. Commit POSTs bulk-status
-///                         for the one EPC, then drops the card from
-///                         the list and returns to step 1 so the
-///                         operator can keep scanning.
+/// Operator pulls the UHF trigger; every unique EPC that passes the Carbon
+/// formula (regardless of which location it lives at) is dropped into a
+/// vertical list as a container card. Each card shows SKU + name +
+/// color/size + the EPC's CURRENT status as a coloured badge. The card
+/// itself toggles between a "header view" and "EPC visible" view — there's
+/// no longer a per-card status picker. The operator hits CONTINUE at the
+/// bottom to advance the whole batch to [StatusPickScreen] where they pick
+/// one target status and COMMIT it for every EPC in the batch.
 ///
-/// Why no search box: the prior 3-tab Encode-style design (search,
-/// pickEpc, pickStatus) optimized for desktop typing. Operators on the
-/// floor never type — they pull the trigger. Removing the search input
-/// + catalog grid removed ~600 lines of UI, simplified the trigger
-/// discipline (UHF only — 2D doesn't need to fill any text field), and
-/// made the pickEpc step redundant (each scanned EPC IS its own row).
+/// Left edge of every card is a tall red trash slot — tapping it removes
+/// that row (it does NOT change the radio, drop the EPC from the radio's
+/// internal de-dupe, or hit the network).
 class StatusChangeScreen extends StatefulWidget {
   const StatusChangeScreen({super.key});
-
   @override
   State<StatusChangeScreen> createState() => _StatusChangeScreenState();
 }
 
-enum _StatusStep { scan, pickStatus }
-
-class _StatusLabel {
-  const _StatusLabel({
-    required this.name,
-    required this.displayLabel,
-    required this.applicable,
-    required this.superAdminLocked,
-    required this.systemOnly,
-  });
-  final String name;
-  final String displayLabel;
-  final bool applicable;
-  final bool superAdminLocked;
-  final bool systemOnly;
-}
-
-/// One scanned EPC + the catalog row it resolved to. Stored in the
-/// scan-list so we can render a container card per row and pick a
-/// single EPC for status change without round-tripping the catalog
-/// again.
+/// One scanned EPC + its tenant-scoped catalog enrichment.
 class _ScannedEpc {
-  const _ScannedEpc({
+  _ScannedEpc({
     required this.epc,
-    required this.row,
+    this.sku,
+    this.productName,
+    this.color,
+    this.size,
+    this.status,
   });
-  final String epc;
-  final Map<String, dynamic> row;
 
-  String get sku => row['sku']?.toString() ?? '';
-  String get name => row['name']?.toString() ?? '';
-  String get color => row['color']?.toString() ?? '';
-  String get size => row['size']?.toString() ?? '';
-  String get currentStatus => row['status']?.toString() ?? '';
-  String get binCode => row['bin_code']?.toString() ?? '';
+  final String epc;
+  final String? sku;
+  final String? productName;
+  final String? color;
+  final String? size;
+  String? status;
+  bool expanded = false;
 }
 
 class _StatusChangeScreenState extends State<StatusChangeScreen> {
-  // ── flow state ────────────────────────────────────────────────────────
-  _StatusStep _step = _StatusStep.scan;
-
-  // Accumulated UHF reads, ordered newest-first so the operator's most
-  // recent scan is at the top of the list. Keys deduped on uppercased
-  // EPC so a single tag pinged 30× by the radio doesn't spam the list.
+  // ── scan ledger ──────────────────────────────────────────────────────
   final List<_ScannedEpc> _scanned = [];
   final Set<String> _seenEpcs = {};
-  final Set<String> _inFlightEpcs = {}; // suppress race during catalog lookup
-
-  // Selected card → which EPC's status are we about to change?
-  _ScannedEpc? _selectedCard;
-  String _selectedTargetStatus = '';
-  bool _override = false;
-  bool _committing = false;
+  final Set<String> _inFlightEpcs = {};
 
   // ── status-label catalogue (loaded once on entry) ────────────────────
-  List<_StatusLabel> _statusLabels = [];
+  List<StatusOption> _statusOptions = [];
   bool _isSuperAdmin = false;
-  bool _labelsLoading = true;
   String? _labelsError;
 
-  // ── trigger / scanner subscriptions ──────────────────────────────────
+  // ── trigger / radio ──────────────────────────────────────────────────
   StreamSubscription<RfidTagRead>? _uhfSub;
   StreamSubscription<String>? _triggerSub;
-
-  /// Single-pull-toggle scan state. First trigger pull starts inventory,
-  /// second pull stops it (no hold-to-scan). Operator-asked behaviour:
-  /// status change is a long sweep, not a tap-and-release task.
   bool _scanning = false;
 
-  /// Live antenna power for this screen. Default 10 dBm per spec —
-  /// status change is typically up-close work where high power picks up
-  /// foreign tags from the rack behind.
-  static const int _defaultPowerDbm = 10;
-  int _powerDbm = _defaultPowerDbm;
+  /// Slider bounds. Filled from `RfidVendorChannel.getPowerRangeDbm` on
+  /// entry so RFD8500 (min ~5 dBm) and C72E (5..23) can't be set below
+  /// the radio's real floor — pre-fix the slider always rendered 1..30
+  /// and the radio silently lifted impossible values. Defaults match the
+  /// previous slider until the native callback lands.
+  int _minDbm = 1;
+  int _maxDbm = 30;
+  int _powerDbm = 10;
 
   RfidManager? _rfid;
 
@@ -124,8 +86,6 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   void initState() {
     super.initState();
     unawaited(ScanSounds.instance.init());
-    // RFID-only: arm UHF, kill the 2D imager so a stray imager pull
-    // can't trigger a screen this flow doesn't expose anymore.
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(RfidVendorChannel.close2dBarcode());
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
@@ -135,20 +95,17 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
       if (!mounted) return;
       final rfid = context.read<RfidManager>();
       _rfid = rfid;
-      // Route reads through the Geiger sink — the Count session-EPC
-      // accumulator must not capture status-change scans.
+      // Route reads through the geiger sink so the Count session-EPC
+      // accumulator doesn't capture status-change scans.
       rfid.scanContext = 'GEIGER_FIND';
       _uhfSub = rfid.geigerTagReads.listen(_onUhfRead, onError: (_) {});
 
-      // Default power 10 dBm + session override so reapply paths
-      // (mobile-sync, scan-context flip) can't quietly snap back to
-      // handheld-config power while the operator is mid-sweep.
+      await _hydrateSliderRange();
       await rfid.setSessionPowerOverrideDbm(_powerDbm);
       try {
         await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
       } catch (_) {}
 
-      // Hardware trigger → single-pull start / second-pull stop.
       _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
         if (!mounted) return;
         if (event == 'down') {
@@ -168,18 +125,27 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   void dispose() {
     unawaited(_uhfSub?.cancel());
     unawaited(_triggerSub?.cancel());
-    // Stop inventory before leaving so a pending UHF stream doesn't
-    // bleed reads into the next screen's accumulator.
     unawaited(RfidVendorChannel.stopChainwayInventory());
     unawaited(RfidVendorChannel.stopZebraInventory());
     final rfid = _rfid;
     if (rfid != null) {
       unawaited(rfid.setSessionPowerOverrideDbm(null));
     }
-    // Other screens that want a specific mode will re-assert on entry;
-    // we just make sure we don't leave the device in a half-state.
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     super.dispose();
+  }
+
+  /// Read the active radio's achievable power range and clamp the slider
+  /// to it. RFD8500 typically reports 5..30 dBm; C72E is 5..23. The slider
+  /// keeps the operator inside what the radio can actually honour.
+  Future<void> _hydrateSliderRange() async {
+    final range = await RfidVendorChannel.getPowerRangeDbm();
+    if (!mounted || range == null) return;
+    setState(() {
+      _minDbm = range.minDbm;
+      _maxDbm = range.maxDbm;
+      _powerDbm = _powerDbm.clamp(_minDbm, _maxDbm);
+    });
   }
 
   Future<void> _startScan() async {
@@ -211,7 +177,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   }
 
   Future<void> _setPower(int dbm) async {
-    final clamped = dbm.clamp(1, 30);
+    final clamped = dbm.clamp(_minDbm, _maxDbm);
     if (clamped == _powerDbm) return;
     setState(() => _powerDbm = clamped);
     final rfid = _rfid;
@@ -225,45 +191,40 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
 
   // ── status-label load ────────────────────────────────────────────────
   Future<void> _loadStatusLabels() async {
-    setState(() {
-      _labelsLoading = true;
-      _labelsError = null;
-    });
     try {
       final api = context.read<WmsApiClient>();
       final res = await api.fetchScannerStatusLabels();
       final rows = (res['rows'] as List?) ?? const [];
-      final parsed = rows.whereType<Map<String, dynamic>>().map((r) {
-        return _StatusLabel(
-          name: r['name']?.toString() ?? '',
-          displayLabel:
-              (r['display_label']?.toString().trim().isNotEmpty ?? false)
-                  ? r['display_label'].toString()
-                  : (r['name']?.toString() ?? ''),
-          applicable: r['applicable'] == true,
-          superAdminLocked: r['super_admin_locked'] == true,
-          systemOnly: r['is_system_only'] == true,
-        );
-      }).toList();
+      final opts = <StatusOption>[];
+      for (final raw in rows) {
+        if (raw is! Map<String, dynamic>) continue;
+        if (raw['applicable'] != true) continue;
+        final name = raw['name']?.toString() ?? '';
+        if (name.isEmpty) continue;
+        final wms = _wmsValueForLabelName(name);
+        if (wms == null) continue; // unknown label — skip rather than ship a bad commit
+        opts.add(StatusOption(
+          labelName: name,
+          displayLabel: (raw['display_label']?.toString().trim().isNotEmpty ?? false)
+              ? raw['display_label'].toString()
+              : name,
+          wmsValue: wms,
+        ));
+      }
       if (!mounted) return;
       setState(() {
-        _statusLabels = parsed;
+        _statusOptions = opts;
         _isSuperAdmin = res['super_admin'] == true;
-        _labelsLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _labelsLoading = false;
-        _labelsError = 'Status list unavailable: $e';
-      });
+      setState(() => _labelsError = 'Status list unavailable: $e');
     }
   }
 
   // ── UHF input ────────────────────────────────────────────────────────
   void _onUhfRead(RfidTagRead read) {
     if (!mounted) return;
-    if (_step == _StatusStep.pickStatus) return; // don't yank state mid-commit
     final epc = read.epcHex24.toUpperCase();
     if (epc.isEmpty) return;
     if (_seenEpcs.contains(epc) || _inFlightEpcs.contains(epc)) return;
@@ -271,34 +232,55 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     unawaited(_resolveAndAppend(epc));
   }
 
+  /// Resolve the EPC against the tenant-scoped handheld lookup. Carbon
+  /// formula validation lives server-side; if `valid` is false we drop
+  /// the read silently (formula failures aren't user-actionable here).
+  /// Items rows are tenant-scoped — multiple locations of this tenant
+  /// share the EPC space — so the lookup is NOT location-gated. The
+  /// commit at the end goes through `/api/inventory/bulk-status` which
+  /// is session-location-scoped; off-location EPCs commit-as-no-op
+  /// (`updated=0`) and the snackbar surfaces that.
   Future<void> _resolveAndAppend(String epc) async {
     final api = context.read<WmsApiClient>();
     try {
-      final row = await api.lookupCatalogByEpc(epc);
+      final rows = await api.lookupEpcs([epc]);
       if (!mounted) {
         _inFlightEpcs.remove(epc);
         return;
       }
       _inFlightEpcs.remove(epc);
-      if (row == null) {
-        ScanSounds.instance.play(ScanCue.error);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('EPC not at this location: $epc'),
-          duration: const Duration(seconds: 2),
-        ));
+      Map<String, dynamic>? row;
+      for (final r in rows) {
+        final e = (r['epcHex'] as String?)?.toUpperCase();
+        if (e == epc) {
+          row = r;
+          break;
+        }
+      }
+      if (row == null || row['valid'] != true) {
+        // Formula failed (wrong prefix / non-hex / wrong length) or
+        // server returned no row. Silent skip — the operator can keep
+        // scanning; no error sound and no toast spam.
         return;
       }
-      // Catalog rows from lookupCatalogByEpc don't include the EPC
-      // itself — we set it explicitly so the status-pick header can
-      // render it (still hidden in the card list per spec).
-      final stamped = Map<String, dynamic>.from(row)..['epc'] = epc;
       setState(() {
         _seenEpcs.add(epc);
-        // Newest scan on top — operator's most recent pull is what
-        // they're trying to act on.
-        _scanned.insert(0, _ScannedEpc(epc: epc, row: stamped));
+        _scanned.insert(
+          0,
+          _ScannedEpc(
+            epc: epc,
+            sku: _str(row?['sku']),
+            productName: _str(row?['productName']),
+            color: _str(row?['color']),
+            size: _str(row?['size']),
+            status: _str(row?['status']),
+          ),
+        );
       });
-      ScanSounds.instance.play(ScanCue.success);
+      // No `ScanCue.success` here — the native per-tag beep fires from
+      // the vendor controller's emitTag path and is the only audible cue
+      // we want on a successful add. Operator asked for a single beep
+      // per scan, not a beep + a separate "success" jingle.
     } catch (e) {
       _inFlightEpcs.remove(epc);
       if (!mounted) return;
@@ -309,75 +291,60 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     }
   }
 
-  // ── selection / commit ───────────────────────────────────────────────
-  void _selectCard(_ScannedEpc card) {
+  static String? _str(Object? v) {
+    if (v == null) return null;
+    final s = v.toString().trim();
+    return s.isEmpty ? null : s;
+  }
+
+  void _removeRow(_ScannedEpc card) {
     setState(() {
-      _selectedCard = card;
-      _selectedTargetStatus = '';
-      _override = false;
-      _step = _StatusStep.pickStatus;
+      _scanned.removeWhere((c) => c.epc == card.epc);
+      _seenEpcs.remove(card.epc);
     });
   }
 
-  void _stepBack() {
+  void _toggleExpand(_ScannedEpc card) {
     setState(() {
-      _step = _StatusStep.scan;
-      _selectedCard = null;
-      _selectedTargetStatus = '';
-      _override = false;
+      card.expanded = !card.expanded;
     });
   }
 
-  Future<void> _commit() async {
-    final card = _selectedCard;
-    final target = _selectedTargetStatus.trim();
-    if (card == null || target.isEmpty) return;
-    setState(() => _committing = true);
-    try {
-      final api = context.read<WmsApiClient>();
-      final res = await api.postBulkStatus(
-        epcs: [card.epc],
-        targetStatus: target,
-        override: _override,
+  Future<void> _continue() async {
+    if (_scanned.isEmpty) return;
+    if (_labelsError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_labelsError!)),
       );
-      if (!mounted) return;
-      final updated = (res['updated'] as num?)?.toInt() ?? 0;
-      ScanSounds.instance.play(
-          updated > 0 ? ScanCue.success : ScanCue.error);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(updated > 0
-            ? 'Status updated → $target'
-            : 'No change applied (status may already match)'),
-      ));
-      // Drop the card we just acted on so the operator's list
-      // shrinks as they work through it. Then return to the scan
-      // step ready for the next pull.
-      setState(() {
-        if (updated > 0) {
-          _seenEpcs.remove(card.epc);
-          _scanned.removeWhere((c) => c.epc == card.epc);
-        }
-        _step = _StatusStep.scan;
-        _selectedCard = null;
-        _selectedTargetStatus = '';
-        _override = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScanSounds.instance.play(ScanCue.error);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Commit failed: $e')));
-    } finally {
-      if (mounted) setState(() => _committing = false);
+      return;
     }
-  }
-
-  void _clearScanList() {
-    setState(() {
-      _scanned.clear();
-      _seenEpcs.clear();
-      _inFlightEpcs.clear();
-    });
+    if (_statusOptions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Status list still loading…')),
+      );
+      return;
+    }
+    if (_scanning) {
+      await _stopScan();
+    }
+    if (!mounted) return;
+    final epcs = _scanned.map((e) => e.epc).toList(growable: false);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => StatusPickScreen(
+          epcs: epcs,
+          statusOptions: _statusOptions,
+          isSuperAdmin: _isSuperAdmin,
+          onCommitted: (updated) {
+            if (!mounted || updated <= 0) return;
+            setState(() {
+              _scanned.clear();
+              _seenEpcs.clear();
+            });
+          },
+        ),
+      ),
+    );
   }
 
   // ── ui ───────────────────────────────────────────────────────────────
@@ -390,21 +357,43 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
         child: Column(
           children: [
             _StepHeader(
-              step: _step,
               count: _scanned.length,
-              onBack: _step == _StatusStep.pickStatus ? _stepBack : null,
-              onClear:
-                  _step == _StatusStep.scan && _scanned.isNotEmpty
-                      ? _clearScanList
-                      : null,
+              onClear: _scanned.isNotEmpty
+                  ? () => setState(() {
+                        _scanned.clear();
+                        _seenEpcs.clear();
+                      })
+                  : null,
             ),
             Expanded(
-              child: _step == _StatusStep.scan
-                  ? _buildScanList()
-                  : _buildStatusPick(),
+              child: _scanned.isEmpty
+                  ? const _ScanEmptyHint()
+                  : ListView.separated(
+                      padding:
+                          EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 12.h),
+                      itemCount: _scanned.length,
+                      separatorBuilder: (_, __) => SizedBox(height: 8.h),
+                      itemBuilder: (_, i) {
+                        final card = _scanned[i];
+                        return _EpcContainer(
+                          card: card,
+                          onTap: () => _toggleExpand(card),
+                          onRemove: () => _removeRow(card),
+                        );
+                      },
+                    ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 8.h),
+              child: _ContinueButton(
+                enabled: _scanned.isNotEmpty && _statusOptions.isNotEmpty,
+                onTap: _continue,
+              ),
             ),
             _StatusChangePowerSlider(
               powerDbm: _powerDbm,
+              minDbm: _minDbm,
+              maxDbm: _maxDbm,
               scanning: _scanning,
               onChanged: (v) => unawaited(_setPower(v)),
             ),
@@ -413,165 +402,46 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
       ),
     );
   }
+}
 
-  // ── scan list step ───────────────────────────────────────────────────
-  Widget _buildScanList() {
-    if (_scanned.isEmpty) {
-      return const _ScanEmptyHint();
-    }
-    return ListView.separated(
-      padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 12.h),
-      itemCount: _scanned.length,
-      separatorBuilder: (_, __) => SizedBox(height: 8.h),
-      itemBuilder: (_, i) {
-        final card = _scanned[i];
-        return _EpcContainer(
-          card: card,
-          onTap: () => _selectCard(card),
-        );
-      },
-    );
-  }
-
-  // ── status pick step ─────────────────────────────────────────────────
-  Widget _buildStatusPick() {
-    final card = _selectedCard;
-    if (card == null) return const SizedBox.shrink();
-
-    final applicable = _statusLabels.where((s) => s.applicable).toList();
-    final unavailable = _statusLabels.where((s) => !s.applicable).toList();
-
-    final canCommit = _selectedTargetStatus.isNotEmpty &&
-        _selectedTargetStatus != card.currentStatus &&
-        !_committing;
-
-    return Column(
-      children: [
-        // Selected card preview — same item-detail block, no EPC string,
-        // visually marked as the operator's current target.
-        Padding(
-          padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0),
-          child: _EpcContainer(card: card, onTap: null, highlighted: true),
-        ),
-        Expanded(
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 12.h),
-            children: [
-              Text(
-                'CHOOSE NEW STATUS',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.4,
-                  color: const Color(0xFF6D7979),
-                ),
-              ),
-              SizedBox(height: 8.h),
-              if (_labelsLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_labelsError != null)
-                Text(
-                  _labelsError!,
-                  style: GoogleFonts.manrope(
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFFBF2E2E),
-                  ),
-                )
-              else ...[
-                for (final s in applicable)
-                  _StatusOptionTile(
-                    label: s.displayLabel,
-                    value: s.name,
-                    selected: _selectedTargetStatus == s.name,
-                    disabled: s.name == card.currentStatus,
-                    onTap: () =>
-                        setState(() => _selectedTargetStatus = s.name),
-                  ),
-                if (unavailable.isNotEmpty) ...[
-                  SizedBox(height: 16.h),
-                  Text(
-                    'LOCKED · SUPER ADMIN ONLY',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.4,
-                      color: const Color(0xFF8A9595),
-                    ),
-                  ),
-                  SizedBox(height: 6.h),
-                  for (final s in unavailable)
-                    _StatusOptionTile(
-                      label: s.displayLabel,
-                      value: s.name,
-                      selected: false,
-                      disabled: true,
-                      onTap: () {},
-                    ),
-                ],
-              ],
-              SizedBox(height: 16.h),
-              if (_isSuperAdmin)
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: Text(
-                    'Override risky transitions (e.g. sold → in-stock)',
-                    style: GoogleFonts.manrope(
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textMain,
-                    ),
-                  ),
-                  value: _override,
-                  onChanged: (v) => setState(() => _override = v ?? false),
-                ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 16.h),
-          child: _CommitButton(
-            enabled: canCommit,
-            busy: _committing,
-            onTap: canCommit ? _commit : null,
-          ),
-        ),
-      ],
-    );
+/// Map `status_labels.name` → `items.status` (the WMS canonical form the
+/// bulk-status endpoint allow-lists). Returns null when the label name
+/// isn't one we know how to commit so the picker can hide it instead of
+/// shipping a guaranteed-400.
+String? _wmsValueForLabelName(String labelName) {
+  switch (labelName.toUpperCase()) {
+    case 'LIVE':
+      return 'in-stock';
+    case 'RETURN':
+      return 'return';
+    case 'DAMAGED':
+      return 'damaged';
+    case 'SOLD':
+      return 'sold';
+    case 'STOLEN':
+      return 'stolen';
+    case 'TAG KILLED':
+      return 'tag_killed';
+    case 'PENDING VISIBILITY':
+      return 'pending_visibility';
+    case 'IN TRANSIT':
+      return 'in-transit';
+    case 'PENDING TRANSACTION':
+      return 'pending_transaction';
+    default:
+      return null;
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// step header — shows current step label + scan count + clear/back affordance
+// step header
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _StepHeader extends StatelessWidget {
-  const _StepHeader({
-    required this.step,
-    required this.count,
-    this.onBack,
-    this.onClear,
-  });
+  const _StepHeader({required this.count, this.onClear});
 
-  final _StatusStep step;
   final int count;
-  final VoidCallback? onBack;
   final VoidCallback? onClear;
-
-  String get _label {
-    switch (step) {
-      case _StatusStep.scan:
-        return count == 0
-            ? 'PULL TRIGGER TO SCAN'
-            : '$count SCANNED · TAP TO CHANGE STATUS';
-      case _StatusStep.pickStatus:
-        return 'PICK NEW STATUS';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -581,22 +451,11 @@ class _StepHeader extends StatelessWidget {
       color: const Color(0xFFF0F5F4),
       child: Row(
         children: [
-          if (onBack != null)
-            GestureDetector(
-              onTap: onBack,
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.only(right: 10.w),
-                child: Icon(
-                  LucideIcons.chevronLeft,
-                  size: 18.sp,
-                  color: const Color(0xFF3D4949),
-                ),
-              ),
-            ),
           Expanded(
             child: Text(
-              _label,
+              count == 0
+                  ? 'PULL TRIGGER TO SCAN'
+                  : '$count SCANNED · TAP A CARD TO REVEAL EPC',
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 11.sp,
                 fontWeight: FontWeight.w800,
@@ -629,12 +488,11 @@ class _StepHeader extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// empty state — operator hasn't pulled the trigger yet
+// empty state
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _ScanEmptyHint extends StatelessWidget {
   const _ScanEmptyHint();
-
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -658,7 +516,7 @@ class _ScanEmptyHint extends StatelessWidget {
             ),
             SizedBox(height: 6.h),
             Text(
-              'Each tag becomes a card.\nTap a card to change its status.',
+              'Any EPC that passes the Carbon formula will land here.\nTap CONTINUE when you have your batch.',
               textAlign: TextAlign.center,
               style: GoogleFonts.manrope(
                 fontSize: 12.sp,
@@ -675,187 +533,164 @@ class _ScanEmptyHint extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Per-EPC container card — same shape Count Inventory uses for items.
-// Shows SKU + matrix description (name · color · size) + bin + current
-// status. EPC string and qty are intentionally NOT displayed: every card
-// represents exactly one tag, identified by its catalog metadata.
+// per-EPC card — trash on the left, content on the right
 // ═══════════════════════════════════════════════════════════════════════════
+
+const Color _kTrashRed = Color(0xFFBF2E2E);
+const Color _kCardGrey = Color(0xFFECECEC);
 
 class _EpcContainer extends StatelessWidget {
   const _EpcContainer({
     required this.card,
     required this.onTap,
-    this.highlighted = false,
+    required this.onRemove,
   });
 
   final _ScannedEpc card;
-  final VoidCallback? onTap;
-  final bool highlighted;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     final desc = [
-      if (card.name.isNotEmpty) card.name,
-      if (card.color.isNotEmpty) card.color,
-      if (card.size.isNotEmpty) card.size,
+      if ((card.productName ?? '').isNotEmpty) card.productName!,
+      if ((card.color ?? '').isNotEmpty) card.color!,
+      if ((card.size ?? '').isNotEmpty) card.size!,
     ].join(' · ');
-    final bg = highlighted
-        ? AppColors.primary
-        : const Color(0xFFECECEC);
-    final fgMain = highlighted ? Colors.white : AppColors.textMain;
-    final fgMuted = highlighted
-        ? Colors.white.withValues(alpha: 0.92)
-        : const Color(0xFF3F4A4A);
-    final binBg = highlighted
-        ? Colors.white.withValues(alpha: 0.18)
-        : AppColors.primary;
-    final binFg = highlighted ? Colors.white : Colors.white;
 
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.zero,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(14.w, 12.h, 12.w, 12.h),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Text(
-                      card.sku.isEmpty ? 'SKU: —' : 'SKU: ${card.sku}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.robotoMono(
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.w700,
-                        color: fgMain,
-                      ),
-                    ),
-                  ),
-                  if (card.binCode.isNotEmpty)
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 10.w, vertical: 4.h),
-                      color: binBg,
-                      child: Text(
-                        'BIN ${card.binCode}',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 11.sp,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.0,
-                          color: binFg,
-                        ),
-                      ),
-                    ),
-                ],
+    return Container(
+      color: _kCardGrey,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Left trash slot — fixed 56dp wide so glove-touch lands.
+            GestureDetector(
+              onTap: onRemove,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: 56,
+                color: _kTrashRed,
+                alignment: Alignment.center,
+                child: Icon(LucideIcons.trash2,
+                    color: Colors.white, size: 22.sp),
               ),
-              if (desc.isNotEmpty) ...[
-                SizedBox(height: 4.h),
-                Text(
-                  desc,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.manrope(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w700,
-                    color: fgMain,
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: onTap,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(14.w, 12.h, 12.w, 12.h),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              (card.sku ?? '').isEmpty
+                                  ? 'SKU: —'
+                                  : 'SKU: ${card.sku}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.robotoMono(
+                                fontSize: 16.sp,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textMain,
+                              ),
+                            ),
+                          ),
+                          if ((card.status ?? '').isNotEmpty) ...[
+                            SizedBox(width: 8.w),
+                            _StatusBadge(wmsStatus: card.status!),
+                          ],
+                        ],
+                      ),
+                      if (desc.isNotEmpty) ...[
+                        SizedBox(height: 4.h),
+                        Text(
+                          desc,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.manrope(
+                            fontSize: 13.sp,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textMain,
+                          ),
+                        ),
+                      ],
+                      if (card.expanded) ...[
+                        SizedBox(height: 8.h),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 10.w, vertical: 6.h),
+                          color: const Color(0xFFE2E7E7),
+                          child: Text(
+                            card.epc,
+                            style: GoogleFonts.robotoMono(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF3D4949),
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              ],
-              if (card.currentStatus.isNotEmpty) ...[
-                SizedBox(height: 6.h),
-                Text(
-                  'CURRENT · ${card.currentStatus.toUpperCase()}',
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 11.sp,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                    color: fgMuted,
-                  ),
-                ),
-              ],
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// status option tile — radio-style, with disabled state for current status
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _StatusOptionTile extends StatelessWidget {
-  const _StatusOptionTile({
-    required this.label,
-    required this.value,
-    required this.selected,
-    required this.disabled,
-    required this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final bool selected;
-  final bool disabled;
-  final VoidCallback onTap;
+/// Coloured chip mirroring the WMS status palette. Falls back to a slate
+/// grey for unrecognised values so a server-side rename doesn't crash the
+/// list.
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({required this.wmsStatus});
+  final String wmsStatus;
 
   @override
   Widget build(BuildContext context) {
-    final fg = disabled
-        ? const Color(0xFF8A9595)
-        : (selected ? Colors.white : AppColors.textMain);
-    final bg = disabled
-        ? const Color(0xFFEEEEEE)
-        : (selected ? AppColors.primary : const Color(0xFFF0F5F4));
-    return Padding(
-      padding: EdgeInsets.only(bottom: 6.h),
-      child: Material(
-        color: bg,
-        child: InkWell(
-          onTap: disabled ? null : onTap,
-          child: Padding(
-            padding:
-                EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
-            child: Row(
-              children: [
-                Icon(
-                  selected
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
-                  size: 18.sp,
-                  color: fg,
-                ),
-                SizedBox(width: 10.w),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: GoogleFonts.manrope(
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.w800,
-                      color: fg,
-                    ),
-                  ),
-                ),
-                if (disabled)
-                  Text(
-                    'CURRENT',
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                      color: fg,
-                    ),
-                  ),
-              ],
-            ),
-          ),
+    final v = wmsStatus.trim().toLowerCase();
+    final bg = switch (v) {
+      'in-stock' => const Color(0xFF1B7D7D),
+      'return' => const Color(0xFF4C4FA1),
+      'damaged' => const Color(0xFFBF2E2E),
+      'sold' => const Color(0xFF3F4A4A),
+      'stolen' => const Color(0xFF2A2A2A),
+      'tag_killed' => const Color(0xFF3F4A4A),
+      'in-transit' => const Color(0xFF4A6478),
+      'pending_visibility' => const Color(0xFF6A7A7A),
+      'pending_transaction' => const Color(0xFF6A7A7A),
+      _ => const Color(0xFF6A7A7A),
+    };
+    final display = switch (v) {
+      'in-stock' => 'LIVE',
+      'tag_killed' => 'TAG KILLED',
+      'in-transit' => 'IN TRANSIT',
+      'pending_visibility' => 'PENDING',
+      'pending_transaction' => 'PENDING TX',
+      _ => v.toUpperCase(),
+    };
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+      color: bg,
+      child: Text(
+        display,
+        style: GoogleFonts.spaceGrotesk(
+          fontSize: 10.sp,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.0,
+          color: Colors.white,
         ),
       ),
     );
@@ -863,83 +698,70 @@ class _StatusOptionTile extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// commit button
+// continue button
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _CommitButton extends StatelessWidget {
-  const _CommitButton({
-    required this.enabled,
-    required this.busy,
-    required this.onTap,
-  });
-
+class _ContinueButton extends StatelessWidget {
+  const _ContinueButton({required this.enabled, required this.onTap});
   final bool enabled;
-  final bool busy;
-  final VoidCallback? onTap;
-
+  final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
     final bg = enabled ? AppColors.primary : const Color(0xFFBCC9C9);
     return GestureDetector(
-      onTap: enabled && !busy ? onTap : null,
+      onTap: enabled ? onTap : null,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        height: 56.h,
-        decoration: BoxDecoration(
-          color: bg,
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x24000000),
-              blurRadius: 18,
-              offset: Offset(0, 8),
+        duration: const Duration(milliseconds: 140),
+        height: 52.h,
+        color: bg,
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'CONTINUE',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2.4,
+                color: Colors.white,
+              ),
             ),
+            SizedBox(width: 8.w),
+            Icon(LucideIcons.chevronRight,
+                color: Colors.white, size: 18.sp),
           ],
-        ),
-        child: Center(
-          child: busy
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.4,
-                    valueColor: AlwaysStoppedAnimation(Colors.white),
-                  ),
-                )
-              : Text(
-                  'COMMIT STATUS CHANGE',
-                  style: GoogleFonts.manrope(
-                    fontSize: 15.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2.0,
-                    color: Colors.white,
-                  ),
-                ),
         ),
       ),
     );
   }
 }
 
-/// Bottom-bar power slider for Status Change. Mirrors the count gear's
-/// session-override pattern: drag = immediate radio change, no save
-/// button. The "scanning" pill on the left flips so the operator can
-/// see at a glance whether the radio is hot.
+// ═══════════════════════════════════════════════════════════════════════════
+// power slider — bounds set from native getPowerRangeDbm so the operator
+// can't drag below the radio's real floor (RFD8500 ≈ 5 dBm, C72E 5..23)
+// ═══════════════════════════════════════════════════════════════════════════
+
 class _StatusChangePowerSlider extends StatelessWidget {
   const _StatusChangePowerSlider({
     required this.powerDbm,
+    required this.minDbm,
+    required this.maxDbm,
     required this.scanning,
     required this.onChanged,
   });
 
   final int powerDbm;
+  final int minDbm;
+  final int maxDbm;
   final bool scanning;
   final ValueChanged<int> onChanged;
 
-  static const int _minDbm = 1;
-  static const int _maxDbm = 30;
-
   @override
   Widget build(BuildContext context) {
+    final lo = minDbm.toDouble();
+    final hi = maxDbm.toDouble();
+    final value = powerDbm.toDouble().clamp(lo, hi);
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFFF0F5F4),
@@ -988,13 +810,10 @@ class _StatusChangePowerSlider extends StatelessWidget {
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
               ),
               child: Slider(
-                value: powerDbm.toDouble().clamp(
-                      _minDbm.toDouble(),
-                      _maxDbm.toDouble(),
-                    ),
-                min: _minDbm.toDouble(),
-                max: _maxDbm.toDouble(),
-                divisions: _maxDbm - _minDbm,
+                value: value,
+                min: lo,
+                max: hi,
+                divisions: (maxDbm - minDbm).clamp(1, 60),
                 onChanged: (v) => onChanged(v.round()),
               ),
             ),

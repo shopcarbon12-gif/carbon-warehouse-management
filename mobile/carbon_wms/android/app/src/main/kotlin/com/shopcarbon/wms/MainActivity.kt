@@ -331,6 +331,18 @@ class MainActivity : FlutterFragmentActivity() {
           chainway.setAntennaPowerDbm(p)
           result.success(null)
         }
+        "rfid.getPowerRangeDbm" -> {
+          // Prefer Zebra when connected — RFD8500 is the sled the user
+          // explicitly singled out for slider accuracy. Otherwise fall
+          // through to Chainway (5..23 hardware clamp). When neither is
+          // ready, return null so Dart can fall back to a safe default.
+          val range = zebra.getPowerRangeDbm() ?: chainway.getPowerRangeDbm()
+          if (range == null) {
+            result.success(null)
+          } else {
+            result.success(mapOf("minDbm" to range.first, "maxDbm" to range.second))
+          }
+        }
         "rfid.setSingulationSession" -> {
           val args = call.arguments as? Map<*, *>
           val useS0 = (args?.get("useSessionZero") as? Boolean) ?: false

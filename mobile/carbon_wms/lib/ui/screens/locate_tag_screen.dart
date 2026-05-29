@@ -7,11 +7,13 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
@@ -411,49 +413,57 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                   ),
                 ),
               ),
-              const Divider(height: 1),
-              tile(
-                icon: Icons.swap_horiz,
-                label: 'Status change',
-                onTap: () async {
-                  Navigator.of(sheetCtx).pop();
-                  await handOffRadio();
-                  if (!mounted) return;
-                  await Navigator.of(context).push<void>(
-                    MaterialPageRoute(
-                      builder: (_) => const StatusChangeScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1),
-              tile(
-                icon: Icons.tag,
-                label: 'Encode',
-                onTap: () async {
-                  Navigator.of(sheetCtx).pop();
-                  await handOffRadio();
-                  if (!mounted) return;
-                  await Navigator.of(context).push<void>(
-                    MaterialPageRoute(builder: (_) => const EncodeScreen()),
-                  );
-                },
-              ),
-              const Divider(height: 1),
-              tile(
-                icon: Icons.refresh,
-                label: 'Re-encode',
-                onTap: () async {
-                  Navigator.of(sheetCtx).pop();
-                  await handOffRadio();
-                  if (!mounted) return;
-                  await Navigator.of(context).push<void>(
-                    MaterialPageRoute(
-                      builder: (_) => const SearchAndEncodeScreen(),
-                    ),
-                  );
-                },
-              ),
+              // Phase 2 — drop tiles for actions the operator's role can't
+              // open. context.read is safe inside the modal builder since
+              // it doesn't subscribe to rebuilds.
+              if (context.read<MobilePermissions>().canView(ScreenIds.statusChange)) ...[
+                const Divider(height: 1),
+                tile(
+                  icon: Icons.swap_horiz,
+                  label: 'Status change',
+                  onTap: () async {
+                    Navigator.of(sheetCtx).pop();
+                    await handOffRadio();
+                    if (!mounted) return;
+                    await context.pushGuarded<void>(
+                      ScreenIds.statusChange,
+                      (_) => const StatusChangeScreen(),
+                    );
+                  },
+                ),
+              ],
+              if (context.read<MobilePermissions>().canView(ScreenIds.encode)) ...[
+                const Divider(height: 1),
+                tile(
+                  icon: Icons.tag,
+                  label: 'Encode',
+                  onTap: () async {
+                    Navigator.of(sheetCtx).pop();
+                    await handOffRadio();
+                    if (!mounted) return;
+                    await context.pushGuarded<void>(
+                      ScreenIds.encode,
+                      (_) => const EncodeScreen(),
+                    );
+                  },
+                ),
+              ],
+              if (context.read<MobilePermissions>().canView(ScreenIds.searchAndEncode)) ...[
+                const Divider(height: 1),
+                tile(
+                  icon: Icons.refresh,
+                  label: 'Re-encode',
+                  onTap: () async {
+                    Navigator.of(sheetCtx).pop();
+                    await handOffRadio();
+                    if (!mounted) return;
+                    await context.pushGuarded<void>(
+                      ScreenIds.searchAndEncode,
+                      (_) => const SearchAndEncodeScreen(),
+                    );
+                  },
+                ),
+              ],
               const SizedBox(height: 8),
             ],
           ),

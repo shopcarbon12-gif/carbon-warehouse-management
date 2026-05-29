@@ -9,7 +9,9 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/epc/epc_codec.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
@@ -130,12 +132,11 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   }
 
   Future<void> _openGeiger(_GeigerItem item) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => LocateTagScreen(
-          targetEpc: item.epc,
-          cloudGeigerMode: true,
-        ),
+    await context.pushGuarded<void>(
+      ScreenIds.locateTag,
+      (_) => LocateTagScreen(
+        targetEpc: item.epc,
+        cloudGeigerMode: true,
       ),
     );
   }

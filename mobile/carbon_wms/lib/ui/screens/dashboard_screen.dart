@@ -11,8 +11,10 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/barcode_intake_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
@@ -396,19 +398,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _push(Widget screen) => Navigator.of(context)
-      .push<void>(MaterialPageRoute<void>(builder: (_) => screen));
+  /// Phase 2 RBAC-aware push. Skips the push (with a one-shot snackbar)
+  /// when [screenId] is in the operator's hidden-screens list and wraps
+  /// the destination in [PermissionGuard] so a deep-link / scan
+  /// shortcut can't bypass the check either.
+  Future<void> _pushGuarded(String screenId, WidgetBuilder builder) {
+    return context.pushGuarded<void>(screenId, builder);
+  }
 
   void _onNavTap(int idx) {
     if (idx == _navIndex) return;
     setState(() => _navIndex = idx);
     switch (idx) {
       case 1:
-        _push(const InventoryHubScreen());
+        _pushGuarded(ScreenIds.inventoryHub, (_) => const InventoryHubScreen());
       case 2:
-        _push(const TransferSlipsScreen());
+        _pushGuarded(ScreenIds.transferSlips, (_) => const TransferSlipsScreen());
       case 3:
-        _push(const EncodeSuiteScreen(initialTab: 0));
+        _pushGuarded(ScreenIds.encodeSuite, (_) => const EncodeSuiteScreen(initialTab: 0));
     }
     setState(() => _navIndex = 0);
   }
@@ -452,11 +459,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       },
       onSettings: () {
         Navigator.pop(context);
-        _push(const HandheldSettingsScreen());
+        _pushGuarded(
+          ScreenIds.handheldSettings,
+          (_) => const HandheldSettingsScreen(),
+        );
       },
       onRefresh: () async {
         Navigator.pop(context);
         final messenger = ScaffoldMessenger.of(context);
+        final api = context.read<WmsApiClient>();
+        final perms = context.read<MobilePermissions>();
         messenger.showSnackBar(
           const SnackBar(
             content: Text('Syncing settings...'),
@@ -465,6 +477,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
         await _syncMobileSettings();
         await _refreshDashboardStats();
+        // Refresh the Phase 2 RBAC payload as part of the manual sync so
+        // operators can pull a role change without logging out.
+        await perms.refresh(api);
         if (mounted) {
           messenger.showSnackBar(
             const SnackBar(
@@ -585,6 +600,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildBody(BuildContext context) {
     return Consumer2<RfidManager, MobileSettingsRepository>(
       builder: (context, rfid, settings, _) {
+        // Permissions drive which tiles appear — watching forces a rebuild
+        // whenever the post-login refresh lands. Until the first fetch
+        // completes [hasFullAccess] is true (fail-open) so nothing is
+        // hidden during the brief window before the cached value loads.
+        final perms = context.watch<MobilePermissions>();
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final mutedColor =
             isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
@@ -641,7 +661,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (_inventoryUnits == null) {
                           unawaited(_refreshDashboardStats());
                         } else {
-                          _push(const InventoryLookupScreen());
+                          _pushGuarded(
+                            ScreenIds.inventoryLookup,
+                            (_) => const InventoryLookupScreen(),
+                          );
                         }
                       },
                       cardColor: cardColor,
@@ -657,7 +680,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (_orderOpen == null) {
                           unawaited(_refreshDashboardStats());
                         } else {
-                          _push(const TransferSlipsScreen());
+                          _pushGuarded(
+                            ScreenIds.transferSlips,
+                            (_) => const TransferSlipsScreen(),
+                          );
                         }
                       },
                       cardColor: cardColor,
@@ -670,6 +696,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
 
             // ── D. 2×2 Hero tile grid ─────────────────────────────────
+            // Each tile owns a Phase 2 screen id; hidden ones drop out so
+            // the grid reflows from 4 to N. Empty grid hides the section
+            // entirely (rare — would require all four to be hidden).
             SliverPadding(
               padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 0.h),
               sliver: SliverToBoxAdapter(
@@ -680,44 +709,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
                   childAspectRatio: 1,
-                  children: [
-                    _HeroTile(
-                      icon: Icons.inventory_2_outlined,
-                      label: 'Inventory',
-                      teal: false,
-                      cardColor: cardColor,
-                      cardHigh: cardHigh,
-                      mainColor: mainColor,
-                      onTap: () => _push(const InventoryHubScreen()),
-                    ),
-                    _HeroTile(
-                      icon: Icons.precision_manufacturing_outlined,
-                      label: 'Operations',
-                      teal: true,
-                      cardColor: cardColor,
-                      cardHigh: cardHigh,
-                      mainColor: mainColor,
-                      onTap: () => _push(const TransferSlipsScreen()),
-                    ),
-                    _HeroTile(
-                      icon: Icons.qr_code_scanner,
-                      label: 'Bin Assign',
-                      teal: false,
-                      highSurface: true,
-                      cardColor: cardColor,
-                      cardHigh: cardHigh,
-                      mainColor: mainColor,
-                      onTap: () => _push(const FastPutawayScreen()),
-                    ),
-                    _HeroTile(
-                      icon: Icons.local_shipping_outlined,
-                      label: 'Transfers',
-                      teal: false,
-                      cardColor: cardColor,
-                      cardHigh: cardHigh,
-                      mainColor: mainColor,
-                      onTap: () => _push(const BarcodeIntakeScreen()),
-                    ),
+                  children: <Widget>[
+                    if (perms.canView(ScreenIds.inventoryHub))
+                      _HeroTile(
+                        icon: Icons.inventory_2_outlined,
+                        label: 'Inventory',
+                        teal: false,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushGuarded(
+                          ScreenIds.inventoryHub,
+                          (_) => const InventoryHubScreen(),
+                        ),
+                      ),
+                    if (perms.canView(ScreenIds.transferSlips))
+                      _HeroTile(
+                        icon: Icons.precision_manufacturing_outlined,
+                        label: 'Operations',
+                        teal: true,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushGuarded(
+                          ScreenIds.transferSlips,
+                          (_) => const TransferSlipsScreen(),
+                        ),
+                      ),
+                    if (perms.canView(ScreenIds.fastPutaway))
+                      _HeroTile(
+                        icon: Icons.qr_code_scanner,
+                        label: 'Bin Assign',
+                        teal: false,
+                        highSurface: true,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushGuarded(
+                          ScreenIds.fastPutaway,
+                          (_) => const FastPutawayScreen(),
+                        ),
+                      ),
+                    if (perms.canView(ScreenIds.barcodeIntake))
+                      _HeroTile(
+                        icon: Icons.local_shipping_outlined,
+                        label: 'Transfers',
+                        teal: false,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushGuarded(
+                          ScreenIds.barcodeIntake,
+                          (_) => const BarcodeIntakeScreen(),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -809,47 +854,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisSpacing: 8,
                   childAspectRatio: 1.1,
                 ),
-                delegate: SliverChildListDelegate([
-                  // Encode replaces the old "Putaway" small tile (which was a
-                  // duplicate of the Bin Assign hero tile above). The new
-                  // Encode flow is a SKU-first re-encoder for any UHF tag.
-                  _SmallTile(
-                      icon: LucideIcons.tag,
-                      label: 'Encode',
-                      onTap: () => _push(const EncodeScreen())),
-                  _SmallTile(
-                      icon: LucideIcons.trash2,
-                      label: 'Clean Bin',
-                      onTap: () => _push(const CleanBinScreen())),
-                  _SmallTile(
-                      icon: LucideIcons.fileUp,
-                      label: 'CSV',
-                      onTap: () => _push(const InventoryCsvSessionScreen())),
-                  _SmallTile(
-                      icon: LucideIcons.radio,
-                      label: 'Geiger',
-                      onTap: () => _push(const GeigerSearchScreen())),
-                  _SmallTile(
-                      icon: LucideIcons.clipboardList,
-                      label: 'Status',
-                      onTap: () => _push(const StatusChangeScreen())),
-                  _SmallTile(
-                      icon: LucideIcons.printer,
-                      label: 'Print',
-                      onTap: () => _push(const PrintScreen())),
-                  _SmallTile(
-                      icon: LucideIcons.refreshCw,
-                      label: 'Re-Encode',
-                      onTap: () => _push(const SearchAndEncodeScreen())),
-                  _SmallTile(
-                      icon: LucideIcons.upload,
-                      label: 'Upload',
-                      onTap: () =>
-                          _push(const EncodeSuiteScreen(initialTab: 2))),
-                  _SmallTile(
-                      icon: LucideIcons.cloud,
-                      label: 'Cloud + Geiger',
-                      onTap: () => _push(const CloudGeigerScreen())),
+                delegate: SliverChildListDelegate(<Widget>[
+                  // Each small tile is gated by its Phase 2 screen id —
+                  // hidden tiles drop out of the grid entirely (Sliver
+                  // child list reflows around the gaps).
+                  if (perms.canView(ScreenIds.encode))
+                    _SmallTile(
+                        icon: LucideIcons.tag,
+                        label: 'Encode',
+                        onTap: () => _pushGuarded(
+                            ScreenIds.encode, (_) => const EncodeScreen())),
+                  if (perms.canView(ScreenIds.cleanBin))
+                    _SmallTile(
+                        icon: LucideIcons.trash2,
+                        label: 'Clean Bin',
+                        onTap: () => _pushGuarded(
+                            ScreenIds.cleanBin, (_) => const CleanBinScreen())),
+                  if (perms.canView(ScreenIds.inventoryCsvSession))
+                    _SmallTile(
+                        icon: LucideIcons.fileUp,
+                        label: 'CSV',
+                        onTap: () => _pushGuarded(
+                            ScreenIds.inventoryCsvSession,
+                            (_) => const InventoryCsvSessionScreen())),
+                  if (perms.canView(ScreenIds.geigerSearch))
+                    _SmallTile(
+                        icon: LucideIcons.radio,
+                        label: 'Geiger',
+                        onTap: () => _pushGuarded(ScreenIds.geigerSearch,
+                            (_) => const GeigerSearchScreen())),
+                  if (perms.canView(ScreenIds.statusChange))
+                    _SmallTile(
+                        icon: LucideIcons.clipboardList,
+                        label: 'Status',
+                        onTap: () => _pushGuarded(ScreenIds.statusChange,
+                            (_) => const StatusChangeScreen())),
+                  if (perms.canView(ScreenIds.print))
+                    _SmallTile(
+                        icon: LucideIcons.printer,
+                        label: 'Print',
+                        onTap: () => _pushGuarded(
+                            ScreenIds.print, (_) => const PrintScreen())),
+                  if (perms.canView(ScreenIds.searchAndEncode))
+                    _SmallTile(
+                        icon: LucideIcons.refreshCw,
+                        label: 'Re-Encode',
+                        onTap: () => _pushGuarded(ScreenIds.searchAndEncode,
+                            (_) => const SearchAndEncodeScreen())),
+                  if (perms.canView(ScreenIds.encodeSuite))
+                    _SmallTile(
+                        icon: LucideIcons.upload,
+                        label: 'Upload',
+                        onTap: () => _pushGuarded(ScreenIds.encodeSuite,
+                            (_) => const EncodeSuiteScreen(initialTab: 2))),
+                  if (perms.canView(ScreenIds.cloudGeiger))
+                    _SmallTile(
+                        icon: LucideIcons.cloud,
+                        label: 'Cloud + Geiger',
+                        onTap: () => _pushGuarded(ScreenIds.cloudGeiger,
+                            (_) => const CloudGeigerScreen())),
                 ]),
               ),
             ),

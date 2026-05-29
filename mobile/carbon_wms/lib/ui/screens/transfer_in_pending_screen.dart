@@ -7,7 +7,9 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/transfer_in_receive_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -59,16 +61,15 @@ class _TransferInPendingScreenState extends State<TransferInPendingScreen> {
   Future<void> _openSlip(Map<String, dynamic> row) async {
     final id = (row['id'] ?? '').toString();
     if (id.isEmpty) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => TransferInReceiveScreen(
-          transferId: id,
-          slipNumber: row['slip_number'] is int
-              ? row['slip_number'] as int
-              : int.tryParse('${row['slip_number']}'),
-          sourceCode: (row['source_location_code'] ?? '').toString(),
-          sourceName: (row['source_location_name'] ?? '').toString(),
-        ),
+    await context.pushGuarded<void>(
+      ScreenIds.transferInReceive,
+      (_) => TransferInReceiveScreen(
+        transferId: id,
+        slipNumber: row['slip_number'] is int
+            ? row['slip_number'] as int
+            : int.tryParse('${row['slip_number']}'),
+        sourceCode: (row['source_location_code'] ?? '').toString(),
+        sourceName: (row['source_location_name'] ?? '').toString(),
       ),
     );
     if (!mounted) return;

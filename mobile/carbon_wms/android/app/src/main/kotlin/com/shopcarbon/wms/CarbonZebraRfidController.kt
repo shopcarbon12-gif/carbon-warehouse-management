@@ -560,6 +560,40 @@ class CarbonZebraRfidController(
 
   fun isReady(): Boolean = reader?.isConnected == true
 
+  /**
+   * Achievable power range in integer dBm for the connected RFD8500.
+   * Reads `transmitPowerLevelValues`, applies the same divisor heuristic
+   * as [applyTransmitPowerDbm] (1 / 10 / 100 → dBm / deci-dBm / centi-dBm),
+   * and returns [floorDbm, ceilDbm]. The status-change slider uses this
+   * to clamp itself to what the radio can actually accept — pre-fix the
+   * slider went 1..30, but RFD8500 firmware floors at ~5 dBm and silently
+   * lifted anything below it, so "3 dBm" on the bar matched 5 dBm on the
+   * radio. Returns null when the reader isn't connected.
+   */
+  fun getPowerRangeDbm(): Pair<Int, Int>? {
+    val r = reader
+    if (r == null || !r.isConnected) return null
+    return try {
+      val levels = r.ReaderCapabilities.transmitPowerLevelValues
+        ?: return null
+      if (levels.isEmpty()) return null
+      val minRaw = levels.min()
+      val maxRaw = levels.max()
+      val divisor = when {
+        maxRaw <= 33 -> 1
+        maxRaw <= 330 -> 10
+        else -> 100
+      }
+      val minDbm = (minRaw + divisor - 1) / divisor // ceil(min) so we don't expose a value the radio can't hit
+      val maxDbm = maxRaw / divisor
+      Log.d(TAG, "getPowerRangeDbm: minRaw=$minRaw maxRaw=$maxRaw divisor=$divisor -> ${minDbm}..${maxDbm} dBm")
+      minDbm to maxDbm
+    } catch (e: Exception) {
+      Log.w(TAG, "getPowerRangeDbm failed: ${e.message}")
+      null
+    }
+  }
+
   private fun performWriteEpc(targetEpc: String, newEpc: String): Boolean {
     val r = reader ?: return false
     if (!r.isConnected) return false

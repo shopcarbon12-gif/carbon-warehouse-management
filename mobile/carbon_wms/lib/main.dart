@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/theme_notifier.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
@@ -58,6 +59,13 @@ class _CarbonWmsRootState extends State<CarbonWmsRoot> {
         Provider<WmsApiClient>(create: (_) => WmsApiClient()),
         ChangeNotifierProvider<MobileSettingsRepository>(
           create: (_) => MobileSettingsRepository()..loadFromPrefs(),
+        ),
+        // Mobile RBAC payload (Phase 2). Cached value is loaded
+        // immediately so the first frame after relaunch doesn't flicker
+        // hidden tiles in/out; auth-gate triggers a fresh fetch after
+        // we confirm the session JWT is still good.
+        ChangeNotifierProvider<MobilePermissions>(
+          create: (_) => MobilePermissions()..loadCached(),
         ),
         ChangeNotifierProvider<RfidManager>(
           create: (context) {

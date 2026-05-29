@@ -11,6 +11,7 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_client_info.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/ui/screens/dashboard_screen.dart';
 import 'package:carbon_wms/ui/screens/device_lock_screen.dart';
 import 'package:carbon_wms/ui/screens/login_screen.dart';
@@ -153,6 +154,14 @@ class _AppAuthGateState extends State<AppAuthGate> {
         }
         return;
       }
+      // Pull the operator's mobile-role permissions before painting the
+      // dashboard. Best-effort: a failed fetch leaves [MobilePermissions]
+      // in whichever state it already had (cached value from prior
+      // session, or fail-open empty if none). Service swallows the
+      // exception internally and stores `lastError` for the drawer.
+      if (mounted) {
+        unawaited(context.read<MobilePermissions>().refresh(api));
+      }
       if (mounted) {
         setState(() => _phase = _Phase.dashboard);
         if (updateAvailable && downloadUrl != null && downloadUrl.isNotEmpty) {
@@ -230,8 +239,13 @@ class _AppAuthGateState extends State<AppAuthGate> {
           androidId: _androidId.isEmpty ? '(unavailable)' : _androidId,
           pendingApproval: _pending,
           onLogout: () async {
-            await context.read<WmsApiClient>().setSessionToken(null);
+            // Read providers up-front so the awaits below don't cross the
+            // BuildContext.
+            final api = context.read<WmsApiClient>();
+            final perms = context.read<MobilePermissions>();
+            await api.setSessionToken(null);
             await LoginCredentialsStore.onUserLogout();
+            await perms.clear();
             if (mounted) {
               setState(() {
                 _loginKey++;
@@ -245,8 +259,11 @@ class _AppAuthGateState extends State<AppAuthGate> {
           otaDownloadUrl: _otaUrl,
           otaLatestVersion: _otaLatestVersion,
           onLogout: () async {
-            await context.read<WmsApiClient>().setSessionToken(null);
+            final api = context.read<WmsApiClient>();
+            final perms = context.read<MobilePermissions>();
+            await api.setSessionToken(null);
             await LoginCredentialsStore.onUserLogout();
+            await perms.clear();
             if (mounted) {
               setState(() {
                 _loginKey++;

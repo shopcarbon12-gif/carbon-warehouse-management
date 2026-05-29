@@ -1156,6 +1156,91 @@ class WmsApiClient {
     return decoded;
   }
 
+  /// `POST /api/rfid/encode-finalize` — Phase 3 post-write confirmation.
+  /// Call this AFTER `RfidVendorChannel.writeEpcTag` returns true. The
+  /// server promotes the new EPC from 'unknown' → 'in-stock' (LIVE) and
+  /// dismisses the old EPC's row from the Defective EPCs modal (sets
+  /// `defective_acknowledged_at = now()` — same dismiss mechanism the
+  /// desktop button uses).
+  ///
+  /// Returns `{ ok, livePromoted, defectiveDismissed }`. Best-effort —
+  /// the chip write already succeeded by the time we get here, so a
+  /// finalize failure is a soft warning, not a flow-blocking error.
+  Future<Map<String, dynamic>?> postEncodeFinalize({
+    required String newEpc,
+    String? oldEpc,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/rfid/encode-finalize');
+    final body = jsonEncode({
+      'newEpc': newEpc.toUpperCase(),
+      if (oldEpc != null && oldEpc.isNotEmpty) 'oldEpc': oldEpc.toUpperCase(),
+    });
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: body,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return null;
+  }
+
+  /// `GET /api/handheld/encode-events` — re-encode reports list for the
+  /// mobile Inventory → Reports → RE-ENCODE tile. Returns the active
+  /// session location's recent encode_events rows (newest first).
+  /// Best-effort empty list on failure so the screen can degrade
+  /// gracefully — handheld already prefers fail-open UX.
+  Future<List<Map<String, dynamic>>> fetchEncodeEvents({
+    int limit = 200,
+    String? status,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/encode-events').replace(
+      queryParameters: <String, String>{
+        'deviceId': deviceId,
+        'limit': '$limit',
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+    );
+    final res = await _http.get(uri, headers: await handheldAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return const [];
+    final rows = decoded['rows'];
+    if (rows is! List) return const [];
+    return rows.whereType<Map<String, dynamic>>().toList();
+  }
+
+  /// `GET /api/mobile/permissions` — Phase 2 mobile RBAC payload. Returns
+  /// the operator's mobile role, the flat `hiddenScreens` allow-list, and
+  /// the nested `permissions` map. Authenticated with the same session JWT
+  /// every other `/api/*` call uses (no new auth flow).
+  ///
+  /// Returns null on a transient parse failure so [MobilePermissions] can
+  /// fall back to its cached value without nuking it. Non-2xx responses
+  /// throw [WmsApiException] so the caller can log the HTTP code.
+  Future<Map<String, dynamic>?> fetchMobilePermissions() async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/permissions');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return null;
+  }
+
   /// `GET /api/scanner/status-labels` — operator-visible status labels for
   /// the handheld Status Change screen. Each row carries `applicable`
   /// indicating whether the requesting user can pick it (super-admin gets
