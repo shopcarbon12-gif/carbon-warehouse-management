@@ -6,16 +6,40 @@ import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 
 /**
- * Single-variant catalog operations. Currently only Archive (set/unset
- * custom_skus.archived). Wired from the Lightspeed-style item-details
- * popup's Archive button. Admin-only.
+ * Single-variant catalog operations. Edits the WMS-owned custom_skus row:
+ * archive plus the variant attributes surfaced in the item-details popup
+ * (sku, color, size, upc, retail_price, default_cost). Matrix-level fields
+ * (name/description, brand, category, subcategory_1, matrix upc) live on the
+ * matrices row — edit those via /api/inventory/catalog/matrices/[id].
+ *
+ * Lightspeed is being retired and the WMS is now the source of truth, so
+ * these are first-class editable fields (the prior read-only posture existed
+ * only because LS sync would overwrite them). Admin-only.
  */
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
-const patchSchema = z.object({
-  archived: z.boolean(),
-});
+/** Trimmed string that becomes null when empty (for nullable text columns). */
+const nullableText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .transform((s) => (s === "" ? null : s))
+    .nullable()
+    .optional();
+
+const patchSchema = z
+  .object({
+    archived: z.boolean().optional(),
+    sku: z.string().trim().min(1).max(100).optional(),
+    color_code: nullableText(100),
+    size: nullableText(50),
+    upc: nullableText(100),
+    retail_price: z.number().nonnegative().max(1_000_000).nullable().optional(),
+    default_cost: z.number().nonnegative().max(1_000_000).nullable().optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, { message: "No fields to update" });
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -46,14 +70,46 @@ export async function PATCH(req: Request, { params }: Ctx) {
       { status: 400 },
     );
   }
+  const d = parsed.data;
 
-  const r = await pool.query(
-    `UPDATE custom_skus
-        SET archived = $2
-      WHERE id = $1::uuid
-        AND archived <> $2`,
-    [id, parsed.data.archived],
-  );
+  // Build the SET clause from only the provided fields. $1 is always the id.
+  const sets: string[] = [];
+  const vals: unknown[] = [id];
+  const add = (col: string, val: unknown, cast = "") => {
+    vals.push(val);
+    sets.push(`${col} = $${vals.length}${cast}`);
+  };
 
-  return NextResponse.json({ ok: true, updated: r.rowCount ?? 0 });
+  if (d.archived !== undefined) add("archived", d.archived);
+  if (d.sku !== undefined) add("sku", d.sku);
+  if (d.color_code !== undefined) add("color_code", d.color_code);
+  if (d.size !== undefined) add("size", d.size);
+  if (d.upc !== undefined) add("upc", d.upc);
+  if (d.retail_price !== undefined) add("retail_price", d.retail_price, "::numeric");
+  if (d.default_cost !== undefined) add("default_cost", d.default_cost, "::numeric");
+
+  if (sets.length === 0) {
+    return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+  }
+
+  try {
+    const r = await pool.query(
+      `UPDATE custom_skus SET ${sets.join(", ")} WHERE id = $1::uuid`,
+      vals,
+    );
+    if (r.rowCount === 0) {
+      return NextResponse.json({ error: "Custom SKU not found" }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true, updated: r.rowCount });
+  } catch (e) {
+    // 23505 = unique_violation — almost always a duplicate SKU.
+    if ((e as { code?: string })?.code === "23505") {
+      return NextResponse.json(
+        { error: "That SKU is already in use by another item." },
+        { status: 409 },
+      );
+    }
+    console.error("[custom-skus PATCH]", e);
+    return NextResponse.json({ error: "Update failed" }, { status: 500 });
+  }
 }

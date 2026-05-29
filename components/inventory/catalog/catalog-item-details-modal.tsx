@@ -9,15 +9,14 @@ import { CatalogMatrixModal } from "./catalog-matrix-modal";
  * Lightspeed-style item-details popup. Opens when the operator clicks
  * the Item name or Custom SKU cell in /inventory/catalog.
  *
- * Visual structure tracks the Lightspeed item-edit screen so the popup
- * feels familiar, but with WMS-relevant sections only. Top bar exposes
- * Matrix / Print Label / Archive actions. Print Label is intentionally
- * disabled for now — variant-level (non-EPC) printing isn't wired yet;
- * the per-EPC reprint at /api/rfid/reprint is the closest existing path.
+ * Fully editable: Lightspeed is being retired and the WMS is the source of
+ * truth, so the operator edits catalog attributes here. Variant fields
+ * (sku, color, size, upc, price, cost) save to custom_skus; matrix fields
+ * (name/description, brand, category, subcategory) save to the parent matrix
+ * and therefore apply to every variant under it. Save is admin-only.
  *
- * All values are sourced from the CatalogGridRow already in the table
- * — no extra fetch on open. Sales History / Reserved are placeholders
- * because the WMS doesn't yet track sales or reservations.
+ * Sales History / Reserved remain placeholders — the WMS doesn't track sales
+ * or reservations yet.
  */
 
 type Props = {
@@ -57,35 +56,159 @@ function fmtPct(n: number | null, digits = 1): string {
   return `${n.toFixed(digits)}%`;
 }
 
+/** Editable form mirror of the row. Money kept as strings for free typing. */
+type Form = {
+  name: string;
+  brand: string;
+  category: string;
+  subcategory_1: string;
+  color: string;
+  size: string;
+  sku: string;
+  upc: string;
+  retail_price: string;
+  default_cost: string;
+};
+
+function formFromRow(row: CatalogGridRow): Form {
+  return {
+    name: row.name ?? "",
+    brand: row.brand ?? "",
+    category: row.category ?? "",
+    subcategory_1: row.subcategory_1 ?? "",
+    color: row.color ?? "",
+    size: row.size ?? "",
+    sku: row.sku ?? "",
+    upc: row.sku_upc ?? "",
+    retail_price: row.retail_price ?? "",
+    default_cost: row.default_cost ?? "",
+  };
+}
+
 export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: Props) {
   const [tab, setTab] = useState<LeftTab>("details");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [matrixOpen, setMatrixOpen] = useState(false);
 
-  const cost = parseMoney(row.default_cost);
-  const price = parseMoney(row.retail_price);
+  const [form, setForm] = useState<Form>(() => formFromRow(row));
+  const [initial, setInitial] = useState<Form>(() => formFromRow(row));
+
+  const patch = useCallback(
+    (p: Partial<Form>) => {
+      setOkMsg(null);
+      setForm((f) => ({ ...f, ...p }));
+    },
+    [],
+  );
+
+  const dirty = useMemo(
+    () => (Object.keys(form) as (keyof Form)[]).some((k) => form[k] !== initial[k]),
+    [form, initial],
+  );
+
+  // Derived pricing recomputes live from the edited price/cost fields.
+  const cost = parseMoney(form.default_cost);
+  const price = parseMoney(form.retail_price);
   const available = row.active_epc_count ?? 0;
-  /* Online price isn't tracked separately in our schema — Lightspeed
-     R-Series carries it in default_price; we mirror retail. When the
-     two diverge in a future sync we'll surface them separately. */
   const onlinePrice = price;
   const totalValue = cost != null ? cost * available : null;
   const totalSaleValue = price != null ? price * available : null;
   const margin =
-    price != null && cost != null && price > 0
-      ? ((price - cost) / price) * 100
-      : null;
+    price != null && cost != null && price > 0 ? ((price - cost) / price) * 100 : null;
   const markup =
-    cost != null && cost > 0 && price != null
-      ? ((price - cost) / cost) * 100
-      : null;
+    cost != null && cost > 0 && price != null ? ((price - cost) / cost) * 100 : null;
 
-  const upcDisplay = row.sku_upc?.trim() || row.matrix_upc?.trim() || "—";
+  const save = useCallback(async () => {
+    if (!canManage || !dirty) return;
+
+    // Validate money fields up front so we don't half-apply.
+    for (const [field, label] of [
+      ["retail_price", "Price"],
+      ["default_cost", "Cost"],
+    ] as const) {
+      const v = form[field].trim();
+      if (v !== "" && !Number.isFinite(Number.parseFloat(v))) {
+        setErr(`${label} must be a number (or blank).`);
+        return;
+      }
+    }
+    if (form.name.trim() === "") {
+      setErr("Name can't be empty.");
+      return;
+    }
+
+    setBusy("save");
+    setErr(null);
+    setOkMsg(null);
+
+    const moneyOrNull = (s: string): number | null => {
+      const t = s.trim();
+      if (t === "") return null;
+      const n = Number.parseFloat(t);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    // Variant-level diff → custom_skus
+    const variantBody: Record<string, unknown> = {};
+    if (form.sku.trim() !== initial.sku) variantBody.sku = form.sku.trim();
+    if (form.color !== initial.color) variantBody.color_code = form.color.trim();
+    if (form.size !== initial.size) variantBody.size = form.size.trim();
+    if (form.upc !== initial.upc) variantBody.upc = form.upc.trim();
+    if (form.retail_price !== initial.retail_price)
+      variantBody.retail_price = moneyOrNull(form.retail_price);
+    if (form.default_cost !== initial.default_cost)
+      variantBody.default_cost = moneyOrNull(form.default_cost);
+
+    // Matrix-level diff → matrices (applies to every variant under the matrix)
+    const matrixBody: Record<string, unknown> = {};
+    if (form.name !== initial.name) matrixBody.description = form.name.trim();
+    if (form.brand !== initial.brand) matrixBody.brand = form.brand.trim();
+    if (form.category !== initial.category) matrixBody.category = form.category.trim();
+    if (form.subcategory_1 !== initial.subcategory_1)
+      matrixBody.subcategory_1 = form.subcategory_1.trim();
+
+    try {
+      if (Object.keys(variantBody).length > 0) {
+        const res = await fetch(
+          `/api/inventory/catalog/custom-skus/${row.custom_sku_id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(variantBody),
+          },
+        );
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) throw new Error(j.error ?? "Variant save failed");
+      }
+      if (Object.keys(matrixBody).length > 0) {
+        const res = await fetch(`/api/inventory/catalog/matrices/${row.matrix_id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(matrixBody),
+        });
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) throw new Error(j.error ?? "Matrix save failed");
+      }
+      setInitial(form);
+      setOkMsg("Saved.");
+      onMutated?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(null);
+    }
+  }, [canManage, dirty, form, initial, row, onMutated]);
 
   const archive = useCallback(async () => {
     if (!canManage) return;
-    if (!confirm(`Archive this variant (${row.sku})? Catalog rows hide archived items by default; you can unarchive by re-running this with the Show Archived filter on.`)) return;
+    if (
+      !confirm(
+        `Archive this variant (${row.sku})? Catalog rows hide archived items by default; you can unarchive by re-running this with the Show Archived filter on.`,
+      )
+    )
+      return;
     setBusy("archive");
     setErr(null);
     try {
@@ -109,11 +232,11 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
   }, [canManage, row, onMutated, onClose]);
 
   const headerLabel = useMemo(() => {
-    const bits = [row.name];
-    const vc = [row.color, row.size].filter((v) => v?.trim());
+    const bits = [form.name || row.name];
+    const vc = [form.color, form.size].filter((v) => v?.trim());
     if (vc.length > 0) bits.push(`· ${vc.join(" / ")}`);
     return bits.join(" ");
-  }, [row]);
+  }, [form, row]);
 
   return (
     <>
@@ -125,16 +248,21 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
       />
       <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto p-4">
         <div className="my-8 w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
-          {/* Top bar — mirrors LS: Save Changes (read-only here) · Matrix · Print Label · Archive */}
+          {/* Top bar — Save Changes · Matrix · Print Label · Archive */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5">
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                disabled
-                title="Inline edits on the popup are intentionally read-only — catalog attributes are owned by Lightspeed."
-                className="rounded-md border border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] opacity-50"
+                disabled={!canManage || !dirty || busy !== null}
+                onClick={() => void save()}
+                title={
+                  canManage
+                    ? "Save catalog edits (variant + matrix)"
+                    : "Admin scope required"
+                }
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Save Changes
+                {busy === "save" ? "Saving…" : "Save Changes"}
               </button>
               <button
                 type="button"
@@ -184,9 +312,13 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
               {err}
             </p>
           ) : null}
+          {okMsg ? (
+            <p className="border-b border-emerald-500/30 bg-emerald-950/30 px-4 py-2 font-mono text-xs text-emerald-200">
+              {okMsg}
+            </p>
+          ) : null}
 
           <div className="flex">
-            {/* Left nav — same layout as LS sidebar */}
             <nav className="w-44 shrink-0 border-r border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-3">
               {NAV_ITEMS.map((n) => (
                 <button
@@ -205,8 +337,10 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
             </nav>
 
             <div className="min-w-0 flex-1 p-5">
-              {/* Item-name header (matches the bold name above sections in LS) */}
-              <h2 className="mb-4 truncate text-base font-semibold text-[var(--wms-fg)]" title={headerLabel}>
+              <h2
+                className="mb-4 truncate text-base font-semibold text-[var(--wms-fg)]"
+                title={headerLabel}
+              >
                 {headerLabel}
                 {row.archived ? (
                   <span className="ml-2 rounded border border-amber-500/40 bg-amber-950/40 px-2 py-0.5 align-middle font-mono text-[0.55rem] uppercase tracking-wide text-amber-200">
@@ -218,9 +352,10 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
               {tab === "details" ? (
                 <DetailsTab
                   row={row}
-                  upcDisplay={upcDisplay}
+                  form={form}
+                  patch={patch}
+                  editable={canManage}
                   cost={cost}
-                  price={price}
                   onlinePrice={onlinePrice}
                   margin={margin}
                   markup={markup}
@@ -250,9 +385,10 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
 
 function DetailsTab({
   row,
-  upcDisplay,
+  form,
+  patch,
+  editable,
   cost,
-  price,
   onlinePrice,
   margin,
   markup,
@@ -261,9 +397,10 @@ function DetailsTab({
   totalSaleValue,
 }: {
   row: CatalogGridRow;
-  upcDisplay: string;
+  form: Form;
+  patch: (p: Partial<Form>) => void;
+  editable: boolean;
   cost: number | null;
-  price: number | null;
   onlinePrice: number | null;
   margin: number | null;
   markup: number | null;
@@ -271,40 +408,78 @@ function DetailsTab({
   totalValue: number | null;
   totalSaleValue: number | null;
 }) {
-  /* Avg Cost mirrors Default Cost — Carbon WMS doesn't carry receiving-cost
-     history, so the configured default IS the running average. */
   const avgCost = cost;
-  /* Reserved is always 0 — WMS doesn't track reservations (Lightspeed POS
-     does); shown so the section visually matches the LS screen. */
   const reserved = 0;
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.2fr_1fr_1fr]">
-      {/* Column 1 — Color/Size, IDs, Organize, eCommerce */}
+      {/* Column 1 — Name, Color/Size, IDs, Organize, eCommerce */}
       <div className="space-y-3">
+        <Section title="Item">
+          <EditRow
+            label="Name"
+            value={form.name}
+            onChange={(v) => patch({ name: v })}
+            editable={editable}
+            hint="Matrix name — applies to all variants"
+          />
+        </Section>
+
         <Section title="Color / Size">
-          <Row label="Color" value={row.color?.trim() || "—"} />
-          <Row label="Size" value={row.size?.trim() || "—"} />
+          <EditRow
+            label="Color"
+            value={form.color}
+            onChange={(v) => patch({ color: v })}
+            editable={editable}
+          />
+          <EditRow
+            label="Size"
+            value={form.size}
+            onChange={(v) => patch({ size: v })}
+            editable={editable}
+          />
         </Section>
 
         <Section title="IDs">
           <Row label="System ID" value={row.sku_ls_system_id ?? "—"} mono />
-          <Row label="UPC" value={upcDisplay} mono />
-          <Row label="Custom SKU" value={row.sku || "—"} mono />
+          <EditRow
+            label="UPC"
+            value={form.upc}
+            onChange={(v) => patch({ upc: v })}
+            editable={editable}
+            mono
+          />
+          <EditRow
+            label="Custom SKU"
+            value={form.sku}
+            onChange={(v) => patch({ sku: v })}
+            editable={editable}
+            mono
+          />
         </Section>
 
         <Section title="Organize">
-          <Row
+          <EditRow
             label="Category"
-            value={
-              row.category
-                ? row.subcategory_1
-                  ? `${row.category} / ${row.subcategory_1}`
-                  : row.category
-                : "—"
-            }
+            value={form.category}
+            onChange={(v) => patch({ category: v })}
+            editable={editable}
+            hint="Matrix-level"
           />
-          <Row label="Brand" value={row.brand?.trim() || "—"} />
+          <EditRow
+            label="Subcategory"
+            value={form.subcategory_1}
+            onChange={(v) => patch({ subcategory_1: v })}
+            editable={editable}
+            hint="Matrix-level"
+          />
+          <EditRow
+            label="Brand"
+            value={form.brand}
+            onChange={(v) => patch({ brand: v })}
+            editable={editable}
+            hint="Matrix-level"
+          />
         </Section>
 
         <Section title="eCommerce">
@@ -318,24 +493,6 @@ function DetailsTab({
               Publish to Shopify
             </label>
           </div>
-          <div className="flex flex-wrap gap-2 px-3 pb-2">
-            <button
-              type="button"
-              disabled
-              className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2.5 py-1 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] opacity-60"
-              title="Shopify product link not wired yet"
-            >
-              Manage Online Details ↗
-            </button>
-            <button
-              type="button"
-              disabled
-              className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2.5 py-1 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] opacity-60"
-              title="Online store URL not wired yet"
-            >
-              View in Online Store ↗
-            </button>
-          </div>
         </Section>
       </div>
 
@@ -343,16 +500,30 @@ function DetailsTab({
       <div className="space-y-3">
         <Section title="Pricing">
           <PriceHeader />
-          <PriceRow label="Default" amount={price} markup={markup} margin={margin} />
+          <EditPriceRow
+            label="Default"
+            value={form.retail_price}
+            onChange={(v) => patch({ retail_price: v })}
+            editable={editable}
+            markup={markup}
+            margin={margin}
+          />
           <PriceRow label="Online" amount={onlinePrice} markup={markup} margin={margin} />
         </Section>
 
         <Section title="Inventory Defaults">
-          <Row label="Default Cost" value={fmtMoney(cost)} mono />
+          <EditRow
+            label="Default Cost"
+            value={form.default_cost}
+            onChange={(v) => patch({ default_cost: v })}
+            editable={editable}
+            mono
+            numeric
+          />
         </Section>
       </div>
 
-      {/* Column 3 — Stock + Sales History */}
+      {/* Column 3 — Stock + Sales History (derived / read-only) */}
       <div className="space-y-3">
         <Section title="Stock">
           <Row label="Available" value={String(available)} mono />
@@ -422,6 +593,49 @@ function Row({
   );
 }
 
+function EditRow({
+  label,
+  value,
+  onChange,
+  editable,
+  mono,
+  numeric,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  editable: boolean;
+  mono?: boolean;
+  numeric?: boolean;
+  hint?: string;
+}) {
+  if (!editable) {
+    return <Row label={label} value={value.trim() || "—"} mono={mono} />;
+  }
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+      <span
+        className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]"
+        title={hint}
+      >
+        {label}
+      </span>
+      <input
+        type={numeric ? "number" : "text"}
+        inputMode={numeric ? "decimal" : undefined}
+        step={numeric ? "0.01" : undefined}
+        min={numeric ? "0" : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-40 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none ${
+          mono ? "font-mono" : ""
+        }`}
+      />
+    </div>
+  );
+}
+
 function PriceHeader() {
   return (
     <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 bg-[var(--wms-surface-elevated)]/60 px-3 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
@@ -450,6 +664,44 @@ function PriceRow({
         {label}
       </span>
       <span className="text-right text-[var(--wms-fg)]">{fmtMoney(amount)}</span>
+      <span className="text-right text-[var(--wms-muted)]">{fmtPct(markup)}</span>
+      <span className="text-right text-[var(--wms-muted)]">{fmtPct(margin)}</span>
+    </div>
+  );
+}
+
+function EditPriceRow({
+  label,
+  value,
+  onChange,
+  editable,
+  markup,
+  margin,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  editable: boolean;
+  markup: number | null;
+  margin: number | null;
+}) {
+  if (!editable) {
+    return <PriceRow label={label} amount={parseMoney(value)} markup={markup} margin={margin} />;
+  }
+  return (
+    <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 px-3 py-1.5 font-mono text-xs">
+      <span className="text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+        {label}
+      </span>
+      <input
+        type="number"
+        inputMode="decimal"
+        step="0.01"
+        min="0"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
+      />
       <span className="text-right text-[var(--wms-muted)]">{fmtPct(markup)}</span>
       <span className="text-right text-[var(--wms-muted)]">{fmtPct(margin)}</span>
     </div>
