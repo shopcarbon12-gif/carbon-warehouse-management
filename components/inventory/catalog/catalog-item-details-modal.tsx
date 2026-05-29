@@ -32,7 +32,6 @@ type LeftTab = "details" | "inventory" | "sales" | "customers" | "history";
 
 const NAV_ITEMS: { key: LeftTab; label: string }[] = [
   { key: "details", label: "Details" },
-  { key: "inventory", label: "Inventory" },
   { key: "sales", label: "Sales" },
   { key: "customers", label: "Customers" },
   { key: "history", label: "History" },
