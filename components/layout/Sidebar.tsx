@@ -89,7 +89,7 @@ const sections: NavSection[] = [
     id: "rfid",
     label: "RFID & Hardware",
     isActiveSection: (p) =>
-      p.startsWith("/rfid/epc-tracker") ||
+      p.startsWith("/rfid/bulk-geiger") ||
       p.startsWith("/rfid/commissioning") ||
       p.startsWith("/rfid/encode-items") ||
       p.startsWith("/operations/exceptions") ||
@@ -100,7 +100,7 @@ const sections: NavSection[] = [
       // Section still highlights when an /antenna_test deep-link is open.
       p.startsWith("/antenna_test"),
     items: [
-      { href: "/rfid/epc-tracker", label: "EPC Tracker", icon: Search },
+      { href: "/rfid/bulk-geiger", label: "Bulk Geiger", icon: Search },
       { href: "/rfid/commissioning", label: "Print / Commission", icon: Printer },
       { href: "/rfid/encode-items", label: "Encode Items", icon: Tags },
       {
