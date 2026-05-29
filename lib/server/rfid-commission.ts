@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import * as net from "node:net";
 import { z } from "zod";
 import { generateSGTIN96 } from "@/lib/epc";
+import { pickRandomUniqueSerialBatch } from "@/lib/server/rfid-serial-allocator";
 import {
   generateCarbonTagZpl,
   generateCarbonTagBatch,
@@ -25,6 +26,11 @@ export const commissionBodySchema = z.object({
       h: z.coerce.number().int().min(100),
     })
     .optional(),
+  /** Explicit status for the created item(s). When set, overrides the
+   *  addToInventory-derived default. The catalog popup's Print Label button
+   *  passes "unknown" — print a tag for the SKU without committing it to live
+   *  stock (it's promoted later, e.g. by the re-encode finalize flow). */
+  status: z.enum(["in-stock", "pending_visibility", "unknown"]).optional(),
 });
 // Pre-1.2.42 we required `binId` whenever `addToInventory=true`. The web
 // commissioning page picks a bin in the form and always passed it, so the
@@ -142,13 +148,14 @@ export async function rfidCommissionPrepare(
     }
   }
 
-  const maxSn = await client.query<{ m: string }>(
-    `SELECT coalesce(max(serial_number), 0)::text AS m
-     FROM items
-     WHERE custom_sku_id = $1::uuid AND location_id = $2::uuid`,
-    [row.id, session.lid],
-  );
-  const nextSerial = Number(maxSn.rows[0]?.m ?? 0) + 1;
+  // Random 6-digit unique serials per Carbon-Jeans policy (2026-05-29).
+  // The batch allocator pre-checks against existing items.serial_number
+  // for this sku AND keeps an in-batch Set so the qty draws can't
+  // collide with each other. Two parallel commission requests for the
+  // same sku could still pick the same random number — items.epc
+  // UNIQUE will reject the second INSERT and the route bubbles a 23505
+  // error (rare; caller's "Retry" button covers it).
+  const serials = await pickRandomUniqueSerialBatch(client, row.id, qty);
 
   const cp = bodyCp ?? envCompanyPrefix();
   const lsId = Number(row.ls_system_id);
@@ -177,7 +184,7 @@ export async function rfidCommissionPrepare(
     labelHeightDots: ll,
   };
 
-  const statusFinal = addToInventory ? "in-stock" : "pending_visibility";
+  const statusFinal = body.status ?? (addToInventory ? "in-stock" : "pending_visibility");
   const inserted: { epc: string; serial_number: number }[] = [];
   const zplLabels: string[] = [];
 
@@ -192,7 +199,7 @@ export async function rfidCommissionPrepare(
   };
 
   for (let i = 0; i < qty; i += 1) {
-    const serial = nextSerial + i;
+    const serial = serials[i]!;
     const epc = generateSGTIN96(cp, lsId, serial);
     await client.query(
       `INSERT INTO items (epc, serial_number, custom_sku_id, location_id, bin_id, status, created_by_user_id)

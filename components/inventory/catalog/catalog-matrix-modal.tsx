@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { Plus, X as XIcon, RotateCcw } from "lucide-react";
+import { Plus, Printer, X as XIcon, RotateCcw } from "lucide-react";
+import { printRfidLabel } from "./print-label";
 
 /**
  * Lightspeed-style matrix EDITOR. Opens from CatalogItemDetailsModal's "Matrix"
@@ -269,6 +270,17 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
     const targetColors = colors.length > 0 ? colors : [""];
     setRows((rs) => [...rs, ...targetColors.map((c) => blankRow(c, name))]);
     setNewSize("");
+  };
+
+  const [printingId, setPrintingId] = useState<string | null>(null);
+  const printRow = async (variantId: string) => {
+    setPrintingId(variantId);
+    setErr(null);
+    setOkMsg(null);
+    const res = await printRfidLabel(variantId);
+    if (res.ok) setOkMsg(res.message);
+    else setErr(res.message);
+    setPrintingId(null);
   };
 
   const deleteRow = (key: string) => {
@@ -640,7 +652,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                   </div>
                   <div className="overflow-x-auto">
                     <div className="min-w-[760px]">
-                      <div className="grid grid-cols-[36px_150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                      <div className="grid grid-cols-[64px_150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
                         <span />
                         <span>Color</span>
                         <span>Size</span>
@@ -652,35 +664,54 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                       {rows.map((r) => (
                         <div
                           key={r.key}
-                          className={`grid grid-cols-[36px_150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-xs last:border-b-0 ${
+                          className={`grid grid-cols-[64px_150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-xs last:border-b-0 ${
                             r.markedDelete ? "opacity-40" : ""
                           } ${r.isNew ? "bg-[var(--wms-accent)]/5" : ""}`}
                         >
-                          <button
-                            type="button"
-                            disabled={!canManage}
-                            onClick={() => deleteRow(r.key)}
-                            title={
-                              r.isNew
-                                ? "Remove this new row"
-                                : r.markedDelete
-                                  ? "Undo delete"
-                                  : r.hasStock
-                                    ? "Archive row (has live stock — history kept)"
-                                    : "Delete (archive) row"
-                            }
-                            className={`flex h-6 w-6 items-center justify-center rounded border text-[var(--wms-muted)] disabled:opacity-40 ${
-                              r.markedDelete
-                                ? "border-[var(--wms-border)] hover:bg-[var(--wms-surface)]"
-                                : "border-red-500/40 hover:bg-red-950/40 hover:text-red-200"
-                            }`}
-                          >
-                            {r.markedDelete ? (
-                              <RotateCcw className="h-3.5 w-3.5" />
-                            ) : (
-                              <XIcon className="h-3.5 w-3.5" />
-                            )}
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={!canManage}
+                              onClick={() => deleteRow(r.key)}
+                              title={
+                                r.isNew
+                                  ? "Remove this new row"
+                                  : r.markedDelete
+                                    ? "Undo delete"
+                                    : r.hasStock
+                                      ? "Archive row (has live stock — history kept)"
+                                      : "Delete (archive) row"
+                              }
+                              className={`flex h-6 w-6 items-center justify-center rounded border text-[var(--wms-muted)] disabled:opacity-40 ${
+                                r.markedDelete
+                                  ? "border-[var(--wms-border)] hover:bg-[var(--wms-surface)]"
+                                  : "border-red-500/40 hover:bg-red-950/40 hover:text-red-200"
+                              }`}
+                            >
+                              {r.markedDelete ? (
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              ) : (
+                                <XIcon className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!canManage || r.isNew || r.markedDelete || !r.id || printingId !== null}
+                              onClick={() => r.id && void printRow(r.id)}
+                              title={
+                                r.isNew
+                                  ? "Save the row first, then you can print its tag"
+                                  : "Print one RFID tag for this variant to 192.168.1.3 (status: unknown)"
+                              }
+                              className="flex h-6 w-6 items-center justify-center rounded border border-[var(--wms-border)] text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)] disabled:opacity-40"
+                            >
+                              {printingId === r.id ? (
+                                <span className="text-[0.6rem]">…</span>
+                              ) : (
+                                <Printer className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
                           <Cell value={r.color} onChange={(x) => patchRow(r.key, { color: x })} editable={canManage} />
                           <Cell value={r.size} onChange={(x) => patchRow(r.key, { size: x })} editable={canManage} />
                           <Cell value={r.retail_price} onChange={(x) => patchRow(r.key, { retail_price: x })} editable={canManage} numeric />

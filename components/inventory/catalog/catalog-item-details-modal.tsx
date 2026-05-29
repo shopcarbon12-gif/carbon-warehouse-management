@@ -5,6 +5,7 @@ import { X as XIcon } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { CatalogMatrixModal } from "./catalog-matrix-modal";
 import { ItemSalesTab, ItemCustomersTab, ItemHistoryTab } from "./item-report-tabs";
+import { printRfidLabel } from "./print-label";
 
 /**
  * Lightspeed-style item-details popup. Opens when the operator clicks
@@ -209,6 +210,18 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
     }
   }, [canManage, dirty, form, initial, row, onMutated]);
 
+  const onPrintLabel = useCallback(async () => {
+    if (!canManage) return;
+    setBusy("print");
+    setErr(null);
+    setOkMsg(null);
+    const r = await printRfidLabel(row.custom_sku_id);
+    if (r.ok) setOkMsg(r.message);
+    else setErr(r.message);
+    onMutated?.();
+    setBusy(null);
+  }, [canManage, row.custom_sku_id, onMutated]);
+
   const archive = useCallback(async () => {
     if (!canManage) return;
     if (
@@ -281,11 +294,16 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
               </button>
               <button
                 type="button"
-                disabled
-                title="Variant-level label printing not wired yet (per-EPC reprint lives on the commissioning page)."
-                className="rounded-md border border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] opacity-50"
+                disabled={!canManage || busy !== null}
+                onClick={() => void onPrintLabel()}
+                title={
+                  canManage
+                    ? "Print one RFID tag for this SKU to 192.168.1.3 (status: unknown)"
+                    : "Admin scope required"
+                }
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Print Label
+                {busy === "print" ? "Printing…" : "Print Label"}
               </button>
             </div>
             <div className="flex items-center gap-2">
