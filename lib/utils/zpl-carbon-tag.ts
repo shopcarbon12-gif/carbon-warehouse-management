@@ -86,6 +86,24 @@ const COMMON_SIZES = new Set([
   "OS", "ONESIZE",
 ]);
 
+// Natural garment-size order for the sizes-run column. The SQL feeding this
+// column uses `ORDER BY size`, which sorts ALPHABETICALLY (L, M, S, XL, XS,
+// XXL, XXXL) — wrong for humans. This table ranks the common alpha sizes so
+// the strip prints XS S M L XL XXL XXXL. Aliases (2XL≡XXL, etc.) share a rank.
+const ALPHA_SIZE_RANK: Record<string, number> = {
+  XXS: 0,
+  XS: 1,
+  S: 2,
+  M: 3,
+  L: 4,
+  XL: 5,
+  XXL: 6, "2XL": 6,
+  XXXL: 7, "3XL": 7,
+  XXXXL: 8, "4XL": 8,
+  XXXXXL: 9, "5XL": 9,
+  OS: 100, ONESIZE: 100,
+};
+
 const MULTI_WORD_COLORS = new Set([
   "OFF WHITE",
   "DARK BLUE",
@@ -275,6 +293,22 @@ function normalizeSizesColumn(value: string): string {
   // Operator preference (May 2026): no commas in the size-run strip —
   // just space-separated tokens for cleaner visual scanning.
   if (unique.length === 0) return "XS S M L";
+
+  // Sort into natural size order (XS S M L XL XXL XXXL …) rather than the
+  // alphabetical order the SQL DISTINCT…ORDER BY produced. Numeric sizes
+  // (e.g. jeans 28/30/32) sort ascending; recognised alpha sizes use the
+  // rank table; anything unrecognised keeps its incoming order, last.
+  const rankKey = (s: string): [number, number] => {
+    if (/^\d+(\.\d+)?$/.test(s)) return [0, Number.parseFloat(s)];
+    const r = ALPHA_SIZE_RANK[s];
+    if (r !== undefined) return [1, r];
+    return [2, unique.indexOf(s)];
+  };
+  unique.sort((a, b) => {
+    const ka = rankKey(a);
+    const kb = rankKey(b);
+    return ka[0] - kb[0] || ka[1] - kb[1];
+  });
   return unique.join(" ");
 }
 
