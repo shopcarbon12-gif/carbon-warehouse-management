@@ -73,6 +73,9 @@ export async function GET(req: Request) {
 
   return NextResponse.json(
     {
+      // Subject id so the app can key its permission cache per-user — avoids
+      // one operator inheriting another's cached perms on a shared handheld.
+      userId: session.sub,
       role: row?.role_name ?? null,
       isSuperAdmin,
       hiddenScreens,

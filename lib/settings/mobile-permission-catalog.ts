@@ -90,6 +90,7 @@ export const MOBILE_PERMISSION_PAGES: readonly PermissionPageDef[] = [
       { id: "count_reports", label: "Count reports" },
       { id: "status_reports", label: "Status reports" },
       { id: "damages_reports", label: "Damages reports" },
+      { id: "re_encode_reports", label: "Re-encode reports" },
     ],
   },
   {
