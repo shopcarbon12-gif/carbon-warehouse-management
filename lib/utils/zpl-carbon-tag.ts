@@ -71,7 +71,7 @@ export const DEFAULT_CARBON_TAG_SETTINGS: CarbonTagSettings = {
   // These move the format on the media (no field clipping). First-pass values;
   // tune from a test print — if a direction is backwards, flip the sign.
   labelShiftX: -24, // right
-  labelShiftY: 24, // down
+  labelShiftY: 48, // down
 };
 
 export type CarbonTagInput = {
