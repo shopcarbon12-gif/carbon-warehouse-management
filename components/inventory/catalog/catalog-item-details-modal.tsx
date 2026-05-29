@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { X as XIcon } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { CatalogMatrixModal } from "./catalog-matrix-modal";
+import { ItemSalesTab, ItemCustomersTab, ItemHistoryTab } from "./item-report-tabs";
 
 /**
  * Lightspeed-style item-details popup. Opens when the operator clicks
@@ -371,6 +372,12 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
                   totalValue={totalValue}
                   totalSaleValue={totalSaleValue}
                 />
+              ) : tab === "sales" ? (
+                <ItemSalesTab customSkuId={row.custom_sku_id} />
+              ) : tab === "customers" ? (
+                <ItemCustomersTab customSkuId={row.custom_sku_id} />
+              ) : tab === "history" ? (
+                <ItemHistoryTab customSkuId={row.custom_sku_id} />
               ) : (
                 <PlaceholderTab label={NAV_ITEMS.find((n) => n.key === tab)?.label ?? ""} />
               )}
