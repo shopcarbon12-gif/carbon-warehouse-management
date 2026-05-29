@@ -622,10 +622,8 @@ function EditRow({
         {label}
       </span>
       <input
-        type={numeric ? "number" : "text"}
+        type="text"
         inputMode={numeric ? "decimal" : undefined}
-        step={numeric ? "0.01" : undefined}
-        min={numeric ? "0" : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={`w-40 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none ${
@@ -694,10 +692,8 @@ function EditPriceRow({
         {label}
       </span>
       <input
-        type="number"
+        type="text"
         inputMode="decimal"
-        step="0.01"
-        min="0"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-right text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"

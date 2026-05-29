@@ -551,10 +551,8 @@ function Cell({
   }
   return (
     <input
-      type={numeric ? "number" : "text"}
+      type="text"
       inputMode={numeric ? "decimal" : undefined}
-      step={numeric ? "0.01" : undefined}
-      min={numeric ? "0" : undefined}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={`w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-1 text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none ${
