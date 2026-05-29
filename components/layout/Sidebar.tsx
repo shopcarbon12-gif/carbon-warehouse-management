@@ -134,7 +134,7 @@ const sections: NavSection[] = [
   },
   {
     id: "loyalty",
-    label: "Loyalty",
+    label: "Rewards",
     isActiveSection: (p) => p.startsWith("/loyalty"),
     items: [
       { href: "/loyalty", label: "Overview", icon: Star },
