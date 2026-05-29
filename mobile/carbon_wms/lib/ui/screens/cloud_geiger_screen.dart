@@ -47,6 +47,11 @@ const Color _kCardFound = Color(0xFFD6F5E6);
 const Color _kStripeFound = Color(0xFF16A34A);
 const Color _kTrashRed = Color(0xFFBF2E2E);
 const Color _kTextMuted = Color(0xFF8A9090);
+// Light teal used by the two non-CSV bottom buttons (REFRESH + DELETE
+// ALL). Distinct from AppColors.primary (the deeper teal used for the
+// CSV button and the geiger icon) so the destructive + maintenance
+// actions visually separate from the destination action.
+const Color _kLightTeal = Color(0xFF2BA3A3);
 
 class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   static const Duration _pollInterval = Duration(seconds: 8);
@@ -66,6 +71,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   // Bulk-find radio state.
   RfidManager? _rfid;
   StreamSubscription<RfidTagRead>? _uhfSub;
+  StreamSubscription<RfidTagRead>? _vendorSub;
   StreamSubscription<String>? _triggerSub;
   bool _scanning = false;
   bool _uploading = false;
@@ -100,10 +106,35 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       _rfid = context.read<RfidManager>();
-      _rfid!.scanContext = 'CLOUD_GEIGER_BULK_FIND';
+      // 2026-05-29 — ROOT FIX for "trigger pull doesn't pick up tags on
+      // the main screen, but per-row Geiger finds them". RfidManager
+      // gates its geigerTagReads stream on _scanContext == 'GEIGER_FIND'
+      // (rfid_manager.dart:379). Cloud+Geiger was setting the context
+      // to a project-specific 'CLOUD_GEIGER_BULK_FIND' which the
+      // manager didn't recognise → no reads ever flowed into our
+      // stream → 0/N forever. Use the same 'GEIGER_FIND' context the
+      // locate-tag screen uses; it's the canonical Carbon WMS label
+      // for "raw single-tag-style reads, no edge ingest / ghost
+      // filter".
+      _rfid!.scanContext = 'GEIGER_FIND';
       _uhfSub = _rfid!.geigerTagReads.listen(_onUhfRead, onError: (_) {});
+      // Belt-and-suspenders: also subscribe to the vendor channel's
+      // raw stream. The locate-tag screen does this for the same
+      // reason — if the manager's gate ever falls out of sync with
+      // the active driver, the vendor channel still surfaces every
+      // chip the radio reports.
+      _vendorSub = RfidVendorChannel.tagReadStream().listen(
+        _onUhfRead,
+        onError: (_) {},
+      );
 
       await _hydrateSliderRange();
+      // Default the slider to the radio's MAX achievable dBm so the
+      // first bulk-find sweep has the widest possible range without
+      // the operator having to drag the slider first. They can always
+      // dial down for closer work; defaulting low frustrated operators
+      // hunting tags across an aisle.
+      _powerDbm = _maxDbm;
       await _rfid!.setSessionPowerOverrideDbm(_powerDbm);
       try {
         await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
@@ -136,6 +167,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     _poller?.cancel();
     _poller = null;
     unawaited(_uhfSub?.cancel());
+    unawaited(_vendorSub?.cancel());
     unawaited(_triggerSub?.cancel());
     unawaited(RfidVendorChannel.stopChainwayInventory());
     unawaited(RfidVendorChannel.stopZebraInventory());
@@ -338,11 +370,70 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     await _pollOnce();
   }
 
+  Future<void> _confirmDeleteAll() async {
+    if (_items.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete every row?'),
+        content: Text(
+          'This permanently dismisses all ${_items.length} EPC(s) for '
+          'this handheld on the server. They will not come back from '
+          'the next poll. Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFBF2E2E),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete all'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final epcs = _items.map((e) => e.epc).toList(growable: false);
+    setState(() {
+      _items.clear();
+      _seenEpcs.clear();
+      _foundEpcs.clear();
+    });
+    // Best-effort server dismiss for every EPC. Failure on any single
+    // call doesn't undo the local clear — the next poll will re-fetch
+    // any rows the server still considers pending.
+    unawaited(_dismissBatch(epcs));
+  }
+
+  Future<void> _dismissBatch(List<String> epcs) async {
+    try {
+      final api = context.read<WmsApiClient>();
+      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+      await api.dismissEpcQueueItems(deviceId: deviceId, epcs: epcs);
+    } catch (_) {
+      /* best-effort */
+    }
+  }
+
   Future<void> _openGeiger(_GeigerItem item) async {
+    // Thread the enrichment payload through so LocateTagScreen renders
+    // its built-in item-info card directly under the EPC strip. The
+    // operator confirmed they don't want to mentally cross-reference
+    // SKU/colour/size while sweeping — same container Count Inventory
+    // uses, same data this row already has resolved.
     await context.pushGuarded<void>(
       ScreenIds.locateTag,
       (_) => LocateTagScreen(
         targetEpc: item.epc,
+        targetSku: item.sku,
+        targetName: item.itemName,
+        targetColor: item.color,
+        targetSize: item.size,
         cloudGeigerMode: true,
       ),
     );
@@ -452,32 +543,43 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
                   Expanded(
                     child: SizedBox(
                       height: 48,
-                      child: FilledButton.icon(
-                        // Gated only on _uploading; NOT on _loading. The
-                        // 8s background poll flips _loading true→false
-                        // every cycle and a button whose `onPressed` is
-                        // null-then-non-null mid-frame reads to the eye
-                        // as a phantom press (Material's disabled-state
-                        // ripple). The operator's tap is harmless during
-                        // a poll — _pollOnce already self-guards via
-                        // `if (_loading) return`.
+                      child: FilledButton(
+                        // _loading deliberately not in the disabled
+                        // gate — see commit b8108b2 rationale (the 8s
+                        // background poll caused the button to read
+                        // as auto-pressed via Material's disabled-
+                        // state ripple).
                         onPressed: _uploading ? null : _onRefresh,
-                        icon: const Icon(Icons.refresh, size: 18),
-                        label: Text(
-                          'REFRESH',
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.6,
-                          ),
-                        ),
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF6A7575),
+                          backgroundColor: _kLightTeal,
                           foregroundColor: Colors.white,
+                          padding: EdgeInsets.zero,
                           shape: const RoundedRectangleBorder(
                             borderRadius: BorderRadius.zero,
                           ),
                         ),
+                        child: const Icon(Icons.refresh, size: 22),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: FilledButton(
+                        onPressed: (_items.isEmpty || _uploading)
+                            ? null
+                            : () => unawaited(_confirmDeleteAll()),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _kLightTeal,
+                          disabledBackgroundColor: const Color(0xFFBCC9C9),
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.zero,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                        ),
+                        child: const Icon(Icons.delete_outline, size: 22),
                       ),
                     ),
                   ),
@@ -495,7 +597,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
                           color: Colors.white,
                         ),
                         label: Text(
-                          _uploading ? 'UPLOADING…' : 'UPLOAD CSV',
+                          _uploading ? '…' : 'CSV',
                           style: GoogleFonts.spaceGrotesk(
                             fontSize: 14.sp,
                             fontWeight: FontWeight.w900,
@@ -571,17 +673,9 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
       itemBuilder: (_, i) {
         final item = _items[i];
         final found = _foundEpcs.contains(item.epc);
-        return Dismissible(
+        return _SwipeRevealRow(
           key: ValueKey<String>('geiger-${item.epc}'),
-          direction: DismissDirection.endToStart,
-          background: Container(
-            alignment: Alignment.centerRight,
-            padding: EdgeInsets.symmetric(horizontal: 18.w),
-            color: _kTrashRed,
-            child: Icon(Icons.delete_outline,
-                color: Colors.white, size: 26.sp),
-          ),
-          onDismissed: (_) => _removeItem(item),
+          onDelete: () => _removeItem(item),
           child: _GeigerItemContainer(
             item: item,
             found: found,
@@ -692,7 +786,7 @@ class _GeigerItem {
   }
 }
 
-class _GeigerItemContainer extends StatelessWidget {
+class _GeigerItemContainer extends StatefulWidget {
   const _GeigerItemContainer({
     required this.item,
     required this.found,
@@ -703,7 +797,15 @@ class _GeigerItemContainer extends StatelessWidget {
   final bool found;
   final VoidCallback onGeigerTap;
 
+  @override
+  State<_GeigerItemContainer> createState() => _GeigerItemContainerState();
+}
+
+class _GeigerItemContainerState extends State<_GeigerItemContainer> {
+  bool _expanded = false;
+
   String _primaryLine() {
+    final item = widget.item;
     if (item.formulaOk && (item.sku ?? '').isNotEmpty) {
       return 'SKU: ${item.sku}';
     }
@@ -711,6 +813,7 @@ class _GeigerItemContainer extends StatelessWidget {
   }
 
   String _secondaryLine() {
+    final item = widget.item;
     if (!item.formulaOk) return 'Foreign EPC / no Carbon prefix';
     final parts = <String>[
       if ((item.itemName ?? '').isNotEmpty) item.itemName!,
@@ -721,10 +824,18 @@ class _GeigerItemContainer extends StatelessWidget {
     return parts.join(' · ').toUpperCase();
   }
 
+  /// Container body is tappable only when the row is resolved AND the
+  /// EPC isn't already the primary line (raw-EPC rows have nothing to
+  /// reveal). Toggles `_expanded` to show the 24-hex EPC string in a
+  /// recessed monospace strip under the description.
+  bool get _canExpand =>
+      widget.item.formulaOk && (widget.item.sku ?? '').isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
-    final cardBg = found ? _kCardFound : _kCardGrey;
-    final stripe = found ? _kStripeFound : AppColors.primary;
+    final item = widget.item;
+    final cardBg = widget.found ? _kCardFound : _kCardGrey;
+    final stripe = widget.found ? _kStripeFound : AppColors.primary;
     return Container(
       color: cardBg,
       child: IntrinsicHeight(
@@ -733,67 +844,101 @@ class _GeigerItemContainer extends StatelessWidget {
           children: [
             Container(width: 4, color: stripe),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _primaryLine(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF171D1D),
-                              fontFamily: 'monospace',
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                        if (found) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 3),
-                            color: _kStripeFound,
+              child: GestureDetector(
+                onTap: _canExpand
+                    ? () => setState(() => _expanded = !_expanded)
+                    : null,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
                             child: Text(
-                              'FOUND',
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: 10.sp,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.0,
-                                color: Colors.white,
+                              _primaryLine(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF171D1D),
+                                fontFamily: 'monospace',
+                                height: 1.2,
                               ),
                             ),
                           ),
+                          if (widget.found) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              color: _kStripeFound,
+                              child: Text(
+                                'FOUND',
+                                style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 10.sp,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.0,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (_canExpand) ...[
+                            const SizedBox(width: 6),
+                            Transform.rotate(
+                              angle: _expanded ? 3.14159 : 0,
+                              child: const Icon(
+                                Icons.keyboard_arrow_down,
+                                size: 18,
+                                color: _kTextMuted,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _secondaryLine(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: item.formulaOk
-                            ? AppColors.textMain
-                            : _kTextMuted,
-                        height: 1.2,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        _secondaryLine(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: item.formulaOk
+                              ? AppColors.textMain
+                              : _kTextMuted,
+                          height: 1.2,
+                        ),
+                      ),
+                      if (_expanded) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 10.w, vertical: 6.h),
+                          color: const Color(0xFFE2E7E7),
+                          child: Text(
+                            item.epc,
+                            style: GoogleFonts.robotoMono(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF3D4949),
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
             GestureDetector(
-              onTap: onGeigerTap,
+              onTap: widget.onGeigerTap,
               behavior: HitTestBehavior.opaque,
               child: Container(
                 width: 56,
@@ -809,6 +954,149 @@ class _GeigerItemContainer extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Custom slidable row — pan the child to the RIGHT to reveal a red
+/// trash button on the LEFT side. The reveal is a STAGED action: the
+/// swipe alone does NOT delete; the operator must tap the revealed
+/// trash button. This replaces the prior Dismissible swipe-left flow
+/// because operators wanted a confirmation step without the modal
+/// dialog overhead.
+///
+/// Tap anywhere else on the foreground (or swipe back left) collapses.
+class _SwipeRevealRow extends StatefulWidget {
+  const _SwipeRevealRow({
+    super.key,
+    required this.child,
+    required this.onDelete,
+  });
+
+  final Widget child;
+  final VoidCallback onDelete;
+
+  @override
+  State<_SwipeRevealRow> createState() => _SwipeRevealRowState();
+}
+
+class _SwipeRevealRowState extends State<_SwipeRevealRow>
+    with SingleTickerProviderStateMixin {
+  static const double _revealWidth = 72.0;
+  late final AnimationController _ctrl;
+  bool _isOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+      value: 0,
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _onDragUpdate(DragUpdateDetails d) {
+    // Only allow right-drag (positive delta when closed) and left-drag
+    // when open (negative delta returns to closed). Clamps prevent
+    // overshoot.
+    final next = (_ctrl.value + d.primaryDelta! / _revealWidth)
+        .clamp(0.0, 1.0);
+    _ctrl.value = next;
+  }
+
+  void _onDragEnd(DragEndDetails d) {
+    final vx = d.primaryVelocity ?? 0;
+    if (vx.abs() > 600) {
+      // Strong flick — snap in the flicked direction.
+      if (vx > 0) {
+        _open();
+      } else {
+        _close();
+      }
+      return;
+    }
+    if (_ctrl.value > 0.5) {
+      _open();
+    } else {
+      _close();
+    }
+  }
+
+  void _open() {
+    _ctrl.animateTo(1.0).then((_) {
+      if (mounted) setState(() => _isOpen = true);
+    });
+  }
+
+  void _close() {
+    _ctrl.animateTo(0.0).then((_) {
+      if (mounted) setState(() => _isOpen = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) {
+        final offset = _ctrl.value * _revealWidth;
+        return SizedBox(
+          height: null,
+          child: Stack(
+            children: [
+              // Background — trash button revealed under the swiped row.
+              Positioned.fill(
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        widget.onDelete();
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        width: _revealWidth,
+                        color: _kTrashRed,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.delete_outline,
+                          color: Colors.white,
+                          size: 28.sp,
+                        ),
+                      ),
+                    ),
+                    // Tap on the visible part of the foreground (the
+                    // sliver to the right of the trash button) collapses
+                    // the row. Same gesture iOS Mail uses.
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: _isOpen ? _close : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Foreground — the row content, slid to the right.
+              Transform.translate(
+                offset: Offset(offset, 0),
+                child: GestureDetector(
+                  onHorizontalDragUpdate: _onDragUpdate,
+                  onHorizontalDragEnd: _onDragEnd,
+                  behavior: HitTestBehavior.translucent,
+                  child: widget.child,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
