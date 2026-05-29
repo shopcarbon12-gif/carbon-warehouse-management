@@ -65,8 +65,13 @@ export const DEFAULT_CARBON_TAG_SETTINGS: CarbonTagSettings = {
   printerPort: 80,
   labelWidthDots: LABEL_WIDTH_DOTS,
   labelHeightDots: LABEL_HEIGHT_DOTS,
-  labelShiftX: 0,
-  labelShiftY: 0,
+  // Print-alignment nudge (2026-05-28): shift the whole printed image on the
+  // physical label so it sits centered once the operator rotates the tag 90°.
+  // labelShiftX → ^LS (NEGATIVE = right), labelShiftY → ^LT (POSITIVE = down).
+  // These move the format on the media (no field clipping). First-pass values;
+  // tune from a test print — if a direction is backwards, flip the sign.
+  labelShiftX: -24, // right
+  labelShiftY: 24, // down
 };
 
 export type CarbonTagInput = {
