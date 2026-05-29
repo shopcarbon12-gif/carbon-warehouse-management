@@ -9,6 +9,9 @@ export type TenantUserListRow = {
   last_name: string | null;
   role_id: number | null;
   role_name: string | null;
+  /** Optional WMS Mobile (handheld) role — scope='mobile' user_roles row. */
+  mobile_role_id: number | null;
+  mobile_role_name: string | null;
   locations: { id: string; code: string; name: string }[];
 };
 
@@ -23,6 +26,8 @@ export async function listTenantUsers(
     last_name: string | null;
     role_id: string | null;
     role_name: string | null;
+    mobile_role_id: string | null;
+    mobile_role_name: string | null;
     locations: unknown;
   }>(
     `SELECT
@@ -32,6 +37,8 @@ export async function listTenantUsers(
        u.last_name,
        u.role_id::text,
        ur.name AS role_name,
+       u.mobile_role_id::text,
+       mr.name AS mobile_role_name,
        COALESCE(
          json_agg(
            DISTINCT jsonb_build_object(
@@ -45,9 +52,10 @@ export async function listTenantUsers(
      FROM users u
      INNER JOIN memberships m ON m.user_id = u.id AND m.tenant_id = $1::uuid
      LEFT JOIN user_roles ur ON ur.id = u.role_id
+     LEFT JOIN user_roles mr ON mr.id = u.mobile_role_id
      LEFT JOIN user_locations ul ON ul.user_id = u.id
      LEFT JOIN locations l ON l.id = ul.location_id AND l.tenant_id = $1::uuid
-     GROUP BY u.id, u.email, u.first_name, u.last_name, u.role_id, ur.name
+     GROUP BY u.id, u.email, u.first_name, u.last_name, u.role_id, ur.name, u.mobile_role_id, mr.name
      ORDER BY lower(u.email) ASC`,
     [tenantId],
   );
@@ -58,6 +66,8 @@ export async function listTenantUsers(
     last_name: row.last_name,
     role_id: row.role_id != null ? Number(row.role_id) : null,
     role_name: row.role_name,
+    mobile_role_id: row.mobile_role_id != null ? Number(row.mobile_role_id) : null,
+    mobile_role_name: row.mobile_role_name,
     locations: Array.isArray(row.locations)
       ? (row.locations as { id: string; code: string; name: string }[])
       : [],

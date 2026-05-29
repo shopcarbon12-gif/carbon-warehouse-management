@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 
-export type RoleScope = "wms" | "pos" | "rewards";
+export type RoleScope = "wms" | "pos" | "rewards" | "mobile";
 
 export type UserRoleRow = {
   id: number;
@@ -83,7 +83,10 @@ export async function deleteUserRole(
 ): Promise<"deleted" | "in_use" | "not_found"> {
   // A role is in use if any WMS user (users.role_id) or POS employee
   // (pos_employees.pos_role_id, when present) references it.
-  const u = await pool.query(`SELECT 1 FROM users WHERE role_id = $1::int LIMIT 1`, [id]);
+  const u = await pool.query(
+    `SELECT 1 FROM users WHERE role_id = $1::int OR mobile_role_id = $1::int LIMIT 1`,
+    [id],
+  );
   if (u.rows[0]) return "in_use";
   const peExists = await pool.query<{ exists: boolean }>(
     `SELECT EXISTS (

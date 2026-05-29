@@ -22,6 +22,7 @@ export async function GET(req: Request) {
     const scope =
       raw === "pos" ? "pos"
       : raw === "rewards" ? "rewards"
+      : raw === "mobile" ? "mobile"
       : raw === "all" ? undefined
       : "wms";
     const rows = await listUserRoles(pool, scope);
@@ -35,10 +36,14 @@ export async function GET(req: Request) {
 const postSchema = z.object({
   name: z.string().min(1).max(256),
   permissions: z.record(z.string(), z.record(z.string(), z.enum(["view", "hide"]))).optional(),
-  scope: z.enum(["wms", "pos", "rewards"]).optional(),
+  scope: z.enum(["wms", "pos", "rewards", "mobile"]).optional(),
 }).refine(
-  (v) => !((v.scope === "pos" || v.scope === "rewards") && /warehouse/i.test(v.name)),
-  { message: "Warehouse roles aren't allowed under POS or Rewards." },
+  (v) =>
+    !(
+      (v.scope === "pos" || v.scope === "rewards" || v.scope === "mobile") &&
+      /warehouse/i.test(v.name)
+    ),
+  { message: "Warehouse roles aren't allowed under POS, Rewards, or Mobile." },
 );
 
 export async function POST(req: Request) {

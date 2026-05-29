@@ -13,6 +13,7 @@ import {
 } from "@/lib/settings/permission-catalog";
 import { PosAccessPanel } from "./pos-access-panel";
 import { RewardsAccessPanel } from "./rewards-access-panel";
+import { MobileAccessPanel } from "./mobile-access-panel";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -35,7 +36,7 @@ function hydratePermissions(raw: unknown): PermissionsMap {
   return out;
 }
 
-type TopTab = "wms" | "pos" | "rewards";
+type TopTab = "wms" | "pos" | "rewards" | "mobile";
 type WmsSubTab = "users" | "roles";
 
 export function UsersSettingsWorkspace() {
@@ -202,6 +203,15 @@ export function UsersSettingsWorkspace() {
         >
           Rewards
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={topTab === "mobile"}
+          onClick={() => setTopTab("mobile")}
+          className={topTabBtnCls(topTab === "mobile")}
+        >
+          WMS Mobile
+        </button>
       </div>
 
       {/* WMS sub-tabs: Users / User roles (only visible when WMS is the active scope) */}
@@ -236,6 +246,8 @@ export function UsersSettingsWorkspace() {
         <PosAccessPanel />
       ) : topTab === "rewards" ? (
         <RewardsAccessPanel />
+      ) : topTab === "mobile" ? (
+        <MobileAccessPanel />
       ) : tab === "users" ? (
         <>
           <div className="flex flex-wrap items-center justify-end gap-2">
