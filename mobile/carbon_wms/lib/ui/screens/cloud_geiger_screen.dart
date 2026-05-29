@@ -102,12 +102,18 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
 
       _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
         if (!mounted) return;
-        if (event == 'down') {
-          if (_scanning) {
-            unawaited(_stopScan());
-          } else {
-            unawaited(_startScan());
-          }
+        if (event != 'down') return;
+        // No EPCs to find → ignore the trigger entirely. We never want
+        // bulk-find to fire when the list is empty: the operator gets
+        // a confusing "started but found nothing" radio chirp and the
+        // header would flip into BULK FIND state with no rows to mark.
+        // Only block on _start; an already-running scan still stops on
+        // a second pull so the operator can cancel cleanly.
+        if (!_scanning && _items.isEmpty) return;
+        if (_scanning) {
+          unawaited(_stopScan());
+        } else {
+          unawaited(_startScan());
         }
       }, onError: (_) {});
 
@@ -430,7 +436,6 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
                   ),
                   SizedBox(width: 8.w),
                   Expanded(
-                    flex: 2,
                     child: SizedBox(
                       height: 48,
                       child: FilledButton.icon(
