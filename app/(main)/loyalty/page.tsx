@@ -2,6 +2,10 @@ import Link from "next/link";
 import { withDb } from "@/lib/db";
 import { Star, Users, TrendingUp, Activity } from "lucide-react";
 
+// KPIs are live shared-DB reads — never statically cache this page, or it
+// would drift from rewards.shopcarbon.com/admin (which is force-dynamic too).
+export const dynamic = "force-dynamic";
+
 /**
  * Loyalty → Overview. Top-level dashboard mirroring what
  * rewards.shopcarbon.com/admin shows, but rendered inside the WMS shell
@@ -31,18 +35,17 @@ type Stats = {
 export default async function LoyaltyOverview() {
   const stats = await withDb<Stats>(
     async (pool) => {
-      const [m, s, settings] = await Promise.all([
-        pool.query<{ n: string }>(
-          `SELECT COUNT(DISTINCT customer_id)::text AS n FROM loyalty_ledger
-            WHERE customer_id IS NOT NULL`,
-        ),
-        pool.query<{ awarded: string; redeemed: string; refunded: string }>(
-          `SELECT
-             COALESCE(SUM(CASE WHEN delta_points > 0 AND reason IN ('sale','signup_bonus','birthday_bonus','referral_bonus','manual')
-                                THEN delta_points ELSE 0 END), 0)::text AS awarded,
-             COALESCE(SUM(CASE WHEN reason = 'redemption' THEN -delta_points ELSE 0 END), 0)::text AS redeemed,
-             COALESCE(SUM(CASE WHEN reason = 'refund' THEN delta_points ELSE 0 END), 0)::text AS refunded
-           FROM loyalty_ledger`,
+      const [kpi, settings] = await Promise.all([
+        // Single source of truth shared with rewards.shopcarbon.com/admin
+        // (loyalty_kpi_summary, defined by the loyalty service's migration
+        // 005). Don't hand-roll the SUMs here — that's what made the two
+        // dashboards disagree (WMS used to count manual adjustments as
+        // awarded). Read the view so the definition lives in one place.
+        pool.query<{ members: string; awarded: string; redeemed: string }>(
+          `SELECT members::text          AS members,
+                  points_awarded::text   AS awarded,
+                  points_redeemed::text  AS redeemed
+             FROM loyalty_kpi_summary`,
         ),
         pool.query<{
           earn_rate_per_dollar: string;
@@ -64,9 +67,9 @@ export default async function LoyaltyOverview() {
         ),
       ]);
       return {
-        members: Number(m.rows[0]?.n ?? 0),
-        awarded: Number(s.rows[0]?.awarded ?? 0),
-        redeemed: Number(s.rows[0]?.redeemed ?? 0),
+        members: Number(kpi.rows[0]?.members ?? 0),
+        awarded: Number(kpi.rows[0]?.awarded ?? 0),
+        redeemed: Number(kpi.rows[0]?.redeemed ?? 0),
         settings: settings.rows[0] ?? null,
       };
     },
