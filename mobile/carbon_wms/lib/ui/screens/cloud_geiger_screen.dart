@@ -81,6 +81,15 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   void initState() {
     super.initState();
     unawaited(ScanSounds.instance.init());
+    // Silence the native per-tag beep. Cloud+Geiger only wants audible
+    // feedback when a *list-EPC* is freshly matched — the operator must
+    // not hear a beep for every tag the radio picks up in the field
+    // (which on a typical warehouse aisle is dozens of tags per sec).
+    // Dart-side ScanCue.read fires explicitly inside _onUhfRead when
+    // _foundEpcs.add(epc) returns true (i.e. first sighting of a
+    // queued EPC). Restored in dispose so downstream screens keep
+    // their per-tag beep.
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     // RFID-only screen — kill the 2D imager so a stray trigger doesn't
     // fire it. Same hand-off pattern Status Change uses.
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
@@ -130,6 +139,9 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     unawaited(_triggerSub?.cancel());
     unawaited(RfidVendorChannel.stopChainwayInventory());
     unawaited(RfidVendorChannel.stopZebraInventory());
+    // Restore the native per-tag beep for downstream screens
+    // (count / status change / etc rely on it firing for every read).
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
     final rfid = _rfid;
     if (rfid != null) {
       unawaited(rfid.setSessionPowerOverrideDbm(null));
@@ -192,10 +204,32 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     if (!mounted || !_scanning) return;
     final epc = read.epcHex24.toUpperCase();
     if (epc.isEmpty) return;
-    if (!_seenEpcs.contains(epc)) return; // not in the dropped list — ignore
-    if (_foundEpcs.add(epc)) {
+    // Exact-match against the queue first. If no exact match AND the
+    // queued EPCs are shorter / differently-prefixed (a CSV with 16-hex
+    // tail-only EPCs vs the radio's 24-hex full EPC is the most common
+    // case), fall back to a suffix compare on the last 16 hex chars
+    // (item + serial bits — what's actually unique). 0/N counts in the
+    // field were the symptom that pushed this in.
+    String matched = epc;
+    var hit = _seenEpcs.contains(epc);
+    if (!hit && epc.length >= 16) {
+      final tail = epc.substring(epc.length - 16);
+      for (final q in _seenEpcs) {
+        if (q == epc) continue;
+        if (q.endsWith(tail) ||
+            (q.length >= 16 && tail.endsWith(q.substring(q.length - 16)))) {
+          matched = q;
+          hit = true;
+          break;
+        }
+      }
+    }
+    if (!hit) return;
+    if (_foundEpcs.add(matched)) {
       // First time we've heard this EPC during the bulk-find pass —
-      // tick the success cue so the operator hears progress.
+      // tick the success cue so the operator hears progress. Native
+      // per-tag beep is suppressed for this screen so this is the ONLY
+      // sound the operator gets, and only on a fresh queue hit.
       try {
         ScanSounds.instance.play(ScanCue.read);
       } catch (_) {}
@@ -246,6 +280,10 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     }
   }
 
+  /// Bulk-EPC enrichment via /api/handheld/epc-lookup. The server reply
+  /// uses field name `epcHex` (NOT `epc`) and `productName` (NOT `name`)
+  /// — pre-2026-05-29 we keyed off `r['epc']` which silently returned
+  /// null for every row, so every container stayed "Resolving…" forever.
   Future<void> _enrich(List<String> epcs) async {
     try {
       final api = context.read<WmsApiClient>();
@@ -253,7 +291,9 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
       if (!mounted) return;
       final byEpc = <String, Map<String, dynamic>>{};
       for (final r in rows) {
-        final e = (r['epc'] as String?)?.trim().toUpperCase();
+        // Server-side field is `epcHex`; legacy/alt `epc` checked as fallback.
+        final eRaw = (r['epcHex'] as String?) ?? (r['epc'] as String?);
+        final e = eRaw?.trim().toUpperCase();
         if (e == null || e.isEmpty) continue;
         byEpc[e] = r;
       }
@@ -413,8 +453,15 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
                     child: SizedBox(
                       height: 48,
                       child: FilledButton.icon(
-                        onPressed:
-                            (_loading || _uploading) ? null : _onRefresh,
+                        // Gated only on _uploading; NOT on _loading. The
+                        // 8s background poll flips _loading true→false
+                        // every cycle and a button whose `onPressed` is
+                        // null-then-non-null mid-frame reads to the eye
+                        // as a phantom press (Material's disabled-state
+                        // ripple). The operator's tap is harmless during
+                        // a poll — _pollOnce already self-guards via
+                        // `if (_loading) return`.
+                        onPressed: _uploading ? null : _onRefresh,
                         icon: const Icon(Icons.refresh, size: 18),
                         label: Text(
                           'REFRESH',
@@ -637,7 +684,8 @@ class _GeigerItem {
       epc: epc,
       formulaOk: formulaOk,
       sku: s('sku') ?? s('custom_sku'),
-      itemName: s('name') ?? s('item_name'),
+      // Server-side field is `productName`; legacy aliases checked too.
+      itemName: s('productName') ?? s('name') ?? s('item_name'),
       color: s('color'),
       size: s('size'),
     );
