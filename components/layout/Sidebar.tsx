@@ -40,7 +40,6 @@ import {
   Warehouse,
   Webhook,
   Star,
-  Gift,
   Share2,
   X,
 } from "lucide-react";
@@ -142,7 +141,6 @@ const sections: NavSection[] = [
       { href: "/rewards/ledger", label: "Ledger", icon: Activity },
       { href: "/rewards/tiers", label: "Tiers", icon: Layers },
       { href: "/rewards/referrals", label: "Referrals", icon: Share2 },
-      { href: "/rewards/rewards", label: "Rewards", icon: Gift },
     ],
   },
   {

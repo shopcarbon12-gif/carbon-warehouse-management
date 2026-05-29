@@ -20,10 +20,13 @@ type SettingsRow = {
   earn_rate_per_dollar: string;
   redeem_points_per_dollar: number;
   redeem_increment_points: number;
+  max_redeem_pct_of_order: number;
+  coupon_ttl_hours: number;
   live: boolean;
   signup_bonus_points: number;
   birthday_bonus_points: number;
   referral_reward_points: number;
+  points_never_expire: boolean;
 };
 type Stats = {
   members: number;
@@ -51,18 +54,24 @@ export default async function LoyaltyOverview() {
           earn_rate_per_dollar: string;
           redeem_points_per_dollar: number;
           redeem_increment_points: number;
+          max_redeem_pct_of_order: number;
+          coupon_ttl_hours: number;
           live: boolean;
           signup_bonus_points: number;
           birthday_bonus_points: number;
           referral_reward_points: number;
+          points_never_expire: boolean;
         }>(
           `SELECT earn_rate_per_dollar::text,
                   redeem_points_per_dollar,
                   redeem_increment_points,
+                  max_redeem_pct_of_order,
+                  coupon_ttl_hours,
                   live,
                   signup_bonus_points,
                   birthday_bonus_points,
-                  referral_reward_points
+                  referral_reward_points,
+                  points_never_expire
              FROM loyalty_settings WHERE id = 1`,
         ),
       ]);
@@ -105,23 +114,27 @@ export default async function LoyaltyOverview() {
       </div>
 
       {stats.settings ? (
-        <div className="border border-border bg-card p-5 max-w-3xl">
-          <h2 className="text-base font-bold mb-2">Current rules</h2>
-          <ul className="text-sm space-y-1">
-            <li>Earn: <b>{Number(stats.settings.earn_rate_per_dollar)} pt per $1</b></li>
-            <li>Redeem: <b>{stats.settings.redeem_increment_points} pts → ${(stats.settings.redeem_increment_points / stats.settings.redeem_points_per_dollar).toFixed(2)} off</b></li>
-            <li>Welcome bonus: <b>{stats.settings.signup_bonus_points} pts</b></li>
-            <li>Birthday bonus: <b>{stats.settings.birthday_bonus_points} pts</b></li>
-            <li>Referral reward: <b>{stats.settings.referral_reward_points} pts</b></li>
-          </ul>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
+            <Card title="Earn rate" value={`${Number(stats.settings.earn_rate_per_dollar)} pt per $1`} />
+            <Card
+              title="Redemption tier"
+              value={`${stats.settings.redeem_increment_points} pts → $${(stats.settings.redeem_increment_points / stats.settings.redeem_points_per_dollar).toFixed(2)} off`}
+              note={`Multiples of ${stats.settings.redeem_increment_points} pts · max ${stats.settings.max_redeem_pct_of_order}% of subtotal · coupon expires in ${stats.settings.coupon_ttl_hours}h`}
+            />
+            <Card title="Welcome bonus" value={`${stats.settings.signup_bonus_points} pts`} />
+            <Card title="Birthday bonus" value={`${stats.settings.birthday_bonus_points} pts`} note="Once per calendar year" />
+            <Card title="Referral reward" value={`${stats.settings.referral_reward_points} pts`} note="Awarded to the referrer when the referee signs up" />
+            <Card title="Expiry" value={stats.settings.points_never_expire ? "Never" : "(time-bound)"} />
+          </div>
           <p className="text-xs text-muted-foreground mt-3">
             Edit at{" "}
-            <a className="underline" href="https://rewards.shopcarbon.com/admin/settings">
+            <a className="underline" href="https://rewards.shopcarbon.com/admin/settings" target="_blank" rel="noreferrer">
               rewards.shopcarbon.com/admin/settings
             </a>
             .
           </p>
-        </div>
+        </>
       ) : (
         <div className="border border-border bg-card p-6 max-w-3xl">
           <p className="text-sm text-muted-foreground">
@@ -175,6 +188,16 @@ function Stat({
         {label}
       </div>
       <p className={`text-2xl font-bold mt-2 ${valueCls}`}>{value}</p>
+    </div>
+  );
+}
+
+function Card({ title, value, note }: { title: string; value: string; note?: string }) {
+  return (
+    <div className="border border-border bg-card p-5">
+      <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">{title}</div>
+      <div className="text-xl font-bold mt-2">{value}</div>
+      {note ? <p className="text-xs text-muted-foreground mt-2">{note}</p> : null}
     </div>
   );
 }
