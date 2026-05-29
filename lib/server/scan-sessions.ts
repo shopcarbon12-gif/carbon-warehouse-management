@@ -59,7 +59,8 @@ export type ScanSessionKind =
   | "print-commission"
   | "encode-items"
   | "bulk-import"
-  | "bulk-status";
+  | "bulk-status"
+  | "bulk-geiger";
 
 export type ScanSession = {
   /** Stable opaque id; used as the lifecycle handle. */

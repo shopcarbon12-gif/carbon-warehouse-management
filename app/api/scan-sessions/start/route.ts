@@ -39,6 +39,7 @@ const bodySchema = z.object({
     "encode-items",
     "bulk-import",
     "bulk-status",
+    "bulk-geiger",
   ]),
   context: z.record(z.string(), z.unknown()).optional(),
 });
