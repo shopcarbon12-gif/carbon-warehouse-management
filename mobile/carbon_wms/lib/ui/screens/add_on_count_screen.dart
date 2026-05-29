@@ -79,6 +79,16 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       sourceEpcs: widget.sourceEpcs,
     );
     final api = context.read<WmsApiClient>();
+    // Hydrate from the server's epc_ledger + failed_ledger so a resumed
+    // session shows every EPC the operator (or any joined device) has
+    // already counted. Without this, in-memory state always starts empty
+    // and the operator sees "NEW 0" when re-entering a session that has
+    // thousands of EPCs on the server. Best-effort: if the GET fails the
+    // screen still works for fresh scans.
+    unawaited(api.getAddOnSession(widget.sessionId).then((s) {
+      if (!mounted) return;
+      _session.hydrateFromServer(s);
+    }).catchError((Object _) {/* offline / network — keep empty */}));
     _sse = AddOnSessionRealtime(api: api, sessionId: widget.sessionId);
     _sseSub = _sse!.events.listen(_handleSseEvent);
     unawaited(_sse!.start());

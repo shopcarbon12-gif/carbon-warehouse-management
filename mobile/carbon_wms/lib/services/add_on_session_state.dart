@@ -107,6 +107,60 @@ class AddOnSessionState extends ChangeNotifier {
 
   int get newCount => _newEntries.length;
 
+  /// Populate the in-memory ledger from a `getAddOnSession` server response.
+  /// Used on screen entry so a resumed/joined session shows the EPCs other
+  /// devices already counted (and our own scans from a previous run, since
+  /// Q22-mobile-state-doesn't-persist means we have nothing locally on
+  /// re-entry). Each EPC is also marked as already-submitted so the scan
+  /// loop won't re-POST it to /epc.
+  ///
+  /// Server format (from lib/server/add-on-sessions.ts:getSession):
+  ///   epc_ledger:    Map<epc, {u, d, at}>
+  ///   failed_ledger: Map<epc, {u, d, at, r}>
+  void hydrateFromServer(Map<String, dynamic> serverSession) {
+    final newLedger = serverSession['epc_ledger'];
+    if (newLedger is Map) {
+      for (final e in newLedger.entries) {
+        final epcKey = e.key.toString().toUpperCase();
+        final meta = e.value;
+        DateTime at;
+        if (meta is Map && meta['at'] is String) {
+          at = DateTime.tryParse(meta['at'] as String) ?? DateTime.now().toUtc();
+        } else {
+          at = DateTime.now().toUtc();
+        }
+        if (_newSeen.add(epcKey)) {
+          _newEntries.add(NewEpcEntry(epc: epcKey, scannedAtUtc: at));
+        }
+        _submitted.add(epcKey);
+      }
+    }
+    final failLedger = serverSession['failed_ledger'];
+    if (failLedger is Map) {
+      for (final e in failLedger.entries) {
+        final epcKey = e.key.toString().toUpperCase();
+        final meta = e.value;
+        DateTime at;
+        String reason = 'unknown';
+        if (meta is Map) {
+          if (meta['at'] is String) {
+            at = DateTime.tryParse(meta['at'] as String) ?? DateTime.now().toUtc();
+          } else {
+            at = DateTime.now().toUtc();
+          }
+          if (meta['r'] is String) reason = meta['r'] as String;
+        } else {
+          at = DateTime.now().toUtc();
+        }
+        if (_failedSeen.add(epcKey)) {
+          _failedEntries.add(FailedEpcEntry(epc: epcKey, reason: reason, scannedAtUtc: at));
+        }
+        _submitted.add(epcKey);
+      }
+    }
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _disposed = true;
