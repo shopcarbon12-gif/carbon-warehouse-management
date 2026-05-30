@@ -24,11 +24,46 @@ export type CustomersTableRow = {
   created_at: string;
   created_at_geo: string | null;
   pos_location_name: string | null;
-  created_by_email: string | null;
+  created_by_first: string | null;
+  created_by_last: string | null;
 };
 
-const usd = (v: string) =>
-  Number(v).toLocaleString(undefined, { style: "currency", currency: "USD" });
+const DASH = "—";
+
+// Money, blank ("—") when there's nothing.
+const usd = (v: string) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0
+    ? n.toLocaleString(undefined, { style: "currency", currency: "USD" })
+    : DASH;
+};
+
+// Plain count / number, blank when zero or missing.
+const count = (v: string) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n.toLocaleString() : DASH;
+};
+
+// Date only (MM/DD/YYYY in store time) — never a time, blank when missing.
+const fmtDate = (v: string | null) => {
+  if (!v) return DASH;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return DASH;
+  return d.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+};
+
+// "Elior Perez" -> "Elior P." (never the email); blank when no name on file.
+const addedBy = (first: string | null, last: string | null) => {
+  const f = (first ?? "").trim();
+  if (!f) return DASH;
+  const l = (last ?? "").trim();
+  return l ? `${f} ${l[0].toUpperCase()}.` : f;
+};
 
 export function LoyaltyCustomersTable({ rows }: { rows: CustomersTableRow[] }) {
   const tableRef = useRef<HTMLTableElement>(null);
@@ -62,7 +97,7 @@ export function LoyaltyCustomersTable({ rows }: { rows: CustomersTableRow[] }) {
                 <th
                   key={c.label || `col-${i}`}
                   style={w !== null ? { width: w, minWidth: w } : undefined}
-                  className={`relative overflow-hidden px-3 py-2 ${c.align === "right" ? "text-right" : "text-left"}`}
+                  className={`relative overflow-hidden whitespace-nowrap px-3 py-2 ${c.align === "right" ? "text-right" : "text-left"}`}
                 >
                   <span>{c.label}</span>
                   <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
@@ -80,47 +115,43 @@ export function LoyaltyCustomersTable({ rows }: { rows: CustomersTableRow[] }) {
             </tr>
           ) : (
             rows.map((r) => {
-              const where = r.pos_location_name ?? r.created_at_geo ?? "—";
+              const where = r.pos_location_name ?? r.created_at_geo ?? DASH;
               return (
                 <tr key={r.id}>
                   <td className={`${cellTruncate} px-3 py-2 font-semibold`} title={r.first_name ?? ""}>
                     <Link href={`/rewards/customers/${r.id}`} className="hover:underline">
-                      {r.first_name ?? "—"}
+                      {r.first_name ?? DASH}
                     </Link>
                   </td>
                   <td className={`${cellTruncate} px-3 py-2`} title={r.last_name ?? ""}>
-                    {r.last_name ?? "—"}
+                    {r.last_name ?? DASH}
                   </td>
                   <td className={`${cellTruncate} px-3 py-2`} title={r.phone ?? ""}>
-                    {r.phone ?? "—"}
+                    {r.phone ?? DASH}
                   </td>
                   <td className={`${cellTruncate} px-3 py-2`} title={r.phone_2 ?? ""}>
-                    {r.phone_2 ?? "—"}
+                    {r.phone_2 ?? DASH}
                   </td>
                   <td className={`${cellTruncate} px-3 py-2`} title={r.email ?? ""}>
-                    {r.email ?? "—"}
+                    {r.email ?? DASH}
                   </td>
                   <td className={`${cellTruncate} px-3 py-2`} title={r.email_2 ?? ""}>
-                    {r.email_2 ?? "—"}
+                    {r.email_2 ?? DASH}
                   </td>
                   <td className="overflow-hidden px-3 py-2 text-right tabular-nums">
-                    {usd(r.sales)}
+                    {count(r.sales)}
                   </td>
                   <td className="overflow-hidden px-3 py-2 text-right tabular-nums font-bold">
-                    {Number(r.points).toLocaleString()}
+                    {count(r.points)}
                   </td>
                   <td className="overflow-hidden px-3 py-2 text-right tabular-nums">
                     {usd(r.store_credit_balance)}
                   </td>
                   <td className={`${cellTruncate} px-3 py-2 text-muted-foreground`}>
-                    {new Date(r.created_at).toLocaleDateString()}{" "}
-                    {new Date(r.created_at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {fmtDate(r.created_at)}
                   </td>
-                  <td className={`${cellTruncate} px-3 py-2`} title={r.created_by_email ?? ""}>
-                    {r.created_by_email ?? "—"}
+                  <td className={`${cellTruncate} px-3 py-2`}>
+                    {addedBy(r.created_by_first, r.created_by_last)}
                   </td>
                   <td className={`${cellTruncate} px-3 py-2`} title={where}>
                     {where}

@@ -30,7 +30,8 @@ type Row = {
   created_at: string;
   created_at_geo: string | null;
   pos_location_name: string | null;
-  created_by_email: string | null;
+  created_by_first: string | null;
+  created_by_last: string | null;
 };
 
 /**
@@ -97,9 +98,9 @@ export default async function RewardsCustomers({
                 pc.phone_2,
                 pc.email,
                 pc.email_2,
-                -- lifetime sales: sum of this customer's completed pos_sales
+                -- number of this customer's completed (non-voided) sales
                 COALESCE((
-                  SELECT SUM(s.total_amount)
+                  SELECT COUNT(*)
                     FROM pos_sales s
                    WHERE s.customer_id = pc.id
                      AND s.status = 'completed'
@@ -112,7 +113,8 @@ export default async function RewardsCustomers({
                 -- pos_locations has no name column; resolve via the
                 -- WMS-owned locations table
                 l.name                        AS pos_location_name,
-                u.email                       AS created_by_email
+                u.first_name                  AS created_by_first,
+                u.last_name                   AS created_by_last
            FROM pos_customers pc
            LEFT JOIN loyalty_balance lb ON lb.customer_id = pc.id
            LEFT JOIN pos_locations  pl  ON pl.id = pc.pos_location_id
