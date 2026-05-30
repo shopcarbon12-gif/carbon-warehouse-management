@@ -1034,6 +1034,66 @@ function ActiveSessionView({
         : variance.locked.filter((r) => epcInSource(r.epc)).length,
     [variance.locked, sourceFilter, epcInSource],
   );
+
+  // "By source" breakdown strip: one chip per (kind, name) contributor with
+  // matched / added-here / defective counts so the operator sees what the
+  // mobile add-on contributed without touching the Source dropdown first.
+  // MUST be declared above the `if (!detail) return` early-returns so the
+  // hook count stays stable across renders (React: "Rendered more hooks
+  // than during the previous render"). detail can be undefined here on
+  // the loading render — use optional chaining.
+  const sourceBreakdown = useMemo<
+    Array<{
+      key: string;
+      kind: "mobile" | "reader";
+      name: string;
+      matched: number;
+      addedHere: number;
+      defective: number;
+    }>
+  >(() => {
+    const sources = detail?.scanned_epc_sources ?? {};
+    if (Object.keys(sources).length === 0) return [];
+    type Agg = {
+      kind: "mobile" | "reader";
+      name: string;
+      matched: number;
+      addedHere: number;
+      defective: number;
+    };
+    const agg = new Map<string, Agg>();
+    const matchedSet = new Set(variance.matched.map((r) => r.epc.toUpperCase()));
+    const addedSet = new Set(variance.added_here.map((r) => r.epc.toUpperCase()));
+    const defectiveSet = new Set(variance.defective.map((r) => r.epc.toUpperCase()));
+    for (const [epc, src] of Object.entries(sources)) {
+      const key = `${src.kind}:${src.name}`;
+      const existing = agg.get(key) ?? {
+        kind: src.kind,
+        name: src.name,
+        matched: 0,
+        addedHere: 0,
+        defective: 0,
+      };
+      if (matchedSet.has(epc)) existing.matched += 1;
+      if (addedSet.has(epc)) existing.addedHere += 1;
+      if (defectiveSet.has(epc)) existing.defective += 1;
+      agg.set(key, existing);
+    }
+    return Array.from(agg.entries())
+      .map(([key, v]) => ({ key, ...v }))
+      .sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind === "reader" ? -1 : 1;
+        const ta = a.matched + a.addedHere + a.defective;
+        const tb = b.matched + b.addedHere + b.defective;
+        return tb - ta;
+      });
+  }, [
+    detail?.scanned_epc_sources,
+    variance.matched,
+    variance.added_here,
+    variance.defective,
+  ]);
+
   // Coverage % uses Math.floor so a count that's 99.91% complete shows as
   // 99%, not a misleading "100%". Only display 100 when ALL expected EPCs
   // are accounted for (matched == expected, missing == 0). Without this
@@ -1122,67 +1182,6 @@ function ActiveSessionView({
   const matchedCount = variance.matched.length;
   const coverage = expectedCount === 0 ? 0 : Math.round((matchedCount / expectedCount) * 100);
   const lastReadStr = lastReadAt ? `${Math.max(1, Math.round((Date.now() - lastReadAt) / 1000))}s ago` : "—";
-
-  /**
-   * "By source" inline breakdown — answers the operator's "what did the
-   * mobile add-on contribute?" question without requiring them to play
-   * with the Source dropdown first. One row per contributor with
-   * matched / added-here / defective counts pre-computed against the
-   * source map. Rendered as a chip strip below the KPI tiles; clicking
-   * any chip applies that source as the table filter.
-   */
-  type SourceBreakdownRow = {
-    key: string;
-    kind: "mobile" | "reader";
-    name: string;
-    matched: number;
-    addedHere: number;
-    defective: number;
-  };
-  const sourceBreakdown = useMemo<SourceBreakdownRow[]>(() => {
-    const sources = detail.scanned_epc_sources ?? {};
-    if (Object.keys(sources).length === 0) return [];
-    // Group EPCs by source name (per kind). One row per (kind, name).
-    type Agg = {
-      kind: "mobile" | "reader";
-      name: string;
-      matched: number;
-      addedHere: number;
-      defective: number;
-    };
-    const agg = new Map<string, Agg>();
-    const matchedSet = new Set(variance.matched.map((r) => r.epc.toUpperCase()));
-    const addedSet = new Set(variance.added_here.map((r) => r.epc.toUpperCase()));
-    const defectiveSet = new Set(variance.defective.map((r) => r.epc.toUpperCase()));
-    for (const [epc, src] of Object.entries(sources)) {
-      const key = `${src.kind}:${src.name}`;
-      const existing = agg.get(key) ?? {
-        kind: src.kind,
-        name: src.name,
-        matched: 0,
-        addedHere: 0,
-        defective: 0,
-      };
-      if (matchedSet.has(epc)) existing.matched += 1;
-      if (addedSet.has(epc)) existing.addedHere += 1;
-      if (defectiveSet.has(epc)) existing.defective += 1;
-      agg.set(key, existing);
-    }
-    return Array.from(agg.entries())
-      .map(([key, v]) => ({ key, ...v }))
-      .sort((a, b) => {
-        // Sort: readers before mobiles, then by total contribution desc
-        if (a.kind !== b.kind) return a.kind === "reader" ? -1 : 1;
-        const ta = a.matched + a.addedHere + a.defective;
-        const tb = b.matched + b.addedHere + b.defective;
-        return tb - ta;
-      });
-  }, [
-    detail.scanned_epc_sources,
-    variance.matched,
-    variance.added_here,
-    variance.defective,
-  ]);
 
   return (
     <div className="space-y-5">
