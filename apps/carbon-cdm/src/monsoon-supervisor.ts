@@ -818,6 +818,15 @@ const SLOW_WARMUP_SILENCE_TIMEOUT_MS = 90_000;
  * backoff doubler in the on-exit handler.
  */
 const MIN_POS_RESPAWN_INTERVAL_MS = 5_000;
+/**
+ * POS reader redesign 2026-05-30: is_pos_dedicated readers run at a CONSTANT
+ * 33 dBm and are NEVER reconfigured by the cashier. Changing RF power (esp.
+ * reductions) is what wedged the chip — so the radio stays pinned at the
+ * regulatory ceiling forever and proximity is done in software via per-tag
+ * RSSI (the POS slider is now an RSSI display filter, not a power control).
+ * 330 = 33.0 dBm in the binary's tenth-dBm --power arg.
+ */
+const POS_FIXED_POWER_ARG = 330;
 const WATCHDOG_INTERVAL_MS = 5_000;
 /**
  * Throttle for /api/cdm-agents/reader-offline pushes. A reader sitting
@@ -1074,6 +1083,10 @@ export class MonsoonSupervisor {
     for (const readerId of changedReaders) {
       const slot = this.slots.get(readerId);
       if (!slot) continue;
+      // POS readers run at a constant 33 dBm now — the slider is an RSSI
+      // display filter, not a power control. Never respawn them on a power
+      // value (it would only re-introduce the power-change wedge we removed).
+      if (slot.spec.is_pos_dedicated === true) continue;
       // Don't disrupt an in-flight antenna test — the operator owns
       // the slot's power via the test page in that case.
       if (slot.testSession !== null) continue;
@@ -2917,8 +2930,13 @@ export class MonsoonSupervisor {
     // the only path that exceeds operator-WMS-configured power, because
     // the WMS value for POS is deliberately set to the regulatory ceiling
     // (33 dBm) and the cashier's slider scales DOWN per register context.
+    // POS reader runs at a CONSTANT 33 dBm — the cashier slider is now an RSSI
+    // display filter, not a power control, so we ignore posPowerOverrides and
+    // the WMS-configured power entirely for is_pos_dedicated readers.
     const posOverrideDbm = this.posPowerOverrides.get(slot.spec.id);
-    const basePower = posOverrideDbm != null ? posOverrideDbm * 10 : clampedPower;
+    const basePower = slot.spec.is_pos_dedicated === true
+      ? POS_FIXED_POWER_ARG
+      : posOverrideDbm != null ? posOverrideDbm * 10 : clampedPower;
     const powerArg = muxMode ? Math.min(basePower, 300) : basePower;
 
     // Pick the current candidate serial port. The candidate list is
@@ -3260,12 +3278,13 @@ export class MonsoonSupervisor {
       const configuredArg = Math.round(this.avgPower(spec) * 10);
       const overrideArg = slot.sweepPowerOverrideArg ?? configuredArg;
       const clampedArg = Math.min(overrideArg, configuredArg);
-      // Carbon-POS cashier slider override wins (see basePower computation
-      // in the stream-driver branch for the same logic). The cashier is
-      // the authoritative source for the POS reader's RF power during a
-      // register session.
+      // POS reader runs at a CONSTANT 33 dBm (see POS_FIXED_POWER_ARG): the
+      // cashier slider is now an RSSI display filter, not a power control, so
+      // posPowerOverrides and configured power are ignored for the POS reader.
       const posOverrideDbm = this.posPowerOverrides.get(slot.spec.id);
-      powerArg = posOverrideDbm != null ? posOverrideDbm * 10 : clampedArg;
+      powerArg = spec.is_pos_dedicated === true
+        ? POS_FIXED_POWER_ARG
+        : posOverrideDbm != null ? posOverrideDbm * 10 : clampedArg;
       const enabled = spec.antennas.filter((a) => a.enabled);
       // Supervisor-managed mux: stamp this spawn with the antenna at the
       // current rotation index. Each spawn drives ONE antenna; the

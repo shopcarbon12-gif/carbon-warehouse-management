@@ -15,6 +15,13 @@ export type EdgeScanStreamPayload = {
    * EPC in this batch). Subscribers that don't care can ignore it.
    */
   epcAntennaMap?: Record<string, string>;
+  /**
+   * Optional map of EPC (uppercased hex) → strongest RSSI (dBm, negative) seen
+   * for that EPC in this batch. Used by the Carbon-POS cart/scan UI to filter
+   * the display by proximity (closer tag = higher RSSI) now that the POS reader
+   * runs at a constant 33 dBm. Subscribers that don't care can ignore it.
+   */
+  epcRssiMap?: Record<string, number>;
   timestamp?: string;
   rowsAffected?: number;
 };

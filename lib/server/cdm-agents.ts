@@ -1194,12 +1194,23 @@ export async function ingestAgentReads(
       const aId = antennaIds[i];
       if (aId) epcAntennaMap[body.reads[i].epcHex.toUpperCase()] = aId;
     }
+    // Per-EPC RSSI so the Carbon-POS cart/scan UI can filter by proximity now
+    // that the POS reader is pinned at 33 dBm. Keep the STRONGEST (closest to
+    // 0) RSSI seen for each EPC in this batch — that's the closest sighting.
+    const epcRssiMap: Record<string, number> = {};
+    for (const r of body.reads) {
+      if (r.rssi === undefined || r.rssi === null) continue;
+      const key = r.epcHex.toUpperCase();
+      const prev = epcRssiMap[key];
+      if (prev === undefined || r.rssi > prev) epcRssiMap[key] = r.rssi;
+    }
     publishEdgeScanEvent(auth.tenantId, locationId, {
       deviceId: body.readerId,
       locationId,
       scanContext: "TRANSFER",
       epcs,
       epcAntennaMap,
+      epcRssiMap,
       timestamp: new Date().toISOString(),
       rowsAffected: insertedCount,
     });
