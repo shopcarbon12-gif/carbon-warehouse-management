@@ -2,26 +2,30 @@
 
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { ArrowRight, ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
 
 /**
  * Category manager popup for /inventory/categories. The page itself is empty
  * except for the top-right "Legacy" button; clicking it opens this windowed
- * popup that mirrors the Lightspeed category manager:
+ * popup that mirrors the Lightspeed category manager.
  *
- *   list   → every parent category, each with its subcategories indented.
- *            A "+ New Category" button (top-right) opens the new-parent form.
+ *   list   → the category tree (up to 3 levels). Every node is clickable
+ *            (opens its detail), shows its item count, and — when it has
+ *            children — a left collapse/expand toggle. Subcategories keep the
+ *            "→" marker. A "+ New Category" button (top-right) adds a parent.
  *   new    → a single "Category Name" field + Save Changes (creates a parent).
- *   detail → click a parent: rename it, delete it, and add/list subcategories.
+ *   detail → click any node: rename it, delete it, and add/list children
+ *            (children themselves are clickable to drill deeper, up to level 3).
  *
- * Backed by /api/inventory/categories (+ /[id]) against the WMS-owned
- * `categories` table. Nothing here touches items or Lightspeed.
+ * Backed by /api/inventory/categories (+ /[id]). Nothing here touches items or
+ * Lightspeed; item counts are derived read-only from the catalog.
  */
 
-type Sub = { id: string; name: string };
-type Category = { id: string; name: string; subcategories: Sub[] };
+const MAX_DEPTH = 3;
 
-const fetcher = async (url: string): Promise<{ categories: Category[] }> => {
+type Node = { id: string; name: string; count: number; children: Node[] };
+
+const fetcher = async (url: string): Promise<{ categories: Node[] }> => {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -40,6 +44,17 @@ async function mutateJson(url: string, method: string, body?: unknown): Promise<
     const j = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(j.error ?? "Request failed");
   }
+}
+
+/** Depth-first search returning the node and its ancestor path (root → node). */
+function findPath(roots: Node[], id: string, trail: Node[] = []): Node[] | null {
+  for (const n of roots) {
+    const next = [...trail, n];
+    if (n.id === id) return next;
+    const deeper = findPath(n.children, id, next);
+    if (deeper) return deeper;
+  }
+  return null;
 }
 
 type View = "list" | "new" | "detail";
@@ -71,12 +86,15 @@ function CategoryManagerModal({ onClose }: { onClose: () => void }) {
 
   const [view, setView] = useState<View>("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = useMemo(
-    () => categories.find((c) => c.id === selectedId) ?? null,
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const path = useMemo(
+    () => (selectedId ? findPath(categories, selectedId) : null),
     [categories, selectedId],
   );
+  const selected = path ? path[path.length - 1] : null;
+  const selectedDepth = path ? path.length - 1 : 0; // 0 = parent, 1 = sub, 2 = sub-sub
 
-  // Esc closes; lock body scroll while the popup is up.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -89,6 +107,14 @@ function CategoryManagerModal({ onClose }: { onClose: () => void }) {
       document.body.style.overflow = prev;
     };
   }, [onClose]);
+
+  const toggleCollapse = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const goList = () => {
     setSelectedId(null);
@@ -104,7 +130,7 @@ function CategoryManagerModal({ onClose }: { onClose: () => void }) {
       <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
         {/* Breadcrumb bar + close */}
         <div className="flex items-center justify-between gap-3 border-b border-[var(--wms-border)] px-5 py-3">
-          <div className="flex items-center gap-1.5 font-mono text-xs text-[var(--wms-muted)]">
+          <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs text-[var(--wms-muted)]">
             <span>Inventory</span>
             <ChevronRight className="h-3.5 w-3.5" />
             <button
@@ -120,10 +146,12 @@ function CategoryManagerModal({ onClose }: { onClose: () => void }) {
                 <span className="text-[var(--wms-fg)]">Category: New</span>
               </>
             ) : null}
-            {view === "detail" && selected ? (
+            {view === "detail" && path ? (
               <>
                 <ChevronRight className="h-3.5 w-3.5" />
-                <span className="text-[var(--wms-fg)]">Category: {selected.name}</span>
+                <span className="text-[var(--wms-fg)]">
+                  Category: {path.map((n) => n.name).join(" ▸ ")}
+                </span>
               </>
             ) : null}
           </div>
@@ -148,6 +176,8 @@ function CategoryManagerModal({ onClose }: { onClose: () => void }) {
             <ListView
               categories={categories}
               isLoading={isLoading}
+              collapsed={collapsed}
+              onToggle={toggleCollapse}
               onNew={() => setView("new")}
               onOpen={openDetail}
             />
@@ -166,11 +196,14 @@ function CategoryManagerModal({ onClose }: { onClose: () => void }) {
           {view === "detail" && selected ? (
             <DetailView
               category={selected}
+              depth={selectedDepth}
               onBack={goList}
+              onOpenChild={openDetail}
               onChanged={() => mutate()}
               onDeleted={async () => {
                 await mutate();
-                goList();
+                if (path && path.length > 1) openDetail(path[path.length - 2].id);
+                else goList();
               }}
             />
           ) : null}
@@ -194,11 +227,15 @@ function CategoryManagerModal({ onClose }: { onClose: () => void }) {
 function ListView({
   categories,
   isLoading,
+  collapsed,
+  onToggle,
   onNew,
   onOpen,
 }: {
-  categories: Category[];
+  categories: Node[];
   isLoading: boolean;
+  collapsed: Set<string>;
+  onToggle: (id: string) => void;
   onNew: () => void;
   onOpen: (id: string) => void;
 }) {
@@ -222,37 +259,109 @@ function ListView({
           No categories yet. Click “New Category” to create one.
         </p>
       ) : (
-        <ul className="divide-y divide-[var(--wms-border)]/70">
+        <ul className="py-1">
           {categories.map((c) => (
-            <li key={c.id} className="px-2 py-1.5">
-              <button
-                type="button"
-                onClick={() => onOpen(c.id)}
-                className="group flex w-full items-center justify-between rounded-md px-3 py-2 text-left hover:bg-[var(--wms-surface-elevated)]"
-              >
-                <span className="text-sm font-semibold uppercase tracking-wide text-[var(--wms-fg)]">
-                  {c.name}
-                </span>
-                <ChevronRight className="h-4 w-4 text-[var(--wms-muted)] group-hover:text-[var(--wms-accent)]" />
-              </button>
-              {c.subcategories.length > 0 ? (
-                <ul className="mb-1 mt-0.5 space-y-0.5 pl-3">
-                  {c.subcategories.map((s) => (
-                    <li
-                      key={s.id}
-                      className="flex items-center gap-2 px-3 py-1 font-mono text-xs text-[var(--wms-muted)]"
-                    >
-                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--wms-secondary)]" />
-                      <span className="uppercase tracking-wide">{s.name}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </li>
+            <TreeRow
+              key={c.id}
+              node={c}
+              depth={0}
+              collapsed={collapsed}
+              onToggle={onToggle}
+              onOpen={onOpen}
+            />
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/** One row of the category tree, rendered recursively for its children. */
+function TreeRow({
+  node,
+  depth,
+  collapsed,
+  onToggle,
+  onOpen,
+}: {
+  node: Node;
+  depth: number;
+  collapsed: Set<string>;
+  onToggle: (id: string) => void;
+  onOpen: (id: string) => void;
+}) {
+  const hasChildren = node.children.length > 0;
+  const isCollapsed = collapsed.has(node.id);
+  const isParent = depth === 0;
+
+  return (
+    <li>
+      <div
+        className="group flex items-center gap-1 rounded-md px-2 hover:bg-[var(--wms-surface-elevated)]"
+        style={{ paddingLeft: `${8 + depth * 22}px` }}
+      >
+        {/* Left collapse/expand toggle — only on nodes that have children. */}
+        {hasChildren ? (
+          <button
+            type="button"
+            onClick={() => onToggle(node.id)}
+            aria-label={isCollapsed ? "Expand" : "Collapse"}
+            aria-expanded={!isCollapsed}
+            className="shrink-0 rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+          >
+            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+        ) : (
+          <span className="inline-block w-6 shrink-0" />
+        )}
+
+        {/* Subcategory marker (kept as the existing arrow for depth >= 1). */}
+        {depth >= 1 ? (
+          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--wms-secondary)]" />
+        ) : null}
+
+        {/* Name — clickable, opens the detail view for this node. */}
+        <button
+          type="button"
+          onClick={() => onOpen(node.id)}
+          className="flex min-w-0 flex-1 items-center justify-between gap-2 py-2 text-left"
+        >
+          <span
+            className={
+              isParent
+                ? "truncate text-sm font-semibold uppercase tracking-wide text-[var(--wms-fg)]"
+                : "truncate font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)]/90"
+            }
+          >
+            {node.name}
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span
+              className="rounded-full border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-0.5 font-mono text-[0.6rem] tabular-nums text-[var(--wms-muted)]"
+              title="Items in this category"
+            >
+              {node.count}
+            </span>
+            <ChevronRight className="h-4 w-4 text-[var(--wms-muted)] group-hover:text-[var(--wms-accent)]" />
+          </span>
+        </button>
+      </div>
+
+      {hasChildren && !isCollapsed ? (
+        <ul>
+          {node.children.map((ch) => (
+            <TreeRow
+              key={ch.id}
+              node={ch}
+              depth={depth + 1}
+              collapsed={collapsed}
+              onToggle={onToggle}
+              onOpen={onOpen}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </li>
   );
 }
 
@@ -334,16 +443,20 @@ function NewCategoryView({
   );
 }
 
-/* -------------------------------------------------------- parent detail */
+/* --------------------------------------------------------------- detail */
 
 function DetailView({
   category,
+  depth,
   onBack,
+  onOpenChild,
   onChanged,
   onDeleted,
 }: {
-  category: Category;
+  category: Node;
+  depth: number;
   onBack: () => void;
+  onOpenChild: (id: string) => void;
   onChanged: () => void;
   onDeleted: () => void;
 }) {
@@ -352,8 +465,9 @@ function DetailView({
   const [busy, setBusy] = useState<null | "rename" | "delete" | "add" | string>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // Keep the rename field in sync if the underlying row changes (e.g. after a
-  // successful rename refetch returns the canonical value).
+  const canAddChild = depth < MAX_DEPTH - 1; // level 3 nodes can't go deeper
+  const childLabel = depth === 0 ? "Subcategory" : "Sub-subcategory";
+
   useEffect(() => {
     setName(category.name);
   }, [category.name]);
@@ -377,7 +491,8 @@ function DetailView({
   };
 
   const remove = async () => {
-    if (!window.confirm(`Delete “${category.name}” and all its subcategories?`)) return;
+    const childWord = category.children.length > 0 ? " and everything under it" : "";
+    if (!window.confirm(`Delete “${category.name}”${childWord}?`)) return;
     setBusy("delete");
     setErr(null);
     try {
@@ -389,7 +504,7 @@ function DetailView({
     }
   };
 
-  const addSub = async () => {
+  const addChild = async () => {
     const trimmed = subName.trim();
     if (!trimmed) return;
     setBusy("add");
@@ -402,20 +517,20 @@ function DetailView({
       setSubName("");
       onChanged();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Add subcategory failed");
+      setErr(e instanceof Error ? e.message : "Add failed");
     } finally {
       setBusy(null);
     }
   };
 
-  const removeSub = async (sub: Sub) => {
-    setBusy(`sub:${sub.id}`);
+  const removeChild = async (child: Node) => {
+    setBusy(`sub:${child.id}`);
     setErr(null);
     try {
-      await mutateJson(`/api/inventory/categories/${sub.id}`, "DELETE");
+      await mutateJson(`/api/inventory/categories/${child.id}`, "DELETE");
       onChanged();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Delete subcategory failed");
+      setErr(e instanceof Error ? e.message : "Delete failed");
     } finally {
       setBusy(null);
     }
@@ -468,53 +583,64 @@ function DetailView({
         />
       </div>
 
-      {/* Add subcategory */}
-      <div className="border-t border-[var(--wms-border)] px-5 py-4">
-        <h4 className="mb-2 font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
-          Add Subcategory
-        </h4>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={subName}
-            maxLength={128}
-            onChange={(e) => setSubName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") addSub();
-            }}
-            placeholder="Name"
-            className="w-full max-w-sm rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={addSub}
-            disabled={busy === "add" || !subName.trim()}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:border-[var(--wms-accent)] hover:text-[var(--wms-accent)] disabled:opacity-50"
-          >
-            <Plus className="h-4 w-4" />
-            {busy === "add" ? "Adding…" : "Add Subcategory"}
-          </button>
+      {/* Add child */}
+      {canAddChild ? (
+        <div className="border-t border-[var(--wms-border)] px-5 py-4">
+          <h4 className="mb-2 font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
+            Add {childLabel}
+          </h4>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={subName}
+              maxLength={128}
+              onChange={(e) => setSubName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addChild();
+              }}
+              placeholder="Name"
+              className="w-full max-w-sm rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={addChild}
+              disabled={busy === "add" || !subName.trim()}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:border-[var(--wms-accent)] hover:text-[var(--wms-accent)] disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              {busy === "add" ? "Adding…" : `Add ${childLabel}`}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      {/* Subcategories list */}
+      {/* Children list */}
       <div className="border-t border-[var(--wms-border)] px-5 py-4">
         <h4 className="mb-2 font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
-          Subcategories
+          {depth === 0 ? "Subcategories" : "Sub-subcategories"}
         </h4>
-        {category.subcategories.length === 0 ? (
-          <p className="font-mono text-xs text-[var(--wms-muted)]">No subcategories yet.</p>
+        {category.children.length === 0 ? (
+          <p className="font-mono text-xs text-[var(--wms-muted)]">None yet.</p>
         ) : (
           <ul className="divide-y divide-[var(--wms-border)]/70">
-            {category.subcategories.map((s) => (
-              <li key={s.id} className="flex items-center justify-between py-2">
-                <span className="flex items-center gap-2 font-mono text-sm text-[var(--wms-fg)]">
-                  <ArrowRight className="h-3.5 w-3.5 text-[var(--wms-secondary)]" />
-                  <span className="uppercase tracking-wide">{s.name}</span>
-                </span>
+            {category.children.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-2 py-1">
                 <button
                   type="button"
-                  onClick={() => removeSub(s)}
+                  onClick={() => onOpenChild(s.id)}
+                  className="group flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
+                >
+                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--wms-secondary)]" />
+                  <span className="truncate font-mono text-sm uppercase tracking-wide text-[var(--wms-fg)] group-hover:text-[var(--wms-accent)]">
+                    {s.name}
+                  </span>
+                  <span className="rounded-full border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.6rem] tabular-nums text-[var(--wms-muted)]">
+                    {s.count}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeChild(s)}
                   disabled={busy === `sub:${s.id}`}
                   aria-label={`Delete ${s.name}`}
                   className="rounded p-1 text-[var(--wms-muted)] hover:text-red-400 disabled:opacity-50"
