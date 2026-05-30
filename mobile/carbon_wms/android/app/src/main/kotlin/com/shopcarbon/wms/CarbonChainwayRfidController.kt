@@ -950,23 +950,44 @@ class CarbonChainwayRfidController(private val context: Context) {
       Log.d(TAG, "performWriteEpc: write branch=$writeBranch; entering verify after power cycle")
       val verified = verifyEpcWrite(reader, targetEpc, newEpc)
       if (!verified) {
-        // Diagnostic: the write returned true at the SDK layer but the tag didn't end up
-        // with newEpc in EEPROM. Read the EPC and RESERVED banks directly so the log tells
-        // us whether the tag is lock-protected / has a non-default access password /
-        // silently refused the write. Filter by targetEpc (oldEpc) — that's what the tag
-        // should still be broadcasting if the write didn't commit.
+        // POST-FAIL READ-BACK FALLBACK (2026-05-30)
+        // ----
+        // Mirror the Zebra controller's "is the OLD EPC actually gone"
+        // promotion. Cause: 6 of 43 WRITE_FAILED rows from the operator's
+        // 2026-05-29 re-encode session physically did write — geiger
+        // confirmed the chip broadcasts the NEW EPC and the old EPC is
+        // gone. The verify loop hit 0 new-EPC sightings within the
+        // 1500ms window even though the chip was written. Likely causes:
+        // (a) tag at edge of read range at verify-time after the
+        // operator naturally moves the gun post-write,
+        // (b) tag still in its post-power-cycle re-boot when verify
+        // started polling (Chainway antennas sometimes need >300ms),
+        // (c) buffer drain stole the few new-EPC reads we did get.
+        //
+        // The diagnostic readData(EPC bank) was always logged but never
+        // acted on; promote when the read-back matches newEpc.
+        var rescueEpc: String? = null
         runCatching {
           val pc = reader.readData(ACCESS_PWD, 1, 0, 1)  // bank=EPC, ptr=0 words, cnt=1 word = CRC
           Log.d(TAG, "post-fail diag: readData(EPC bank, ptr=0, cnt=1 CRC) -> $pc")
         }.onFailure { Log.w(TAG, "post-fail diag: EPC CRC read threw: ${it.message}") }
         runCatching {
           val epcReadBack = reader.readData(ACCESS_PWD, 1, 2, 6)  // bank=EPC, ptr=2, cnt=6 = 96-bit EPC
+          rescueEpc = epcReadBack?.replace("\\s".toRegex(), "")?.uppercase()
           Log.d(TAG, "post-fail diag: readData(EPC bank, ptr=2, cnt=6 EPC) -> '$epcReadBack' (expected new=$newEpc, else old=$targetEpc)")
         }.onFailure { Log.w(TAG, "post-fail diag: EPC read threw: ${it.message}") }
         runCatching {
           val reserved = reader.readData(ACCESS_PWD, 0, 0, 4)  // bank=RESERVED, ptr=0, cnt=4 = kill+access pw
           Log.d(TAG, "post-fail diag: readData(RESERVED bank, kill+access pw) -> '$reserved' (if read-locked, write likely write-locked too)")
         }.onFailure { Log.w(TAG, "post-fail diag: RESERVED read threw (likely read-locked): ${it.message}") }
+        // Promote when the read-back matches the new EPC. We accept
+        // both equality and `startsWith` because some Chainway SDK
+        // builds return a few extra trailing bytes from the bank.
+        val newNorm = newEpc.uppercase()
+        if (rescueEpc != null && (rescueEpc == newNorm || rescueEpc!!.startsWith(newNorm))) {
+          Log.d(TAG, "performWriteEpc: verify returned false but read-back EPC '$rescueEpc' matches newEpc — promoting to true (verify false-negative, chip wrote OK)")
+          return true
+        }
       }
       return verified
     } finally {
