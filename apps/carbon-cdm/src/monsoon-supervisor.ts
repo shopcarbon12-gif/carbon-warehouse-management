@@ -1556,15 +1556,13 @@ export class MonsoonSupervisor {
       // would flip-flop between ports unnecessarily and waste recovery time.
       // We still rotate non-mux readers (the original behavior).
       const silentMs = now - slot.lastByteAt;
-      // POS-dedicated readers (.34) are controlled by the cashier's register
-      // slider, not by the supervisor. Autonomous recovery — power sweeps,
-      // bridge/chip resets — must NEVER run on them: during a scan session it
-      // injects extra kill/respawn + bridge-reboot cycles that stall the
-      // reader for seconds before it settles at the slider's demanded power
-      // (the "double sweep" stall), and while idle (no cashier) the reader
-      // legitimately produces 0 records, which recovery would misread as a
-      // wedge and pummel. The cashier's slider-change respawn is the recovery
-      // path during a session; start/stop governs the idle state.
+      // POS-dedicated readers (.34) get full never-give-up recovery EXCEPT the
+      // power SWEEP. The sweep walks power downward from the cashier's setting
+      // (wrong direction for a register reader) and fights the slider, which
+      // stalled the reader for seconds on slider changes (the "double sweep").
+      // posReader gates only the sweep blocks below; chip/bridge-reset recovery
+      // still runs (see the on-exit fast-stuck / long-stuck ladder), so a
+      // wedged register reader always self-heals in software.
       const posReader = slot.spec.is_pos_dedicated === true;
       // Tell the WMS this reader is offline as soon as silence persists
       // past the watchdog threshold. Throttled so a long-silent reader
@@ -3552,12 +3550,15 @@ export class MonsoonSupervisor {
         wasIntendedKill,
         spawnDurationMs,
       });
-      // POS-dedicated readers (.34) are cashier-controlled — skip all
-      // autonomous recovery escalation (fast-stuck + long-stuck bridge/chip
-      // resets, sweeps). During a session the slider is authoritative and
-      // 0-record spawns between items are normal; while idle the reader
-      // legitimately reads nothing. Recovery here only stalls / false-wedges.
-      const posReader = spec.is_pos_dedicated === true;
+      // POS-dedicated readers (.34) must ALWAYS self-heal in software — the
+      // operator's hard rule: never give up, never dead-end at "needs
+      // service" / blame PoE / hardware. So they DO get the chip/bridge-reset
+      // recovery below (fast-stuck + long-stuck). What they must NOT get is
+      // the power-SWEEP: it walks power downward from the cashier's setting
+      // (wrong direction for a register reader) and fights the slider, which
+      // is what stalled the reader on slider changes. The sweep is gated out
+      // for POS in startRecoverySweep + the watchdog sweep blocks; the resets
+      // here run for everyone.
 
       // FAST-STUCK DETECTION 2026-05-21: track consecutive sub-1s
       // cleanExit:true 0-records exits. After FAST_CLEAN_EXIT_STRIKES
@@ -3571,7 +3572,6 @@ export class MonsoonSupervisor {
       if (
         cleanExit &&
         !wasIntendedKill &&
-        !posReader &&
         !slot.bytesSinceSpawn &&
         totalRecords === 0 &&
         spawnDurationMs < FAST_CLEAN_EXIT_THRESHOLD_MS
@@ -3649,18 +3649,20 @@ export class MonsoonSupervisor {
         !wasIntendedKill &&
         totalRecords === 0 &&
         spawnDurationMs >= LONG_STUCK_MIN_RUNTIME_MS &&
-        // POS-dedicated reader — 0-record spawns are normal (idle or between
-        // items); don't escalate (see posReader note above).
-        !posReader &&
         // While a records-judged recovery sweep owns the slot, the watchdog
         // drives step advance / success / exhaustion — don't let a natural
-        // mid-sweep exit also advance this ladder.
+        // mid-sweep exit also advance this ladder. (POS readers run this
+        // ladder too — chip/bridge resets only; the sweep tier no-ops via
+        // startRecoverySweep's POS guard.)
         !slot.sweepRequireRecords
       ) {
         slot.consecutiveLongStuckCycles += 1;
         const cycles = slot.consecutiveLongStuckCycles;
         const sinceLast = Date.now() - slot.lastLongStuckRecoveryAt;
         const cooldownPassed = sinceLast >= LONG_STUCK_RECOVERY_COOLDOWN_MS;
+        // POS readers self-heal with resets only — no power sweep (it walks
+        // power the wrong way for a register reader and fights the slider).
+        const posReader = spec.is_pos_dedicated === true;
         const baseInfo = {
           readerId: spec.id,
           readerName: spec.name,
@@ -3680,18 +3682,29 @@ export class MonsoonSupervisor {
           // cooldown until real reads return, instead of parking the reader
           // until a human clicks recover in the WMS. The wedge flag
           // auto-clears in the totalRecords>0 branch the moment a tag flows.
-          if (slot.wedgeLevel < 3) {
+          // POS readers NEVER flip to chassis_wedged / "needs hardware
+          // service" — the operator's hard rule is that it's always a
+          // software problem, never PoE/hardware. They keep doing software
+          // resets (below) indefinitely without ever raising the badge.
+          if (!posReader && slot.wedgeLevel < 3) {
             log.error("supervisor: long-stuck cycles exhausted — flagging needs-service (autonomous recovery continues)", baseInfo);
             slot.wedgeLevel = 3;
             slot.wedgedSinceMs = Date.now();
           }
           const sinceWedgedRetry = Date.now() - slot.lastWedgedRetryAt;
           if (sinceWedgedRetry >= WEDGED_RETRY_COOLDOWN_MS) {
-            log.warn("supervisor: wedged-retry — chip reset + records-judged recovery sweep (Level 3 is non-terminal)", baseInfo);
             slot.lastWedgedRetryAt = Date.now();
             slot.lastLongStuckRecoveryAt = Date.now();
             this.tryChipReset(spec);
-            this.startRecoverySweep(slot);
+            if (posReader) {
+              // Never give up on a register reader, never blame hardware:
+              // chip + bridge reset on the cooldown, forever, no sweep.
+              log.warn("supervisor: wedged-retry (POS) — chip reset + bridge reset (non-terminal, no sweep)", baseInfo);
+              this.tryBridgeReset(spec);
+            } else {
+              log.warn("supervisor: wedged-retry — chip reset + records-judged recovery sweep (Level 3 is non-terminal)", baseInfo);
+              this.startRecoverySweep(slot);
+            }
           } else {
             log.info("supervisor: wedged — next autonomous recovery on cooldown", {
               ...baseInfo,
@@ -3700,12 +3713,19 @@ export class MonsoonSupervisor {
           }
         } else if (cycles === LONG_STUCK_SWEEP_AFTER_CYCLES && cooldownPassed) {
           // Cycle 5: chip reset (cycle 3) and bridge reset (cycle 4) didn't
-          // clear it. Run the autonomous records-judged power sweep — the
-          // same recovery the operator performs by hand on the antenna-test
-          // Sweep page, and the one proven to un-stick these chips.
-          log.warn("supervisor: long-stuck — escalating to records-judged recovery sweep", baseInfo);
+          // clear it. Non-POS readers run the autonomous records-judged power
+          // sweep — the same recovery the operator performs by hand on the
+          // antenna-test Sweep page. POS readers don't sweep (wrong-direction
+          // power walk + fights the cashier slider) — keep recovering with
+          // another bridge reset.
           slot.lastLongStuckRecoveryAt = Date.now();
-          this.startRecoverySweep(slot);
+          if (posReader) {
+            log.warn("supervisor: long-stuck (POS) — escalating to bridge reset (no sweep)", baseInfo);
+            this.tryBridgeReset(spec);
+          } else {
+            log.warn("supervisor: long-stuck — escalating to records-judged recovery sweep", baseInfo);
+            this.startRecoverySweep(slot);
+          }
         } else if (cycles === LONG_STUCK_BRIDGE_RESET_AFTER_CYCLES && cooldownPassed) {
           log.warn("supervisor: long-stuck — escalating to bridge reset", baseInfo);
           slot.lastLongStuckRecoveryAt = Date.now();
