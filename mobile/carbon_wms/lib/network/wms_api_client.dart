@@ -1156,6 +1156,43 @@ class WmsApiClient {
     return decoded;
   }
 
+  /// `POST /api/rfid/encode-rollback` — Phase 2.5 post-write rollback.
+  /// Call this AFTER `RfidVendorChannel.writeEpcTag` returns false (or
+  /// throws). The server DELETEs the phantom new-EPC items row that
+  /// encode-claim created at `status='unknown'`, so a failed write never
+  /// leaves a ghost item in catalog. The OLD EPC is intentionally NOT
+  /// touched — the physical chip still carries it and encode-claim
+  /// already marked it `tag_killed`.
+  ///
+  /// Best-effort: server errors are logged in the route but the mobile
+  /// fire-and-forgets — a failed rollback just means a phantom row
+  /// briefly lingers in catalog, not an inventory mutation.
+  Future<Map<String, dynamic>?> postEncodeRollback({
+    required String newEpc,
+    String? oldEpc,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/rfid/encode-rollback');
+    final body = jsonEncode({
+      'newEpc': newEpc.toUpperCase(),
+      if (oldEpc != null && oldEpc.isNotEmpty) 'oldEpc': oldEpc.toUpperCase(),
+    });
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: body,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return null;
+  }
+
   /// `POST /api/rfid/encode-finalize` — Phase 3 post-write confirmation.
   /// Call this AFTER `RfidVendorChannel.writeEpcTag` returns true. The
   /// server promotes the new EPC from 'unknown' → 'in-stock' (LIVE) and

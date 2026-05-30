@@ -74,14 +74,6 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
   final Map<String, int> _attemptsByEpc = <String, int>{};
   static const int _maxAttemptsPerEpc = 3;
 
-  /// Cards whose chip-write failed (operator moved away, RF dropout, etc.)
-  /// keyed by the old C-prefix EPC. When the operator scans the same tag
-  /// again, [_onTagRead] reuses the previously-claimed `newEpc` instead of
-  /// allocating a fresh serial server-side (which would leak the first
-  /// claim's items row). Cleared on a successful retry or when the
-  /// operator removes the row.
-  final Map<String, EncodeTagResult> _failedCards = <String, EncodeTagResult>{};
-
   /// SINGLE-FLIGHT MUTEX (2026-05-30).
   /// The radio fires ~50 reads/sec; without this gate, the first 5-6
   /// C-prefix EPCs each kick off their own catalog → encode-claim →
@@ -423,125 +415,22 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     if (_processInFlight) return;
 
     // Per-EPC attempt budget — operator wants up to 3 attempts per chip
-    // per session, each attempt rendered as its OWN history row (no
-    // in-place mutation of a prior fail). After 3 the EPC is locked out
-    // until reset or a new session.
+    // per session, each attempt rendered as its OWN history row. After
+    // 3 the EPC is locked out until reset or a new session. Every
+    // attempt runs the FULL pipeline (fresh catalog → fresh claim →
+    // fresh write); on failure we rollback the just-claimed phantom
+    // items row so catalog never sees a "failed new EPC" entry, and
+    // the next retry gets a clean claim of its own.
     final attempts = _attemptsByEpc[epc] ?? 0;
     if (attempts >= _maxAttemptsPerEpc) return;
 
-    if (attempts == 0) {
-      // First attempt: fresh catalog → claim → write pipeline.
-      _attemptsByEpc[epc] = 1;
-      setState(() => _readCount += 1);
-      // Operator asked for a single beep on every relevant (C-prefix)
-      // read. Native per-tag beep stays suppressed (silences the
-      // foreign-tag drop path above); this explicit Dart cue fires only
-      // after the C-prefix filter passes, so the operator hears exactly
-      // the tags they care about and nothing else.
-      _sounds.play(ScanCue.read);
-      _processInFlight = true;
-      unawaited(_processTag(epc).whenComplete(() {
-        _processInFlight = false;
-      }));
-      return;
-    }
-
-    // Retry attempt (2 or 3): chip-write previously failed but the
-    // server already burned a serial via /api/rfid/encode-claim. Reuse
-    // that claim — claiming again would orphan the first allocation in
-    // items. Push a NEW history row so the operator sees the retry as
-    // a separate container, not a status flip on the original row.
-    final prior = _failedCards[epc];
-    if (prior == null || prior.newEpc == null || prior.newEpc!.length != 24) {
-      // No claim to reuse — defensive, shouldn't happen if attempts>0.
-      // Drop without bumping the counter so the next scan can start
-      // fresh.
-      return;
-    }
     _attemptsByEpc[epc] = attempts + 1;
+    if (attempts == 0) setState(() => _readCount += 1);
     _sounds.play(ScanCue.read);
     _processInFlight = true;
-    unawaited(_retryWriteAsNewRow(prior).whenComplete(() {
+    unawaited(_processTag(epc).whenComplete(() {
       _processInFlight = false;
     }));
-  }
-
-  /// Push a NEW history row for a retry attempt and re-run the chip
-  /// write. Re-uses `prior.newEpc` from the original `postEncodeClaim`
-  /// — the serial is already burned server-side and the items row
-  /// already exists, so claiming again would orphan the first allocation.
-  ///
-  /// On success: marks the new row encoded, clears the EPC from
-  /// [_failedCards] (no more retries needed), bumps [_encodedCount] and
-  /// runs the same finalize-write + event-report tail as the
-  /// first-attempt success path.
-  ///
-  /// On failure: marks the new row TAG_ISSUE / WRITE_FAILED and stores
-  /// it back into [_failedCards] so the next scan of the same EPC (up
-  /// to the [_maxAttemptsPerEpc] cap) can retry against the same claim.
-  Future<void> _retryWriteAsNewRow(EncodeTagResult prior) async {
-    final newEpc = prior.newEpc;
-    final oldEpc = prior.oldEpc;
-    if (newEpc == null || newEpc.length != 24) return;
-    final card = EncodeTagResult(
-      oldEpc: oldEpc,
-      newEpc: newEpc,
-      systemId: prior.systemId,
-      serial: prior.serial,
-      customSku: prior.customSku,
-      itemName: prior.itemName,
-      status: EncodeStatus.detected,
-      at: DateTime.now(),
-    );
-    _pushHistory(card);
-
-    bool written = false;
-    try {
-      written = await RfidVendorChannel.writeEpcTag(
-        targetEpc: oldEpc,
-        newEpc: newEpc,
-      );
-    } catch (_) {
-      written = false;
-    }
-    if (!mounted) return;
-    if (!written) {
-      _updateCard(card, (c) {
-        c.status = EncodeStatus.tagIssue;
-        c.failureReason = EncodeFailureReason.writeFailed;
-      });
-      // Keep the claim available for the next retry (if any attempts
-      // remain in the per-session budget).
-      _failedCards[oldEpc] = card;
-      _sounds.play(ScanCue.error);
-      unawaited(_reportEvent(
-        oldEpc: oldEpc,
-        newEpc: newEpc,
-        systemId: prior.systemId,
-        serial: prior.serial,
-        customSku: prior.customSku ?? '',
-        status: 'write_failed',
-      ));
-      return;
-    }
-    _updateCard(card, (c) {
-      c.status = EncodeStatus.encoded;
-      c.failureReason = EncodeFailureReason.none;
-    });
-    _failedCards.remove(oldEpc);
-    setState(() => _encodedCount += 1);
-    _sounds.play(ScanCue.success);
-    // Same finalisation as the first-attempt success path — the server's
-    // encode-claim left the items row at 'unknown' even though the chip
-    // is now confirmed to carry [newEpc].
-    unawaited(_finalizeWrite(oldEpc: oldEpc, newEpc: newEpc));
-    unawaited(_reportEvent(
-      oldEpc: oldEpc,
-      newEpc: newEpc,
-      systemId: prior.systemId,
-      serial: prior.serial,
-      customSku: prior.customSku ?? '',
-    ));
   }
 
   Future<void> _processTag(String epc) async {
@@ -711,13 +600,17 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
         c.status = EncodeStatus.tagIssue;
         c.failureReason = EncodeFailureReason.writeFailed;
       });
-      // Arm retry — same C-prefix EPC scanned again pulls this card out
-      // of [_failedCards] and re-runs writeEpcTag with the existing
-      // [newEpc] instead of claiming a fresh serial. The server-side
-      // claim already happened above, so allocating again here would
-      // leak the first serial as an orphan items row.
-      _failedCards[epc] = card;
       _sounds.play(ScanCue.error);
+      // Roll back the phantom items row that encode-claim just inserted
+      // at status='unknown'. Without this, every failed write leaves an
+      // orphan items row in catalog — operator complaint 2026-05-30
+      // ("any failed epc will never uploaded it new failed epc to
+      // catalog"). Fire-and-forget: a server error here just means a
+      // phantom row briefly lingers, not an inventory mutation. The
+      // server's encode-events audit gets a 'rolled_back' row from the
+      // route so the per-EPC trail (ok → write_failed → rolled_back)
+      // stays intact.
+      unawaited(_rollbackEncode(oldEpc: epc, newEpc: newEpc));
       unawaited(_reportEvent(
         oldEpc: epc, newEpc: newEpc, systemId: systemId, serial: serial,
         customSku: customSku, status: 'write_failed',
@@ -820,7 +713,6 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     setState(() {
       _history.clear();
       _attemptsByEpc.clear();
-      _failedCards.clear();
       _catalogCache.clear();
       _processInFlight = false;
       _readCount = 0;
@@ -828,6 +720,22 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       _encodedCount = 0;
       _liveRssi = null;
     });
+  }
+
+  /// Fire-and-forget rollback of the phantom items row that encode-claim
+  /// inserted at status='unknown' when a chip write later failed. Errors
+  /// are logged via [WmsApiException] but never surface to the operator
+  /// — the chip-write failure was already shown as a TAG_ISSUE row.
+  Future<void> _rollbackEncode({
+    required String oldEpc,
+    required String newEpc,
+  }) async {
+    try {
+      final api = context.read<WmsApiClient>();
+      await api.postEncodeRollback(oldEpc: oldEpc, newEpc: newEpc);
+    } catch (_) {
+      /* best-effort; server-side audit row still gets written when reachable */
+    }
   }
 
   int? _toInt(Object? v) {
@@ -967,7 +875,6 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
                                 // scan after manual deletion starts a
                                 // new pipeline from attempt 1.
                                 _attemptsByEpc.remove(r.oldEpc);
-                                _failedCards.remove(r.oldEpc);
                               });
                             },
                             confirmDelete: () async {
