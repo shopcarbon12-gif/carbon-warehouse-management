@@ -7,7 +7,7 @@
 --      at the session's location, between the session's started_at and
 --      its completed_at (or now() if active), we tag the EPC as
 --      `kind=reader` with `name=devices.name` and `ts=<earliest read_at>`.
---   2. Everything else falls back to `kind=mobile, name='mobile (legacy)',
+--   2. Everything else falls back to `kind=mobile, name='mobile (pre-tracking)',
 --      ts=session.started_at`. We can't reconstruct which specific
 --      handheld contributed each EPC pre-migration — that's why this
 --      bucket exists.
@@ -55,7 +55,7 @@ BEGIN
        ORDER BY upper(cr.epc_hex), cr.read_at ASC
     ),
     -- Build the merged source map: existing entries are preserved,
-    -- missing EPCs get either a reader hit OR the mobile (legacy) fallback.
+    -- missing EPCs get either a reader hit OR the mobile (pre-tracking) fallback.
     new_sources AS (
       SELECT jsonb_object_agg(
         epc,
@@ -70,7 +70,7 @@ BEGIN
                COALESCE(rh.epc IS NOT NULL,  false) AS has_reader,
                CASE WHEN rh.epc IS NOT NULL THEN 'reader' ELSE 'mobile' END AS kind,
                CASE WHEN rh.epc IS NOT NULL THEN rh.reader_name
-                    ELSE 'mobile (legacy)' END AS name,
+                    ELSE 'mobile (pre-tracking)' END AS name,
                CASE WHEN rh.epc IS NOT NULL
                     THEN to_char(rh.read_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
                     ELSE to_char(s.started_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')

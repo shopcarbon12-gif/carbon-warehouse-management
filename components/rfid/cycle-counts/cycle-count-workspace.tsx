@@ -969,12 +969,71 @@ function ActiveSessionView({
     () => new Set((detail?.expected ?? []).map((e) => e.epc.toUpperCase())),
     [detail?.expected],
   );
+
+  /** Helper: does an EPC fall inside the current Source filter?
+   * Returns true when filter is "all" OR the EPC's source map entry
+   * matches the kind (+ optionally name). EPCs with no source entry
+   * fail any non-"all" filter — same rule the EPC table uses. */
+  const epcInSource = useCallback(
+    (epc: string): boolean => {
+      if (sourceFilter.kind === "all") return true;
+      const src = detail?.scanned_epc_sources?.[epc.toUpperCase()];
+      if (!src) return false;
+      if (src.kind !== sourceFilter.kind) return false;
+      if (sourceFilter.name != null && src.name !== sourceFilter.name) return false;
+      return true;
+    },
+    [detail?.scanned_epc_sources, sourceFilter],
+  );
+
+  /** Filtered scanned set the KPI tiles use. When Source = All, this is
+   *  identical to localScanned. When Source = (mobile | reader | name),
+   *  only EPCs whose source entry matches survive — so Matched / Missing
+   *  / Coverage all rescope to "what THIS source contributed." */
+  const scopedScanned = useMemo(() => {
+    if (sourceFilter.kind === "all") return localScanned;
+    const out = new Set<string>();
+    for (const e of localScanned) if (epcInSource(e)) out.add(e);
+    return out;
+  }, [localScanned, sourceFilter, epcInSource]);
+
   const liveMatchedCount = useMemo(() => {
     let n = 0;
-    for (const epc of localScanned) if (expectedEpcSet.has(epc)) n += 1;
-    return Math.max(n, variance.matched.length);
-  }, [localScanned, expectedEpcSet, variance.matched.length]);
+    for (const epc of scopedScanned) if (expectedEpcSet.has(epc)) n += 1;
+    // Server variance.matched is the global high-water; we only take it
+    // when the Source filter is "all" so a narrower view doesn't get
+    // inflated by the global reconciliation.
+    return sourceFilter.kind === "all"
+      ? Math.max(n, variance.matched.length)
+      : n;
+  }, [scopedScanned, expectedEpcSet, variance.matched.length, sourceFilter]);
   const liveMissingCount = Math.max(0, liveExpectedCount - liveMatchedCount);
+
+  /** Per-source counts for the three extras buckets. When the filter is
+   *  "all", these collapse to the server-reported totals. Otherwise we
+   *  reduce against the source map so the tile under the filter matches
+   *  the operator's selection. */
+  const liveAddedHereCount = useMemo(
+    () =>
+      sourceFilter.kind === "all"
+        ? variance.added_here.length
+        : variance.added_here.filter((r) => epcInSource(r.epc)).length,
+    [variance.added_here, sourceFilter, epcInSource],
+  );
+  const liveDefectiveCount = useMemo(
+    () =>
+      sourceFilter.kind === "all"
+        ? variance.defective.length
+        : variance.defective.filter((r) => epcInSource(r.epc)).length,
+    [variance.defective, sourceFilter, epcInSource],
+  );
+  const liveLockedCount = useMemo(
+    () =>
+      sourceFilter.kind === "all"
+        ? variance.locked.length
+        : variance.locked.filter((r) => epcInSource(r.epc)).length,
+    [variance.locked, sourceFilter, epcInSource],
+  );
   // Coverage % uses Math.floor so a count that's 99.91% complete shows as
   // 99%, not a misleading "100%". Only display 100 when ALL expected EPCs
   // are accounted for (matched == expected, missing == 0). Without this
@@ -1111,9 +1170,9 @@ function ActiveSessionView({
           cls="wms-status-success"
         />
         <AnimKpiTile label="Missing" target={liveMissingCount} cls="text-amber-400" />
-        <AnimKpiTile label="Added here" target={variance.added_here.length} cls="text-sky-300" />
-        <AnimKpiTile label="Defective" target={variance.defective.length} cls="text-red-400" />
-        <AnimKpiTile label="Locked" target={variance.locked.length} cls="text-fuchsia-300" />
+        <AnimKpiTile label="Added here" target={liveAddedHereCount} cls="text-sky-300" />
+        <AnimKpiTile label="Defective" target={liveDefectiveCount} cls="text-red-400" />
+        <AnimKpiTile label="Locked" target={liveLockedCount} cls="text-fuchsia-300" />
         <ScanTimeTile scanPeriods={detail.scan_periods} status={detail.status} />
         <AnimKpiTile
           label="Read rate"
