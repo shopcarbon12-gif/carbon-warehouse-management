@@ -64,20 +64,23 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
   int _detectedCount = 0;
 
   final List<EncodeTagResult> _history = <EncodeTagResult>[];
-  final Set<String> _seen = <String>{};
+
+  /// Per-EPC attempt counter keyed by the old C-prefix EPC. Each scan of a
+  /// failed tag pushes a NEW history row (a "container") instead of
+  /// mutating the prior one — operator preference 2026-05-30. Hard-capped
+  /// at [_maxAttemptsPerEpc]: once an EPC reaches the cap in this session
+  /// it is silently dropped from the read loop and can only be retried in
+  /// a fresh session (or after the operator hits RESET / deletes its rows).
+  final Map<String, int> _attemptsByEpc = <String, int>{};
+  static const int _maxAttemptsPerEpc = 3;
 
   /// Cards whose chip-write failed (operator moved away, RF dropout, etc.)
   /// keyed by the old C-prefix EPC. When the operator scans the same tag
-  /// again, [_onTagRead] retries the write against the previously-claimed
-  /// `newEpc` instead of allocating a fresh serial server-side (which
-  /// would leak the first claim's items row). Cleared on a successful
-  /// retry or when the operator removes the row.
+  /// again, [_onTagRead] reuses the previously-claimed `newEpc` instead of
+  /// allocating a fresh serial server-side (which would leak the first
+  /// claim's items row). Cleared on a successful retry or when the
+  /// operator removes the row.
   final Map<String, EncodeTagResult> _failedCards = <String, EncodeTagResult>{};
-
-  /// Guard against re-entry while a retry write is still in flight — the
-  /// vendor channel takes ~100-400 ms to come back and the radio keeps
-  /// streaming reads of the still-unwritten tag during that window.
-  final Set<String> _retryInFlight = <String>{};
 
   /// SINGLE-FLIGHT MUTEX (2026-05-30).
   /// The radio fires ~50 reads/sec; without this gate, the first 5-6
@@ -397,7 +400,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     if (epc.isEmpty) return;
     // STRICT re-encode filter: only legacy C-prefix tags (C1*/C2*/C3*)
     // are eligible to be rewritten. Every other EPC is silently dropped —
-    // no rebuild, no beep, no light, no _seen entry, no _readCount bump,
+    // no rebuild, no beep, no light, no attempt-counter entry, no _readCount bump,
     // no processTag. With native per-tag beep already suppressed in
     // initState, this means a Carbon-prefix or foreign tag in the
     // antenna's field is invisible to the operator on this screen.
@@ -419,91 +422,125 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     // target the instant the current pipeline finishes.
     if (_processInFlight) return;
 
-    // Retry path: a previous write for this exact chip failed (operator
-    // moved too far / RF dropout). The server already burned a serial
-    // via /api/rfid/encode-claim, so just re-issue the chip write with
-    // the same newEpc instead of claiming again — claiming again leaves
-    // the first allocation orphaned in items.
-    final failed = _failedCards[epc];
-    if (failed != null) {
-      if (_retryInFlight.contains(epc)) return;
-      _processInFlight = true;
+    // Per-EPC attempt budget — operator wants up to 3 attempts per chip
+    // per session, each attempt rendered as its OWN history row (no
+    // in-place mutation of a prior fail). After 3 the EPC is locked out
+    // until reset or a new session.
+    final attempts = _attemptsByEpc[epc] ?? 0;
+    if (attempts >= _maxAttemptsPerEpc) return;
+
+    if (attempts == 0) {
+      // First attempt: fresh catalog → claim → write pipeline.
+      _attemptsByEpc[epc] = 1;
+      setState(() => _readCount += 1);
+      // Operator asked for a single beep on every relevant (C-prefix)
+      // read. Native per-tag beep stays suppressed (silences the
+      // foreign-tag drop path above); this explicit Dart cue fires only
+      // after the C-prefix filter passes, so the operator hears exactly
+      // the tags they care about and nothing else.
       _sounds.play(ScanCue.read);
-      unawaited(_retryWrite(failed).whenComplete(() {
+      _processInFlight = true;
+      unawaited(_processTag(epc).whenComplete(() {
         _processInFlight = false;
       }));
       return;
     }
 
-    if (!_seen.add(epc)) {
+    // Retry attempt (2 or 3): chip-write previously failed but the
+    // server already burned a serial via /api/rfid/encode-claim. Reuse
+    // that claim — claiming again would orphan the first allocation in
+    // items. Push a NEW history row so the operator sees the retry as
+    // a separate container, not a status flip on the original row.
+    final prior = _failedCards[epc];
+    if (prior == null || prior.newEpc == null || prior.newEpc!.length != 24) {
+      // No claim to reuse — defensive, shouldn't happen if attempts>0.
+      // Drop without bumping the counter so the next scan can start
+      // fresh.
       return;
     }
-    setState(() => _readCount += 1);
-    // Operator asked for a single beep on every relevant (C-prefix) read.
-    // Native per-tag beep stays suppressed (silences the foreign-tag drop
-    // path above); this explicit Dart cue fires only after the C-prefix
-    // filter passes, so the operator hears exactly the tags they care
-    // about and nothing else.
+    _attemptsByEpc[epc] = attempts + 1;
     _sounds.play(ScanCue.read);
     _processInFlight = true;
-    unawaited(_processTag(epc).whenComplete(() {
+    unawaited(_retryWriteAsNewRow(prior).whenComplete(() {
       _processInFlight = false;
     }));
   }
 
-  /// Re-run the chip write for a card whose previous write failed.
-  /// Re-uses `card.newEpc` from the prior `postEncodeClaim` — the serial
-  /// is already burned server-side and the items row already exists.
-  Future<void> _retryWrite(EncodeTagResult card) async {
-    final newEpc = card.newEpc;
+  /// Push a NEW history row for a retry attempt and re-run the chip
+  /// write. Re-uses `prior.newEpc` from the original `postEncodeClaim`
+  /// — the serial is already burned server-side and the items row
+  /// already exists, so claiming again would orphan the first allocation.
+  ///
+  /// On success: marks the new row encoded, clears the EPC from
+  /// [_failedCards] (no more retries needed), bumps [_encodedCount] and
+  /// runs the same finalize-write + event-report tail as the
+  /// first-attempt success path.
+  ///
+  /// On failure: marks the new row TAG_ISSUE / WRITE_FAILED and stores
+  /// it back into [_failedCards] so the next scan of the same EPC (up
+  /// to the [_maxAttemptsPerEpc] cap) can retry against the same claim.
+  Future<void> _retryWriteAsNewRow(EncodeTagResult prior) async {
+    final newEpc = prior.newEpc;
+    final oldEpc = prior.oldEpc;
     if (newEpc == null || newEpc.length != 24) return;
-    if (_retryInFlight.contains(card.oldEpc)) return;
-    _retryInFlight.add(card.oldEpc);
-    _updateCard(card, (c) {
-      // Flip back to "in progress" so the badge reflects the new attempt.
-      c.status = EncodeStatus.detected;
-      c.failureReason = EncodeFailureReason.none;
-    });
+    final card = EncodeTagResult(
+      oldEpc: oldEpc,
+      newEpc: newEpc,
+      systemId: prior.systemId,
+      serial: prior.serial,
+      customSku: prior.customSku,
+      itemName: prior.itemName,
+      status: EncodeStatus.detected,
+      at: DateTime.now(),
+    );
+    _pushHistory(card);
+
     bool written = false;
     try {
       written = await RfidVendorChannel.writeEpcTag(
-        targetEpc: card.oldEpc,
+        targetEpc: oldEpc,
         newEpc: newEpc,
       );
     } catch (_) {
       written = false;
     }
-    if (!mounted) {
-      _retryInFlight.remove(card.oldEpc);
-      return;
-    }
+    if (!mounted) return;
     if (!written) {
       _updateCard(card, (c) {
         c.status = EncodeStatus.tagIssue;
         c.failureReason = EncodeFailureReason.writeFailed;
       });
+      // Keep the claim available for the next retry (if any attempts
+      // remain in the per-session budget).
+      _failedCards[oldEpc] = card;
       _sounds.play(ScanCue.error);
-      _retryInFlight.remove(card.oldEpc);
+      unawaited(_reportEvent(
+        oldEpc: oldEpc,
+        newEpc: newEpc,
+        systemId: prior.systemId,
+        serial: prior.serial,
+        customSku: prior.customSku ?? '',
+        status: 'write_failed',
+      ));
       return;
     }
     _updateCard(card, (c) {
       c.status = EncodeStatus.encoded;
       c.failureReason = EncodeFailureReason.none;
     });
-    _failedCards.remove(card.oldEpc);
-    _retryInFlight.remove(card.oldEpc);
+    _failedCards.remove(oldEpc);
     setState(() => _encodedCount += 1);
     _sounds.play(ScanCue.success);
     // Same finalisation as the first-attempt success path — the server's
     // encode-claim left the items row at 'unknown' even though the chip
     // is now confirmed to carry [newEpc].
-    unawaited(_finalizeWrite(oldEpc: card.oldEpc, newEpc: newEpc));
+    unawaited(_finalizeWrite(oldEpc: oldEpc, newEpc: newEpc));
     unawaited(_reportEvent(
-      oldEpc: card.oldEpc,
+      oldEpc: oldEpc,
       newEpc: newEpc,
-      systemId: card.systemId,
-      serial: card.serial,
-      customSku: card.customSku ?? '',
+      systemId: prior.systemId,
+      serial: prior.serial,
+      customSku: prior.customSku ?? '',
     ));
   }
 
@@ -782,9 +819,8 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
   void _resetScreen() {
     setState(() {
       _history.clear();
-      _seen.clear();
+      _attemptsByEpc.clear();
       _failedCards.clear();
-      _retryInFlight.clear();
       _catalogCache.clear();
       _processInFlight = false;
       _readCount = 0;
@@ -927,9 +963,11 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
                             onDelete: () {
                               setState(() {
                                 _history.removeAt(i);
-                                _seen.remove(r.oldEpc);
+                                // Reset the per-EPC budget so a fresh
+                                // scan after manual deletion starts a
+                                // new pipeline from attempt 1.
+                                _attemptsByEpc.remove(r.oldEpc);
                                 _failedCards.remove(r.oldEpc);
-                                _retryInFlight.remove(r.oldEpc);
                               });
                             },
                             confirmDelete: () async {

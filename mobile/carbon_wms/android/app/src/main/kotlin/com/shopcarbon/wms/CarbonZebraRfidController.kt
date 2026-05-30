@@ -804,16 +804,13 @@ class CarbonZebraRfidController(
           }
         }
 
-        runCatching {
-          val rp = r.Actions.TagAccess.ReadAccessParams()
-          rp.accessPassword = 0L
-          rp.memoryBank = com.zebra.rfid.api3.MEMORY_BANK.MEMORY_BANK_RESERVED
-          rp.offset = 0
-          rp.count = 4
-          val td = r.Actions.TagAccess.readWait(targetEpc, rp, null)
-          val mem = td?.getMemoryBankData() ?: "<null>"
-          Log.d(TAG, "post-fail diag: readWait(RESERVED bank, kill+access pw) -> '$mem' (if read-locked, write likely write-locked too)")
-        }.onFailure { Log.w(TAG, "post-fail diag: RESERVED read threw (likely read-locked): ${it.message}") }
+        // The RESERVED-bank diag probe used to run here as a third
+        // readWait — purely informational ("if read-locked, write was
+        // probably write-locked too"). It never set rescuedById, so on
+        // real failures it just added another ~500-1500ms to a path
+        // the operator was already complaining was >10s long. Removed
+        // 2026-05-30. If we need that signal back for a specific
+        // troubleshooting session, run it manually from the diag UI.
 
         if (rescuedById != null) {
           Log.d(TAG, "performWriteEpc: verify returned false but rescue path '$rescuedById' confirmed write — promoting to true")
@@ -860,15 +857,19 @@ class CarbonZebraRfidController(
    * tag's write-buffer briefly echoes the new EPC before the silicon reverts. Same rationale
    * as [CarbonChainwayRfidController.verifyEpcWrite].
    */
-  /// timeoutMs lowered 3000 → 1500 on 2026-05-29: success exits on the
-  /// first matching sighting (~50-150ms when the tag is touching the
-  /// antenna at max power, where the verify already runs), so the
-  /// only thing the larger ceiling did was lengthen the failure path.
+  /// timeoutMs lowered 3000 → 1500 on 2026-05-29, then 1500 → 600 on
+  /// 2026-05-30: success exits on the first matching sighting
+  /// (~50-150ms when the tag is touching the antenna at max power,
+  /// where the verify already runs), so the larger ceiling only
+  /// lengthened the failure path. Operator complaint 2026-05-30:
+  /// failures took >10s per row; verify timeout was a big chunk of
+  /// that budget. 600ms gives the SDK 4x typical-success margin
+  /// without padding the failure path.
   private fun verifyEpcWrite(
     r: RFIDReader,
     oldEpc: String,
     newEpc: String,
-    timeoutMs: Long = 1500,
+    timeoutMs: Long = 600,
     minNewSightings: Int = 1,
   ): Boolean {
     val oldNorm = oldEpc.uppercase()
