@@ -174,6 +174,13 @@ export async function postHeartbeat(
      *  antennas so Hardware Config can offer a one-click "Apply X dBm"
      *  banner. Cleared on self-heal. */
     powerSuggestions?: { readerId: string; suggestedDbm: number }[];
+    /** POS readers currently in active software recovery, so the WMS can set
+     *  devices.recovery_state for the POS "Reader recovering…" indicator. */
+    recoveringReaders?: {
+      readerId: string;
+      state: "recovering" | "hard_resetting";
+      sinceMs: number;
+    }[];
   },
 ): Promise<HeartbeatResponse> {
   const r = await request<HeartbeatResponse>(
@@ -339,20 +346,34 @@ export type PosPowerOverride = {
   livePowerDbm: number;
 };
 
+/** Per-POS-reader recovery-arming state. `armed` = a cashier is parked on a
+ *  scan surface (cart / Update Item Status); `scanning` = a scan modal is
+ *  actively open. The supervisor runs aggressive recovery on the POS reader
+ *  ONLY while armed, and applies the tighter "no reads in 30 s" rule while
+ *  scanning. Stale/absent = idle → leave the reader alone. */
+export type PosReaderState = {
+  readerId: string;
+  armed: boolean;
+  scanning: boolean;
+};
+
 export async function fetchActiveSessions(env: AgentEnv): Promise<{
   antennaTestSessions: ActiveAntennaTestSession[];
   scanSessions: ActiveScanSession[];
   posOverrides: PosPowerOverride[];
+  posReaderState: PosReaderState[];
 }> {
   const r = await request<{
     sessions?: ActiveAntennaTestSession[];
     scanSessions?: ActiveScanSession[];
     posOverrides?: PosPowerOverride[];
+    posReaderState?: PosReaderState[];
   }>(env, "GET", "/api/cdm-agents/active-sessions");
   return {
     antennaTestSessions: r.sessions ?? [],
     scanSessions: r.scanSessions ?? [],
     posOverrides: r.posOverrides ?? [],
+    posReaderState: r.posReaderState ?? [],
   };
 }
 

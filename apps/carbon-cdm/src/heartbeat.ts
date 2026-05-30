@@ -30,6 +30,13 @@ export function startHeartbeat(
   /** Snapshot of supervisor auto-sweep power suggestions (working power
    *  found below the operator-configured value). */
   getPowerSuggestions?: () => { readerId: string; suggestedDbm: number }[],
+  /** Snapshot of POS readers currently in active recovery, so the WMS can set
+   *  devices.recovery_state and the POS shows "Reader recovering…". */
+  getRecoveringReaders?: () => {
+    readerId: string;
+    state: "recovering" | "hard_resetting";
+    sinceMs: number;
+  }[],
 ): () => void {
   const intervalMs = env.CARBON_HEARTBEAT_INTERVAL_SEC * 1000;
   const host = effectiveHostname(env);
@@ -46,6 +53,7 @@ export function startHeartbeat(
         bootTimeIso: BOOT_TIME_ISO,
         wedgedReaders: getWedgedReaders?.() ?? [],
         powerSuggestions: getPowerSuggestions?.() ?? [],
+        recoveringReaders: getRecoveringReaders?.() ?? [],
       });
       if (r.restart_requested) {
         log.warn("heartbeat: restart_requested by server — exiting (systemd will respawn)", {

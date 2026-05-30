@@ -126,6 +126,7 @@ async function main(): Promise<void> {
       supervisor.setActiveScanSessionReaders(readerIds),
     setPosPowerOverrides: (overrides) =>
       supervisor.setPosPowerOverrides(overrides),
+    setPosReaderState: (state) => supervisor.setPosReaderState(state),
   });
   antennaTest.start();
 
@@ -145,6 +146,7 @@ async function main(): Promise<void> {
     () => !lastPullOk,
     () => supervisor.getWedgedReaders(),
     () => supervisor.getPowerSuggestions(),
+    () => supervisor.getRecoveringReaders(),
   );
   const stopWiznetDiscovery = startWiznetDiscovery(env);
   // Encode Items worker — polls /api/cdm-agents/encode-jobs every few

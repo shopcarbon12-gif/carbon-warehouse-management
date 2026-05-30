@@ -84,8 +84,38 @@ export async function GET(req: Request) {
     [a.agentId],
   );
 
+  // POS reader recovery-arming state. The cashier's presence on a scan surface
+  // (cart page / Update Item Status) refreshes monitor_armed_at; an open scan
+  // modal refreshes scanning_active_at. Fresh (within 30 s — the POS heartbeat
+  // is 15 s, so one missed beat still counts) means the cashier is actively
+  // present, so the agent runs its
+  // aggressive armed-only recovery on the POS reader; stale/absent means the
+  // reader is idle and must be left alone (no resets when nobody's there).
+  const posReaderStateRows = await pool.query<{
+    readerId: string;
+    armed: boolean;
+    scanning: boolean;
+  }>(
+    `SELECT d.id::text AS "readerId",
+            (s.monitor_armed_at   IS NOT NULL AND s.monitor_armed_at   > now() - interval '30 seconds') AS armed,
+            (s.scanning_active_at IS NOT NULL AND s.scanning_active_at > now() - interval '30 seconds') AS scanning
+       FROM pos_register_sessions s
+       JOIN pos_registers reg ON reg.id = s.register_id
+       JOIN devices d ON d.cdm_agent_id = reg.cdm_agent_id
+                     AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
+                     AND d.is_pos_dedicated = TRUE
+      WHERE s.status = 'open'
+        AND reg.cdm_agent_id = $1::uuid`,
+    [a.agentId],
+  );
+
   return NextResponse.json(
-    { sessions, scanSessions, posOverrides: posOverridesRows.rows },
+    {
+      sessions,
+      scanSessions,
+      posOverrides: posOverridesRows.rows,
+      posReaderState: posReaderStateRows.rows,
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

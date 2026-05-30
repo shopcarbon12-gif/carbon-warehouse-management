@@ -7,6 +7,7 @@ import {
   type ActiveScanSession,
   type AntennaTestIngestRead,
   type PosPowerOverride,
+  type PosReaderState,
 } from "./wms-client.js";
 
 /**
@@ -109,6 +110,13 @@ export type AntennaTestSupervisorHooks = {
    *  spawns the reader, this value wins over WMS-configured power. Empty
    *  map = no overrides; revert to configured power on next respawn. */
   setPosPowerOverrides: (overrides: Map<string, number>) => void;
+  /** Update per-POS-reader recovery-arming state from Carbon-POS. `armed` =
+   *  cashier parked on a scan surface; `scanning` = a scan modal is open. The
+   *  supervisor runs aggressive recovery on the reader ONLY while armed, and
+   *  uses the tighter 30 s no-reads rule while scanning. */
+  setPosReaderState: (
+    state: Map<string, { armed: boolean; scanning: boolean }>,
+  ) => void;
 };
 
 type Pending = {
@@ -219,11 +227,12 @@ export class AntennaTestController {
     if (this.polling) return; // simple in-flight guard
     this.polling = true;
     try {
-      const { antennaTestSessions, scanSessions, posOverrides } =
+      const { antennaTestSessions, scanSessions, posOverrides, posReaderState } =
         await fetchActiveSessions(this.env);
       this.reconcile(antennaTestSessions);
       this.reconcileScanSessions(scanSessions);
       this.reconcilePosOverrides(posOverrides);
+      this.reconcilePosReaderState(posReaderState);
     } catch (e) {
       // Don't spam — log at debug. Real operator-visible errors will
       // surface via the SSE channel anyway when reads stop flowing.
@@ -252,6 +261,15 @@ export class AntennaTestController {
       posOverrides.map((o) => [o.readerId, o.livePowerDbm]),
     );
     this.hooks.setPosPowerOverrides(map);
+  }
+
+  /** Forward per-POS-reader recovery-arming state to the supervisor. */
+  private reconcilePosReaderState(rows: PosReaderState[]): void {
+    if (!this.hooks) return;
+    const map = new Map<string, { armed: boolean; scanning: boolean }>(
+      rows.map((r) => [r.readerId, { armed: r.armed, scanning: r.scanning }]),
+    );
+    this.hooks.setPosReaderState(map);
   }
 
   private reconcile(sessions: ActiveAntennaTestSession[]): void {

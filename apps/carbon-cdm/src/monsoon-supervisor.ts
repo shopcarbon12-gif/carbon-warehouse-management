@@ -827,6 +827,22 @@ const MIN_POS_RESPAWN_INTERVAL_MS = 5_000;
  * 330 = 33.0 dBm in the binary's tenth-dBm --power arg.
  */
 const POS_FIXED_POWER_ARG = 330;
+/**
+ * POS armed-recovery thresholds (2026-05-30). A POS reader is recovered ONLY
+ * while a cashier is present (armed). Escalation is time-based and software-
+ * only — it NEVER raises a hardware/PoE badge:
+ *   - chip silent (no bytes) ≥ 15 s  → quick respawn (kick)
+ *   - actively scanning, no tag reads ≥ 30 s → chip reset + respawn
+ *   - chip silent ≥ 60 s → HARD RESET (chip + bridge) + records-judged sweep
+ * "Chip silent" (no bytes) distinguishes a genuine wedge from "no item at the
+ * register" (healthy — bytes still flow with no tags); the scanning rule fires
+ * on no tag-READS because an actively-scanning cashier IS presenting items.
+ */
+const POS_QUICK_KICK_SILENT_MS = 15_000;
+const POS_SCANNING_NOREAD_MS = 30_000;
+const POS_EMERGENCY_SILENT_MS = 60_000;
+const POS_RECOVERY_KICK_COOLDOWN_MS = 12_000;
+const POS_EMERGENCY_COOLDOWN_MS = 90_000;
 const WATCHDOG_INTERVAL_MS = 5_000;
 /**
  * Throttle for /api/cdm-agents/reader-offline pushes. A reader sitting
@@ -917,6 +933,74 @@ export class MonsoonSupervisor {
    *  payload. Wins over WMS-configured power at spawn time. Empty map =
    *  no overrides; revert to configured power. Updated every ~100 ms. */
   private posPowerOverrides = new Map<string, number>();
+
+  /** POS reader recovery-arming state from Carbon-POS (active-sessions poll).
+   *  A POS reader is recovered ONLY while armed (a cashier is parked on a scan
+   *  surface); `scanning` (a scan modal is open) tightens the no-reads rule to
+   *  30 s. Idle/unarmed POS readers are left completely alone. */
+  private posMonitorArmed = new Set<string>();
+  private posScanningActive = new Set<string>();
+  /** ms timestamp when each POS reader most recently transitioned to armed.
+   *  The 60 s "hard reset + sweep" emergency times from here (reset on every
+   *  real read so it only fires when the reader is genuinely not responding
+   *  while a cashier is present). */
+  private posArmedSinceMs = new Map<string, number>();
+  /** ms timestamp of the last 60 s emergency (hard reset + sweep) per POS
+   *  reader — cooldown so we don't pummel the chip. */
+  private posLastEmergencyAt = new Map<string, number>();
+  /** Per-reader recovery status surfaced to the POS "Reader recovering…"
+   *  indicator (via heartbeat → devices.recovery_state). */
+  private recoveryStateByReader = new Map<
+    string,
+    { state: "recovering" | "hard_resetting"; sinceMs: number }
+  >();
+
+  /**
+   * Update per-POS-reader recovery-arming state. Armed transitions stamp
+   * posArmedSinceMs; disarm clears all derived state so an idle reader is never
+   * treated as "needs recovery."
+   */
+  setPosReaderState(
+    state: Map<string, { armed: boolean; scanning: boolean }>,
+  ): void {
+    const armed = new Set<string>();
+    const scanning = new Set<string>();
+    for (const [id, s] of state) {
+      if (s.armed) armed.add(id);
+      if (s.scanning) scanning.add(id);
+    }
+    const now = Date.now();
+    for (const id of armed) {
+      if (!this.posArmedSinceMs.has(id)) this.posArmedSinceMs.set(id, now);
+    }
+    for (const id of Array.from(this.posArmedSinceMs.keys())) {
+      if (!armed.has(id)) {
+        this.posArmedSinceMs.delete(id);
+        this.posLastEmergencyAt.delete(id);
+        this.recoveryStateByReader.delete(id);
+      }
+    }
+    this.posMonitorArmed = armed;
+    this.posScanningActive = scanning;
+  }
+
+  /** Snapshot for the heartbeat: readers currently in active recovery, so the
+   *  POS can show "Reader recovering…". */
+  getRecoveringReaders(): {
+    readerId: string;
+    state: "recovering" | "hard_resetting";
+    sinceMs: number;
+  }[] {
+    const out: {
+      readerId: string;
+      state: "recovering" | "hard_resetting";
+      sinceMs: number;
+    }[] = [];
+    for (const [readerId, v] of this.recoveryStateByReader) {
+      out.push({ readerId, state: v.state, sinceMs: v.sinceMs });
+    }
+    return out;
+  }
 
   /**
    * Reader IDs that the encode-jobs worker has temporarily borrowed the
@@ -1577,12 +1661,104 @@ export class MonsoonSupervisor {
       // still runs (see the on-exit fast-stuck / long-stuck ladder), so a
       // wedged register reader always self-heals in software.
       const posReader = slot.spec.is_pos_dedicated === true;
+      const posArmed = posReader && this.posMonitorArmed.has(slot.spec.id);
       // Tell the WMS this reader is offline as soon as silence persists
       // past the watchdog threshold. Throttled so a long-silent reader
       // doesn't hammer the endpoint. Fires regardless of which recovery
       // branch (rotate / kick / exhaustion) we take below.
       if (silentMs >= silenceTimeout) {
         this.pushReaderOfflineIfDue(slot, now);
+      }
+
+      // ── POS armed recovery ────────────────────────────────────────────
+      // A POS reader self-heals ONLY while a cashier is present (armed) — an
+      // idle/unarmed POS reader is left completely alone (no resets when
+      // nobody's there). Time-based, software-only escalation; never raises a
+      // hardware/PoE badge. Skipped while a records-judged recovery sweep is
+      // already walking (it owns the slot below).
+      if (posReader && !slot.sweepRequireRecords && slot.testSession === null) {
+        if (!posArmed) {
+          this.recoveryStateByReader.delete(slot.spec.id);
+        } else if (slot.child) {
+          const armedSince = this.posArmedSinceMs.get(slot.spec.id) ?? now;
+          const lastRead = slot.lastRecordAt;
+          const reading = lastRead > 0 && now - lastRead < 5_000;
+          if (reading) {
+            this.recoveryStateByReader.delete(slot.spec.id);
+          } else {
+            const chipSilentMs = now - slot.lastByteAt; // no bytes = wedge
+            const noReadMs = lastRead > 0 ? now - lastRead : now - armedSince;
+            const sinceKick =
+              now - (this.posLastEmergencyAt.get(slot.spec.id) ?? 0);
+            const scanning = this.posScanningActive.has(slot.spec.id);
+            if (
+              chipSilentMs >= POS_EMERGENCY_SILENT_MS &&
+              sinceKick >= POS_EMERGENCY_COOLDOWN_MS
+            ) {
+              // 60 s not responding → HARD RESET (chip + bridge) + sweep.
+              log.error(
+                "supervisor: POS armed + not responding 60s — hard reset + sweep",
+                {
+                  readerId: slot.spec.id,
+                  readerName: slot.spec.name,
+                  chipSilentMs,
+                },
+              );
+              this.posLastEmergencyAt.set(slot.spec.id, now);
+              this.recoveryStateByReader.set(slot.spec.id, {
+                state: "hard_resetting",
+                sinceMs: now,
+              });
+              this.tryChipReset(slot.spec);
+              this.startRecoverySweep(slot);
+              slot.intendedKill = true;
+              slot.lastByteAt = now;
+              this.killSlotChildHard(slot);
+              continue;
+            }
+            if (
+              ((scanning && noReadMs >= POS_SCANNING_NOREAD_MS) ||
+                chipSilentMs >= POS_QUICK_KICK_SILENT_MS) &&
+              sinceKick >= POS_RECOVERY_KICK_COOLDOWN_MS
+            ) {
+              // Actively scanning with no reads (30 s), or chip silent (15 s)
+              // → kick: chip reset + fresh respawn. Immediate fix attempt.
+              log.warn(
+                "supervisor: POS armed not reading — chip reset + respawn",
+                {
+                  readerId: slot.spec.id,
+                  readerName: slot.spec.name,
+                  scanning,
+                  noReadMs,
+                  chipSilentMs,
+                },
+              );
+              this.posLastEmergencyAt.set(slot.spec.id, now);
+              this.recoveryStateByReader.set(slot.spec.id, {
+                state: "recovering",
+                sinceMs: now,
+              });
+              this.tryChipReset(slot.spec);
+              slot.intendedKill = true;
+              slot.lastByteAt = now;
+              this.killSlotChildHard(slot);
+              continue;
+            }
+            // Below thresholds: surface "recovering" only when the chip is
+            // actually silent (genuine wedge), not when it's healthy and just
+            // waiting for an item (bytes flowing, no tags).
+            if (chipSilentMs >= 10_000 || (scanning && noReadMs >= 15_000)) {
+              if (!this.recoveryStateByReader.has(slot.spec.id)) {
+                this.recoveryStateByReader.set(slot.spec.id, {
+                  state: "recovering",
+                  sinceMs: now,
+                });
+              }
+            } else {
+              this.recoveryStateByReader.delete(slot.spec.id);
+            }
+          }
+        }
       }
       // Supervisor-managed antenna mux: rotate antennas on the configured
       // interval. Skipped during TEST_MODE (the antenna-test endpoint owns
@@ -1625,9 +1801,10 @@ export class MonsoonSupervisor {
       if (slot.sweepRequireRecords && slot.sweepPowerOverrideArg !== null) {
         const hadRecordThisStep =
           slot.lastRecordAt > 0 && slot.lastRecordAt >= slot.sweepStepStartedAt;
-        if (slot.testSession !== null || posReader) {
-          // An operator antenna-test, or a cashier-controlled POS reader, owns
-          // the slot's power — stand down so we don't fight it.
+        if (slot.testSession !== null || (posReader && !posArmed)) {
+          // An operator antenna-test, or an UNARMED POS reader (no cashier),
+          // owns / should-not-touch the slot — stand down. An ARMED POS reader
+          // DOES run the sweep (the 60 s emergency).
           slot.sweepRequireRecords = false;
           slot.sweepPowerOverrideArg = null;
           continue;
@@ -2205,19 +2382,15 @@ export class MonsoonSupervisor {
     //      scan-session for this reader. The session-end POST will revert.
     //   3. testWakeReaders.has(reader.id) — antenna-test session has woken
     //      the reader for the duration of the test.
-    //   4. reader.is_pos_dedicated === true — POS readers (.34) MUST stay
-    //      always-warm. Carbon-POS calls "Update Status Item" expecting
-    //      reads within a couple seconds; if the supervisor has stopped
-    //      the chip between calls, the cashier pays the full chip cold-
-    //      start window (live evidence 2026-05-26 on .34: 45 s before
-    //      first read on every click, because the supervisor was
-    //      toggling stop/start every minute as the POS scan-session came
-    //      and went). Always-desired removes the cold-start tax — the
-    //      child runs continuously, ready on the very next read.
-    //
-    // Previously this filter only checked effective_paused + active
-    // sessions. The new pos_dedicated bypass is opt-in via the per-
-    // reader flag.
+    //   4. reader.is_pos_dedicated === true AND it is within store hours
+    //      (effective_paused is FALSE — driven by the per-reader scan_schedule
+    //      now, since the POS no longer toggles scan_paused_at) — the POS
+    //      reader stays always-WARM during the store's open hours so the
+    //      cashier never pays the ~45 s cold-start tax. Outside store hours it
+    //      is fully OFF, EXCEPT when posMonitorArmed (a cashier triggered it
+    //      after hours): then it cold-starts on demand and stops again on
+    //      disarm. This daily on/off is safe — it is NOT the per-session
+    //      teardown that wedged the chip under the reverted f0e536e.
     const desiredById = new Map(
       bundle.readers
         .filter(
@@ -2225,7 +2398,7 @@ export class MonsoonSupervisor {
             !(r.effective_paused ?? false) ||
             this.activeScanSessionReaders.has(r.id) ||
             this.testWakeReaders.has(r.id) ||
-            r.is_pos_dedicated === true,
+            (r.is_pos_dedicated === true && this.posMonitorArmed.has(r.id)),
         )
         .map((r) => [r.id, r] as const),
     );
@@ -2825,9 +2998,14 @@ export class MonsoonSupervisor {
    */
   private startRecoverySweep(slot: ReaderSlot): void {
     if (slot.testSession !== null) return; // operator owns the slot during a test
-    // POS-dedicated readers are cashier-controlled — never sweep over their
-    // power; the slider-change respawn is their recovery path.
-    if (slot.spec.is_pos_dedicated === true) return;
+    // POS readers only sweep during the armed 60 s emergency (hard reset +
+    // sweep). When NOT armed they're left alone; the constant-33 dBm pin means
+    // there's no slider to fight, so the emergency sweep is safe.
+    if (
+      slot.spec.is_pos_dedicated === true &&
+      !this.posMonitorArmed.has(slot.spec.id)
+    )
+      return;
     const configuredArg = Math.round(this.avgPower(slot.spec) * 10);
     const startIdx = RECOVERY_SWEEP_POWERS.findIndex((p) => p <= configuredArg);
     const startPower =
@@ -3569,15 +3747,13 @@ export class MonsoonSupervisor {
         wasIntendedKill,
         spawnDurationMs,
       });
-      // POS-dedicated readers (.34) must ALWAYS self-heal in software — the
-      // operator's hard rule: never give up, never dead-end at "needs
-      // service" / blame PoE / hardware. So they DO get the chip/bridge-reset
-      // recovery below (fast-stuck + long-stuck). What they must NOT get is
-      // the power-SWEEP: it walks power downward from the cashier's setting
-      // (wrong direction for a register reader) and fights the slider, which
-      // is what stalled the reader on slider changes. The sweep is gated out
-      // for POS in startRecoverySweep + the watchdog sweep blocks; the resets
-      // here run for everyone.
+      // POS-dedicated readers (.34) are recovered by the dedicated ARMED
+      // recovery path in runStreamWatchdog (time-based, cashier-present only,
+      // software-only, never a hardware/PoE badge). They are EXCLUDED from the
+      // generic on-exit fast-stuck / long-stuck cycle ladders here so the two
+      // mechanisms don't fight — and so an idle/unarmed POS reader is never
+      // reset just because no cashier is present.
+      const posReaderExit = spec.is_pos_dedicated === true;
 
       // FAST-STUCK DETECTION 2026-05-21: track consecutive sub-1s
       // cleanExit:true 0-records exits. After FAST_CLEAN_EXIT_STRIKES
@@ -3591,6 +3767,7 @@ export class MonsoonSupervisor {
       if (
         cleanExit &&
         !wasIntendedKill &&
+        !posReaderExit &&
         !slot.bytesSinceSpawn &&
         totalRecords === 0 &&
         spawnDurationMs < FAST_CLEAN_EXIT_THRESHOLD_MS
@@ -3668,19 +3845,19 @@ export class MonsoonSupervisor {
         !wasIntendedKill &&
         totalRecords === 0 &&
         spawnDurationMs >= LONG_STUCK_MIN_RUNTIME_MS &&
+        // POS readers are handled by the armed-recovery path, not this ladder.
+        !posReaderExit &&
         // While a records-judged recovery sweep owns the slot, the watchdog
         // drives step advance / success / exhaustion — don't let a natural
-        // mid-sweep exit also advance this ladder. (POS readers run this
-        // ladder too — chip/bridge resets only; the sweep tier no-ops via
-        // startRecoverySweep's POS guard.)
+        // mid-sweep exit also advance this ladder.
         !slot.sweepRequireRecords
       ) {
         slot.consecutiveLongStuckCycles += 1;
         const cycles = slot.consecutiveLongStuckCycles;
         const sinceLast = Date.now() - slot.lastLongStuckRecoveryAt;
         const cooldownPassed = sinceLast >= LONG_STUCK_RECOVERY_COOLDOWN_MS;
-        // POS readers self-heal with resets only — no power sweep (it walks
-        // power the wrong way for a register reader and fights the slider).
+        // Non-POS only here (posReaderExit gate above); the POS-vs-sweep
+        // branching below is now dead for POS but kept for clarity.
         const posReader = spec.is_pos_dedicated === true;
         const baseInfo = {
           readerId: spec.id,

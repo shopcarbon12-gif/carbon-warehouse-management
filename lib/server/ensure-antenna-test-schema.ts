@@ -26,6 +26,14 @@ export async function ensureAntennaTestSchema(pool: Pool): Promise<void> {
     await pool.query(
       `ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_test_epc_count INT`,
     );
+    // POS reader recovery indicator (2026-05-30). Set by the agent heartbeat;
+    // read by the Carbon-POS sell screen "Reader recovering…" badge.
+    await pool.query(
+      `ALTER TABLE devices ADD COLUMN IF NOT EXISTS recovery_state TEXT`,
+    );
+    await pool.query(
+      `ALTER TABLE devices ADD COLUMN IF NOT EXISTS recovering_since TIMESTAMPTZ`,
+    );
     await pool.query(
       `CREATE INDEX IF NOT EXISTS devices_test_pending_idx
          ON devices (test_pending_at)

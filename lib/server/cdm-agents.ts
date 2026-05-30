@@ -72,6 +72,20 @@ export const heartbeatSchema = z.object({
     )
     .max(64)
     .optional(),
+  /** POS readers currently in active software recovery. Stamps
+   *  `devices.recovery_state` (+ recovering_since) so the Carbon-POS sell
+   *  screen shows the amber "Reader recovering…" indicator. Readers absent
+   *  from the list get the column cleared. */
+  recoveringReaders: z
+    .array(
+      z.object({
+        readerId: z.string().uuid(),
+        state: z.enum(["recovering", "hard_resetting"]),
+        sinceMs: z.number().int().nonnegative(),
+      }),
+    )
+    .max(64)
+    .optional(),
 });
 
 export type HeartbeatBody = z.infer<typeof heartbeatSchema>;
@@ -316,6 +330,30 @@ export async function recordAgentHeartbeat(
          AND chassis_wedged_at IS NOT NULL
          AND NOT (id = ANY($2::uuid[]))`,
     [agentId, wedgedIds],
+  );
+
+  // Sync `recovery_state` from the agent's active-recovery list (POS readers
+  // only). Drives the Carbon-POS "Reader recovering…" indicator. Readers in
+  // this agent's bundle but absent from the list get the flag cleared.
+  const recovering = body.recoveringReaders ?? [];
+  const recoveringIds = recovering.map((r) => r.readerId);
+  for (const r of recovering) {
+    await client.query(
+      `UPDATE devices
+          SET recovery_state = $3,
+              recovering_since = COALESCE(recovering_since, now()),
+              updated_at = now()
+        WHERE cdm_agent_id = $1::uuid AND id = $2::uuid`,
+      [agentId, r.readerId, r.state],
+    );
+  }
+  await client.query(
+    `UPDATE devices
+        SET recovery_state = NULL, recovering_since = NULL, updated_at = now()
+      WHERE cdm_agent_id = $1::uuid
+        AND recovery_state IS NOT NULL
+        AND NOT (id = ANY($2::uuid[]))`,
+    [agentId, recoveringIds],
   );
 
   // Power suggestions are ADVISORY only — write to suggested_power_dbm
