@@ -994,6 +994,19 @@ export class MonsoonSupervisor {
     }
   }
 
+  /** Snapshot for the heartbeat: readers the supervisor currently has a live
+   *  child process for (i.e. actually RUNNING / started). The WMS writes this
+   *  to devices.reader_running so Hardware Config can show started/stopped —
+   *  the authoritative source now that start/stop is schedule + arm driven, not
+   *  scan_paused_at. */
+  getRunningReaders(): string[] {
+    const out: string[] = [];
+    for (const slot of this.slots.values()) {
+      if (slot.child !== null && !slot.shuttingDown) out.push(slot.spec.id);
+    }
+    return out;
+  }
+
   /** Snapshot for the heartbeat: readers currently in active recovery, so the
    *  POS can show "Reader recovering…". */
   getRecoveringReaders(): {

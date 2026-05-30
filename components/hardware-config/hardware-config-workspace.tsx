@@ -767,6 +767,31 @@ function ReaderCard({
       <div className="flex flex-wrap items-center gap-2">
         <Radio className="h-3.5 w-3.5 text-[var(--wms-accent)]" />
         <span className="font-mono text-xs text-[var(--wms-fg)]">{reader.name}</span>
+        {/* Authoritative started/stopped from the agent (live child process).
+            This is the on/off truth now that POS start/stop is schedule + arm
+            driven, not scan_paused_at. */}
+        {reader.recovery_state ? (
+          <span
+            title="Agent is actively self-healing this reader"
+            className="rounded border border-amber-400/50 bg-amber-500/20 px-1.5 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-wide text-amber-300"
+          >
+            recovering
+          </span>
+        ) : reader.reader_running === true ? (
+          <span
+            title="Agent has a live reader process — started/running"
+            className="rounded border border-emerald-400/50 bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-wide text-emerald-300"
+          >
+            running
+          </span>
+        ) : reader.reader_running === false ? (
+          <span
+            title="No reader process — stopped (outside hours / no cashier / paused)"
+            className="rounded border border-zinc-400/40 bg-zinc-500/20 px-1.5 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-wide text-zinc-300"
+          >
+            stopped
+          </span>
+        ) : null}
         <ReaderHealthBadge health={reader.health} />
         {reader.network_address ? (
           <span className="rounded bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">

@@ -37,6 +37,9 @@ export function startHeartbeat(
     state: "recovering" | "hard_resetting";
     sinceMs: number;
   }[],
+  /** Reader IDs the supervisor currently has running (live child) → WMS writes
+   *  devices.reader_running for the Hardware Config started/stopped column. */
+  getRunningReaders?: () => string[],
 ): () => void {
   const intervalMs = env.CARBON_HEARTBEAT_INTERVAL_SEC * 1000;
   const host = effectiveHostname(env);
@@ -54,6 +57,7 @@ export function startHeartbeat(
         wedgedReaders: getWedgedReaders?.() ?? [],
         powerSuggestions: getPowerSuggestions?.() ?? [],
         recoveringReaders: getRecoveringReaders?.() ?? [],
+        runningReaders: getRunningReaders?.() ?? [],
       });
       if (r.restart_requested) {
         log.warn("heartbeat: restart_requested by server — exiting (systemd will respawn)", {

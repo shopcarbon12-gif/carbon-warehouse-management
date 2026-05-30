@@ -147,6 +147,7 @@ async function main(): Promise<void> {
     () => supervisor.getWedgedReaders(),
     () => supervisor.getPowerSuggestions(),
     () => supervisor.getRecoveringReaders(),
+    () => supervisor.getRunningReaders(),
   );
   const stopWiznetDiscovery = startWiznetDiscovery(env);
   // Encode Items worker — polls /api/cdm-agents/encode-jobs every few

@@ -181,6 +181,9 @@ export async function postHeartbeat(
       state: "recovering" | "hard_resetting";
       sinceMs: number;
     }[];
+    /** Reader IDs the supervisor currently has running (live child). WMS writes
+     *  devices.reader_running for the Hardware Config started/stopped column. */
+    runningReaders?: string[];
   },
 ): Promise<HeartbeatResponse> {
   const r = await request<HeartbeatResponse>(

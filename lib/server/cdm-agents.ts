@@ -86,6 +86,9 @@ export const heartbeatSchema = z.object({
     )
     .max(64)
     .optional(),
+  /** Reader IDs the supervisor currently has running (live child). Stamps
+   *  `devices.reader_running` so Hardware Config shows started/stopped. */
+  runningReaders: z.array(z.string().uuid()).max(64).optional(),
 });
 
 export type HeartbeatBody = z.infer<typeof heartbeatSchema>;
@@ -354,6 +357,19 @@ export async function recordAgentHeartbeat(
         AND recovery_state IS NOT NULL
         AND NOT (id = ANY($2::uuid[]))`,
     [agentId, recoveringIds],
+  );
+
+  // Sync `reader_running` from the agent's running list (live child process).
+  // This is the authoritative started/stopped signal for Hardware Config now
+  // that start/stop is schedule + arm driven, not scan_paused_at.
+  const runningIds = body.runningReaders ?? [];
+  await client.query(
+    `UPDATE devices
+        SET reader_running = (id = ANY($2::uuid[])), updated_at = now()
+      WHERE cdm_agent_id = $1::uuid
+        AND device_type IN ('fixed_reader','transaction_reader','door_reader')
+        AND reader_running IS DISTINCT FROM (id = ANY($2::uuid[]))`,
+    [agentId, runningIds],
   );
 
   // Power suggestions are ADVISORY only — write to suggested_power_dbm

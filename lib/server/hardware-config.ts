@@ -75,6 +75,12 @@ export type HardwareReaderRow = {
    *  In, etc.) but still shown in Hardware Config + Cycle Counts so admins
    *  retain physical control. Flag is set per-reader; see migration 0074. */
   is_pos_dedicated: boolean;
+  /** Authoritative started/stopped — the agent currently has a live reader
+   *  process. TRUE = running, FALSE = stopped, null = unknown (no heartbeat).
+   *  This is the on/off truth now that start/stop is schedule + arm driven. */
+  reader_running: boolean | null;
+  /** Agent software-recovery state for POS readers; surfaces "recovering". */
+  recovery_state: string | null;
   antennas: HardwareAntennaRow[];
 };
 
@@ -142,6 +148,12 @@ type RawDevice = {
   suggested_power_dbm_at: string | null;
   /** Reader-level flag (ignored on antenna rows). See HardwareReaderRow. */
   is_pos_dedicated: boolean;
+  /** Authoritative started/stopped — the agent has a live child process for
+   *  this reader. Set by the heartbeat. NULL = unknown (no recent heartbeat). */
+  reader_running: boolean | null;
+  /** Agent software-recovery state for POS readers ('recovering' |
+   *  'hard_resetting' | null). */
+  recovery_state: string | null;
 };
 
 /**
@@ -265,7 +277,9 @@ export async function buildHardwareConfigTree(
          d.chassis_wedged_at::text AS chassis_wedged_at,
          d.suggested_power_dbm,
          d.suggested_power_dbm_at::text AS suggested_power_dbm_at,
-         d.is_pos_dedicated
+         d.is_pos_dedicated,
+         d.reader_running,
+         d.recovery_state
        FROM devices d
        LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
        WHERE d.tenant_id = $1::uuid
@@ -538,6 +552,8 @@ export async function buildHardwareConfigTree(
         peers_median_5m: peerMedian,
       },
       is_pos_dedicated: d.is_pos_dedicated === true,
+      reader_running: d.reader_running,
+      recovery_state: d.recovery_state,
       antennas: antennasByParent.get(d.id) ?? [],
     };
     if (d.zone_id) {

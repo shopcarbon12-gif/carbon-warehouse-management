@@ -34,6 +34,11 @@ export async function ensureAntennaTestSchema(pool: Pool): Promise<void> {
     await pool.query(
       `ALTER TABLE devices ADD COLUMN IF NOT EXISTS recovering_since TIMESTAMPTZ`,
     );
+    // Authoritative started/stopped (agent has a live child) for Hardware
+    // Config — set by the agent heartbeat.
+    await pool.query(
+      `ALTER TABLE devices ADD COLUMN IF NOT EXISTS reader_running BOOLEAN`,
+    );
     await pool.query(
       `CREATE INDEX IF NOT EXISTS devices_test_pending_idx
          ON devices (test_pending_at)
