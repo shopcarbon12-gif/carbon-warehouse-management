@@ -184,9 +184,63 @@ export async function enrichEpcsByCatalog(
           }
         >();
 
+    // C-prefix fallback: some tags encode the custom SKU directly in the first
+    // 13 chars of the EPC (e.g. C11121246040518149709975 -> C111212460405).
+    // For EPCs the binary formula couldn't resolve to a catalog row, decode the
+    // SKU from the string and look it up so catalog columns (sku/description/
+    // color/size/upc/price) still fill on every export — even for "not found"
+    // / uncommissioned tags. custom_skus + matrices are single-tenant.
+    type CatRow = {
+      sku: string;
+      custom_sku_id: string;
+      name: string | null;
+      color: string | null;
+      size: string | null;
+      upc: string | null;
+      asset_id: string | null;
+      vendor: string | null;
+      retail_price: string | null;
+      ls_system_id: string | null;
+    };
+    const needsCPrefix = decodedList.filter(
+      (d) =>
+        (d.systemId === null || !bySystemId.has(d.systemId.toString())) &&
+        d.epc.startsWith("C") &&
+        d.epc.length >= 13,
+    );
+    const cPrefixCodes = [...new Set(needsCPrefix.map((d) => d.epc.slice(0, 13)))];
+    const cPrefixBySku = new Map<string, CatRow>();
+    if (cPrefixCodes.length) {
+      const rows = await client.query<CatRow & { sku_key: string }>(
+        `SELECT UPPER(cs.sku) AS sku_key,
+                cs.sku,
+                cs.id::text AS custom_sku_id,
+                m.description AS name,
+                cs.color_code AS color,
+                cs.size,
+                COALESCE(cs.upc, m.upc) AS upc,
+                cs.asset_id,
+                m.vendor,
+                cs.retail_price::text AS retail_price,
+                cs.ls_system_id::text AS ls_system_id
+           FROM custom_skus cs
+           LEFT JOIN matrices m ON m.id = cs.matrix_id
+          WHERE UPPER(cs.sku) = ANY($1::text[])`,
+        [cPrefixCodes],
+      );
+      for (const r of rows.rows) cPrefixBySku.set(r.sku_key, r);
+    }
+    const cPrefixHit = (epc: string): CatRow | undefined =>
+      epc.startsWith("C") && epc.length >= 13
+        ? cPrefixBySku.get(epc.slice(0, 13))
+        : undefined;
+
     return decodedList.map((d): CatalogEnrichRow => {
       const item = itemsByEpc.get(d.epc);
-      if (!d.decoded) {
+      const binaryHit =
+        d.systemId !== null ? bySystemId.get(d.systemId.toString()) : undefined;
+      const cat: CatRow | undefined = binaryHit ?? cPrefixHit(d.epc);
+      if (!cat) {
         return {
           epc: d.epc,
           sku: null,
@@ -194,29 +248,7 @@ export async function enrichEpcsByCatalog(
           location_code: item?.location_code ?? null,
           bin_id: item?.bin_id ?? null,
           bin_code: item?.bin_code ?? null,
-          status: "undecodable",
-          item_status: item?.status ?? null,
-          name: null,
-          color: null,
-          size: null,
-          upc: null,
-          asset_id: null,
-          vendor: null,
-          retail_price: null,
-          custom_sku_id: null,
-          sku_ls_system_id: null,
-        };
-      }
-      const hit = d.systemId !== null ? bySystemId.get(d.systemId.toString()) : undefined;
-      if (!hit) {
-        return {
-          epc: d.epc,
-          sku: null,
-          location_id: item?.location_id ?? null,
-          location_code: item?.location_code ?? null,
-          bin_id: item?.bin_id ?? null,
-          bin_code: item?.bin_code ?? null,
-          status: "unknown",
+          status: d.decoded ? "unknown" : "undecodable",
           item_status: item?.status ?? null,
           name: null,
           color: null,
@@ -231,22 +263,24 @@ export async function enrichEpcsByCatalog(
       }
       return {
         epc: d.epc,
-        sku: hit.sku,
+        sku: cat.sku,
         location_id: item?.location_id ?? null,
         location_code: item?.location_code ?? null,
         bin_id: item?.bin_id ?? null,
         bin_code: item?.bin_code ?? null,
         status: "in-stock",
         item_status: item?.status ?? null,
-        name: hit.name,
-        color: hit.color,
-        size: hit.size,
-        upc: hit.upc,
-        asset_id: hit.asset_id,
-        vendor: hit.vendor,
-        retail_price: hit.retail_price,
-        custom_sku_id: hit.custom_sku_id,
-        sku_ls_system_id: hit.ls_system_id,
+        name: cat.name,
+        color: cat.color,
+        size: cat.size,
+        upc: cat.upc,
+        asset_id: cat.asset_id,
+        vendor: cat.vendor,
+        retail_price: cat.retail_price,
+        custom_sku_id: cat.custom_sku_id,
+        sku_ls_system_id:
+          cat.ls_system_id ??
+          (d.systemId !== null ? d.systemId.toString() : null),
       };
     });
   } finally {

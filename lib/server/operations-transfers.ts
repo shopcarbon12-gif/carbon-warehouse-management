@@ -682,6 +682,9 @@ export type TransferDetailRow = {
     qty: number;
     state: string;
   }>;
+  created_by_email: string | null;
+  created_by_first: string | null;
+  created_by_last: string | null;
 };
 
 export async function getTransferDetail(
@@ -700,6 +703,9 @@ export async function getTransferDetail(
     source_location_name: string;
     destination_location_code: string;
     destination_location_name: string;
+    created_by_email: string | null;
+    created_by_first: string | null;
+    created_by_last: string | null;
   }>(
     `SELECT
        tr.id::text,
@@ -711,10 +717,14 @@ export async function getTransferDetail(
        sl.code AS source_location_code,
        sl.name AS source_location_name,
        dl.code AS destination_location_code,
-       dl.name AS destination_location_name
+       dl.name AS destination_location_name,
+       u.email AS created_by_email,
+       u.first_name AS created_by_first,
+       u.last_name AS created_by_last
      FROM transfer_records tr
      INNER JOIN locations sl ON sl.id = tr.source_location_id
      INNER JOIN locations dl ON dl.id = tr.destination_location_id
+     LEFT JOIN users u ON u.id = tr.created_by
      WHERE tr.id = $1::uuid AND tr.tenant_id = $2::uuid LIMIT 1`,
     [transferId, tenantId],
   );
@@ -824,6 +834,9 @@ export async function getTransferDetail(
       qty: r.qty_delta,
       state: r.state,
     })),
+    created_by_email: t.created_by_email,
+    created_by_first: t.created_by_first,
+    created_by_last: t.created_by_last,
   };
 }
 

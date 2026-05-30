@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { getTransferDetail } from "@/lib/server/operations-transfers";
+import { shortName } from "@/lib/format-name";
 
 /**
  * GET /api/operations/transfers/<uuid>/pdf — return a printable HTML page
@@ -140,7 +141,7 @@ ${autoprint ? "<script>window.addEventListener('load', () => setTimeout(() => wi
       <tr>
         <td>${escapeHtml(slipNumber)}</td>
         <td>${escapeHtml(dateCreated)}</td>
-        <td></td>
+        <td>${escapeHtml(shortName(detail.created_by_first, detail.created_by_last, detail.created_by_email))}</td>
         <td class="right">${totalSent}</td>
         <td class="right">${totalEpcs}</td>
         <td class="right">${totalManual}</td>
