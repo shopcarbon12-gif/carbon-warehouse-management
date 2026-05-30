@@ -67,15 +67,23 @@ export async function POST(req: Request) {
       raw_csv: parsed.data.csvData,
     });
 
-    // 'cloud-geiger-find' is an audit-only upload: the mobile screen
-    // records which of the dropped EPCs were physically found via a
-    // bulk-find trigger pull. It MUST NOT mutate items.last_seen_at /
-    // status — that would silently flip every found EPC to in-stock at
-    // the operator's active location even when the operator hadn't
-    // intended to update inventory. We log the raw CSV so /reports/
-    // uploads still has the full record; the desktop reports view
-    // parses it for human display.
-    if (parsed.data.mode === "cloud-geiger-find") {
+    // Audit-only modes — the CSV is logged for the desktop reports view
+    // but MUST NOT mutate items.status / last_seen_at. The CSV ingest
+    // path falls back to a SKU-based bulk UPDATE when no `epc` column
+    // exists (e.g. the re-encode CSV only carries `old_epc` + `new_epc`),
+    // which would silently promote every item with the matching custom_sku
+    // at the operator's active location to 'in-stock' regardless of
+    // whether the underlying chip write succeeded. That broke session
+    // #37 (2026-05-30): 11/11 chip writes failed yet all 11 new EPCs
+    // landed LIVE in the catalog because the upload bulk-flipped by SKU.
+    //
+    // Modes here:
+    //   cloud-geiger-find — find-only audit
+    //   re-encode         — re-encode session report; the real items
+    //                       state is owned by encode-claim/finalize, the
+    //                       CSV is just the audit trail
+    const auditOnlyModes = new Set(["cloud-geiger-find", "re-encode"]);
+    if (auditOnlyModes.has(parsed.data.mode)) {
       return NextResponse.json({
         ok: true,
         logId,

@@ -1,0 +1,11 @@
+import pg from 'pg';
+const NEW = ['F0A0B30E4F9B8F7000038D23','F0A0B30E4F9B9000000A191D','F0A0B30E4F9B9030000752C7','F0A0B30E4F9B8F8000078262','F0A0B30E4F9B96200007372D','F0A0B30E4F9B9D3000066BC0','F0A0B30E4F9C21D00008DBB5','F0A0B30E4F9BBE20000D4801','F0A0B30E4F9BB320000340BD','F0A0B30E4F9C19B0000677C5','F0A0B30E4F9C02C0000E4749'];
+const c = new pg.Client({connectionString: process.env.DATABASE_URL, ssl:false});
+await c.connect();
+const cols = await c.query(`SELECT column_name FROM information_schema.columns WHERE table_name='cdm_reads' ORDER BY ordinal_position`);
+console.log('cdm_reads cols:', cols.rows.map(r=>r.column_name).join(','));
+const cr = await c.query(`SELECT epc_hex, MIN(seen_at) as first_seen, MAX(seen_at) as last_seen, COUNT(*) AS n, COUNT(DISTINCT reader_id) AS n_readers FROM cdm_reads WHERE epc_hex=ANY($1) GROUP BY epc_hex ORDER BY epc_hex`, [NEW]);
+console.log('\ncdm_reads sightings (only post-encode period would matter):');
+for (const r of cr.rows) console.log(' ', r.epc_hex.slice(0,16), '| first', r.first_seen?.toISOString?.(), '| last', r.last_seen?.toISOString?.(), '| n', r.n, '| readers', r.n_readers);
+console.log('\ntotal new EPCs with any cdm_reads sighting:', cr.rows.length, '/ 11');
+await c.end();

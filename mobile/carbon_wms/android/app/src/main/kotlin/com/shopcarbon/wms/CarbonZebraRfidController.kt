@@ -857,19 +857,20 @@ class CarbonZebraRfidController(
    * tag's write-buffer briefly echoes the new EPC before the silicon reverts. Same rationale
    * as [CarbonChainwayRfidController.verifyEpcWrite].
    */
-  /// timeoutMs lowered 3000 → 1500 on 2026-05-29, then 1500 → 600 on
-  /// 2026-05-30: success exits on the first matching sighting
-  /// (~50-150ms when the tag is touching the antenna at max power,
-  /// where the verify already runs), so the larger ceiling only
-  /// lengthened the failure path. Operator complaint 2026-05-30:
-  /// failures took >10s per row; verify timeout was a big chunk of
-  /// that budget. 600ms gives the SDK 4x typical-success margin
-  /// without padding the failure path.
+  /// timeoutMs lowered 3000 → 1500 on 2026-05-29. A second drop to 600ms
+  /// on 2026-05-30 was reverted: operator's re-encode session #37
+  /// (2026-05-30) hit 11/11 write_failed where the chip really had
+  /// NOT committed but the LIVE catalog still got polluted (via a
+  /// separate CSV-upload bug, since fixed). 1500ms is the safe floor:
+  /// success still exits on the first matching sighting (~50-150ms
+  /// when the tag is touching the antenna at max-power verify), so
+  /// in the common case the larger ceiling costs nothing; on a
+  /// genuine-failure path the extra ~900ms is the price of certainty.
   private fun verifyEpcWrite(
     r: RFIDReader,
     oldEpc: String,
     newEpc: String,
-    timeoutMs: Long = 600,
+    timeoutMs: Long = 1500,
     minNewSightings: Int = 1,
   ): Boolean {
     val oldNorm = oldEpc.uppercase()
