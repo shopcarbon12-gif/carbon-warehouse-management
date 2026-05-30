@@ -1123,6 +1123,67 @@ function ActiveSessionView({
   const coverage = expectedCount === 0 ? 0 : Math.round((matchedCount / expectedCount) * 100);
   const lastReadStr = lastReadAt ? `${Math.max(1, Math.round((Date.now() - lastReadAt) / 1000))}s ago` : "—";
 
+  /**
+   * "By source" inline breakdown — answers the operator's "what did the
+   * mobile add-on contribute?" question without requiring them to play
+   * with the Source dropdown first. One row per contributor with
+   * matched / added-here / defective counts pre-computed against the
+   * source map. Rendered as a chip strip below the KPI tiles; clicking
+   * any chip applies that source as the table filter.
+   */
+  type SourceBreakdownRow = {
+    key: string;
+    kind: "mobile" | "reader";
+    name: string;
+    matched: number;
+    addedHere: number;
+    defective: number;
+  };
+  const sourceBreakdown = useMemo<SourceBreakdownRow[]>(() => {
+    const sources = detail.scanned_epc_sources ?? {};
+    if (Object.keys(sources).length === 0) return [];
+    // Group EPCs by source name (per kind). One row per (kind, name).
+    type Agg = {
+      kind: "mobile" | "reader";
+      name: string;
+      matched: number;
+      addedHere: number;
+      defective: number;
+    };
+    const agg = new Map<string, Agg>();
+    const matchedSet = new Set(variance.matched.map((r) => r.epc.toUpperCase()));
+    const addedSet = new Set(variance.added_here.map((r) => r.epc.toUpperCase()));
+    const defectiveSet = new Set(variance.defective.map((r) => r.epc.toUpperCase()));
+    for (const [epc, src] of Object.entries(sources)) {
+      const key = `${src.kind}:${src.name}`;
+      const existing = agg.get(key) ?? {
+        kind: src.kind,
+        name: src.name,
+        matched: 0,
+        addedHere: 0,
+        defective: 0,
+      };
+      if (matchedSet.has(epc)) existing.matched += 1;
+      if (addedSet.has(epc)) existing.addedHere += 1;
+      if (defectiveSet.has(epc)) existing.defective += 1;
+      agg.set(key, existing);
+    }
+    return Array.from(agg.entries())
+      .map(([key, v]) => ({ key, ...v }))
+      .sort((a, b) => {
+        // Sort: readers before mobiles, then by total contribution desc
+        if (a.kind !== b.kind) return a.kind === "reader" ? -1 : 1;
+        const ta = a.matched + a.addedHere + a.defective;
+        const tb = b.matched + b.addedHere + b.defective;
+        return tb - ta;
+      });
+  }, [
+    detail.scanned_epc_sources,
+    variance.matched,
+    variance.added_here,
+    variance.defective,
+  ]);
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -1182,6 +1243,66 @@ function ActiveSessionView({
           cls={readsPerMin > 0 ? "text-emerald-300" : "text-[var(--wms-muted)]"}
         />
       </div>
+
+      {/* By-source breakdown strip — answers "what did the mobile add-on
+          contribute?" at a glance, without making the operator open the
+          Source filter dropdown. Click any chip to apply that source
+          as the table filter. Hidden when the session has no source
+          attribution (legacy / never-scanned). */}
+      {sourceBreakdown.length > 0 ? (
+        <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-3">
+          <div className="mb-2 flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+            <span>By source</span>
+            {sourceFilter.kind !== "all" ? (
+              <button
+                type="button"
+                onClick={() => setSourceFilter({ kind: "all" })}
+                className="ml-auto rounded border border-[var(--wms-border)] px-2 py-0.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+              >
+                Clear filter
+              </button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {sourceBreakdown.map((row) => {
+              const active =
+                sourceFilter.kind === row.kind && sourceFilter.name === row.name;
+              return (
+                <button
+                  key={row.key}
+                  type="button"
+                  onClick={() =>
+                    active
+                      ? setSourceFilter({ kind: "all" })
+                      : setSourceFilter({ kind: row.kind, name: row.name })
+                  }
+                  className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-left font-mono text-[0.7rem] transition-colors ${
+                    active
+                      ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/15 text-[var(--wms-fg)]"
+                      : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/50"
+                  }`}
+                >
+                  <span className="text-base leading-none">
+                    {row.kind === "mobile" ? "📱" : "📡"}
+                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs font-semibold uppercase tracking-wide">
+                      {row.name}
+                    </span>
+                    <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                      <span className="wms-status-success">{row.matched} matched</span>
+                      {" · "}
+                      <span className="text-sky-300">{row.addedHere} added</span>
+                      {" · "}
+                      <span className="text-red-400">{row.defective} defective</span>
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {/* Action bar */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-3">
