@@ -1169,6 +1169,15 @@ export class MonsoonSupervisor {
     // here is the belt to that suspender — closes the small race
     // window AND makes the intent of POS-driven kills explicit.
     slot.backoffMs = 1000;
+    // Stand down any in-flight recovery sweep so the slider change respawns
+    // clean at the demanded power. Without this, a byte-judged sweep that was
+    // mid-walk would fire a bridge reset on the next byte (POST_BRIDGE_RESET_
+    // QUIET_MS + bridge reboot), stalling the reader for several seconds
+    // before it scans at the cashier's power — the "double sweep" stall.
+    slot.sweepPowerOverrideArg = null;
+    slot.sweepRequireRecords = false;
+    slot.bridgeResetAt = 0;
+    slot.consecutiveLongStuckCycles = 0;
     slot.lastIntendedRespawnAt = now;
     slot.intendedKill = true;
     this.killSlotChildHard(slot);
@@ -1547,6 +1556,16 @@ export class MonsoonSupervisor {
       // would flip-flop between ports unnecessarily and waste recovery time.
       // We still rotate non-mux readers (the original behavior).
       const silentMs = now - slot.lastByteAt;
+      // POS-dedicated readers (.34) are controlled by the cashier's register
+      // slider, not by the supervisor. Autonomous recovery — power sweeps,
+      // bridge/chip resets — must NEVER run on them: during a scan session it
+      // injects extra kill/respawn + bridge-reboot cycles that stall the
+      // reader for seconds before it settles at the slider's demanded power
+      // (the "double sweep" stall), and while idle (no cashier) the reader
+      // legitimately produces 0 records, which recovery would misread as a
+      // wedge and pummel. The cashier's slider-change respawn is the recovery
+      // path during a session; start/stop governs the idle state.
+      const posReader = slot.spec.is_pos_dedicated === true;
       // Tell the WMS this reader is offline as soon as silence persists
       // past the watchdog threshold. Throttled so a long-silent reader
       // doesn't hammer the endpoint. Fires regardless of which recovery
@@ -1595,8 +1614,9 @@ export class MonsoonSupervisor {
       if (slot.sweepRequireRecords && slot.sweepPowerOverrideArg !== null) {
         const hadRecordThisStep =
           slot.lastRecordAt > 0 && slot.lastRecordAt >= slot.sweepStepStartedAt;
-        if (slot.testSession !== null) {
-          // An operator antenna-test took the slot mid-sweep — stand down.
+        if (slot.testSession !== null || posReader) {
+          // An operator antenna-test, or a cashier-controlled POS reader, owns
+          // the slot's power — stand down so we don't fight it.
           slot.sweepRequireRecords = false;
           slot.sweepPowerOverrideArg = null;
           continue;
@@ -1672,6 +1692,13 @@ export class MonsoonSupervisor {
         continue;
       }
 
+      // POS reader — drop any byte-judged sweep so it can't inject a bridge
+      // reset / power step while the cashier's slider drives the power.
+      if (slot.sweepPowerOverrideArg !== null && posReader) {
+        slot.sweepPowerOverrideArg = null;
+        slot.lastSweepAttemptAt = now;
+        continue;
+      }
       // Auto-sweep recovery — when active, every silent kick advances the
       // power step. If a step produces bytes, the byte-arrival site clears
       // the override (recovery succeeded). If all steps go silent, give up
@@ -1793,6 +1820,7 @@ export class MonsoonSupervisor {
         if (
           !muxSlot &&
           slot.testSession === null &&
+          !posReader &&
           slot.sweepPowerOverrideArg === null &&
           !forceConfigured &&
           !skipSweepLowPower &&
@@ -1839,6 +1867,7 @@ export class MonsoonSupervisor {
         if (
           !muxSlot &&
           slot.testSession === null &&
+          !posReader &&
           slot.sweepPowerOverrideArg === null &&
           !forceConfigured &&
           skipSweepLowPower &&
@@ -2785,6 +2814,9 @@ export class MonsoonSupervisor {
    */
   private startRecoverySweep(slot: ReaderSlot): void {
     if (slot.testSession !== null) return; // operator owns the slot during a test
+    // POS-dedicated readers are cashier-controlled — never sweep over their
+    // power; the slider-change respawn is their recovery path.
+    if (slot.spec.is_pos_dedicated === true) return;
     const configuredArg = Math.round(this.avgPower(slot.spec) * 10);
     const startIdx = RECOVERY_SWEEP_POWERS.findIndex((p) => p <= configuredArg);
     const startPower =
@@ -3520,6 +3552,13 @@ export class MonsoonSupervisor {
         wasIntendedKill,
         spawnDurationMs,
       });
+      // POS-dedicated readers (.34) are cashier-controlled — skip all
+      // autonomous recovery escalation (fast-stuck + long-stuck bridge/chip
+      // resets, sweeps). During a session the slider is authoritative and
+      // 0-record spawns between items are normal; while idle the reader
+      // legitimately reads nothing. Recovery here only stalls / false-wedges.
+      const posReader = spec.is_pos_dedicated === true;
+
       // FAST-STUCK DETECTION 2026-05-21: track consecutive sub-1s
       // cleanExit:true 0-records exits. After FAST_CLEAN_EXIT_STRIKES
       // in a row, fire tryBridgeReset immediately and kill any in-
@@ -3532,6 +3571,7 @@ export class MonsoonSupervisor {
       if (
         cleanExit &&
         !wasIntendedKill &&
+        !posReader &&
         !slot.bytesSinceSpawn &&
         totalRecords === 0 &&
         spawnDurationMs < FAST_CLEAN_EXIT_THRESHOLD_MS
@@ -3609,6 +3649,9 @@ export class MonsoonSupervisor {
         !wasIntendedKill &&
         totalRecords === 0 &&
         spawnDurationMs >= LONG_STUCK_MIN_RUNTIME_MS &&
+        // POS-dedicated reader — 0-record spawns are normal (idle or between
+        // items); don't escalate (see posReader note above).
+        !posReader &&
         // While a records-judged recovery sweep owns the slot, the watchdog
         // drives step advance / success / exhaustion — don't let a natural
         // mid-sweep exit also advance this ladder.
