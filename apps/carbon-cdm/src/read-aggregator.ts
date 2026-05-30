@@ -55,9 +55,20 @@ export class ReadAggregator {
     }
     const receivedAtIso = ev.receivedAt.toISOString();
     for (const r of ev.reads) {
+      // Carry per-tag RSSI through to the WMS (it was being dropped here, so
+      // cdm_reads.rssi was always null and the Carbon-POS proximity filter had
+      // nothing to filter on). The WMS schema wants an INT and "closer = higher
+      // (less negative)"; the parsers emit floats (e.g. -68.4), and 0 means
+      // "unparseable/absent" — treat that as no-RSSI so it doesn't pollute the
+      // strongest-per-EPC map or force-show a tag.
+      const rssi =
+        typeof r.rssiDbm === "number" && r.rssiDbm < 0
+          ? Math.round(r.rssiDbm)
+          : undefined;
       q.push({
         epcHex: r.epcHex,
         antennaNumber: r.antennaNumber,
+        rssi,
         readAt: receivedAtIso,
       });
     }
