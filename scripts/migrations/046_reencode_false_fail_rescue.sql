@@ -3,20 +3,28 @@
 -- verified by the operator on 2026-05-30 — the chips broadcast the new
 -- EPC and the old EPC is silent).
 --
--- Root cause: the Chainway controller's verifyEpcWrite loop hit 0 new-EPC
--- sightings within the 1500ms post-power-cycle window. The chip had
--- written, but for one of these reasons it wasn't sighted in time:
---   (a) tag at the edge of read range when the operator naturally moved
---       the gun after the write completed,
---   (b) tag still in its post-power-cycle re-boot when verify began
---       polling (Chainway chips sometimes need >300ms to come back),
---   (c) buffer drain consumed the few new-EPC reads we did get.
--- The Zebra controller already had a "is the old EPC actually gone"
--- fallback that promotes verify-false to true; Chainway didn't. A
--- companion mobile-side fix (CarbonChainwayRfidController.kt — same
--- commit) adds the equivalent fallback by checking the read-back EPC
--- against newEpc. From the next APK on, this class of false-fail
--- self-rescues at the radio layer and no manual cleanup is required.
+-- Root cause (Zebra RFD8500 sled): the verifyEpcWrite loop hit 0 new-EPC
+-- sightings within the 1500ms post-power-cycle window, so it returned
+-- false. There WAS a "is the old EPC actually gone" fallback that should
+-- have promoted these to success, but its check was too loose:
+--
+--   `if (td != null) oldStillPresent = true`
+--
+-- The fallback called `readWait(targetEpc, ...)` expecting the SDK to
+-- apply `targetEpc` as a Gen2 SELECT mask and only return the chip if
+-- it was still broadcasting the OLD EPC. But the operator's RFD8500
+-- firmware build IGNORES the SELECT filter and returns whatever tag is
+-- nearest — so any third-party tag in the operator's hand or on a
+-- neighbouring rack made `td != null` true, the fallback declared
+-- "oldStillPresent", and the false-fail stuck.
+--
+-- Going-forward fix (CarbonZebraRfidController.kt — same commit):
+--   - Inspect td.getTagID() instead of `td != null` — only promote when
+--     the returned tag's ID actually matches oldEpc / newEpc.
+--   - Add a positive readWait(newEpc, …) probe — on filter-honouring
+--     firmware that's a direct "yes the chip wrote" signal.
+--   - Both rescue paths log a distinct "performWriteEpc: …rescue path
+--     '<name>' confirmed write" line for easy grepping.
 --
 -- Per-pair work for this batch:
 --   1. Promote the NEW EPC items row from 'unknown' → 'in-stock' so

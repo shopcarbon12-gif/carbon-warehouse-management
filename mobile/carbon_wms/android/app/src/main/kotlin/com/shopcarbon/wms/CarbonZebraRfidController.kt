@@ -727,13 +727,33 @@ class CarbonZebraRfidController(
       }.onFailure { Log.w(TAG, "post-verify: restore setTransmitPowerIndex failed: ${it.message}") }
       Log.d(TAG, "post-verify: restored to operator's idx=$restoreIdx")
       if (!verified) {
-        // Probe directly: readWait(EPC bank) with targetEpc as the
-        // SELECT filter. If the tag is actually still broadcasting the
-        // old EPC, this read succeeds with a non-null tagID. If the tag
-        // has been rewritten (so it no longer matches the targetEpc
-        // filter) the readWait throws — proof the write committed even
-        // when the in-field verify couldn't catch enough new sightings.
-        var oldStillPresent = false
+        // POST-FAIL RESCUE (hardened 2026-05-30)
+        // ----
+        // Operator hit 6 false-fails out of 43 WRITE_FAILED rows on the
+        // 2026-05-29 RFD8500 session; geiger-verified the chips actually
+        // wrote. Root cause of those 6: the prior fallback checked only
+        // `td != null` to decide `oldStillPresent`, but RFD8500 firmware
+        // variants ignore the EPC SELECT filter on `readWait` and return
+        // whatever tag is nearest. With another tag in the operator's
+        // hand or on a nearby rack, `td != null` was always true →
+        // `oldStillPresent` always true → promotion never fired.
+        //
+        // New logic: read the EPC bank, then INSPECT the returned
+        // tag's ID. Three outcomes:
+        //   - tagID == oldEpc            → write did not commit, keep verified=false
+        //   - tagID == newEpc            → write committed, PROMOTE
+        //   - tagID null / something else → SELECT filter didn't fire
+        //                                   (firmware quirk); ignore and
+        //                                   keep verified=false (conservative)
+        //
+        // Additionally try a second readWait with `newEpc` as the
+        // SELECT mask — on the RFD8500 builds that DO honour the filter,
+        // a non-null result for that probe is unambiguous proof the
+        // write committed.
+        val oldNorm = targetEpc.uppercase()
+        val newNorm = newEpc.uppercase()
+        var rescuedById: String? = null
+
         runCatching {
           val rp = r.Actions.TagAccess.ReadAccessParams()
           rp.accessPassword = 0L
@@ -741,11 +761,49 @@ class CarbonZebraRfidController(
           rp.offset = 2
           rp.count = 6
           val td = r.Actions.TagAccess.readWait(targetEpc, rp, null)
-          val id = td?.getTagID() ?: "<null>"
+          val id = td?.getTagID()?.trim()?.uppercase()
           val mem = td?.getMemoryBankData() ?: "<null>"
-          if (td != null) oldStillPresent = true
-          Log.d(TAG, "post-fail diag: readWait(EPC bank, ptr=2, cnt=6) tagID=$id memBank='$mem' (expected new=$newEpc, else old=$targetEpc)")
+          Log.d(TAG, "post-fail diag: readWait(EPC bank, ptr=2, cnt=6) tagID=$id memBank='$mem' (expected new=$newNorm, else old=$oldNorm)")
+          when (id) {
+            newNorm -> {
+              rescuedById = "readWait-old-mask-returned-new"
+              Log.d(TAG, "post-fail rescue: readWait with OLD filter returned NEW tagID — SELECT was ignored by firmware but the chip is now broadcasting newEpc")
+            }
+            oldNorm -> {
+              Log.d(TAG, "post-fail diag: tag still broadcasting OLD EPC; write did not commit")
+            }
+            null -> {
+              Log.d(TAG, "post-fail diag: readWait returned no tag; SELECT may have filtered out the rewritten chip (success-shape signal)")
+            }
+            else -> {
+              Log.d(TAG, "post-fail diag: readWait returned a third-party tag (id=$id); SELECT filter wasn't honoured on this firmware")
+            }
+          }
         }.onFailure { Log.w(TAG, "post-fail diag: EPC read threw: ${it.message}") }
+
+        // Positive probe — explicitly ask for the NEW EPC. If any tag
+        // matches that filter (or, on filter-ignoring firmware, the
+        // returned tagID happens to be newEpc), the chip definitely
+        // wrote.
+        if (rescuedById == null) {
+          runCatching {
+            val rp = r.Actions.TagAccess.ReadAccessParams()
+            rp.accessPassword = 0L
+            rp.memoryBank = com.zebra.rfid.api3.MEMORY_BANK.MEMORY_BANK_EPC
+            rp.offset = 2
+            rp.count = 6
+            val td = r.Actions.TagAccess.readWait(newEpc, rp, null)
+            val id = td?.getTagID()?.trim()?.uppercase()
+            Log.d(TAG, "post-fail probe: readWait(NEW EPC select) tagID=$id")
+            if (id == newNorm) {
+              rescuedById = "readWait-new-mask-confirmed"
+              Log.d(TAG, "post-fail rescue: readWait with NEW filter returned the NEW tagID — write confirmed")
+            }
+          }.onFailure {
+            Log.w(TAG, "post-fail probe (NEW EPC select) threw: ${it.message}")
+          }
+        }
+
         runCatching {
           val rp = r.Actions.TagAccess.ReadAccessParams()
           rp.accessPassword = 0L
@@ -756,15 +814,15 @@ class CarbonZebraRfidController(
           val mem = td?.getMemoryBankData() ?: "<null>"
           Log.d(TAG, "post-fail diag: readWait(RESERVED bank, kill+access pw) -> '$mem' (if read-locked, write likely write-locked too)")
         }.onFailure { Log.w(TAG, "post-fail diag: RESERVED read threw (likely read-locked): ${it.message}") }
-        // Promote false -> true when the targeted readWait can't find
-        // any tag broadcasting the old EPC. Combined with the buffer
-        // drain at the start of verifyEpcWrite (which prevents stale
-        // old-sighting false positives), `!oldStillPresent` is now a
-        // strong "the tag has been rewritten" signal.
-        if (!oldStillPresent) {
-          Log.d(TAG, "performWriteEpc: verify returned false but oldEpc not found in EEPROM — promoting to true (write committed, lost in crowded field)")
+
+        if (rescuedById != null) {
+          Log.d(TAG, "performWriteEpc: verify returned false but rescue path '$rescuedById' confirmed write — promoting to true")
           return true
         }
+        // Keep verified=false. The chip is genuinely still broadcasting
+        // the old EPC (or we got an ambiguous signal we shouldn't gamble
+        // on). Operator can retry the row.
+        Log.d(TAG, "performWriteEpc: verify and rescue both inconclusive; reporting writeFailed")
       }
       return verified
     } catch (e: InvalidUsageException) {
