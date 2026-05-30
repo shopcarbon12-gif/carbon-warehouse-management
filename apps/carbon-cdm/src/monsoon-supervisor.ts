@@ -980,8 +980,18 @@ export class MonsoonSupervisor {
         this.recoveryStateByReader.delete(id);
       }
     }
+    // Did the armed set change? If so, the spawn desired-set must be
+    // re-evaluated NOW (the reconcile that owns spawn/stop decisions otherwise
+    // only runs on the 60 s config pull). This is what makes an after-hours
+    // arm cold-start the reader within ~100 ms, and a disarm stop it.
+    const armedChanged =
+      armed.size !== this.posMonitorArmed.size ||
+      [...armed].some((id) => !this.posMonitorArmed.has(id));
     this.posMonitorArmed = armed;
     this.posScanningActive = scanning;
+    if (armedChanged && this.lastBundle) {
+      this.reconcile(this.lastBundle);
+    }
   }
 
   /** Snapshot for the heartbeat: readers currently in active recovery, so the

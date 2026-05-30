@@ -263,12 +263,20 @@ export class AntennaTestController {
     this.hooks.setPosPowerOverrides(map);
   }
 
-  /** Forward per-POS-reader recovery-arming state to the supervisor. */
+  /** Forward per-POS-reader recovery-arming state to the supervisor.
+   *  OR-merge across rows so a reader shared by multiple open sessions is
+   *  armed/scanning if ANY of them is (defensive — the WMS query already
+   *  aggregates with bool_or). */
   private reconcilePosReaderState(rows: PosReaderState[]): void {
     if (!this.hooks) return;
-    const map = new Map<string, { armed: boolean; scanning: boolean }>(
-      rows.map((r) => [r.readerId, { armed: r.armed, scanning: r.scanning }]),
-    );
+    const map = new Map<string, { armed: boolean; scanning: boolean }>();
+    for (const r of rows) {
+      const prev = map.get(r.readerId);
+      map.set(r.readerId, {
+        armed: (prev?.armed ?? false) || r.armed,
+        scanning: (prev?.scanning ?? false) || r.scanning,
+      });
+    }
     this.hooks.setPosReaderState(map);
   }
 

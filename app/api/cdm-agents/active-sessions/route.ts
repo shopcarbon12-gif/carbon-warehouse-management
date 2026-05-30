@@ -96,16 +96,22 @@ export async function GET(req: Request) {
     armed: boolean;
     scanning: boolean;
   }>(
+    // One row per reader: a reader is armed/scanning if ANY open register
+    // session on its agent is (bool_or). Multiple open sessions can share the
+    // single is_pos_dedicated reader — without the aggregate, the agent's
+    // per-reader map would let a stale session's `false` clobber the active
+    // session's `true`.
     `SELECT d.id::text AS "readerId",
-            (s.monitor_armed_at   IS NOT NULL AND s.monitor_armed_at   > now() - interval '30 seconds') AS armed,
-            (s.scanning_active_at IS NOT NULL AND s.scanning_active_at > now() - interval '30 seconds') AS scanning
+            bool_or(s.monitor_armed_at   IS NOT NULL AND s.monitor_armed_at   > now() - interval '30 seconds') AS armed,
+            bool_or(s.scanning_active_at IS NOT NULL AND s.scanning_active_at > now() - interval '30 seconds') AS scanning
        FROM pos_register_sessions s
        JOIN pos_registers reg ON reg.id = s.register_id
        JOIN devices d ON d.cdm_agent_id = reg.cdm_agent_id
                      AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
                      AND d.is_pos_dedicated = TRUE
       WHERE s.status = 'open'
-        AND reg.cdm_agent_id = $1::uuid`,
+        AND reg.cdm_agent_id = $1::uuid
+      GROUP BY d.id`,
     [a.agentId],
   );
 
