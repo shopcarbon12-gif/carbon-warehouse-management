@@ -524,6 +524,24 @@ export async function closeCycleCountFromAddOn(
     unrecognized: 0,
   };
 
+  // Persist add-on findings into scanned_epcs so the workspace's live
+  // variance recompute (classifyVarianceLive) and the "By source" chip
+  // strip both see the mobile contribution. Pre-fix, only matchedCount
+  // in variance_summary reflected add-on findings — the EPC list stayed
+  // dark, which is why session #020 (5/28) showed 10k scanned in the
+  // header even though the operator scanned 13k via the handheld. Dedup
+  // is required: the same EPC can land here twice if a reader saw it
+  // during the live phase AND the handheld saw it during add-on.
+  const mergedScanned = [
+    ...new Set([
+      ...(Array.isArray(row.scanned_epcs)
+        ? (row.scanned_epcs as string[])
+        : []
+      ).map((e) => e.toUpperCase()),
+      ...addOnFoundEpcs.map((e) => e.replace(/\s/g, "").toUpperCase()),
+    ]),
+  ];
+
   await pool.query(
     `UPDATE cycle_count_sessions
         SET status              = 'committed',
@@ -532,11 +550,13 @@ export async function closeCycleCountFromAddOn(
             add_on_completed_at = now(),
             add_on_completed_by = $1::uuid,
             scan_periods        = $2::jsonb,
-            variance_summary    = COALESCE(variance_summary, $3::jsonb)
-      WHERE id = $4::uuid AND tenant_id = $5::uuid`,
+            scanned_epcs        = $3::jsonb,
+            variance_summary    = COALESCE(variance_summary, $4::jsonb)
+      WHERE id = $5::uuid AND tenant_id = $6::uuid`,
     [
       userId,
       JSON.stringify(closedPeriods),
+      JSON.stringify(mergedScanned),
       JSON.stringify(varianceSummary),
       cycleCountSessionId,
       tenantId,

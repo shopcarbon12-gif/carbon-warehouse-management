@@ -6,6 +6,7 @@ import {
   insertCountSessionReport,
   listCountSessionReports,
 } from "@/lib/queries/inventory-reports";
+import { enrichEpcsByCatalog } from "@/lib/server/catalog-enrich";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,7 +111,56 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid when timestamp" }, { status: 400 });
   }
 
-  const csv = buildCsvFromRows(parsed.data.rows);
+  // Resolve EPC → catalog (custom_sku, item_name, color, size, retail_price,
+  // bin) server-side so the archived CSV carries full item context instead
+  // of the empty columns the mobile sends. The mobile commits with epc +
+  // timestamps only — every other column is blank — so without this step
+  // the /reports/count-sessions page is unreadable.
+  //
+  // overrideCatalog semantics:
+  //   false (default) — fill in only the columns the row left blank.
+  //   true            — replace mobile-supplied values with the catalog
+  //                     hit, useful when an operator suspects the mobile's
+  //                     cached metadata is stale.
+  const epcsToResolve = parsed.data.rows
+    .map((r) => (r.epc ?? "").trim())
+    .filter((e) => e.length > 0);
+
+  let enrichedRows = parsed.data.rows;
+  if (epcsToResolve.length > 0) {
+    try {
+      const enrich = await enrichEpcsByCatalog(pool, auth.tenantId, epcsToResolve);
+      const byEpc = new Map(enrich.map((r) => [r.epc, r] as const));
+      const empty = (v: unknown) => v == null || String(v).trim() === "";
+      const pick = <T,>(incoming: T | null | undefined, fromCatalog: T | null) =>
+        parsed.data.overrideCatalog
+          ? (fromCatalog ?? incoming ?? null)
+          : (empty(incoming) ? (fromCatalog ?? null) : (incoming ?? null));
+
+      enrichedRows = parsed.data.rows.map((r) => {
+        const epcUp = (r.epc ?? "").trim().toUpperCase();
+        const hit = byEpc.get(epcUp);
+        if (!hit) return r;
+        return {
+          ...r,
+          system_id: pick(r.system_id, hit.sku_ls_system_id),
+          custom_sku: pick(r.custom_sku, hit.sku),
+          item_name: pick(r.item_name, hit.name),
+          color: pick(r.color, hit.color),
+          size: pick(r.size, hit.size),
+          retail_price: pick(r.retail_price, hit.retail_price),
+          bin: pick(r.bin, hit.bin_code),
+        };
+      });
+    } catch (e) {
+      // Enrichment is best-effort. If the catalog query fails we still
+      // archive whatever the mobile uploaded — a CSV with empty metadata
+      // is better than a 500.
+      console.error("[reports/count-sessions POST] catalog enrich failed:", e);
+    }
+  }
+
+  const csv = buildCsvFromRows(enrichedRows);
   const filename = buildFilename(parsed.data.activity, whenDate);
 
   try {
@@ -121,7 +171,7 @@ export async function POST(req: Request) {
       uploadedBy: auth.userId,
       deviceId: auth.deviceId,
       overrideCatalog: parsed.data.overrideCatalog,
-      rowCount: parsed.data.rows.length,
+      rowCount: enrichedRows.length,
       csvContent: csv,
       filename,
     });
