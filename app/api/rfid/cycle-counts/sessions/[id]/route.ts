@@ -8,6 +8,7 @@ import {
   updateSession,
 } from "@/lib/server/rfid-cycle-count-sessions";
 import { ingestCycleCountEpcs } from "@/lib/server/rfid-cycle-count-scan";
+import { appendSourceSightings } from "@/lib/server/cycle-count-source-attribution";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,14 +65,28 @@ async function backfillFromCdmReads(
     : startedAtMs;
   const sinceIso = new Date(windowStartMs).toISOString();
 
-  const r = await client.query<{ epc: string }>(
-    `SELECT DISTINCT upper(cr.epc_hex) AS epc
+  // Pull reader name + first-sighting timestamp per EPC so we can stamp
+  // source attribution alongside the EPC append. `MIN(read_at)` keeps
+  // first-sighting wins (matches the cycle-count semantics — we never
+  // overwrite an earlier source). `string_agg(DISTINCT d.name)` would
+  // be wrong for cross-reader sightings; we pick the reader of the
+  // earliest read deterministically via DISTINCT ON.
+  const r = await client.query<{
+    epc: string;
+    reader_name: string;
+    first_seen_at: string;
+  }>(
+    `SELECT DISTINCT ON (upper(cr.epc_hex))
+            upper(cr.epc_hex)                         AS epc,
+            COALESCE(d.name, 'reader')                AS reader_name,
+            to_char(cr.read_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS first_seen_at
        FROM cdm_reads cr
        JOIN devices d ON d.id = cr.reader_id
       WHERE cr.tenant_id = $1::uuid
         AND d.location_id = $2::uuid
         AND cr.read_at >= $3::timestamptz
-        AND cr.passes_formula = true`,
+        AND cr.passes_formula = true
+      ORDER BY upper(cr.epc_hex), cr.read_at ASC`,
     [tenantId, detail.location_id, sinceIso],
   );
 
@@ -80,8 +95,9 @@ async function backfillFromCdmReads(
   backfillState.set(sessionId, { lastAt: now, firstDone: true });
   if (r.rowCount === 0) return;
   const haveSet = new Set(detail.scanned_epcs.map((e) => e.toUpperCase()));
-  const missed = r.rows.map((row) => row.epc).filter((epc) => !haveSet.has(epc));
-  if (missed.length === 0) return;
+  const missedRows = r.rows.filter((row) => !haveSet.has(row.epc));
+  if (missedRows.length === 0) return;
+  const missed = missedRows.map((row) => row.epc);
   // Process through the same pipeline as live SSE-fed scans.
   const results = await ingestCycleCountEpcs(client, {
     tenantId,
@@ -103,6 +119,22 @@ async function backfillFromCdmReads(
         SET scanned_epcs = $3::jsonb
       WHERE tenant_id = $1::uuid AND id = $2::uuid`,
     [tenantId, sessionId, JSON.stringify(merged)],
+  );
+  // Stamp source attribution: each newly-ingested EPC gets the reader
+  // name + first-seen timestamp we resolved above. Existing entries in
+  // the source map are preserved (first-sighting wins).
+  const resultSet = new Set(results.map((res) => res.epc.toUpperCase()));
+  await appendSourceSightings(
+    client,
+    sessionId,
+    missedRows
+      .filter((row) => resultSet.has(row.epc))
+      .map((row) => ({
+        epc: row.epc,
+        kind: "reader" as const,
+        name: row.reader_name,
+        ts: row.first_seen_at,
+      })),
   );
   detail.scanned_epcs = merged;
 }

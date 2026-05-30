@@ -1976,6 +1976,11 @@ class WmsApiClient {
     String? addOnSourceId,
     String? addOnSessionId,
     String? clientFilename,
+    /// Operator-friendly device name (e.g. "Samsung S938U" or
+    /// "Chainway HC720A211200582"). Forwarded to the cycle-count
+    /// source map so the workspace filter shows each handheld
+    /// individually. Pulled from HandheldClientInfo at the caller.
+    String? deviceName,
   }) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
@@ -1989,6 +1994,8 @@ class WmsApiClient {
       if (addOnSourceType != null) 'addOnSourceType': addOnSourceType,
       if (addOnSourceId != null) 'addOnSourceId': addOnSourceId,
       if (addOnSessionId != null) 'addOnSessionId': addOnSessionId,
+      if (deviceName != null && deviceName.isNotEmpty)
+        'deviceName': deviceName,
       if (clientFilename != null && clientFilename.isNotEmpty)
         'clientFilename': clientFilename,
     });

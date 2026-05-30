@@ -132,19 +132,47 @@ export function buildFlatRows(
 const PAGE_SIZE = 200;
 const PAGE_STEP = 500;
 
+export type EpcSourceRecord = Record<
+  string,
+  { kind: "mobile" | "reader"; name: string; ts: string }
+>;
+export type EpcSourceFilter =
+  | { kind: "all" }
+  | { kind: "mobile"; name: string | null }
+  | { kind: "reader"; name: string | null };
+
 export function AllEpcsTable({
   rows,
   search,
   stateFilter,
+  sources,
+  sourceFilter,
 }: {
   rows: FlatRow[];
   search: string;
   stateFilter: StateFilter;
+  /** Per-EPC source map from the session; `{}` on pre-migration sessions. */
+  sources?: EpcSourceRecord;
+  /** Workspace source filter (All / Mobile / specific reader name). */
+  sourceFilter?: EpcSourceFilter;
 }) {
+  const srcMap = sources ?? {};
+  const srcFilter = sourceFilter ?? { kind: "all" as const };
+
   const filtered = useMemo(() => {
     const q = search.trim().toUpperCase();
     return rows.filter((r) => {
       if (stateFilter !== "all" && r.state !== stateFilter) return false;
+      // Source filter — applied AFTER state so the operator can stack
+      // "missing AND from this reader" queries naturally. Rows whose
+      // EPC isn't in the source map fail any non-"all" source filter
+      // (we can't show what we don't know).
+      if (srcFilter.kind !== "all") {
+        const src = srcMap[r.epc.toUpperCase()];
+        if (!src) return false;
+        if (src.kind !== srcFilter.kind) return false;
+        if (srcFilter.name != null && src.name !== srcFilter.name) return false;
+      }
       if (!q) return true;
       return (
         r.epc.includes(q) ||
@@ -156,14 +184,14 @@ export function AllEpcsTable({
         r.size.toUpperCase().includes(q)
       );
     });
-  }, [rows, search, stateFilter]);
+  }, [rows, search, stateFilter, srcMap, srcFilter]);
 
   /* Reset the visible cap whenever the filter set changes so the operator
      always lands on the first page of the new query. */
   const [visibleCap, setVisibleCap] = useState(PAGE_SIZE);
   useEffect(() => {
     setVisibleCap(PAGE_SIZE);
-  }, [search, stateFilter, rows]);
+  }, [search, stateFilter, rows, srcFilter]);
   const visibleRows = useMemo(
     () => filtered.slice(0, visibleCap),
     [filtered, visibleCap],
@@ -172,7 +200,7 @@ export function AllEpcsTable({
 
   const [openEpc, setOpenEpc] = useState<string | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
-  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 9);
 
   const cols: { label: string; align?: "right" | "center"; mdOnly?: boolean }[] = [
     { label: "SKU" },
@@ -182,6 +210,7 @@ export function AllEpcsTable({
     { label: "Size" },
     { label: "Expected bin" },
     { label: "State" },
+    { label: "Source" },
     { label: "EPC" },
   ];
 
@@ -240,6 +269,23 @@ export function AllEpcsTable({
                     </span>
                   ) : null}
                 </td>
+                <td
+                  className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}
+                  title={(() => {
+                    const s = srcMap[r.epc.toUpperCase()];
+                    return s ? `${s.kind} · ${s.name} · ${new Date(s.ts).toLocaleString()}` : "—";
+                  })()}
+                >
+                  {(() => {
+                    const s = srcMap[r.epc.toUpperCase()];
+                    if (!s) return "—";
+                    const tag =
+                      s.kind === "mobile"
+                        ? "📱"
+                        : "📡";
+                    return `${tag} ${s.name}`;
+                  })()}
+                </td>
                 <td className={`${cellTruncate} px-3 py-2`}>
                   <button
                     type="button"
@@ -254,7 +300,7 @@ export function AllEpcsTable({
             ))}
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-[var(--wms-muted)]">
+                <td colSpan={9} className="p-6 text-center text-[var(--wms-muted)]">
                   Nothing to show.
                 </td>
               </tr>

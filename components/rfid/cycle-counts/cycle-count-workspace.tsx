@@ -66,8 +66,52 @@ type SessionDetail = {
   audit_log_id: string | null;
   expected: ExpectedRow[];
   scanned_epcs: string[];
+  /**
+   * Per-EPC source attribution from the server. Empty `{}` on legacy
+   * sessions before the backfill migration runs. Drives the filter
+   * dropdown + the "Source" column in the EPC table.
+   */
+  scanned_epc_sources: Record<
+    string,
+    { kind: "mobile" | "reader"; name: string; ts: string }
+  >;
   scan_periods: ScanPeriod[];
 };
+
+/** Workspace-level filter for the EPC table + KPI scoping. */
+type SourceFilter =
+  | { kind: "all" }
+  | { kind: "mobile"; name: string | null }
+  | { kind: "reader"; name: string | null };
+
+function epcMatchesFilter(
+  epc: string,
+  sources: SessionDetail["scanned_epc_sources"],
+  f: SourceFilter,
+): boolean {
+  if (f.kind === "all") return true;
+  const src = sources[epc.toUpperCase()];
+  if (!src) return false;
+  if (src.kind !== f.kind) return false;
+  if (f.name == null) return true;
+  return src.name === f.name;
+}
+
+function distinctSourceNames(
+  sources: SessionDetail["scanned_epc_sources"],
+): { mobiles: string[]; readers: string[] } {
+  const mobiles = new Set<string>();
+  const readers = new Set<string>();
+  for (const v of Object.values(sources)) {
+    if (!v?.name) continue;
+    if (v.kind === "mobile") mobiles.add(v.name);
+    else if (v.kind === "reader") readers.add(v.name);
+  }
+  return {
+    mobiles: [...mobiles].sort((a, b) => a.localeCompare(b)),
+    readers: [...readers].sort((a, b) => a.localeCompare(b)),
+  };
+}
 
 function totalScanMs(periods: ScanPeriod[], now: number): number {
   let ms = 0;
@@ -576,6 +620,7 @@ function ActiveSessionView({
 
   const [tab, setTab] = useState<"all" | "by_sku" | "by_bin">("all");
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>({ kind: "all" });
   const [search, setSearch] = useState("");
   const [commitOpen, setCommitOpen] = useState(false);
   // "Finish" popup: replaces the old "Review & commit" closer. The fixed-
@@ -1233,6 +1278,68 @@ function ActiveSessionView({
           </div>
         ) : null}
 
+        {/* Source filter — only rendered when at least one source is
+            known on the session. Pre-migration / never-scanned sessions
+            have an empty map; showing a dropdown with one item ("All")
+            is noise. */}
+        {(() => {
+          const { mobiles, readers } = distinctSourceNames(detail.scanned_epc_sources);
+          if (mobiles.length === 0 && readers.length === 0) return null;
+          // Serialise the active filter to a single string for the
+          // <select>; parse on change. Format: "kind:name" or "all".
+          const current =
+            sourceFilter.kind === "all"
+              ? "all"
+              : `${sourceFilter.kind}:${sourceFilter.name ?? ""}`;
+          return (
+            <div className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 px-2 py-1">
+              <span className="font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                Source
+              </span>
+              <select
+                value={current}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "all") {
+                    setSourceFilter({ kind: "all" });
+                  } else if (v === "mobile:") {
+                    setSourceFilter({ kind: "mobile", name: null });
+                  } else if (v === "reader:") {
+                    setSourceFilter({ kind: "reader", name: null });
+                  } else if (v.startsWith("mobile:")) {
+                    setSourceFilter({ kind: "mobile", name: v.slice(7) });
+                  } else if (v.startsWith("reader:")) {
+                    setSourceFilter({ kind: "reader", name: v.slice(7) });
+                  }
+                }}
+                className="bg-transparent font-mono text-xs text-[var(--wms-fg)] outline-none"
+              >
+                <option value="all">All</option>
+                {mobiles.length > 0 && (
+                  <optgroup label="📱 Mobile">
+                    <option value="mobile:">Any mobile</option>
+                    {mobiles.map((n) => (
+                      <option key={`m:${n}`} value={`mobile:${n}`}>
+                        {n}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {readers.length > 0 && (
+                  <optgroup label="📡 Readers">
+                    <option value="reader:">Any reader</option>
+                    {readers.map((n) => (
+                      <option key={`r:${n}`} value={`reader:${n}`}>
+                        {n}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+          );
+        })()}
+
         <div className="ml-auto inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 px-2 py-1">
           <Search className="h-3.5 w-3.5 text-[var(--wms-muted)]" />
           <input
@@ -1247,7 +1354,13 @@ function ActiveSessionView({
 
       {/* Tab body */}
       {tab === "all" ? (
-        <AllEpcsTable rows={flatRows} search={search} stateFilter={stateFilter} />
+        <AllEpcsTable
+          rows={flatRows}
+          search={search}
+          stateFilter={stateFilter}
+          sources={detail.scanned_epc_sources}
+          sourceFilter={sourceFilter}
+        />
       ) : tab === "by_sku" ? (
         <BySkuTable expected={detail.expected} variance={variance} search={search} />
       ) : (

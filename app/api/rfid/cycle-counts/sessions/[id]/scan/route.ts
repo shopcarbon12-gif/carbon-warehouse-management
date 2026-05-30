@@ -7,15 +7,27 @@ import {
   classifyVarianceLive,
   getSession as getCycleSession,
 } from "@/lib/server/rfid-cycle-count-sessions";
+import { appendSourceSightings } from "@/lib/server/cycle-count-source-attribution";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Optional source attribution. Callers that want per-EPC provenance in
+// the workspace filter (mobile vs each reader by name) pass
+// `source: { kind: 'mobile'|'reader', name: <device or reader name> }`.
+// Missing → tagged as `reader/desktop-scan-button` (the only thing today
+// that POSTs without a source is the desktop "scan manually" affordance).
 const bodySchema = z.object({
   epcs: z
     .array(z.string().transform((s) => s.replace(/\s/g, "").toUpperCase()))
     .min(1)
     .max(500),
+  source: z
+    .object({
+      kind: z.enum(["mobile", "reader"]),
+      name: z.string().trim().max(128),
+    })
+    .optional(),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -111,6 +123,24 @@ export async function POST(req: Request, { params }: Ctx) {
             SET scanned_epcs = $3::jsonb
           WHERE tenant_id = $1::uuid AND id = $2::uuid`,
         [session.tid, id, JSON.stringify(merged)],
+      );
+      // Source attribution — caller-supplied source wins; if missing,
+      // assume this came from the desktop manual-scan button so it
+      // gets a recognisable name in the filter dropdown.
+      const src = parsed.data.source ?? {
+        kind: "reader" as const,
+        name: "desktop-scan",
+      };
+      const nowIso = new Date().toISOString();
+      await appendSourceSightings(
+        client,
+        id,
+        results.map((r) => ({
+          epc: r.epc,
+          kind: src.kind,
+          name: src.name,
+          ts: nowIso,
+        })),
       );
     }
 

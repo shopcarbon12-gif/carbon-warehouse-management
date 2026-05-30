@@ -78,6 +78,11 @@ export type ScanFinalizeInput = {
   addOnSourceId?: string;
   /** When screen='add_on_count', the session that produced this. */
   addOnSessionId?: string;
+  /** Operator-friendly handheld name (Samsung S938U, Chainway HC72...).
+   *  Forwarded to the cycle-count source map when closing an add-on
+   *  session against a cycle_count source so the workspace filter
+   *  dropdown shows each handheld individually. */
+  deviceName?: string;
   /** Operator-visible filename suggested by the mobile client, e.g.
    *  `count-0508-851-Elior.csv`. When provided, this is what gets stamped
    *  onto inventory_reports.filename so the web reports page shows the
@@ -538,6 +543,7 @@ export async function finalizeScanSession(
             input.addOnSourceId,
             epcsScanned,
             input.userId,
+            input.deviceName,
           );
           if (result.killed > 0) {
             console.info(

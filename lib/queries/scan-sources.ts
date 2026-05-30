@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { appendSourceSightings } from "@/lib/server/cycle-count-source-attribution";
 
 /**
  * Add-On Count source picker — UNION across the 3 v1 source tables:
@@ -456,6 +457,15 @@ export async function closeCycleCountFromAddOn(
   cycleCountSessionId: string,
   addOnFoundEpcs: string[],
   userId: string | null,
+  /**
+   * Optional handheld attribution. When provided, every EPC the mobile
+   * scanned gets a `{kind:'mobile', name: deviceName}` entry in the
+   * session's source map so the workspace filter dropdown can isolate
+   * mobile contributions from each reader's. Falls back to a generic
+   * 'mobile' name when not provided so behaviour is unchanged for
+   * legacy callers.
+   */
+  deviceName?: string | null,
 ): Promise<{ killed: number; matched: number; missing: number }> {
   const foundUpper = new Set(
     addOnFoundEpcs.map((e) => e.replace(/\s/g, "").toUpperCase()),
@@ -532,6 +542,26 @@ export async function closeCycleCountFromAddOn(
       tenantId,
     ],
   );
+
+  // Stamp mobile source attribution for every EPC the handheld claimed
+  // to have found. First-sighting-wins inside `appendSourceSightings`
+  // — if a reader already saw the EPC during the live phase, the
+  // earlier reader entry stays put and the filter still shows it as
+  // a reader-contributed scan.
+  if (addOnFoundEpcs.length > 0) {
+    const nowIso = new Date().toISOString();
+    const name = (deviceName ?? "").trim() || "mobile";
+    await appendSourceSightings(
+      pool,
+      cycleCountSessionId,
+      addOnFoundEpcs.map((epc) => ({
+        epc: epc.replace(/\s/g, "").toUpperCase(),
+        kind: "mobile" as const,
+        name,
+        ts: nowIso,
+      })),
+    );
+  }
 
   if (reallyMissing.length === 0) {
     return { killed: 0, matched: matchedCount, missing: 0 };

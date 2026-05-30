@@ -47,6 +47,11 @@ const bodySchema = z.object({
   overrideCatalog: z.boolean().optional().default(false),
   rows: z.array(rowSchema).min(1).max(50_000),
   deviceId: z.string().min(1).max(256).optional(),
+  /** Operator-friendly device name (e.g. "Samsung S938U", "Chainway C72E
+   *  HC720A211200582"). Used for the cycle-count workspace source filter
+   *  so each handheld shows up individually. Falls back to "mobile" when
+   *  missing — keeps legacy callers working. */
+  deviceName: z.string().min(1).max(128).optional(),
   addOnSourceType: z.enum(["mobile_count", "cycle_count", "csv_import"]).optional(),
   addOnSourceId: z.string().min(1).max(64).optional(),
   addOnSessionId: z.string().min(1).max(64).optional(),
@@ -111,6 +116,7 @@ export async function POST(req: Request) {
       addOnSourceType: parsed.data.addOnSourceType,
       addOnSourceId: parsed.data.addOnSourceId,
       addOnSessionId: parsed.data.addOnSessionId,
+      deviceName: parsed.data.deviceName,
     });
     return NextResponse.json({ ok: true, ...result }, { status: 201 });
   } catch (e) {

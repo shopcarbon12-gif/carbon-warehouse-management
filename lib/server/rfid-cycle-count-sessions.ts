@@ -109,6 +109,14 @@ export type SessionRow = {
 export type SessionDetail = SessionRow & {
   expected: CycleCountExpectedRow[];
   scanned_epcs: string[];
+  /**
+   * Per-EPC source attribution: `{ EPC: { kind: 'mobile'|'reader',
+   * name: string, ts: ISO } }`. Empty `{}` on sessions older than the
+   * Add-On Count ↔ cycle-count sync work (migration 044) until the
+   * backfill (045) lands. Used by the desktop workspace's source
+   * filter dropdown and the EPC table's source column.
+   */
+  scanned_epc_sources: Record<string, { kind: "mobile" | "reader"; name: string; ts: string }>;
 };
 
 export type VarianceSummary = {
@@ -257,11 +265,16 @@ export async function getSession(
   id: string,
 ): Promise<SessionDetail | null> {
   const r = await client.query<
-    SessionRow & { expected_snapshot: CycleCountExpectedRow[]; scanned_epcs: string[] }
+    SessionRow & {
+      expected_snapshot: CycleCountExpectedRow[];
+      scanned_epcs: string[];
+      scanned_epc_sources: unknown;
+    }
   >(
     `SELECT ${SESSION_COLUMNS},
             s.expected_snapshot,
-            s.scanned_epcs
+            s.scanned_epcs,
+            s.scanned_epc_sources
        FROM cycle_count_sessions s
        INNER JOIN locations loc ON loc.id = s.location_id
        LEFT JOIN bins b ON b.id = s.bin_id
@@ -271,11 +284,31 @@ export async function getSession(
   );
   const row = r.rows[0];
   if (!row) return null;
-  const { expected_snapshot, scanned_epcs, ...summary } = row;
+  const {
+    expected_snapshot,
+    scanned_epcs,
+    scanned_epc_sources,
+    ...summary
+  } = row;
+  // Defensive parse — accepts the post-migration shape, falls back to
+  // {} for pre-migration rows that get queried before 044 lands.
+  const sources: SessionDetail["scanned_epc_sources"] = {};
+  if (scanned_epc_sources && typeof scanned_epc_sources === "object" && !Array.isArray(scanned_epc_sources)) {
+    for (const [k, v] of Object.entries(scanned_epc_sources as Record<string, unknown>)) {
+      if (!v || typeof v !== "object") continue;
+      const o = v as Record<string, unknown>;
+      const kind = o.kind === "mobile" || o.kind === "reader" ? o.kind : null;
+      const name = typeof o.name === "string" ? o.name : "";
+      const ts = typeof o.ts === "string" ? o.ts : "";
+      if (!kind || !ts) continue;
+      sources[k.toUpperCase()] = { kind, name, ts };
+    }
+  }
   return {
     ...summary,
     expected: expected_snapshot ?? [],
     scanned_epcs: scanned_epcs ?? [],
+    scanned_epc_sources: sources,
   };
 }
 

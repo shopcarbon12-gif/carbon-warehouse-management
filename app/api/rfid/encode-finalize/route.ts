@@ -15,14 +15,17 @@ import { getPool } from "@/lib/db";
  *
  *   1. The new EPC promoted from 'unknown' to 'in-stock' (LIVE) so the
  *      tag counts as sellable stock immediately.
- *   2. The old EPC silenced in the Defective EPCs modal — the operator's
- *      desktop coworkers shouldn't see it lingering. Implemented as a
- *      `defective_acknowledged_at = now()` stamp (same mechanism the
- *      desktop dismiss button uses), so a re-scan of the killed tag
- *      can still bring it back if something's wrong.
+ *   2. The old EPC's items row DELETED entirely (2026-05-30 hardened).
+ *      Previously we only set `defective_acknowledged_at = now()`, but
+ *      that left the row in 'tag_killed' status — every cycle-count
+ *      session, every "DEFECTIVE" KPI, every catalog audit kept
+ *      seeing the row. The operator's intent for a successful
+ *      re-encode is unambiguous: that chip ID is gone forever and the
+ *      new chip ID has replaced it. Hard-DELETE the row; the audit
+ *      trail (encode_events) preserves the old→new mapping.
  *
  * Body: { newEpc, oldEpc? }  (24-hex each)
- * Reply: { ok, livePromoted: bool, defectiveDismissed: bool }
+ * Reply: { ok, livePromoted: bool, defectiveDeleted: bool }
  *
  * Auth: session JWT only (this is the same boundary `encode-claim` uses).
  * Tenant/location scope is taken from the session — we never trust client
@@ -84,17 +87,21 @@ export async function POST(req: Request) {
     );
     const livePromoted = (livePromote.rowCount ?? 0) > 0;
 
-    // Dismiss the old EPC from the Defective EPCs modal — same mechanism
-    // the desktop dismiss button uses. We don't touch its status (it
-    // stays 'tag_killed'), only set the acknowledgement timestamp so the
-    // modal's `last_seen_at > defective_acknowledged_at` filter hides it
-    // unless it gets re-scanned afterwards.
-    let defectiveDismissed = false;
+    // DELETE the old EPC's items row entirely. Pre-2026-05-30 we only
+    // dismissed (`defective_acknowledged_at = now()`) which left the row
+    // in 'tag_killed' status — every cycle-count session's DEFECTIVE
+    // bucket, every catalog count, every dashboard KPI kept seeing
+    // these rows accumulate. After a successful chip write the operator's
+    // intent is unambiguous: the old chip ID is replaced by the new chip
+    // ID; treat the items row as obsolete. encode_events keeps the
+    // old→new mapping for audit. Hard-DELETE; items has no FK children
+    // so this is safe. Scoped by tenant + location so we can't reach
+    // across boundaries.
+    let defectiveDeleted = false;
     if (oldEpc && oldEpc !== newEpc) {
-      const dismiss = await client.query(
-        `UPDATE items i
-            SET defective_acknowledged_at = now()
-           FROM locations l
+      const del = await client.query(
+        `DELETE FROM items i
+          USING locations l
           WHERE i.location_id = l.id
             AND l.tenant_id = $1::uuid
             AND i.location_id = $2::uuid
@@ -102,14 +109,14 @@ export async function POST(req: Request) {
             AND i.status = 'tag_killed'`,
         [session.tid, session.lid, oldEpc],
       );
-      defectiveDismissed = (dismiss.rowCount ?? 0) > 0;
+      defectiveDeleted = (del.rowCount ?? 0) > 0;
     }
 
     await client.query("COMMIT");
     return NextResponse.json({
       ok: true,
       livePromoted,
-      defectiveDismissed,
+      defectiveDeleted,
     });
   } catch (e) {
     try {

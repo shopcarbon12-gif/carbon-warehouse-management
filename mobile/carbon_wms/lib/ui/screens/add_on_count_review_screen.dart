@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/add_on_session_state.dart';
+import 'package:carbon_wms/services/handheld_client_info.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/add_on_epc_card.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
@@ -55,6 +56,12 @@ class _AddOnCountReviewScreenState extends State<AddOnCountReviewScreen> {
     final api = context.read<WmsApiClient>();
     try {
       final rows = widget.newEntries.map((e) => e.toFinalizeRow()).toList();
+      // Resolve the handheld's operator-friendly name BEFORE the POST
+      // so the server can stamp it onto the cycle-count source map
+      // (workspace filter dropdown shows each handheld individually).
+      // Empty string on iOS/web/failure — server falls back to a
+      // generic "mobile" label.
+      final deviceName = await HandheldClientInfo.displayName();
       final result = await api.postScanFinalize(
         intent: intent,
         screen: 'add_on_count',
@@ -62,6 +69,7 @@ class _AddOnCountReviewScreenState extends State<AddOnCountReviewScreen> {
         addOnSourceType: widget.sourceType,
         addOnSourceId: widget.sourceId,
         addOnSessionId: widget.sessionId,
+        deviceName: deviceName.isEmpty ? null : deviceName,
       );
       if (!mounted) return;
       _showResult(intent, result);

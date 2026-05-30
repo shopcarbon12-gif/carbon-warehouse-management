@@ -56,4 +56,35 @@ class HandheldClientInfo {
     } catch (_) {}
     return out;
   }
+
+  /// Operator-friendly handheld name for the cycle-count workspace
+  /// source filter. Prefers the build's `brand` + `model` ("Samsung
+  /// SM-S938U" → reads as "Samsung S938U" in the dropdown), falling
+  /// back to the raw model when brand is empty (Chainway units
+  /// usually have just a model). Returns an empty string on iOS /
+  /// web / failure so the server's "mobile" default kicks in.
+  static Future<String> displayName() async {
+    if (kIsWeb || !Platform.isAndroid) return '';
+    try {
+      final a = await DeviceInfoPlugin().androidInfo;
+      final brand = a.brand.trim();
+      final model = a.model.trim();
+      if (brand.isEmpty && model.isEmpty) return '';
+      if (brand.isEmpty) return model;
+      if (model.isEmpty) return brand;
+      // "samsung" + "SM-S938U" → "Samsung SM-S938U"
+      final brandPretty = brand.length > 1
+          ? '${brand[0].toUpperCase()}${brand.substring(1).toLowerCase()}'
+          : brand.toUpperCase();
+      // Strip the brand prefix from the model if it already includes it.
+      final modelStripped =
+          model.toLowerCase().startsWith(brand.toLowerCase())
+              ? model.substring(brand.length).trim()
+              : model;
+      return '$brandPretty $modelStripped'.trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
 }
