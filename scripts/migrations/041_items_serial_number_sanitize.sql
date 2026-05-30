@@ -25,12 +25,20 @@ CREATE TEMP TABLE _sn_targets (
 ) ON COMMIT DROP;
 
 -- Class A: wrong digit count / NULL / out of band.
+-- IMPORTANT: skip rows with NULL custom_sku_id — they exist on a small
+-- number of historical bulk-import items and have no SKU scope we can
+-- guarantee uniqueness against. Without this filter migration 041
+-- aborted with "null value in column custom_sku of _sn_targets
+-- violates not-null constraint" on 2026-05-30 Coolify boot, which
+-- stopped 042-046 from running. Affected items keep their wrong-shape
+-- serial; admins can clean them up via the catalog UI.
 INSERT INTO _sn_targets (id, custom_sku, old_serial)
 SELECT id, custom_sku_id, serial_number
   FROM items
- WHERE serial_number IS NULL
-    OR serial_number < 100000
-    OR serial_number > 999999;
+ WHERE custom_sku_id IS NOT NULL
+   AND (serial_number IS NULL
+        OR serial_number < 100000
+        OR serial_number > 999999);
 
 -- Class B: duplicates within a custom_sku — keep the oldest items.id,
 -- rewrite every newer copy. Exclude rows already targeted by Class A
@@ -44,7 +52,8 @@ SELECT i.id, i.custom_sku_id, i.serial_number
              ORDER BY created_at NULLS LAST, id
            ) AS rn
       FROM items
-     WHERE serial_number BETWEEN 100000 AND 999999
+     WHERE custom_sku_id IS NOT NULL
+       AND serial_number BETWEEN 100000 AND 999999
   ) i
  WHERE i.rn > 1
    AND NOT EXISTS (SELECT 1 FROM _sn_targets t WHERE t.id = i.id);
