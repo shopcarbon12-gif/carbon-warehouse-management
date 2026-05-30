@@ -1345,6 +1345,41 @@ class WmsApiClient {
     return <String, dynamic>{};
   }
 
+  /// `POST /api/rfid/encode-resolve-and-claim` — single-round-trip
+  /// merger of [catalogItemByCustomSku] + [postEncodeClaim]. Used by
+  /// the Re-Encode screen since 1.2.104 to halve the per-tag network
+  /// latency the handheld pays in warehouse Wi-Fi conditions.
+  ///
+  /// Returns `{ok, epc, serial, system_id, customSkuId, customSku,
+  /// name}` on success. Throws `WmsApiException` on non-2xx so the
+  /// caller can map HTTP code → failure reason (`SKU_NOT_FOUND`,
+  /// `NO_SYSTEM_ID`, `EPC_COLLISION`).
+  Future<Map<String, dynamic>> postEncodeResolveAndClaim({
+    required String customSku,
+    String? oldEpc,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/rfid/encode-resolve-and-claim');
+    final body = <String, dynamic>{'customSku': customSku.trim()};
+    if (oldEpc != null && oldEpc.trim().isNotEmpty) {
+      body['oldEpc'] = oldEpc.trim().toUpperCase();
+    }
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
   /// `POST /api/rfid/encode-claim` — atomic "next serial + insert items
   /// row + return the new EPC". Server-side computes `MAX(serial)+1` for
   /// the SKU/location with a 100,001 floor for fresh SKUs and signs the

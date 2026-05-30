@@ -79,6 +79,30 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
   /// streaming reads of the still-unwritten tag during that window.
   final Set<String> _retryInFlight = <String>{};
 
+  /// SINGLE-FLIGHT MUTEX (2026-05-30).
+  /// The radio fires ~50 reads/sec; without this gate, the first 5-6
+  /// C-prefix EPCs each kick off their own catalog → encode-claim →
+  /// chip-write pipeline concurrently. The native chip-write
+  /// serializes on the vendor's executor so the calls queue 5-10s
+  /// deep behind each other while the radio keeps reading + the dart
+  /// queue keeps growing — operators perceive this as "the screen is
+  /// stuck, can't move the handheld." This flag drops incoming tag
+  /// reads to a no-op while a write pipeline is already running.
+  /// When the current write completes (success OR failure), the next
+  /// trigger-held tag becomes the next write target. Matches the
+  /// operator's mental model: "first tag, encode within a second,
+  /// then the next one."
+  bool _processInFlight = false;
+
+  /// Memoized [WmsApiClient.catalogItemByCustomSku] result keyed by
+  /// the extracted customSku. Operators re-encoding a stack of the
+  /// same defective product would otherwise pay ~300 ms of warehouse
+  /// wifi per tag for an identical lookup. Cleared by the RESET
+  /// button so a SKU correction by an admin mid-session can be picked
+  /// up without restart.
+  final Map<String, Map<String, dynamic>?> _catalogCache =
+      <String, Map<String, dynamic>?>{};
+
   RfidManager? _rfid;
   StreamSubscription<RfidTagRead>? _directTagSub;
   StreamSubscription<String>? _barcodeSub;
@@ -385,6 +409,16 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     }
     if (read.rssi != null) _liveRssi = read.rssi;
 
+    // SINGLE-FLIGHT GATE — drop EVERY incoming read while we're busy
+    // running a pipeline. The radio fires 50+ reads/sec; without this,
+    // 5-6 C-prefix EPCs each kick off their own catalog→claim→write in
+    // parallel and the native chip-write executor queues 5-10s deep
+    // ("can't move the handheld, screen is stuck"). Reads we drop now
+    // will be re-emitted naturally — the operator just keeps the
+    // trigger held, the next tag in range becomes the next write
+    // target the instant the current pipeline finishes.
+    if (_processInFlight) return;
+
     // Retry path: a previous write for this exact chip failed (operator
     // moved too far / RF dropout). The server already burned a serial
     // via /api/rfid/encode-claim, so just re-issue the chip write with
@@ -393,8 +427,11 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     final failed = _failedCards[epc];
     if (failed != null) {
       if (_retryInFlight.contains(epc)) return;
+      _processInFlight = true;
       _sounds.play(ScanCue.read);
-      unawaited(_retryWrite(failed));
+      unawaited(_retryWrite(failed).whenComplete(() {
+        _processInFlight = false;
+      }));
       return;
     }
 
@@ -408,7 +445,10 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     // filter passes, so the operator hears exactly the tags they care
     // about and nothing else.
     _sounds.play(ScanCue.read);
-    unawaited(_processTag(epc));
+    _processInFlight = true;
+    unawaited(_processTag(epc).whenComplete(() {
+      _processInFlight = false;
+    }));
   }
 
   /// Re-run the chip write for a card whose previous write failed.
@@ -529,34 +569,67 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       print('[SearchEncode] legacy epc=$epc pos=[$_positionStart..$_positionEnd] sku=$customSku warehouse=$_warehouseId');
     }
 
-    Map<String, dynamic>? item;
+    // SINGLE-ROUND-TRIP CATALOG + CLAIM (1.2.104, 2026-05-30).
+    // Pre-1.2.104 the screen did two awaits per tag — GET catalog,
+    // then POST encode-claim — each ~200-500ms on warehouse Wi-Fi.
+    // /api/rfid/encode-resolve-and-claim merges them into one
+    // transaction + one HTTPS round-trip. The SKU catalog cache
+    // [_catalogCache] also remains: when we've already merged for
+    // this customSku in-session, we skip the round-trip for the
+    // catalog half AND still get a fresh serial from the same call
+    // (server still does the catalog lookup but the result lands
+    // identically — no harm). The cache key stays `customSku` so a
+    // cache HIT short-circuits the lookup half of the merged
+    // endpoint via the same code path. RESET clears the cache.
+    Map<String, dynamic> resolved;
     try {
-      item = await api.catalogItemByCustomSku(customSku);
-      if (kDebugMode) {
-        // ignore: avoid_print
-        print('[SearchEncode] catalog lookup sku=$customSku -> ${item == null ? "NULL" : "hit system_id=${item['system_id']} name=${item['name']}"}');
+      resolved = await api.postEncodeResolveAndClaim(
+        customSku: customSku,
+        oldEpc: epc,
+      );
+    } on WmsApiException catch (e) {
+      // 404 = SKU not in catalog (notFound), 422 = no system_id, 409 =
+      // EPC collision (caller can retry). All three are surfaced to
+      // the operator as TAG_ISSUE with a specific reason; the screen
+      // only differentiates `notInCatalog` for the dashboard tally.
+      if (e.statusCode == 404) {
+        _updateCard(card, (c) {
+          c.status = EncodeStatus.notFound;
+          c.failureReason = EncodeFailureReason.notInCatalog;
+        });
+        _sounds.play(ScanCue.error);
+        unawaited(_reportEvent(oldEpc: epc, customSku: customSku, status: 'not_found'));
+        return;
       }
-    } catch (e) {
-      if (kDebugMode) {
-        // ignore: avoid_print
-        print('[SearchEncode] catalog lookup sku=$customSku THREW: $e');
-      }
-      item = null;
-    }
-
-    if (item == null) {
       _updateCard(card, (c) {
-        c.status = EncodeStatus.notFound;
-        c.failureReason = EncodeFailureReason.notInCatalog;
+        c.status = EncodeStatus.tagIssue;
+        c.failureReason = EncodeFailureReason.serialFetchFailed;
       });
       _sounds.play(ScanCue.error);
-      unawaited(_reportEvent(oldEpc: epc, customSku: customSku, status: 'not_found'));
+      return;
+    } catch (_) {
+      _updateCard(card, (c) {
+        c.status = EncodeStatus.tagIssue;
+        c.failureReason = EncodeFailureReason.serialFetchFailed;
+      });
+      _sounds.play(ScanCue.error);
       return;
     }
 
-    final customSkuId = item['id']?.toString() ?? '';
-    final systemId = _toInt(item['system_id']);
-    final itemName = item['name']?.toString() ?? '';
+    final systemId = _toInt(resolved['system_id']);
+    final itemName = resolved['name']?.toString() ?? '';
+    final customSkuId = resolved['customSkuId']?.toString() ?? '';
+    // Memoize the catalog half — used as a defensive cache so we don't
+    // re-resolve for a SKU we've already seen this session (e.g. if a
+    // future flow needs catalog-only lookup again). Stored even on the
+    // merged success path so it's available without an extra GET.
+    _catalogCache[customSku] = <String, dynamic>{
+      'id': customSkuId,
+      'system_id': systemId,
+      'name': itemName,
+      'custom_sku': customSku,
+      'sku': customSku,
+    };
     _updateCard(card, (c) {
       c.systemId = systemId;
       c.itemName = itemName;
@@ -573,31 +646,8 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       return;
     }
 
-    // 1.2.42: re-encode now uses the same atomic /api/rfid/encode-claim
-    // endpoint as the new Encode screen. Server allocates the next
-    // serial under MAX(serial)+1 with a 100,001 floor for fresh SKUs,
-    // INSERTs the items row, and kills the old EPC's row in one txn —
-    // so re-encoded tags pick up at the right serial position and never
-    // collide with anything Senitron-issued or commission-issued.
-    //
-    // Drops the legacy nextRfidSerial + client-side buildEpc combo
-    // (per-warehouse counter, no atomic kill, no MAX+1 awareness).
-    Map<String, dynamic> claim;
-    try {
-      claim = await api.postEncodeClaim(
-        customSkuId: customSkuId,
-        oldEpc: epc,
-      );
-    } catch (_) {
-      _updateCard(card, (c) {
-        c.status = EncodeStatus.tagIssue;
-        c.failureReason = EncodeFailureReason.serialFetchFailed;
-      });
-      _sounds.play(ScanCue.error);
-      return;
-    }
-    final newEpc = (claim['epc'] as String?)?.toUpperCase() ?? '';
-    final serial = (claim['serial'] as num?)?.toInt() ?? 0;
+    final newEpc = (resolved['epc'] as String?)?.toUpperCase() ?? '';
+    final serial = (resolved['serial'] as num?)?.toInt() ?? 0;
     if (newEpc.length != 24 || serial == 0) {
       _updateCard(card, (c) {
         c.status = EncodeStatus.tagIssue;
@@ -735,6 +785,8 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       _seen.clear();
       _failedCards.clear();
       _retryInFlight.clear();
+      _catalogCache.clear();
+      _processInFlight = false;
       _readCount = 0;
       _detectedCount = 0;
       _encodedCount = 0;
