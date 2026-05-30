@@ -231,15 +231,13 @@ const LONG_STUCK_POS_WEDGED_AFTER_CYCLES = 3;
  * performs (bridge reset → slot teardown → fresh respawn via reconcile) until
  * real tag reads return. The badge (`chassis_wedged_at`) then self-clears.
  *
- * POS readers retry fast (the register is customer-facing) BUT only while the
- * store is active — gated on a real read within WEDGE_AUTORECOVER_ACTIVE_MS so
- * an idle/closed register isn't bridge-reset every minute all night. With no
- * recent reads (quiet/closed, or genuinely dead hardware) recovery backs off
- * to the slow cadence.
+ * POS readers retry FAST (the register is customer-facing and now only runs
+ * during its real ON window — the POS app gates scan_paused_at — so a wedged
+ * POS reader means a cashier is actively waiting). Other readers retry on a
+ * slower cadence to avoid cascading rapid bridge resets.
  */
 const WEDGE_AUTORECOVER_POS_COOLDOWN_MS = 60_000;
 const WEDGE_AUTORECOVER_COOLDOWN_MS = 10 * 60_000;
-const WEDGE_AUTORECOVER_ACTIVE_MS = 30 * 60_000;
 
 /**
  * Grace window between SIGTERM and SIGKILL when stopping a slot's child.
@@ -880,16 +878,10 @@ export class MonsoonSupervisor {
    *  no overrides; revert to configured power. Updated every ~100 ms. */
   private posPowerOverrides = new Map<string, number>();
 
-  /** Per-reader timestamps that MUST survive a slot teardown+respawn (the
-   *  never-give-up recovery deletes and recreates the slot). Keyed by reader id.
-   *  - lastReadAtByReader: ms of the last REAL tag read. Drives the activity-
-   *    aware wedge-recovery cadence (a register that read recently then went
-   *    silent = broke mid-business → recover FAST; long-silent = idle/closed/
-   *    dead → back off). Never reset, only bumped forward.
-   *  - lastWedgeRecoveryAtByReader: ms of the last never-give-up Hard-Reset
-   *    recovery, so the cooldown actually rate-limits across respawns instead
-   *    of resetting to 0 on every fresh slot. */
-  private lastReadAtByReader = new Map<string, number>();
+  /** ms of the last never-give-up Hard-Reset recovery per reader id. Lives at
+   *  the supervisor level (not on the slot) so the cooldown actually rate-limits
+   *  across the slot teardown+respawn that the recovery itself performs, instead
+   *  of resetting to 0 on every fresh slot. */
   private lastWedgeRecoveryAtByReader = new Map<string, number>();
 
   /**
@@ -1842,17 +1834,13 @@ export class MonsoonSupervisor {
       if (slot.testSession !== null) continue;
       if (this.externalBridgeHold.has(slot.spec.id)) continue;
       const isPos = slot.spec.is_pos_dedicated === true;
-      // Activity-aware cadence (read from the teardown-surviving Maps): a POS
-      // register that read recently then went silent = broke mid-business →
-      // recover FAST; long-silent = idle/closed/dead hardware → back off so we
-      // don't bridge-reset every minute all night (cascading rapid resets push
-      // a chip DEEPER into stuck — see commits a68a9be / 268e7a7).
-      const lastReadAt = this.lastReadAtByReader.get(slot.spec.id) ?? 0;
-      const recentlyActive = lastReadAt > 0 && now - lastReadAt <= WEDGE_AUTORECOVER_ACTIVE_MS;
-      const cooldown =
-        isPos && recentlyActive
-          ? WEDGE_AUTORECOVER_POS_COOLDOWN_MS
-          : WEDGE_AUTORECOVER_COOLDOWN_MS;
+      // POS readers only RUN during their ON window now (the POS app gates
+      // scan_paused_at — see reconcile comment), so if a POS reader is wedged
+      // it means a cashier is actively trying to scan: recover FAST, always.
+      // Other readers retry on a slower cadence (rapid cascading bridge resets
+      // push a chip DEEPER into stuck — see commits a68a9be / 268e7a7). The
+      // cooldown survives the slot teardown via lastWedgeRecoveryAtByReader.
+      const cooldown = isPos ? WEDGE_AUTORECOVER_POS_COOLDOWN_MS : WEDGE_AUTORECOVER_COOLDOWN_MS;
       const lastRecoveryAt = this.lastWedgeRecoveryAtByReader.get(slot.spec.id) ?? 0;
       if (now - lastRecoveryAt < cooldown) continue;
       this.lastWedgeRecoveryAtByReader.set(slot.spec.id, now);
@@ -1861,7 +1849,6 @@ export class MonsoonSupervisor {
         readerName: slot.spec.name,
         host: String(slot.spec.network_address ?? ""),
         isPos,
-        recentlyActive,
         cooldownMs: cooldown,
         wedgedForMs: slot.wedgedSinceMs > 0 ? now - slot.wedgedSinceMs : null,
       });
@@ -2127,33 +2114,38 @@ export class MonsoonSupervisor {
     // Default-paused-readers model: a reader is desired (= spawn a child)
     // only when ONE of these is true:
     //   1. bundle.effective_paused is FALSE — the operator manually un-paused
-    //      it from Hardware Config, or the schedule says it's a scan window.
+    //      it from Hardware Config, OR the POS app cleared scan_paused_at
+    //      (effective_paused derives from devices.scan_paused_at). This is how
+    //      the POS reader (.34) follows its start/stop rule — see below.
     //   2. activeScanSessionReaders.has(reader.id) — a workflow page
     //      (Transfer Out / Cycle Counts / Print-Commission) has an open
     //      scan-session for this reader. The session-end POST will revert.
     //   3. testWakeReaders.has(reader.id) — antenna-test session has woken
     //      the reader for the duration of the test.
-    //   4. reader.is_pos_dedicated === true — POS readers (.34) MUST stay
-    //      always-warm. Carbon-POS calls "Update Status Item" expecting
-    //      reads within a couple seconds; if the supervisor has stopped
-    //      the chip between calls, the cashier pays the full chip cold-
-    //      start window (live evidence 2026-05-26 on .34: 45 s before
-    //      first read on every click, because the supervisor was
-    //      toggling stop/start every minute as the POS scan-session came
-    //      and went). Always-desired removes the cold-start tax — the
-    //      child runs continuously, ready on the very next read.
     //
-    // Previously this filter only checked effective_paused + active
-    // sessions. The new pos_dedicated bypass is opt-in via the per-
-    // reader flag.
+    // POS reader start/stop (2026-05-30): the previous `is_pos_dedicated === true`
+    // ALWAYS-ON bypass was REMOVED. It was added 2026-05-26 to dodge a chip
+    // cold-start, but it overrode the POS app's own start/stop rule and left
+    // .34 running idle 24/7 — which is what made the supervisor false-wedge it
+    // during quiet periods (the console binary emits no bytes when no tag is
+    // present → silence watchdog → long-stuck → chassis_wedged on a healthy
+    // reader). Carbon-POS already drives `scan_paused_at` correctly via
+    // lib/reader-control.ts: it CLEARS the pause (reader ON) while a cashier is
+    // on a scan surface (/sales/{code}/new, the "scan RFID" rescan button, and
+    // Update Item Status on /inventory/{code}), with a 15 s heartbeat + 30 s
+    // grace so it doesn't flap, and SETS the pause (reader OFF) ~30 s after the
+    // cashier leaves. So .34 now runs ONLY during its real ON window, and the
+    // supervisor's recovery machinery (never-give-up + POS-compressed ladder)
+    // applies exactly when the reader is supposed to be reading. The heartbeat
+    // debounce is what makes the old always-warm hack unnecessary — there is no
+    // per-minute stop/start toggle-storm anymore.
     const desiredById = new Map(
       bundle.readers
         .filter(
           (r) =>
             !(r.effective_paused ?? false) ||
             this.activeScanSessionReaders.has(r.id) ||
-            this.testWakeReaders.has(r.id) ||
-            r.is_pos_dedicated === true,
+            this.testWakeReaders.has(r.id),
         )
         .map((r) => [r.id, r] as const),
     );
@@ -3355,7 +3347,6 @@ export class MonsoonSupervisor {
       totalMal += result.malformedCount;
       if (result.records.length > 0) {
         slot.lastRecordAt = Date.now();
-        this.lastReadAtByReader.set(slot.spec.id, Date.now());
         slot.recordsThisWindow += result.records.length;
       }
 
@@ -3800,7 +3791,6 @@ export class MonsoonSupervisor {
     const now = Date.now();
     if (result.records.length > 0) {
       slot.lastRecordAt = now;
-      this.lastReadAtByReader.set(slot.spec.id, now);
       slot.recordsThisWindow += result.records.length;
     }
     for (const rec of result.records) {
