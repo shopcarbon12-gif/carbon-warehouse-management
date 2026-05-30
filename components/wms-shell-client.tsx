@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ThemeProvider } from "@/components/theme/theme-provider";
@@ -25,6 +26,20 @@ export function WmsShellClient({
   // sync from localStorage in an effect to avoid hydration mismatch.
   const [pinned, setPinned] = useState<boolean>(true);
   const [open, setOpen] = useState(false);
+
+  // The Categories page hosts a full-width windowed manager popup, so the
+  // sidebar must auto-collapse to the side on that route only — regardless of
+  // the operator's pin preference. We override the *effective* pin here (the
+  // stored `pinned` value is left untouched, so every other page keeps its
+  // normal behaviour and the preference is restored on navigate-away).
+  const pathname = usePathname() ?? "";
+  const forceCollapsed = pathname.startsWith("/inventory/categories");
+  const effectivePinned = forceCollapsed ? false : pinned;
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- collapse the drawer when entering the Categories route
+    if (forceCollapsed) setOpen(false);
+  }, [forceCollapsed]);
 
   useEffect(() => {
     try {
@@ -60,7 +75,7 @@ export function WmsShellClient({
       <div className="flex min-h-full flex-1 bg-[var(--wms-bg)]">
         <Sidebar
           activeLocationId={activeLocationId}
-          pinned={pinned}
+          pinned={effectivePinned}
           onTogglePin={togglePin}
           open={open}
           onOpenChange={onOpenChange}
@@ -71,7 +86,7 @@ export function WmsShellClient({
               md:hidden behaviour (header only appears on small
               viewports, since the sidebar already sits in flow). */}
           <header
-            className={`sticky top-0 z-30 ${pinned ? "flex md:hidden" : "flex"} min-h-12 shrink-0 items-center gap-3 border-b border-[var(--wms-border)] bg-[var(--wms-surface)]/95 px-3 py-2 backdrop-blur-md`}
+            className={`sticky top-0 z-30 ${effectivePinned ? "flex md:hidden" : "flex"} min-h-12 shrink-0 items-center gap-3 border-b border-[var(--wms-border)] bg-[var(--wms-surface)]/95 px-3 py-2 backdrop-blur-md`}
           >
             <button
               type="button"
