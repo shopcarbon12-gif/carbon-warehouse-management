@@ -212,6 +212,36 @@ const LONG_STUCK_WEDGED_AFTER_CYCLES = 5;
 const LONG_STUCK_RECOVERY_COOLDOWN_MS = 60_000;
 
 /**
+ * POS readers (`is_pos_dedicated`) run the long-stuck ladder on a COMPRESSED
+ * schedule. A cashier can't wait the ~8 min the standard 3→4→5 ladder takes
+ * (each cycle ≈ 90 s behind the WiFi extender). Escalate on the first cycles
+ * instead: chip reset @1, bridge reset @2, mark-wedged @3 — and the wedge is
+ * NOT terminal (see WEDGE_AUTORECOVER_* + runStreamWatchdog never-give-up
+ * branch). 2026-05-30: .34 sat at the purple "needs_service" badge for hours
+ * because the standard ladder dead-ended and only a manual Hard Reset cleared
+ * it. Live evidence: apps/carbon-cdm journal 2026-05-30 00:13–00:27Z.
+ */
+const LONG_STUCK_POS_CHIP_RESET_AFTER_CYCLES = 1;
+const LONG_STUCK_POS_BRIDGE_RESET_AFTER_CYCLES = 2;
+const LONG_STUCK_POS_WEDGED_AFTER_CYCLES = 3;
+
+/**
+ * Never-give-up auto-recovery: a slot at wedgeLevel 3 is NOT a terminal state.
+ * On a cooldown the supervisor re-runs the exact sequence a human Hard Reset
+ * performs (bridge reset → slot teardown → fresh respawn via reconcile) until
+ * real tag reads return. The badge (`chassis_wedged_at`) then self-clears.
+ *
+ * POS readers retry fast (the register is customer-facing) BUT only while the
+ * store is active — gated on a real read within WEDGE_AUTORECOVER_ACTIVE_MS so
+ * an idle/closed register isn't bridge-reset every minute all night. With no
+ * recent reads (quiet/closed, or genuinely dead hardware) recovery backs off
+ * to the slow cadence.
+ */
+const WEDGE_AUTORECOVER_POS_COOLDOWN_MS = 60_000;
+const WEDGE_AUTORECOVER_COOLDOWN_MS = 10 * 60_000;
+const WEDGE_AUTORECOVER_ACTIVE_MS = 30 * 60_000;
+
+/**
  * Grace window between SIGTERM and SIGKILL when stopping a slot's child.
  * `new_monsoonreader` catches SIGTERM and FINs its bridge TCP socket
  * within ~300 ms; we wait a touch longer for safety. SIGKILL fallback
@@ -808,6 +838,21 @@ export class MonsoonSupervisor {
   private freeSlotIndex(idx: number): void {
     this.usedIndexes.delete(idx);
   }
+  /**
+   * Tear a slot all the way down — the same sequence the per-reader Hard Reset
+   * runs in `reconcile` (bridge cold reset + child kill + slot teardown + slot
+   * index freed). The caller is responsible for triggering a respawn (the
+   * reconcile path falls through to fresh-slot creation; the never-give-up
+   * watchdog path calls `reconcile(this.lastBundle)` after the loop). Factored
+   * out so the supervisor can perform a Hard Reset WITHOUT a human clicking the
+   * button — see the wedgeLevel-3 never-give-up branch in runStreamWatchdog.
+   */
+  private hardResetSlot(slot: ReaderSlot): void {
+    this.tryBridgeReset(slot.spec);
+    this.stopSlot(slot);
+    this.slots.delete(slot.spec.id);
+    this.freeSlotIndex(slot.index);
+  }
   private testSweepHandle: NodeJS.Timeout | null = null;
   private streamWatchdogHandle: NodeJS.Timeout | null = null;
   /** Set of antenna IDs we've already started a test for (one-shot per pending). */
@@ -834,6 +879,18 @@ export class MonsoonSupervisor {
    *  payload. Wins over WMS-configured power at spawn time. Empty map =
    *  no overrides; revert to configured power. Updated every ~100 ms. */
   private posPowerOverrides = new Map<string, number>();
+
+  /** Per-reader timestamps that MUST survive a slot teardown+respawn (the
+   *  never-give-up recovery deletes and recreates the slot). Keyed by reader id.
+   *  - lastReadAtByReader: ms of the last REAL tag read. Drives the activity-
+   *    aware wedge-recovery cadence (a register that read recently then went
+   *    silent = broke mid-business → recover FAST; long-silent = idle/closed/
+   *    dead → back off). Never reset, only bumped forward.
+   *  - lastWedgeRecoveryAtByReader: ms of the last never-give-up Hard-Reset
+   *    recovery, so the cooldown actually rate-limits across respawns instead
+   *    of resetting to 0 on every fresh slot. */
+  private lastReadAtByReader = new Map<string, number>();
+  private lastWedgeRecoveryAtByReader = new Map<string, number>();
 
   /**
    * Reader IDs that the encode-jobs worker has temporarily borrowed the
@@ -1326,6 +1383,19 @@ export class MonsoonSupervisor {
           slot.muxSwapAtMs = now;
         }
       }
+      // DEFENSIVE 2026-05-30: POS readers (`is_pos_dedicated`) must NEVER carry
+      // a sweep override. Auto-sweep entry is gated off for them, but clear any
+      // stale override here too so no advance-site (silence watchdog / on-exit)
+      // can resume walking a deliberately-low POS reader's power downward.
+      if (slot.spec.is_pos_dedicated === true && slot.sweepPowerOverrideArg !== null) {
+        log.warn("supervisor: defensively clearing sweepPowerOverrideArg on POS slot", {
+          readerId: slot.spec.id,
+          readerName: slot.spec.name,
+          stalePower: slot.sweepPowerOverrideArg,
+        });
+        slot.sweepPowerOverrideArg = null;
+        slot.lastSweepAttemptAt = 0;
+      }
       // Periodic auto-retest of operator-configured power. When sweep
       // recovery pinned the slot to a sub-configured power earlier,
       // we keep it there long enough for the reader to actually be
@@ -1626,12 +1696,22 @@ export class MonsoonSupervisor {
         // (direct bridge reset, no sweep) — see second branch below.
         const minSweepPower = SWEEP_POWERS[SWEEP_POWERS.length - 1] ?? 30;
         const skipSweepLowPower = configuredPower * 10 < minSweepPower;
+        // POS readers (`is_pos_dedicated`) NEVER auto-sweep. Auto-sweep can
+        // only walk power at-or-BELOW the operator's setting, and a POS reader
+        // is deliberately run at low power (it must read only the item at the
+        // register, not surrounding stock). Sweeping it lower is the wrong
+        // direction — it makes coverage worse and never recovers. Live evidence
+        // 2026-05-30 on .34 (20 dBm): sweep walked 19→17→15 dBm, all silent,
+        // then dead-ended at chassis_wedged. Route POS to the direct bridge-
+        // reset path instead (same as low-power slots).
+        const isPosReader = slot.spec.is_pos_dedicated === true;
         if (
           !muxSlot &&
           slot.testSession === null &&
           slot.sweepPowerOverrideArg === null &&
           !forceConfigured &&
           !skipSweepLowPower &&
+          !isPosReader &&
           now - slot.lastSweepAttemptAt >= SWEEP_RETRY_COOLDOWN_MS
         ) {
           // testSession gate: an active /antenna_test session owns this slot.
@@ -1677,7 +1757,7 @@ export class MonsoonSupervisor {
           slot.testSession === null &&
           slot.sweepPowerOverrideArg === null &&
           !forceConfigured &&
-          skipSweepLowPower &&
+          (skipSweepLowPower || isPosReader) &&
           !slot.bytesSinceSpawn &&
           now - slot.lastSweepAttemptAt >= SWEEP_RETRY_COOLDOWN_MS &&
           now - slot.bridgeResetAt >= SWEEP_RETRY_COOLDOWN_MS
@@ -1743,6 +1823,58 @@ export class MonsoonSupervisor {
     }
     // After per-slot processing, do peer-relative slow detection.
     this.detectAndRecoverSlowSlots(now);
+
+    // Never-give-up auto-recovery: a wedgeLevel-3 slot is NOT terminal. Re-run
+    // the exact sequence a human Hard Reset performs (bridge reset → teardown →
+    // fresh respawn) on a cooldown until real reads return — instead of sitting
+    // at the "needs_service" badge forever waiting for a human to click the
+    // button. Driver-agnostic: catches both the long-stuck ladder wedge and the
+    // slow-detector wedge. 2026-05-30: this is what closes the .34 incident —
+    // the supervisor now does automatically what the operator did by hand.
+    //
+    // Collect first, mutate after: hardResetSlot() deletes from this.slots, so
+    // we must not delete mid-iteration. One reconcile(this.lastBundle) after the
+    // teardowns respawns every torn-down slot from a clean state.
+    const wedgeRecoverIds: string[] = [];
+    for (const slot of this.slots.values()) {
+      if (slot.shuttingDown) continue;
+      if (slot.wedgeLevel !== 3) continue;
+      if (slot.testSession !== null) continue;
+      if (this.externalBridgeHold.has(slot.spec.id)) continue;
+      const isPos = slot.spec.is_pos_dedicated === true;
+      // Activity-aware cadence (read from the teardown-surviving Maps): a POS
+      // register that read recently then went silent = broke mid-business →
+      // recover FAST; long-silent = idle/closed/dead hardware → back off so we
+      // don't bridge-reset every minute all night (cascading rapid resets push
+      // a chip DEEPER into stuck — see commits a68a9be / 268e7a7).
+      const lastReadAt = this.lastReadAtByReader.get(slot.spec.id) ?? 0;
+      const recentlyActive = lastReadAt > 0 && now - lastReadAt <= WEDGE_AUTORECOVER_ACTIVE_MS;
+      const cooldown =
+        isPos && recentlyActive
+          ? WEDGE_AUTORECOVER_POS_COOLDOWN_MS
+          : WEDGE_AUTORECOVER_COOLDOWN_MS;
+      const lastRecoveryAt = this.lastWedgeRecoveryAtByReader.get(slot.spec.id) ?? 0;
+      if (now - lastRecoveryAt < cooldown) continue;
+      this.lastWedgeRecoveryAtByReader.set(slot.spec.id, now);
+      log.warn("supervisor: wedged slot — auto Hard-Reset recovery (never give up)", {
+        readerId: slot.spec.id,
+        readerName: slot.spec.name,
+        host: String(slot.spec.network_address ?? ""),
+        isPos,
+        recentlyActive,
+        cooldownMs: cooldown,
+        wedgedForMs: slot.wedgedSinceMs > 0 ? now - slot.wedgedSinceMs : null,
+      });
+      wedgeRecoverIds.push(slot.spec.id);
+    }
+    if (wedgeRecoverIds.length > 0) {
+      for (const id of wedgeRecoverIds) {
+        const slot = this.slots.get(id);
+        if (slot) this.hardResetSlot(slot);
+      }
+      // Respawn fresh slots immediately — same path the manual Hard Reset takes.
+      if (this.lastBundle) this.reconcile(this.lastBundle);
+    }
   }
 
   /**
@@ -2123,10 +2255,7 @@ export class MonsoonSupervisor {
           requestedAt: spec.reader_recover_requested_at,
           slotAgeMs: Date.now() - existing.slotCreatedAt,
         });
-        this.tryBridgeReset(spec);
-        this.stopSlot(existing);
-        this.slots.delete(spec.id);
-        this.freeSlotIndex(existing.index);
+        this.hardResetSlot(existing);
         existing = undefined;
       }
 
@@ -3226,6 +3355,7 @@ export class MonsoonSupervisor {
       totalMal += result.malformedCount;
       if (result.records.length > 0) {
         slot.lastRecordAt = Date.now();
+        this.lastReadAtByReader.set(slot.spec.id, Date.now());
         slot.recordsThisWindow += result.records.length;
       }
 
@@ -3392,38 +3522,53 @@ export class MonsoonSupervisor {
       if (
         !wasIntendedKill &&
         totalRecords === 0 &&
-        spawnDurationMs >= LONG_STUCK_MIN_RUNTIME_MS
+        spawnDurationMs >= LONG_STUCK_MIN_RUNTIME_MS &&
+        // RACE GUARD 2026-05-30: while an auto-sweep owns the slot, the sweep
+        // machinery is deliberately power-cycling the radio and each step runs
+        // with 0 records by design. Counting those toward the wedge threshold
+        // raced .34 to chassis_wedged mid-sweep. Only count "real" stuck cycles
+        // (no sweep in progress).
+        slot.sweepPowerOverrideArg === null
       ) {
         slot.consecutiveLongStuckCycles += 1;
         const cycles = slot.consecutiveLongStuckCycles;
         const sinceLast = Date.now() - slot.lastLongStuckRecoveryAt;
         const cooldownPassed = sinceLast >= LONG_STUCK_RECOVERY_COOLDOWN_MS;
+        // POS readers escalate on a COMPRESSED schedule (chip@1, bridge@2,
+        // wedged@3) — the standard 3/4/5 ladder takes ~8 min behind the WiFi
+        // extender (each cycle ≈ 90 s) and a cashier can't wait that long.
+        const isPos = spec.is_pos_dedicated === true;
+        const chipAt = isPos ? LONG_STUCK_POS_CHIP_RESET_AFTER_CYCLES : LONG_STUCK_CHIP_RESET_AFTER_CYCLES;
+        const bridgeAt = isPos ? LONG_STUCK_POS_BRIDGE_RESET_AFTER_CYCLES : LONG_STUCK_BRIDGE_RESET_AFTER_CYCLES;
+        const wedgedAt = isPos ? LONG_STUCK_POS_WEDGED_AFTER_CYCLES : LONG_STUCK_WEDGED_AFTER_CYCLES;
         const baseInfo = {
           readerId: spec.id,
           readerName: spec.name,
           host: String(spec.network_address ?? ""),
           cycles,
+          isPos,
           spawnDurationMs,
           cooldownAgoMs: slot.lastLongStuckRecoveryAt === 0 ? null : sinceLast,
         };
-        if (cycles >= LONG_STUCK_WEDGED_AFTER_CYCLES && slot.wedgeLevel < 3) {
-          // Software-exhausted. Mark chassis_wedged so the operator UI
-          // surfaces "needs hardware service" and stop hammering the chip.
-          log.error("supervisor: long-stuck cycles exhausted — marking chassis_wedged", baseInfo);
+        if (cycles >= wedgedAt && slot.wedgeLevel < 3) {
+          // Software-exhausted at this level. Mark chassis_wedged so the
+          // operator UI surfaces "needs service". This is NO LONGER terminal:
+          // the never-give-up branch in runStreamWatchdog re-runs a full
+          // Hard-Reset recovery on a cooldown until reads return, and the badge
+          // self-clears on the first real read. Only genuinely dead hardware
+          // (recovery never produces a read) keeps the badge.
+          log.error("supervisor: long-stuck cycles exhausted — marking chassis_wedged (auto-recovery will retry)", baseInfo);
           slot.wedgeLevel = 3;
           slot.wedgedSinceMs = Date.now();
-          // Counter stays — the supervisor will keep counting cycles but
-          // won't issue any more recovery escalations (cooldown check
-          // below also gates this).
-        } else if (cycles === LONG_STUCK_BRIDGE_RESET_AFTER_CYCLES && cooldownPassed) {
+        } else if (cycles === bridgeAt && cooldownPassed) {
           log.warn("supervisor: long-stuck — escalating to bridge reset", baseInfo);
           slot.lastLongStuckRecoveryAt = Date.now();
           this.tryBridgeReset(spec);
-        } else if (cycles === LONG_STUCK_CHIP_RESET_AFTER_CYCLES && cooldownPassed) {
+        } else if (cycles === chipAt && cooldownPassed) {
           log.warn("supervisor: long-stuck — escalating to chip reset", baseInfo);
           slot.lastLongStuckRecoveryAt = Date.now();
           this.tryChipReset(spec);
-        } else if (cycles >= LONG_STUCK_CHIP_RESET_AFTER_CYCLES && !cooldownPassed) {
+        } else if (cycles >= chipAt && !cooldownPassed) {
           log.info("supervisor: long-stuck — recovery on cooldown, waiting", baseInfo);
         } else {
           log.info("supervisor: long-stuck cycle observed (no escalation yet)", baseInfo);
@@ -3655,6 +3800,7 @@ export class MonsoonSupervisor {
     const now = Date.now();
     if (result.records.length > 0) {
       slot.lastRecordAt = now;
+      this.lastReadAtByReader.set(slot.spec.id, now);
       slot.recordsThisWindow += result.records.length;
     }
     for (const rec of result.records) {
