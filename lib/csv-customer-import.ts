@@ -194,8 +194,8 @@ async function upsertOne(
     const r = await client.query<{ id: number }>(
       `SELECT id FROM pos_customers
         WHERE LOWER(email) = $1
-          AND (regexp_replace(COALESCE(mobile_phone,''), '[^0-9]', '', 'g') = $2
-               OR regexp_replace(COALESCE(phone,''),        '[^0-9]', '', 'g') = $2)
+          AND (regexp_replace(COALESCE(phone,''),   '[^0-9]', '', 'g') = $2
+               OR regexp_replace(COALESCE(phone_2,''), '[^0-9]', '', 'g') = $2)
         LIMIT 1`,
       [row.email, row.phone],
     );
@@ -211,8 +211,8 @@ async function upsertOne(
   if (!matchId && row.phone) {
     const r = await client.query<{ id: number }>(
       `SELECT id FROM pos_customers
-        WHERE regexp_replace(COALESCE(mobile_phone,''), '[^0-9]', '', 'g') = $1
-           OR regexp_replace(COALESCE(phone,''),        '[^0-9]', '', 'g') = $1
+        WHERE regexp_replace(COALESCE(phone,''),   '[^0-9]', '', 'g') = $1
+           OR regexp_replace(COALESCE(phone_2,''), '[^0-9]', '', 'g') = $1
         LIMIT 1`,
       [row.phone],
     );
@@ -225,7 +225,7 @@ async function upsertOne(
           SET first_name   = COALESCE(first_name, $1),
               last_name    = COALESCE(last_name,  $2),
               email        = COALESCE(email,      $3),
-              mobile_phone = COALESCE(mobile_phone, $4),
+              phone        = COALESCE(phone,      $4),
               birthday     = COALESCE(birthday,   $5::date)
         WHERE id = $6`,
       [row.first_name, row.last_name, row.email, row.phone, row.birthday, matchId],
@@ -240,7 +240,7 @@ async function upsertOne(
 
   const ins = await client.query<{ id: number }>(
     `INSERT INTO pos_customers
-       (first_name, last_name, email, mobile_phone, birthday,
+       (first_name, last_name, email, phone, birthday,
         pos_location_id, created_by_user_id, created_via, created_at)
      VALUES ($1, $2, $3, $4, $5::date, $6::int, $7::uuid, 'wms_csv', now())
      RETURNING id`,

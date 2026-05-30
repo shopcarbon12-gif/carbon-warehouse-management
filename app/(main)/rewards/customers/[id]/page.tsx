@@ -34,8 +34,9 @@ export default async function CustomerDetail({
     first_name: string;
     last_name: string | null;
     email: string | null;
-    mobile_phone: string | null;
+    email_2: string | null;
     phone: string | null;
+    phone_2: string | null;
     birthday: string | null;
     shopify_customer_gid: string | null;
     shopify_linked_at: string | null;
@@ -70,7 +71,7 @@ export default async function CustomerDetail({
   } else {
     try {
       const c = await pool.query<Customer>(
-        `SELECT pc.id, pc.first_name, pc.last_name, pc.email, pc.mobile_phone, pc.phone,
+        `SELECT pc.id, pc.first_name, pc.last_name, pc.email, pc.email_2, pc.phone, pc.phone_2,
                 pc.birthday::text, pc.shopify_customer_gid, pc.shopify_linked_at::text,
                 pc.created_at::text,
                 pc.created_via, pc.created_at_geo,
@@ -186,7 +187,7 @@ export default async function CustomerDetail({
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <UserSearch className="h-3.5 w-3.5" />
-          Rewards · <Link className="underline" href="/rewards/customers">Members</Link>
+          Rewards · <Link className="underline" href="/rewards/customers">Customers</Link>
         </div>
         <h1 className="text-2xl font-bold mt-1">
           {c ? [c.first_name, c.last_name].filter(Boolean).join(" ") || "(no name)" : "—"}
@@ -195,7 +196,7 @@ export default async function CustomerDetail({
           <>
             <p className="text-sm text-muted-foreground mt-1">
               {c.email ?? ""}
-              {c.mobile_phone || c.phone ? ` · ${c.mobile_phone ?? c.phone}` : ""}
+              {c.phone || c.phone_2 ? ` · ${c.phone ?? c.phone_2}` : ""}
               {c.birthday ? ` · 🎂 ${c.birthday}` : ""}
             </p>
             <div className="mt-3 inline-flex flex-wrap items-center gap-3 px-3 py-2 border border-border bg-muted/40 text-xs text-muted-foreground">

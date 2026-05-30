@@ -46,9 +46,9 @@ export default async function AddCustomerPage() {
           const r = await pool.query<{ id: number }>(
             `SELECT id FROM pos_customers
               WHERE LOWER(email) = $1
-                AND (regexp_replace(COALESCE(mobile_phone,''), '[^0-9]', '', 'g')
+                AND (regexp_replace(COALESCE(phone,''), '[^0-9]', '', 'g')
                    = regexp_replace($2,'[^0-9]','','g')
-                   OR regexp_replace(COALESCE(phone,''), '[^0-9]', '', 'g')
+                   OR regexp_replace(COALESCE(phone_2,''), '[^0-9]', '', 'g')
                    = regexp_replace($2,'[^0-9]','','g'))
               LIMIT 1`,
             [email, phone],
@@ -65,7 +65,7 @@ export default async function AddCustomerPage() {
         if (existingId) return existingId;
         const ins = await pool.query<{ id: number }>(
           `INSERT INTO pos_customers
-             (first_name, last_name, email, mobile_phone, birthday,
+             (first_name, last_name, email, phone, birthday,
               pos_location_id, created_by_user_id, created_via, notes, created_at)
            VALUES ($1,$2,$3,$4,$5::date, $6::int, $7::uuid, 'wms_manual', $8, now())
            RETURNING id`,
@@ -84,7 +84,7 @@ export default async function AddCustomerPage() {
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <UserPlus className="h-3.5 w-3.5" />
-          Rewards · <Link className="underline" href="/rewards/customers">Members</Link>
+          Rewards · <Link className="underline" href="/rewards/customers">Customers</Link>
         </div>
         <h1 className="text-2xl font-bold mt-1">Add customer</h1>
         <p className="text-sm text-muted-foreground mt-1">
