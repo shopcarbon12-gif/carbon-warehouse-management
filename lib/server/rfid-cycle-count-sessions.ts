@@ -94,6 +94,8 @@ export type SessionRow = {
   status: SessionStatus;
   started_by: string | null;
   started_by_email: string | null;
+  started_by_first: string | null;
+  started_by_last: string | null;
   started_at: string;
   completed_at: string | null;
   scanned_count: number;
@@ -139,6 +141,8 @@ const SESSION_COLUMNS = `
   s.status,
   s.started_by::text,
   u.email AS started_by_email,
+  u.first_name AS started_by_first,
+  u.last_name AS started_by_last,
   s.started_at::text,
   s.completed_at::text,
   jsonb_array_length(s.scanned_epcs) AS scanned_count,

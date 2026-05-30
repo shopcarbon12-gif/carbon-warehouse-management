@@ -38,6 +38,7 @@ import {
   ResizeHandle,
   useColResize,
 } from "@/components/shared/data-table";
+import { shortName } from "@/lib/format-name";
 
 type LocationRow = { id: string; code: string; name: string };
 type BinRow = { id: string; code: string; in_stock_count: number };
@@ -56,6 +57,8 @@ type SessionDetail = {
   status: "active" | "paused" | "committed" | "canceled";
   started_by: string | null;
   started_by_email: string | null;
+  started_by_first: string | null;
+  started_by_last: string | null;
   started_at: string;
   completed_at: string | null;
   scanned_count: number;
@@ -450,7 +453,13 @@ function SessionTable({
               return (
                 <th
                   key={c.label || `col-${i}`}
-                  style={w !== null ? { width: w, minWidth: w } : undefined}
+                  style={
+                    w !== null
+                      ? { width: w, minWidth: w }
+                      : c.label === "#"
+                        ? { width: "1%", whiteSpace: "nowrap" }
+                        : undefined
+                  }
                   className={`relative overflow-hidden px-3 py-2 ${
                     c.align === "right"
                       ? "text-right"
@@ -471,7 +480,11 @@ function SessionTable({
         <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
           {sessions.map((s) => (
             <tr key={s.id} className="hover:bg-[var(--wms-surface-elevated)]/40">
-              <td className={`${cellTruncate} px-3 py-2 tabular-nums text-[var(--wms-accent)]`} title={s.name}>
+              <td
+                className={`${cellTruncate} px-3 py-2 tabular-nums text-[var(--wms-accent)]`}
+                style={{ width: "1%", whiteSpace: "nowrap" }}
+                title={s.name}
+              >
                 {s.name}
               </td>
               {isHistory ? null : (
@@ -492,7 +505,7 @@ function SessionTable({
                   className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}
                   title={s.started_by_email ?? ""}
                 >
-                  {s.started_by_email ?? "—"}
+                  {shortName(s.started_by_first, s.started_by_last, s.started_by_email)}
                 </td>
               ) : null}
               <td className="overflow-hidden px-3 py-2 text-right">
