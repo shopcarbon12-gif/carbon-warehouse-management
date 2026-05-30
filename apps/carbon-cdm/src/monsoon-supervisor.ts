@@ -208,8 +208,67 @@ const CHIP_RESET_COOLDOWN_MS = 2 * 60 * 1000;
 const LONG_STUCK_MIN_RUNTIME_MS = 15_000;
 const LONG_STUCK_CHIP_RESET_AFTER_CYCLES = 3;
 const LONG_STUCK_BRIDGE_RESET_AFTER_CYCLES = 4;
-const LONG_STUCK_WEDGED_AFTER_CYCLES = 5;
+/**
+ * Cycle 5: before declaring the chassis wedged, run an autonomous power
+ * SWEEP — the exact recovery the operator performs by hand via the
+ * Antenna-Test "Sweep" page (project_sweep_mode_unsticks_radio_2026_05_09).
+ * The old ladder went straight from bridge-reset (cycle 4) to wedged
+ * (cycle 5) and never swept, so a chip that the operator could trivially
+ * un-stick with a sweep got parked in "needs service" until a human
+ * intervened. Live evidence 2026-05-30 on .34 (POS): operator-requested
+ * recovery 01:54 → ran fine → re-wedged → chassis_wedged_at 03:17, every
+ * time recoverable by hand. The supervisor must do the same on its own.
+ *
+ * This sweep is RECORDS-judged, not byte-judged: the .34 UART-break wedge
+ * emits framing bytes while producing zero tag-read frames, so "bytes
+ * arrived" is NOT recovery. Only a real tag read ends the sweep. Each
+ * power step is a fresh respawn (forces RF-stage PLL relock + a clean
+ * chip inventory session), walked every MIN_SWEEP_DWELL_MS — mirroring
+ * how the operator's antenna-test sweep kills+respawns each step.
+ */
+const LONG_STUCK_SWEEP_AFTER_CYCLES = 5;
+const LONG_STUCK_WEDGED_AFTER_CYCLES = 6;
+/**
+ * Power steps for the long-stuck RECOVERY sweep (distinct from SWEEP_POWERS,
+ * which is the fine 2-dBm diagnostic walk used to suggest a working power).
+ * Recovery doesn't need precision — the un-stick mechanism is the power
+ * CHANGE itself (each step is a fresh spawn that forces an RF-stage PLL
+ * relock + a clean chip inventory session). Coarse, large jumps clear the
+ * wedge in far fewer steps, which matters because each step must dwell long
+ * enough for the chip to actually warm up and emit a read before we judge it
+ * silent. All values are `--power` args (dBm × 10) and are a subset of
+ * SWEEP_POWERS at/below 19 dBm so they never exceed a typical configured
+ * ceiling. The walker starts at the largest step ≤ configured power.
+ */
+const RECOVERY_SWEEP_POWERS: readonly number[] = [190, 150, 110, 70, 30];
+/**
+ * Per-step dwell for the recovery sweep — how long a step's fresh child gets
+ * to warm up and produce a real tag read before we judge it silent and
+ * advance. Must exceed the chip's cold-stream warm-up or every step is
+ * declared silent before the chip can speak. Readers behind a WiFi extender
+ * (skip_arp_pin) take 30-90 s to warm up over the proxy-ARP backhaul
+ * (project_wifi_extender_bridge_warmup_2026_05_26), so they get a longer
+ * dwell; direct-wired readers warm up in a few seconds. 5 coarse steps ×
+ * the dwell keeps a full sweep bounded (~3.75 min extender, ~1 min wired).
+ */
+const RECOVERY_SWEEP_DWELL_MS = 12_000;
+const RECOVERY_SWEEP_DWELL_SLOW_MS = 45_000;
 const LONG_STUCK_RECOVERY_COOLDOWN_MS = 60_000;
+/**
+ * Level-3 ("needs hardware service") is NOT a terminal dead-end. The
+ * operator's manual recovery (chip hard-reset → agent stop/start →
+ * antenna-test sweep) provably brings these chips back every time, which
+ * means they are software-recoverable — the supervisor must keep doing the
+ * same thing autonomously instead of parking the reader until someone
+ * clicks "recover" in the WMS. At Level 3 we keep the "needs service"
+ * badge up as an operator heads-up, but every WEDGED_RETRY_COOLDOWN_MS we
+ * re-run the full escalation (chip reset → bridge reset → records-judged
+ * sweep). The 5-min cooldown honors the anti-pummel lesson (cascading
+ * resets push chips deeper, 2026-05-21) while guaranteeing the reader
+ * self-heals without a human in the loop. The wedge flag auto-clears the
+ * moment real tag reads return (see the totalRecords>0 branch on-exit).
+ */
+const WEDGED_RETRY_COOLDOWN_MS = 5 * 60_000;
 
 /**
  * Grace window between SIGTERM and SIGKILL when stopping a slot's child.
@@ -502,6 +561,21 @@ type ReaderSlot = {
    *  LONG_STUCK_RECOVERY_COOLDOWN_MS so a bad chip can't trigger a
    *  cascade. */
   lastLongStuckRecoveryAt: number;
+  /** ms timestamp of the most recent Level-3 ("needs service") retry
+   *  escalation. 0 = never. Level 3 is non-terminal: while wedged, the
+   *  supervisor re-runs the full recovery (chip+bridge reset → records-
+   *  judged sweep) every WEDGED_RETRY_COOLDOWN_MS until real reads return,
+   *  instead of waiting for an operator to click recover in the WMS. */
+  lastWedgedRetryAt: number;
+  /** When true, the active auto-sweep (sweepPowerOverrideArg) is a
+   *  long-stuck RECOVERY sweep judged on real tag-reads, not framing
+   *  bytes. The .34 UART-break wedge emits bytes while producing zero
+   *  reads, so a byte-judged sweep would falsely "succeed" on the first
+   *  framing byte without ever clearing the wedge. While set, the
+   *  watchdog walks SWEEP_POWERS on no-reads-within-dwell and only ends
+   *  the sweep when a tag read actually flows. Cleared with
+   *  sweepPowerOverrideArg. */
+  sweepRequireRecords: boolean;
   /** ms timestamp of the most recent push to /api/cdm-agents/reader-offline.
    *  Throttle so a chronically-silent reader posts offline once per minute,
    *  not on every watchdog tick. Reset to 0 on first-byte (online) so the
@@ -1334,6 +1408,7 @@ export class MonsoonSupervisor {
       // operator's chosen power. If not, sweep just re-pins.
       if (
         slot.sweepPowerOverrideArg !== null &&
+        !slot.sweepRequireRecords &&
         slot.lastSweepAttemptAt > 0 &&
         now - slot.lastSweepAttemptAt >= SWEEP_OVERRIDE_RETEST_MS
       ) {
@@ -1505,6 +1580,95 @@ export class MonsoonSupervisor {
           slot.intendedKill = true;
           this.killSlotChildHard(slot);
         }
+        continue;
+      }
+
+      // Records-judged RECOVERY sweep (long-stuck path) — owns the slot
+      // while active. Unlike the byte-judged sweep below, framing bytes do
+      // NOT count as recovery; only a real tag read does (the .34 UART-break
+      // wedge emits bytes while producing zero reads). Walk RECOVERY_SWEEP_
+      // POWERS one fresh respawn per step, dwelling long enough at each for
+      // the chip to warm up (longer for skip_arp_pin/extender readers),
+      // until reads flow — mirroring the operator's antenna-test sweep. This
+      // must run BEFORE the byte-judged sweep block (it `continue`s in every
+      // branch, so the two never both fire on the same slot).
+      if (slot.sweepRequireRecords && slot.sweepPowerOverrideArg !== null) {
+        const hadRecordThisStep =
+          slot.lastRecordAt > 0 && slot.lastRecordAt >= slot.sweepStepStartedAt;
+        if (slot.testSession !== null) {
+          // An operator antenna-test took the slot mid-sweep — stand down.
+          slot.sweepRequireRecords = false;
+          slot.sweepPowerOverrideArg = null;
+          continue;
+        }
+        if (hadRecordThisStep) {
+          // RECOVERY SUCCESS — real tag reads at the swept power. The chip is
+          // un-wedged. Clear the recovery state and the needs-service flag,
+          // then respawn at the operator-configured power (the 20 dBm
+          // ceiling) so production runs at full configured power, never
+          // pinned to the lower recovery power. Operator's setting is
+          // authoritative — the sweep was only a transient un-stick.
+          log.info("supervisor: records-judged recovery sweep SUCCEEDED — real reads flowing, returning to configured power", {
+            readerId: slot.spec.id,
+            readerName: slot.spec.name,
+            recoveredAtPower: slot.sweepPowerOverrideArg,
+            configuredDbm: Math.round(this.avgPower(slot.spec)),
+            wasWedgeLevel: slot.wedgeLevel,
+          });
+          slot.sweepPowerOverrideArg = null;
+          slot.sweepRequireRecords = false;
+          slot.lastSweepAttemptAt = now;
+          slot.consecutiveLongStuckCycles = 0;
+          slot.lastLongStuckRecoveryAt = 0;
+          slot.fastStuckCycles = 0;
+          if (slot.wedgeLevel === 3) {
+            slot.wedgeLevel = 0;
+            slot.wedgedSinceMs = 0;
+            slot.lastWedgedRetryAt = 0;
+          }
+          // Fresh respawn at configured power (intendedKill → fast, clean,
+          // and excluded from the long-stuck counter).
+          slot.intendedKill = true;
+          slot.lastByteAt = now;
+          this.killSlotChildHard(slot);
+          continue;
+        }
+        const recoveryDwell =
+          slot.spec.skip_arp_pin === true
+            ? RECOVERY_SWEEP_DWELL_SLOW_MS
+            : RECOVERY_SWEEP_DWELL_MS;
+        if (now - slot.sweepStepStartedAt >= recoveryDwell) {
+          const ridx = RECOVERY_SWEEP_POWERS.indexOf(slot.sweepPowerOverrideArg);
+          if (ridx >= 0 && ridx + 1 < RECOVERY_SWEEP_POWERS.length) {
+            slot.sweepPowerOverrideArg = RECOVERY_SWEEP_POWERS[ridx + 1] ?? null;
+            slot.sweepStepStartedAt = Date.now();
+            log.info("supervisor: records-judged sweep — no reads at step, advancing power (fresh respawn)", {
+              readerId: slot.spec.id,
+              readerName: slot.spec.name,
+              prevPower: RECOVERY_SWEEP_POWERS[ridx],
+              nextPower: slot.sweepPowerOverrideArg,
+              dwellMs: recoveryDwell,
+            });
+          } else {
+            // Walked every power step with no reads. Bridge-reset and end the
+            // sweep; the long-stuck / wedged-retry cooldown re-arms it later.
+            log.warn("supervisor: records-judged sweep exhausted all power steps with no reads — bridge reset, will retry", {
+              readerId: slot.spec.id,
+              readerName: slot.spec.name,
+            });
+            slot.sweepPowerOverrideArg = null;
+            slot.sweepRequireRecords = false;
+            slot.lastSweepAttemptAt = now;
+            this.tryBridgeReset(slot.spec);
+          }
+          // Fresh respawn at the next step (intendedKill → fast respawn and
+          // excluded from the long-stuck counter).
+          slot.intendedKill = true;
+          slot.lastByteAt = now;
+          this.killSlotChildHard(slot);
+          continue;
+        }
+        // Still inside the current step's dwell — let the child run.
         continue;
       }
 
@@ -2268,6 +2432,8 @@ export class MonsoonSupervisor {
         chipResetAt: 0,
         consecutiveLongStuckCycles: 0,
         lastLongStuckRecoveryAt: 0,
+        lastWedgedRetryAt: 0,
+        sweepRequireRecords: false,
         suggestedPowerDbm: null,
         lastForcedRespawnAt: 0,
         lastUpwardProbeAt: 0,
@@ -2605,6 +2771,48 @@ export class MonsoonSupervisor {
     return enabled.reduce((s, a) => s + a.transmit_power_dbm, 0) / enabled.length;
   }
 
+  /**
+   * Begin a long-stuck RECOVERY sweep on this slot — the autonomous
+   * equivalent of the operator's Antenna-Test "Sweep" recovery. Walks the
+   * transmit power down from the largest SWEEP_POWERS step at or below the
+   * operator-configured ceiling, one fresh respawn per step. Judged on real
+   * tag reads (sweepRequireRecords), so a chip that emits framing bytes but
+   * no reads (the .34 UART-break wedge) keeps walking instead of falsely
+   * declaring success on the first byte. The runStreamWatchdog records-
+   * judged branch drives step advance + success/exhaustion; this just arms
+   * the state. The caller's on-exit respawn lands the child on the first
+   * step.
+   */
+  private startRecoverySweep(slot: ReaderSlot): void {
+    if (slot.testSession !== null) return; // operator owns the slot during a test
+    const configuredArg = Math.round(this.avgPower(slot.spec) * 10);
+    const startIdx = RECOVERY_SWEEP_POWERS.findIndex((p) => p <= configuredArg);
+    const startPower =
+      startIdx >= 0
+        ? RECOVERY_SWEEP_POWERS[startIdx]
+        : RECOVERY_SWEEP_POWERS[RECOVERY_SWEEP_POWERS.length - 1];
+    slot.sweepPowerOverrideArg = startPower ?? null;
+    slot.sweepRequireRecords = true;
+    slot.sweepStepStartedAt = Date.now();
+    slot.lastSweepAttemptAt = Date.now();
+    slot.consecutiveZeroByteKicks = 0;
+    slot.lastExhaustionResetAt = 0;
+    slot.bytesSinceSpawn = false;
+    // Neutralize the post-bridge-reset override-clear in the on-exit respawn
+    // path: a bridge reset may have fired in the same cycle that triggered
+    // this sweep, and that path clears sweepPowerOverrideArg when bridgeResetAt
+    // is set and the respawn delay is long — which would wipe the sweep we
+    // just armed. The sweep IS the recovery now; the quiet window is moot.
+    slot.bridgeResetAt = 0;
+    log.warn("supervisor: starting long-stuck records-judged recovery sweep", {
+      readerId: slot.spec.id,
+      readerName: slot.spec.name,
+      host: String(slot.spec.network_address ?? ""),
+      configuredDbm: Math.round(this.avgPower(slot.spec)),
+      firstSweepPower: slot.sweepPowerOverrideArg,
+    });
+  }
+
   private spawnReader(slot: ReaderSlot): void {
     if (slot.shuttingDown) return;
     // Encode-jobs worker is holding this slot for a chip-write op —
@@ -2918,6 +3126,7 @@ export class MonsoonSupervisor {
         if (
           slot.sweepPowerOverrideArg !== null &&
           slot.testSession === null &&
+          !slot.sweepRequireRecords &&
           Date.now() - slot.sweepStepStartedAt >= MIN_SWEEP_DWELL_MS
         ) {
           const idx = SWEEP_POWERS.indexOf(slot.sweepPowerOverrideArg);
@@ -3177,7 +3386,14 @@ export class MonsoonSupervisor {
         //
         // Gate on supervisor-driven sweep + NORMAL mode so an operator
         // antenna-test run can't be mistaken for a recovery success.
-        if (slot.sweepPowerOverrideArg !== null && slot.testSession === null) {
+        // sweepRequireRecords excludes long-stuck RECOVERY sweeps: those are
+        // judged on real tag reads (in runStreamWatchdog), not bytes, because
+        // the UART-break wedge emits framing bytes while producing zero reads.
+        if (
+          slot.sweepPowerOverrideArg !== null &&
+          slot.testSession === null &&
+          !slot.sweepRequireRecords
+        ) {
           // Stash the diagnosed working power as a SUGGESTION. The heartbeat
           // pushes it to WMS so Hardware Config can show a one-click "Apply
           // X dBm" banner — operator approves the actual config change.
@@ -3392,7 +3608,11 @@ export class MonsoonSupervisor {
       if (
         !wasIntendedKill &&
         totalRecords === 0 &&
-        spawnDurationMs >= LONG_STUCK_MIN_RUNTIME_MS
+        spawnDurationMs >= LONG_STUCK_MIN_RUNTIME_MS &&
+        // While a records-judged recovery sweep owns the slot, the watchdog
+        // drives step advance / success / exhaustion — don't let a natural
+        // mid-sweep exit also advance this ladder.
+        !slot.sweepRequireRecords
       ) {
         slot.consecutiveLongStuckCycles += 1;
         const cycles = slot.consecutiveLongStuckCycles;
@@ -3406,15 +3626,43 @@ export class MonsoonSupervisor {
           spawnDurationMs,
           cooldownAgoMs: slot.lastLongStuckRecoveryAt === 0 ? null : sinceLast,
         };
-        if (cycles >= LONG_STUCK_WEDGED_AFTER_CYCLES && slot.wedgeLevel < 3) {
-          // Software-exhausted. Mark chassis_wedged so the operator UI
-          // surfaces "needs hardware service" and stop hammering the chip.
-          log.error("supervisor: long-stuck cycles exhausted — marking chassis_wedged", baseInfo);
-          slot.wedgeLevel = 3;
-          slot.wedgedSinceMs = Date.now();
-          // Counter stays — the supervisor will keep counting cycles but
-          // won't issue any more recovery escalations (cooldown check
-          // below also gates this).
+        if (cycles >= LONG_STUCK_WEDGED_AFTER_CYCLES) {
+          // Software escalation exhausted FOR NOW (chip reset, bridge reset
+          // and a records-judged sweep all failed to bring reads back this
+          // round). Surface "needs hardware service" as an operator heads-up
+          // — but Level 3 is NOT a terminal dead-end. The operator's manual
+          // recovery (chip hard-reset → agent stop/start → antenna-test
+          // sweep) provably brings these chips back every time, so the
+          // supervisor keeps doing exactly that autonomously on a long
+          // cooldown until real reads return, instead of parking the reader
+          // until a human clicks recover in the WMS. The wedge flag
+          // auto-clears in the totalRecords>0 branch the moment a tag flows.
+          if (slot.wedgeLevel < 3) {
+            log.error("supervisor: long-stuck cycles exhausted — flagging needs-service (autonomous recovery continues)", baseInfo);
+            slot.wedgeLevel = 3;
+            slot.wedgedSinceMs = Date.now();
+          }
+          const sinceWedgedRetry = Date.now() - slot.lastWedgedRetryAt;
+          if (sinceWedgedRetry >= WEDGED_RETRY_COOLDOWN_MS) {
+            log.warn("supervisor: wedged-retry — chip reset + records-judged recovery sweep (Level 3 is non-terminal)", baseInfo);
+            slot.lastWedgedRetryAt = Date.now();
+            slot.lastLongStuckRecoveryAt = Date.now();
+            this.tryChipReset(spec);
+            this.startRecoverySweep(slot);
+          } else {
+            log.info("supervisor: wedged — next autonomous recovery on cooldown", {
+              ...baseInfo,
+              retryInMs: Math.max(0, WEDGED_RETRY_COOLDOWN_MS - sinceWedgedRetry),
+            });
+          }
+        } else if (cycles === LONG_STUCK_SWEEP_AFTER_CYCLES && cooldownPassed) {
+          // Cycle 5: chip reset (cycle 3) and bridge reset (cycle 4) didn't
+          // clear it. Run the autonomous records-judged power sweep — the
+          // same recovery the operator performs by hand on the antenna-test
+          // Sweep page, and the one proven to un-stick these chips.
+          log.warn("supervisor: long-stuck — escalating to records-judged recovery sweep", baseInfo);
+          slot.lastLongStuckRecoveryAt = Date.now();
+          this.startRecoverySweep(slot);
         } else if (cycles === LONG_STUCK_BRIDGE_RESET_AFTER_CYCLES && cooldownPassed) {
           log.warn("supervisor: long-stuck — escalating to bridge reset", baseInfo);
           slot.lastLongStuckRecoveryAt = Date.now();
@@ -3429,19 +3677,34 @@ export class MonsoonSupervisor {
           log.info("supervisor: long-stuck cycle observed (no escalation yet)", baseInfo);
         }
       } else if (totalRecords > 0) {
-        // ANY real tag read clears the long-stuck streak and exits any
-        // wedged-level if we were below 3 (level 3 is sticky until WMS
-        // resets it via reader_recover_requested_at).
-        if (slot.consecutiveLongStuckCycles > 0 || slot.lastLongStuckRecoveryAt > 0) {
-          log.info("supervisor: long-stuck cleared by real tag reads", {
+        // ANY real tag read clears the long-stuck streak AND the needs-service
+        // wedge flag — a reader demonstrably producing reads is, by
+        // definition, not in need of service. (Level 3 used to be sticky
+        // until the operator clicked recover in the WMS; that created the
+        // .34 babysitting loop — recover by hand, run fine, re-wedge, get
+        // re-flagged. Auto-clearing on real reads closes the loop; the
+        // heartbeat then drops the chassis_wedged_at badge.)
+        if (
+          slot.consecutiveLongStuckCycles > 0 ||
+          slot.lastLongStuckRecoveryAt > 0 ||
+          slot.wedgeLevel === 3
+        ) {
+          log.info("supervisor: long-stuck / wedge cleared by real tag reads", {
             readerId: spec.id,
             readerName: spec.name,
             wasCycles: slot.consecutiveLongStuckCycles,
+            wasWedgeLevel: slot.wedgeLevel,
             recordsThisSpawn: totalRecords,
           });
         }
         slot.consecutiveLongStuckCycles = 0;
         slot.lastLongStuckRecoveryAt = 0;
+        slot.lastWedgedRetryAt = 0;
+        slot.sweepRequireRecords = false;
+        if (slot.wedgeLevel === 3) {
+          slot.wedgeLevel = 0;
+          slot.wedgedSinceMs = 0;
+        }
       }
 
       // Rapid-respawn pattern (cleanExit:true, totalRecords:0, child exited
@@ -3487,6 +3750,7 @@ export class MonsoonSupervisor {
         if (
           slot.sweepPowerOverrideArg !== null &&
           slot.testSession === null &&
+          !slot.sweepRequireRecords &&
           Date.now() - slot.sweepStepStartedAt >= MIN_SWEEP_DWELL_MS
         ) {
           const idx = SWEEP_POWERS.indexOf(slot.sweepPowerOverrideArg);
