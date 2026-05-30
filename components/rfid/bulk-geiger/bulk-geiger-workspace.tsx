@@ -161,6 +161,40 @@ export function BulkGeigerWorkspace() {
           /* leave chunk unresolved → N/A */
         }
       }
+      // 3) Second pass — EPCs the items lookup couldn't resolve (no items row
+      // yet) but that encode their custom SKU in the first 13 chars (C-prefix
+      // tags). Decode + pull catalog details so the row shows the item's
+      // description/color/size even before the tag is commissioned.
+      const cMisses = epcs.filter((e) => {
+        const cur = base.get(e);
+        return cur !== undefined && !cur.resolved && e.toUpperCase().startsWith("C");
+      });
+      for (let i = 0; i < cMisses.length; i += LOOKUP_CHUNK) {
+        const chunk = cMisses.slice(i, i + LOOKUP_CHUNK);
+        try {
+          const dres = await fetch("/api/rfid/bulk-geiger/decode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ epcs: chunk }),
+          });
+          if (!dres.ok) continue;
+          const dj = (await dres.json()) as {
+            rows?: { epc: string; sku: string | null; name: string | null; color: string | null; size: string | null }[];
+          };
+          for (const r of dj.rows ?? []) {
+            const cur = base.get(r.epc.toUpperCase());
+            if (cur && r.sku) {
+              cur.sku = r.sku;
+              cur.name = r.name ?? null;
+              cur.color = r.color ?? null;
+              cur.size = r.size ?? null;
+              cur.resolved = true;
+            }
+          }
+        } catch {
+          /* leave unresolved → N/A */
+        }
+      }
       const built = epcs.map((e) => base.get(e)!);
       setRows(built);
       uploadedSetRef.current = new Set(built.map((r) => r.epc.toUpperCase()));
