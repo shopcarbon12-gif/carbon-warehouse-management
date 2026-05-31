@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import ShopifyMenuItemsTree from "@/components/shopify-menu-items-tree";
+import { CategoryManagerModal } from "@/components/inventory/categories-legacy-manager";
 import { formatAppDateTime } from "@/lib/formatAppDateTime";
 import { normalizeMenuPath } from "@/lib/shopifyCollectionSkuParser";
 import {
@@ -609,7 +610,9 @@ export default function ShopifyCollectionMapping() {
   const pathname = usePathname();
   const isStandaloneCollectionMappingRoute =
     pathname === "/shopify-collection-mapping" ||
+    pathname === "/inventory/categories" ||
     pathname === "/inventory/categories/collection-mapping";
+  const [legacyManagerOpen, setLegacyManagerOpen] = useState(false);
   const [shop, setShop] = useState("");
   const [nodes, setNodes] = useState<MenuNode[]>([]);
   const [lastSyncedNodes, setLastSyncedNodes] = useState<MenuNode[]>([]);
@@ -5252,6 +5255,34 @@ export default function ShopifyCollectionMapping() {
           </div>
         </div>
       ) : null}
+      {isStandaloneCollectionMappingRoute && !isMobileIdea3Layout ? (
+        <button
+          type="button"
+          onClick={() => setLegacyManagerOpen(true)}
+          title="Open the legacy category manager"
+          style={{
+            position: "fixed",
+            top: 96,
+            right: 28,
+            zIndex: 40,
+            padding: "6px 14px",
+            borderRadius: 8,
+            border: "1px solid #2a3550",
+            background: "#121a30",
+            color: "#cfe0ff",
+            fontSize: 12,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            cursor: "pointer",
+          }}
+        >
+          Legacy
+        </button>
+      ) : null}
+      {legacyManagerOpen ? (
+        <CategoryManagerModal onClose={() => setLegacyManagerOpen(false)} />
+      ) : null}
       <div className="pageNoticeFrame">
         <div className="noticeStandalone">
           <div className="noticeSlot">
@@ -5445,6 +5476,14 @@ export default function ShopifyCollectionMapping() {
                         {sub ? <span className="m3-kpi-sub">{sub}</span> : null}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      className="m3-kpi-pill"
+                      onClick={() => setLegacyManagerOpen(true)}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      Legacy
+                    </button>
                   </div>
                 </div>
 

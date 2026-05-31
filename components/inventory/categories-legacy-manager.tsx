@@ -86,7 +86,7 @@ export function CategoriesLegacyManager() {
   );
 }
 
-function CategoryManagerModal({ onClose }: { onClose: () => void }) {
+export function CategoryManagerModal({ onClose }: { onClose: () => void }) {
   const { data, error, isLoading, mutate } = useSWR("/api/inventory/categories", fetcher, {
     revalidateOnFocus: false,
   });

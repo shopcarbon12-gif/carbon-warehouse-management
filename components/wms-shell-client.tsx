@@ -102,7 +102,11 @@ export function WmsShellClient({
               CarbonWMS
             </span>
           </header>
-          <main className="flex flex-1 flex-col p-5 md:p-7 lg:p-8">
+          <main
+            className={`flex flex-1 flex-col ${
+              forceCollapsed ? "p-0" : "p-5 md:p-7 lg:p-8"
+            }`}
+          >
             {banner}
             {children}
           </main>

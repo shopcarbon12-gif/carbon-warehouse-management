@@ -1,13 +1,13 @@
 import { getSession } from "@/lib/get-session";
-import { CategoriesLegacyManager } from "@/components/inventory/categories-legacy-manager";
+import ShopifyCollectionMapping from "@/components/shopify-collection-mapping";
 
 export const dynamic = "force-dynamic";
 
+// Categories now opens straight into the Shopify Collection Mapping workspace.
+// The old category manager is reachable from the "Legacy" button under the KPI
+// row inside that workspace.
 export default async function CategoriesPage() {
   const session = await getSession();
   if (!session) return null;
-
-  // Intentionally empty: the page is just a host for the top-right "Legacy"
-  // button, which opens the full category manager popup.
-  return <CategoriesLegacyManager />;
+  return <ShopifyCollectionMapping />;
 }
