@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Plus, Share2, Trash2, X } from "lucide-react";
 
 /**
  * Category manager popup for /inventory/categories. The page itself is empty
@@ -64,7 +65,14 @@ export function CategoriesLegacyManager() {
 
   return (
     <div className="flex min-h-[60vh] flex-col">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Link
+          href="/inventory/categories/collection-mapping"
+          className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:border-[var(--wms-accent)] hover:text-[var(--wms-accent)]"
+        >
+          <Share2 className="h-4 w-4" />
+          Collection Mapping
+        </Link>
         <button
           type="button"
           onClick={() => setOpen(true)}

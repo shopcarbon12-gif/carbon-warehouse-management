@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shopify Collection Mapping — Full Investigation Report &amp; Migration Plan</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121931; --panel2:#0f1528; --ink:#e8edff; --muted:#9aa6c8;
+    --line:#26304f; --accent:#6ea8fe; --accent2:#8ce0c0; --warn:#ffd27a; --bad:#ff8a8a; --good:#7ee0a3;
+    --chip:#1b2banner;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:linear-gradient(180deg,#080c18,#0b1020 240px);color:var(--ink);
+    font:15px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1040px;margin:0 auto;padding:40px 26px 120px}
+  h1{font-size:30px;line-height:1.2;margin:0 0 6px}
+  h2{font-size:23px;margin:46px 0 12px;padding-top:14px;border-top:1px solid var(--line)}
+  h3{font-size:18px;margin:28px 0 8px;color:#fff}
+  h4{font-size:15px;margin:18px 0 6px;color:var(--accent2);text-transform:uppercase;letter-spacing:.06em}
+  p{margin:10px 0}
+  code{background:#0a0f1f;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#cfe0ff}
+  pre{background:#080d1c;border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto;font:12.5px/1.55 ui-monospace,Menlo,Consolas,monospace;color:#cfe0ff}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .sub{color:var(--muted);font-size:14px}
+  .lead{font-size:16.5px;color:#dfe6ff}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#0e1530;color:#cdd8ff;font-weight:600}
+  td code{font-size:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:16px 0}
+  .callout{border-left:4px solid var(--accent);background:#0f1730;border-radius:0 10px 10px 0;padding:12px 16px;margin:16px 0}
+  .callout.warn{border-color:var(--warn);background:#211b0e}
+  .callout.bad{border-color:var(--bad);background:#231012}
+  .callout.good{border-color:var(--good);background:#0e2018}
+  .callout b{color:#fff}
+  .pill{display:inline-block;background:#16203f;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;color:#bcd0ff;margin:2px 4px 2px 0}
+  .toc{columns:2;column-gap:30px;font-size:14px}
+  .toc a{display:block;padding:3px 0;color:#cdd8ff}
+  .kicker{display:inline-block;background:#16203f;border:1px solid var(--accent);color:#cfe0ff;border-radius:999px;padding:3px 12px;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .flow{font:12.5px/1.5 ui-monospace,monospace;white-space:pre;background:#080d1c;border:1px solid var(--line);border-radius:10px;padding:16px;overflow:auto;color:#bcd0ff}
+  .step{display:flex;gap:14px;margin:10px 0;align-items:flex-start}
+  .num{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#06122e;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .tag{font-size:11px;border-radius:5px;padding:1px 6px;border:1px solid var(--line)}
+  .tag.get{color:#7ee0a3;border-color:#1f5b3f;background:#0e2018}
+  .tag.post{color:#ffd27a;border-color:#5b4a1f;background:#211b0e}
+  hr{border:0;border-top:1px solid var(--line);margin:30px 0}
+  .small{font-size:13px;color:var(--muted)}
+  ul{margin:8px 0 8px 2px;padding-left:20px}
+  li{margin:4px 0}
+  .legend{font-size:12.5px;color:var(--muted);margin-top:6px}
+  .two{display:grid;grid-template-columns:160px 1fr;gap:6px 14px;font-size:14px}
+  .two div:nth-child(odd){color:var(--accent2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="kicker">Carbon-gen → CarbonWMS · Investigation &amp; Migration Plan</span>
+  <h1>Shopify Collection Mapping</h1>
+  <p class="lead">A complete, plain-English study of the page at
+  <code>https://app.shopcarbon.com/shopify-collection-mapping</code> in the <b>carbon-gen</b> project —
+  every screen, every behaviour, where the data comes from and goes — followed by a concrete plan to rebuild
+  it inside <b>CarbonWMS</b> under the Categories page.</p>
+  <p class="sub">Generated 2026-05-30. Source project: <code>/home/carbondev/dev/carbon-gen</code> · Target: <code>/home/carbondev/dev/carbon-warehouse-management</code></p>
+
+  <div class="card">
+    <h4 style="margin-top:0">Contents</h4>
+    <div class="toc">
+      <a href="#tldr">0 · The one-paragraph version</a>
+      <a href="#what">1 · What this page actually is</a>
+      <a href="#flow">2 · The big picture &amp; data flow</a>
+      <a href="#sources">3 · Where the data comes from &amp; goes</a>
+      <a href="#ui">4 · The screen, element by element</a>
+      <a href="#workflow">5 · The work loop (load → push)</a>
+      <a href="#automap">6 · The auto-mapping brain</a>
+      <a href="#tree">7 · The menu tree</a>
+      <a href="#kpi">8 · Statuses &amp; KPIs</a>
+      <a href="#api">9 · The backend &amp; Shopify calls</a>
+      <a href="#db">10 · The database (5 tables)</a>
+      <a href="#creds">11 · Credentials &amp; config</a>
+      <a href="#auth">12 · Auth, gating &amp; kill-switches</a>
+      <a href="#quirks">13 · Quirks &amp; risks</a>
+      <a href="#plan">PLAN · Copy it into CarbonWMS</a>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="tldr">0 · The one-paragraph version</h2>
+  <div class="callout">
+    <p style="margin-top:0">This page is a <b>merchandising control panel for a Shopify store's navigation menu</b>.
+    On the left it shows the store's <b>menu tree</b> (MEN ▸ CLOTHING ▸ JEANS …), each menu item linked to a Shopify
+    <b>collection</b>. On the right it shows the store's <b>products</b>, one row per UPC, and for each product it
+    <b>automatically decides which collections it should belong to</b> by reading the Carbon SKU (gender + season +
+    category digit) and looking the answer up in a hard-coded rules "workbook." A human reviews/approves those
+    decisions, then clicks <b>Commit / Push</b>, and the app writes the membership changes <b>back into Shopify</b>
+    (adds/removes the product to/from collections). Everything it shows is pulled live from the <b>Shopify Admin
+    GraphQL API</b>; the only thing it stores in its own Postgres database is the menu-tree structure, the
+    node→collection map, and each user's in-progress "draft" decisions plus audit logs.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="what">1 · What this page actually is</h2>
+  <p>Carbon-gen is the <b>Carbon Creative Studio</b> — a workspace app with several tools (image generator, SEO,
+  Instagram widget, etc.). <b>Collection Mapping</b> is one of those tools, promoted to its own top-level URL.
+  Its job is to keep the Shopify storefront's category navigation correct:</p>
+  <ul>
+    <li><b>Collections</b> in Shopify are groups of products (e.g. "Men's Jeans"). They can be <i>manual</i> (you add
+    products by hand) or <i>automated</i> (Shopify auto-fills them from rules). This tool primarily manages the
+    <i>manual</i> membership — which products sit in which collection.</li>
+    <li>The <b>menu / navigation tree</b> is the storefront's dropdown menu. Each menu item points at a collection.
+    This tool lets you edit that tree (add/rename/move/delete items, up to ~4 levels) and sync it to Shopify.</li>
+    <li>The bridge between them is the <b>mapping</b>: "menu node X corresponds to collection Y," and "product P should
+    be in collections [Y1, Y2…]." The page computes the second part automatically from the product's SKU.</li>
+  </ul>
+  <p>So a merchandiser opens the page, the app says "here are 6,000 products and here's where each one <i>should</i> go,"
+  the merchandiser approves, and the app makes Shopify match.</p>
+
+  <p class="small">Implementation footprint: ~22,000 lines. The UI is one giant client component
+  (<code>components/shopify-collection-mapping.tsx</code>, 11,834 lines, of which ~4,500 are a single CSS block) plus a
+  drag-and-drop tree (<code>components/shopify-menu-items-tree.tsx</code>, 2,228 lines). The backend is one fat route
+  (<code>app/api/shopify/collection-mapping/route.ts</code>, 4,458 lines) plus a data repository (1,519 lines), a rules
+  engine (529), an auto-mapper (204), and a KPI/classifier (282).</p>
+
+  <!-- ============================================================ -->
+  <h2 id="flow">2 · The big picture &amp; data flow</h2>
+  <div class="flow">
+   ┌─────────────────────────────────────────────────────────────────────────┐
+   │                         BROWSER  (one big React component)               │
+   │   Left: editable MENU TREE        Right: PRODUCTS table (1 row / UPC)    │
+   │   KPI tiles · filters · "Commit / Push" · modals · per-user drafts       │
+   └───────────────▲───────────────────────────────┬─────────────────────────┘
+                   │ GET (load page data)           │ POST { action: … }  (15 actions)
+                   │                                 ▼
+   ┌───────────────┴─────────────────────────────────────────────────────────┐
+   │   NEXT.JS ROUTE  /api/collection-mapping  →  /api/shopify/collection-…    │
+   │   • resolve shop + admin token   • auto-map each product (SKU rules)      │
+   │   • paginate · classify · attach this user's drafts                      │
+   └──────────▲────────────────────────────────┬──────────────────┬───────────┘
+              │ GraphQL (read + write)          │ read/write        │ read/write
+              ▼                                 ▼                  ▼
+   ┌──────────────────────┐        ┌──────────────────────┐  ┌──────────────────┐
+   │  SHOPIFY ADMIN API   │        │  POSTGRES (5 tables)  │  │  RULES WORKBOOK  │
+   │  GraphQL 2025-01     │        │  menu nodes · map ·   │  │  (hard-coded in  │
+   │  collections·products│        │  drafts · reviews ·   │  │   the codebase)  │
+   │  ·menus·add/remove   │        │  audit logs          │  │  SKU → category  │
+   └──────────────────────┘        └──────────────────────┘  └──────────────────┘
+  </div>
+  <p class="legend">The single most important arrow: <b>product→collection membership is written back into Shopify</b>
+  (the <code>collectionAddProducts</code> / <code>collectionRemoveProducts</code> mutations). Everything else the app
+  stores is supporting metadata. There are <b>no background jobs</b> — every push happens synchronously inside the web
+  request (the route allows up to 120 seconds).</p>
+
+  <!-- ============================================================ -->
+  <h2 id="sources">3 · Where the data comes from &amp; goes</h2>
+  <table>
+    <tr><th>Thing on screen</th><th>Comes from</th><th>Stored where</th><th>Written back to Shopify?</th></tr>
+    <tr><td>Collections list (titles, handles, product counts, automated flag)</td><td>Shopify GraphQL <code>collections</code> (cursor-paged, 250/page, ≤20 pages)</td><td>In-memory cache 60s; not persisted</td><td>Only on rename</td></tr>
+    <tr><td>Products table (title, SKU, UPC, type, <b>image</b>)</td><td>Shopify GraphQL <code>products</code> (100/page, ≤60 pages, filter <code>status:active published</code>)</td><td>In-memory cache 45s; grouped by UPC; not persisted</td><td>No (read)</td></tr>
+    <tr><td>Product image thumbnails</td><td>Shopify CDN URL in the product's <code>image</code> field — returned verbatim, never built client-side</td><td>—</td><td>No</td></tr>
+    <tr><td>Menu tree (left panel)</td><td>Shopify GraphQL <code>menus</code> (live) → flattened</td><td><b>Postgres</b> <code>shopify_collection_menu_nodes</code></td><td>Yes — whole tree re-pushed via <code>menuUpdate</code> on edits</td></tr>
+    <tr><td>Node → collection mapping</td><td>User assignment / seed defaults</td><td><b>Postgres</b> (same node table, <code>collection_id</code> column)</td><td>No (DB only) unless you also push the menu link</td></tr>
+    <tr><td>"Suggested" / "Auto" chips, Decision</td><td>Computed live from SKU + rules workbook each request</td><td>Not persisted (recomputed)</td><td>No</td></tr>
+    <tr><td>Your in-progress decisions (checked chips, manual add/remove, "approved", "hold")</td><td>Your clicks</td><td><b>Postgres</b> <code>…_row_drafts</code>, scoped <i>per user</i>, 7-day TTL</td><td>No, until you push</td></tr>
+    <tr><td>Product→collection membership (the actual result)</td><td>Your approved drafts → Commit/Push</td><td><b>Shopify</b> (truth) + audit row in Postgres</td><td><b>Yes</b> — add/remove mutations</td></tr>
+    <tr><td>Audit log / push history</td><td>Every action</td><td><b>Postgres</b> <code>…_audit</code> (90-day TTL) + <code>…_actions</code></td><td>No</td></tr>
+  </table>
+  <div class="callout good"><b>Key insight:</b> Shopify is the source of truth for products, collections, and the menu.
+  The app's database is just a <b>workbench</b>: it remembers the menu structure, which collection each menu node maps
+  to, and your half-finished decisions. If you wiped the app DB, you'd lose the menu-node map and drafts, but the
+  products/collections/menu would all reload from Shopify.</div>
+
+  <!-- ============================================================ -->
+  <h2 id="ui">4 · The screen, element by element</h2>
+  <p>The component renders <b>two complete layouts</b> — a desktop one and a mobile "inbox" one — chosen by screen
+  width (≤900px = mobile). Below is the desktop layout, top to bottom.</p>
+
+  <h3>4.1 — Header KPI tiles (top-right, floating)</h3>
+  <p>Five clickable tiles that are also the primary filter: <span class="pill">Loaded</span>
+  <span class="pill">Needs Review</span> <span class="pill">Ready to Push</span> <span class="pill">Push Failed</span>
+  <span class="pill">Synced</span>. Each shows a count and, when clicked, filters the product table to that queue.
+  The active tile is ringed.</p>
+
+  <h3>4.2 — Notice bar</h3>
+  <p>A single status strip that shows "Loading…", "Saving changes…", "Loaded successfully," errors, or a progress bar
+  during a push. Dismissible.</p>
+
+  <h3>4.3 — The workspace: a 3-column grid</h3>
+  <div class="two">
+    <div>Left column</div><div><b>Menu tree panel</b> — resizable (drag the divider) and collapsible to a thin rail. Renders the navigation tree.</div>
+    <div>Divider</div><div>A draggable grip that resizes the tree panel (339–1600px).</div>
+    <div>Right column</div><div><b>Product panel</b> — toolbar, filter chips, the products table, and a pager.</div>
+  </div>
+
+  <h4>The menu tree panel (left)</h4>
+  <ul>
+    <li>Toolbar: collapse, <b>refresh</b> (re-pull from Shopify), <b>undo</b>, a <b>search</b> box ("Search menu items…"),
+    and a <b>save</b> (disk) button.</li>
+    <li>The tree itself is <b>drag-and-drop</b> (powered by @dnd-kit): you can reorder and re-nest items. Each row has an
+    expand/collapse toggle, a label, the linked collection/target, and hover actions: <b>eye</b> (show/hide),
+    <b>pencil</b> (inline edit — rename + pick the Shopify asset it links to), <b>trash</b> (delete). Tree lines
+    (elbows) are drawn between parents and children.</li>
+    <li>"Load more menu items" appears past 350 nodes; "Add menu item" adds a root node.</li>
+    <li>An <b>UNMAPPED COLLECTIONS</b> section lists collections not yet attached to any menu node; each is draggable
+    (to attach) and inline-renamable.</li>
+  </ul>
+
+  <h4>The product toolbar (right)</h4>
+  <p><b>Search</b> (title / SKU / UPC / type) · <b>Refresh</b> (re-pull products, with a clear-session confirm) ·
+  <b>More filters</b> (opens a drawer) · <b>Reports</b> (opens a modal of CSV exports) · <b>COMMIT CHANGES</b>
+  (a dropdown: "Push selected (N)", "Push all final changes", "⚠ Remove all from selected products").</p>
+
+  <h4>The products table</h4>
+  <p>One row per UPC (products with the same barcode are collapsed together). Columns: a <b>select-all checkbox</b>,
+  <b>View</b> (an eye that opens the "why this decision" modal), a <b>Picture</b> thumbnail (click → fullscreen), the
+  <b>Product</b> (title/SKU/UPC), <b>Auto Path</b> (the collections the rules chose, as chips), <b>Decision</b>
+  (Auto-mapped / Suggested / Manual review), <b>Suggested</b> (clickable chips you toggle to accept/reject a mapping),
+  a context-sensitive <b>Hold from Sync</b> or <b>Approved</b> checkbox, <b>Status</b> (Synced / Ready / Review /
+  Failed), and <b>Current → Final</b> (what's in Shopify now vs what it'll be, with a "+N / −N" change count). All the
+  text-ish columns are sortable by clicking the header.</p>
+
+  <h4>The pager</h4>
+  <p>First/prev/next/last, "Page X of Y", and a per-page selector (20/50/100/200/500).</p>
+
+  <h3>4.4 — Modals &amp; drawers</h3>
+  <ul>
+    <li><b>Filters drawer:</b> "has suggestions," "needs manual review / auto-mapped," "include finished rows," and a
+    multi-select product-type list. Drafted, then "Apply."</li>
+    <li><b>Reports modal:</b> client-side CSV exports — master audit, push summary, push failures, collection delta,
+    skipped-review.</li>
+    <li><b>Push preview / commit modal:</b> shows exactly what will change (selected/eligible/skipped, additions vs
+    removals, per-row plan). "Remove all" requires typing <code>REMOVE ALL</code> to confirm. Confirm runs the push.</li>
+    <li><b>Menu item editor:</b> name + asset type (Collection/Product/Page/Blog) + a search combobox over Shopify
+    assets.</li>
+    <li><b>Undo</b> (preview → confirm → result), <b>image lightbox</b>, and the <b>"Mapping Decision" explainer</b>
+    (thumbnail, the decision and why, conflict flags, a current-vs-final path diff, the auto-map failure reason, and
+    buttons to mark Needs-Review / Ready-to-Push).</li>
+  </ul>
+
+  <h3>4.5 — The mobile layout</h3>
+  <p>An entirely separate "Idea 3" experience: a KPI pill strip, a card list (one card per product with thumbnail,
+  expand, suggestions), bottom-sheets for the menu and suggestions, an image lightbox, and a sticky bottom dock with
+  the commit menu + pager. Same data and actions, phone-friendly chrome.</p>
+
+  <!-- ============================================================ -->
+  <h2 id="workflow">5 · The work loop (load → push)</h2>
+  <div class="step"><div class="num">1</div><div><b>Load.</b> On open (and whenever you search/sort/page/filter), the browser does one <span class="tag get">GET</span> <code>/api/collection-mapping</code>. The server pulls all collections + all products from Shopify, syncs the live menu into its DB, auto-maps every product, paginates, and merges in <i>your</i> saved drafts.</div></div>
+  <div class="step"><div class="num">2</div><div><b>Auto-decide.</b> For each product row the server has already computed: the collections the rules say it belongs to (<i>Auto Path</i>), a <i>Decision</i> (Auto-mapped / Suggested / Manual review), and any conflicts. Suggestions deliberately outrank a clean auto-map so nothing is silently changed without a human glance.</div></div>
+  <div class="step"><div class="num">3</div><div><b>Review.</b> You filter by "Needs Review," click suggestion chips to accept/reject, optionally tweak the menu tree, mark rows "Approved," or "Hold from Sync." Every click autosaves to your personal draft (debounced 550 ms) — so you can leave and come back.</div></div>
+  <div class="step"><div class="num">4</div><div><b>Preview.</b> "COMMIT CHANGES → Push selected/all" opens a preview that lists exactly which products get added to / removed from which collections, and which rows are skipped (and why: not reviewed, missing data, on hold, no change).</div></div>
+  <div class="step"><div class="num">5</div><div><b>Push.</b> Confirm runs the push: per eligible row, the server reads the product's current collections, computes the minimal add/remove diff (with "ancestor closure" so parent collections are included), and calls Shopify <code>collectionAddProducts</code> / <code>collectionRemoveProducts</code>. Progress shows in a local job tracker.</div></div>
+  <div class="step"><div class="num">6</div><div><b>Sync &amp; settle.</b> Committed rows are marked, the page reloads from Shopify, and rows that now match their target flip to <b>Synced</b>. Their drafts auto-clear.</div></div>
+
+  <!-- ============================================================ -->
+  <h2 id="automap">6 · The auto-mapping brain</h2>
+  <p>This is the cleverest part and the most Carbon-specific. It turns a <b>SKU</b> into a set of <b>collections</b>.</p>
+  <h4>Step 1 — Parse the SKU</h4>
+  <p>Carbon SKUs encode a <b>route</b> (gender + season) and a <b>category digit</b>. The parser yields a
+  <code>routeKey</code> — <code>11</code> Men-Summer, <code>12</code> Men-Winter, <code>21</code> Women-Summer,
+  <code>22</code> Women-Winter — plus a digit <code>0–9</code> for the category.</p>
+  <h4>Step 2 — Look it up in the "workbook"</h4>
+  <p>There is a hard-coded table (a transcription of a spreadsheet) where each
+  <code>route + digit</code> maps to one or more <b>targets</b>: a menu path (<code>MEN &gt; CLOTHING &gt; JEANS</code>),
+  a direct collection (<code>COLLECTION: jeans-men</code>), or an intentional <code>ERROR</code>. Some rows are
+  <i>exact</i> (route+digit is enough); others are <i>ambiguous</i> and need the product's text (title/type/SKU) to
+  disambiguate.</p>
+  <h4>Step 3 — Resolve</h4>
+  <ul>
+    <li><b>Exact rows win.</b> If a clean route+digit rule exists, use it.</li>
+    <li><b>Ambiguous rows are scored</b> by how many of the rule's category keywords appear in the product text;
+    highest score (then best coverage) wins. Ties are broken by per-bucket keyword tables (e.g. distinguishing
+    LEGGINGS vs SWEATPANTS vs PANTS), and if still tied it gives up and asks for human review.</li>
+    <li>Conditional targets (<code>IF JOGGER: …</code>) only apply if that keyword is present.</li>
+  </ul>
+  <h4>Step 4 — Decide &amp; explain</h4>
+  <p>The decision is <b>Suggested</b> (something to approve), <b>Auto-mapped</b> (clean, no follow-ups), or
+  <b>Manual review</b> (couldn't resolve). When it can't decide, it records a precise reason
+  (<code>PARSE_FAILED</code>, <code>MISSING_ROUTE_KEY</code>, <code>MULTIPLE_MATCHES</code>,
+  <code>LEGACY_REVIEW_REQUIRED</code> for old "C…" SKUs, etc.) and a human sentence shown in the explainer modal. It
+  also runs conflict detection (e.g. a UPC whose gender contradicts the assigned path) and surfaces a one-click fix.</p>
+  <div class="callout warn"><b>Why this matters for the port:</b> the entire rules workbook is Carbon's own SKU
+  scheme. It's pure, hard-coded logic with no external dependency — it ports verbatim. The only question is whether you
+  feed it Shopify product SKUs (as today) or CarbonWMS catalog SKUs (see the plan).</div>
+
+  <!-- ============================================================ -->
+  <h2 id="tree">7 · The menu tree</h2>
+  <p>The left panel is a live editor for the Shopify storefront menu. Notable details:</p>
+  <ul>
+    <li><b>Shopify allows 3 levels of menu nesting; the app allows 4.</b> Level-4 nodes are kept <b>only in the app's
+    database</b> (keys prefixed <code>local4:</code>) and are never pushed to Shopify, so the storefront stays valid.</li>
+    <li>Editing any node (add/rename/move/delete/visibility) <b>re-pushes the entire menu</b> to Shopify via one
+    <code>menuUpdate</code> mutation — last-write-wins, no locking (a real-world risk with two editors).</li>
+    <li>There's a hard-coded <b>"mega-menu seed"</b> (~99 nodes: MEN / WOMEN / JEANS / REWARDS / BECOME AFFILIATE) that
+    can rebuild the whole menu from scratch.</li>
+    <li>The node↔collection mapping lives in the DB; the menu structure is reconciled from Shopify on each load
+    (new live nodes are upserted, stale ones removed, but local-4 and disabled nodes are preserved).</li>
+  </ul>
+
+  <!-- ============================================================ -->
+  <h2 id="kpi">8 · Statuses &amp; KPIs</h2>
+  <p>Every product row is classified into exactly one workflow status, and the KPI tiles just count them:</p>
+  <table>
+    <tr><th>Status</th><th>Meaning (plain English)</th></tr>
+    <tr><td><b>Push Failed</b></td><td>The last push to Shopify for this row errored.</td></tr>
+    <tr><td><b>Synced</b></td><td>What's in Shopify already matches the target, and any required human review is done.</td></tr>
+    <tr><td><b>Ready to Push</b></td><td>Decisions are made/approved but Shopify hasn't been updated yet (add-pending or removal-pending).</td></tr>
+    <tr><td><b>Needs Review</b></td><td>A human still needs to look — manual-review decision, a conflict, manual edits, or an unapproved suggestion.</td></tr>
+  </table>
+  <p>Other computed metrics: a <b>collection audit</b> (total collections, mapped vs unmapped, duplicates) and a
+  <b>push plan summary</b> (eligible vs skipped rows, total additions/removals). All computed in the browser from the
+  loaded page of data.</p>
+
+  <!-- ============================================================ -->
+  <h2 id="api">9 · The backend &amp; Shopify calls</h2>
+  <p>One fat route handles everything. The browser only ever calls <code>/api/collection-mapping</code>, which is a
+  thin alias of <code>/api/shopify/collection-mapping</code> (there's also a Pages-Router compat bridge). Two HTTP
+  methods:</p>
+  <ul>
+    <li><span class="tag get">GET</span> — the big page load (collections + products + menu + auto-map + your drafts).</li>
+    <li><span class="tag post">POST</span> — everything else, multiplexed by a <code>body.action</code> string
+    (15 actions): rename collection, save/clear drafts, get/download logs, refresh/save/restore menu, save mappings,
+    set node mapping, add/edit/move/delete menu node, and the big one — <code>toggle-nodes</code> /
+    <code>bulk-toggle-nodes</code> which adds/removes products to/from collections in Shopify.</li>
+  </ul>
+  <h4>How Shopify is talked to</h4>
+  <p>Everything is <b>GraphQL</b> against <code>https://{shop}/admin/api/2025-01/graphql.json</code> with the header
+  <code>X-Shopify-Access-Token: &lt;token&gt;</code>. No REST. The client retries on throttling (HTTP 429 or GraphQL
+  <code>THROTTLED</code>) with exponential backoff. Reads are cached in-process (collections 60s, products 45s).
+  GraphQL operations used: read <code>collections</code>, <code>products</code>, <code>menus</code>,
+  <code>pages/blogs</code>, <code>product.collections</code>; write <code>menuUpdate</code>,
+  <code>collectionAddProducts</code>, <code>collectionRemoveProducts</code>, <code>collectionUpdate</code>.</p>
+  <h4>How the token is found</h4>
+  <p>Per request: figure out the <b>shop</b> (request param → <code>SHOPIFY_SHOP_DOMAIN</code> → most-recently-installed
+  shop in the DB), then find a working <b>admin token</b> — first a per-shop token stored in the
+  <code>shopify_tokens</code> Postgres table (written by the OAuth callback), else an env token
+  (<code>SHOPIFY_ADMIN_TOKEN_&lt;SHOP&gt;</code> or the global <code>SHOPIFY_ADMIN_ACCESS_TOKEN</code>). Each candidate
+  is probed; the first that works (and ideally has navigation scope) is cached 60s. No token → <code>401 "Shop not
+  connected."</code></p>
+
+  <!-- ============================================================ -->
+  <h2 id="db">10 · The database (5 tables)</h2>
+  <p>Plain Postgres, one shared instance, <b>multi-tenant by a <code>shop</code> text column</b> on every table (no
+  per-tenant schema). There are <b>no migration files</b> — the tables are created in code on first use
+  (<code>CREATE TABLE IF NOT EXISTS</code>). If no DB is configured, the whole thing falls back to in-memory maps.</p>
+  <table>
+    <tr><th>Table</th><th>What it stores</th><th>Key / retention</th></tr>
+    <tr><td><code>shopify_collection_menu_nodes</code></td><td><b>The menu tree + node→collection map.</b> label, parent, depth, sort, enabled, and the assigned collection (id/title/handle + a default handle for reset).</td><td>PK (shop, node_key)</td></tr>
+    <tr><td><code>shopify_collection_mapping_actions</code></td><td>Audit of every product toggle (which product, which node, added/removed collection ids, ok/error). Drives the "Processed/Failed" row badge.</td><td>by (shop, created_at)</td></tr>
+    <tr><td><code>shopify_collection_mapping_audit</code></td><td>High-level action log (action, summary, status, JSON details).</td><td>90-day TTL</td></tr>
+    <tr><td><code>shopify_collection_mapping_row_reviews</code></td><td>Per-row "I reviewed this" flags (largely superseded by drafts).</td><td>PK (shop, row_id)</td></tr>
+    <tr><td><code>shopify_collection_mapping_row_drafts</code></td><td><b>Each user's in-progress decisions</b> (selected suggestions, manual add/remove paths, approved, hold, committed) as JSON. Row id is <code>actor::rowId</code> so drafts are per-user.</td><td>PK (shop, row_id) · 7-day TTL</td></tr>
+  </table>
+  <p>Plus <code>shopify_tokens</code> (shop → OAuth access token), owned by a separate repository.</p>
+
+  <!-- ============================================================ -->
+  <h2 id="creds">11 · Credentials &amp; config (the 3rd-party part)</h2>
+  <p>The only third party is <b>Shopify</b> (plus the app's own Postgres). Two ways to authenticate, and the code
+  supports both at once:</p>
+  <div class="grid">
+    <div class="card"><h4 style="margin-top:0">OAuth mode (per-store, preferred)</h4>
+      <div class="two">
+        <div>SHOPIFY_APP_CLIENT_ID</div><div>Shopify app API key</div>
+        <div>SHOPIFY_APP_CLIENT_SECRET</div><div>OAuth secret + HMAC verify</div>
+        <div>SHOPIFY_REDIRECT_URI</div><div>…/api/shopify/callback (whitelisted)</div>
+        <div>SHOPIFY_SCOPES</div><div>incl. read/write_online_store_navigation</div>
+      </div>
+      <p class="small">The OAuth callback stores the token in <code>shopify_tokens</code>. Good for multiple stores.</p>
+    </div>
+    <div class="card"><h4 style="margin-top:0">Static-token mode (single store, simplest)</h4>
+      <div class="two">
+        <div>SHOPIFY_ADMIN_ACCESS_TOKEN</div><div>Admin API token (custom app)</div>
+        <div>SHOPIFY_SHOP_DOMAIN</div><div>the *.myshopify.com store</div>
+      </div>
+      <p class="small">No OAuth needed. The token must carry product + online-store-navigation scopes.</p>
+    </div>
+  </div>
+  <p><b>Always needed:</b> a Postgres connection string (<code>COOLIFY_DATABASE_URL</code> / <code>POSTGRES_URL</code> /
+  <code>DATABASE_URL</code>). <b>Optional:</b> <code>SHOPIFY_API_VERSION</code> (defaults to <code>2025-01</code>),
+  <code>SHOPIFY_COLLECTION_MAPPING_MENU_HANDLE</code> (defaults to <code>main-menu</code>). The page also respects two
+  kill-switches: <code>DISABLE_SHOPIFY_COLLECTION_MAPPING</code> (hides the page) and, on Coolify,
+  <code>SHOPIFY_LIVE_UPDATES_ON_COOLIFY</code> (must be <code>true</code> or every write is blocked with 503).</p>
+
+  <!-- ============================================================ -->
+  <h2 id="auth">12 · Auth, gating &amp; kill-switches</h2>
+  <ul>
+    <li><b>Login gate.</b> Carbon-gen's middleware (the fork uses <code>proxy.ts</code>, not <code>middleware.ts</code>)
+    requires a <code>carbon_gen_auth_v1</code> cookie; unauthenticated users are bounced to <code>/login</code>. A
+    "meta-review" role is locked out entirely. In dev, <code>AUTH_BYPASS=true</code> auto-logs-in a super-admin.</li>
+    <li><b>The legacy URL</b> <code>/studio/shopify-collection-mapping</code> is 308-redirected to the canonical
+    <code>/shopify-collection-mapping</code>.</li>
+    <li><b>No in-route RBAC.</b> The API only reads the session to tag your drafts; protection is entirely the cookie
+    gate + the Coolify write kill-switch. Any logged-in user can drive collection writes.</li>
+    <li><b>The Coolify write block</b> (<code>proxy.ts</code>) returns 503 for all non-GET <code>/api/shopify/*</code>
+    unless <code>SHOPIFY_LIVE_UPDATES_ON_COOLIFY=true</code> — a deliberate production safety valve.</li>
+  </ul>
+
+  <!-- ============================================================ -->
+  <h2 id="quirks">13 · Quirks &amp; risks worth knowing</h2>
+  <ul>
+    <li><b>Whole-menu rewrites, last-write-wins.</b> Two people editing the tree can clobber each other.</li>
+    <li><b>Synchronous pushes.</b> A big "push all" runs inside one 120-second request — no queue. Large batches can
+    time out.</li>
+    <li><b>In-memory caches per process.</b> Fine on a single instance; multiple instances can show slightly stale
+    collections/products for up to 45–60s.</li>
+    <li><b>No SSL config on the DB pool</b> — relies on the network/connection string.</li>
+    <li><b>Tables auto-created in code, no migrations</b> — replicating the schema means copying the
+    <code>CREATE TABLE</code> block verbatim.</li>
+    <li><b>The whole feature is one 11.8k-line component</b> — hard to partially adopt; it's effectively all-or-nothing.</li>
+  </ul>
+
+  <!-- ============================================================ -->
+  <!-- ============================  PLAN  ============================ -->
+  <h2 id="plan">PLAN · Copy it into CarbonWMS under the Categories page</h2>
+  <p class="lead">Goal: rebuild this exact tool inside CarbonWMS, reachable from the Categories page. Below is the
+  honest mapping of what transfers cleanly, what has to change, the credentials needed, and a step-by-step sequence.
+  This is a <b>plan for discussion</b> — there's one big product decision to make first.</p>
+
+  <div class="callout warn">
+    <b>Decision #1 (please read first): what data does it operate on?</b>
+    <p style="margin:8px 0 0">This tool is fundamentally a <b>Shopify</b> tool — it maps <b>Shopify products</b> into
+    <b>Shopify collections</b> and edits the <b>Shopify storefront menu</b>. CarbonWMS, by contrast, is a
+    <b>Lightspeed</b>-based warehouse system; it actually <i>removed</i> its old Shopify integration
+    (<code>migration 009_remove_shopify.sql</code>). So "copy as is" means <b>WMS gains a Shopify control panel</b> that
+    talks to your Shopify store — independent of WMS's Lightspeed catalog. The alternative is to <i>adapt</i> it to map
+    your WMS catalog (<code>matrices</code>/<code>custom_skus</code>) into the WMS Categories you just built. These are
+    very different projects. My recommendation: <b>port as-is first</b> (it's a faithful copy and the SKU rules already
+    match Carbon), then decide separately whether to also wire it to WMS catalog data. The rest of this plan assumes
+    as-is.</p>
+  </div>
+
+  <h3>P1 · Credentials you'll need (and what WMS already has)</h3>
+  <div class="callout good"><b>Good news:</b> CarbonWMS's <code>.env.coolify.local</code> <b>already contains</b> all the
+  core Shopify variables: <code>SHOPIFY_APP_CLIENT_ID</code>, <code>SHOPIFY_APP_CLIENT_SECRET</code>,
+  <code>SHOPIFY_ADMIN_ACCESS_TOKEN</code>, <code>SHOPIFY_SHOP_DOMAIN</code>, <code>SHOPIFY_REDIRECT_URI</code>,
+  <code>SHOPIFY_SCOPES</code>, <code>SHOPIFY_WEBHOOK_SECRET</code>, <code>SHOPIFY_ADMIN_STORE_SLUG</code>,
+  <code>SHOPIFY_STOREFRONT_BASE_URL</code>. The credentials largely exist — they're just unused since WMS dropped
+  Shopify.</div>
+  <table>
+    <tr><th>Credential / var</th><th>Status in WMS</th><th>Action</th></tr>
+    <tr><td><code>SHOPIFY_ADMIN_ACCESS_TOKEN</code> + <code>SHOPIFY_SHOP_DOMAIN</code></td><td>Present in env</td><td><b>Verify the token still works</b> and has <code>read_products, write_products, read_online_store_navigation, write_online_store_navigation</code> scopes. If not, regenerate the custom-app token in Shopify admin.</td></tr>
+    <tr><td>OAuth client id/secret/redirect/scopes</td><td>Present in env</td><td>Only needed if you want multi-store OAuth. For a single store, static token is enough — skip OAuth.</td></tr>
+    <tr><td><code>SHOPIFY_API_VERSION</code></td><td>Not set</td><td>Optional; add <code>2025-01</code> to pin it (else it defaults).</td></tr>
+    <tr><td><code>SHOPIFY_COLLECTION_MAPPING_MENU_HANDLE</code></td><td>Not set</td><td>Optional; defaults to <code>main-menu</code>. Set if your menu handle differs.</td></tr>
+    <tr><td>Postgres (<code>DATABASE_URL</code>)</td><td>Present (WMS prod DB)</td><td>Reuse WMS's DB — the new tables get a <code>tenant_id</code> column to fit WMS's multi-tenant model.</td></tr>
+    <tr><td>Live-write switch</td><td>WMS proxy differs</td><td>Decide whether to gate writes behind a flag like carbon-gen's <code>SHOPIFY_LIVE_UPDATES_ON_COOLIFY</code> (recommended for safety).</td></tr>
+  </table>
+  <p class="small">No new third-party accounts are required — just Shopify (already provisioned) and the WMS Postgres
+  you already use.</p>
+
+  <h3>P2 · What transfers cleanly vs what must change</h3>
+  <table>
+    <tr><th>Piece</th><th>Effort</th><th>Notes</th></tr>
+    <tr><td>Rules workbook, auto-mapper, SKU parser, suggestions, conflicts, KPI classifier (<code>lib/shopify*…</code>)</td><td><b>Copy ~verbatim</b></td><td>Pure functions, no framework or DB ties. Same Carbon SKU scheme. Lowest risk.</td></tr>
+    <tr><td>Shopify GraphQL client (<code>lib/shopify.ts</code>) + token resolution + <code>shopify_tokens</code> repo</td><td><b>Copy + adapt</b></td><td>WMS has <i>no</i> Shopify client today (it was removed). Bring this in; point token lookup at the WMS env token; add tenant scoping.</td></tr>
+    <tr><td>The repository (5 tables, <code>CREATE TABLE</code> block)</td><td><b>Convert to WMS migration</b></td><td>WMS uses real <code>scripts/migrations/NNNN_*.sql</code> files. Turn the in-code DDL into a migration (e.g. <code>0089_shopify_collection_mapping.sql</code>) and add a <code>tenant_id</code> column + index to each table to match WMS's model.</td></tr>
+    <tr><td>The big API route (4,458 lines)</td><td><b>Copy + re-wire</b></td><td>Swap carbon-gen's <code>sqlDb</code>/session helpers for WMS's <code>lib/db.ts</code> <code>getPool()</code> and <code>getSessionFromRequest()</code>; scope by <code>tenant_id</code>; register the path in WMS's <code>proxy.ts</code> allowlist (else it 401s before the handler — a known WMS gotcha).</td></tr>
+    <tr><td>The UI component (11,834 lines) + tree (2,228) + CSS</td><td><b>Copy + restyle</b></td><td>Biggest single chunk. It's self-contained React + a <code>&lt;style jsx&gt;</code> block. Port as-is, then optionally swap its colors to WMS theme tokens (<code>--wms-*</code>). Add <code>@dnd-kit</code> to WMS deps (the tree uses it).</td></tr>
+    <tr><td>Auth / routing</td><td><b>Adapt</b></td><td>Mount under Categories (see P4). Replace carbon-gen's cookie gate with WMS's session + the proxy allowlist. Both apps are the same Next.js fork (16.x, <code>proxy.ts</code>), so the mechanics line up.</td></tr>
+  </table>
+
+  <h3>P3 · Database plan (new WMS migration)</h3>
+  <p>Create <code>scripts/migrations/0089_shopify_collection_mapping.sql</code> with the five tables, each gaining a
+  <code>tenant_id uuid</code> (referencing <code>tenants</code>) alongside the existing <code>shop</code> column, and a
+  composite key/index of <code>(tenant_id, shop, …)</code>. Carry over the indexes and the 90-day/7-day retention as a
+  scheduled cleanup (or keep the in-handler trim). The node table is the important one (the menu-tree + node→collection
+  map); the rest are audit/draft/review.</p>
+
+  <h3>P4 · How it attaches to the Categories page</h3>
+  <p>Two clean options — recommend B:</p>
+  <div class="grid">
+    <div class="card"><h4 style="margin-top:0">A · A button on the Categories page</h4>
+      <p class="small">Add a second top-right button next to "Legacy" (e.g. "Shopify Mapping") that routes to a new
+      full-screen sub-page. Minimal change to the page you just built.</p></div>
+    <div class="card"><h4 style="margin-top:0">B · A dedicated sub-route (recommended)</h4>
+      <p class="small">New route <code>app/(main)/inventory/categories/collection-mapping/page.tsx</code> hosting the
+      ported component, linked from the Categories page. Keeps the heavy tool isolated, reuses the WMS shell, and (like
+      the Categories page) can auto-collapse the sidebar for full width.</p></div>
+  </div>
+
+  <h3>P5 · Step-by-step sequence</h3>
+  <div class="step"><div class="num">1</div><div><b>Confirm Decision #1</b> (Shopify-as-is vs WMS-catalog) and verify the Shopify admin token + scopes against the live store with a one-line GraphQL probe.</div></div>
+  <div class="step"><div class="num">2</div><div><b>Port the pure libs</b> (rules, SKU parser, auto-mapper, suggestions, conflicts, KPI). Unit-test the auto-map on a handful of real SKUs.</div></div>
+  <div class="step"><div class="num">3</div><div><b>Port the Shopify client</b> (<code>lib/shopify.ts</code> + token repo). Add the <code>tenant_id</code> dimension. Confirm a live <code>collections</code> read returns data.</div></div>
+  <div class="step"><div class="num">4</div><div><b>Write migration 0089</b> for the five tables (tenant-scoped). Apply on a dev DB; validate.</div></div>
+  <div class="step"><div class="num">5</div><div><b>Port the API route</b>; rewire to WMS <code>getPool()</code>/session; add the path to <code>proxy.ts</code> allowlist; gate writes behind a live-update flag.</div></div>
+  <div class="step"><div class="num">6</div><div><b>Port the UI component + tree + CSS</b>; add <code>@dnd-kit</code>; point its fetches at the new WMS endpoint; (optional) restyle to WMS theme.</div></div>
+  <div class="step"><div class="num">7</div><div><b>Mount under Categories</b> (option B), wire navigation, auto-collapse sidebar.</div></div>
+  <div class="step"><div class="num">8</div><div><b>End-to-end test</b> on the real store with writes OFF (read-only) first, then enable writes and push one product as a smoke test before opening it up.</div></div>
+
+  <h3>P6 · Effort &amp; risk, honestly</h3>
+  <ul>
+    <li><b>Largest risk &amp; effort:</b> the 11.8k-line UI component — it's monolithic and assumes its own endpoint
+    shape. Porting it is mostly mechanical but voluminous.</li>
+    <li><b>Medium:</b> the API route re-wiring (DB + session + proxy allowlist) and the migration.</li>
+    <li><b>Low:</b> the pure rule/auto-map libs and the Shopify client.</li>
+    <li><b>Watch-outs:</b> WMS's proxy allowlist (new <code>/api/*</code> paths 401 until added); the live-write
+    kill-switch; the per-process cache if WMS runs multiple instances; and the fact that this writes to your <b>live
+    Shopify store</b> — keep writes flagged off until verified.</li>
+  </ul>
+
+  <h3>P7 · Open questions for our discussion</h3>
+  <ol>
+    <li><b>As-is Shopify tool, or adapt to WMS catalog?</b> (Decision #1.) This is the fork in the road.</li>
+    <li><b>Single store or multi-store?</b> Determines static-token vs OAuth, and whether <code>tenant_id</code> maps to
+    a Shopify shop.</li>
+    <li><b>Theme:</b> keep carbon-gen's look or restyle to the WMS dark theme?</li>
+    <li><b>Writes:</b> ship read-only first (safe), then enable pushing? I'd strongly recommend yes.</li>
+    <li><b>Scope of copy:</b> full feature (menu editing + product mapping + reports) or a subset to start?</li>
+  </ol>
+
+  <hr />
+  <p class="small">Report compiled from a full read of: <code>components/shopify-collection-mapping.tsx</code>,
+  <code>components/shopify-menu-items-tree.tsx</code>, <code>components/workspace-shell.tsx</code>,
+  <code>app/shopify-collection-mapping/*</code>, <code>app/api/shopify/collection-mapping/route.ts</code>,
+  <code>app/api/collection-mapping/route.ts</code>, <code>pages/api/compat/collection-mapping.ts</code>,
+  <code>lib/shopify.ts</code>, <code>lib/shopifyTokenRepository.ts</code>,
+  <code>lib/shopifyCollectionMappingRepository.ts</code>, <code>lib/shopifyCollectionMappingRules.ts</code>,
+  <code>lib/shopifyCollectionAutoMapper.ts</code>, <code>lib/shopifyCollectionMappingKpi.ts</code>,
+  <code>lib/workspacePageCatalog.ts</code>, <code>proxy.ts</code>, and the carbon-gen env files (names only). No secret
+  values were read or copied.</p>
+
+</div>
+</body>
+</html>
