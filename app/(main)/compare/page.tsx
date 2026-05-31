@@ -16,7 +16,7 @@ export default function ComparePage() {
           Reports → POS compare
         </Link>
         {" · "}
-        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/operations/exceptions">
+        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/rfid/exceptions">
           Operations exceptions
         </Link>
       </p>

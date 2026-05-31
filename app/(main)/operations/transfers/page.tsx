@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// Legacy /operations/transfers — superseded by /operations/transfers/out (action page).
+// Legacy /operations/transfers — superseded by /inventory/transfers/out (menu regroup).
 export default function TransfersLegacyRedirect() {
-  redirect("/operations/transfers/out");
+  redirect("/inventory/transfers/out");
 }

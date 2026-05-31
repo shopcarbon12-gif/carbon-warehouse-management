@@ -585,7 +585,7 @@ export function CommandCenter() {
             <KpiTile
               title="Receiving concerns"
               value={kpis.receiving_concerns}
-              href="/operations/transfers/in"
+              href="/inventory/transfers/in"
               accent="amber"
             />
             <KpiTile

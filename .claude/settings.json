@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 shopcarbon@192.168.1.219 \"sudo journalctl -u carbon-cdm-agent.service -f --no-pager -o cat 2>&1\")"
+      "Bash(ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 shopcarbon@192.168.1.219 \"sudo journalctl -u carbon-cdm-agent.service -f --no-pager -o cat 2>&1\")",
+      "Bash(adb -s 192.168.1.183:38553 logcat -T 1)",
+      "Read(//home/carbondev/CarbonWmsRelease/**)",
+      "Bash(adb -s 192.168.1.183:38553 logcat -T 1 -s WMS_AUTH:* flutter:*)",
+      "Bash(adb -s 192.168.1.183:38553 logcat -T 1 -s flutter:I)",
+      "Bash(adb -s 192.168.1.183:38553 logcat -c)",
+      "Bash(adb -s 192.168.1.183:38553 logcat -v brief)",
+      "Bash(adb -s 192.168.1.183:38553 logcat --pid=11467 -v brief)"
     ]
   }
 }

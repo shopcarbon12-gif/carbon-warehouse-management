@@ -16,6 +16,10 @@ export function isWarehouseFloorRole(role: string): boolean {
 export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname.startsWith("/infrastructure")) return true;
   if (pathname.startsWith("/settings")) return true;
+  if (pathname.startsWith("/integrations")) return true;
+  // Devices moved from /infrastructure/devices → /rfid/devices (menu regroup);
+  // keep it admin-only even though the rest of /rfid is floor-accessible.
+  if (pathname.startsWith("/rfid/devices")) return true;
   if (pathname.startsWith("/inventory/sync")) return true;
   if (pathname.startsWith("/api/infrastructure")) return true;
   if (pathname.startsWith("/api/settings")) return true;
@@ -40,9 +44,17 @@ export function isWarehouseFloorAllowedPath(pathname: string): boolean {
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return true;
   if (pathname.startsWith("/operations")) return true;
   if (pathname.startsWith("/overview")) return true;
+  // Devices + Hardware Config moved under /rfid (menu regroup) but stay
+  // off-limits to floor operators — exclude them before the broad /rfid allow.
+  if (pathname.startsWith("/rfid/devices")) return false;
+  if (pathname.startsWith("/rfid/hardware-config")) return false;
   if (pathname.startsWith("/rfid")) return true;
   if (pathname.startsWith("/inventory/catalog")) return true;
   if (pathname.startsWith("/inventory/transfers")) return true;
+  // Bin Locations (was /overview/locations) + Cycle Counts (was /rfid/cycle-counts)
+  // regrouped under /inventory; preserve floor access.
+  if (pathname.startsWith("/inventory/locations")) return true;
+  if (pathname.startsWith("/inventory/cycle-counts")) return true;
   if (pathname.startsWith("/handheld")) return true;
   if (pathname.startsWith("/reports")) return true;
 

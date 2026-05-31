@@ -219,7 +219,7 @@ function buildPickList(tree: unknown): AntennaPickEntry[] {
 export function AntennaTestWorkspace() {
   const tree = useSWR("/api/hardware-config", fetcher, { refreshInterval: 0 });
   const picks = useMemo(() => buildPickList(tree.data), [tree.data]);
-  // When the user clicks "Test" on an antenna in /hardware_config, we
+  // When the user clicks "Test" on an antenna in /rfid/hardware-config, we
   // navigate here with `?antennaId=<uuid>` so the dropdown pre-selects
   // that antenna. Picker stays unlocked — the operator can still pick a
   // different antenna once on the page; we only set the default.

@@ -41,7 +41,42 @@ const nextConfig: NextConfig = {
   },
   ...(basePath ? { basePath } : {}),
   async redirects() {
-    if (!basePath) return [];
+    /**
+     * Menu regroup (2026-05-30): every page now lives under its menu header's
+     * path (/inventory/*, /rfid/*, /integrations/*, /settings/*). These
+     * permanent redirects keep old bookmarks, deep-links and the mobile app's
+     * web entry points working. `:path*` carries through any sub-segments.
+     */
+    const menuRegroup = [
+      { source: "/overview/locations", destination: "/inventory/locations" },
+      { source: "/overview/locations/:path*", destination: "/inventory/locations/:path*" },
+      { source: "/rfid/cycle-counts", destination: "/inventory/cycle-counts" },
+      { source: "/rfid/cycle-counts/:path*", destination: "/inventory/cycle-counts/:path*" },
+      { source: "/operations/transfers/out", destination: "/inventory/transfers/out" },
+      { source: "/operations/transfers/out/:path*", destination: "/inventory/transfers/out/:path*" },
+      { source: "/operations/transfers/in", destination: "/inventory/transfers/in" },
+      { source: "/operations/transfers/in/:path*", destination: "/inventory/transfers/in/:path*" },
+      { source: "/operations/exceptions", destination: "/rfid/exceptions" },
+      { source: "/operations/exceptions/:path*", destination: "/rfid/exceptions/:path*" },
+      { source: "/infrastructure/devices", destination: "/rfid/devices" },
+      { source: "/infrastructure/devices/:path*", destination: "/rfid/devices/:path*" },
+      { source: "/hardware_config", destination: "/rfid/hardware-config" },
+      { source: "/hardware_config/:path*", destination: "/rfid/hardware-config/:path*" },
+      { source: "/inventory/sync", destination: "/integrations/sync" },
+      { source: "/inventory/sync/:path*", destination: "/integrations/sync/:path*" },
+      { source: "/infrastructure/lightspeed-sales", destination: "/integrations/lightspeed-sales" },
+      {
+        source: "/infrastructure/lightspeed-sales/:path*",
+        destination: "/integrations/lightspeed-sales/:path*",
+      },
+      { source: "/infrastructure/settings", destination: "/settings/general-settings" },
+      {
+        source: "/infrastructure/settings/:path*",
+        destination: "/settings/general-settings/:path*",
+      },
+    ].map((r) => ({ ...r, permanent: true }));
+
+    if (!basePath) return menuRegroup;
     return [
       {
         source: "/",
@@ -49,6 +84,7 @@ const nextConfig: NextConfig = {
         permanent: false,
         basePath: false,
       },
+      ...menuRegroup,
     ];
   },
   async headers() {

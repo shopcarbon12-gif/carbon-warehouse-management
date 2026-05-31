@@ -55,7 +55,7 @@ function LightspeedLiveReadiness({
         {rSeriesLive ? (
           <>
             <span className="font-medium text-emerald-800 dark:text-emerald-400">Ready for a real pull.</span> Open{" "}
-            <a href="/inventory/sync" className="font-semibold text-[var(--wms-accent)] underline hover:opacity-90">
+            <a href="/integrations/sync" className="font-semibold text-[var(--wms-accent)] underline hover:opacity-90">
               Lightspeed Sync
             </a>{" "}
             and run Trigger manual sync. The result should not say simulated.
@@ -134,7 +134,7 @@ export function SettingsWorkspace() {
     if (err) {
       setToast(`Lightspeed OAuth: ${decodeURIComponent(err)}`);
       setTab("integrations");
-      window.history.replaceState({}, "", "/infrastructure/settings");
+      window.history.replaceState({}, "", "/settings/general-settings");
     }
   }, []);
 

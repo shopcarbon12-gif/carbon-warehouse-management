@@ -558,7 +558,7 @@ export function CatalogWorkspace({
                     {syncBusy ? "Syncing…" : "Sync Lightspeed"}
                   </button>
                   <Link
-                    href="/inventory/sync"
+                    href="/integrations/sync"
                     role="menuitem"
                     onClick={() => setCatalogMenuOpen(null)}
                     className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
@@ -566,7 +566,7 @@ export function CatalogWorkspace({
                     Open Lightspeed sync workspace
                   </Link>
                   <Link
-                    href="/inventory/sync"
+                    href="/integrations/sync"
                     role="menuitem"
                     onClick={() => setCatalogMenuOpen(null)}
                     className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
@@ -646,7 +646,7 @@ export function CatalogWorkspace({
           {!canTriggerLightspeedSync ? (
             <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
               Full sync API may require admin.{" "}
-              <Link href="/inventory/sync" className="text-teal-500 hover:underline">
+              <Link href="/integrations/sync" className="text-teal-500 hover:underline">
                 Lightspeed sync
               </Link>
             </p>
@@ -681,7 +681,7 @@ export function CatalogWorkspace({
               </button>
             ) : null}
             <Link
-              href="/inventory/sync"
+              href="/integrations/sync"
               className="inline-flex items-center justify-center rounded-lg border border-[var(--wms-border)]/50 bg-[var(--wms-surface-elevated)]/40 px-6 py-3 font-mono text-sm font-medium text-[var(--wms-fg)] transition-colors hover:bg-[var(--wms-surface-elevated)]/50"
             >
               Sync dashboard

@@ -70,16 +70,16 @@ const sections: NavSection[] = [
       p.startsWith("/inventory/categories") ||
       p.startsWith("/inventory/bulk-status") ||
       p.startsWith("/inventory/bulk-import") ||
-      p.startsWith("/overview/locations") ||
-      p.startsWith("/rfid/cycle-counts") ||
-      p.startsWith("/operations/transfers"),
+      p.startsWith("/inventory/locations") ||
+      p.startsWith("/inventory/cycle-counts") ||
+      p.startsWith("/inventory/transfers"),
     items: [
       { href: "/inventory/catalog", label: "Catalog", icon: Package },
       { href: "/inventory/categories", label: "Categories", icon: Layers },
-      { href: "/overview/locations", label: "Bin Locations", icon: Map },
-      { href: "/rfid/cycle-counts", label: "Cycle Counts", icon: ScanLine },
-      { href: "/operations/transfers/out", label: "Transfer Out", icon: ArrowRightLeft },
-      { href: "/operations/transfers/in", label: "Transfer In", icon: FolderInput },
+      { href: "/inventory/locations", label: "Bin Locations", icon: Map },
+      { href: "/inventory/cycle-counts", label: "Cycle Counts", icon: ScanLine },
+      { href: "/inventory/transfers/out", label: "Transfer Out", icon: ArrowRightLeft },
+      { href: "/inventory/transfers/in", label: "Transfer In", icon: FolderInput },
       { href: "/inventory/bulk-status", label: "Bulk status", icon: SlidersHorizontal },
       { href: "/inventory/bulk-import", label: "Bulk Import", icon: PackagePlus },
     ],
@@ -91,11 +91,11 @@ const sections: NavSection[] = [
       p.startsWith("/rfid/bulk-geiger") ||
       p.startsWith("/rfid/commissioning") ||
       p.startsWith("/rfid/encode-items") ||
-      p.startsWith("/operations/exceptions") ||
-      p.startsWith("/infrastructure/devices") ||
-      p.startsWith("/hardware_config") ||
+      p.startsWith("/rfid/exceptions") ||
+      p.startsWith("/rfid/devices") ||
+      p.startsWith("/rfid/hardware-config") ||
       // Antenna Test page is no longer linked from the sidebar — operators
-      // reach it via the per-antenna "Test" button in /hardware_config.
+      // reach it via the per-antenna "Test" button in /rfid/hardware-config.
       // Section still highlights when an /antenna_test deep-link is open.
       p.startsWith("/antenna_test"),
     items: [
@@ -103,13 +103,13 @@ const sections: NavSection[] = [
       { href: "/rfid/commissioning", label: "Print / Commission", icon: Printer },
       { href: "/rfid/encode-items", label: "Encode Items", icon: Tags },
       {
-        href: "/operations/exceptions",
+        href: "/rfid/exceptions",
         label: "Exceptions",
         icon: AlertTriangle,
         notify: true,
       },
-      { href: "/infrastructure/devices", label: "Devices", icon: Router },
-      { href: "/hardware_config", label: "Hardware Config", icon: Cpu },
+      { href: "/rfid/devices", label: "Devices", icon: Router },
+      { href: "/rfid/hardware-config", label: "Hardware Config", icon: Cpu },
     ],
   },
   {
@@ -146,19 +146,18 @@ const sections: NavSection[] = [
   {
     id: "integrations",
     label: "Integrations",
-    isActiveSection: (p) =>
-      p.startsWith("/inventory/sync") || p.startsWith("/infrastructure/lightspeed-sales"),
+    isActiveSection: (p) => p.startsWith("/integrations"),
     items: [
-      { href: "/inventory/sync", label: "Lightspeed Sync", icon: RefreshCw },
-      { href: "/infrastructure/lightspeed-sales", label: "LS Sales", icon: Banknote },
+      { href: "/integrations/sync", label: "Lightspeed Sync", icon: RefreshCw },
+      { href: "/integrations/lightspeed-sales", label: "LS Sales", icon: Banknote },
     ],
   },
   {
     id: "settings",
     label: "Settings",
-    isActiveSection: (p) => p.startsWith("/settings/") || p.startsWith("/infrastructure/settings"),
+    isActiveSection: (p) => p.startsWith("/settings/"),
     items: [
-      { href: "/infrastructure/settings", label: "General settings", icon: Settings },
+      { href: "/settings/general-settings", label: "General settings", icon: Settings },
       { href: "/settings/theme", label: "Theme & style", icon: Palette },
       { href: "/settings/handheld", label: "Handheld settings", icon: Smartphone },
       { href: "/settings/updates", label: "Mobile OTA", icon: Download },

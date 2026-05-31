@@ -14,7 +14,7 @@ export default function AlertsPage() {
       </p>
       <p className="mt-2 font-mono text-xs text-[var(--muted)]">
         Floor workspace:{" "}
-        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/operations/exceptions">
+        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/rfid/exceptions">
           Operations → Exceptions
         </Link>
         {" · "}

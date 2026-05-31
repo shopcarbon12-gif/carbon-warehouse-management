@@ -18,7 +18,7 @@ export default async function OrdersPage() {
         <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/integrations">
           Integrations
         </Link>
-        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/inventory/sync">
+        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/integrations/sync">
           Inventory sync
         </Link>
         <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/dashboard">
