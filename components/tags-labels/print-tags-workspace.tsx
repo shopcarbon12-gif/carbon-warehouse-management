@@ -399,16 +399,13 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
           {/* 2 — quantity */}
           <section className="card m-qty">
             <div className="card-h"><span className="step-no">2</span><h2>{rfid ? "Quantity & placement" : "Quantity"}</h2></div>
-            <div className="two" style={{ marginTop: 14 }}>
-              <div>
-                <span style={{ display: "block", fontFamily: "'JetBrains Mono',monospace", fontSize: "13.5px", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--wms-muted)", marginBottom: 7 }}>Quantity</span>
+            {rfid ? (
+              <div className="two" style={{ marginTop: 14, alignItems: "end" }}>
                 <div className="stepper">
                   <button type="button" onClick={() => bumpQty(-1)}>−</button>
                   <input className="mono" type="number" min={1} max={500} value={qty} onChange={(e) => setQty(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} />
                   <button type="button" onClick={() => bumpQty(1)}>+</button>
                 </div>
-              </div>
-              {rfid ? (
                 <div>
                   <span style={{ display: "block", fontFamily: "'JetBrains Mono',monospace", fontSize: "13.5px", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--wms-muted)", marginBottom: 7 }}>Add to inventory</span>
                   <div className={`toggle ${addStock ? "on" : ""}`} onClick={() => setAddStock((v) => !v)}>
@@ -416,8 +413,14 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
                     <span className="lab">{addStock ? "On" : "Off"}</span>
                   </div>
                 </div>
-              ) : null}
-            </div>
+              </div>
+            ) : (
+              <div className="stepper" style={{ marginTop: 14 }}>
+                <button type="button" onClick={() => bumpQty(-1)}>−</button>
+                <input className="mono" type="number" min={1} max={500} value={qty} onChange={(e) => setQty(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} />
+                <button type="button" onClick={() => bumpQty(1)}>+</button>
+              </div>
+            )}
             {rfid && addStock ? (
               <label className="fld">
                 <span>Bin (optional)</span>

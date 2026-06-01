@@ -183,11 +183,11 @@
 
 /* ===================== MOBILE (≤640px) — simple, touch-first ===================== */
 @media (max-width: 640px) {
-  .pt-root .topbar { justify-content: center; }
+  .pt-root .topbar { justify-content: flex-start; }
   .pt-root .topbar .ghost-btn, .pt-root .pill, .pt-root .spacer { display: none; }
-  .pt-root .brand { align-items: center; text-align: center; }
+  .pt-root .brand { align-items: flex-start; text-align: left; }
   .pt-root .brand .t { display: none; }
-  .pt-root h1.page { font-size: 26px; margin: 8px 0 16px; text-align: center; }
+  .pt-root h1.page { font-size: 26px; margin: 8px 0 16px; text-align: left; }
   .pt-root .page-sub { display: none; }
 
   .pt-root .tabs { gap: 8px; margin-bottom: 18px; }
@@ -227,9 +227,4 @@
   .pt-root .dims { font-size: 13px; }
   .pt-root .status-head { justify-content: center; gap: 16px; }
   .pt-root .status-note { text-align: center; font-size: 14.5px; }
-
-  /* Non-RFID has only a Quantity field — drop the redundant label and let the
-     stepper fill the card (same width as the Print tag button). */
-  .pt-root .tab-nonrfid .m-qty .two { grid-template-columns: 1fr; }
-  .pt-root .tab-nonrfid .m-qty .two > div > span { display: none; }
 }
