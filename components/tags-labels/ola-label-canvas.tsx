@@ -22,7 +22,7 @@ const ART_H = 576;
 
 /* Physical label stock per tab. The 2×3 non-RFID label is larger than the
  * 5×6.5 cm RFID tag; both render at one common px/cm so sizes compare truly. */
-const PX_PER_CM = 60;
+const PX_PER_CM = 70;
 const MEDIA: Record<Media, { caption: string; wCm: number; hCm: number }> = {
   rfid: { caption: "RFID tag · 5 × 6.5 cm", wCm: 5.0, hCm: 6.5 },
   nonrfid: { caption: "Non-RFID · 2 × 3 in", wCm: 5.08, hCm: 7.62 },
@@ -199,13 +199,11 @@ export function OlaLabelCanvas({
     : `${MEDIA[media].caption} (${MEDIA[media].wCm.toFixed(2)} × ${MEDIA[media].hCm.toFixed(2)} cm)`;
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <canvas
-        ref={ref}
-        className="max-w-full rounded-md border border-[var(--wms-border)] bg-white shadow-lg"
-        aria-label="Hang-tag label preview"
-      />
-      <p className="text-center font-mono text-[0.7rem] text-[var(--wms-muted)]">{caption}</p>
-    </div>
+    <>
+      <div className="label-stage">
+        <canvas ref={ref} aria-label="Hang-tag label preview" />
+      </div>
+      <div className="dims">{caption}</div>
+    </>
   );
 }

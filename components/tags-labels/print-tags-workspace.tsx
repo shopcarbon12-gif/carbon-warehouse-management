@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Code2, Copy, Minus, Plus, Printer, Settings2, X } from "lucide-react";
 import { buildOlaHangtagZplBatch, type OlaLabelItem } from "@/lib/utils/zpl-ola-hangtag";
+import { PrintLogsModal } from "@/components/rfid/commissioning/print-logs-modal";
 import { OlaLabelCanvas } from "./ola-label-canvas";
 
 type Mode = "rfid" | "nonrfid";
@@ -19,7 +20,12 @@ type Match = {
 };
 
 type Phase = "IDLE" | "ENCODING" | "PRINTING" | "SUCCESS" | "ERROR";
-const STEPS: Phase[] = ["IDLE", "ENCODING", "PRINTING", "SUCCESS"];
+const STEPS: { p: Phase; label: string }[] = [
+  { p: "IDLE", label: "Idle (ready)" },
+  { p: "ENCODING", label: "Encoding" },
+  { p: "PRINTING", label: "Printing" },
+  { p: "SUCCESS", label: "Success" },
+];
 
 type BinRow = { id: string; code: string };
 type PnPrinter = { id: number; name: string };
@@ -31,13 +37,16 @@ function parsePrinterLine(line: string): { host: string; port: number; uri: stri
   return { host: m[1].trim(), port: Number.isFinite(port) && port > 0 ? port : 80, uri: m[3].trim() || "PSTPRNT" };
 }
 
+const I = {
+  theme: "M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19",
+};
+
 export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; companyPrefix: number }) {
   const rfid = mode === "rfid";
 
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [matches, setMatches] = useState<Match[]>([]);
-  const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<Match | null>(null);
 
   const [qty, setQty] = useState(1);
@@ -45,7 +54,6 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
   const [bins, setBins] = useState<BinRow[]>([]);
   const [binId, setBinId] = useState("");
 
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [printerLine, setPrinterLine] = useState("192.168.1.3:80 / PSTPRNT");
   const [pnPrinters, setPnPrinters] = useState<PnPrinter[]>([]);
   const [pnPrinterId, setPnPrinterId] = useState<number | "">("");
@@ -54,11 +62,11 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
   const [elapsedMs, setElapsedMs] = useState(0);
   const timerRef = useRef<number | null>(null);
   const startRef = useRef<number | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [lastJob, setLastJob] = useState<string[]>([]);
   const [nextSerial, setNextSerial] = useState(1);
   const [zplOpen, setZplOpen] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
   const busy = phase === "ENCODING" || phase === "PRINTING";
 
   useEffect(() => {
@@ -66,18 +74,12 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
     return () => window.clearTimeout(t);
   }, [search]);
 
-  // search + auto-select single match; never re-open the list for the already-picked SKU
   useEffect(() => {
-    if (debounced.length < 2) {
-      setMatches([]);
-      return;
-    }
-    if (selected && debounced === selected.sku) {
+    if (debounced.length < 2 || (selected && debounced === selected.sku)) {
       setMatches([]);
       return;
     }
     let cancelled = false;
-    setSearching(true);
     void (async () => {
       try {
         const res = await fetch(`/api/rfid/catalog-search?q=${encodeURIComponent(debounced)}`);
@@ -86,8 +88,8 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
         if (cancelled) return;
         if (list.length === 1) pick(list[0]!);
         else setMatches(list);
-      } finally {
-        if (!cancelled) setSearching(false);
+      } catch {
+        /* non-fatal */
       }
     })();
     return () => {
@@ -186,40 +188,33 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
     setSearch(m.sku);
     setMatches([]);
     setMessage(null);
-    setError(null);
   }
 
   const bumpQty = (d: number) => setQty((q) => Math.max(1, Math.min(500, q + d)));
-
-  const copyZpl = useCallback(async () => {
-    if (!batchZpl) return setError("Select a product first.");
-    try {
-      await navigator.clipboard.writeText(batchZpl);
-      setMessage(`Copied full ZPL — ${qty} label(s), ${batchZpl.length} chars.`);
-    } catch {
-      setMessage("Clipboard blocked — open Show ZPL to copy manually.");
-    }
-  }, [batchZpl, qty]);
-
   const stopTimer = useCallback(() => {
     if (timerRef.current) window.clearInterval(timerRef.current);
     timerRef.current = null;
     if (startRef.current) setElapsedMs(Date.now() - startRef.current);
   }, []);
 
+  const copyZpl = useCallback(async () => {
+    if (!batchZpl) return setMessage({ text: "Select a product first.", ok: false });
+    try {
+      await navigator.clipboard.writeText(batchZpl);
+      setMessage({ text: `Copied full ZPL — ${qty} label(s), ${batchZpl.length} chars.`, ok: true });
+    } catch {
+      setMessage({ text: "Clipboard blocked — open Show ZPL to copy manually.", ok: false });
+    }
+  }, [batchZpl, qty]);
+
   const onPrint = useCallback(async () => {
     setMessage(null);
-    setError(null);
     setLastJob([]);
-    if (!selected || !olaItem) return setError("Select a product from search.");
-
+    if (!selected || !olaItem) return setMessage({ text: "Select a product from search.", ok: false });
     setPhase("ENCODING");
     setElapsedMs(0);
     try {
       if (rfid) {
-        // Commission (DB encode + audit), then print the returned ZPL straight to
-        // the network Zebra (192.168.1.3). Bin optional: null = inherit the bin
-        // where this UPC already lives, else unassigned.
         const { host, port, uri } = parsePrinterLine(printerLine);
         const res = await fetch("/api/rfid/commission", {
           method: "POST",
@@ -247,7 +242,7 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
         if (!res.ok) {
           stopTimer();
           setPhase("ERROR");
-          return setError(data.error ?? "Commission failed");
+          return setMessage({ text: data.error ?? "Commission failed", ok: false });
         }
         const inserted = data.inserted ?? [];
         setPhase("PRINTING");
@@ -273,14 +268,13 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
         setPhase("SUCCESS");
         setLastJob(inserted.map((r) => r.epc));
         const stock = data.status_final ?? (addStock ? "in-stock" : "commissioned");
-        setMessage(
-          printerOk
-            ? `Created ${inserted.length} tag(s) — ${stock}. Sent ${inserted.length} job(s) to ${printUrl}. Audit: rfid_print.`
+        setMessage({
+          ok: printerOk,
+          text: printerOk
+            ? `Created ${inserted.length} tag(s) — ${stock}. Sent to ${printUrl}. Audit: rfid_print.`
             : `Created ${inserted.length} tag(s) — ${stock}. Printer unreachable (${printUrl}): ${printerErr}. Items saved.`,
-        );
+        });
       } else {
-        // Non-RFID: the label printer isn't a network printer, so it prints via
-        // PrintNode (cloud → local client → printer). No EPC, no placement.
         setPhase("PRINTING");
         const res = await fetch("/api/printnode/print", {
           method: "POST",
@@ -298,329 +292,272 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
         if (!res.ok) {
           stopTimer();
           setPhase("ERROR");
-          return setError(data.error ?? "PrintNode submit failed");
+          return setMessage({ text: data.error ?? "PrintNode submit failed", ok: false });
         }
         stopTimer();
         setPhase("SUCCESS");
         setLastJob(Array.from({ length: qty }, (_, i) => `${selected.sku} · label ${i + 1}/${qty}`));
-        setMessage(`Sent ${qty} label(s) to PrintNode (job #${data.jobId}).`);
+        setMessage({ text: `Sent ${qty} label(s) to PrintNode (job #${data.jobId}).`, ok: true });
       }
       window.setTimeout(() => setPhase("IDLE"), 4500);
     } catch {
       stopTimer();
       setPhase("ERROR");
-      setError("Network error");
+      setMessage({ text: "Network error", ok: false });
     }
   }, [selected, olaItem, addStock, binId, rfid, printerLine, companyPrefix, qty, pnPrinterId, nextSerial, stopTimer]);
 
-  // ---- house-style UI ----
-  const cardCls = "rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4";
-  const headCls = "flex items-center gap-2";
-  const h2Cls = "m-0 font-mono text-[0.7rem] font-semibold uppercase tracking-wider text-[var(--wms-muted)]";
-  const stepNo = (n: number) => (
-    <span className="grid h-5 w-5 place-items-center rounded border border-[color-mix(in_srgb,var(--wms-accent)_40%,var(--wms-border))] bg-[color-mix(in_srgb,var(--wms-accent)_16%,var(--wms-surface-elevated))] font-mono text-[0.6rem] font-bold text-[var(--wms-accent)]">
-      {n}
-    </span>
-  );
+  const toggleTheme = () => {
+    const el = document.documentElement;
+    el.dataset.theme = el.dataset.theme === "light" ? "dark" : "light";
+  };
 
-  const activeIdx = phase === "ERROR" ? 0 : Math.max(0, STEPS.indexOf(phase));
-  const stepLabel = (p: Phase) =>
-    p === "ENCODING" ? (rfid ? "Encoding" : "Sending") : p === "IDLE" ? "Idle (ready)" : p[0] + p.slice(1).toLowerCase();
+  const activeIdx = phase === "ERROR" ? 0 : Math.max(0, STEPS.findIndex((s) => s.p === phase));
+  const mmss = `${String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:${String(Math.floor(elapsedMs / 1000) % 60).padStart(2, "0")}`;
   const note =
     phase === "ENCODING"
-      ? rfid
-        ? "Commission API: DB encode → audit…"
-        : "Building ZPL…"
+      ? rfid ? "Commission API: DB encode → audit…" : "Building ZPL…"
       : phase === "PRINTING"
-        ? rfid
-          ? `Printing to ${parsePrinterLine(printerLine).host}…`
-          : "PrintNode → local client → printer…"
+        ? rfid ? `Printing to ${parsePrinterLine(printerLine).host}…` : "PrintNode → local client → printer…"
         : phase === "SUCCESS"
-          ? rfid
-            ? "Job complete — rfid_print audit written."
-            : "Job complete — sent to PrintNode."
-          : phase === "ERROR"
-            ? "Job aborted — see message below."
-            : rfid
-              ? "Ready — select a SKU and print tags."
-              : "Ready — select a SKU and print labels.";
+          ? rfid ? "Job complete — rfid_print audit written." : "Job complete — sent to PrintNode."
+          : phase === "ERROR" ? "Job aborted — see message below."
+            : rfid ? "Ready — select a SKU and run print & commission." : "Ready — select a SKU and print labels.";
 
   return (
-    <div className="space-y-4">
-      {/* 1 — find product */}
-      <section className={cardCls}>
-        <div className={headCls}>
-          {stepNo(1)}
-          <h2 className={h2Cls}>Find product</h2>
+    <div className="shell">
+      <div className="topbar">
+        <div className="brand">
+          <span className="k">Carbon WMS · Tags &amp; Labels</span>
+          <span className="t">{rfid ? "RFID commissioning console" : "Label printing console"}</span>
         </div>
-        <p className="mt-1.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-          System ID · SKU · UPC / EAN · or matrix description — type 2+ characters.
-        </p>
-        <div className="relative mt-2.5">
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              if (selected && e.target.value !== selected.sku) setSelected(null);
-            }}
-            placeholder="Search catalog…"
-            autoComplete="off"
-            className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] focus:border-[var(--wms-accent)]/50 focus:outline-none focus:ring-1 focus:ring-[var(--wms-accent)]/30"
-          />
-          {searching ? <p className="mt-1.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">Searching…</p> : null}
-          {matches.length > 0 ? (
-            <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl">
-              {matches.map((m) => (
-                <li key={m.id}>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      pick(m);
-                    }}
-                    className="w-full px-3 py-1.5 text-left font-mono text-xs hover:bg-[color-mix(in_srgb,var(--wms-accent)_12%,var(--wms-surface-elevated))]"
-                  >
-                    <span className="font-semibold text-[var(--wms-accent)]">{m.sku}</span>
-                    <span className="text-[var(--wms-muted)]">
-                      {" "}
-                      · {m.color ?? "—"} · sz {m.size ?? "—"} · ${Math.trunc(Number(m.price) || 0)}
-                    </span>
-                    <br />
-                    <span className="text-[var(--wms-muted)]">
-                      UPC {m.upc ?? "—"} · {m.description ?? "—"}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-        {selected ? (
-          <div className="mt-2.5 rounded-md border border-[var(--wms-accent)]/35 bg-[color-mix(in_srgb,var(--wms-accent)_9%,var(--wms-surface))] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]">
-            <span className="font-bold text-[var(--wms-accent)]">{selected.sku}</span>
-            <span className="text-[var(--wms-muted)]"> · </span>
-            {selected.description ?? "—"}
-            <span className="mt-1 block text-[var(--wms-muted)]">
-              {selected.color ?? "—"} · size {selected.size ?? "—"} · ${Math.trunc(Number(selected.price) || 0)} · UPC{" "}
-              {selected.upc ?? "—"} · System ID {selected.ls_system_id}
-            </span>
-          </div>
-        ) : null}
-      </section>
-
-      {/* 2 — quantity (+ placement, RFID only) */}
-      <section className={cardCls}>
-        <div className={headCls}>
-          {stepNo(2)}
-          <h2 className={h2Cls}>{rfid ? "Quantity & placement" : "Quantity"}</h2>
-        </div>
-        <div className={`mt-3 grid gap-3 ${rfid ? "grid-cols-2" : "grid-cols-1"}`}>
-          <div>
-            <span className="mb-1.5 block font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">Quantity</span>
-            <div className="flex h-10 items-stretch overflow-hidden rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]">
-              <button type="button" onClick={() => bumpQty(-1)} className="grid w-10 place-items-center text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-accent)_14%,transparent)]" aria-label="Decrease">
-                <Minus className="h-4 w-4" />
-              </button>
-              <input
-                type="number"
-                min={1}
-                max={500}
-                value={qty}
-                onChange={(e) => setQty(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
-                className="w-full min-w-0 flex-1 border-0 bg-transparent text-center font-mono text-base tabular-nums text-[var(--wms-fg)] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-              />
-              <button type="button" onClick={() => bumpQty(1)} className="grid w-10 place-items-center text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-accent)_14%,transparent)]" aria-label="Increase">
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-          {rfid ? (
-            <div>
-              <span className="mb-1.5 block font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">Add to inventory</span>
-              <button type="button" onClick={() => setAddStock((v) => !v)} className="flex h-10 w-full items-center justify-center gap-2.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]">
-                <span className={`relative h-5 w-9 rounded-full transition ${addStock ? "bg-[var(--wms-accent)]" : "bg-[color-mix(in_srgb,var(--wms-muted)_40%,transparent)]"}`}>
-                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${addStock ? "left-[1.15rem]" : "left-0.5"}`} />
-                </span>
-                <span className="font-mono text-xs text-[var(--wms-fg)]">{addStock ? "On" : "Off"}</span>
-              </button>
-            </div>
-          ) : null}
-        </div>
-        {rfid && addStock ? (
-          <label className="mt-3 block">
-            <span className="mb-1.5 block font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">Bin (optional)</span>
-            <select value={binId} onChange={(e) => setBinId(e.target.value)} className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]">
-              <option value="">— Auto (where its UPC lives) —</option>
-              {bins.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.code}
-                </option>
-              ))}
-            </select>
-            <span className="mt-1 block font-mono text-[0.55rem] text-[var(--wms-muted)]">
-              Leave on Auto: the tag joins the bin its UPC already occupies, or stays unassigned.
-            </span>
-          </label>
-        ) : null}
-      </section>
-
-      {/* 3 — print */}
-      <section className={cardCls}>
-        <div className={headCls}>
-          {stepNo(3)}
-          <h2 className={h2Cls}>{rfid ? "Encode & print" : "Print"}</h2>
-        </div>
-        <div className="mt-3 flex gap-2">
-          <button type="button" onClick={() => (batchZpl ? setZplOpen(true) : setError("Select a product first."))} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] py-2 font-mono text-xs font-medium text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/50">
-            <Code2 className="h-4 w-4" /> Show ZPL
-          </button>
-          <button type="button" onClick={() => void copyZpl()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] py-2 font-mono text-xs font-medium text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/50">
-            <Copy className="h-4 w-4" /> Copy ZPL
-          </button>
-        </div>
-        <button type="button" disabled={!selected || busy} onClick={() => void onPrint()} className="wms-btn-primary mt-2.5 inline-flex w-full font-mono disabled:cursor-not-allowed disabled:opacity-40">
-          <Printer className="h-4 w-4" strokeWidth={2} />
-          Print tag
+        <div className="spacer" />
+        <span className="pill">
+          <span className="dot" /> {rfid ? "192.168.1.3 · PSTPRNT" : "PrintNode · cloud"}
+        </span>
+        <button type="button" className="ghost-btn" onClick={toggleTheme}>
+          <svg className="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d={I.theme} /></svg>
+          Theme
         </button>
-        {error ? <p className="mt-2.5 font-mono text-xs text-[var(--wms-status-danger-fg)]">{error}</p> : null}
-        {message ? <p className="mt-2.5 font-mono text-xs font-medium text-[var(--wms-accent)]">{message}</p> : null}
-      </section>
+        <button type="button" className="ghost-btn" onClick={() => setLogsOpen(true)}>
+          <svg className="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8M8 17h6" /></svg>
+          Print logs
+        </button>
+      </div>
 
-      {/* preview */}
-      <section className={cardCls}>
-        <div className={headCls}>
-          <h2 className={h2Cls}>Label preview</h2>
-          <span className="font-mono text-[0.6rem] normal-case text-[var(--wms-muted)]">· rendered from live ZPL</span>
-        </div>
-        <div className="mt-3 grid place-items-center">
-          <OlaLabelCanvas item={olaItem} media={mode} serial={nextSerial} />
-        </div>
-      </section>
+      <h1 className="page">Print tags</h1>
+      <p className="page-sub">
+        {rfid
+          ? "Commission RFID hang-tags: find the product, set quantity and placement, preview the tag exactly as it prints, then encode & print in one pass. Every job is SGTIN-encoded and audit-logged (rfid_print)."
+          : "Print non-RFID hang-tags on 2″ × 3″ stock: find the product, set quantity, preview the tag exactly as it prints, then send to PrintNode. Same artwork as RFID tags — no chip encode."}
+      </p>
 
-      {/* status */}
-      <section className={cardCls}>
-        <div className="flex items-center justify-between gap-3">
-          <h2 className={h2Cls}>{rfid ? "RFID task status" : "Print status"}</h2>
-          <span className={`font-mono text-sm tabular-nums ${phase === "IDLE" ? "text-[var(--wms-muted)]" : "font-semibold text-[var(--wms-accent)]"}`}>
-            {String(Math.floor(elapsedMs / 60000)).padStart(2, "0")}:{String(Math.floor(elapsedMs / 1000) % 60).padStart(2, "0")}
-          </span>
-        </div>
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          {STEPS.map((p, i) => {
-            const done = phase !== "ERROR" && i < activeIdx;
-            const current = phase !== "ERROR" && i === activeIdx;
-            return (
-              <div
-                key={p}
-                className={`flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wide ${
-                  done
-                    ? "border-emerald-500/40 bg-emerald-500/10 font-medium text-emerald-200"
-                    : current
-                      ? "border-[var(--wms-accent)]/55 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] font-semibold text-[var(--wms-accent)]"
-                      : "border-[var(--wms-border)] text-[var(--wms-muted)]"
-                }`}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${done ? "bg-emerald-400" : current ? "animate-pulse bg-[var(--wms-accent)]" : "bg-[var(--wms-muted)]"}`} />
-                {stepLabel(p)}
+      <div className="tabs" role="tablist">
+        <Link href="/tags-labels/print/rfid" role="tab" className={`tab ${rfid ? "active" : ""}`}>
+          <span className="tdot" />RFID tags
+        </Link>
+        <Link href="/tags-labels/print/non-rfid" role="tab" className={`tab ${!rfid ? "active" : ""}`}>
+          <span className="tdot" />Non-RFID tags
+        </Link>
+      </div>
+
+      <div className="grid">
+        {/* LEFT */}
+        <div>
+          {/* 1 — find */}
+          <section className="card m-find">
+            <div className="card-h"><span className="step-no">1</span><h2>Find product</h2></div>
+            <p className="hint">System ID · SKU · UPC / EAN · or matrix description — type 2+ characters.</p>
+            <div className="search-wrap">
+              <input
+                className="input mono"
+                type="search"
+                placeholder="Search catalog…"
+                autoComplete="off"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  if (selected && e.target.value !== selected.sku) setSelected(null);
+                }}
+              />
+              {matches.length > 0 ? (
+                <div className="results">
+                  {matches.map((m) => (
+                    <button key={m.id} type="button" className="result" onMouseDown={(e) => { e.preventDefault(); pick(m); }}>
+                      <span className="sku">{m.sku}</span>
+                      <span className="mut"> · {m.color ?? "—"} · sz {m.size ?? "—"} · ${Math.trunc(Number(m.price) || 0)}</span>
+                      <br />
+                      <span className="mut">UPC {m.upc ?? "—"} · {m.description ?? "—"}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            {selected ? (
+              <div className="selected">
+                <span className="sku">{selected.sku}</span> <span className="mut">·</span> {selected.description ?? "—"}
+                <div className="row2">
+                  {selected.color ?? "—"} · size {selected.size ?? "—"} · ${Math.trunc(Number(selected.price) || 0)} · UPC{" "}
+                  {selected.upc ?? "—"} · System ID {selected.ls_system_id}
+                </div>
               </div>
-            );
-          })}
-        </div>
-        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[var(--wms-surface-elevated)]">
-          <div className={`h-full transition-all duration-300 ${phase === "ERROR" ? "bg-red-500/70" : "bg-[var(--wms-accent)]"}`} style={{ width: phase === "ERROR" ? "100%" : ["0%", "33%", "66%", "100%"][activeIdx] }} />
-        </div>
-        <p className="mt-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">{note}</p>
-        {lastJob.length > 0 ? (
-          <div className="mt-2.5 max-h-36 overflow-auto border-t border-[var(--wms-border)]/70 pt-2">
-            <p className="font-mono text-[0.55rem] uppercase tracking-wider text-[var(--wms-muted)]">
-              {rfid ? "Last job — EPCs (hex)" : "Last job — labels sent"}
-            </p>
-            <ul className="mt-1 space-y-0.5 font-mono text-[0.6rem] text-[var(--wms-accent)]">
-              {lastJob.map((e) => (
-                <li key={e}>{e}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </section>
+            ) : null}
+          </section>
 
-      {/* settings drawer */}
-      <details className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80" open={settingsOpen}>
-        <summary
-          onClick={(e) => {
-            e.preventDefault();
-            setSettingsOpen((v) => !v);
-          }}
-          className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 font-mono text-[0.7rem] font-semibold uppercase tracking-wider text-[var(--wms-muted)]"
-        >
-          <Settings2 className="h-4 w-4" />
-          {rfid ? "RFID / printer settings" : "Printer settings (PrintNode)"}
-          <ChevronDown className={`ml-auto h-4 w-4 transition-transform ${settingsOpen ? "rotate-180" : ""}`} />
-        </summary>
-        <div className="space-y-3 border-t border-[var(--wms-border)] px-4 py-4">
-          {rfid ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
-                  Company prefix (20-bit)
-                  <input readOnly value={companyPrefix} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/60 px-2 py-1.5 font-mono text-sm text-[var(--wms-muted)]" />
-                </label>
-                <label className="block font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
-                  Bit split (item / serial)
-                  <input readOnly value="40 / 36" className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/60 px-2 py-1.5 font-mono text-sm text-[var(--wms-muted)]" />
-                </label>
+          {/* 2 — quantity */}
+          <section className="card m-qty">
+            <div className="card-h"><span className="step-no">2</span><h2>{rfid ? "Quantity & placement" : "Quantity"}</h2></div>
+            <div className="two" style={{ marginTop: 14 }}>
+              <div>
+                <span style={{ display: "block", fontFamily: "'JetBrains Mono',monospace", fontSize: "13.5px", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--wms-muted)", marginBottom: 7 }}>Quantity</span>
+                <div className="stepper">
+                  <button type="button" onClick={() => bumpQty(-1)}>−</button>
+                  <input className="mono" type="number" min={1} max={500} value={qty} onChange={(e) => setQty(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} />
+                  <button type="button" onClick={() => bumpQty(1)}>+</button>
+                </div>
               </div>
-              <label className="block font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
-                Printer (host:port / URI)
-                <input value={printerLine} onChange={(e) => setPrinterLine(e.target.value)} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-sm text-[var(--wms-fg)]" />
-              </label>
-            </>
-          ) : (
-            <>
-              <label className="block font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
-                PrintNode printer
-                <select value={pnPrinterId} onChange={(e) => setPnPrinterId(e.target.value ? Number(e.target.value) : "")} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-sm text-[var(--wms-fg)]">
-                  {pnPrinters.length === 0 ? <option value="">(server default)</option> : null}
-                  {pnPrinters.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
+              {rfid ? (
+                <div>
+                  <span style={{ display: "block", fontFamily: "'JetBrains Mono',monospace", fontSize: "13.5px", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--wms-muted)", marginBottom: 7 }}>Add to inventory</span>
+                  <div className={`toggle ${addStock ? "on" : ""}`} onClick={() => setAddStock((v) => !v)}>
+                    <span className="switch" />
+                    <span className="lab">{addStock ? "On" : "Off"}</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {rfid && addStock ? (
+              <label className="fld">
+                <span>Bin (optional)</span>
+                <select className="input" value={binId} onChange={(e) => setBinId(e.target.value)}>
+                  <option value="">— Auto (where its UPC lives) —</option>
+                  {bins.map((b) => (
+                    <option key={b.id} value={b.id}>{b.code}</option>
                   ))}
                 </select>
               </label>
-              <p className="font-mono text-[0.6rem] leading-relaxed text-[var(--wms-muted)]">
-                The non-RFID label printer isn&apos;t a network printer, so it prints via PrintNode.
-              </p>
-            </>
-          )}
-        </div>
-      </details>
+            ) : null}
+          </section>
 
-      {/* Show ZPL modal */}
+          {/* 3 — print */}
+          <section className="card m-print">
+            <div className="card-h"><span className="step-no">3</span><h2>{rfid ? "Encoding & print" : "Print"}</h2></div>
+            <p className="hint" style={{ marginTop: 8 }}>
+              {rfid
+                ? "SGTIN-encoded + audit-logged on print. Inspect or copy the raw Zebra ZPL before sending."
+                : "Printed via PrintNode. Inspect or copy the raw ZPL before sending."}
+            </p>
+            <div className="actions">
+              <button type="button" className="ghost-btn" onClick={() => (batchZpl ? setZplOpen(true) : setMessage({ text: "Select a product first.", ok: false }))}>
+                <svg className="icon" viewBox="0 0 24 24"><path d="M16 18l6-6-6-6" /><path d="M8 6l-6 6 6 6" /></svg>
+                Show ZPL
+              </button>
+              <button type="button" className="ghost-btn" onClick={() => void copyZpl()}>
+                <svg className="icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+                Copy ZPL
+              </button>
+            </div>
+            <button type="button" className="primary" disabled={!selected || busy} onClick={() => void onPrint()}>
+              <svg className="icon" viewBox="0 0 24 24" style={{ width: 17, height: 17 }}><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
+              Print tag
+            </button>
+            {message ? <p className={`msg ${message.ok ? "ok" : "err"}`}>{message.text}</p> : null}
+          </section>
+
+          {/* settings drawer */}
+          <details className="drawer">
+            <summary>
+              <svg className="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9z" /></svg>
+              {rfid ? "RFID / printer settings" : "Printer settings (PrintNode)"}
+            </summary>
+            <div className="body">
+              {rfid ? (
+                <>
+                  <div className="two">
+                    <label className="fld" style={{ marginTop: 0 }}><span>Company prefix (20-bit)</span><input className="input ro" value={companyPrefix} readOnly /></label>
+                    <div className="two" style={{ gap: 10 }}>
+                      <label className="fld" style={{ marginTop: 0 }}><span>Bits — item</span><input className="input ro" value="40" readOnly /></label>
+                      <label className="fld" style={{ marginTop: 0 }}><span>Bits — serial</span><input className="input ro" value="36" readOnly /></label>
+                    </div>
+                  </div>
+                  <label className="fld"><span>Printer (host:port / URI)</span><input className="input" value={printerLine} onChange={(e) => setPrinterLine(e.target.value)} /></label>
+                  <p className="locknote">RFID hang-tag (5 × 6.5 cm), Code 39 + chip encode (^RFW). Prints straight to the network Zebra over the LAN.</p>
+                </>
+              ) : (
+                <>
+                  <label className="fld"><span>PrintNode printer</span>
+                    <select className="input" value={pnPrinterId} onChange={(e) => setPnPrinterId(e.target.value ? Number(e.target.value) : "")}>
+                      {pnPrinters.length === 0 ? <option value="">(server default)</option> : null}
+                      {pnPrinters.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                    </select>
+                  </label>
+                  <p className="locknote">The non-RFID label printer isn&apos;t a network printer, so it prints via PrintNode (cloud → local client → printer). Same artwork as RFID — no chip encode.</p>
+                </>
+              )}
+            </div>
+          </details>
+        </div>
+
+        {/* RIGHT */}
+        <div>
+          <section className="card m-status">
+            <div className="status-head">
+              <div className="card-h" style={{ margin: 0 }}><h2>{rfid ? "RFID task status" : "Print status"}</h2></div>
+              <span className={`timer ${phase !== "IDLE" ? "live" : ""}`}>{mmss}</span>
+            </div>
+            <div className="steps">
+              {STEPS.map((s, i) => {
+                const cls = phase === "ERROR" ? "" : i < activeIdx ? "done" : i === activeIdx ? "current" : "";
+                const label = s.p === "ENCODING" && !rfid ? "Sending" : s.label;
+                return (
+                  <div key={s.p} className={`chip ${cls}`}><span className="b" />{label}</div>
+                );
+              })}
+            </div>
+            <div className="progress">
+              <i style={{ width: phase === "ERROR" ? "100%" : ["0%", "33%", "66%", "100%"][activeIdx], background: phase === "ERROR" ? "#f87171" : undefined }} />
+            </div>
+            <p className="status-note">{note}</p>
+            {lastJob.length > 0 ? (
+              <div className="epc-list">
+                <p style={{ margin: "0 0 4px", fontFamily: "'JetBrains Mono',monospace", fontSize: "11px", textTransform: "uppercase", letterSpacing: ".06em", color: "var(--wms-muted)" }}>
+                  {rfid ? "Last job — EPCs (hex)" : "Last job — labels sent"}
+                </p>
+                <ul>{lastJob.map((e) => (<li key={e}>{e}</li>))}</ul>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="card m-preview">
+            <div className="card-h"><h2>Label preview <span style={{ color: "var(--wms-muted)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>· rendered from live ZPL</span></h2></div>
+            <OlaLabelCanvas item={olaItem} media={mode} serial={nextSerial} />
+          </section>
+        </div>
+      </div>
+
+      {/* ZPL modal */}
       {zplOpen ? (
         <>
-          <button type="button" aria-label="Close" className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm" onClick={() => setZplOpen(false)} />
-          <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-            <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
-              <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
-                <h3 className="font-mono text-sm font-semibold text-[var(--wms-fg)]">
-                  Raw ZPL <span className="font-normal text-[var(--wms-muted)]">· {qty} label(s) · {batchZpl.length} chars</span>
-                </h3>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => void copyZpl()} className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.7rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]">
-                    <Copy className="h-3.5 w-3.5" /> Copy
+          <div className="overlay" onClick={() => setZplOpen(false)} />
+          <div className="modal">
+            <div className="box">
+              <div className="mh">
+                <h3>Raw ZPL <span className="mono" style={{ color: "var(--wms-muted)", fontWeight: 400, fontSize: 12 }}>· {qty} label(s) · {batchZpl.length} chars</span></h3>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button type="button" className="ghost-btn" onClick={() => void copyZpl()}>
+                    <svg className="icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+                    Copy
                   </button>
-                  <button type="button" onClick={() => setZplOpen(false)} className="rounded p-1.5 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]" aria-label="Close">
-                    <X className="h-5 w-5" />
-                  </button>
+                  <button type="button" className="ghost-btn" onClick={() => setZplOpen(false)}>Close</button>
                 </div>
               </div>
-              <pre className="m-0 overflow-auto whitespace-pre px-4 py-3 font-mono text-xs leading-relaxed text-[var(--wms-fg)]">{batchZpl}</pre>
+              <div className="mb"><pre className="zpl-pre mono">{batchZpl}</pre></div>
             </div>
           </div>
         </>
       ) : null}
+
+      <PrintLogsModal open={logsOpen} onClose={() => setLogsOpen(false)} />
     </div>
   );
 }
