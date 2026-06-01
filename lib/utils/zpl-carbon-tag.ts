@@ -134,6 +134,23 @@ export function epcBitTotal(s: CarbonTagSettings): number {
   return s.companyPrefixBits + s.itemNumberBits + s.serialBits;
 }
 
+/**
+ * Strip every RFID chip-encode command from a label so the SAME visual tag
+ * prints cleanly on a NON-RFID printer (e.g. the Carbon PrintNode Jadens),
+ * where `^RB`/`^RFW` would VOID the label or error. Removes the `^RB`
+ * transponder setup and the `^RFW` write block (and defensively `^RFR` read,
+ * `^RS`/`^RZ` RFID setup). The visible layout — boxes, barcode, text — is
+ * untouched. The EPC still lives in the DB commission record; only the
+ * physical chip write is omitted.
+ */
+export function stripRfidEncoding(zpl: string): string {
+  return String(zpl ?? "")
+    .replace(/\^RB[^]*?\^FS\r?\n?/g, "")
+    .replace(/\^RF[WR][^]*?\^FS\r?\n?/g, "")
+    .replace(/\^R[SZ][^]*?\^FS\r?\n?/g, "")
+    .replace(/\n{2,}/g, "\n");
+}
+
 function mask(bits: number): bigint {
   return (BigInt(1) << BigInt(bits)) - BigInt(1);
 }

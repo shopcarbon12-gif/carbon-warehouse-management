@@ -12,6 +12,7 @@ import {
   buildOlaHangtagZpl,
   buildOlaHangtagZplBatch,
 } from "@/lib/utils/zpl-ola-hangtag";
+import { stripRfidEncoding } from "@/lib/utils/zpl-carbon-tag";
 
 export const dynamic = "force-dynamic";
 
@@ -84,14 +85,25 @@ export async function POST(req: Request) {
 
   // Prefer raw ZPL (RFID = the commission/zpl-carbon-tag output, calibrated on
   // the printer). Fall back to building the hang-tag here (non-RFID).
+  // The Carbon PrintNode printer is a NON-RFID Jadens, so the chip-encode
+  // commands (^RB/^RFW) in the commission ZPL would VOID/ignore on it. Strip
+  // them and print the same visual tag — the EPC still lives in the DB
+  // commission record. Set PRINTNODE_RFID_PRINTER_ENCODES=true if an
+  // RFID-capable printer is ever attached to PrintNode and the chip should
+  // actually be written.
+  const rfidPrinterEncodes =
+    String(process.env.PRINTNODE_RFID_PRINTER_ENCODES || "").trim().toLowerCase() === "true";
   const zpl =
-    rawZpl ??
-    (serials && serials.length > 0
-      ? serials.map((s) => buildOlaHangtagZpl(item!, s, { includeRfid, companyPrefix: cp })).join("\n")
-      : buildOlaHangtagZplBatch(item!, parsed.data.startSerial ?? 1, qty, {
-          includeRfid,
-          companyPrefix: cp,
-        }));
+    rawZpl !== undefined
+      ? rfidPrinterEncodes
+        ? rawZpl
+        : stripRfidEncoding(rawZpl)
+      : serials && serials.length > 0
+        ? serials.map((s) => buildOlaHangtagZpl(item!, s, { includeRfid, companyPrefix: cp })).join("\n")
+        : buildOlaHangtagZplBatch(item!, parsed.data.startSerial ?? 1, qty, {
+            includeRfid,
+            companyPrefix: cp,
+          });
   const titleSku = item?.sku ?? "tag";
 
   try {
