@@ -654,8 +654,8 @@ export function CommandCenter() {
               Integrations
             </Link>
             {" · "}
-            <Link className="text-[var(--wms-accent)] hover:underline" href="/rfid/commissioning">
-              Commissioning
+            <Link className="text-[var(--wms-accent)] hover:underline" href="/tags-labels/print">
+              Print tags
             </Link>
           </div>
           <ul className="divide-y divide-[var(--wms-border)]/80">

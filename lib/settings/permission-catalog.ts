@@ -30,7 +30,7 @@ export const APP_PERMISSION_PAGES: PermissionPageDef[] = [
     sections: [
       { id: "cycle_counts", label: "Cycle counts" },
       { id: "epc_tracker", label: "EPC tracker" },
-      { id: "commissioning", label: "Print / Commission" },
+      { id: "commissioning", label: "Print tags" },
       { id: "encode_items", label: "Encode Items (re-encode chip)" },
       { id: "antenna_test", label: "Antenna Test (diagnostic)" },
     ],

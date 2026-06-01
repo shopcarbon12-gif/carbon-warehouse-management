@@ -4,14 +4,14 @@ import { getSession } from "@/lib/get-session";
 
 export const dynamic = "force-dynamic";
 
-export default async function CommissioningPage() {
+export default async function PrintTagsPage() {
   const session = await getSession();
   if (!session) redirect("/login");
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-[var(--wms-fg)]">
-          Print / commission
+          Print tags
         </h1>
         <p className="mt-2 max-w-2xl font-mono text-sm text-[var(--wms-muted)]">
           Studio-style RFID commissioning: broad catalog lookup, 812×594 label preview, printer

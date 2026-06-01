@@ -68,7 +68,6 @@ const sections: NavSection[] = [
     isActiveSection: (p) =>
       p.startsWith("/inventory/catalog") ||
       p.startsWith("/inventory/categories") ||
-      p.startsWith("/inventory/bulk-status") ||
       p.startsWith("/inventory/bulk-import") ||
       p.startsWith("/inventory/locations") ||
       p.startsWith("/inventory/cycle-counts") ||
@@ -80,17 +79,24 @@ const sections: NavSection[] = [
       { href: "/inventory/cycle-counts", label: "Cycle Counts", icon: ScanLine },
       { href: "/inventory/transfers/out", label: "Transfer Out", icon: ArrowRightLeft },
       { href: "/inventory/transfers/in", label: "Transfer In", icon: FolderInput },
-      { href: "/inventory/bulk-status", label: "Bulk status", icon: SlidersHorizontal },
       { href: "/inventory/bulk-import", label: "Bulk Import", icon: PackagePlus },
+    ],
+  },
+  {
+    id: "tags-labels",
+    label: "Tags & Labels",
+    isActiveSection: (p) => p.startsWith("/tags-labels"),
+    items: [
+      { href: "/tags-labels/print", label: "Print tags", icon: Printer },
+      { href: "/tags-labels/bulk-geiger", label: "Bulk Geiger", icon: Search },
+      { href: "/tags-labels/encode-items", label: "Encode Items", icon: Tags },
+      { href: "/tags-labels/bulk-status", label: "Bulk status", icon: SlidersHorizontal },
     ],
   },
   {
     id: "rfid",
     label: "RFID & Hardware",
     isActiveSection: (p) =>
-      p.startsWith("/rfid/bulk-geiger") ||
-      p.startsWith("/rfid/commissioning") ||
-      p.startsWith("/rfid/encode-items") ||
       p.startsWith("/rfid/exceptions") ||
       p.startsWith("/rfid/devices") ||
       p.startsWith("/rfid/hardware-config") ||
@@ -99,9 +105,6 @@ const sections: NavSection[] = [
       // Section still highlights when an /antenna_test deep-link is open.
       p.startsWith("/antenna_test"),
     items: [
-      { href: "/rfid/bulk-geiger", label: "Bulk Geiger", icon: Search },
-      { href: "/rfid/commissioning", label: "Print / Commission", icon: Printer },
-      { href: "/rfid/encode-items", label: "Encode Items", icon: Tags },
       {
         href: "/rfid/exceptions",
         label: "Exceptions",

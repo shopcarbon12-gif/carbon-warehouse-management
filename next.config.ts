@@ -74,6 +74,19 @@ const nextConfig: NextConfig = {
         source: "/infrastructure/settings/:path*",
         destination: "/settings/general-settings/:path*",
       },
+      /**
+       * Tags & Labels regroup (2026-06-01): Print/Commission, Bulk Geiger,
+       * Encode Items and Bulk status moved out of /rfid/* and /inventory/*
+       * into the dedicated /tags-labels/* tab. /rfid/commissioning → /print.
+       */
+      { source: "/rfid/commissioning", destination: "/tags-labels/print" },
+      { source: "/rfid/commissioning/:path*", destination: "/tags-labels/print/:path*" },
+      { source: "/rfid/bulk-geiger", destination: "/tags-labels/bulk-geiger" },
+      { source: "/rfid/bulk-geiger/:path*", destination: "/tags-labels/bulk-geiger/:path*" },
+      { source: "/rfid/encode-items", destination: "/tags-labels/encode-items" },
+      { source: "/rfid/encode-items/:path*", destination: "/tags-labels/encode-items/:path*" },
+      { source: "/inventory/bulk-status", destination: "/tags-labels/bulk-status" },
+      { source: "/inventory/bulk-status/:path*", destination: "/tags-labels/bulk-status/:path*" },
     ].map((r) => ({ ...r, permanent: true }));
 
     if (!basePath) return menuRegroup;

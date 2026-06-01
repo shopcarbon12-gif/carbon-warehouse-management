@@ -170,11 +170,11 @@ export function PrintActionsModal({ open, epc, onClose }: Props) {
               Uses the label dimensions and ZPL format from{" "}
               <a
                 className="text-[var(--wms-accent)] hover:underline"
-                href="/rfid/commissioning"
+                href="/tags-labels/print"
                 target="_blank"
                 rel="noopener"
               >
-                /rfid/commissioning
+                /tags-labels/print
               </a>
               . This modal does not change any settings.
             </p>
