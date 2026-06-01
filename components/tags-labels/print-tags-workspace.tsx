@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildOlaHangtagZplBatch, type OlaLabelItem } from "@/lib/utils/zpl-ola-hangtag";
+import { type OlaLabelItem } from "@/lib/utils/zpl-ola-hangtag";
+import type { CarbonTagInput } from "@/lib/utils/zpl-carbon-tag";
+import {
+  generateNonRfidTag203Batch,
+  generateRfidTagPreviewBatch,
+} from "@/lib/utils/zpl-carbon-tag-203";
 import { PrintLogsModal } from "@/components/rfid/commissioning/print-logs-modal";
 import { OlaLabelCanvas } from "./ola-label-canvas";
 
@@ -162,10 +167,29 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
     };
   }, [selected]);
 
-  const batchZpl = useMemo(
-    () => (olaItem ? buildOlaHangtagZplBatch(olaItem, nextSerial, qty, { includeRfid: rfid, companyPrefix }) : ""),
-    [olaItem, nextSerial, qty, rfid, companyPrefix],
-  );
+  // ZPL CODE preview == what actually prints: RFID tab mirrors the commission
+  // print (generateCarbonTagZpl, 300dpi Zebra .3); non-RFID tab is the 203dpi
+  // Jadens .220 tag with the box icon. sizesAvailable is filled server-side at
+  // commission, so the preview's sizes-run is blank.
+  const carbonInput: CarbonTagInput | null = useMemo(() => {
+    if (!selected) return null;
+    return {
+      itemName: selected.description ?? "",
+      color: selected.color ?? "",
+      size: selected.size ?? "",
+      upc: selected.upc ?? "",
+      customSku: selected.sku,
+      retailPrice: selected.price ?? "0",
+      sizesAvailable: "",
+    };
+  }, [selected]);
+
+  const batchZpl = useMemo(() => {
+    if (!carbonInput || !selected) return "";
+    return rfid
+      ? generateRfidTagPreviewBatch(carbonInput, selected.ls_system_id, companyPrefix, nextSerial, qty)
+      : generateNonRfidTag203Batch(carbonInput, qty);
+  }, [carbonInput, selected, rfid, companyPrefix, nextSerial, qty]);
 
   function pick(m: Match) {
     setSelected(m);
@@ -194,7 +218,7 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
   const onPrint = useCallback(async () => {
     setMessage(null);
     setLastJob([]);
-    if (!selected || !olaItem) return setMessage({ text: "Select a product from search.", ok: false });
+    if (!selected || !olaItem || !carbonInput) return setMessage({ text: "Select a product from search.", ok: false });
     setPhase("ENCODING");
     setElapsedMs(0);
     try {
@@ -263,7 +287,7 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
         // the network label printer (192.168.1.220), browser-direct.
         const { host, port, uri } = parsePrinterLine(printerLine);
         setPhase("PRINTING");
-        const zpl = buildOlaHangtagZplBatch(olaItem, nextSerial, qty, { includeRfid: false, companyPrefix });
+        const zpl = generateNonRfidTag203Batch(carbonInput, qty);
         const printUrl = `http://${host}:${port}/${uri.toLowerCase()}`;
         let printerOk = false;
         let printerErr: string | null = null;
@@ -296,7 +320,7 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
       setPhase("ERROR");
       setMessage({ text: "Network error", ok: false });
     }
-  }, [selected, olaItem, addStock, binId, rfid, printerLine, companyPrefix, qty, nextSerial, stopTimer]);
+  }, [selected, olaItem, carbonInput, addStock, binId, rfid, printerLine, companyPrefix, qty, stopTimer]);
 
   const toggleTheme = () => {
     const el = document.documentElement;
