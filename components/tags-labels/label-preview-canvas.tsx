@@ -36,6 +36,15 @@ const C39: Record<string, string> = {
   S: "NNWNNNWWN", T: "NNNNWNWWN", U: "WWNNNNNNW", V: "NWWNNNNNW", W: "WWWNNNNNN", X: "NWNNWNNNW",
   Y: "WWNNWNNNN", Z: "NWWNWNNNN", "-": "NWNNNNWNW", ".": "WWNNNNWNN", " ": "NWWNNNNWN", "*": "NWNNWNWNN",
 };
+function code39Width(text: string, nw: number): number {
+  let total = 0;
+  for (const ch of `*${text.toUpperCase().replace(/[^0-9A-Z\-. ]/g, "")}*`) {
+    const p = C39[ch] ?? C39["*"];
+    for (let i = 0; i < 9; i += 1) total += (p[i] === "W" ? 3 : 1) * nw;
+    total += nw;
+  }
+  return total;
+}
 function drawCode39(ctx: CanvasRenderingContext2D, x: number, y: number, nw: number, h: number, text: string) {
   const chars = `*${text.toUpperCase().replace(/[^0-9A-Z\-. ]/g, "")}*`.split("");
   let cx = x;
@@ -155,7 +164,8 @@ export function LabelPreviewCanvas({
     const sku = (input.customSku || "").toUpperCase();
     const price = String(Math.trunc(Number.parseFloat(input.retailPrice) || 0));
     const nm = layoutItemName(input.itemName, color, size);
-    const sizeRun = normalizeSizesColumn(input.sizesAvailable ?? "");
+    // sizes-run is filled server-side at commission; don't show the default placeholder
+    const sizeRun = input.sizesAvailable ? normalizeSizesColumn(input.sizesAvailable) : "";
 
     fld(54, 497, 38, null, "TALLA/SIZE", "L");
     fld(161, 529, 100, 515, size, "C");
@@ -166,8 +176,11 @@ export function LabelPreviewCanvas({
     // barcode + human SKU
     if (sku) {
       const bcY = barcodeStartY(sku);
+      const total = code39Width(sku, 2);
       ctx.save();
-      ctx.translate(436, bcY);
+      // translate to the FAR end + rotate -90° so the bars grow back toward bcY
+      // (the +total offset is what was missing — bars were drawn off-canvas).
+      ctx.translate(436, bcY + total);
       ctx.rotate(-Math.PI / 2);
       drawCode39(ctx, 0, 0, 2, 112, sku);
       ctx.restore();
