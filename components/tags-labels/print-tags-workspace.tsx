@@ -28,7 +28,6 @@ const STEPS: { p: Phase; label: string }[] = [
 ];
 
 type BinRow = { id: string; code: string };
-type PnPrinter = { id: number; name: string };
 
 function parsePrinterLine(line: string): { host: string; port: number; uri: string } {
   const m = line.trim().match(/^(.+):(\d+)\s*\/\s*(.+)$/);
@@ -54,9 +53,9 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
   const [bins, setBins] = useState<BinRow[]>([]);
   const [binId, setBinId] = useState("");
 
-  const [printerLine, setPrinterLine] = useState("192.168.1.3:80 / PSTPRNT");
-  const [pnPrinters, setPnPrinters] = useState<PnPrinter[]>([]);
-  const [pnPrinterId, setPnPrinterId] = useState<number | "">("");
+  const [printerLine, setPrinterLine] = useState(
+    rfid ? "192.168.1.3:80 / PSTPRNT" : "192.168.1.220:80 / PSTPRNT",
+  );
 
   const [phase, setPhase] = useState<Phase>("IDLE");
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -108,21 +107,6 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
       }
     })();
   }, []);
-
-  useEffect(() => {
-    if (rfid) return;
-    void (async () => {
-      try {
-        const res = await fetch("/api/printnode/printers");
-        if (!res.ok) return;
-        const list = ((await res.json()) as { printers?: PnPrinter[] }).printers ?? [];
-        setPnPrinters(list);
-        if (list[0]) setPnPrinterId((prev) => (prev === "" ? list[0]!.id : prev));
-      } catch {
-        /* non-fatal */
-      }
-    })();
-  }, [rfid]);
 
   useEffect(() => {
     if (!selected) {
@@ -275,29 +259,36 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
             : `Created ${inserted.length} tag(s) — ${stock}. Printer unreachable (${printUrl}): ${printerErr}. Items saved.`,
         });
       } else {
+        // Non-RFID: no DB encode — build the no-chip ZPL and print straight to
+        // the network label printer (192.168.1.220), browser-direct.
+        const { host, port, uri } = parsePrinterLine(printerLine);
         setPhase("PRINTING");
-        const res = await fetch("/api/printnode/print", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            item: olaItem,
-            qty,
-            includeRfid: false,
-            startSerial: nextSerial,
-            printerId: pnPrinterId === "" ? undefined : pnPrinterId,
-            printerKind: "nonrfid",
-          }),
-        });
-        const data = (await res.json()) as { error?: string; jobId?: number };
-        if (!res.ok) {
-          stopTimer();
-          setPhase("ERROR");
-          return setMessage({ text: data.error ?? "PrintNode submit failed", ok: false });
+        const zpl = buildOlaHangtagZplBatch(olaItem, nextSerial, qty, { includeRfid: false, companyPrefix });
+        const printUrl = `http://${host}:${port}/${uri.toLowerCase()}`;
+        let printerOk = false;
+        let printerErr: string | null = null;
+        try {
+          await fetch(printUrl, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+            body: zpl,
+            mode: "no-cors",
+            signal: AbortSignal.timeout(10_000),
+          });
+          printerOk = true;
+        } catch (e) {
+          printerErr = e instanceof Error ? e.message : "Printer fetch failed";
         }
+        await new Promise((r) => window.setTimeout(r, 1200));
         stopTimer();
         setPhase("SUCCESS");
         setLastJob(Array.from({ length: qty }, (_, i) => `${selected.sku} · label ${i + 1}/${qty}`));
-        setMessage({ text: `Sent ${qty} label(s) to PrintNode (job #${data.jobId}).`, ok: true });
+        setMessage({
+          ok: printerOk,
+          text: printerOk
+            ? `Sent ${qty} label(s) to ${printUrl}.`
+            : `Printer unreachable (${printUrl}): ${printerErr}.`,
+        });
       }
       window.setTimeout(() => setPhase("IDLE"), 4500);
     } catch {
@@ -305,7 +296,7 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
       setPhase("ERROR");
       setMessage({ text: "Network error", ok: false });
     }
-  }, [selected, olaItem, addStock, binId, rfid, printerLine, companyPrefix, qty, pnPrinterId, nextSerial, stopTimer]);
+  }, [selected, olaItem, addStock, binId, rfid, printerLine, companyPrefix, qty, nextSerial, stopTimer]);
 
   const toggleTheme = () => {
     const el = document.documentElement;
@@ -318,14 +309,15 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
     phase === "ENCODING"
       ? rfid ? "Commission API: DB encode → audit…" : "Building ZPL…"
       : phase === "PRINTING"
-        ? rfid ? `Printing to ${parsePrinterLine(printerLine).host}…` : "PrintNode → local client → printer…"
+        ? `Printing to ${parsePrinterLine(printerLine).host}…`
         : phase === "SUCCESS"
-          ? rfid ? "Job complete — rfid_print audit written." : "Job complete — sent to PrintNode."
+          ? rfid ? "Job complete — rfid_print audit written." : "Job complete — sent to printer."
           : phase === "ERROR" ? "Job aborted — see message below."
             : rfid ? "Ready — select a SKU and run print & commission." : "Ready — select a SKU and print labels.";
 
+  const pp = parsePrinterLine(printerLine);
   return (
-    <div className="shell">
+    <div className={`shell ${rfid ? "tab-rfid" : "tab-nonrfid"}`}>
       <div className="topbar">
         <div className="brand">
           <span className="k">Carbon WMS · Tags &amp; Labels</span>
@@ -333,7 +325,7 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
         </div>
         <div className="spacer" />
         <span className="pill">
-          <span className="dot" /> {rfid ? "192.168.1.3 · PSTPRNT" : "PrintNode · cloud"}
+          <span className="dot" /> {pp.host} · {pp.uri}
         </span>
         <button type="button" className="ghost-btn" onClick={toggleTheme}>
           <svg className="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d={I.theme} /></svg>
@@ -349,7 +341,7 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
       <p className="page-sub">
         {rfid
           ? "Commission RFID hang-tags: find the product, set quantity and placement, preview the tag exactly as it prints, then encode & print in one pass. Every job is SGTIN-encoded and audit-logged (rfid_print)."
-          : "Print non-RFID hang-tags on 2″ × 3″ stock: find the product, set quantity, preview the tag exactly as it prints, then send to PrintNode. Same artwork as RFID tags — no chip encode."}
+          : "Print non-RFID hang-tags: find the product, set quantity, preview the tag exactly as it prints, then print to the label printer (192.168.1.220). Same artwork as RFID tags — no chip encode."}
       </p>
 
       <div className="tabs" role="tablist">
@@ -485,13 +477,8 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
                 </>
               ) : (
                 <>
-                  <label className="fld"><span>PrintNode printer</span>
-                    <select className="input" value={pnPrinterId} onChange={(e) => setPnPrinterId(e.target.value ? Number(e.target.value) : "")}>
-                      {pnPrinters.length === 0 ? <option value="">(server default)</option> : null}
-                      {pnPrinters.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
-                    </select>
-                  </label>
-                  <p className="locknote">The non-RFID label printer isn&apos;t a network printer, so it prints via PrintNode (cloud → local client → printer). Same artwork as RFID — no chip encode.</p>
+                  <label className="fld"><span>Printer (host:port / URI)</span><input className="input" value={printerLine} onChange={(e) => setPrinterLine(e.target.value)} /></label>
+                  <p className="locknote">Non-RFID label printer at 192.168.1.220 (network). Same hang-tag artwork as RFID — no chip encode.</p>
                 </>
               )}
             </div>
