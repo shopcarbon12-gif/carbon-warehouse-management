@@ -26,38 +26,55 @@ const MEDIA: Record<Mode, { caption: string; wCm: number; hCm: number }> = {
   nonrfid: { caption: "Non-RFID tag · 2 × 3 in · Zebra .220 · 203 dpi", wCm: 5.08, hCm: 7.62 },
 };
 
-/* Code 39 patterns (visual stand-in for the printed Code 93 — same bar look). */
-const C39: Record<string, string> = {
-  "0": "NNNWWNWNN", "1": "WNNWNNNNW", "2": "NNWWNNNNW", "3": "WNWWNNNNN", "4": "NNNWWNNNW",
-  "5": "WNNWWNNNN", "6": "NNWWWNNNN", "7": "NNNWNNWNW", "8": "WNNWNNWNN", "9": "NNWWNNWNN",
-  A: "WNNNNWNNW", B: "NNWNNWNNW", C: "WNWNNWNNN", D: "NNNNWWNNW", E: "WNNNWWNNN", F: "NNWNWWNNN",
-  G: "NNNNNWWNW", H: "WNNNNWWNN", I: "NNWNNWWNN", J: "NNNNWWWNN", K: "WNNNNNNWW", L: "NNWNNNNWW",
-  M: "WNWNNNNWN", N: "NNNNWNNWW", O: "WNNNWNNWN", P: "NNWNWNNWN", Q: "NNNNNNWWW", R: "WNNNNNWWN",
-  S: "NNWNNNWWN", T: "NNNNWNWWN", U: "WWNNNNNNW", V: "NWWNNNNNW", W: "WWWNNNNNN", X: "NWNNWNNNW",
-  Y: "WWNNWNNNN", Z: "NWWNWNNNN", "-": "NWNNNNWNW", ".": "WWNNNNWNN", " ": "NWWNNNNWN", "*": "NWNNWNWNN",
+/* Code 93 — the symbology the tag ZPL actually uses (^BAB). Each character is a
+ * 9-module pattern (bar,space,bar,space,bar,space widths); the barcode is
+ * *<data><C-check><K-check>* plus a final termination bar. */
+const C93_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+const C93_PATTERNS: Record<string, string> = {
+  "0": "131112", "1": "111213", "2": "111312", "3": "111411", "4": "121113",
+  "5": "121212", "6": "121311", "7": "111114", "8": "131211", "9": "141111",
+  A: "211113", B: "211212", C: "211311", D: "221112", E: "221211", F: "231111",
+  G: "112113", H: "112212", I: "112311", J: "122112", K: "132111", L: "111123",
+  M: "111222", N: "111321", O: "121122", P: "131121", Q: "212112", R: "212211",
+  S: "211122", T: "211221", U: "221121", V: "222111", W: "112122", X: "112221",
+  Y: "122121", Z: "123111", "-": "121131", ".": "311112", " ": "311211",
+  $: "321111", "/": "112131", "+": "113121", "%": "211131", "*": "111141",
 };
-function code39Width(text: string, nw: number): number {
-  let total = 0;
-  for (const ch of `*${text.toUpperCase().replace(/[^0-9A-Z\-. ]/g, "")}*`) {
-    const p = C39[ch] ?? C39["*"];
-    for (let i = 0; i < 9; i += 1) total += (p[i] === "W" ? 3 : 1) * nw;
-    total += nw;
-  }
-  return total;
+function c93Sanitize(text: string): string {
+  return text.toUpperCase().replace(/[^0-9A-Z\-. $/+%]/g, "");
 }
-function drawCode39(ctx: CanvasRenderingContext2D, x: number, y: number, nw: number, h: number, text: string) {
-  const chars = `*${text.toUpperCase().replace(/[^0-9A-Z\-. ]/g, "")}*`.split("");
+function c93Checks(data: string): [string, string] {
+  const vals = [...data].map((c) => C93_CHARS.indexOf(c)).filter((v) => v >= 0);
+  let sumC = 0;
+  for (let i = 0; i < vals.length; i += 1) sumC += (((vals.length - 1 - i) % 20) + 1) * vals[i];
+  const c = sumC % 47;
+  const vals2 = [...vals, c];
+  let sumK = 0;
+  for (let i = 0; i < vals2.length; i += 1) sumK += (((vals2.length - 1 - i) % 15) + 1) * vals2[i];
+  const k = sumK % 47;
+  return [C93_CHARS[c], C93_CHARS[k]];
+}
+function code93Width(text: string, nw: number): number {
+  const data = c93Sanitize(text);
+  const [c, k] = c93Checks(data);
+  let total = 0;
+  for (const ch of `*${data}${c}${k}*`) for (const d of C93_PATTERNS[ch]) total += Number(d) * nw;
+  return total + nw; // termination bar
+}
+function drawCode93(ctx: CanvasRenderingContext2D, x: number, y: number, nw: number, h: number, text: string) {
+  const data = c93Sanitize(text);
+  const [c, k] = c93Checks(data);
   let cx = x;
   ctx.fillStyle = "#000";
-  for (const ch of chars) {
-    const pat = C39[ch] ?? C39["*"];
-    for (let i = 0; i < 9; i += 1) {
-      const w = (pat[i] === "W" ? 3 : 1) * nw;
+  for (const ch of `*${data}${c}${k}*`) {
+    const p = C93_PATTERNS[ch];
+    for (let i = 0; i < 6; i += 1) {
+      const w = Number(p[i]) * nw;
       if (i % 2 === 0) ctx.fillRect(cx, y, w, h);
       cx += w;
     }
-    cx += nw;
   }
+  ctx.fillRect(cx, y, nw, h); // termination bar
 }
 
 /**
@@ -164,8 +181,7 @@ export function LabelPreviewCanvas({
     const sku = (input.customSku || "").toUpperCase();
     const price = String(Math.trunc(Number.parseFloat(input.retailPrice) || 0));
     const nm = layoutItemName(input.itemName, color, size);
-    // sizes-run is filled server-side at commission; don't show the default placeholder
-    const sizeRun = input.sizesAvailable ? normalizeSizesColumn(input.sizesAvailable) : "";
+    const sizeRun = normalizeSizesColumn(input.sizesAvailable ?? "");
 
     fld(54, 497, 38, null, "TALLA/SIZE", "L");
     fld(161, 529, 100, 515, size, "C");
@@ -176,13 +192,12 @@ export function LabelPreviewCanvas({
     // barcode + human SKU
     if (sku) {
       const bcY = barcodeStartY(sku);
-      const total = code39Width(sku, 2);
+      const total = code93Width(sku, 3); // nw=3 → matches the ZPL ^BY3
       ctx.save();
-      // translate to the FAR end + rotate -90° so the bars grow back toward bcY
-      // (the +total offset is what was missing — bars were drawn off-canvas).
+      // translate to the FAR end + rotate -90° so the bars grow back toward bcY.
       ctx.translate(436, bcY + total);
       ctx.rotate(-Math.PI / 2);
-      drawCode39(ctx, 0, 0, 2, 112, sku);
+      drawCode93(ctx, 0, 0, 3, 112, sku);
       ctx.restore();
     }
     fld(581, 559, 38, 550, sku, "C");
