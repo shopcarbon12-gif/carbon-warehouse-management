@@ -2,10 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Radio, ScanLine } from "lucide-react";
+import { Radio, ScanLine, Trash2 } from "lucide-react";
 
 import { bulkStatusOptionsForUi } from "@/lib/inventory/bulk-wms-status-options";
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import {
+  RssiProximitySlider,
+  useRssiThreshold,
+  passesRssi,
+} from "@/components/shared/rssi-proximity-slider";
 
 /** IP of the reader the operator wants pre-selected when this workspace
  *  mounts. Operator request 2026-05-26: .70 covers the bulk-status table
@@ -53,6 +58,8 @@ type ScannedRow = {
   status: string | null;
   location_code: string | null;
   bin_code: string | null;
+  /** Strongest per-tag RSSI seen this session (dBm, negative). null = none reported. */
+  rssi: number | null;
   /** Tracks whether enrichment has been attempted (success or fail). */
   looked_up: boolean;
 };
@@ -79,7 +86,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
-  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 7);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
 
   // Scan state — exactly the pattern Transfer Out uses. Empty picker accepts
   // all readers (consistent with item-5 spec); pick one or more readers to
@@ -221,6 +228,24 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
   }, [rows]);
   const [checked, setChecked] = useState<Set<string>>(new Set());
 
+  // Trashed EPCs stay hidden for the session (re-surface on Clear staged).
+  const suppressedRef = useRef<Set<string>>(new Set());
+
+  // RSSI proximity slider — shown ONLY when .70 is the single selected reader.
+  const [rssiThreshold, setRssiThreshold] = useRssiThreshold("wms.bulk-status.rssi");
+  const reader70Id = useMemo(() => {
+    for (const loc of hcData?.locations ?? []) {
+      for (const z of loc.zones ?? [])
+        for (const r of z.readers ?? [])
+          if (r.network_address === BULK_STATUS_DEFAULT_READER_IP) return r.id;
+      for (const r of loc.unzoned_readers ?? [])
+        if (r.network_address === BULK_STATUS_DEFAULT_READER_IP) return r.id;
+    }
+    return null;
+  }, [hcData]);
+  const showRssi =
+    selectedReaders.size === 1 && reader70Id !== null && selectedReaders.has(reader70Id);
+
   // Edge-stream subscription — accept reads from selected readers (or all
   // when picker is empty). Each new EPC becomes a row; duplicates are no-op.
   useEffect(() => {
@@ -228,9 +253,9 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     es.onmessage = (ev) => {
       if (!scanningRef.current) return;
       if (!ev.data?.trim() || ev.data.startsWith(":")) return;
-      let p: { epcs?: string[]; deviceId?: string };
+      let p: { epcs?: string[]; deviceId?: string; epcRssiMap?: Record<string, number> };
       try {
-        p = JSON.parse(ev.data) as { epcs?: string[]; deviceId?: string };
+        p = JSON.parse(ev.data) as typeof p;
       } catch {
         return;
       }
@@ -238,25 +263,36 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
       if (sel.size > 0 && p.deviceId && !sel.has(p.deviceId)) return;
       const list = (p.epcs ?? [])
         .map((e) => e.replace(/\s/g, "").toUpperCase())
-        .filter((e) => /^[0-9A-F]{24}$/.test(e));
+        .filter((e) => /^[0-9A-F]{24}$/.test(e))
+        // Drop EPCs the operator has trash-iconed this session (re-surface on Clear staged).
+        .filter((e) => !suppressedRef.current.has(e));
       if (list.length === 0) return;
+      const rssiMap = p.epcRssiMap ?? {};
       const next = new Map(rowsRef.current);
       let changed = false;
       for (const epc of list) {
-        if (next.has(epc)) continue;
-        next.set(epc, {
-          epc,
-          sku: null,
-          ls_system_id: null,
-          name: null,
-          color: null,
-          size: null,
-          status: null,
-          location_code: null,
-          bin_code: null,
-          looked_up: false,
-        });
-        changed = true;
+        const rssi = typeof rssiMap[epc] === "number" ? rssiMap[epc] : null;
+        const cur = next.get(epc);
+        if (!cur) {
+          next.set(epc, {
+            epc,
+            sku: null,
+            ls_system_id: null,
+            name: null,
+            color: null,
+            size: null,
+            status: null,
+            location_code: null,
+            bin_code: null,
+            rssi,
+            looked_up: false,
+          });
+          changed = true;
+        } else if (rssi != null && (cur.rssi == null || rssi > cur.rssi)) {
+          // Keep the strongest (closest) sighting so the slider tracks proximity.
+          next.set(epc, { ...cur, rssi });
+          changed = true;
+        }
       }
       if (changed) setRows(next);
     };
@@ -346,7 +382,26 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     setChecked(next);
   };
 
+  // Per-row trash → drop from the staged set and keep it out for the session
+  // (does NOT touch the chip; just un-stages it before Apply).
+  const trashRow = (epc: string) => {
+    suppressedRef.current.add(epc);
+    setRows((prev) => {
+      if (!prev.has(epc)) return prev;
+      const next = new Map(prev);
+      next.delete(epc);
+      return next;
+    });
+    setChecked((prev) => {
+      if (!prev.has(epc)) return prev;
+      const next = new Set(prev);
+      next.delete(epc);
+      return next;
+    });
+  };
+
   const clearAll = () => {
+    suppressedRef.current = new Set();
     setRows(new Map());
     setChecked(new Set());
     setScanning(false);
@@ -390,7 +445,10 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     }
   };
 
-  const sortedRows = useMemo(() => [...rows.values()], [rows]);
+  const sortedRows = useMemo(() => {
+    const arr = [...rows.values()];
+    return showRssi ? arr.filter((r) => passesRssi(r.rssi, rssiThreshold)) : arr;
+  }, [rows, showRssi, rssiThreshold]);
   const targetOption = options.find((o) => o.value === target);
   const applyDisabled = busy || checked.size === 0;
 
@@ -482,6 +540,14 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
         </span>
       </div>
 
+      {showRssi ? (
+        <RssiProximitySlider
+          value={rssiThreshold}
+          onChange={setRssiThreshold}
+          hint=".70 proximity filter"
+        />
+      ) : null}
+
       <DataTableContainer maxHeight="min(70vh, 640px)">
         <table
           ref={tableRef}
@@ -496,6 +562,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
                 { label: "SKU" },
                 { label: "System ID" },
                 { label: "Description" },
+                { label: "RSSI" },
                 { label: "Current status" },
                 { label: "Loc · Bin" },
               ].map((c, i) => {
@@ -523,13 +590,14 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
                   </th>
                 );
               })}
+              <th className="w-11 whitespace-nowrap px-3 py-2 text-left"></th>
             </tr>
           </thead>
           <tbody>
             {sortedRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={9}
                   className="px-3 py-8 text-center text-xs text-[var(--wms-muted)]"
                 >
                   {scanning
@@ -574,6 +642,9 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
                   <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
                     {desc || <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                    {row.rssi != null ? `${row.rssi} dBm` : "—"}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
                     {row.status ? (
                       <span
@@ -600,6 +671,16 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
                     ) : (
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right">
+                    <button
+                      type="button"
+                      onClick={() => trashRow(row.epc)}
+                      title="Un-stage this row (removes it from the list; does not change the chip)"
+                      className="inline-flex items-center rounded border border-red-400/30 bg-red-400/5 px-1.5 py-0.5 text-red-300 hover:bg-red-400/15"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
                   </td>
                 </tr>
               );

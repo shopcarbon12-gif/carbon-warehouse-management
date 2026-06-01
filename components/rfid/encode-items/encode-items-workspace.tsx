@@ -43,6 +43,11 @@ import {
 } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import {
+  RssiProximitySlider,
+  useRssiThreshold,
+  passesRssi,
+} from "@/components/shared/rssi-proximity-slider";
 
 const DEFAULT_READER_IP = "192.168.1.70";
 
@@ -120,6 +125,8 @@ type Row = {
   color: string | null;
   /** items.status from the resolve response. "—" when no row exists yet. */
   status: string;
+  /** Strongest per-tag RSSI seen this session (dBm, negative). null = none reported. */
+  rssi: number | null;
   /** Post-encode status text — e.g. "Encoded: <new-epc>" or "Failed: …". */
   encodeStatus: string | null;
   /** True while an in-flight POST /encode-claim is updating this row. */
@@ -177,6 +184,23 @@ export function EncodeItemsWorkspace() {
     if (defaultId) setSelectedReaders(new Set([defaultId]));
   }, [hcData]);
 
+  // RSSI proximity slider — shown ONLY when .70 is the single selected reader.
+  // (RSSI across multiple readers at different distances is meaningless.)
+  const [rssiThreshold, setRssiThreshold] = useRssiThreshold("wms.encode-items.rssi");
+  const reader70Id = useMemo(() => {
+    for (const loc of hcData?.locations ?? []) {
+      for (const z of loc.zones ?? [])
+        for (const r of z.readers ?? []) if (r.network_address === DEFAULT_READER_IP) return r.id;
+      for (const r of loc.unzoned_readers ?? [])
+        if (r.network_address === DEFAULT_READER_IP) return r.id;
+      for (const r of loc.unzonedReaders ?? [])
+        if (r.network_address === DEFAULT_READER_IP) return r.id;
+    }
+    return null;
+  }, [hcData]);
+  const showRssi =
+    selectedReaders.size === 1 && reader70Id !== null && selectedReaders.has(reader70Id);
+
   // --- Read state -------------------------------------------------------
   const [reading, setReading] = useState(false);
   const [scanSessionId, setScanSessionId] = useState<string | null>(null);
@@ -220,6 +244,10 @@ export function EncodeItemsWorkspace() {
     if (cPrefixOnly) {
       arr = arr.filter((r) => /^[Cc]/.test(r.epc));
     }
+    // Proximity filter (only when .70 is the sole selected reader).
+    if (showRssi) {
+      arr = arr.filter((r) => passesRssi(r.rssi, rssiThreshold));
+    }
     if (sortKey) {
       const dir = sortDir === "asc" ? 1 : -1;
       const get = (r: Row): string => {
@@ -245,7 +273,7 @@ export function EncodeItemsWorkspace() {
       );
     }
     return arr;
-  }, [rowsByEpc, cPrefixOnly, sortKey, sortDir]);
+  }, [rowsByEpc, cPrefixOnly, sortKey, sortDir, showRssi, rssiThreshold]);
 
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
 
@@ -392,9 +420,14 @@ export function EncodeItemsWorkspace() {
     const filterDeviceIds = selectedReaders.size > 0 ? selectedReaders : null;
     const onMessage = (ev: MessageEvent) => {
       if (!ev.data || ev.data.startsWith(":")) return;
-      let p: { scanContext?: string; epcs?: string[]; deviceId?: string };
+      let p: {
+        scanContext?: string;
+        epcs?: string[];
+        deviceId?: string;
+        epcRssiMap?: Record<string, number>;
+      };
       try {
-        p = JSON.parse(ev.data) as { scanContext?: string; epcs?: string[]; deviceId?: string };
+        p = JSON.parse(ev.data) as typeof p;
       } catch {
         return;
       }
@@ -407,22 +440,30 @@ export function EncodeItemsWorkspace() {
         .filter((e) => !suppressedRef.current.has(e));
       if (list.length === 0) return;
       // Add new EPCs as empty rows; enrich each via encode-resolve.
+      const rssiMap = p.epcRssiMap ?? {};
       setRowsByEpc((prev) => {
         const next = new Map(prev);
         for (const epc of list) {
-          if (next.has(epc)) continue;
-          next.set(epc, {
-            epc,
-            sku: null,
-            upc: null,
-            name: null,
-            size: null,
-            color: null,
-            status: "—",
-            encodeStatus: null,
-            busy: false,
-            autoCustomSkuId: null,
-          });
+          const rssi = typeof rssiMap[epc] === "number" ? rssiMap[epc] : null;
+          const cur = next.get(epc);
+          if (!cur) {
+            next.set(epc, {
+              epc,
+              sku: null,
+              upc: null,
+              name: null,
+              size: null,
+              color: null,
+              status: "—",
+              rssi,
+              encodeStatus: null,
+              busy: false,
+              autoCustomSkuId: null,
+            });
+          } else if (rssi != null && (cur.rssi == null || rssi > cur.rssi)) {
+            // Keep the strongest (closest) sighting so the slider tracks proximity.
+            next.set(epc, { ...cur, rssi });
+          }
         }
         return next;
       });
@@ -995,6 +1036,14 @@ export function EncodeItemsWorkspace() {
         </div>
       ) : null}
 
+      {showRssi ? (
+        <RssiProximitySlider
+          value={rssiThreshold}
+          onChange={setRssiThreshold}
+          hint=".70 proximity filter"
+        />
+      ) : null}
+
       {/* Table */}
       <div className="overflow-auto rounded-lg border border-[var(--wms-border)]">
         <table className="w-full min-w-[1100px] border-collapse font-mono text-xs">
@@ -1015,6 +1064,7 @@ export function EncodeItemsWorkspace() {
               <SortableTh label="Name" sortKeyName="name" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
               <SortableTh label="Size" sortKeyName="size" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
               <SortableTh label="Color" sortKeyName="color" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
+              {showRssi ? <th className="px-3 py-2 text-left">RSSI</th> : null}
               <SortableTh label="Status" sortKeyName="status" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
               <th className="px-3 py-2 text-left w-10"></th>
             </tr>
@@ -1022,7 +1072,7 @@ export function EncodeItemsWorkspace() {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+                <td colSpan={showRssi ? 10 : 9} className="px-3 py-8 text-center text-[var(--wms-muted)]">
                   {reading ? "Listening… scan some tags." : "Click Read to start streaming EPCs."}
                 </td>
               </tr>
@@ -1058,6 +1108,11 @@ export function EncodeItemsWorkspace() {
                     </td>
                     <td className="px-3 py-2 text-[var(--wms-muted)]">{r.size ?? "—"}</td>
                     <td className="px-3 py-2 text-[var(--wms-muted)]">{r.color ?? "—"}</td>
+                    {showRssi ? (
+                      <td className="px-3 py-2 text-[var(--wms-muted)]">
+                        {r.rssi != null ? `${r.rssi} dBm` : "—"}
+                      </td>
+                    ) : null}
                     <td className="px-3 py-2">
                       {r.encodeStatus ? (
                         <span
