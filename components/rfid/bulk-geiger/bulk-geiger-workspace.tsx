@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Upload, Radio, Loader2 } from "lucide-react";
+import { Upload, Radio, Loader2, Plus } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
 
@@ -69,9 +69,11 @@ export function BulkGeigerWorkspace() {
     rowsRef.current = rows;
   }, [rows]);
   const [checked, setChecked] = useState<Set<string>>(() => new Set());
-  const [busy, setBusy] = useState<"upload" | "send" | null>(null);
+  const [busy, setBusy] = useState<"upload" | "send" | "add" | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // Manual single-EPC entry box (in-table). Same enrichment path as import.
+  const [manualEpc, setManualEpc] = useState("");
 
   // Set of uploaded EPC keys (uppercased) for fast membership tests in the
   // SSE handler — we only mark FOUND for EPCs that are in the table.
@@ -97,117 +99,165 @@ export function BulkGeigerWorkspace() {
     autoAddRef.current = autoAdd;
   }, [autoAdd]);
 
-  const onFile = useCallback(async (file: File) => {
-    setBusy("upload");
+  // Seed + two-pass enrich an EPC list into fully-built rows. The single source
+  // of truth for "resolve an EPC to its catalog item", shared verbatim by file
+  // import and manual single-EPC entry so a typed EPC behaves identically to an
+  // imported one: items-lookup (decode + catalog) first, then C-prefix decode
+  // for tags that encode their custom SKU in the first 13 chars.
+  const enrichEpcs = useCallback(async (epcs: string[]): Promise<Row[]> => {
+    const base = new Map<string, Row>();
+    for (const e of epcs) {
+      base.set(e, {
+        epc: e,
+        sku: null,
+        name: null,
+        color: null,
+        size: null,
+        resolved: false,
+        found: false,
+        passesFormula: null,
+        liveStatus: null,
+        promoted: false,
+        scanLookedUp: false,
+      });
+    }
+    // Pass 1 — items lookup for every EPC.
+    for (let i = 0; i < epcs.length; i += LOOKUP_CHUNK) {
+      const chunk = epcs.slice(i, i + LOOKUP_CHUNK);
+      try {
+        const lres = await fetch("/api/operations/transfers/lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ epcs: chunk }),
+        });
+        if (!lres.ok) continue;
+        const lj = (await lres.json()) as {
+          rows?: { epc: string; sku: string | null; name: string | null; color: string | null; size: string | null }[];
+        };
+        for (const r of lj.rows ?? []) {
+          const cur = base.get(r.epc.toUpperCase());
+          if (cur) {
+            cur.sku = r.sku ?? null;
+            cur.name = r.name ?? null;
+            cur.color = r.color ?? null;
+            cur.size = r.size ?? null;
+            cur.resolved = true;
+          }
+        }
+      } catch {
+        /* leave chunk unresolved → N/A */
+      }
+    }
+    // Pass 2 — EPCs the items lookup couldn't resolve (no items row yet) but
+    // that encode their custom SKU in the first 13 chars (C-prefix tags).
+    // Decode + pull catalog so the row shows description/color/size pre-commission.
+    const cMisses = epcs.filter((e) => {
+      const cur = base.get(e);
+      return cur !== undefined && !cur.resolved && e.toUpperCase().startsWith("C");
+    });
+    for (let i = 0; i < cMisses.length; i += LOOKUP_CHUNK) {
+      const chunk = cMisses.slice(i, i + LOOKUP_CHUNK);
+      try {
+        const dres = await fetch("/api/rfid/bulk-geiger/decode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ epcs: chunk }),
+        });
+        if (!dres.ok) continue;
+        const dj = (await dres.json()) as {
+          rows?: { epc: string; sku: string | null; name: string | null; color: string | null; size: string | null }[];
+        };
+        for (const r of dj.rows ?? []) {
+          const cur = base.get(r.epc.toUpperCase());
+          if (cur && r.sku) {
+            cur.sku = r.sku;
+            cur.name = r.name ?? null;
+            cur.color = r.color ?? null;
+            cur.size = r.size ?? null;
+            cur.resolved = true;
+          }
+        }
+      } catch {
+        /* leave unresolved → N/A */
+      }
+    }
+    return epcs.map((e) => base.get(e)!);
+  }, []);
+
+  const onFile = useCallback(
+    async (file: File) => {
+      setBusy("upload");
+      setErr(null);
+      setMsg(null);
+      setRows([]);
+      setChecked(new Set());
+      uploadedSetRef.current = new Set();
+      try {
+        // 1) parse EPCs from the file (server: CSV + XLSX)
+        const fd = new FormData();
+        fd.append("file", file);
+        const pres = await fetch("/api/rfid/bulk-geiger/parse", { method: "POST", body: fd });
+        const pj = (await pres.json().catch(() => ({}))) as { epcs?: string[]; error?: string };
+        if (!pres.ok) throw new Error(pj.error ?? "Parse failed");
+        const epcs = pj.epcs ?? [];
+        if (epcs.length === 0) {
+          setErr("No EPCs found in the file.");
+          return;
+        }
+        // 2) seed + enrich (the exact path manual entry reuses)
+        const built = await enrichEpcs(epcs);
+        setRows(built);
+        uploadedSetRef.current = new Set(built.map((r) => r.epc.toUpperCase()));
+        // default: select everything
+        setChecked(new Set(built.map((r) => r.epc)));
+        const resolved = built.filter((r) => r.resolved).length;
+        setMsg(`Loaded ${built.length} EPC(s) — ${resolved} resolved, ${built.length - resolved} N/A.`);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Upload failed");
+      } finally {
+        setBusy(null);
+      }
+    },
+    [enrichEpcs],
+  );
+
+  // Manual single-EPC entry. Identical to importing a one-line file: the typed
+  // EPC runs through the same enrichEpcs() path, lands in the table fully
+  // resolved (or N/A), is auto-selected, and participates in fixed-reader
+  // scanning + formula-pass status + auto-add exactly like an imported row.
+  const addManualEpc = useCallback(async () => {
+    const epc = manualEpc.replace(/\s+/g, "").toUpperCase();
+    if (!epc) return;
+    // Already present → just (re)select it, never duplicate.
+    const existing = rowsRef.current.find((r) => r.epc.toUpperCase() === epc);
+    if (existing) {
+      setChecked((prev) => new Set(prev).add(existing.epc));
+      setManualEpc("");
+      setErr(null);
+      setMsg(`${epc} is already in the list.`);
+      return;
+    }
+    setBusy("add");
     setErr(null);
     setMsg(null);
-    setRows([]);
-    setChecked(new Set());
-    uploadedSetRef.current = new Set();
     try {
-      // 1) parse EPCs from the file (server: CSV + XLSX)
-      const fd = new FormData();
-      fd.append("file", file);
-      const pres = await fetch("/api/rfid/bulk-geiger/parse", { method: "POST", body: fd });
-      const pj = (await pres.json().catch(() => ({}))) as { epcs?: string[]; error?: string };
-      if (!pres.ok) throw new Error(pj.error ?? "Parse failed");
-      const epcs = pj.epcs ?? [];
-      if (epcs.length === 0) {
-        setErr("No EPCs found in the file.");
-        return;
-      }
-
-      // 2) seed rows (all start unresolved → N/A), then enrich via lookup
-      const base = new Map<string, Row>();
-      for (const e of epcs) {
-        base.set(e, {
-          epc: e,
-          sku: null,
-          name: null,
-          color: null,
-          size: null,
-          resolved: false,
-          found: false,
-          passesFormula: null,
-          liveStatus: null,
-          promoted: false,
-          scanLookedUp: false,
-        });
-      }
-      for (let i = 0; i < epcs.length; i += LOOKUP_CHUNK) {
-        const chunk = epcs.slice(i, i + LOOKUP_CHUNK);
-        try {
-          const lres = await fetch("/api/operations/transfers/lookup", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ epcs: chunk }),
-          });
-          if (!lres.ok) continue;
-          const lj = (await lres.json()) as {
-            rows?: { epc: string; sku: string | null; name: string | null; color: string | null; size: string | null }[];
-          };
-          for (const r of lj.rows ?? []) {
-            const key = r.epc.toUpperCase();
-            const cur = base.get(key);
-            if (cur) {
-              cur.sku = r.sku ?? null;
-              cur.name = r.name ?? null;
-              cur.color = r.color ?? null;
-              cur.size = r.size ?? null;
-              cur.resolved = true;
-            }
-          }
-        } catch {
-          /* leave chunk unresolved → N/A */
-        }
-      }
-      // 3) Second pass — EPCs the items lookup couldn't resolve (no items row
-      // yet) but that encode their custom SKU in the first 13 chars (C-prefix
-      // tags). Decode + pull catalog details so the row shows the item's
-      // description/color/size even before the tag is commissioned.
-      const cMisses = epcs.filter((e) => {
-        const cur = base.get(e);
-        return cur !== undefined && !cur.resolved && e.toUpperCase().startsWith("C");
-      });
-      for (let i = 0; i < cMisses.length; i += LOOKUP_CHUNK) {
-        const chunk = cMisses.slice(i, i + LOOKUP_CHUNK);
-        try {
-          const dres = await fetch("/api/rfid/bulk-geiger/decode", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ epcs: chunk }),
-          });
-          if (!dres.ok) continue;
-          const dj = (await dres.json()) as {
-            rows?: { epc: string; sku: string | null; name: string | null; color: string | null; size: string | null }[];
-          };
-          for (const r of dj.rows ?? []) {
-            const cur = base.get(r.epc.toUpperCase());
-            if (cur && r.sku) {
-              cur.sku = r.sku;
-              cur.name = r.name ?? null;
-              cur.color = r.color ?? null;
-              cur.size = r.size ?? null;
-              cur.resolved = true;
-            }
-          }
-        } catch {
-          /* leave unresolved → N/A */
-        }
-      }
-      const built = epcs.map((e) => base.get(e)!);
-      setRows(built);
-      uploadedSetRef.current = new Set(built.map((r) => r.epc.toUpperCase()));
-      // default: select everything
-      setChecked(new Set(built.map((r) => r.epc)));
-      const resolved = built.filter((r) => r.resolved).length;
-      setMsg(`Loaded ${built.length} EPC(s) — ${resolved} resolved, ${built.length - resolved} N/A.`);
+      const [built] = await enrichEpcs([epc]);
+      // Prepend so the just-added row is visible at the top of the table.
+      setRows((prev) => [built, ...prev]);
+      uploadedSetRef.current.add(epc);
+      setChecked((prev) => new Set(prev).add(built.epc));
+      setManualEpc("");
+      setMsg(
+        built.resolved
+          ? `Added ${epc} — ${[built.sku, built.name].filter(Boolean).join(" · ") || "resolved"}.`
+          : `Added ${epc} — N/A (no catalog match in this location).`,
+      );
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Upload failed");
+      setErr(e instanceof Error ? e.message : "Could not add EPC");
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [manualEpc, enrichEpcs]);
 
   const allChecked = rows.length > 0 && checked.size === rows.length;
   const toggleAll = () => setChecked(allChecked ? new Set() : new Set(rows.map((r) => r.epc)));
@@ -569,10 +619,45 @@ export function BulkGeigerWorkspace() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--wms-border)]/50">
+            {/* Manual entry row — type/scan an EPC; resolved identically to import. */}
+            <tr className="bg-[var(--wms-surface-elevated)]/40">
+              <td className="px-3 py-2 text-center text-[var(--wms-muted)]">
+                <Plus className="mx-auto h-3.5 w-3.5" />
+              </td>
+              <td className="px-3 py-2" colSpan={5}>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={manualEpc}
+                    onChange={(e) => setManualEpc(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void addManualEpc();
+                      }
+                    }}
+                    placeholder="Type or scan an EPC, press Enter — resolved exactly like an imported one"
+                    disabled={busy !== null}
+                    spellCheck={false}
+                    autoComplete="off"
+                    aria-label="Add EPC manually"
+                    className="w-full max-w-[460px] rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-xs uppercase text-[var(--wms-fg)] placeholder:normal-case placeholder:text-[var(--wms-muted)] focus:border-[var(--wms-accent)] focus:outline-none disabled:opacity-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void addManualEpc()}
+                    disabled={busy !== null || manualEpc.trim() === ""}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
+                  >
+                    {busy === "add" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    Add
+                  </button>
+                </div>
+              </td>
+            </tr>
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-3 py-10 text-center text-[var(--wms-muted)]">
-                  Import a CSV / XLSX of EPCs to begin.
+                  Import a CSV / XLSX of EPCs — or type one in the row above — to begin.
                 </td>
               </tr>
             ) : (
