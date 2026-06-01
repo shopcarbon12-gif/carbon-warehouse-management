@@ -26,15 +26,12 @@
  * the same SGTIN-96 layout.
  */
 
-// 6.5 × 5 cm physical label stock at 12 dpmm (300 DPI):
-//   65 mm × 12 = 780 dots wide
-//   50 mm × 12 = 600 dots tall
-// Pre-1.2.50 carbon-gen used 812 × 594 which assumed a slightly bigger
-// label — the rightmost ^GB tear-off line at x=783 + bottom row at
-// y=552 fit fine in the carbon-gen-sized stock but pushed past the
-// edge on the warehouse 65×50 mm rolls.
-export const LABEL_WIDTH_DOTS = 780;
-export const LABEL_HEIGHT_DOTS = 600;
+// 6.5 × 5 cm physical label stock on the ZD500R at 300 DPI. The printer's
+// own configured media print width is 812 dots (ezpl.print_width) — the
+// earlier 780 left a blank ~32-dot strip on the right of the tag. Gap-to-gap
+// calibrated label length is 624 dots. Verified on-printer 2026-06-01.
+export const LABEL_WIDTH_DOTS = 812;
+export const LABEL_HEIGHT_DOTS = 624;
 export const PRINTER_DPI = 300;
 
 export type CarbonTagSettings = {
@@ -65,13 +62,14 @@ export const DEFAULT_CARBON_TAG_SETTINGS: CarbonTagSettings = {
   printerPort: 80,
   labelWidthDots: LABEL_WIDTH_DOTS,
   labelHeightDots: LABEL_HEIGHT_DOTS,
-  // Print-alignment nudge (2026-05-28): shift the whole printed image on the
-  // physical label so it sits centered once the operator rotates the tag 90°.
-  // labelShiftX → ^LS (NEGATIVE = right), labelShiftY → ^LT (POSITIVE = down).
-  // These move the format on the media (no field clipping). First-pass values;
-  // tune from a test print — if a direction is backwards, flip the sign.
-  labelShiftX: -24, // right
-  labelShiftY: 48, // down
+  // Whole-label centering on the physical media (so the design sits centered
+  // once the operator rotates the tag 90°). labelShiftX → ^LS (NEG = right),
+  // labelShiftY → ^LT (POS = down). Dialed in on-printer 2026-06-01 for the
+  // 812×624 media. NOTE: the "ending line" (rightmost divider, ^FO775) and
+  // ^LS are coupled — if ^LS changes, shift the ending-line x by the same
+  // amount to keep it at the right edge.
+  labelShiftX: -32, // right
+  labelShiftY: 24, // down
 };
 
 export type CarbonTagInput = {
@@ -195,53 +193,71 @@ export function buildEpc(opts: {
   };
 }
 
+/** Greedy whole-word wrap: pack words into lines of at most `max` chars,
+ *  never splitting a word. */
+function greedyWrap(words: string[], max: number): string[] {
+  const out: string[] = [];
+  let cur: string[] = [];
+  for (const w of words) {
+    const cand = [...cur, w].join(" ");
+    if (cur.length && cand.length > max) {
+      out.push(cur.join(" "));
+      cur = [w];
+    } else {
+      cur.push(w);
+    }
+  }
+  if (cur.length) out.push(cur.join(" "));
+  return out;
+}
+
 /**
- * ERB-faithful description word-wrap, ported from the operator's external
- * label-editor template. Splits the description on whitespace, removes every
- * word that also appears in color (attr3) or size (attr4), then greedily packs
- * words into up to two lines — each line takes words until the running length
- * exceeds 15 chars; the overflowing word starts the next line. Mirrors the
- * Ruby `number_of_lines.times { ... }` block. One safe deviation from the ERB:
- * a single word longer than 15 chars is emitted alone rather than dropped
- * (the ERB would have rendered an empty line).
+ * Box-4 item-name layout (tuned on-printer 2026-06-01). Strips color/size
+ * words from the name, then:
+ *   • fits on ONE centered row (font 40) when ≤16 chars, at x324
+ *   • else greedy-wraps to TWO rows (font 40, ≤16 each) at x294/354
+ *   • else (won't fit 2 rows) drops to font 36 and uses THREE rows
+ *     (≤18 each) at x284/324/364
+ * All rows centered horizontally (^FB…,C) and anchored at y575.
  */
-function wrapDescriptionErb(
-  description: string,
+function layoutItemName(
+  name: string,
   color: string,
   size: string,
-): readonly [string, string] {
+): { rows: string[]; font: number; xs: number[] } {
   const remove = new Set(
-    [sanitizeZpl(color), sanitizeZpl(size)]
-      .join(" ")
-      .toUpperCase()
-      .split(/\s+/)
-      .filter(Boolean),
+    [sanitizeZpl(color), sanitizeZpl(size)].join(" ").toUpperCase().split(/\s+/).filter(Boolean),
   );
-  let words = sanitizeZpl(description)
+  const words = sanitizeZpl(name)
     .toUpperCase()
     .split(/\s+/)
     .filter(Boolean)
     .filter((w) => !remove.has(w));
-  const charsPerLine = 15;
-  const out: string[] = [];
-  for (let n = 0; n < 2; n += 1) {
-    let line = "";
-    let temp = "";
-    for (const r of words) {
-      temp += `${r} `;
-      if (temp.length > charsPerLine) break;
-      line = temp;
-    }
-    let consumed = line.trim() ? line.trim().split(/\s+/).length : 0;
-    if (consumed === 0 && words.length > 0) {
-      line = words[0];
-      consumed = 1;
-    }
-    out.push(line.trim());
-    words = words.slice(consumed);
-    if (words.length === 0) break;
-  }
-  return [out[0] ?? "", out[1] ?? ""] as const;
+  if (words.length === 0) return { rows: ["ITEM"], font: 40, xs: [324] };
+  const full = words.join(" ");
+  if (full.length <= 16) return { rows: [full], font: 40, xs: [324] };
+  const r2 = greedyWrap(words, 16);
+  if (r2.length <= 2) return { rows: r2, font: 40, xs: [294, 354] };
+  const r3 = greedyWrap(words, 18);
+  const rows = r3.length <= 3 ? r3 : [r3[0], r3[1], r3.slice(2).join(" ")];
+  return { rows, font: 36, xs: [284, 324, 364] };
+}
+
+/** Box-8 size-run auto-shrink: pick the largest font ≤48 whose estimated
+ *  Arial width fits the ^FB550 block (~530 usable), nudging x up as the
+ *  glyph shrinks so the strip stays vertically centered. */
+function box8Layout(text: string): { font: number; x: number } {
+  const em = [...text].reduce((a, c) => a + (c === " " ? 0.278 : 0.556), 0);
+  const font = Math.min(48, Math.max(20, Math.floor(530 / Math.max(em, 1))));
+  const x = Math.round(756 - (48 - font) * 0.5);
+  return { font, x };
+}
+
+/** Box-6 barcode is Code 93 at ^BY3 — length grows with the SKU. Center it
+ *  in the content height (y64..541) so short/long SKUs stay balanced. */
+function barcodeStartY(sku: string): number {
+  const lengthDots = (9 * sku.length + 37) * 3; // Code 93 module count × ^BY3
+  return Math.max(30, Math.round(64 + (477 - lengthDots) / 2));
 }
 
 export function inferSizeFromDescription(description: string): string {
@@ -337,55 +353,56 @@ export function generateCarbonTagZpl(opts: {
   ).toUpperCase();
   const safeUpc = sanitizeZpl(input.upc).toUpperCase();
   const safeSku = sanitizeZpl(input.customSku).toUpperCase();
-  // ERB renders `$<%=@retail_price.to_i %>` — integer dollars, truncated.
+  // Integer dollars (truncated) — matches the operator's $<price.to_i> format.
   const safePrice = String(Math.trunc(Number.parseFloat(sanitizeZpl(input.retailPrice)) || 0));
   const safeSizes = normalizeSizesColumn(input.sizesAvailable ?? "");
-  const [line1, line2] = wrapDescriptionErb(input.itemName, safeColorResolved, safeSize);
+  const name = layoutItemName(input.itemName, safeColorResolved, safeSize);
+  const nameLines = name.rows
+    .map((r, i) => `^FT${name.xs[i]},575^AKB,${name.font}^FB550,1,0,C^FD${r}^FS`)
+    .join("\n");
+  const b8 = box8Layout(safeSizes);
+  const bcY = barcodeStartY(safeSku);
   const epcLength = epcBitTotal(settings);
-  // 2026-05-28 — WMS commission/reprint label re-aligned to MATCH the
-  // operator's external label-editor ERB template 1:1: the ERB's exact
-  // ^GB box/divider coordinates, ^FT field positions, plain Arial (no bold
-  // font B), integer price (`.to_i`-equivalent truncation), and the ERB's
-  // 15-char/2-line description wrap (wrapDescriptionErb above).
-  //   • Barcode REVERTED to Code 128 (^BCB,110) at ^BY2,2 per operator
-  //     request, encoding the RAW SKU/ALU — the prior trailing-letter
-  //     strip ("subset C width hack") is intentionally GONE so the bars
-  //     mirror the ERB's `<%=@alu%>`. If a SKU that ends in letters
-  //     overflows the right border again, revisit the encode here.
-  //   • The ERB `@item_attr12` slot (^FT765) is mapped to the sizes-run
-  //     column (safeSizes). Change that token if attr12 should hold a
-  //     different field.
-  // The static `TALLA/SIZE` label is hardcoded. ^PW/^LL/^LH/^LS/^LT remain
-  // (the ERB omits them — the external editor injects size/offset; the WMS
-  // must supply them itself for raw-port printing). ^CI28 kept for UTF-8.
+
+  // Carbon RFID price-tag — final layout dialed in on-printer 2026-06-01
+  // (see project_zd500r_font_and_calibration_2026_06_01 memory). Fonts:
+  // K=Arial, B=Arial heavy bold (ARI000), M=Liberation Sans Bold uploaded as
+  // E:LSB3.TTF via BINARY ~DY (ASCII-hex upload stores but won't render).
+  // ^PR2 slows the print so the thin Code 93 bars come out crisp on thermal.
+  // Box 6 barcode = Code 93 (^BAB) of the FULL SKU incl. letters (laser /
+  // red-light scannable), centered by length. EPC via ^RB + ^RFW,E decimal
+  // triplet (printer bit-packs (cp<<76)|(item<<36)|serial — matches
+  // generateSGTIN96). REQUIRES E:LSB3.TTF on the target printer, else box 3
+  // (UPC) and box 7 (price) render blank.
 
   return `^XA
 ^CI28
 ^PW${settings.labelWidthDots}
 ^LL${settings.labelHeightDots}
 ^MD20
+^PR2
 ^LH0,0
 ^LS${settings.labelShiftX}
 ^LT${settings.labelShiftY}
 ^CWK,E:ARIAL.TTF
-^FT73,490^AKB,38,^FDTALLA/SIZE^FS
-^FT194,522^AKB,134^FB515,1,0,C^FD${safeSize}^FS
-^FT253,590^AKB,36^FB600,1,0,C^FD${safeUpc}^FS
-^FT313,552^AKB,36^FB550,1,0,C^FD${line1}^FS
-^FT373,552^AKB,36^FB550,1,0,C^FD${line2}^FS
-^FT432,552^AKB,36^FB550,1,0,C^FD${safeColorResolved}^FS
-^FO455,${safeSku.length === 13 ? "95" : "125"}^BY2,2^BCB,110,N,N,N^FD${safeSku}^FS
-^FT600,552^AKB,32^FB550,1,0,C^FD${safeSku}^FS
-^FT687,552^AKB,60^FB550,1,0,C^FD$${safePrice}^FS
-^FT765,552^AKB,44^FB550,1,0,C^FD${safeSizes}^FS
-^FO34,79^GB410,427,2^FS
-^FO83,77^GB0,423,3^FS
-^FO325,80^GB0,425,3^FS
-^FO387,80^GB0,425,3^FS
-^FO612,79^GB107,426,3^FS
-^FO783,57^GB0,477,3^FS
-^FO266,80^GB0,425,3^FS
-^FO207,80^GB0,425,3^FS
+^CWB,E:ARI000.TTF
+^CWM,E:LSB3.TTF
+^FO15,86^GB410,427,2^FS
+^FO64,84^GB0,423,3^FS
+^FO188,87^GB0,425,3^FS
+^FO247,87^GB0,425,3^FS
+^FO368,87^GB0,425,3^FS
+^FO593,86^GB107,426,3^FS
+^FO775,64^GB0,477,3^FS
+^FT54,497^AKB,38,^FDTALLA/SIZE^FS
+^FT161,529^AKB,100^FB515,1,0,C^FD${safeSize}^FS
+^FT232,575^AMB,44^FB550,1,0,C^FD${safeUpc}^FS
+${nameLines}
+^FT413,559^AKB,36^FB550,1,0,C^FD${safeColorResolved}^FS
+^FO436,${bcY}^BY3,2^BAB,112,N,N^FD${safeSku}^FS
+^FT581,559^AKB,38^FB550,1,0,C^FD${safeSku}^FS
+^FT662,559^AMB,58^FB550,1,0,C^FD$${safePrice}^FS
+^FT${b8.x},567^AKB,${b8.font}^FB550,1,0,C^FD${safeSizes}^FS
 ^RB${epcLength},${settings.companyPrefixBits},${settings.itemNumberBits},${settings.serialBits}^FS
 ^RFW,E^FD${epcWrite.companyPrefix},${epcWrite.itemNumber},${epcWrite.serialNumber}^FS
 ^PQ1,0,1,Y
