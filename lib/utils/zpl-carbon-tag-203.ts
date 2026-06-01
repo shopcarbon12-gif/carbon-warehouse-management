@@ -7,7 +7,7 @@ import {
 } from "@/lib/utils/zpl-carbon-tag";
 
 /**
- * 203-dpi Carbon tag rendering for the Jadens (.220) non-RFID printer, plus a
+ * 203-dpi Carbon tag rendering for the second Zebra (.220, a 203-dpi ZD500R) non-RFID printer, plus a
  * 300-dpi RFID preview that mirrors what `generateCarbonTagZpl` actually prints
  * to the Zebra (.3). Both share the one tuned design so the Print Tags page
  * preview == print.
@@ -49,7 +49,7 @@ export function scaleZplTo203(zpl: string): string {
     .replace(/\^BC([NBRI]),(\d+)/g, (_m, o, h) => `^BC${o},${R(+h)}`);
 }
 
-/** One non-RFID Carbon tag for the 203-dpi Jadens (.220), box icon included. */
+/** One non-RFID Carbon tag for the 203-dpi Zebra at .220, box icon included. */
 export function generateNonRfidTag203(input: CarbonTagInput): string {
   const full = generateCarbonTagZpl({
     input,
@@ -58,7 +58,7 @@ export function generateNonRfidTag203(input: CarbonTagInput): string {
   });
   let z = scaleZplTo203(stripRfidEncoding(full));
   // tuned 2x3 / 203-dpi geometry (^LL = the calibrated 2" label length, 414).
-  // Drop ^MD — on the Jadens firmware ^MD stacks on print.tone and maxes
+  // Drop ^MD — on the .220 Zebra firmware ^MD stacks on print.tone and maxes
   // darkness; darkness is set on the printer (print.tone 4) instead.
   z = z
     .replace(/\^MD\d+\r?\n/, "")
