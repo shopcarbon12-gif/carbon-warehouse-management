@@ -6,6 +6,10 @@ export type CommissionSkuMatch = {
   ls_system_id: string;
   upc: string;
   description: string;
+  /** Hang-tag label fields (OLA template): size = @item_attr4, color = @item_attr3, price = @retail_price. */
+  size: string | null;
+  color: string | null;
+  price: string | null;
 };
 
 /** Broad lookup: System ID (exact when query is all-digits), SKU, UPC/EAN, description (substring). */
@@ -26,13 +30,19 @@ export async function searchSkusForCommission(
     ls_system_id: string;
     upc: string;
     description: string;
+    size: string | null;
+    color: string | null;
+    price: string | null;
   }>(
     `SELECT
        cs.id,
        cs.sku,
        cs.ls_system_id::text AS ls_system_id,
-       m.upc,
-       m.description
+       coalesce(nullif(cs.upc, ''), m.upc) AS upc,
+       m.description,
+       cs.size,
+       cs.color_code AS color,
+       cs.retail_price::text AS price
      FROM custom_skus cs
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE
