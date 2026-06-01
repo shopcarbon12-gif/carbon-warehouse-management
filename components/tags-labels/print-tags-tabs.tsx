@@ -8,12 +8,12 @@ const TABS = [
   { href: "/tags-labels/print/non-rfid", label: "Non-RFID tags" },
 ];
 
-/** Text tabs matching the WMS house style (e.g. Bin Locations List/Shelf Map). */
+/** Segmented pill tabs, each sized to fill the container (flex-1). */
 export function PrintTagsTabs() {
   const pathname = usePathname() ?? "";
   const isNon = pathname.includes("/non-rfid");
   return (
-    <div role="tablist" className="flex gap-1 border-b border-[var(--wms-border)]">
+    <div className="flex gap-2.5">
       {TABS.map((t) => {
         const active = t.href.includes("/non-rfid") ? isNon : !isNon;
         return (
@@ -22,12 +22,13 @@ export function PrintTagsTabs() {
             href={t.href}
             role="tab"
             aria-selected={active}
-            className={`px-4 py-2 font-mono text-sm transition-colors ${
+            className={`inline-flex flex-1 items-center justify-center gap-2.5 rounded-xl border px-5 py-3 font-mono text-sm font-bold tracking-wide transition ${
               active
-                ? "border-b-2 border-[var(--wms-accent)] text-[var(--wms-fg)]"
-                : "border-b-2 border-transparent text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                ? "border-[var(--wms-accent)] bg-[color-mix(in_srgb,var(--wms-accent)_15%,transparent)] text-[var(--wms-accent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--wms-accent)_30%,transparent),0_0_18px_color-mix(in_srgb,var(--wms-accent)_18%,transparent)]"
+                : "border-[var(--wms-border)] text-[var(--wms-muted)] hover:border-[var(--wms-accent)]/45 hover:text-[var(--wms-fg)]"
             }`}
           >
+            <span className="h-2 w-2 rounded-full bg-current opacity-90" aria-hidden />
             {t.label}
           </Link>
         );

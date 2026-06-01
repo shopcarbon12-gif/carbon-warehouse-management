@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { PrintTagsTabs } from "@/components/tags-labels/print-tags-tabs";
 
-/** Shared chrome for the Print Tags tabs (RFID / Non-RFID) — WMS house style. */
+/** Shared chrome for the Print Tags tabs — centered container like other WMS pages. */
 export default function PrintTagsLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-3xl space-y-4">
       <div className="border-b border-[var(--wms-border)] pb-3">
         <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Print tags</h1>
         <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
