@@ -38,12 +38,13 @@ export async function POST(req: Request) {
         ? generateRfidTagPreview(input, body.sysid ?? "0", body.companyPrefix ?? 985_611, body.serial ?? 1)
         : generateNonRfidTag203(input);
 
+    // Render at the TRUE physical label size so the picture reflects real stock:
+    //   RFID    = 6.5 × 5 cm  (2.56 × 1.97 in) @ 12 dpmm — Zebra .3
+    //   Non-RFID= 2 × 3 in stock; printed extent ~3.30 × 2.04 in @ 8 dpmm
+    //             (the box icon pushes content to ~3.3" wide) — Zebra .220
     const dpmm = kind === "rfid" ? 12 : 8;
-    const dpi = kind === "rfid" ? 300 : 203;
-    const pw = Number(zpl.match(/\^PW(\d+)/)?.[1] ?? (kind === "rfid" ? 812 : 670));
-    const ll = Number(zpl.match(/\^LL(\d+)/)?.[1] ?? (kind === "rfid" ? 624 : 414));
-    const w = (pw / dpi).toFixed(2);
-    const h = (ll / dpi).toFixed(2);
+    const w = kind === "rfid" ? "2.56" : "3.30";
+    const h = kind === "rfid" ? "1.97" : "2.04";
 
     const url = `https://api.labelary.com/v1/printers/${dpmm}dpmm/labels/${w}x${h}/0/`;
     const resp = await fetch(url, {
