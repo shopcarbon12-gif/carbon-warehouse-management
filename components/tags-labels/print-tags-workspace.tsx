@@ -8,7 +8,7 @@ import {
   generateRfidTagPreviewBatch,
 } from "@/lib/utils/zpl-carbon-tag-203";
 import { PrintLogsModal } from "@/components/rfid/commissioning/print-logs-modal";
-import { LabelPreviewImage } from "./label-preview-image";
+import { LabelPreviewCanvas } from "./label-preview-canvas";
 
 type Mode = "rfid" | "nonrfid";
 
@@ -530,13 +530,7 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
 
           <section className="card m-preview">
             <div className="card-h"><h2>Label preview <span style={{ color: "var(--wms-muted)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>· rendered from live ZPL</span></h2></div>
-            <LabelPreviewImage
-              input={carbonInput}
-              mode={mode}
-              sysid={selected?.ls_system_id}
-              companyPrefix={companyPrefix}
-              serial={nextSerial}
-            />
+            <LabelPreviewCanvas input={carbonInput} mode={mode} serial={nextSerial} />
           </section>
         </div>
       </div>

@@ -237,7 +237,7 @@ function greedyWrap(words: string[], max: number): string[] {
  *     (≤18 each) at x284/324/364
  * All rows centered horizontally (^FB…,C) and anchored at y575.
  */
-function layoutItemName(
+export function layoutItemName(
   name: string,
   color: string,
   size: string,
@@ -263,7 +263,7 @@ function layoutItemName(
 /** Box-8 size-run auto-shrink: pick the largest font ≤48 whose estimated
  *  Arial width fits the ^FB550 block (~530 usable), nudging x up as the
  *  glyph shrinks so the strip stays vertically centered. */
-function box8Layout(text: string): { font: number; x: number } {
+export function box8Layout(text: string): { font: number; x: number } {
   const em = [...text].reduce((a, c) => a + (c === " " ? 0.278 : 0.556), 0);
   const font = Math.min(48, Math.max(20, Math.floor(530 / Math.max(em, 1))));
   const x = Math.round(756 - (48 - font) * 0.5);
@@ -272,7 +272,7 @@ function box8Layout(text: string): { font: number; x: number } {
 
 /** Box-6 barcode is Code 93 at ^BY3 — length grows with the SKU. Center it
  *  in the content height (y64..541) so short/long SKUs stay balanced. */
-function barcodeStartY(sku: string): number {
+export function barcodeStartY(sku: string): number {
   const lengthDots = (9 * sku.length + 37) * 3; // Code 93 module count × ^BY3
   return Math.max(30, Math.round(64 + (477 - lengthDots) / 2));
 }
@@ -315,7 +315,7 @@ export function inferColorFromDescription(description: string, inferredSize: str
   return tokens[lastIdx] || "";
 }
 
-function normalizeSizesColumn(value: string): string {
+export function normalizeSizesColumn(value: string): string {
   const tokens = sanitizeZpl(value)
     .toUpperCase()
     .split(/[,/| ]+/)
