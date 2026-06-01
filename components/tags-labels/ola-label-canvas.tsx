@@ -22,7 +22,7 @@ const ART_H = 576;
 
 /* Physical label stock per tab. The 2×3 non-RFID label is larger than the
  * 5×6.5 cm RFID tag; both render at one common px/cm so sizes compare truly. */
-const PX_PER_CM = 70;
+const PX_PER_CM = 60;
 const MEDIA: Record<Media, { caption: string; wCm: number; hCm: number }> = {
   rfid: { caption: "RFID tag · 5 × 6.5 cm", wCm: 5.0, hCm: 6.5 },
   nonrfid: { caption: "Non-RFID · 2 × 3 in", wCm: 5.08, hCm: 7.62 },

@@ -14,12 +14,26 @@ export function printNodeApiKey(): string {
   return process.env.PRINTNODE_API_KEY?.trim() ?? "";
 }
 
-/** Default printer id (PrintNode numeric id) when the caller doesn't pass one. */
-export function printNodeDefaultPrinterId(): number | null {
-  const raw = process.env.PRINTNODE_PRINTER_ID?.trim();
+function envPrinterId(name: string): number | null {
+  const raw = process.env[name]?.trim();
   if (!raw) return null;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Default NON-RFID printer id (the 2x3 label printer). */
+export function printNodeDefaultPrinterId(): number | null {
+  return envPrinterId("PRINTNODE_PRINTER_ID");
+}
+
+/**
+ * RFID printer id (the Zebra hang-tag printer). Must be added to PrintNode so the
+ * cloud WMS can reach it over HTTPS — a browser can't POST to the LAN printer.
+ * NO fallback to the non-RFID printer: that printer can't encode the RFID chip,
+ * so an unconfigured RFID printer should fail loudly rather than misprint.
+ */
+export function printNodeRfidPrinterId(): number | null {
+  return envPrinterId("PRINTNODE_RFID_PRINTER_ID");
 }
 
 function authHeader(key: string): string {

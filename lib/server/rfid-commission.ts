@@ -148,6 +148,29 @@ export async function rfidCommissionPrepare(
     }
   }
 
+  // Bin resolution. A bin is never *required*. When the caller adds to
+  // inventory but picks no bin (binId null), the new EPCs inherit the bin
+  // where existing in-stock items of the SAME UPC (matrix) already live —
+  // most-populated bin wins. If this UPC has never been binned, the rows
+  // stay unassigned (bin_id NULL). "Lives wherever its UPC lives, else null."
+  let resolvedBinId: string | null = binId ?? null;
+  if (!resolvedBinId && addToInventory) {
+    const inherit = await client.query<{ bin_id: string }>(
+      `SELECT i.bin_id
+         FROM items i
+         JOIN custom_skus cs2 ON cs2.id = i.custom_sku_id
+        WHERE cs2.matrix_id = $1::uuid
+          AND i.location_id = $2::uuid
+          AND i.status = 'in-stock'
+          AND i.bin_id IS NOT NULL
+        GROUP BY i.bin_id
+        ORDER BY count(*) DESC
+        LIMIT 1`,
+      [row.matrix_id, session.lid],
+    );
+    resolvedBinId = inherit.rows[0]?.bin_id ?? null;
+  }
+
   // Random 6-digit unique serials per Carbon-Jeans policy (2026-05-29).
   // The batch allocator pre-checks against existing items.serial_number
   // for this sku AND keeps an in-batch Set so the qty draws can't
@@ -204,7 +227,7 @@ export async function rfidCommissionPrepare(
     await client.query(
       `INSERT INTO items (epc, serial_number, custom_sku_id, location_id, bin_id, status, created_by_user_id)
        VALUES ($1, $2, $3::uuid, $4::uuid, $5::uuid, $6, $7::uuid)`,
-      [epc, serial, row.id, session.lid, binId ?? null, statusFinal, session.sub],
+      [epc, serial, row.id, session.lid, resolvedBinId, statusFinal, session.sub],
     );
     inserted.push({ epc, serial_number: serial });
     zplLabels.push(
