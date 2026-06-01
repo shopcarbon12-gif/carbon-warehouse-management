@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { ensureTenantSettings } from "@/lib/queries/tenant-settings";
 import { authorizeHandheldDeviceRequest } from "@/lib/server/handheld-request-auth";
+import { ignoredEpcList } from "@/lib/server/ignored-epcs";
 import type { EpcProfile } from "@/lib/settings/tenant-settings-defaults";
 
 export const runtime = "nodejs";
@@ -62,6 +63,9 @@ export async function GET(req: Request) {
         epc_settings: row.epc_settings,
         epc_profiles: activeProfiles,
         epc_config: epcConfig,
+        // System-wide phantom-tag ignore-list. The handheld drops these EPCs
+        // on-device before any beep/display. See lib/server/ignored-epcs.ts.
+        ignored_epcs: ignoredEpcList(),
         updated_at: row.updated_at,
       },
       { headers: { "Cache-Control": "no-store" } },

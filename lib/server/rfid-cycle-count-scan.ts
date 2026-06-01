@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { decodeEpc } from "@/lib/server/epc-decode";
 import { loadEpcConfig } from "@/lib/server/epc-ingress";
+import { isIgnoredEpc } from "@/lib/server/ignored-epcs";
 import { loadStatusLabelBrainMap } from "@/lib/server/status-label-enforcement";
 import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
 
@@ -56,7 +57,7 @@ export async function ingestCycleCountEpcs(
 ): Promise<CycleCountScanResult[]> {
   const norm = [
     ...new Set(args.epcs.map((e) => e.replace(/\s/g, "").toUpperCase())),
-  ].filter((e) => /^[0-9A-F]{24}$/.test(e));
+  ].filter((e) => /^[0-9A-F]{24}$/.test(e) && !isIgnoredEpc(e));
   if (norm.length === 0) return [];
 
   const config = await loadEpcConfig(client, args.tenantId);

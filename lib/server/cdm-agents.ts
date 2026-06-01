@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { createHash, randomBytes } from "node:crypto";
 import { publishEdgeScanEvent } from "@/lib/server/edge-scan-hub";
+import { filterIgnoredReads } from "@/lib/server/ignored-epcs";
 import { decodeEpc } from "@/lib/server/epc-decode";
 import { loadEpcConfig } from "@/lib/server/epc-ingress";
 import { isLiveScanActive } from "@/lib/server/live-scan-sessions";
@@ -935,6 +936,14 @@ export async function ingestAgentReads(
     throw new Error("BAD_REQUEST:Reader not found or not owned by this agent");
   }
   const readerName = ownership.rows[0].name;
+
+  // Drop system-ignored "phantom" EPCs at the door. These never enter
+  // cdm_reads, never get an antenna `last_read_at` bump, and never reach the
+  // edge SSE hub — so they vanish from live scan, Encode Items, Bulk Status,
+  // dashboards and the POS cart in one stroke, without being recorded as
+  // tag_killed. See lib/server/ignored-epcs.ts.
+  body = { ...body, reads: filterIgnoredReads(body.reads) };
+  if (body.reads.length === 0) return { inserted: 0 };
 
   // ── Live-scan formula evaluation (no items mutation) ──
   // Background reads from fixed readers must NEVER write to the items

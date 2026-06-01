@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getPool } from "@/lib/db";
 import { authorizeHandheldDeviceRequest } from "@/lib/server/handheld-request-auth";
 import { enqueueEdgeIngestJob } from "@/lib/server/edge-ingest-queue";
+import { filterIgnoredEpcs } from "@/lib/server/ignored-epcs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,11 +48,11 @@ export async function POST(req: Request) {
   }
   const device = auth.device;
 
-  const epcsDeduped = [
+  const epcsDeduped = filterIgnoredEpcs([
     ...new Set(
       parsed.data.epcs.map((e) => e.replace(/\s/g, "").toUpperCase()).filter(Boolean),
     ),
-  ];
+  ]);
 
   enqueueEdgeIngestJob({
     tenantId: device.tenantId,
