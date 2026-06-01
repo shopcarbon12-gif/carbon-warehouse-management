@@ -72,8 +72,14 @@ function buildWhere(
   const params: unknown[] = [];
   let i = 1;
 
-  if (!showArchived) {
-    parts.push(`cs.archived = FALSE`);
+  /* Archived visibility:
+   *  • A search query (q) shows everything incl. archived, regardless of the
+   *    toggle — operators searching by SKU/UPC/name must always reach archived
+   *    items (archived rows get highlighted client-side).
+   *  • "Show archived" ON with no search → archived-ONLY.
+   *  • Default (no search, toggle off) → active (non-archived) only. */
+  if (!q.trim()) {
+    parts.push(showArchived ? `cs.archived = TRUE` : `cs.archived = FALSE`);
   }
 
   /* MANUAL ITEMS toolbar toggle — restricts the grid to matrices flagged

@@ -486,12 +486,12 @@ export function CatalogWorkspace({
               }`}
               title={
                 showArchived
-                  ? "Archived items are visible — click to hide"
-                  : "Archived items are hidden — click to include them"
+                  ? "Showing archived items only — click to return to active items"
+                  : "Showing active items — click to show archived only (search always includes archived)"
               }
             >
               <Archive className="h-3.5 w-3.5" />
-              {showArchived ? "Archived: ON" : "Show archived"}
+              {showArchived ? "Archived only" : "Show archived"}
             </button>
             <button
               type="button"
@@ -778,8 +778,10 @@ export function CatalogWorkspace({
                 ) : (
                   rows.map((r) => {
                     const isArchived = r.archived || r.matrix_archived;
+                    // Archived rows are highlighted (amber) so they stand out in
+                    // search results, where active + archived items are mixed.
                     const archivedRowCls = isArchived
-                      ? "bg-[var(--wms-surface-elevated)]/40 italic text-[var(--wms-muted)]"
+                      ? "bg-amber-500/15 italic text-amber-700 dark:text-amber-300"
                       : "";
                     return (
                     <tr

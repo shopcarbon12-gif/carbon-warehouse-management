@@ -170,6 +170,25 @@ export async function insertSyncAudit(
   );
 }
 
+/** Lightspeed delivers a category as a "PARENT >> SUB" full path
+ * (lightspeed-rseries-catalog-fetch normalises the LS slash path to " >> ").
+ * Split it so the catalog stores the parent in `category` and the leaf in
+ * `subcategory_1`, matching the legacy category tree:
+ *   "MEN >> BUTTON SHIRT" → category="MEN", subcategory_1="BUTTON SHIRT". */
+export function splitCategoryPath(raw: string | null | undefined): {
+  category: string | null;
+  subcategory: string | null;
+} {
+  const v = (raw ?? "").trim();
+  if (!v) return { category: null, subcategory: null };
+  const idx = v.indexOf(">>");
+  if (idx === -1) return { category: v, subcategory: null };
+  return {
+    category: v.slice(0, idx).trim() || null,
+    subcategory: v.slice(idx + 2).trim() || null,
+  };
+}
+
 export async function upsertMatrixRow(
   client: PoolClient,
   row: CatalogSyncMatrixPayload,
@@ -177,7 +196,7 @@ export async function upsertMatrixRow(
   const upc = row.upc?.trim() || null;
   const description = row.description.trim();
   const brand = row.brand?.trim() || null;
-  const category = row.category?.trim() || null;
+  const { category, subcategory } = splitCategoryPath(row.category);
   const vendor = row.vendor?.trim() || null;
   const lsSystemId = row.matrixLsSystemId;
 
@@ -188,16 +207,17 @@ export async function upsertMatrixRow(
    * is the conflict target; UPC is now a non-unique attribute. */
   if (lsSystemId != null) {
     const ins = await client.query<{ id: string }>(
-      `INSERT INTO matrices (upc, description, brand, category, vendor, ls_system_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO matrices (upc, description, brand, category, subcategory_1, vendor, ls_system_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (ls_system_id) WHERE ls_system_id IS NOT NULL DO UPDATE SET
          upc = EXCLUDED.upc,
          description = EXCLUDED.description,
          brand = COALESCE(EXCLUDED.brand, matrices.brand),
          category = COALESCE(EXCLUDED.category, matrices.category),
+         subcategory_1 = COALESCE(EXCLUDED.subcategory_1, matrices.subcategory_1),
          vendor = COALESCE(EXCLUDED.vendor, matrices.vendor)
        RETURNING id::text`,
-      [upc, description, brand, category, vendor, lsSystemId],
+      [upc, description, brand, category, subcategory, vendor, lsSystemId],
     );
     const id = ins.rows[0]?.id;
     if (!id) throw new Error("matrix upsert returned no id");
@@ -208,10 +228,10 @@ export async function upsertMatrixRow(
    * set matrixLsSystemId; this branch is the safety net. No conflict target —
    * always insert; manual dedupe is the caller's responsibility. */
   const ins = await client.query<{ id: string }>(
-    `INSERT INTO matrices (upc, description, brand, category, vendor, ls_system_id)
-     VALUES ($1, $2, $3, $4, $5, NULL)
+    `INSERT INTO matrices (upc, description, brand, category, subcategory_1, vendor, ls_system_id)
+     VALUES ($1, $2, $3, $4, $5, $6, NULL)
      RETURNING id::text`,
-    [upc, description, brand, category, vendor],
+    [upc, description, brand, category, subcategory, vendor],
   );
   const id = ins.rows[0]?.id;
   if (!id) throw new Error("matrix upsert returned no id");
