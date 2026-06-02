@@ -277,6 +277,23 @@ export function EncodePrintWorkspace() {
     setHits([]);
   }, []);
 
+  // box 8 (size-run) — fetch the style's real available sizes so the preview
+  // matches the printed tag (same /api/tags/sizes the Print Tags page uses).
+  const [sizesAvailable, setSizesAvailable] = useState("");
+  useEffect(() => {
+    if (!target) return;
+    let cancelled = false;
+    fetch(`/api/tags/sizes?customSkuId=${encodeURIComponent(target.id)}`)
+      .then((r) => r.json())
+      .then((j: { sizesAvailable?: string }) => {
+        if (!cancelled) setSizesAvailable(String(j.sizesAvailable ?? ""));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [target]);
+
   const carbonInput: CarbonTagInput | null = useMemo(
     () =>
       target
@@ -287,9 +304,10 @@ export function EncodePrintWorkspace() {
             upc: target.upc ?? "",
             customSku: target.sku,
             retailPrice: target.price ?? "0",
+            sizesAvailable,
           }
         : null,
-    [target],
+    [target, sizesAvailable],
   );
 
   // ── Encode → poll chip-write ─────────────────────────────────────────
