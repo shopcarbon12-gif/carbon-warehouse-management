@@ -153,17 +153,22 @@ export function LabelPreviewCanvas({
     vline(775, 64, 541);
 
     // rotated, optionally-centered, optionally-bold text field
+    // All ^FB,C fields center on the cell cross-axis (the grid box center,
+    // (86+513)/2 ≈ 300) — exactly like the printed ^FB,C does. Centering each
+    // field at y - fbW/2 instead gave each a different cross-position (the size
+    // landed ~28 dots left of the rest), which read as "not centered".
+    const CELL_CY = 300;
     const fld = (
       x: number,
       y: number,
       h: number,
-      fbW: number | null,
+      _fbW: number | null,
       txt: string,
       just: "C" | "L",
       bold = false,
     ) => {
       if (!txt) return;
-      const cy = just === "C" && fbW ? y - fbW / 2 : y;
+      const cy = just === "C" ? CELL_CY : y;
       ctx.save();
       ctx.translate(x, cy);
       ctx.rotate(-Math.PI / 2);

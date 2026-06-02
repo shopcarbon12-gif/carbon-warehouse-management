@@ -155,8 +155,23 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
 
   // ZPL CODE preview == what actually prints: RFID tab mirrors the commission
   // print (generateCarbonTagZpl, 300dpi Zebra .3); non-RFID tab is the 203dpi
-  // Jadens .220 tag with the box icon. sizesAvailable is filled server-side at
-  // commission, so the preview's sizes-run is blank.
+  // Zebra .220 tag with the box icon. The size-run (box 8) is fetched for the
+  // selected style so the preview matches the printed tag (e.g. "30 32 34").
+  const [sizesAvailable, setSizesAvailable] = useState("");
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    fetch(`/api/tags/sizes?customSkuId=${encodeURIComponent(selected.id)}`)
+      .then((r) => r.json())
+      .then((j: { sizesAvailable?: string }) => {
+        if (!cancelled) setSizesAvailable(String(j.sizesAvailable ?? ""));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
   const carbonInput: CarbonTagInput | null = useMemo(() => {
     if (!selected) return null;
     return {
@@ -166,9 +181,9 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
       upc: selected.upc ?? "",
       customSku: selected.sku,
       retailPrice: selected.price ?? "0",
-      sizesAvailable: "",
+      sizesAvailable,
     };
-  }, [selected]);
+  }, [selected, sizesAvailable]);
 
   const batchZpl = useMemo(() => {
     if (!carbonInput || !selected) return "";
