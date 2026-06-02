@@ -60,7 +60,11 @@ export type ScanFinalizeIntent = "save" | "upload";
 export type ScanFinalizeScreen =
   | "count_inventory"
   | "count_inventory_override"
-  | "add_on_count";
+  | "add_on_count"
+  // Add-On Catalog: only EPCs not already in the catalog (no items row or
+  // tag_killed). UPLOAD ingests them at in-stock (LIVE) and flips tag_killed →
+  // in-stock. No override. Standard ingest path (no add-on session/ledger).
+  | "add_on_catalog";
 
 export type ScanFinalizeInput = {
   tenantId: string;
@@ -156,6 +160,8 @@ function activityForScreen(screen: ScanFinalizeScreen): string {
       return "MOBILE COUNT (OVERRIDE)";
     case "add_on_count":
       return "ADD-ON COUNT";
+    case "add_on_catalog":
+      return "ADD-ON CATALOG";
   }
 }
 
@@ -166,6 +172,8 @@ function sourceForScreen(screen: ScanFinalizeScreen): EpcSource {
     case "count_inventory_override":
       return "count_inventory_override";
     case "add_on_count":
+      return "add_on_count";
+    case "add_on_catalog":
       return "add_on_count";
   }
 }

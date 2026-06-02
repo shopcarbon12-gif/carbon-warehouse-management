@@ -1222,15 +1222,20 @@ class WmsApiClient {
   /// Returns `{ ok, livePromoted, defectiveDismissed }`. Best-effort —
   /// the chip write already succeeded by the time we get here, so a
   /// finalize failure is a soft warning, not a flow-blocking error.
+  /// [promoteNew] false leaves the new EPC at status='unknown' so the operator
+  /// picks the final status from the post-encode dropdown (Encode + Encode &
+  /// Print). The old EPC is deleted permanently either way.
   Future<Map<String, dynamic>?> postEncodeFinalize({
     required String newEpc,
     String? oldEpc,
+    bool promoteNew = true,
   }) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/rfid/encode-finalize');
     final body = jsonEncode({
       'newEpc': newEpc.toUpperCase(),
       if (oldEpc != null && oldEpc.isNotEmpty) 'oldEpc': oldEpc.toUpperCase(),
+      'promoteNew': promoteNew,
     });
     final res = await _http.post(
       uri,

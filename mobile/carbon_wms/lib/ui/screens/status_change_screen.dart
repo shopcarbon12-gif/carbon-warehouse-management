@@ -77,6 +77,12 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
 
   // ── trigger / radio ──────────────────────────────────────────────────
   StreamSubscription<RfidTagRead>? _uhfSub;
+  // Raw vendor tag stream — the RfidManager geiger path silently drops reads
+  // when the manager's active-driver state is out of sync with the sled (seen
+  // after the encode screens drive the radio via RfidVendorChannel directly).
+  // Listening here guarantees reads reach _onUhfRead regardless of manager
+  // state; _onUhfRead dedupes so the overlap with the geiger sub is harmless.
+  StreamSubscription<RfidTagRead>? _directSub;
   StreamSubscription<String>? _triggerSub;
   bool _scanning = false;
 
@@ -108,6 +114,9 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
       // accumulator doesn't capture status-change scans.
       rfid.scanContext = 'GEIGER_FIND';
       _uhfSub = rfid.geigerTagReads.listen(_onUhfRead, onError: (_) {});
+      // Also listen to the raw vendor stream so reads land even if the
+      // manager's geiger path is out of sync (see field comment).
+      _directSub = RfidVendorChannel.tagReadStream().listen(_onUhfRead, onError: (_) {});
 
       await _hydrateSliderRange();
       await rfid.setSessionPowerOverrideDbm(_powerDbm);
@@ -133,6 +142,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   @override
   void dispose() {
     unawaited(_uhfSub?.cancel());
+    unawaited(_directSub?.cancel());
     unawaited(_triggerSub?.cancel());
     unawaited(RfidVendorChannel.stopChainwayInventory());
     unawaited(RfidVendorChannel.stopZebraInventory());
@@ -169,6 +179,12 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     try {
       await RfidVendorChannel.startChainwayInventory();
     } catch (_) {}
+    // Start via the manager path too — this is what actually feeds reads to
+    // the RfidManager streams and keeps its driver state consistent. Without
+    // it the trigger started the radio but no reads arrived.
+    try {
+      await _rfid?.startLocateScanning();
+    } catch (_) {}
   }
 
   Future<void> _stopScan() async {
@@ -182,6 +198,9 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     } catch (_) {}
     try {
       await RfidVendorChannel.stopChainwayInventory();
+    } catch (_) {}
+    try {
+      await _rfid?.stopLocateScanning();
     } catch (_) {}
   }
 

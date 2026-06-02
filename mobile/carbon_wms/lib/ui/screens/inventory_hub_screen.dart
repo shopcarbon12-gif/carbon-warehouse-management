@@ -42,7 +42,7 @@ class InventoryHubScreen extends StatelessWidget {
             children: <Widget>[
               if (perms.canView(ScreenIds.countInventory))
                 _InventoryTile(
-                  label: 'COUNT',
+                  label: 'COUNT INVENTORY',
                   icon: LucideIcons.layers,
                   tileColor: tileColor,
                   iconColor: iconColor,
@@ -55,7 +55,7 @@ class InventoryHubScreen extends StatelessWidget {
               if (perms.canView(ScreenIds.addOnCount) ||
                   perms.canView(ScreenIds.addOnCountSourcePicker))
                 _InventoryTile(
-                  label: 'ADD-ON',
+                  label: 'ADD-ON COUNT',
                   icon: LucideIcons.plusCircle,
                   tileColor: tileColor,
                   iconColor: iconColor,
@@ -72,13 +72,7 @@ class InventoryHubScreen extends StatelessWidget {
                 iconColor: iconColor,
                 textColor: textColor,
               ),
-              _InventoryTile(
-                label: 'ADJUST',
-                icon: LucideIcons.slidersHorizontal,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-              ),
+              // Catalog moved to the left (was Adjust's slot).
               if (perms.canView(ScreenIds.inventoryCatalog))
                 _InventoryTile(
                   label: 'CATALOG',
@@ -89,6 +83,20 @@ class InventoryHubScreen extends StatelessWidget {
                   onTap: () => context.pushGuarded<void>(
                     ScreenIds.inventoryCatalog,
                     (_) => const InventoryCatalogScreen(),
+                  ),
+                ),
+              // Add-On Catalog — Count Inventory cloned in add-on-catalog mode:
+              // counts only EPCs not already in the catalog and adds them LIVE.
+              if (perms.canView(ScreenIds.addOnCatalog))
+                _InventoryTile(
+                  label: 'ADD-ON CATALOG',
+                  icon: LucideIcons.bookPlus,
+                  tileColor: tileColor,
+                  iconColor: iconColor,
+                  textColor: textColor,
+                  onTap: () => context.pushGuarded<void>(
+                    ScreenIds.addOnCatalog,
+                    (_) => const CountInventoryScreen(mode: CountMode.addOnCatalog),
                   ),
                 ),
               if (perms.canView(ScreenIds.reportsHub))

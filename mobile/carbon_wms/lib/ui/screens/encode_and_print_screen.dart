@@ -76,6 +76,21 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   String _statusMsg = 'Pull the trigger to scan a barcode — or type to search.';
   String? _errMsg;
 
+  // Decoded info for the live nearest tag (formula lookup).
+  Map<String, dynamic>? _nearestInfo;
+  String? _infoEpc;
+  Timer? _lookupTimer;
+
+  // Post-encode status (operator picks; default unknown).
+  static const _statusOptions = <(String, String)>[
+    ('unknown', 'UNKNOWN'),
+    ('in-stock', 'LIVE'),
+    ('tag_killed', 'TAG KILLED'),
+  ];
+  String _doneStatus = 'unknown';
+  bool _statusSaved = true;
+  bool _savingStatus = false;
+
   @override
   void initState() {
     super.initState();
@@ -115,6 +130,7 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
           _nearestEpc = epc.toUpperCase();
           if (rssi != null) _nearestRssi = rssi;
         });
+        _scheduleNearestLookup();
       }
     }, onError: (_) {});
 
@@ -157,6 +173,7 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _lookupTimer?.cancel();
     _searchCtrl.dispose();
     unawaited(_barcodeSub?.cancel());
     unawaited(_tagSub?.cancel());
@@ -273,6 +290,8 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
       _step = _Step.encode;
       _nearestEpc = null;
       _nearestRssi = null;
+      _nearestInfo = null;
+      _infoEpc = null;
       _newEpc = null;
       _errMsg = null;
       _statusMsg = 'Bring a tag close, then pull the trigger to encode.';
@@ -310,6 +329,48 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
       _step = _Step.sku;
       _statusMsg = 'Pull the trigger to scan a barcode — or type to search.';
     });
+  }
+
+  // Decode the live nearest EPC against the tenant formula (debounced) so we
+  // can show its SKU/description under the EPC when it passes the formula.
+  void _scheduleNearestLookup() {
+    final epc = _nearestEpc;
+    if (epc == null || epc == _infoEpc) return;
+    _lookupTimer?.cancel();
+    _lookupTimer = Timer(const Duration(milliseconds: 350), () async {
+      if (!mounted || _step != _Step.encode || _nearestEpc != epc) return;
+      try {
+        final rows = await context.read<WmsApiClient>().lookupEpcs([epc]);
+        if (!mounted || _nearestEpc != epc) return;
+        setState(() {
+          _infoEpc = epc;
+          _nearestInfo = rows.isNotEmpty ? rows.first : null;
+        });
+      } catch (_) {/* best-effort */}
+    });
+  }
+
+  Future<void> _saveDoneStatus() async {
+    final epc = _newEpc;
+    if (epc == null || _statusSaved || _savingStatus) return;
+    final api = context.read<WmsApiClient>();
+    setState(() => _savingStatus = true);
+    try {
+      await api.postBulkStatus(epcs: [epc], targetStatus: _doneStatus);
+      if (!mounted) return;
+      setState(() {
+        _statusSaved = true;
+        _savingStatus = false;
+      });
+      _sounds.play(ScanCue.success);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _savingStatus = false;
+        _errMsg = 'Status save failed: $e';
+      });
+      _sounds.play(ScanCue.error);
+    }
   }
 
   // ── Step 2: commit = write + verify ─────────────────────────────────────
@@ -364,7 +425,12 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
       return;
     }
     if (!mounted) return;
-    setState(() => _newEpc = newEpc);
+    setState(() {
+      _newEpc = newEpc;
+      _doneStatus = 'unknown';
+      _statusSaved = true;
+      _savingStatus = false;
+    });
 
     bool written = false;
     try {
@@ -378,7 +444,9 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
       return;
     }
     try {
-      await api.postEncodeFinalize(newEpc: newEpc, oldEpc: oldEpc);
+      // promoteNew:false → new EPC stays 'unknown'; the operator picks the
+      // final status from the post-encode dropdown. Old EPC is deleted.
+      await api.postEncodeFinalize(newEpc: newEpc, oldEpc: oldEpc, promoteNew: false);
     } catch (_) {/* chip written; finalize is best-effort */}
     _sounds.play(ScanCue.success);
 
@@ -594,15 +662,109 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
                   )),
               if (_newEpc == null && _nearestRssi != null)
                 Text('$_nearestRssi dBm', style: GoogleFonts.spaceGrotesk(fontSize: 11.sp, color: AppColors.textMuted)),
+              _decodedInfo(),
             ],
           ),
         ),
+        _doneStatusTray(),
         const Spacer(),
         if (_busy) const Center(child: CircularProgressIndicator(color: AppColors.primary)),
         SizedBox(height: 12.h),
         _statusLine(),
         const Spacer(),
       ],
+    );
+  }
+
+  /// Decoded SKU/description for the live nearest tag, shown under the EPC when
+  /// it passes the tenant formula.
+  Widget _decodedInfo() {
+    final info = _nearestInfo;
+    if (_newEpc != null || info == null) return const SizedBox.shrink();
+    if (info['valid'] != true) {
+      return Padding(
+        padding: EdgeInsets.only(top: 6.h),
+        child: Text('fails formula — not a Carbon tag',
+            style: GoogleFonts.manrope(fontSize: 11.sp, color: AppColors.textMuted)),
+      );
+    }
+    final sku = info['sku']?.toString() ?? '';
+    final desc = [info['productName'], info['color'], info['size']]
+        .map((e) => e?.toString() ?? '')
+        .where((e) => e.trim().isNotEmpty)
+        .join(' · ');
+    final status = info['status']?.toString() ?? '';
+    return Padding(
+      padding: EdgeInsets.only(top: 6.h),
+      child: Column(
+        children: [
+          if (sku.isNotEmpty)
+            Text(sku,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.spaceGrotesk(fontSize: 13.sp, fontWeight: FontWeight.w700, color: AppColors.textMain)),
+          if (desc.isNotEmpty)
+            Text(desc,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.manrope(fontSize: 11.sp, color: AppColors.textMuted)),
+          if (status.isNotEmpty)
+            Text('status: $status', style: GoogleFonts.manrope(fontSize: 10.sp, color: AppColors.textMuted)),
+        ],
+      ),
+    );
+  }
+
+  /// Post-encode status picker (UNKNOWN / LIVE / TAG KILLED) — the new EPC
+  /// stays 'unknown' until the operator saves a choice (same as the Encode
+  /// screen). Only shown once a tag is encoded.
+  Widget _doneStatusTray() {
+    if (_step != _Step.done || _newEpc == null) return const SizedBox.shrink();
+    return Container(
+      margin: EdgeInsets.only(top: 10.h),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+      decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border)),
+      child: Row(
+        children: [
+          Text('STATUS', style: GoogleFonts.manrope(fontSize: 11.sp, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                isDense: true,
+                value: _doneStatus,
+                items: _statusOptions
+                    .map((o) => DropdownMenuItem<String>(
+                          value: o.$1,
+                          child: Text(o.$2,
+                              style: GoogleFonts.spaceGrotesk(fontSize: 14.sp, fontWeight: FontWeight.w800, color: AppColors.textMain)),
+                        ))
+                    .toList(),
+                onChanged: _savingStatus
+                    ? null
+                    : (v) {
+                        if (v == null) return;
+                        setState(() {
+                          _doneStatus = v;
+                          _statusSaved = false;
+                        });
+                      },
+              ),
+            ),
+          ),
+          SizedBox(width: 8.w),
+          TextButton(
+            onPressed: (_statusSaved || _savingStatus) ? null : () => _saveDoneStatus(),
+            child: Text(
+              _savingStatus ? 'Saving…' : (_statusSaved ? 'Saved' : 'Save'),
+              style: GoogleFonts.manrope(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w700,
+                color: (_statusSaved || _savingStatus) ? AppColors.textMuted : AppColors.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

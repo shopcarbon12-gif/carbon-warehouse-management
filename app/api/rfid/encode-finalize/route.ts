@@ -36,6 +36,11 @@ export const dynamic = "force-dynamic";
 const bodySchema = z.object({
   newEpc: z.string().regex(/^[0-9A-Fa-f]{24}$/u, "newEpc must be 24 hex chars"),
   oldEpc: z.string().regex(/^[0-9A-Fa-f]{24}$/u, "oldEpc must be 24 hex chars").optional(),
+  // When false, the new EPC is LEFT at status='unknown' so the operator picks
+  // the final status from the post-encode dropdown (Encode + Encode & Print
+  // screens). Defaults true to keep the auto-LIVE behaviour the Re-Encode flow
+  // relies on. The old-EPC delete happens regardless.
+  promoteNew: z.boolean().optional().default(true),
 });
 
 export async function POST(req: Request) {
@@ -64,6 +69,7 @@ export async function POST(req: Request) {
   }
   const newEpc = parsed.data.newEpc.toUpperCase();
   const oldEpc = parsed.data.oldEpc?.toUpperCase();
+  const promoteNew = parsed.data.promoteNew;
 
   const client = await pool.connect();
   try {
@@ -74,18 +80,21 @@ export async function POST(req: Request) {
     // (e.g. operator manually flipped to TAG KILLED via the post-encode
     // dropdown) wins over the auto-promotion. tenant_id check via the
     // join prevents cross-tenant promotion if the EPC happens to collide.
-    const livePromote = await client.query(
-      `UPDATE items i
-          SET status = 'in-stock'
-         FROM locations l
-        WHERE i.location_id = l.id
-          AND l.tenant_id = $1::uuid
-          AND i.location_id = $2::uuid
-          AND i.epc = $3
-          AND i.status = 'unknown'`,
-      [session.tid, session.lid, newEpc],
-    );
-    const livePromoted = (livePromote.rowCount ?? 0) > 0;
+    let livePromoted = false;
+    if (promoteNew) {
+      const livePromote = await client.query(
+        `UPDATE items i
+            SET status = 'in-stock'
+           FROM locations l
+          WHERE i.location_id = l.id
+            AND l.tenant_id = $1::uuid
+            AND i.location_id = $2::uuid
+            AND i.epc = $3
+            AND i.status = 'unknown'`,
+        [session.tid, session.lid, newEpc],
+      );
+      livePromoted = (livePromote.rowCount ?? 0) > 0;
+    }
 
     // DELETE the old EPC's items row entirely. Pre-2026-05-30 we only
     // dismissed (`defective_acknowledged_at = now()`) which left the row

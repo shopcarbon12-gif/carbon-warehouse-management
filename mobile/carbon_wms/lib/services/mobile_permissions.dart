@@ -178,6 +178,8 @@ abstract final class ScreenIds {
   static const String cleanBin = 'clean_bin';
   static const String binAssignSettings = 'bin_assign_settings';
   static const String inventoryCsvSession = 'inventory_csv_session';
+  // Add-On Catalog — Count Inventory clone that adds not-yet-cataloged EPCs LIVE.
+  static const String addOnCatalog = 'add_on_catalog';
 
   // Add-On Count
   static const String addOnCount = 'add_on_count';

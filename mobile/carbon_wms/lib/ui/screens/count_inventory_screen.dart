@@ -132,14 +132,26 @@ String _stripNameSizeSuffix(String name, {String? size, String? color}) {
   return out;
 }
 
+/// Drives the two modes this screen serves:
+///  - [count]        : standard Count Inventory — counts LIVE / no-row EPCs.
+///  - [addOnCatalog] : Add-On Catalog — counts ONLY EPCs that pass the formula
+///    and are NOT already in the catalog (no items row, or status='tag_killed').
+///    In-stock EPCs are ignored entirely. Upload adds them to the catalog as
+///    LIVE (and flips tag_killed → in-stock). No override option.
+enum CountMode { count, addOnCatalog }
+
 class CountInventoryScreen extends StatefulWidget {
-  const CountInventoryScreen({super.key});
+  const CountInventoryScreen({super.key, this.mode = CountMode.count});
+
+  final CountMode mode;
 
   @override
   State<CountInventoryScreen> createState() => _CountInventoryScreenState();
 }
 
 class _CountInventoryScreenState extends State<CountInventoryScreen> {
+  /// True for the Add-On Catalog module (see [CountMode.addOnCatalog]).
+  bool get _isAddOnCatalog => widget.mode == CountMode.addOnCatalog;
   /// Every EPC the radio reports in this session, keyed by EPC. Includes
   /// defective ones (formula-fail or catalog-miss) — the upload pipeline
   /// reads from here so the server still receives the full read set and
@@ -251,7 +263,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final firstName = firstNameRaw.isEmpty
         ? 'Operator'
         : '${firstNameRaw[0].toUpperCase()}${firstNameRaw.substring(1).toLowerCase()}';
-    return 'count-$mm$dd-$hStr$mmStr-$firstName.csv';
+    final prefix = _isAddOnCatalog ? 'addon-catalog' : 'count';
+    return '$prefix-$mm$dd-$hStr$mmStr-$firstName.csv';
   }
 
   @override
@@ -579,15 +592,23 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final cfg = context.read<MobileSettingsRepository>().epcConfig;
     final systemId = decodeSystemId(normalized, cfg);
     if (systemId == null) {
-      // Formula-fail (company prefix mismatch, undecodable bits, etc.).
-      // Counts as defective; no container.
+      // Formula-fail. Add-On Catalog only reads tags that pass the formula —
+      // ignore it entirely (not even defective). Count keeps it as defective.
+      if (_isAddOnCatalog) {
+        _epcRows.remove(normalized);
+        return;
+      }
       _defectiveEpcs.add(normalized);
       return;
     }
     final sysIdStr = systemId.toString();
     if (_catalogMissingSystemIds.contains(sysIdStr)) {
-      // We already learned this system_id has no catalog row this session.
-      // Skip the container, route straight to defective.
+      // No catalog row for this system_id. Add-On Catalog can't add it (no
+      // SKU to map) → ignore entirely. Count routes it to defective.
+      if (_isAddOnCatalog) {
+        _epcRows.remove(normalized);
+        return;
+      }
       _defectiveEpcs.add(normalized);
       return;
     }
@@ -650,7 +671,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       return;
     }
     if (!mounted) return;
-    final reclassify = <String>[];
+    final reclassify = <String>[]; // Count: move to defective bucket.
+    final drop = <String>[]; // Add-On Catalog: ignore entirely (already in WMS).
     for (final r in rows) {
       final epc = (r['epcHex'] as String?)?.toUpperCase();
       if (epc == null || epc.isEmpty) continue;
@@ -658,21 +680,25 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       final status = raw is String && raw.trim().isNotEmpty ? raw : null;
       _epcStatus[epc] = status;
       _epcStatusFetched.add(epc);
-      // The user's classification rule: null (no items row) and 'in-stock'
-      // (LIVE) both count as valid containers; everything else is a
-      // defective scan that should drop out of the SKU group.
-      if (status != null && status != 'in-stock') {
-        reclassify.add(epc);
+      if (_isAddOnCatalog) {
+        // Add-On Catalog counts ONLY EPCs not already in the catalog: no items
+        // row (null) or 'tag_killed' (in the defective list — upload revives
+        // it to LIVE). Anything else is already known to WMS → ignore it
+        // completely: not counted, not shown, not in the report.
+        if (status != null && status != 'tag_killed') {
+          drop.add(epc);
+        }
+      } else {
+        // Count: null (no items row) and 'in-stock' (LIVE) are valid;
+        // everything else is a defective scan that drops out of the group.
+        if (status != null && status != 'in-stock') {
+          reclassify.add(epc);
+        }
       }
     }
-    if (reclassify.isEmpty) return;
-    // Move the now-known-defective EPCs out of whatever group they were
-    // in. The set is small (typically 0..few per tick) so a linear scan
-    // across _groupedRows is fine. If a group ends up empty after the
-    // removal, drop the group entirely so the UI list stays clean.
+    if (reclassify.isEmpty && drop.isEmpty) return;
     setState(() {
-      for (final epc in reclassify) {
-        _defectiveEpcs.add(epc);
+      void removeFromGroups(String epc) {
         final emptiedGroups = <String>[];
         _groupedRows.forEach((sysId, g) {
           if (g.epcs.remove(epc)) {
@@ -683,6 +709,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         for (final id in emptiedGroups) {
           _groupedRows.remove(id);
         }
+      }
+
+      for (final epc in reclassify) {
+        _defectiveEpcs.add(epc);
+        removeFromGroups(epc);
+      }
+      for (final epc in drop) {
+        // Erase from the session — no count, no row, no upload, no defective.
+        _epcRows.remove(epc);
+        removeFromGroups(epc);
       }
     });
     _syncDisplayedCounters();
@@ -707,7 +743,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         final removed = _groupedRows.remove(sysIdStr);
         if (removed != null) {
           for (final e in removed.epcs) {
-            _defectiveEpcs.add(e);
+            // Add-On Catalog can't add an EPC with no catalog SKU → ignore it
+            // entirely. Count buckets it as defective.
+            if (_isAddOnCatalog) {
+              _epcRows.remove(e);
+            } else {
+              _defectiveEpcs.add(e);
+            }
           }
         }
         // No setState here — the _uiFlushTimer (150 ms) repaints from
@@ -1151,9 +1193,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     }
     final result = await api.postScanFinalize(
       intent: 'upload',
-      screen: overrideCatalog ? 'count_inventory_override' : 'count_inventory',
+      screen: _isAddOnCatalog
+          ? 'add_on_catalog'
+          : (overrideCatalog ? 'count_inventory_override' : 'count_inventory'),
       rows: rows,
-      overrideCatalog: overrideCatalog,
+      // Add-On Catalog never overrides — it only adds the scanned not-yet-
+      // cataloged EPCs to the catalog as LIVE (server ingest flips tag_killed).
+      overrideCatalog: _isAddOnCatalog ? false : overrideCatalog,
       clientFilename: _autoReportFilename(),
     );
     final valid = result['rowsValid'] ?? 0;
@@ -1181,7 +1227,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (rows.isEmpty) return;
     await api.postScanFinalize(
       intent: 'save',
-      screen: 'count_inventory',
+      screen: _isAddOnCatalog ? 'add_on_catalog' : 'count_inventory',
       rows: rows,
       overrideCatalog: false,
       clientFilename: _autoReportFilename(),
@@ -1207,6 +1253,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           buildBackendPreviewPayload: () => _buildBackendPreviewPayload(groups),
           onUploadReport: _uploadCountReport,
           onArchiveReport: _archiveSavedReport,
+          showOverride: !_isAddOnCatalog,
         ),
       ),
     );
@@ -1250,7 +1297,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     const summaryBoxHeight = 60.0;
 
     return CarbonScaffold(
-      pageTitle: 'count',
+      pageTitle: _isAddOnCatalog ? 'add-on catalog' : 'count inventory',
       actions: [
         IconButton(
           icon: const Icon(Icons.settings_outlined),
@@ -2154,7 +2201,12 @@ class _CountInventoryContinueScreen extends StatefulWidget {
     required this.buildBackendPreviewPayload,
     required this.onUploadReport,
     required this.onArchiveReport,
+    this.showOverride = true,
   });
+
+  /// Add-On Catalog hides the "Override Entire Cloud Quantities" option — that
+  /// module only ever adds the scanned EPCs, never wipes/replaces.
+  final bool showOverride;
 
   final List<_GroupedRow> groupedRows;
 
@@ -2627,6 +2679,7 @@ class _CountInventoryContinueScreenState
                       ),
                     ),
                   ),
+                  if (widget.showOverride) ...[
                   SizedBox(height: 12.h),
                   SizedBox(
                     height: overH,
@@ -2706,6 +2759,7 @@ class _CountInventoryContinueScreenState
                       ),
                     ),
                   ),
+                  ],
                 ],
               ),
             ),

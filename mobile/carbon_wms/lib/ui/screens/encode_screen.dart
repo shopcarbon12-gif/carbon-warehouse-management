@@ -136,6 +136,10 @@ class _EncodeScreenState extends State<EncodeScreen> {
   String? _searchError;
   List<Map<String, dynamic>> _searchResults = [];
   Map<String, dynamic>? _selectedSku;
+  // True when the current search was kicked off by a 2D barcode scan (not
+  // manual typing) — used to auto-select a unique/exact in-catalog match so
+  // the operator doesn't have to tap the result.
+  bool _autoSelectFromScan = false;
 
   // Phase 3
   int _encodingIndex = -1;
@@ -331,6 +335,8 @@ class _EncodeScreenState extends State<EncodeScreen> {
 
   void _onSearchChanged(String v) {
     _query = v.trim();
+    // Manual typing never auto-selects — only a barcode scan does.
+    _autoSelectFromScan = false;
     _searchDebounceTimer?.cancel();
     if (_query.length < _minQueryLen) {
       setState(() {
@@ -342,9 +348,25 @@ class _EncodeScreenState extends State<EncodeScreen> {
     _searchDebounceTimer = Timer(_searchDebounce, _runSearch);
   }
 
+  /// Find a unique in-catalog match for a scanned value: exact SKU, exact UPC
+  /// (digits), else the sole result. Returns null when ambiguous so the
+  /// operator picks from the list.
+  Map<String, dynamic>? _matchScanned(List<Map<String, dynamic>> rows, String wantedUpper) {
+    final wd = wantedUpper.replaceAll(RegExp(r'[^0-9]'), '');
+    for (final r in rows) {
+      final sku = (r['sku'] ?? '').toString().toUpperCase();
+      final upc = (r['upc'] ?? '').toString().replaceAll(RegExp(r'[^0-9]'), '');
+      if (sku == wantedUpper) return r;
+      if (wd.isNotEmpty && upc.isNotEmpty && upc == wd) return r;
+    }
+    return rows.length == 1 ? rows.first : null;
+  }
+
   Future<void> _runSearch() async {
     if (!mounted) return;
     final api = context.read<WmsApiClient>();
+    final auto = _autoSelectFromScan;
+    final wanted = _query.trim().toUpperCase();
     setState(() {
       _searchLoading = true;
       _searchError = null;
@@ -352,6 +374,20 @@ class _EncodeScreenState extends State<EncodeScreen> {
     try {
       final rows = await api.catalogSearch(_query, limit: 12);
       if (!mounted) return;
+      // Scanned a barcode that resolves to a single in-catalog SKU → select it
+      // automatically; no tap needed.
+      if (auto && rows.isNotEmpty) {
+        final match = _matchScanned(rows, wanted);
+        if (match != null) {
+          _autoSelectFromScan = false;
+          setState(() {
+            _searchResults = [];
+            _searchLoading = false;
+          });
+          _selectSku(match);
+          return;
+        }
+      }
       setState(() {
         _searchResults = rows;
         _searchLoading = false;
@@ -459,6 +495,15 @@ class _EncodeScreenState extends State<EncodeScreen> {
         try {
           ScanSounds.instance.play(ScanCue.success);
         } catch (_) {}
+        // Permanently DELETE the old EPC's items row (encode-claim marked it
+        // tag_killed) so it never returns to the catalog or the Defective
+        // EPCs list — only encode_events keeps the old→new mapping.
+        // promoteNew:false leaves the new EPC at 'unknown' for the dropdown.
+        unawaited(api.postEncodeFinalize(
+          newEpc: newEpc,
+          oldEpc: tag.oldEpc,
+          promoteNew: false,
+        ));
         // Cloud + Geiger auto-resolve: dismiss the queue row if this
         // tag's OLD EPC was the one we were sent to deal with.
         final resolveEpc = widget.cloudGeigerResolveEpc?.trim().toUpperCase();
@@ -828,7 +873,13 @@ class _EncodeScreenState extends State<EncodeScreen> {
     _searchCtrl.text = v;
     _searchCtrl.selection =
         TextSelection.collapsed(offset: _searchCtrl.text.length);
-    _onSearchChanged(v);
+    // Barcode scan → search immediately and auto-select a unique match.
+    _query = v;
+    _autoSelectFromScan = true;
+    _searchDebounceTimer?.cancel();
+    if (_query.length >= _minQueryLen) {
+      unawaited(_runSearch());
+    }
   }
 
   Widget _buildTagListBody() {
@@ -839,8 +890,8 @@ class _EncodeScreenState extends State<EncodeScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.radio,
-                size: 40, color: const Color(0xFF8FA1A1)),
+            const Icon(LucideIcons.radio,
+                size: 40, color: Color(0xFF8FA1A1)),
             const SizedBox(height: 12),
             Text(
               _phase == _Phase.scan
@@ -880,6 +931,42 @@ class _EncodeScreenState extends State<EncodeScreen> {
                   : null,
             ),
             if (_phase == _Phase.post && tag.newEpc != null) ...[
+              // New + old EPC, in the SKU number's font, above the status — so
+              // the operator sees exactly which chip id replaced which.
+              Container(
+                width: double.infinity,
+                color: _kCardGrey,
+                padding: EdgeInsets.fromLTRB(14.w, 10.h, 14.w, 8.h),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'new epc: ${tag.newEpc}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF171D1D),
+                        fontFamily: 'monospace',
+                        height: 1.3,
+                      ),
+                    ),
+                    Text(
+                      'old epc: ${tag.oldEpc}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF8A9090),
+                        fontFamily: 'monospace',
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               _StatusTray(
                 tag: tag,
                 onStatusChanged: (s) => _setStatusForTag(tag, s),
@@ -1157,9 +1244,11 @@ class _CountItemContainer extends StatelessWidget {
   }
 
   Map<String, String> _kvs() {
-    final r = tag.resolved;
-    if (r == null) return const {};
     final out = <String, String>{};
+    // Always surface the current scanned tag's EPC on the card.
+    out['EPC'] = tag.oldEpc;
+    final r = tag.resolved;
+    if (r == null) return out;
     final upc = r['upc']?.toString() ?? '';
     final color = r['color']?.toString() ?? '';
     final size = r['size']?.toString() ?? '';

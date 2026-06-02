@@ -43,7 +43,7 @@ const rowSchema = z
 
 const bodySchema = z.object({
   intent: z.enum(["save", "upload"]),
-  screen: z.enum(["count_inventory", "count_inventory_override", "add_on_count"]),
+  screen: z.enum(["count_inventory", "count_inventory_override", "add_on_count", "add_on_catalog"]),
   overrideCatalog: z.boolean().optional().default(false),
   rows: z.array(rowSchema).min(1).max(50_000),
   deviceId: z.string().min(1).max(256).optional(),
