@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { decodeEpc } from "@/lib/server/epc-decode";
+import { legacyEpcSystemId, legacyEpcSerial } from "@/lib/server/legacy-epc-catalog";
 import { loadEpcConfig } from "@/lib/server/epc-ingress";
 import { isIgnoredEpc } from "@/lib/server/ignored-epcs";
 import { loadStatusLabelBrainMap } from "@/lib/server/status-label-enforcement";
@@ -108,15 +109,40 @@ export async function ingestCycleCountEpcs(
       }
     }
 
-    // 2. Run the formula.
+    // 2. Run the primary formula, then the LEGACY catalog-entrance fallback.
     const decoded = config ? decodeEpc(epc, config) : null;
 
-    if (!decoded || !decoded.valid) {
+    // Resolve to a catalog SKU: primary formula first; if it can't place the
+    // tag, fall back to the legacy formula (int(epc[5:15],16)). The legacy
+    // path is used ONLY here to bring already-encoded tags into stock — never
+    // for encode/print/re-encode.
+    let resolvedCustomSkuId: string | null = null;
+    let resolvedSerial: bigint | null = null;
+    if (decoded && decoded.valid) {
+      resolvedCustomSkuId = await lookupCatalogBySystemId(client, decoded.systemId!);
+      resolvedSerial = decoded.serial;
+    }
+    if (!resolvedCustomSkuId) {
+      const legacySystemId = legacyEpcSystemId(epc);
+      if (legacySystemId !== null) {
+        const legacyMatch = await lookupCatalogBySystemId(client, legacySystemId);
+        if (legacyMatch) {
+          resolvedCustomSkuId = legacyMatch;
+          resolvedSerial =
+            (decoded && decoded.valid ? decoded.serial : null) ?? legacyEpcSerial(epc);
+        }
+      }
+    }
+
+    if (!resolvedCustomSkuId) {
+      // Neither formula placed it → defective (decode-fail vs no-catalog-match).
+      const failOutcome: CycleCountScanOutcome =
+        !decoded || !decoded.valid ? "defective_decode_fail" : "defective_no_match";
       const r = await upsertItem(client, {
         epc,
         status: "tag_killed",
         customSkuId: null,
-        serial: null,
+        serial: decoded && decoded.valid ? decoded.serial : null,
         locationId: args.locationId,
         receivedAt: args.receivedAt,
       });
@@ -130,11 +156,11 @@ export async function ingestCycleCountEpcs(
         newStatus: "tag_killed",
         previousLocationId: prior?.location_id ?? null,
         newLocationId: args.locationId,
-        outcome: "defective_decode_fail",
+        outcome: failOutcome,
       });
       results.push({
         epc,
-        outcome: "defective_decode_fail",
+        outcome: failOutcome,
         previous_status: prior?.status ?? null,
         new_status: "tag_killed",
         from_location_id: prior?.location_id ?? null,
@@ -142,40 +168,7 @@ export async function ingestCycleCountEpcs(
       continue;
     }
 
-    const customSkuId = await lookupCatalogBySystemId(client, decoded.systemId!);
-
-    if (!customSkuId) {
-      const r = await upsertItem(client, {
-        epc,
-        status: "tag_killed",
-        customSkuId: null,
-        serial: decoded.serial,
-        locationId: args.locationId,
-        receivedAt: args.receivedAt,
-      });
-      await writeAudit(client, {
-        tenantId: args.tenantId,
-        userId: args.userId,
-        sessionId: args.sessionId,
-        epc,
-        itemId: r.id,
-        previousStatus: prior?.status ?? null,
-        newStatus: "tag_killed",
-        previousLocationId: prior?.location_id ?? null,
-        newLocationId: args.locationId,
-        outcome: "defective_no_match",
-      });
-      results.push({
-        epc,
-        outcome: "defective_no_match",
-        previous_status: prior?.status ?? null,
-        new_status: "tag_killed",
-        from_location_id: prior?.location_id ?? null,
-      });
-      continue;
-    }
-
-    // 3. Catalog match — write/move to in-stock at this location.
+    // 3. Catalog match (primary or legacy) — write/move to in-stock here.
     const outcome: CycleCountScanOutcome = !prior
       ? "live_added"
       : prior.status === "in-stock" && prior.location_id === args.locationId
@@ -187,8 +180,8 @@ export async function ingestCycleCountEpcs(
     const r = await upsertItem(client, {
       epc,
       status: "in-stock",
-      customSkuId,
-      serial: decoded.serial,
+      customSkuId: resolvedCustomSkuId,
+      serial: resolvedSerial,
       locationId: args.locationId,
       receivedAt: args.receivedAt,
     });

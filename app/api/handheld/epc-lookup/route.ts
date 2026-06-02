@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getPool } from "@/lib/db";
 import { resolveTenantOrError } from "@/lib/auth/resolve-tenant";
 import { decodeEpc, type EpcConfig } from "@/lib/server/epc-decode";
+import { legacyEpcSystemId } from "@/lib/server/legacy-epc-catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,13 @@ const bodySchema = z.object({
   epcs: z.array(z.string()).min(1).max(500),
   deviceId: z.string().min(1).max(256).optional(),
 });
+
+// LEGACY catalog-entrance fallback (recognition side). Returns the decimal
+// system_id string (matches ls_system_id::text). Shared with the ingest path;
+// NEVER used for encode/print. See lib/server/legacy-epc-catalog.ts.
+function legacyCatalogSystemId(epc: string): string | null {
+  return legacyEpcSystemId(epc)?.toString() ?? null;
+}
 
 export async function POST(req: Request) {
   const pool = getPool();
@@ -106,6 +114,30 @@ export async function POST(req: Request) {
     for (const row of r.rows) catalog.set(row.ls_system_id, row);
   }
 
+  // LEGACY fallback: for EPCs the primary formula couldn't place (invalid, or
+  // a valid system_id with no catalog row), try int(epc[5:15],16). Build the
+  // set of legacy system_ids needed, then resolve them against the catalog.
+  const legacyByEpc = new Map<string, string>(); // epcHex → legacy system_id
+  for (const d of decoded) {
+    const primaryResolved = d.systemId !== null && catalog.has(d.systemId);
+    if (primaryResolved) continue;
+    const legacySid = legacyCatalogSystemId(d.epcHex);
+    if (legacySid) legacyByEpc.set(d.epcHex, legacySid);
+  }
+  const legacyCatalog = new Map<string, CatRow>();
+  const legacySystemIds = Array.from(new Set(legacyByEpc.values()));
+  if (legacySystemIds.length > 0) {
+    const r = await pool.query<CatRow>(
+      `SELECT cs.ls_system_id::text AS ls_system_id, cs.sku, cs.color_code, cs.size,
+              m.description AS product_name
+         FROM custom_skus cs
+         LEFT JOIN matrices m ON m.id = cs.matrix_id
+        WHERE cs.ls_system_id::text = ANY($1::text[])`,
+      [legacySystemIds],
+    );
+    for (const row of r.rows) legacyCatalog.set(row.ls_system_id, row);
+  }
+
   // Per-EPC current items.status. Null = no items row exists yet, which
   // is the "fresh EPC, will be ingested as in-stock on upload" case the
   // mobile Count Inventory screen treats as a valid container (matches
@@ -132,12 +164,19 @@ export async function POST(req: Request) {
   }
 
   const rows = decoded.map((d) => {
-    const cat = d.systemId ? catalog.get(d.systemId) : undefined;
+    const primaryCat = d.systemId ? catalog.get(d.systemId) : undefined;
+    // Fall back to the legacy resolution when the primary formula couldn't
+    // place the tag. A legacy hit makes the tag "valid" for scan/count modules
+    // and carries the resolved system_id + catalog fields.
+    const legacySid = primaryCat ? undefined : legacyByEpc.get(d.epcHex);
+    const legacyCat = legacySid ? legacyCatalog.get(legacySid) : undefined;
+    const cat = primaryCat ?? legacyCat;
+    const resolvedViaLegacy = !primaryCat && !!legacyCat;
     return {
       epcHex: d.epcHex,
-      valid: d.valid,
-      reason: d.reason,
-      systemId: d.systemId,
+      valid: d.valid || resolvedViaLegacy,
+      reason: resolvedViaLegacy ? "legacy_catalog_match" : d.reason,
+      systemId: resolvedViaLegacy ? (legacySid ?? null) : d.systemId,
       serial: d.serial,
       sku: cat?.sku ?? null,
       color: cat?.color_code ?? null,

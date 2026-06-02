@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { decodeEpc, type EpcConfig } from "@/lib/server/epc-decode";
+import { legacyEpcSystemId, legacyEpcSerial } from "@/lib/server/legacy-epc-catalog";
 
 /**
  * Unified EPC ingress — every EPC entering the WMS (fixed reader, handheld,
@@ -133,6 +134,30 @@ async function lookupCatalogBySystemId(
 }
 
 /**
+ * Attempt the LEGACY catalog-entrance fallback (see lib/server/legacy-epc-catalog).
+ * If the legacy system_id resolves to a catalog SKU, write the item LIVE
+ * (in-stock) and return the result — the writeItem upsert flips any prior
+ * tag_killed row to in-stock, so the EPC leaves the Defective list for good.
+ * Returns null when the legacy formula can't place it either (caller then
+ * writes tag_killed as usual). NEVER used for encode/print/re-encode.
+ */
+async function tryLegacyCatalogEntrance(
+  client: PoolClient,
+  input: EpcIngressInput,
+  primarySerial: bigint | null,
+): Promise<EpcIngressResult | null> {
+  const legacySystemId = legacyEpcSystemId(input.epc);
+  if (legacySystemId === null) return null;
+  const legacyCustomSkuId = await lookupCatalogBySystemId(client, legacySystemId);
+  if (!legacyCustomSkuId) return null;
+  return await writeItem(client, input, {
+    status: "in-stock",
+    customSkuId: legacyCustomSkuId,
+    serial: primarySerial ?? legacyEpcSerial(input.epc),
+  });
+}
+
+/**
  * Ingest a single EPC. Idempotent — second call with the same EPC updates
  * `last_seen_at` and re-evaluates status (which is what powers the auto-flip
  * from `tag_killed` → `in-stock` when the catalog catches up to a system_id).
@@ -147,8 +172,10 @@ export async function ingestEpc(
   const config = await loadEpcConfig(client, input.tenantId);
   if (!config) {
     // Tenant has no EPC config row — should not happen post-migration 032.
-    // Treat as catastrophic (caller can choose to log/fail). We still write
-    // a tag_killed row so the EPC is at least visible in Defective EPCs.
+    // Try the legacy fallback before giving up; else tag_killed so the EPC is
+    // at least visible in Defective EPCs.
+    const legacy = await tryLegacyCatalogEntrance(client, input, null);
+    if (legacy) return legacy;
     return await writeItem(client, input, {
       status: "tag_killed",
       reason: "decode_failed",
@@ -159,6 +186,10 @@ export async function ingestEpc(
 
   const decoded = decodeEpc(input.epc, config);
   if (!decoded.valid) {
+    // Primary formula rejected it (wrong prefix / bad bits). Legacy fallback:
+    // if int(epc[5:15],16) maps to a catalog SKU, bring it in LIVE.
+    const legacy = await tryLegacyCatalogEntrance(client, input, null);
+    if (legacy) return legacy;
     return await writeItem(client, input, {
       status: "tag_killed",
       reason: "decode_failed",
@@ -169,6 +200,9 @@ export async function ingestEpc(
 
   const customSkuId = await lookupCatalogBySystemId(client, decoded.systemId!);
   if (!customSkuId) {
+    // Primary system_id isn't in the catalog. Legacy fallback before tag_killed.
+    const legacy = await tryLegacyCatalogEntrance(client, input, decoded.serial);
+    if (legacy) return legacy;
     return await writeItem(client, input, {
       status: "tag_killed",
       reason: "unknown_system_id",
