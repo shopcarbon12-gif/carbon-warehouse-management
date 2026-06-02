@@ -15,7 +15,6 @@ import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
-import 'package:carbon_wms/ui/screens/barcode_intake_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
@@ -748,19 +747,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         onTap: () => _pushGuarded(
                           ScreenIds.fastPutaway,
                           (_) => const FastPutawayScreen(),
-                        ),
-                      ),
-                    if (perms.canView(ScreenIds.barcodeIntake))
-                      _HeroTile(
-                        icon: Icons.local_shipping_outlined,
-                        label: 'Transfers',
-                        teal: false,
-                        cardColor: cardColor,
-                        cardHigh: cardHigh,
-                        mainColor: mainColor,
-                        onTap: () => _pushGuarded(
-                          ScreenIds.barcodeIntake,
-                          (_) => const BarcodeIntakeScreen(),
                         ),
                       ),
                   ],

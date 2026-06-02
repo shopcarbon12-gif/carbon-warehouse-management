@@ -685,6 +685,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final reclassify = <String>[]; // Count: move to defective bucket.
     final drop = <String>[]; // Add-On Catalog: ignore entirely (already in WMS).
     final qualify = <Map<String, dynamic>>[]; // Add-On Catalog: group + beep.
+    final newDefective = <String>[]; // Add-On Catalog: new + unresolved → defective.
     for (final r in rows) {
       final epc = (r['epcHex'] as String?)?.toUpperCase();
       if (epc == null || epc.isEmpty) continue;
@@ -693,19 +694,36 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       _epcStatus[epc] = status;
       _epcStatusFetched.add(epc);
       if (_isAddOnCatalog) {
-        // Qualifies ONLY when it passes the formula, maps to a catalog SKU,
-        // and is NOT already a known item — i.e. no items row (null) or it's a
-        // tag_killed defective the upload will revive to LIVE. Everything else
-        // (in-stock or any other status, formula-fail, no catalog SKU) is
-        // already in the catalog or unaddable → ignored: no count, no show,
-        // no beep, no report.
+        // "resolved" = passes the formula AND maps to a catalog SKU.
         final valid = r['valid'] == true;
         final sku = (r['sku'] as String?)?.trim();
         final sysId = r['systemId']?.toString();
-        final notInCatalog = status == null || status == 'tag_killed';
-        if (valid && sku != null && sku.isNotEmpty && sysId != null && sysId.isNotEmpty && notInCatalog) {
-          qualify.add(r);
+        final resolved = valid &&
+            sku != null &&
+            sku.isNotEmpty &&
+            sysId != null &&
+            sysId.isNotEmpty;
+        if (status == null) {
+          // Truly new (not in catalog at all):
+          //   resolved   → show as a container (→ LIVE on upload)
+          //   unresolved → defective (→ tag_killed on upload)
+          if (resolved) {
+            qualify.add(r);
+          } else {
+            newDefective.add(epc);
+          }
+        } else if (status == 'tag_killed') {
+          // Already in the Defective EPCs list:
+          //   resolved now → revive to a container (→ LIVE on upload)
+          //   still unresolved → already defective, nothing to do → ignore
+          if (resolved) {
+            qualify.add(r);
+          } else {
+            drop.add(epc);
+          }
         } else {
+          // in-stock or any other known status → already in catalog → ignore
+          // completely (no count, no show, no beep, no report).
           drop.add(epc);
         }
       } else {
@@ -716,7 +734,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         }
       }
     }
-    if (reclassify.isEmpty && drop.isEmpty && qualify.isEmpty) return;
+    if (reclassify.isEmpty &&
+        drop.isEmpty &&
+        qualify.isEmpty &&
+        newDefective.isEmpty) {
+      return;
+    }
     setState(() {
       void removeFromGroups(String epc) {
         final emptiedGroups = <String>[];
@@ -740,6 +763,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         _epcRows.remove(epc);
         removeFromGroups(epc);
       }
+      // Add-On Catalog: new + unresolved → Defective EPCs (kept in _epcRows so
+      // the upload carries them and ingest writes them tag_killed).
+      for (final epc in newDefective) {
+        _defectiveEpcs.add(epc);
+      }
       // Add-On Catalog: now (and only now) group the confirmed not-in-catalog
       // EPCs so in-catalog tags never flashed on screen.
       for (final r in qualify) {
@@ -761,9 +789,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         }
       }
     });
-    // One confirmation beep per tick when new not-in-catalog items were found
-    // (native per-tag beep is suppressed in add-on mode).
-    if (_isAddOnCatalog && qualify.isNotEmpty) {
+    // One confirmation beep per tick when new (not-in-catalog) items were
+    // found — container or defective. In-catalog tags stay silent (native
+    // per-tag beep is suppressed in add-on mode).
+    if (_isAddOnCatalog && (qualify.isNotEmpty || newDefective.isNotEmpty)) {
       ScanSounds.instance.play(ScanCue.read);
     }
     _syncDisplayedCounters();
@@ -787,14 +816,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         _catalogMissingSystemIds.add(sysIdStr);
         final removed = _groupedRows.remove(sysIdStr);
         if (removed != null) {
+          // Both modes: an EPC whose system_id has no catalog row is "not
+          // resolved" → Defective bucket (uploads tag_killed). (For Add-On
+          // Catalog this is the rare case where the lookup said sku!=null but
+          // the catalog detail fetch then missed.)
           for (final e in removed.epcs) {
-            // Add-On Catalog can't add an EPC with no catalog SKU → ignore it
-            // entirely. Count buckets it as defective.
-            if (_isAddOnCatalog) {
-              _epcRows.remove(e);
-            } else {
-              _defectiveEpcs.add(e);
-            }
+            _defectiveEpcs.add(e);
           }
         }
         // No setState here — the _uiFlushTimer (150 ms) repaints from
