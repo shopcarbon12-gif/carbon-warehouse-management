@@ -15,22 +15,21 @@ import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart' show CatalogRowCard;
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 
 /// Handheld Encode & Print — 3-step commissioning flow:
 ///
 ///   Step 1 (SKU):   pull the trigger → 2D imager fires → the scanned barcode
 ///                   (UPC/SKU) resolves the target SKU. Manual type-to-search
-///                   is always available as a fallback. Picking a SKU → Step 2.
-///   Step 2 (Encode): one trigger pull = read the presented tag + write the
-///                   fresh EPC + re-read-verify (RfidVendorChannel.writeEpcTag
-///                   verifies internally — it returns true only when the chip
-///                   reads back the new EPC).
-///   Step 3 (Print): only when the write verified, print the companion
-///                   non-RFID price label to the Zebra .220 (192.168.1.220)
-///                   over raw TCP 9100.
-///
-/// The scanner is flipped between 2D-barcode mode (Step 1) and RFID mode
-/// (Step 2) as the operator advances.
+///                   is the fallback. Picking a SKU → Step 2 (scanner → RFID).
+///   Step 2 (Encode): the radio scans CONTINUOUSLY (power-controlled by the
+///                   bottom slider so only the nearest tag is in range). The
+///                   nearest EPC shows live; pull the trigger (or tap Encode)
+///                   to commit — mint a fresh EPC, write the chip, and
+///                   re-read-verify (writeEpcTag returns true only when the
+///                   chip reads back the new EPC).
+///   Step 3 (Print): only on a verified write, print the non-RFID label to the
+///                   Zebra .220 (192.168.1.220) over raw TCP 9100.
 class EncodeAndPrintScreen extends StatefulWidget {
   const EncodeAndPrintScreen({super.key});
 
@@ -47,7 +46,6 @@ const Color _danger = Color(0xFFDC2626);
 class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   static const Duration _searchDebounce = Duration(milliseconds: 300);
   static const int _minQueryLen = 2;
-  static const Duration _captureWindow = Duration(milliseconds: 1400);
 
   RfidManager? _rfid;
   StreamSubscription<String>? _barcodeSub;
@@ -67,12 +65,12 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   // flow
   _Step _step = _Step.sku;
   bool _busy = false;
+  bool _scanning = false;
   int _powerDbm = 30;
 
-  // tag capture (Step 2)
-  bool _capturing = false;
-  String? _capturedEpc;
-  int? _capturedRssi;
+  // live nearest tag (Step 2)
+  String? _nearestEpc;
+  int? _nearestRssi;
 
   String? _newEpc;
   String _statusMsg = 'Pull the trigger to scan a barcode — or type to search.';
@@ -81,7 +79,6 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(_sounds.setTagBeepSuppressed(true));
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       context.read<RfidManager>().scanContext = 'RE_ENCODE';
@@ -94,33 +91,34 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   }
 
   void _wireStreams() {
-    // Barcode (2D) — only acted on while picking a SKU.
+    // Barcode (2D) — only while picking a SKU.
     _barcodeSub?.cancel();
     _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((raw) {
       if (!mounted || _step != _Step.sku) return;
       final code = raw.trim();
       if (code.isEmpty) return;
-      // Ignore EPC-shaped reads — those aren't product barcodes.
-      if (RegExp(r'^[0-9A-F]{24}$').hasMatch(code.toUpperCase())) return;
+      if (RegExp(r'^[0-9A-F]{24}$').hasMatch(code.toUpperCase())) return; // ignore EPC reads
       _onBarcode(code);
     }, onError: (_) {});
 
-    // RFID reads — only captured during the Step-2 read window.
+    // RFID reads — captured live while Step 2 is scanning.
     _tagSub?.cancel();
     _tagSub = RfidVendorChannel.tagReadStream().listen((read) {
-      if (!_capturing) return;
+      if (_step != _Step.encode || !_scanning || _busy) return;
       final epc = read.epcHex24;
       if (epc.length != 24) return;
       final rssi = read.rssi;
       final stronger =
-          _capturedEpc == null || (rssi != null && (_capturedRssi == null || rssi > _capturedRssi!));
-      if (stronger) {
-        _capturedEpc = epc.toUpperCase();
-        if (rssi != null) _capturedRssi = rssi;
+          _nearestEpc == null || (rssi != null && (_nearestRssi == null || rssi > _nearestRssi!));
+      if (stronger && mounted) {
+        setState(() {
+          _nearestEpc = epc.toUpperCase();
+          if (rssi != null) _nearestRssi = rssi;
+        });
       }
     }, onError: (_) {});
 
-    // Physical trigger — fires the encode pipeline in Step 2.
+    // Trigger — commits the encode in Step 2.
     _triggerSub?.cancel();
     _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
       if (event == 'down' && _step == _Step.encode && !_busy) {
@@ -133,13 +131,20 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     await RfidVendorChannel.open2dBarcode();
     await RfidVendorChannel.scannerEnableTriggerRelay();
     await RfidVendorChannel.setZebraTriggerMode2D();
+    // Let the native 2D scan beep be the (regular) feedback in Step 1.
+    unawaited(_sounds.setTagBeepSuppressed(false));
   }
 
   Future<void> _armRfidMode() async {
+    // Read settings before any await — no BuildContext across async gaps.
+    _powerDbm = context.read<MobileSettingsRepository>().config.transferOutAntennaPower;
     await RfidVendorChannel.scannerDisableTriggerRelay();
     await RfidVendorChannel.close2dBarcode();
     await RfidVendorChannel.enableRfidFunctionMode();
     await RfidVendorChannel.setZebraTriggerModeRfid();
+    // Silence the per-tag native beep during continuous scan — we only beep
+    // on a verified write.
+    unawaited(_sounds.setTagBeepSuppressed(true));
     await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
   }
 
@@ -180,15 +185,14 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     try {
       final rows = await _search(code);
       if (!mounted || _step != _Step.sku) return;
-      // Auto-pick an exact UPC/SKU match, or the only result.
       final exact = rows.firstWhere(
         (r) => _digits(r['upc']) == _digits(code) || '${r['sku']}'.toUpperCase() == code.toUpperCase(),
         orElse: () => <String, dynamic>{},
       );
       if (exact.isNotEmpty) {
-        _pickSku(exact);
+        await _pickSku(exact);
       } else if (rows.length == 1) {
-        _pickSku(rows.first);
+        await _pickSku(rows.first);
       } else {
         setState(() {
           _results = rows;
@@ -258,7 +262,7 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
       _searchCtrl.clear();
       _searchError = null;
     });
-    _sounds.play(ScanCue.success);
+    // No success chime — the native 2D scan beep already fired in Step 1.
     await _goEncode();
   }
 
@@ -267,20 +271,40 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     if (!mounted) return;
     setState(() {
       _step = _Step.encode;
-      _capturedEpc = null;
-      _capturedRssi = null;
+      _nearestEpc = null;
+      _nearestRssi = null;
       _newEpc = null;
       _errMsg = null;
-      _statusMsg = 'Present a tag and pull the trigger to encode + verify.';
+      _statusMsg = 'Bring a tag close, then pull the trigger to encode.';
     });
+    await _startScan();
+  }
+
+  Future<void> _startScan() async {
+    if (_scanning) return;
+    try {
+      await _rfid?.startLocateScanning();
+    } catch (_) {/* simulated reads still arrive via the stream */}
+    if (!mounted) return;
+    setState(() => _scanning = true);
+  }
+
+  Future<void> _stopScan() async {
+    if (!_scanning) return;
+    try {
+      await _rfid?.stopLocateScanning();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _scanning = false);
   }
 
   Future<void> _goSku() async {
+    await _stopScan();
     await _armBarcodeMode();
     if (!mounted) return;
     setState(() {
       _selectedSku = null;
-      _capturedEpc = null;
+      _nearestEpc = null;
       _newEpc = null;
       _errMsg = null;
       _step = _Step.sku;
@@ -288,7 +312,7 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     });
   }
 
-  // ── Step 2: read + write + verify (one trigger) ─────────────────────────
+  // ── Step 2: commit = write + verify ─────────────────────────────────────
   void _fail(String msg) {
     if (!mounted) return;
     setState(() {
@@ -298,24 +322,15 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     });
   }
 
-  Future<String?> _captureTag() async {
-    _capturedEpc = null;
-    _capturedRssi = null;
-    _capturing = true;
-    try {
-      await _rfid?.startLocateScanning();
-    } catch (_) {/* simulated reads still arrive via the stream */}
-    await Future<void>.delayed(_captureWindow);
-    _capturing = false;
-    try {
-      await _rfid?.stopLocateScanning();
-    } catch (_) {}
-    return _capturedEpc;
-  }
-
   Future<void> _runEncode() async {
     final sku = _selectedSku;
     if (sku == null || _busy) return;
+    final oldEpc = _nearestEpc;
+    if (oldEpc == null) {
+      _sounds.play(ScanCue.error);
+      setState(() => _statusMsg = 'No tag in range — bring it closer or raise the power, then pull again.');
+      return;
+    }
     final customSku = sku['sku']?.toString() ?? '';
     if (customSku.isEmpty) {
       _fail('Selected SKU is missing its code.');
@@ -326,21 +341,10 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
       _busy = true;
       _errMsg = null;
       _newEpc = null;
-      _statusMsg = 'Reading the tag…';
+      _statusMsg = 'Minting EPC + writing chip + verifying…';
     });
     _sounds.play(ScanCue.start);
-
-    final oldEpc = await _captureTag();
-    if (!mounted) return;
-    if (oldEpc == null) {
-      _sounds.play(ScanCue.error);
-      setState(() {
-        _busy = false;
-        _statusMsg = 'No tag read — present a tag and pull the trigger again.';
-      });
-      return;
-    }
-    setState(() => _statusMsg = 'Minting EPC + writing chip + verifying…');
+    await _stopScan(); // release the radio for the chip write
 
     Map<String, dynamic> resolved;
     try {
@@ -431,6 +435,11 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
                 SizedBox(height: 10.h),
               ],
               Expanded(child: _step == _Step.sku ? _skuPane() : _flowPane()),
+              // Antenna power — only meaningful in the RFID (encode) steps.
+              if (_step != _Step.sku) ...[
+                SizedBox(height: 8.h),
+                const RfidPowerSlider(),
+              ],
               SizedBox(height: 10.h),
               _primaryButton(),
             ],
@@ -563,28 +572,34 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   }
 
   Widget _flowPane() {
+    final showEpc = _newEpc ?? _nearestEpc;
+    final epcLabel = _newEpc != null ? 'new EPC' : (_scanning ? 'nearest tag (live)' : 'tag');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(height: 6.h),
-        if (_capturedEpc != null || _newEpc != null)
-          Container(
-            padding: EdgeInsets.all(12.w),
-            decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border)),
-            child: Column(
-              children: [
-                Text(_newEpc != null ? 'new EPC' : 'tag read',
-                    style: GoogleFonts.manrope(fontSize: 11.sp, color: AppColors.textMuted)),
-                SizedBox(height: 4.h),
-                Text(_newEpc ?? _capturedEpc ?? '—',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.spaceGrotesk(fontSize: 13.sp, fontWeight: FontWeight.w700, color: AppColors.primary)),
-              ],
-            ),
+        Container(
+          padding: EdgeInsets.all(12.w),
+          decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border)),
+          child: Column(
+            children: [
+              Text(epcLabel, style: GoogleFonts.manrope(fontSize: 11.sp, color: AppColors.textMuted)),
+              SizedBox(height: 4.h),
+              Text(showEpc ?? '—',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                    color: showEpc == null ? AppColors.textMuted : AppColors.primary,
+                  )),
+              if (_newEpc == null && _nearestRssi != null)
+                Text('$_nearestRssi dBm', style: GoogleFonts.spaceGrotesk(fontSize: 11.sp, color: AppColors.textMuted)),
+            ],
           ),
+        ),
         const Spacer(),
         if (_busy) const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-        SizedBox(height: 14.h),
+        SizedBox(height: 12.h),
         _statusLine(),
         const Spacer(),
       ],
@@ -626,13 +641,9 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
       case _Step.done:
         return Row(
           children: [
-            Expanded(
-              child: _bigButton(label: 'Same SKU →', onTap: () => _goEncode(), icon: Icons.refresh),
-            ),
+            Expanded(child: _bigButton(label: 'Same SKU →', onTap: () => _goEncode(), icon: Icons.refresh)),
             SizedBox(width: 10.w),
-            Expanded(
-              child: _bigButton(label: 'New item', onTap: () => _goSku(), icon: Icons.qr_code_scanner, outlined: true),
-            ),
+            Expanded(child: _bigButton(label: 'New item', onTap: () => _goSku(), icon: Icons.qr_code_scanner, outlined: true)),
           ],
         );
       case _Step.error:

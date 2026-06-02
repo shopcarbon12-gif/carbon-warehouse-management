@@ -56,6 +56,15 @@ fi
 echo "Built: $APK"
 ls -la "$APK" "$RELEASE_ROOT/app-release.apk"
 
+# Auto-upload to WMS → Settings → Updates (OTA) and mark it the active release.
+# Best-effort: never fails the build. Disable with OTA_UPLOAD=0. Needs admin
+# creds in <repo>/.env.agent-secrets.
+REPO_ROOT="$(cd "$ROOT/../.." && pwd)"
+if [[ "${OTA_UPLOAD:-1}" == "1" && -n "${VERSION:-}" && -f "$REPO_ROOT/scripts/upload-apk-ota.sh" ]]; then
+  echo "OTA: uploading $VERSION to WMS Settings → Updates…"
+  bash "$REPO_ROOT/scripts/upload-apk-ota.sh" "$VERSION" || echo "OTA upload failed (non-fatal) — upload manually at /settings/updates."
+fi
+
 # Sanity-print the computed Android versionCode (extracted from the AndroidManifest
 # inside the APK). Helps catch regressions in app/build.gradle.kts:computeVersionCode
 # before sideloading on a handheld that already has an older build.
