@@ -197,6 +197,7 @@ abstract final class ScreenIds {
   static const String encodeSuite = 'encode_suite';
   static const String encodeTestTag = 'encode_test_tag';
   static const String searchAndEncode = 'search_and_encode';
+  static const String encodeAndPrint = 'encode_and_print';
   static const String print = 'print';
   static const String barcodeIntake = 'barcode_intake';
   static const String statusChange = 'status_change';

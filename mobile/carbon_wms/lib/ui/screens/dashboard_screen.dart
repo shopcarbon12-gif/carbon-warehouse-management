@@ -21,7 +21,7 @@ import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
-import 'package:carbon_wms/ui/screens/inventory_csv_session_screen.dart';
+import 'package:carbon_wms/ui/screens/encode_and_print_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
 import 'package:carbon_wms/ui/screens/print_screen.dart';
@@ -870,13 +870,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         label: 'Clean Bin',
                         onTap: () => _pushGuarded(
                             ScreenIds.cleanBin, (_) => const CleanBinScreen())),
-                  if (perms.canView(ScreenIds.inventoryCsvSession))
+                  if (perms.canView(ScreenIds.encodeAndPrint))
                     _SmallTile(
-                        icon: LucideIcons.fileUp,
-                        label: 'CSV',
+                        icon: LucideIcons.printer,
+                        label: 'Encode & Print',
                         onTap: () => _pushGuarded(
-                            ScreenIds.inventoryCsvSession,
-                            (_) => const InventoryCsvSessionScreen())),
+                            ScreenIds.encodeAndPrint,
+                            (_) => const EncodeAndPrintScreen())),
                   if (perms.canView(ScreenIds.geigerSearch))
                     _SmallTile(
                         icon: LucideIcons.radio,

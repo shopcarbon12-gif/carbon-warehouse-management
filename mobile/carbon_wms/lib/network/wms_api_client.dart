@@ -772,6 +772,25 @@ class WmsApiClient {
   /// Returns the raw `{rows, total, brands, categories, vendors}` envelope so
   /// the caller can drive infinite-scroll without losing pagination metadata.
   /// Server scopes by `session.lid`, so the rows are always location-correct.
+  /// `GET /api/rfid/nonrfid-label?customSkuId=` — non-RFID 2×3 in price-label
+  /// ZPL for the Zebra .220 (ZD500R, 203 dpi). Pure read: no serial mint, no
+  /// items insert. Returns `{zpl, sku, printer_host, printer_port,
+  /// printer_uri}`. Throws [WmsApiException] on non-2xx. Used by Encode & Print
+  /// to print the companion price label after the RFID chip is written.
+  Future<Map<String, dynamic>> getNonRfidLabel({required String customSkuId}) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/rfid/nonrfid-label').replace(
+      queryParameters: {'customSkuId': customSkuId.trim()},
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> fetchCatalogGrid({
     String q = '',
     int page = 1,
