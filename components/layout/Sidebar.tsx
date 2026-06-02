@@ -334,12 +334,20 @@ export function Sidebar({
   const isOverlay = !pinned;
   const visible = pinned || open;
 
+  // The Categories module renders its own fixed mobile top bar at z-index 260
+  // (and various sheets above that). When the nav drawer opens as an overlay on
+  // that route it must clear those layers, so bump the overlay/drawer z-index
+  // above 260 there only — every other route keeps the original z-40 / z-50.
+  const onCategories = pathname.startsWith("/inventory/categories");
+  const maskZ = onCategories ? "z-[280]" : "z-40";
+  const drawerZ = onCategories ? "z-[290]" : "z-50";
+
   return (
     <>
       <button
         type="button"
         aria-label="Close menu"
-        className={`fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity ${
+        className={`fixed inset-0 ${maskZ} bg-black/70 backdrop-blur-sm transition-opacity ${
           isOverlay && open ? "opacity-100" : "pointer-events-none opacity-0"
         } ${pinned ? "hidden" : ""}`}
         onClick={() => onOpenChange(false)}
@@ -349,7 +357,7 @@ export function Sidebar({
         id="wms-sidebar"
         className={`${
           isOverlay
-            ? "fixed inset-y-0 left-0 z-50 shadow-2xl"
+            ? `fixed inset-y-0 left-0 ${drawerZ} shadow-2xl`
             : "static z-0 shadow-none"
         } flex w-80 shrink-0 flex-col border-r border-[var(--wms-border)] bg-[var(--wms-surface)] transition-transform duration-200 ease-out ${
           visible ? "translate-x-0" : "-translate-x-full"

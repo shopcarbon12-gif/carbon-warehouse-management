@@ -666,8 +666,14 @@ export default function ShopifyCollectionMapping() {
   const [mobileSheetTreeExpandedByNode, setMobileSheetTreeExpandedByNode] = useState<Record<string, boolean>>({});
   const toggleWorkspaceMenuFromMobileHeader = () => {
     if (typeof document === "undefined") return;
-    const workspaceToggle = document.querySelector("button.menu-toggle") as HTMLButtonElement | null;
-    workspaceToggle?.click();
+    // On the mobile categories layout, this m3-shell top bar is fixed over the
+    // global WMS header, so the WMS hamburger is unreachable. Drive it directly
+    // by id-target instead. (Previously this clicked `button.menu-toggle`, which
+    // never existed in the DOM — the tap was a silent no-op.)
+    const wmsNavToggle = document.querySelector(
+      'button[aria-controls="wms-sidebar"]',
+    ) as HTMLButtonElement | null;
+    wmsNavToggle?.click();
   };
   // Reports are consolidated behind a single modal trigger to reduce canvas clutter.
   const [showReportsModal, setShowReportsModal] = useState(false);
@@ -11961,6 +11967,102 @@ export default function ShopifyCollectionMapping() {
           .reportHubGrid {
             grid-template-columns: 1fr !important;
           }
+
+          /* ═══════════════════════════════════════════════════════════
+             WMS palette alignment (mobile only)
+             Re-point the m3-shell's navy backgrounds / containers / neutral
+             text and the blue brand+primary accents to the live WMS tokens
+             so the Categories mobile view matches the rest of the app.
+             Semantic status colors (green/amber/red/purple badges, chips,
+             rails, dots, deltas) are intentionally left untouched.
+             These rules sit after the originals at equal specificity, so
+             they win; remove this block to restore the navy theme.
+             ═══════════════════════════════════════════════════════════ */
+
+          /* Surfaces — page / shell / elevated containers */
+          .m3-shell { background: var(--wms-surface) !important; }
+          .m3-icon-btn,
+          .m3-drawer,
+          .m3-kpi-strip,
+          .m3-ctrl-btn,
+          .m3-dock-menu { background: var(--wms-surface-elevated) !important; }
+          .m3-brand-mark,
+          .m3-card,
+          .m3-lightbox-panel,
+          .m3-sheet,
+          .m3-suggestion-applied { background: var(--wms-surface-elevated) !important; }
+
+          /* Insets — search field, pills, thumbs, list/menu rows */
+          .m3-drawer a,
+          .m3-kpi-pill,
+          .m3-search-input,
+          .m3-thumb-wrap,
+          .m3-thumb-placeholder,
+          .m3-path-row,
+          .m3-dock-menu-item,
+          .m3-dock-pager-nav button,
+          .m3-dock-per-page-select select { background: var(--wms-bg) !important; }
+          .m3-drawer a:hover {
+            background: color-mix(in srgb, var(--wms-fg) 8%, var(--wms-surface-elevated)) !important;
+          }
+
+          /* Primary action buttons (blue gradient → WMS accent) */
+          .m3-search-submit,
+          .m3-search-filter-btn,
+          .m3-dock-commit-btn,
+          .m3-sheet-save {
+            background: var(--wms-accent) !important;
+            color: var(--wms-accent-fg) !important;
+          }
+
+          /* Neutral / primary text */
+          .m3-shell-title,
+          .m3-drawer a,
+          .m3-kpi-pill em,
+          .m3-kpi-pill--on,
+          .m3-kpi-pill--on em,
+          .m3-search-input,
+          .m3-product-title,
+          .m3-path-row strong,
+          .m3-dock-menu-item,
+          .m3-dock-pager-nav button,
+          .m3-dock-per-page-select select,
+          .m3-lightbox-title,
+          .m3-sheet-title,
+          .m3-suggestion-applied-path { color: var(--wms-fg) !important; }
+
+          /* Muted / secondary text */
+          .m3-drawer h2,
+          .m3-drawer a small,
+          .m3-kpi-pill,
+          .m3-search-icon,
+          .m3-section-label,
+          .m3-empty,
+          .m3-meta-line,
+          .m3-path-row,
+          .m3-suggestion-applied,
+          .m3-suggestion-applied-label,
+          .m3-suggestion-applied-empty,
+          .m3-dock-menu-section,
+          .m3-dock-menu-sub,
+          .m3-dock-pager-nav span,
+          .m3-dock-per-page-select,
+          .m3-lightbox-close,
+          .m3-sheet-close,
+          .m3-sheet-tree-hint,
+          .m3-sheet-tree-empty,
+          .m3-sheet-cancel { color: var(--wms-muted) !important; }
+
+          /* Accent text (brand blue → WMS teal) */
+          .m3-icon-btn,
+          .m3-select-all-lbl,
+          .m3-ctrl-btn,
+          .m3-path-row-hint,
+          .m3-row-link,
+          .m3-sheet-suggestion-kind { color: var(--wms-accent) !important; }
+
+          /* Hairlines / handles → WMS border */
+          .m3-sheet-handle { background: var(--wms-border) !important; }
         }
       `}</style>
     </>
