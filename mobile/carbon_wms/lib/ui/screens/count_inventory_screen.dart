@@ -272,6 +272,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     super.initState();
     // Warm the shared scan sounds (pool-backed for low-latency per-tag read clicks).
     unawaited(ScanSounds.instance.init());
+    // Add-On Catalog suppresses the native per-tag beep: most reads are
+    // already-in-catalog tags we ignore, and beeping on them is wrong. We beep
+    // (ScanCue.read) ourselves only when an EPC qualifies (not in catalog).
+    if (_isAddOnCatalog) {
+      unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initModule());
       unawaited(_loadUserEmail());
@@ -286,6 +292,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   @override
   void dispose() {
+    if (_isAddOnCatalog) {
+      unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
+    }
     _readsSub?.cancel();
     _directTagSub?.cancel();
     _triggerSub?.cancel();
@@ -589,26 +598,28 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // them; the server's ingestEpcs decoder runs the same classification
     // and writes them to items.status='tag_killed', which is what makes
     // them show up under Catalog → Defective EPCs on the desktop.
+    // Add-On Catalog: defer ALL classification to the status batch so an
+    // already-cataloged (in-stock) or formula-fail EPC NEVER groups, shows,
+    // beeps, or reports. lookupEpcs decides — only formula-passing EPCs that
+    // are not yet in the catalog (no items row, or tag_killed) get grouped +
+    // beeped there.
+    if (_isAddOnCatalog) {
+      if (!_epcStatusFetched.contains(normalized)) {
+        _epcStatusPending.add(normalized);
+      }
+      return;
+    }
+
     final cfg = context.read<MobileSettingsRepository>().epcConfig;
     final systemId = decodeSystemId(normalized, cfg);
     if (systemId == null) {
-      // Formula-fail. Add-On Catalog only reads tags that pass the formula —
-      // ignore it entirely (not even defective). Count keeps it as defective.
-      if (_isAddOnCatalog) {
-        _epcRows.remove(normalized);
-        return;
-      }
+      // Formula-fail → defective bucket; no container.
       _defectiveEpcs.add(normalized);
       return;
     }
     final sysIdStr = systemId.toString();
     if (_catalogMissingSystemIds.contains(sysIdStr)) {
-      // No catalog row for this system_id. Add-On Catalog can't add it (no
-      // SKU to map) → ignore entirely. Count routes it to defective.
-      if (_isAddOnCatalog) {
-        _epcRows.remove(normalized);
-        return;
-      }
+      // Known catalog miss this session → defective; no container.
       _defectiveEpcs.add(normalized);
       return;
     }
@@ -673,6 +684,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (!mounted) return;
     final reclassify = <String>[]; // Count: move to defective bucket.
     final drop = <String>[]; // Add-On Catalog: ignore entirely (already in WMS).
+    final qualify = <Map<String, dynamic>>[]; // Add-On Catalog: group + beep.
     for (final r in rows) {
       final epc = (r['epcHex'] as String?)?.toUpperCase();
       if (epc == null || epc.isEmpty) continue;
@@ -681,11 +693,19 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       _epcStatus[epc] = status;
       _epcStatusFetched.add(epc);
       if (_isAddOnCatalog) {
-        // Add-On Catalog counts ONLY EPCs not already in the catalog: no items
-        // row (null) or 'tag_killed' (in the defective list — upload revives
-        // it to LIVE). Anything else is already known to WMS → ignore it
-        // completely: not counted, not shown, not in the report.
-        if (status != null && status != 'tag_killed') {
+        // Qualifies ONLY when it passes the formula, maps to a catalog SKU,
+        // and is NOT already a known item — i.e. no items row (null) or it's a
+        // tag_killed defective the upload will revive to LIVE. Everything else
+        // (in-stock or any other status, formula-fail, no catalog SKU) is
+        // already in the catalog or unaddable → ignored: no count, no show,
+        // no beep, no report.
+        final valid = r['valid'] == true;
+        final sku = (r['sku'] as String?)?.trim();
+        final sysId = r['systemId']?.toString();
+        final notInCatalog = status == null || status == 'tag_killed';
+        if (valid && sku != null && sku.isNotEmpty && sysId != null && sysId.isNotEmpty && notInCatalog) {
+          qualify.add(r);
+        } else {
           drop.add(epc);
         }
       } else {
@@ -696,7 +716,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         }
       }
     }
-    if (reclassify.isEmpty && drop.isEmpty) return;
+    if (reclassify.isEmpty && drop.isEmpty && qualify.isEmpty) return;
     setState(() {
       void removeFromGroups(String epc) {
         final emptiedGroups = <String>[];
@@ -720,7 +740,32 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         _epcRows.remove(epc);
         removeFromGroups(epc);
       }
+      // Add-On Catalog: now (and only now) group the confirmed not-in-catalog
+      // EPCs so in-catalog tags never flashed on screen.
+      for (final r in qualify) {
+        final epc = (r['epcHex'] as String).toUpperCase();
+        final sysId = r['systemId'].toString();
+        final group = _groupedRows.putIfAbsent(
+          sysId,
+          () => _GroupedRow(assetId: sysId),
+        );
+        if (!group.epcs.contains(epc)) {
+          group.epcs.add(epc);
+          group.qty = group.epcs.length;
+        }
+        final cached = _assetCache[sysId];
+        if (cached != null) {
+          _applyCatalogToGroup(group, cached);
+        } else {
+          unawaited(_resolveCatalog(sysId, group));
+        }
+      }
     });
+    // One confirmation beep per tick when new not-in-catalog items were found
+    // (native per-tag beep is suppressed in add-on mode).
+    if (_isAddOnCatalog && qualify.isNotEmpty) {
+      ScanSounds.instance.play(ScanCue.read);
+    }
     _syncDisplayedCounters();
   }
 

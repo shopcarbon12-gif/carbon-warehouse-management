@@ -101,6 +101,10 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   void initState() {
     super.initState();
     unawaited(ScanSounds.instance.init());
+    // Silence the native per-tag read beep — it sounds like a continuous
+    // "searching nearby" tone while the trigger is held. Status Change only
+    // needs the start/stop cues; restored on dispose for other screens.
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(RfidVendorChannel.close2dBarcode());
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
@@ -151,6 +155,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
       unawaited(rfid.setSessionPowerOverrideDbm(null));
     }
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
     super.dispose();
   }
 
@@ -231,12 +236,22 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
         if (name.isEmpty) continue;
         final wms = _wmsValueForLabelName(name);
         if (wms == null) continue; // unknown label — skip rather than ship a bad commit
+        // Operator request: the Status screen offers TAG KILLED in place of
+        // PENDING VISIBILITY. Remap that option (value + label) and de-dup so
+        // we never show a second TAG KILLED if the server already lists one.
+        var effWms = wms;
+        var effDisplay = (raw['display_label']?.toString().trim().isNotEmpty ?? false)
+            ? raw['display_label'].toString()
+            : name;
+        if (wms == 'pending_visibility') {
+          effWms = 'tag_killed';
+          effDisplay = 'Tag Killed';
+        }
+        if (opts.any((o) => o.wmsValue == effWms)) continue;
         opts.add(StatusOption(
           labelName: name,
-          displayLabel: (raw['display_label']?.toString().trim().isNotEmpty ?? false)
-              ? raw['display_label'].toString()
-              : name,
-          wmsValue: wms,
+          displayLabel: effDisplay,
+          wmsValue: effWms,
         ));
       }
       if (!mounted) return;

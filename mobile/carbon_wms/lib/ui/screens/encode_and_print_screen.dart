@@ -304,6 +304,11 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     try {
       await _rfid?.startLocateScanning();
     } catch (_) {/* simulated reads still arrive via the stream */}
+    // Re-assert beep suppression AFTER the radio starts — startLocateScanning
+    // re-applies radio config that can re-enable the native per-tag beep,
+    // which sounds like a continuous "searching nearby" tone. The live
+    // nearest-tag scan must be silent.
+    unawaited(_sounds.setTagBeepSuppressed(true));
     if (!mounted) return;
     setState(() => _scanning = true);
   }
@@ -471,6 +476,10 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     } catch (e) {
       printErr = 'Label fetch failed: $e';
     }
+    // Session done — make sure the radio is fully idle and silent so there's
+    // no lingering "searching nearby" beep on the done screen.
+    await _stopScan();
+    unawaited(_sounds.setTagBeepSuppressed(true));
     if (!mounted) return;
     setState(() {
       _busy = false;
