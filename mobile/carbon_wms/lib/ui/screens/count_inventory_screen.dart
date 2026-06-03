@@ -712,18 +712,26 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           } else {
             newDefective.add(epc);
           }
-        } else if (status == 'tag_killed') {
-          // Already in the Defective EPCs list:
-          //   resolved now → revive to a container (→ LIVE on upload)
-          //   still unresolved → already defective, nothing to do → ignore
+        } else if (status == 'tag_killed' || status == 'unknown') {
+          // Defective (tag_killed) OR unknown status:
+          //   resolved now → revive/flip to a container (→ LIVE on upload)
+          //   still unresolved → leave as-is (tag_killed stays defective,
+          //                      unknown stays unknown) → ignore
+          // Operator rule: unknown that resolves should come LIVE, same as a
+          // revived defective tag.
           if (resolved) {
             qualify.add(r);
           } else {
             drop.add(epc);
           }
         } else {
-          // in-stock or any other known status → already in catalog → ignore
+          // in-stock / damaged / sold / stolen / any other known status →
+          // already a known catalog item or a protected/locked state → ignore
           // completely (no count, no show, no beep, no report).
+          // IMPORTANT: damaged/sold/stolen are super_admin_locked, but the
+          // Add-On Catalog uploader (ingestEpcs) bulldozes status — so we MUST
+          // drop them here to keep them out of the upload payload and never
+          // resurrect protected stock back to live.
           drop.add(epc);
         }
       } else {
