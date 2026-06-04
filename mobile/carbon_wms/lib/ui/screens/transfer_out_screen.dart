@@ -612,6 +612,10 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
                         style: GoogleFonts.spaceGrotesk(
                             fontSize: 14.sp, fontWeight: FontWeight.w600),
                         decoration: const InputDecoration(
+                          // The global input theme fills with grey; turn it off
+                          // so the field is pure white inside the search box
+                          // (no box-inside-a-box).
+                          filled: false,
                           border: InputBorder.none,
                           isCollapsed: true,
                           contentPadding: EdgeInsets.symmetric(vertical: 14),

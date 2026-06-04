@@ -182,12 +182,6 @@ class _StoredItem {
   }
 }
 
-/// Result of the "Same product different colour or new product?" dialog
-/// (spec answer #3). Flows out of `_askSameOrNewProductDialog` into
-/// `_runAssignFlow` to decide between the multi-colour picker and the
-/// new-product mid-session re-arm.
-enum _AssignChoice { sameProduct, newProduct }
-
 /// User's resolution to the multi-bin prompt fired by [_doAssign] when the
 /// preview shows EPCs of the scanned SKU sitting in some other bin.
 enum _MoveOrAddChoice {
@@ -293,6 +287,11 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   /// Multi-items mode (persisted, default OFF). OFF = scan bin → scan item →
   /// assign immediately → advance to next bin. ON = full add-another flow.
   bool _multiItems = false;
+
+  /// Captured in didChangeDependencies so dispose can clear any lingering
+  /// SnackBar (e.g. the 8s "Bin cleaned · UNDO"). SnackBars live on the
+  /// app-wide messenger and otherwise bleed onto the next screen.
+  ScaffoldMessengerState? _messenger;
 
   String? _userEmail;
 
@@ -490,7 +489,16 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _messenger = ScaffoldMessenger.of(context);
+  }
+
+  @override
   void dispose() {
+    // Drop any lingering SnackBar (e.g. "Bin cleaned · UNDO") so it doesn't
+    // hang over the next screen.
+    _messenger?.clearSnackBars();
     BinAssignSession.resetVersion.removeListener(_onManualModeReset);
     _flashTimer?.cancel();
     _flashTimer = null;
@@ -1542,52 +1550,17 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _scanFocus.requestFocus();
       return;
     }
-    // Loop step 2 → 3 → 4 → 2 …
-    while (mounted) {
-      final addAnother = await _askAddAnotherItemDialog();
-      if (!mounted) return;
-      if (addAnother != true) {
-        _triggerEndOfSession();
-        return;
-      }
-      // Determine whether step 3 is still meaningful — if all colours of
-      // this matrix are already assigned to this bin we skip the choice
-      // and go straight to "TRIGGER TO ADD ITEM" mid-session mode (the
-      // operator can scan the next product directly).
-      final hasMoreColours = await _hasUnassignedColoursForMatrix(matrixId);
-      if (!mounted) return;
-      if (!hasMoreColours) {
-        _enterMidSessionForNewItem();
-        return;
-      }
-      final choice = await _askSameOrNewProductDialog();
-      if (!mounted) return;
-      if (choice == _AssignChoice.newProduct) {
-        _enterMidSessionForNewItem();
-        return;
-      }
-      // SAME — multi-colour picker.
-      final picked = await _showColorPicker(matrixId: matrixId, base: skuParts.base);
-      if (!mounted) return;
-      if (picked == null || picked.isEmpty) {
-        // Operator cancelled — return to mid-session.
-        _enterMidSessionForNewItem();
-        return;
-      }
-      final batchOk = await _performMultiColourAssign(
-        base: skuParts.base,
-        colours: picked,
-        itemName: itemName,
-      );
-      if (!mounted) return;
-      if (!batchOk) {
-        // Failure already surfaced via SnackBar — drop back to mid-session
-        // so the operator doesn't get trapped in a confirmation loop.
-        _enterMidSessionForNewItem();
-        return;
-      }
-      // Loop back to "Add another item?" — the worker may want to add
-      // a totally different product after the batch.
+    // After the assign: keep going or wrap up. YES → stay on THIS bin and wait
+    // for the next item scan, which re-runs this whole flow (Assign? → Add
+    // another?) so the operator can pile several items into one bin. NO → end
+    // the session. (Multi-colour batch assignment is still available by
+    // scanning a base SKU with no colour, which opens the colour picker.)
+    final addAnother = await _askAddAnotherItemDialog();
+    if (!mounted) return;
+    if (addAnother == true) {
+      _enterMidSessionForNewItem();
+    } else {
+      _triggerEndOfSession();
     }
   }
 
@@ -1638,33 +1611,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('YES'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<_AssignChoice?> _askSameOrNewProductDialog() {
-    return showDialog<_AssignChoice>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('What next?'),
-        content: const Text(
-          'Pick another colour of the same product, or scan a different product.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, _AssignChoice.newProduct),
-            child: const Text('NEW PRODUCT'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              shape:
-                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-            ),
-            onPressed: () => Navigator.pop(ctx, _AssignChoice.sameProduct),
-            child: const Text('SAME PRODUCT'),
           ),
         ],
       ),
@@ -1827,26 +1773,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   /// Returns true if at least one colour of [matrixId] has no assignment in
   /// the current bin. Used by the popup chain to skip "same product" when
   /// everything is already in the bin.
-  Future<bool> _hasUnassignedColoursForMatrix(String matrixId) async {
-    if (matrixId.isEmpty) return true; // be permissive on lookup failure
-    try {
-      final rows = await context
-          .read<WmsApiClient>()
-          .fetchCustomSkusByMatrix(matrixId);
-      final assigned = _storedContents
-          .where((s) => s.qty > 0)
-          .map((s) => s.colorCode.toUpperCase())
-          .toSet();
-      for (final r in rows) {
-        final c = (r['color_code'] ?? r['color'] ?? '').toString().toUpperCase();
-        if (c.isEmpty) continue;
-        if (!assigned.contains(c)) return true;
-      }
-      return false;
-    } catch (_) {
-      return true;
-    }
-  }
 
   /// Mid-session "ready for the next item" state — bin still active, scanner
   /// re-armed, label red "TRIGGER TO ADD ITEM" (per spec answers #5 and #1).
