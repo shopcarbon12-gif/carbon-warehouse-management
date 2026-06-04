@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:lucide_icons/lucide_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
@@ -16,20 +15,13 @@ import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/encode_screen.dart';
-import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
-import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
-import 'package:carbon_wms/ui/screens/encode_and_print_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
-import 'package:carbon_wms/ui/screens/print_screen.dart';
-import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
-import 'package:carbon_wms/ui/screens/status_change_screen.dart';
+import 'package:carbon_wms/ui/screens/category_hub_screen.dart';
+import 'package:carbon_wms/ui/screens/reports_hub_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
-import 'package:carbon_wms/ui/screens/transfer_out_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_in_pending_screen.dart';
-import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
-import 'package:carbon_wms/ui/screens/cloud_geiger_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_app_drawer.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
 import 'package:carbon_wms/ui/widgets/ota_update_dialog.dart';
@@ -414,6 +406,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return context.pushGuarded<void>(screenId, builder);
   }
 
+  /// Plain push for the category hubs (they have no single screen id; the hub
+  /// itself filters its tiles by permission, and the dashboard square is gated
+  /// by the OR of its children).
+  Future<void> _pushScreen(Widget screen) {
+    return Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => screen));
+  }
+
   void _onNavTap(int idx) {
     if (idx == _navIndex) return;
     setState(() => _navIndex = idx);
@@ -698,78 +698,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
 
-            // ── D. 2×2 Hero tile grid ─────────────────────────────────
-            // Each tile owns a Phase 2 screen id; hidden ones drop out so
-            // the grid reflows from 4 to N. Empty grid hides the section
-            // entirely (rare — would require all four to be hidden).
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 0.h),
-              sliver: SliverToBoxAdapter(
-                child: GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1,
-                  children: <Widget>[
-                    if (perms.canView(ScreenIds.inventoryHub))
-                      _HeroTile(
-                        icon: Icons.inventory_2_outlined,
-                        label: 'Inventory',
-                        teal: false,
-                        cardColor: cardColor,
-                        cardHigh: cardHigh,
-                        mainColor: mainColor,
-                        onTap: () => _pushGuarded(
-                          ScreenIds.inventoryHub,
-                          (_) => const InventoryHubScreen(),
-                        ),
-                      ),
-                    if (perms.canView(ScreenIds.transferSlips))
-                      _HeroTile(
-                        icon: Icons.outbound_outlined,
-                        label: 'Transfer Out',
-                        teal: true,
-                        cardColor: cardColor,
-                        cardHigh: cardHigh,
-                        mainColor: mainColor,
-                        onTap: () => _pushGuarded(
-                          ScreenIds.transferSlips,
-                          (_) => const TransferOutScreen(),
-                        ),
-                      ),
-                    if (perms.canView(ScreenIds.transferInPending))
-                      _HeroTile(
-                        icon: Icons.move_to_inbox_outlined,
-                        label: 'Transfer In',
-                        teal: true,
-                        cardColor: cardColor,
-                        cardHigh: cardHigh,
-                        mainColor: mainColor,
-                        onTap: () => _pushGuarded(
-                          ScreenIds.transferInPending,
-                          (_) => const TransferInPendingScreen(),
-                        ),
-                      ),
-                    if (perms.canView(ScreenIds.fastPutaway))
-                      _HeroTile(
-                        icon: Icons.qr_code_scanner,
-                        label: 'Bin Assign',
-                        teal: false,
-                        highSurface: true,
-                        cardColor: cardColor,
-                        cardHigh: cardHigh,
-                        mainColor: mainColor,
-                        onTap: () => _pushGuarded(
-                          ScreenIds.fastPutaway,
-                          (_) => const FastPutawayScreen(),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
 
             // ── E. Hardware Pulse — 1×3 row, location-scoped counts.
             //   Each card shows total/online (e.g. "3/2") so the operator
@@ -829,96 +757,105 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             mutedColor: mutedColor,
                           ),
                         ),
-                      ],
-                    ),
+
+            // ── D. 2×2 Hero tile grid ─────────────────────────────────
+            // Each tile owns a Phase 2 screen id; hidden ones drop out so
+            // the grid reflows from 4 to N. Empty grid hides the section
+            // entirely (rare — would require all four to be hidden).
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 0.h),
+              sliver: SliverToBoxAdapter(
+                child: GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1,
+                  children: <Widget>[
+                    if (perms.canView(ScreenIds.inventoryHub))
+                      _HeroTile(
+                        icon: Icons.inventory_2_outlined,
+                        label: 'Inventory',
+                        teal: false,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushGuarded(
+                          ScreenIds.inventoryHub,
+                          (_) => const InventoryHubScreen(),
+                        ),
+                      ),
+                    if (perms.canView(ScreenIds.fastPutaway) ||
+                        perms.canView(ScreenIds.cleanBin))
+                      _HeroTile(
+                        icon: Icons.qr_code_scanner,
+                        label: 'Bin Management',
+                        teal: false,
+                        highSurface: true,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushScreen(CategoryHubScreen.binManagement()),
+                      ),
+                    if (perms.canView(ScreenIds.encode) ||
+                        perms.canView(ScreenIds.encodeAndPrint) ||
+                        perms.canView(ScreenIds.searchAndEncode) ||
+                        perms.canView(ScreenIds.print) ||
+                        perms.canView(ScreenIds.printNonRfid) ||
+                        perms.canView(ScreenIds.statusChange))
+                      _HeroTile(
+                        icon: Icons.local_printshop_outlined,
+                        label: 'Encode & Print',
+                        teal: true,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushScreen(CategoryHubScreen.encodePrint()),
+                      ),
+                    if (perms.canView(ScreenIds.geigerSearch) ||
+                        perms.canView(ScreenIds.cloudGeiger))
+                      _HeroTile(
+                        icon: Icons.radar,
+                        label: 'Find & Locate',
+                        teal: false,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushScreen(CategoryHubScreen.findLocate()),
+                      ),
+                    if (perms.canView(ScreenIds.transferSlips) ||
+                        perms.canView(ScreenIds.transferInPending))
+                      _HeroTile(
+                        icon: Icons.swap_horiz,
+                        label: 'Transfers',
+                        teal: true,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushScreen(CategoryHubScreen.transfers()),
+                      ),
+                    if (perms.canView(ScreenIds.reportsHub))
+                      _HeroTile(
+                        icon: Icons.bar_chart_outlined,
+                        label: 'Reports',
+                        teal: false,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushGuarded(
+                          ScreenIds.reportsHub,
+                          (_) => const ReportsHubScreen(),
+                        ),
+                      ),
                   ],
                 ),
               ),
             ),
-
-            // ── G. MORE TOOLS ─────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 28.h, 20.w, 0.h),
-                child: Text('MORE TOOLS',
-                    style: GoogleFonts.spaceGrotesk(
-                        fontSize: 12.sp,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2.0,
-                        color: mutedColor)),
-              ),
-            ),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 32.h),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 1.1,
+                      ],
+                    ),
+                  ],
                 ),
-                delegate: SliverChildListDelegate(<Widget>[
-                  // Each small tile is gated by its Phase 2 screen id —
-                  // hidden tiles drop out of the grid entirely (Sliver
-                  // child list reflows around the gaps).
-                  if (perms.canView(ScreenIds.encode))
-                    _SmallTile(
-                        icon: LucideIcons.tag,
-                        label: 'Encode',
-                        onTap: () => _pushGuarded(
-                            ScreenIds.encode, (_) => const EncodeScreen())),
-                  if (perms.canView(ScreenIds.cleanBin))
-                    _SmallTile(
-                        icon: LucideIcons.trash2,
-                        label: 'Clean Bin',
-                        onTap: () => _pushGuarded(
-                            ScreenIds.cleanBin, (_) => const CleanBinScreen())),
-                  if (perms.canView(ScreenIds.encodeAndPrint))
-                    _SmallTile(
-                        icon: LucideIcons.printer,
-                        label: 'Encode & Print',
-                        onTap: () => _pushGuarded(
-                            ScreenIds.encodeAndPrint,
-                            (_) => const EncodeAndPrintScreen())),
-                  if (perms.canView(ScreenIds.geigerSearch))
-                    _SmallTile(
-                        icon: LucideIcons.radio,
-                        label: 'Geiger',
-                        onTap: () => _pushGuarded(ScreenIds.geigerSearch,
-                            (_) => const GeigerSearchScreen())),
-                  if (perms.canView(ScreenIds.statusChange))
-                    _SmallTile(
-                        icon: LucideIcons.clipboardList,
-                        label: 'Status',
-                        onTap: () => _pushGuarded(ScreenIds.statusChange,
-                            (_) => const StatusChangeScreen())),
-                  if (perms.canView(ScreenIds.print))
-                    _SmallTile(
-                        icon: LucideIcons.printer,
-                        label: 'Print RFID',
-                        onTap: () => _pushGuarded(ScreenIds.print,
-                            (_) => const PrintScreen(mode: PrintMode.rfid))),
-                  if (perms.canView(ScreenIds.printNonRfid))
-                    _SmallTile(
-                        icon: LucideIcons.tag,
-                        label: 'Print Non-RFID',
-                        onTap: () => _pushGuarded(
-                            ScreenIds.printNonRfid,
-                            (_) =>
-                                const PrintScreen(mode: PrintMode.nonRfid))),
-                  if (perms.canView(ScreenIds.searchAndEncode))
-                    _SmallTile(
-                        icon: LucideIcons.refreshCw,
-                        label: 'Re-Encode',
-                        onTap: () => _pushGuarded(ScreenIds.searchAndEncode,
-                            (_) => const SearchAndEncodeScreen())),
-                  if (perms.canView(ScreenIds.cloudGeiger))
-                    _SmallTile(
-                        icon: LucideIcons.cloud,
-                        label: 'Cloud + Geiger',
-                        onTap: () => _pushGuarded(ScreenIds.cloudGeiger,
-                            (_) => const CloudGeigerScreen())),
-                ]),
               ),
             ),
           ],
@@ -1234,43 +1171,3 @@ class _PulseCard extends StatelessWidget {
   }
 }
 
-class _SmallTile extends StatelessWidget {
-  const _SmallTile(
-      {required this.icon, required this.label, required this.onTap});
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1C2828) : _surfaceContainerLow;
-    final iconColor = isDark ? const Color(0xFF7A9090) : AppColors.slateAction;
-    final textColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
-    return Material(
-      color: cardColor,
-      borderRadius: BorderRadius.circular(2.r),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(2.r),
-        child: Padding(
-          padding: EdgeInsets.all(10.r),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, size: 20.sp, color: iconColor),
-              const Spacer(),
-              Text(label.toUpperCase(),
-                  style: GoogleFonts.manrope(
-                      fontSize: 11.sp,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: textColor)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

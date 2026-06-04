@@ -10,7 +10,7 @@ import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/add_on_count_source_picker_screen.dart';
 import 'package:carbon_wms/ui/screens/count_inventory_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart';
-import 'package:carbon_wms/ui/screens/reports_hub_screen.dart';
+import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 class InventoryHubScreen extends StatelessWidget {
@@ -76,6 +76,18 @@ class InventoryHubScreen extends StatelessWidget {
                     (_) => const InventoryCatalogScreen(),
                   ),
                 ),
+              if (perms.canView(ScreenIds.inventoryLookup))
+                _InventoryTile(
+                  label: 'ITEM LOOKUP',
+                  icon: LucideIcons.search,
+                  tileColor: tileColor,
+                  iconColor: iconColor,
+                  textColor: textColor,
+                  onTap: () => context.pushGuarded<void>(
+                    ScreenIds.inventoryLookup,
+                    (_) => const InventoryLookupScreen(),
+                  ),
+                ),
               // Add-On Catalog — Count Inventory cloned in add-on-catalog mode:
               // counts only EPCs not already in the catalog and adds them LIVE.
               if (perms.canView(ScreenIds.addOnCatalog))
@@ -88,18 +100,6 @@ class InventoryHubScreen extends StatelessWidget {
                   onTap: () => context.pushGuarded<void>(
                     ScreenIds.addOnCatalog,
                     (_) => const CountInventoryScreen(mode: CountMode.addOnCatalog),
-                  ),
-                ),
-              if (perms.canView(ScreenIds.reportsHub))
-                _InventoryTile(
-                  label: 'REPORTS',
-                  icon: LucideIcons.fileText,
-                  tileColor: tileColor,
-                  iconColor: iconColor,
-                  textColor: textColor,
-                  onTap: () => context.pushGuarded<void>(
-                    ScreenIds.reportsHub,
-                    (_) => const ReportsHubScreen(),
                   ),
                 ),
             ],
