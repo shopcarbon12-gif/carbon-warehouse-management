@@ -823,7 +823,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     final failedCount = _history.where((r) => r.failureReason != EncodeFailureReason.none).length;
 
     return CarbonScaffold(
-      pageTitle: 'reencode',
+      pageTitle: 're-encode',
       actions: [
         IconButton(
           icon: const Icon(Icons.settings_outlined),

@@ -324,6 +324,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _awaitingBinScan = true;
       _readyForNextEntry = false;
       _flashOk = false;
+      _multiItems = false; // fresh start = single-item default
     });
     _scanFocus.requestFocus();
   }
@@ -371,6 +372,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _readyForNextEntry = true;
       _awaitingBinScan = true; // next scan must be a bin
       _flashOk = true;
+      _multiItems = false; // next session starts single-item by default
     });
     _flashTimer = Timer(const Duration(seconds: 5), () {
       if (!mounted) return;
@@ -380,10 +382,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     _scanFocus.requestFocus();
   }
 
-  Future<void> _setMultiItems(bool v) async {
+  // Multi-items is a per-session choice, not persisted: it always starts OFF
+  // and resets to OFF when a session ends (so the next bin begins single-mode).
+  void _setMultiItems(bool v) {
     setState(() => _multiItems = v);
-    final p = await SharedPreferences.getInstance();
-    await p.setBool('bin_assign_multi_items', v);
   }
 
   Future<void> _load() async {
@@ -391,7 +393,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (!mounted) return;
     setState(() {
       _scannerSource = p.getString('wms_scanner_source_v1') ?? 'hardware';
-      _multiItems = p.getBool('bin_assign_multi_items') ?? false;
       // Manual-mode flags are now in-memory (BinAssignSession) — they
       // survive navigation but reset on app kill, so a fresh login
       // never inherits the previous operator's manual state.
@@ -2125,7 +2126,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               onManualBinSubmit: (code) => unawaited(_handleBinScan(code)),
               onBinDirectSelect: (id, code) => unawaited(_confirmBin(id, code)),
               multiItems: _multiItems,
-              onMultiItemsChanged: (v) => unawaited(_setMultiItems(v)),
+              onMultiItemsChanged: _setMultiItems,
             ),
 
             // ── Fixed header: STORED ITEMS ──────────────────────────────────
@@ -2457,26 +2458,29 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
     _filterBins();
   }
 
+  // Strip everything that isn't a letter/digit so the typed code (which the
+  // hyphen formatter dashes — "6-B-03-R") matches the canonical stored code
+  // ("6B03R"). Without this the dropdown looked slow/empty because almost
+  // nothing matched once the dashes were inserted.
+  static String _normCode(String s) =>
+      s.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+
   void _filterBins() {
-    final query = _binCtrl.text.trim().toUpperCase();
+    final query = _normCode(_binCtrl.text);
+    const int maxResults = 40;
+    final List<Map<String, dynamic>> matches;
     if (query.isEmpty) {
-      setState(() {
-        _filteredBins = _allBins.take(8).toList();
-        _showDropdown = _focusNode.hasFocus;
-      });
+      matches = _allBins.take(maxResults).toList();
     } else {
-      final matches = _allBins
-          .where((b) {
-            final code = (b['code']?.toString() ?? '').toUpperCase();
-            return code.contains(query);
-          })
-          .take(8)
+      matches = _allBins
+          .where((b) => _normCode(b['code']?.toString() ?? '').contains(query))
+          .take(maxResults)
           .toList();
-      setState(() {
-        _filteredBins = matches;
-        _showDropdown = _focusNode.hasFocus;
-      });
     }
+    setState(() {
+      _filteredBins = matches;
+      _showDropdown = _focusNode.hasFocus;
+    });
   }
 
   void _selectBin(Map<String, dynamic> bin) {
@@ -2574,10 +2578,14 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                         child: TextField(
                           controller: _binCtrl,
                           focusNode: _focusNode,
+                          // Centered + big, so a manually-typed bin code reads
+                          // the same as a 2D-scanned one in the box.
+                          textAlign: TextAlign.center,
                           style: GoogleFonts.spaceGrotesk(
-                            fontSize: 28.sp,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 42.sp,
+                            fontWeight: FontWeight.w800,
                             color: AppColors.primary,
+                            letterSpacing: 1.2,
                           ),
                           decoration: InputDecoration(
                             hintText: 'Enter bin code...',
