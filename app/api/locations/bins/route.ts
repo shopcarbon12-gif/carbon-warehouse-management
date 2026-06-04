@@ -86,6 +86,18 @@ export async function POST(req: Request) {
     );
   }
 
+  // Default the bin's location to the caller's ACTIVE session location when the
+  // client omits it (handheld). This keeps create consistent with the
+  // active-location guard on delete/clean — otherwise a bin created at the
+  // wrong location 404s/403s on the very next delete/empty.
+  const locationId = parsed.data.locationId ?? session.lid;
+  if (!locationId) {
+    return NextResponse.json(
+      { error: "No active location for this session" },
+      { status: 400 },
+    );
+  }
+
   const pool = getPool();
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
@@ -94,7 +106,7 @@ export async function POST(req: Request) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const { id } = await upsertBin(client, session.tid, parsed.data);
+    const { id } = await upsertBin(client, session.tid, { ...parsed.data, locationId });
     await client.query("COMMIT");
     return NextResponse.json({ ok: true, id });
   } catch (e) {

@@ -1,6 +1,5 @@
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
-import { findTransferBlockedEpc } from "@/lib/server/status-label-enforcement";
 import { ingestEpcs } from "@/lib/server/epc-ingress";
 import { decodeEpc } from "@/lib/server/epc-decode";
 
@@ -391,6 +390,10 @@ export type TransferCommitResult = {
   transferId: string;
   slipNumber: number | null;
   rfidCount: number;
+  /** EPCs that were in-stock and flipped to in-transit. */
+  liveCount: number;
+  /** EPCs that shipped in a non-live status (damaged / tag_killed / …). */
+  nonLiveCount: number;
   manualCount: number;
   auditId: string;
 };
@@ -418,16 +421,13 @@ export async function commitTransfer(
   if (!src) throw new Error("BAD_REQUEST:Source location not found");
   if (!dst) throw new Error("BAD_REQUEST:Destination location not found");
 
-  if (epcs.length > 0) {
-    const blocked = await findTransferBlockedEpc(client, session.tid, epcs);
-    if (blocked) {
-      throw new Error(`BAD_REQUEST:Item ${blocked} cannot be processed in its current status.`);
-    }
-  }
-
-  // Validate every EPC exists at the declared source location and is in-stock.
-  let rfidLocationOk = true;
-  let badEpcSample = "";
+  // Split the scanned EPCs into LIVE (in-stock → become in-transit) and
+  // NON-LIVE (damaged / tag_killed / sold / stolen / …). Non-live items are
+  // NOT blocked: they ship with the slip in their CURRENT status and are
+  // inspected at the receive step. Every EPC must physically be at the source
+  // location, and may not already be in transit on another slip.
+  const liveEpcs: string[] = [];
+  const nonLiveEpcs: string[] = [];
   if (epcs.length > 0) {
     const rows = await client.query<{ epc: string; location_id: string; status: string }>(
       `SELECT i.epc, i.location_id::text, i.status
@@ -440,16 +440,18 @@ export async function commitTransfer(
       throw new Error("BAD_REQUEST:One or more EPCs were not found in this tenant");
     }
     for (const r of rows.rows) {
-      if (r.location_id !== sourceLocationId || r.status !== "in-stock") {
-        rfidLocationOk = false;
-        badEpcSample = r.epc;
-        break;
+      if (r.location_id !== sourceLocationId) {
+        throw new Error(
+          `BAD_REQUEST:EPC ${r.epc} is not at the chosen source location.`,
+        );
       }
-    }
-    if (!rfidLocationOk) {
-      throw new Error(
-        `BAD_REQUEST:EPC ${badEpcSample} is not in-stock at the chosen source location.`,
-      );
+      if (r.status === "in-transit") {
+        throw new Error(
+          `BAD_REQUEST:EPC ${r.epc} is already in transit on another slip.`,
+        );
+      }
+      if (r.status === "in-stock") liveEpcs.push(r.epc);
+      else nonLiveEpcs.push(r.epc);
     }
   }
 
@@ -487,9 +489,12 @@ export async function commitTransfer(
   const slipNumberRaw = trIns.rows[0]!.slip_number;
   const slipNumber = slipNumberRaw == null ? null : Number(slipNumberRaw);
 
-  // 2. Flip RFID items to in-transit, attach to this transfer.
+  // 2. Live items → in-transit. Non-live items KEEP their status. Both move to
+  // the destination and attach to this transfer so they travel together; the
+  // receive step flips found in-transit items to live and lets the operator
+  // inspect each non-live arrival before closing the slip.
   let movedRfid = 0;
-  if (epcs.length > 0) {
+  if (liveEpcs.length > 0) {
     const upd = await client.query(
       `UPDATE items
        SET location_id = $1::uuid,
@@ -497,9 +502,21 @@ export async function commitTransfer(
            status = 'in-transit',
            transfer_id = $2::uuid
        WHERE epc = ANY($3::text[])`,
-      [destinationLocationId, transferId, epcs],
+      [destinationLocationId, transferId, liveEpcs],
     );
     movedRfid = upd.rowCount ?? 0;
+  }
+  let movedNonLive = 0;
+  if (nonLiveEpcs.length > 0) {
+    const upd = await client.query(
+      `UPDATE items
+       SET location_id = $1::uuid,
+           bin_id = NULL,
+           transfer_id = $2::uuid
+       WHERE epc = ANY($3::text[])`,
+      [destinationLocationId, transferId, nonLiveEpcs],
+    );
+    movedNonLive = upd.rowCount ?? 0;
   }
 
   // 3. Write manual adjustments (source settled now, destination pending receive).
@@ -542,7 +559,9 @@ export async function commitTransfer(
         destination_location: { id: dst.id, code: dst.code, name: dst.name },
         epcs,
         manual_lines: manualLines,
-        rfid_count: movedRfid,
+        rfid_count: movedRfid + movedNonLive,
+        live_count: movedRfid,
+        non_live_count: movedNonLive,
         manual_units: manualUnits,
         state: "in-transit",
       }),
@@ -552,7 +571,9 @@ export async function commitTransfer(
   return {
     transferId,
     slipNumber,
-    rfidCount: movedRfid,
+    rfidCount: movedRfid + movedNonLive,
+    liveCount: movedRfid,
+    nonLiveCount: movedNonLive,
     manualCount: manualUnits,
     auditId: audit.rows[0]?.id ?? "",
   };
@@ -668,6 +689,11 @@ export type TransferDetailRow = {
     upc: string | null;
     retail_price: string | null;
     received: boolean;
+    /** Current item status (in-transit / in-stock / damaged / tag_killed / …). */
+    status: string;
+    /** True when the item arrived in a non-live status (not in-transit, not
+     *  in-stock) — these raise the inspect-before-close notice on receive. */
+    arrived_non_live: boolean;
   }>;
   manual: Array<{
     adjustment_id: string;
@@ -820,6 +846,8 @@ export async function getTransferDetail(
       upc: r.upc,
       retail_price: r.retail_price,
       received: r.status === "in-stock",
+      status: r.status,
+      arrived_non_live: r.status !== "in-transit" && r.status !== "in-stock",
     })),
     manual: manualRows.rows.map((r) => ({
       adjustment_id: r.adjustment_id,
@@ -1096,6 +1124,15 @@ export async function listTransferSlipReport(
  *  Receive (Transfer In) — flip in-transit → in-stock + auto-bin
  * ========================================================================= */
 
+/** Statuses an operator may assign to a non-live arrival during inspection. */
+export const RECEIVE_INSPECT_STATUSES = [
+  "in-stock",
+  "damaged",
+  "tag_killed",
+  "sold",
+  "stolen",
+] as const;
+
 export const transferReceiveSchema = z.object({
   transferId: z.string().uuid(),
   epcs: z
@@ -1111,6 +1148,19 @@ export const transferReceiveSchema = z.object({
     )
     .max(500)
     .default([]),
+  // Inspect-before-close decisions for items that arrived non-live. Each maps
+  // an EPC on this slip to the status the operator set after inspection
+  // ('in-stock' makes it live + auto-bins it; anything else keeps it off the
+  // floor in that status).
+  statuses: z
+    .array(
+      z.object({
+        epc: epcHex24,
+        status: z.enum(RECEIVE_INSPECT_STATUSES),
+      }),
+    )
+    .max(500)
+    .default([]),
 });
 
 export type TransferReceiveBody = z.infer<typeof transferReceiveSchema>;
@@ -1119,7 +1169,13 @@ export type TransferReceiveResult = {
   transferId: string;
   rfidReceived: number;
   manualReceived: number;
+  /** Non-live arrivals whose status the operator set during inspection. */
+  inspected: number;
   state: string;
+  /** Echoed back so callers can fan out a live-mirror event to both ends. */
+  sourceLocationId: string;
+  destinationLocationId: string;
+  slipNumber: number | null;
 };
 
 /**
@@ -1133,16 +1189,19 @@ export async function commitReceive(
   session: SessionPayload,
   body: TransferReceiveBody,
 ): Promise<TransferReceiveResult> {
-  const { transferId, epcs, manualConfirms } = body;
+  const { transferId, epcs, manualConfirms, statuses } = body;
 
   const tr = await client.query<{
     id: string;
+    source_location_id: string;
     destination_location_id: string;
     state: string;
     rfid_count: number;
     manual_count: number;
+    slip_number: string | null;
   }>(
-    `SELECT id::text, destination_location_id::text, state, rfid_count, manual_count
+    `SELECT id::text, source_location_id::text, destination_location_id::text,
+            state, rfid_count, manual_count, slip_number::text
      FROM transfer_records
      WHERE id = $1::uuid AND tenant_id = $2::uuid LIMIT 1`,
     [transferId, session.tid],
@@ -1153,11 +1212,13 @@ export async function commitReceive(
     throw new Error(`BAD_REQUEST:Transfer is ${t.state}`);
   }
 
-  // 1. RFID side — auto-route each EPC to the bin most-used by its custom_sku
-  // at the destination location. NULL when the SKU has no presence yet.
-  let rfidReceived = 0;
+  // 1. RFID side — flip scanned in-transit items to in-stock, plus apply any
+  // inspect-before-close decisions for non-live arrivals. Each item that goes
+  // live is auto-routed to the bin most-used by its custom_sku at the
+  // destination (NULL when the SKU has no presence yet).
+
+  // Validate scanned EPCs: must belong to this transfer + still in-transit.
   if (epcs.length > 0) {
-    // Validate each EPC belongs to this transfer + still in-transit.
     const check = await client.query<{ epc: string; status: string; transfer_id: string | null }>(
       `SELECT epc, status, transfer_id::text FROM items WHERE epc = ANY($1::text[])`,
       [epcs],
@@ -1169,7 +1230,33 @@ export async function commitReceive(
         throw new Error(`BAD_REQUEST:EPC ${e} is not part of this in-transit transfer`);
       }
     }
+  }
 
+  // Validate inspect overrides: each must belong to this transfer (any status).
+  if (statuses.length > 0) {
+    const overrideEpcs = statuses.map((s) => s.epc);
+    const ck = await client.query<{ epc: string; transfer_id: string | null }>(
+      `SELECT epc, transfer_id::text FROM items WHERE epc = ANY($1::text[])`,
+      [overrideEpcs],
+    );
+    for (const s of statuses) {
+      const row = ck.rows.find((r) => r.epc === s.epc);
+      if (!row || row.transfer_id !== transferId) {
+        throw new Error(`BAD_REQUEST:EPC ${s.epc} is not part of this transfer`);
+      }
+    }
+  }
+
+  // Items that go live = scanned in-transit items + any inspect override the
+  // operator explicitly set to 'in-stock'.
+  const liveEpcs = [
+    ...new Set([
+      ...epcs,
+      ...statuses.filter((s) => s.status === "in-stock").map((s) => s.epc),
+    ]),
+  ];
+  let rfidReceived = 0;
+  if (liveEpcs.length > 0) {
     // Pick "most used bin" per EPC's custom_sku at the destination.
     const upd = await client.query(
       `WITH preferred AS (
@@ -1197,10 +1284,20 @@ export async function commitReceive(
            bin_id = preferred.bin_id::uuid
        FROM preferred
        WHERE i.epc = preferred.epc`,
-      [t.destination_location_id, epcs],
+      [t.destination_location_id, liveEpcs],
     );
     rfidReceived = upd.rowCount ?? 0;
   }
+
+  // Inspect overrides that are NOT 'in-stock' → set the chosen non-live status
+  // (keeps the item off the floor at the destination).
+  for (const s of statuses.filter((s) => s.status !== "in-stock")) {
+    await client.query(
+      `UPDATE items SET status = $1 WHERE epc = $2 AND transfer_id = $3::uuid`,
+      [s.status, s.epc, transferId],
+    );
+  }
+  const inspected = statuses.length;
 
   // 2. Manual side — settle named destination-side adjustments.
   let manualReceived = 0;
@@ -1255,6 +1352,7 @@ export async function commitReceive(
         transfer_id: transferId,
         rfid_received: rfidReceived,
         manual_received: manualReceived,
+        inspected,
         new_state: newState,
       }),
     ],
@@ -1264,6 +1362,10 @@ export async function commitReceive(
     transferId,
     rfidReceived,
     manualReceived,
+    inspected,
     state: newState,
+    sourceLocationId: t.source_location_id,
+    destinationLocationId: t.destination_location_id,
+    slipNumber: t.slip_number == null ? null : Number(t.slip_number),
   };
 }

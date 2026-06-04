@@ -26,6 +26,8 @@ import 'package:carbon_wms/ui/screens/print_screen.dart';
 import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
+import 'package:carbon_wms/ui/screens/transfer_out_screen.dart';
+import 'package:carbon_wms/ui/screens/transfer_in_pending_screen.dart';
 import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
 import 'package:carbon_wms/ui/screens/cloud_geiger_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_app_drawer.dart';
@@ -679,8 +681,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           unawaited(_refreshDashboardStats());
                         } else {
                           _pushGuarded(
-                            ScreenIds.transferSlips,
-                            (_) => const TransferSlipsScreen(),
+                            ScreenIds.transferInPending,
+                            (_) => const TransferInPendingScreen(),
                           );
                         }
                       },
@@ -723,15 +725,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     if (perms.canView(ScreenIds.transferSlips))
                       _HeroTile(
-                        icon: Icons.precision_manufacturing_outlined,
-                        label: 'Operations',
+                        icon: Icons.outbound_outlined,
+                        label: 'Transfer Out',
                         teal: true,
                         cardColor: cardColor,
                         cardHigh: cardHigh,
                         mainColor: mainColor,
                         onTap: () => _pushGuarded(
                           ScreenIds.transferSlips,
-                          (_) => const TransferSlipsScreen(),
+                          (_) => const TransferOutScreen(),
+                        ),
+                      ),
+                    if (perms.canView(ScreenIds.transferInPending))
+                      _HeroTile(
+                        icon: Icons.move_to_inbox_outlined,
+                        label: 'Transfer In',
+                        teal: true,
+                        cardColor: cardColor,
+                        cardHigh: cardHigh,
+                        mainColor: mainColor,
+                        onTap: () => _pushGuarded(
+                          ScreenIds.transferInPending,
+                          (_) => const TransferInPendingScreen(),
                         ),
                       ),
                     if (perms.canView(ScreenIds.fastPutaway))
@@ -877,9 +892,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   if (perms.canView(ScreenIds.print))
                     _SmallTile(
                         icon: LucideIcons.printer,
-                        label: 'Print',
+                        label: 'Print RFID',
+                        onTap: () => _pushGuarded(ScreenIds.print,
+                            (_) => const PrintScreen(mode: PrintMode.rfid))),
+                  if (perms.canView(ScreenIds.printNonRfid))
+                    _SmallTile(
+                        icon: LucideIcons.tag,
+                        label: 'Print Non-RFID',
                         onTap: () => _pushGuarded(
-                            ScreenIds.print, (_) => const PrintScreen())),
+                            ScreenIds.printNonRfid,
+                            (_) =>
+                                const PrintScreen(mode: PrintMode.nonRfid))),
                   if (perms.canView(ScreenIds.searchAndEncode))
                     _SmallTile(
                         icon: LucideIcons.refreshCw,

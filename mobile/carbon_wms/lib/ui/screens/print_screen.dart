@@ -36,8 +36,21 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 /// the EPCs land in active inventory immediately, unchecked →
 /// `status='pending_visibility'` so labels print but the rows don't
 /// count until a fixed reader confirms visibility.
+/// Two separate handheld print features share this widget:
+///
+///   • [PrintMode.rfid] — "Print RFID". Mints + encodes RFID hang-tag labels
+///     via `POST /api/rfid/commission` (RFID printer 192.168.1.3). The
+///     "Add tag to inventory?" checkbox decides whether the EPCs go live.
+///   • [PrintMode.nonRfid] — "Print Non-RFID". Pure price labels via
+///     `GET /api/rfid/nonrfid-label` → Zebra .220 (ZD500R, 203 dpi). No serial
+///     mint, no inventory write — mirrors the web
+///     `/tags-labels/print/non-rfid` page exactly.
+enum PrintMode { rfid, nonRfid }
+
 class PrintScreen extends StatefulWidget {
-  const PrintScreen({super.key});
+  const PrintScreen({super.key, this.mode = PrintMode.rfid});
+
+  final PrintMode mode;
 
   @override
   State<PrintScreen> createState() => _PrintScreenState();
@@ -286,6 +299,45 @@ class _PrintScreenState extends State<PrintScreen> {
           continue;
         }
         try {
+          // ── Non-RFID: pure price label to the Zebra .220 ──────────────
+          // Mirrors the web /tags-labels/print/non-rfid page. One GET per
+          // SKU returns the rendered ZPL + printer host (.220); we send it
+          // once per requested qty over raw TCP 9100. No serial mint, no
+          // inventory write.
+          if (widget.mode == PrintMode.nonRfid) {
+            final res = await api.getNonRfidLabel(customSkuId: customSkuId);
+            if (!mounted) return;
+            final zpl = res['zpl']?.toString() ?? '';
+            final host = res['printer_host']?.toString() ?? '';
+            final uri = res['printer_uri']?.toString() ?? 'PSTPRNT';
+            if (zpl.isEmpty || host.isEmpty) {
+              failures.add(
+                  '$skuLabel: ${res['printer_error']?.toString() ?? 'no label'}');
+              continue;
+            }
+            int okCopies = 0;
+            String? lastErr;
+            for (int c = 0; c < perSkuQty; c++) {
+              final tcpErr = await LanZplPrinter.send(
+                host: host,
+                port: 9100,
+                uri: uri,
+                zpl: zpl,
+              );
+              if (tcpErr == null) {
+                okCopies++;
+              } else {
+                lastErr = tcpErr;
+              }
+            }
+            printedTags += okCopies;
+            if (okCopies < perSkuQty) {
+              failures.add(
+                  '$skuLabel: ${lastErr ?? 'partial'} [$host:9100/$uri] ($okCopies/$perSkuQty)');
+            }
+            continue;
+          }
+
           final res = await api.postRfidCommission(
             customSkuId: customSkuId,
             qty: perSkuQty,
@@ -386,7 +438,8 @@ class _PrintScreenState extends State<PrintScreen> {
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
-      pageTitle: 'PRINT',
+      pageTitle:
+          widget.mode == PrintMode.nonRfid ? 'PRINT NON-RFID' : 'PRINT RFID',
       body: SafeArea(
         top: false,
         child: Column(
@@ -511,11 +564,14 @@ class _PrintScreenState extends State<PrintScreen> {
             // policy ("are these tags going live in inventory?") is the
             // bigger commitment, so it's the first decision the operator
             // makes; qty is the trivial number underneath.
-            _CheckboxRow(
-              label: 'Add tag to inventory?',
-              checked: _addToInventory,
-              onChanged: (v) => setState(() => _addToInventory = v),
-            ),
+            // Non-RFID labels are pure price labels — there is no EPC and
+            // nothing to add to inventory, so the checkbox is RFID-only.
+            if (widget.mode == PrintMode.rfid)
+              _CheckboxRow(
+                label: 'Add tag to inventory?',
+                checked: _addToInventory,
+                onChanged: (v) => setState(() => _addToInventory = v),
+              ),
 
             // ── qty stepper ──────────────────────────────────────────
             _QtyStepper(

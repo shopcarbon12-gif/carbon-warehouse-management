@@ -454,6 +454,13 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
         cloudGeigerMode: true,
       ),
     );
+    // Locate Tag's dispose un-suppresses the native per-tag beep and owns
+    // its own scan context. Re-assert ours on return so the next bulk-find
+    // sweep stays silent (we only beep on new queue hits) and reads still
+    // flow through the geiger sink.
+    if (!mounted) return;
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
+    _rfid?.scanContext = 'GEIGER_FIND';
   }
 
   /// Snapshot the current list (epc + found-or-not + best-effort sku /

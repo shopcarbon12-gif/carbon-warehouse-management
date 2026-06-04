@@ -5,6 +5,7 @@ import {
   commitTransfer,
   transferCommitSchema,
 } from "@/lib/server/operations-transfers";
+import { publishTransferEvent } from "@/lib/server/transfer-events-hub";
 
 export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -37,6 +38,15 @@ export async function POST(req: Request) {
     await client.query("BEGIN");
     const result = await commitTransfer(client, session, parsed.data);
     await client.query("COMMIT");
+    publishTransferEvent(session.tid, {
+      kind: "committed",
+      transferId: result.transferId,
+      slipNumber: result.slipNumber,
+      sourceLocationId: parsed.data.sourceLocationId,
+      destinationLocationId: parsed.data.destinationLocationId,
+      state: "in-transit",
+      timestamp: new Date().toISOString(),
+    });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     try {

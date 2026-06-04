@@ -107,6 +107,8 @@ class EncodeTagResult {
   int? serial;
   String? customSku;
   String? itemName;
+  String? color;
+  String? size;
   EncodeStatus status;
   EncodeFailureReason failureReason;
   final DateTime at;

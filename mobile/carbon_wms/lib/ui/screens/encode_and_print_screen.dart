@@ -364,9 +364,19 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     setState(() {
       _selectedSku = null;
       _nearestEpc = null;
+      _nearestRssi = null;
+      _nearestInfo = null;
+      _infoEpc = null;
       _newEpc = null;
       _printErr = null;
+      _errText = null;
       _encodeStage = 0;
+      // Truly fresh SKU step: clear the previous search so NEW ITEM /
+      // CHANGE SKU doesn't land on stale results.
+      _searchCtrl.clear();
+      _query = '';
+      _results = [];
+      _searchError = null;
       _step = _Step.sku;
     });
   }

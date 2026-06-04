@@ -13,6 +13,7 @@ import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
+import 'package:carbon_wms/services/transfer_slip_printer.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -77,6 +78,15 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
   /// Set of expected EPCs (in-transit, awaiting receipt).
   final Set<String> _expected = <String>{};
 
+  /// EPCs that ARRIVED in a non-live status (damaged / tag_killed / …). They
+  /// are NOT in-transit, so they're flagged for inspect-before-close: the
+  /// operator sets each one's final status before the slip can commit.
+  final Set<String> _nonLive = <String>{};
+
+  /// epc → status the operator set during inspection (defaults to the status
+  /// it arrived in). Sent to the server as the `statuses` overrides.
+  final Map<String, String> _nonLiveStatus = {};
+
   bool _scanning = false;
   bool _committing = false;
   String? _commitMsg;
@@ -109,6 +119,10 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
       unawaited(r.pauseScanning());
       unawaited(r.setSessionPowerOverrideDbm(null));
     }
+    // Reopen the 2D imager for the next screen (matches Count / Fast Putaway).
+    // RFID screens re-arm their own mode on entry; this only helps a
+    // barcode-first screen that lands next.
+    unawaited(RfidVendorChannel.open2dBarcode());
     super.dispose();
   }
 
@@ -137,6 +151,8 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
       if (!mounted) return;
       _expected.clear();
       _alreadyReceived.clear();
+      _nonLive.clear();
+      _nonLiveStatus.clear();
       final rfid = j['rfid'];
       if (rfid is List) {
         for (final r in rfid) {
@@ -144,8 +160,14 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
             final epc = (r['epc'] ?? '').toString().toUpperCase();
             if (epc.isEmpty) continue;
             final received = r['received'] == true;
+            final arrivedNonLive = r['arrived_non_live'] == true;
             if (received) {
               _alreadyReceived.add(epc);
+            } else if (arrivedNonLive) {
+              // Not in-transit — shipped in a non-live status. Flagged for
+              // inspect-before-close; default the choice to how it arrived.
+              _nonLive.add(epc);
+              _nonLiveStatus[epc] = (r['status'] ?? 'damaged').toString();
             } else {
               _expected.add(epc);
             }
@@ -258,6 +280,21 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
     }
   }
 
+  Future<void> _printSlip() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final html = await context
+          .read<WmsApiClient>()
+          .fetchTransferSlipHtml(widget.transferId);
+      await TransferSlipPrinter.printSlip(
+        html: html,
+        docName: 'Transfer Slip ${widget.slipNumber ?? ''}'.trim(),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Print failed: $e')));
+    }
+  }
+
   Future<void> _openGear() async {
     final next = await Navigator.of(context).push<int>(
       MaterialPageRoute<int>(
@@ -297,13 +334,33 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
   Future<void> _commit() async {
     if (_committing) return;
     final b = _buckets();
-    if (b.found.isEmpty) {
+    if (b.found.isEmpty && _nonLive.isEmpty) {
       setState(() => _commitMsg = 'NOTHING TO RECEIVE — SCAN AT LEAST ONE EPC');
       return;
     }
     // Capture the api ref *before* any await so the analyzer doesn't flag
     // a context-across-async-gap below. Dialog + commit are async.
     final api = context.read<WmsApiClient>();
+
+    // Inspect-before-close: any item that arrived non-live must have its
+    // final status confirmed by the operator before the slip can commit.
+    if (_nonLive.isNotEmpty) {
+      final result =
+          await Navigator.of(context).push<Map<String, String>>(
+        MaterialPageRoute<Map<String, String>>(
+          builder: (_) => _InspectArrivalsScreen(
+            epcs: _nonLive.toList(),
+            initial: Map<String, String>.from(_nonLiveStatus),
+            detail: _detail,
+          ),
+        ),
+      );
+      if (result == null || !mounted) return; // operator backed out
+      _nonLiveStatus
+        ..clear()
+        ..addAll(result);
+    }
+
     final partialWarning = b.missing.isNotEmpty;
     if (partialWarning) {
       final go = await showDialog<bool>(
@@ -346,9 +403,13 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
       // Stop scanning explicitly — the operator's commit is the antennas-off
       // signal. We don't auto-pause on idle.
       if (_scanning) await _stopScan();
+      final statuses = _nonLiveStatus.entries
+          .map((e) => {'epc': e.key, 'status': e.value})
+          .toList();
       final r = await api.commitTransferReceive(
         transferId: widget.transferId,
         epcs: b.found.toList(),
+        statuses: statuses,
       );
       if (!mounted) return;
       final newState = (r['state'] ?? 'received').toString();
@@ -379,6 +440,11 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
     return CarbonScaffold(
       pageTitle: 'RECEIVE  ·  #${widget.slipNumber ?? "—"}',
       actions: [
+        IconButton(
+          tooltip: 'Print slip',
+          onPressed: _printSlip,
+          icon: Icon(LucideIcons.printer, size: 22.sp, color: _accent),
+        ),
         IconButton(
           tooltip: 'Receive settings',
           onPressed: _openGear,
@@ -479,6 +545,7 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
                         powerDbm: _powerDbm,
                         scanning: _scanning,
                         commitMsg: _commitMsg,
+                        nonLive: _nonLive.length,
                       ),
                       _BucketBar(
                         found: foundN,
@@ -509,6 +576,7 @@ class _Header extends StatelessWidget {
     required this.powerDbm,
     required this.scanning,
     required this.commitMsg,
+    required this.nonLive,
   });
 
   final String sourceCode;
@@ -516,6 +584,7 @@ class _Header extends StatelessWidget {
   final int powerDbm;
   final bool scanning;
   final String? commitMsg;
+  final int nonLive;
 
   @override
   Widget build(BuildContext context) {
@@ -588,6 +657,22 @@ class _Header extends StatelessWidget {
               ],
             ],
           ),
+          if (nonLive > 0) ...[
+            SizedBox(height: 6.h),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+              color: const Color(0x33B87A00),
+              child: Text(
+                '⚠ $nonLive ARRIVED NON-LIVE — SET STATUS ON COMMIT',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .8,
+                  color: const Color(0xFF8A4E12),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -884,6 +969,206 @@ class _EpcRow extends StatelessWidget {
           ),
           Icon(trailing, size: 18.sp, color: accent),
         ],
+      ),
+    );
+  }
+}
+
+/// Inspect-before-close — the flagged-arrivals screen (mockup frame 7). Lists
+/// every item that arrived in a non-live status with a dropdown so the operator
+/// sets each one's final status after inspection. Returns the epc→status map on
+/// confirm, or null if the operator backs out.
+class _InspectArrivalsScreen extends StatefulWidget {
+  const _InspectArrivalsScreen({
+    required this.epcs,
+    required this.initial,
+    required this.detail,
+  });
+
+  final List<String> epcs;
+  final Map<String, String> initial;
+  final Map<String, dynamic>? detail;
+
+  @override
+  State<_InspectArrivalsScreen> createState() => _InspectArrivalsScreenState();
+}
+
+class _InspectArrivalsScreenState extends State<_InspectArrivalsScreen> {
+  static const Color _accent = Color(0xFF1B7F4F);
+  static const Color _transit = Color(0xFFB87A00);
+
+  // value → label for the status dropdown.
+  static const List<MapEntry<String, String>> _options = [
+    MapEntry('in-stock', 'LIVE'),
+    MapEntry('damaged', 'DAMAGED'),
+    MapEntry('tag_killed', 'TAG KILLED'),
+    MapEntry('sold', 'SOLD'),
+    MapEntry('stolen', 'STOLEN'),
+  ];
+
+  late final Map<String, String> _choice;
+
+  @override
+  void initState() {
+    super.initState();
+    _choice = Map<String, String>.from(widget.initial);
+    for (final e in widget.epcs) {
+      _choice.putIfAbsent(e, () => 'damaged');
+      // Normalise any status that isn't a selectable option to 'damaged'.
+      if (!_options.any((o) => o.key == _choice[e])) _choice[e] = 'damaged';
+    }
+  }
+
+  Map<String, dynamic>? _row(String epc) {
+    final rfid = (widget.detail?['rfid'] as List?) ?? const [];
+    for (final r in rfid) {
+      if (r is Map && (r['epc']?.toString().toUpperCase() ?? '') == epc) {
+        return Map<String, dynamic>.from(r);
+      }
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CarbonScaffold(
+      pageTitle: 'INSPECT  ·  ${widget.epcs.length} FLAGGED',
+      bottomBar: SafeArea(
+        top: false,
+        child: Container(
+          color: Colors.white,
+          padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 14.h),
+          child: SizedBox(
+            width: double.infinity,
+            height: 56.h,
+            child: FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(_choice),
+              style: FilledButton.styleFrom(
+                backgroundColor: _accent,
+                foregroundColor: Colors.white,
+                shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero),
+                textStyle: GoogleFonts.spaceGrotesk(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.8),
+              ),
+              icon: Icon(LucideIcons.checkCircle2, size: 20.sp),
+              label: const Text('SET STATUSES · CONTINUE'),
+            ),
+          ),
+        ),
+      ),
+      body: ColoredBox(
+        color: Colors.white,
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              color: _transit.withValues(alpha: 0.12),
+              padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('⚠ ${widget.epcs.length} ITEMS ARRIVED NON-LIVE',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .5,
+                          color: const Color(0xFF8A4E12))),
+                  SizedBox(height: 4.h),
+                  Text(
+                    'These were sent in a non-live status. Inspect each, set its '
+                    'final status, then continue to commit.',
+                    style: GoogleFonts.manrope(
+                        fontSize: 12.sp, color: const Color(0xFF5A6464)),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: EdgeInsets.only(bottom: 16.h),
+                itemCount: widget.epcs.length,
+                itemBuilder: (_, i) {
+                  final epc = widget.epcs[i];
+                  final row = _row(epc);
+                  final sku = row?['sku']?.toString();
+                  final name = row?['name']?.toString();
+                  final color = row?['color']?.toString();
+                  final size = row?['size']?.toString();
+                  return Container(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                          bottom: BorderSide(color: Color(0xFFEFF2F2))),
+                    ),
+                    padding: EdgeInsets.fromLTRB(16.w, 10.h, 12.w, 10.h),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(sku?.isNotEmpty == true ? sku! : epc,
+                                  style: GoogleFonts.robotoMono(
+                                      fontSize: 13.sp,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textMain)),
+                              if (name != null && name.isNotEmpty)
+                                Text(
+                                  [
+                                    name,
+                                    if (color != null && color.isNotEmpty)
+                                      color,
+                                    if (size != null && size.isNotEmpty) size,
+                                  ].join(' · '),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.manrope(
+                                      fontSize: 12.sp,
+                                      color: const Color(0xFF6D7979)),
+                                ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(width: 10.w),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 10.w),
+                          decoration: BoxDecoration(
+                            border:
+                                Border.all(color: const Color(0xFFBCC9C9)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _choice[epc],
+                              isDense: true,
+                              items: [
+                                for (final o in _options)
+                                  DropdownMenuItem<String>(
+                                    value: o.key,
+                                    child: Text(o.value,
+                                        style: GoogleFonts.spaceGrotesk(
+                                            fontSize: 12.sp,
+                                            fontWeight: FontWeight.w800,
+                                            color: o.key == 'in-stock'
+                                                ? _accent
+                                                : AppColors.textMain)),
+                                  ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) setState(() => _choice[epc] = v);
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

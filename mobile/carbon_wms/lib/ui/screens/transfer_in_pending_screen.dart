@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
+import 'package:carbon_wms/services/transfer_events_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/transfer_in_receive_screen.dart';
@@ -31,12 +32,37 @@ class _TransferInPendingScreenState extends State<TransferInPendingScreen> {
   String? _error;
   List<Map<String, dynamic>> _rows = const [];
 
+  // Live mirror: a commit / receive at this location (from any device) pushes
+  // an event over SSE and we re-pull so the list matches the desktop instantly.
+  TransferEventsClient? _events;
+  StreamSubscription<Map<String, dynamic>>? _eventsSub;
+  bool _live = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_reload());
+      _startLiveMirror();
     });
+  }
+
+  void _startLiveMirror() {
+    final client = TransferEventsClient(context.read<WmsApiClient>());
+    _events = client;
+    _eventsSub = client.events.listen((_) {
+      if (!mounted) return;
+      setState(() => _live = true);
+      unawaited(_reload());
+    });
+    unawaited(client.connect());
+  }
+
+  @override
+  void dispose() {
+    _eventsSub?.cancel();
+    _events?.dispose();
+    super.dispose();
   }
 
   Future<void> _reload() async {
@@ -83,6 +109,34 @@ class _TransferInPendingScreenState extends State<TransferInPendingScreen> {
   Widget build(BuildContext context) {
     return CarbonScaffold(
       pageTitle: 'TRANSFER IN',
+      actions: [
+        Padding(
+          padding: EdgeInsets.only(right: 14.w),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8.w,
+                height: 8.w,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _live ? _accent : const Color(0xFFBCC9C9),
+                ),
+              ),
+              SizedBox(width: 6.w),
+              Text(
+                'LIVE',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.4,
+                  color: _live ? _accent : const Color(0xFF8A9090),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
       body: ColoredBox(
         color: Colors.white,
         child: RefreshIndicator(

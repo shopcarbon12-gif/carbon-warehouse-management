@@ -1099,10 +1099,15 @@ class WmsApiClient {
   /// `{ok, transferId, rfidReceived, manualReceived, state}`. The new
   /// state is `received` if everything matched, `partially_received`
   /// otherwise.
+  /// [statuses] carries the inspect-before-close decisions for items that
+  /// arrived non-live: a list of `{epc, status}` where status is one of
+  /// in-stock / damaged / tag_killed / sold / stolen. 'in-stock' makes the
+  /// item live (and auto-bins it); anything else keeps it off the floor.
   Future<Map<String, dynamic>> commitTransferReceive({
     required String transferId,
     required List<String> epcs,
     List<String> manualAdjustmentIds = const [],
+    List<Map<String, String>> statuses = const [],
   }) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/operations/transfers/receive');
@@ -1112,6 +1117,7 @@ class WmsApiClient {
       if (manualAdjustmentIds.isNotEmpty)
         'manualConfirms':
             manualAdjustmentIds.map((id) => {'adjustmentId': id}).toList(),
+      if (statuses.isNotEmpty) 'statuses': statuses,
     };
     final res = await _http.post(
       uri,
@@ -1127,6 +1133,89 @@ class WmsApiClient {
     final decoded = jsonDecode(res.body);
     if (decoded is Map<String, dynamic>) return decoded;
     return <String, dynamic>{};
+  }
+
+  /// `POST /api/operations/transfers/commit` — Transfer OUT. Creates a slip,
+  /// flips live EPCs to in-transit at the destination, and ships any non-live
+  /// EPCs in their current status. [manualLines] is `[{customSkuId, qty}]`.
+  /// Returns `{ok, transferId, slipNumber, rfidCount, liveCount, nonLiveCount,
+  /// manualCount, auditId}`.
+  Future<Map<String, dynamic>> commitTransferOut({
+    required String sourceLocationId,
+    required String destinationLocationId,
+    List<String> epcs = const [],
+    List<Map<String, dynamic>> manualLines = const [],
+    String? notes,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/operations/transfers/commit');
+    final body = <String, dynamic>{
+      'sourceLocationId': sourceLocationId,
+      'destinationLocationId': destinationLocationId,
+      'epcs': epcs,
+      if (manualLines.isNotEmpty) 'manualLines': manualLines,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    };
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(body),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
+  /// `POST /api/operations/transfers/lookup` — enrich a batch of scanned EPCs
+  /// with catalog + status info for the Transfer Out staged list. Each row:
+  /// `{epc, sku, name, color, size, status, ...}`. Non-live items (status not
+  /// in-stock) are flagged in the UI so the operator knows they ship as-is.
+  Future<List<Map<String, dynamic>>> lookupTransferEpcs(
+      List<String> epcs) async {
+    if (epcs.isEmpty) return const <Map<String, dynamic>>[];
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/operations/transfers/lookup');
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'epcs': epcs}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      final rows = decoded['rows'];
+      if (rows is List) {
+        return rows
+            .whereType<Map>()
+            .map((r) => Map<String, dynamic>.from(r))
+            .toList(growable: false);
+      }
+    }
+    return const <Map<String, dynamic>>[];
+  }
+
+  /// Authenticated fetch of the slip's printable HTML (`GET
+  /// /api/operations/transfers/{id}/pdf`). Same document the desktop prints;
+  /// the handheld renders it to PDF on-device for the print / save sheet.
+  Future<String> fetchTransferSlipHtml(String transferId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/operations/transfers/$transferId/pdf');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    return res.body;
   }
 
   Future<Map<String, dynamic>> postCleanBinByCode(String binCode) async {
@@ -1622,22 +1711,14 @@ class WmsApiClient {
     return decoded is List ? decoded : [];
   }
 
-  /// `POST /api/locations/bins` — creates a new bin with the given code.
+  /// `POST /api/locations/bins` — creates a new bin with the given code at the
+  /// operator's ACTIVE session location. We deliberately do NOT send a
+  /// `locationId`: the server defaults it to `session.lid`, the same active
+  /// location the delete/clean guards check. Previously this resolved
+  /// `GET /api/locations[0].id` (the first location, not necessarily the active
+  /// one), so bins landed at the wrong location and the next delete/empty 404'd.
   Future<Map<String, dynamic>> createBin(String code) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
-    // Fetch the session's location ID first
-    final locUri = Uri.parse('$base/api/locations');
-    final locRes = await _http.get(locUri, headers: await sessionAuthHeaders());
-    String? locationId;
-    if (locRes.statusCode >= 200 && locRes.statusCode < 300) {
-      final locDecoded = jsonDecode(locRes.body);
-      if (locDecoded is List && locDecoded.isNotEmpty) {
-        locationId = locDecoded[0]['id']?.toString();
-      }
-    }
-    if (locationId == null || locationId.isEmpty) {
-      throw WmsApiException(400, 'Could not resolve location ID');
-    }
     final uri = Uri.parse('$base/api/locations/bins');
     final res = await _http.post(
       uri,
@@ -1645,7 +1726,7 @@ class WmsApiClient {
         ...await sessionAuthHeaders(),
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'code': code, 'locationId': locationId}),
+      body: jsonEncode({'code': code}),
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { commitReceive, transferReceiveSchema } from "@/lib/server/operations-transfers";
+import { publishTransferEvent } from "@/lib/server/transfer-events-hub";
 
 export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -34,6 +35,15 @@ export async function POST(req: Request) {
     await client.query("BEGIN");
     const result = await commitReceive(client, session, parsed.data);
     await client.query("COMMIT");
+    publishTransferEvent(session.tid, {
+      kind: "received",
+      transferId: result.transferId,
+      slipNumber: result.slipNumber,
+      sourceLocationId: result.sourceLocationId,
+      destinationLocationId: result.destinationLocationId,
+      state: result.state,
+      timestamp: new Date().toISOString(),
+    });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     try {

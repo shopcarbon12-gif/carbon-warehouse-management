@@ -562,6 +562,9 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       c.status = EncodeStatus.detected;
     });
     setState(() => _detectedCount += 1);
+    // Enrich color/size for the card label (name · color · size) WITHOUT
+    // blocking the write — fire-and-forget so throughput is unaffected.
+    if (systemId != null) unawaited(_enrichColorSize(card, systemId));
 
     if (systemId == null || customSkuId.isEmpty) {
       _updateCard(card, (c) {
@@ -675,6 +678,22 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
           .read<WmsApiClient>()
           .catalogLookupBySystemId(systemId.toString());
     } catch (_) { return null; }
+  }
+
+  /// Non-blocking enrichment of the card's color/size (and name as fallback)
+  /// for the "name · color · size" label. Fired fire-and-forget so it never
+  /// adds latency to the write pipeline.
+  Future<void> _enrichColorSize(EncodeTagResult card, int systemId) async {
+    final row = await _lookupItemBySystemId(systemId);
+    if (row == null || !mounted) return;
+    final col = (row['color'] as String?)?.trim();
+    final sz = (row['size'] as String?)?.trim();
+    final nm = (row['name'] as String?)?.trim();
+    _updateCard(card, (c) {
+      if (col != null && col.isNotEmpty) c.color = col;
+      if (sz != null && sz.isNotEmpty) c.size = sz;
+      if ((c.itemName ?? '').isEmpty && nm != null && nm.isNotEmpty) c.itemName = nm;
+    });
   }
 
   Future<void> _reportEvent({
@@ -797,6 +816,11 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     final summaryLabelColor = isDark ? const Color(0xFF5C6C6C) : const Color(0xFF3F4A4A);
     final watermarkColor = isDark ? const Color(0x66A0B3B3) : const Color(0x2995A5A7);
     const summaryBoxHeight = 60.0;
+    // Live = successful re-encodes; Failed = rows with a terminal failure
+    // reason. Derived from history so retries stay accurate without scattered
+    // counters. Read stays the distinct-chips-seen counter.
+    final liveCount = _history.where((r) => r.status == EncodeStatus.encoded).length;
+    final failedCount = _history.where((r) => r.failureReason != EncodeFailureReason.none).length;
 
     return CarbonScaffold(
       pageTitle: 'reencode',
@@ -827,18 +851,19 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
                     ),
                     SizedBox(width: 8.w),
                     _SummaryTile(
-                      label: 'Encoded', value: '$_encodedCount',
+                      label: 'Live', value: '$liveCount',
                       icon: Icons.check_circle_outline,
                       boxWidth: tileWidth, boxHeight: summaryBoxHeight,
-                      tileColor: tileColor, textColor: textColor,
+                      tileColor: tileColor, textColor: const Color(0xFF2A8E2A),
                       labelColor: summaryLabelColor, watermarkColor: watermarkColor,
                     ),
                     SizedBox(width: 8.w),
                     _SummaryTile(
-                      label: 'Detected', value: '$_detectedCount',
-                      icon: Icons.search_outlined,
+                      label: 'Failed', value: '$failedCount',
+                      icon: Icons.error_outline,
                       boxWidth: tileWidth, boxHeight: summaryBoxHeight,
-                      tileColor: tileColor, textColor: textColor,
+                      tileColor: failedCount > 0 ? const Color(0xFFFDECEA) : tileColor,
+                      textColor: failedCount > 0 ? const Color(0xFFD9534F) : textColor,
                       labelColor: summaryLabelColor, watermarkColor: watermarkColor,
                     ),
                   ]);
@@ -1064,64 +1089,84 @@ class _EncodeRow extends StatefulWidget {
 }
 
 class _EncodeRowState extends State<_EncodeRow> {
-  bool _expanded = false;
-
   @override
   Widget build(BuildContext context) {
     final row = widget.row;
-    final descStyle = GoogleFonts.manrope(
-      fontSize: 15.sp, fontWeight: FontWeight.w700,
-      color: AppColors.textMain, height: 1.2,
+    final st = row.status;
+    final isFailed = row.failureReason != EncodeFailureReason.none;
+    final isEncoded = st == EncodeStatus.encoded && !isFailed;
+    final isAlready = st == EncodeStatus.alreadyNew && !isFailed;
+    final inFlight = !isEncoded && !isFailed && !isAlready;
+
+    final stripe = isEncoded
+        ? const Color(0xFF2A8E2A)
+        : isFailed
+            ? const Color(0xFFD9534F)
+            : isAlready
+                ? const Color(0xFF6A7070)
+                : const Color(0xFF1B7D7D);
+
+    // Header: success/already-new → name · color · size; in-flight/failed →
+    // the full OLD EPC (mono). Failed keeps JUST the old EPC number.
+    final showItem = isEncoded || isAlready;
+    final header = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Text(
+            showItem ? _itemLine(row) : row.oldEpc,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: showItem
+                ? GoogleFonts.manrope(fontSize: 15.sp, fontWeight: FontWeight.w700, color: AppColors.textMain)
+                : GoogleFonts.robotoMono(fontSize: 13.sp, fontWeight: FontWeight.w700, color: AppColors.textMain),
+          ),
+        ),
+        SizedBox(width: 10.w),
+        if (inFlight)
+          const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2.5, valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1B7D7D))),
+          )
+        else
+          _RePill(
+            label: isEncoded ? 'LIVE ✓' : (isFailed ? 'FAILED' : 'ALREADY NEW'),
+            bg: isEncoded ? const Color(0xFFD6F5E6) : (isFailed ? const Color(0x24D9534F) : const Color(0x266A7070)),
+            fg: isEncoded ? const Color(0xFF2A8E2A) : (isFailed ? const Color(0xFFD9534F) : const Color(0xFF6A7070)),
+          ),
+      ],
     );
+
+    final col = <Widget>[header];
+    if (isEncoded) {
+      // NEW EPC above OLD EPC (old marked deleted).
+      col
+        ..add(SizedBox(height: 7.h))
+        ..add(_EpcKv(label: 'NEW', value: (row.newEpc ?? '').isEmpty ? '—' : row.newEpc!, accent: true))
+        ..add(SizedBox(height: 3.h))
+        ..add(_EpcKv(label: 'OLD', value: '${row.oldEpc}  — deleted'));
+    } else if (inFlight) {
+      col
+        ..add(SizedBox(height: 5.h))
+        ..add(Text('writing + confirming…',
+            style: GoogleFonts.spaceGrotesk(fontSize: 11.sp, fontWeight: FontWeight.w700, letterSpacing: 1.0, color: const Color(0xFF8A9090))));
+    }
 
     final content = Material(
       color: const Color(0xFFECECEC),
-      borderRadius: BorderRadius.zero,
-      child: InkWell(
-        onTap: () => setState(() => _expanded = !_expanded),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(width: 4.w, color: row.status.chipColor),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 12.w),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _describe(row),
-                              style: descStyle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          SizedBox(width: 10.w),
-                          _StatusBadge(status: row.status),
-                        ],
-                      ),
-                      if (_expanded) ...[
-                        SizedBox(height: 8.h),
-                        _EpcKv(label: 'OLD', value: row.oldEpc),
-                        SizedBox(height: 4.h),
-                        _EpcKv(
-                          label: 'NEW',
-                          value: (row.newEpc ?? '').isEmpty ? '—' : row.newEpc!,
-                          accent: (row.newEpc != null && row.newEpc != row.oldEpc),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 4.w, color: stripe),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 12.w),
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: col),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1147,17 +1192,32 @@ class _EncodeRowState extends State<_EncodeRow> {
     );
   }
 
-  String _describe(EncodeTagResult r) {
-    if (r.failureReason != EncodeFailureReason.none) {
-      return r.failureReason.display;
-    }
+  /// name · color · size (no system_id). Falls back to custom SKU, then EPC.
+  String _itemLine(EncodeTagResult r) {
     final parts = <String>[
-      if (r.systemId != null) '#${r.systemId}',
       if ((r.itemName ?? '').isNotEmpty) r.itemName!,
+      if ((r.color ?? '').isNotEmpty) r.color!,
+      if ((r.size ?? '').isNotEmpty) r.size!,
     ];
     if (parts.isNotEmpty) return parts.join(' · ');
-    if ((r.customSku ?? '').isNotEmpty) return 'Custom SKU: ${r.customSku}';
-    return r.status.label;
+    if ((r.customSku ?? '').isNotEmpty) return r.customSku!;
+    return r.oldEpc;
+  }
+}
+
+class _RePill extends StatelessWidget {
+  const _RePill({required this.label, required this.bg, required this.fg});
+  final String label;
+  final Color bg;
+  final Color fg;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(3.r)),
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+      child: Text(label,
+          style: GoogleFonts.spaceGrotesk(fontSize: 10.sp, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: fg)),
+    );
   }
 }
 
@@ -1201,26 +1261,4 @@ class _EpcKv extends StatelessWidget {
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
-  final EncodeStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-      decoration: BoxDecoration(
-        color: status.chipColor,
-        borderRadius: BorderRadius.circular(2.r),
-      ),
-      child: Text(
-        status.label.toUpperCase(),
-        style: GoogleFonts.spaceGrotesk(
-          color: Colors.white, fontSize: 10.sp,
-          fontWeight: FontWeight.w800, letterSpacing: 0.8,
-        ),
-      ),
-    );
-  }
-}
 

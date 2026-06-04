@@ -48,7 +48,11 @@ export async function listTenantLocationsWithBins(
 }
 
 export const upsertBinSchema = z.object({
-  locationId: z.string().uuid(),
+  // Optional: when omitted, the POST route defaults it to the caller's active
+  // session location (session.lid). The handheld omits it so a bin is always
+  // created at the operator's CURRENT location — fixes create→delete/clean 404
+  // where the mobile previously sent locations[0] (often the wrong location).
+  locationId: z.string().uuid().optional(),
   binId: z.string().uuid().optional(),
   code: z.string().trim().min(1).max(64),
   capacity: z.coerce.number().int().min(0).max(1_000_000).nullable().optional(),
@@ -75,7 +79,12 @@ export async function upsertBin(
   body: UpsertBinBody,
 ): Promise<{ id: string }> {
   const parsed = upsertBinSchema.parse(body);
-  await assertLocationTenant(client, parsed.locationId, tenantId);
+  // locationId is optional on the schema (the handheld omits it and the POST
+  // route fills in the active session location); by the time it reaches here it
+  // must be resolved.
+  const locationId = parsed.locationId;
+  if (!locationId) throw new Error("BAD_REQUEST:locationId is required");
+  await assertLocationTenant(client, locationId, tenantId);
 
   const status = parsed.status ?? "active";
 
@@ -99,7 +108,7 @@ export async function upsertBin(
     `INSERT INTO bins (location_id, code, capacity, status)
      VALUES ($1::uuid, $2, $3, $4)
      RETURNING id::text`,
-    [parsed.locationId, parsed.code, parsed.capacity ?? null, status],
+    [locationId, parsed.code, parsed.capacity ?? null, status],
   );
   const id = ins.rows[0]?.id;
   if (!id) throw new Error("SERVER:Insert failed");
