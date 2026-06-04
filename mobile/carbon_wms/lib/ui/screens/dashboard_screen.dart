@@ -16,7 +16,6 @@ import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/encode_screen.dart';
-import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
 import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
@@ -414,7 +413,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 2:
         _pushGuarded(ScreenIds.transferSlips, (_) => const TransferSlipsScreen());
       case 3:
-        _pushGuarded(ScreenIds.encodeSuite, (_) => const EncodeSuiteScreen(initialTab: 0));
+        _pushGuarded(ScreenIds.encode, (_) => const EncodeScreen());
     }
     setState(() => _navIndex = 0);
   }
@@ -887,12 +886,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         label: 'Re-Encode',
                         onTap: () => _pushGuarded(ScreenIds.searchAndEncode,
                             (_) => const SearchAndEncodeScreen())),
-                  if (perms.canView(ScreenIds.encodeSuite))
-                    _SmallTile(
-                        icon: LucideIcons.upload,
-                        label: 'Upload',
-                        onTap: () => _pushGuarded(ScreenIds.encodeSuite,
-                            (_) => const EncodeSuiteScreen(initialTab: 2))),
                   if (perms.canView(ScreenIds.cloudGeiger))
                     _SmallTile(
                         icon: LucideIcons.cloud,

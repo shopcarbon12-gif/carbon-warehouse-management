@@ -26,7 +26,7 @@ import 'package:carbon_wms/ui/screens/epc_detail_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
-import 'package:carbon_wms/ui/screens/encode_suite_screens.dart';
+import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_app_drawer.dart';
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -3625,8 +3625,7 @@ class _BottomNavBar extends StatelessWidget {
                   active: false,
                   onTap: () {
                     Navigator.of(context).push(MaterialPageRoute<void>(
-                        builder: (_) =>
-                            const EncodeSuiteScreen(initialTab: 0)));
+                        builder: (_) => const EncodeScreen()));
                   }),
             ],
           ),

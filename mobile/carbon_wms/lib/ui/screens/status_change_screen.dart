@@ -94,6 +94,8 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   int _minDbm = 1;
   int _maxDbm = 30;
   int _powerDbm = 10;
+  // Latest-wins coalesce timer for the power slider (see _setPower).
+  Timer? _powerApplyTimer;
 
   RfidManager? _rfid;
 
@@ -145,6 +147,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
 
   @override
   void dispose() {
+    _powerApplyTimer?.cancel();
     unawaited(_uhfSub?.cancel());
     unawaited(_directSub?.cancel());
     unawaited(_triggerSub?.cancel());
@@ -212,14 +215,28 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   Future<void> _setPower(int dbm) async {
     final clamped = dbm.clamp(_minDbm, _maxDbm);
     if (clamped == _powerDbm) return;
+    // Update the visual label immediately so the slider tracks the finger,
+    // but coalesce the native radio push (see _schedulePowerApply).
     setState(() => _powerDbm = clamped);
-    final rfid = _rfid;
-    if (rfid != null) {
-      await rfid.setSessionPowerOverrideDbm(clamped);
-    }
-    try {
-      await RfidVendorChannel.setAntennaPowerDbm(clamped);
-    } catch (_) {}
+    _schedulePowerApply(clamped);
+  }
+
+  /// Latest-wins coalesce (~180 ms) before pushing power to the radio. On
+  /// the RFD8500 every push is a stop -> setAntennaRfConfig -> resume cycle,
+  /// so a fast drag without this queues one cycle per tick and stutters the
+  /// RSSI / locate feedback. Mirrors the Count / Transfer-In sliders.
+  void _schedulePowerApply(int dbm) {
+    _powerApplyTimer?.cancel();
+    _powerApplyTimer = Timer(const Duration(milliseconds: 180), () async {
+      if (!mounted) return;
+      final rfid = _rfid;
+      if (rfid != null) {
+        await rfid.setSessionPowerOverrideDbm(dbm);
+      }
+      try {
+        await RfidVendorChannel.setAntennaPowerDbm(dbm);
+      } catch (_) {}
+    });
   }
 
   // ── status-label load ────────────────────────────────────────────────

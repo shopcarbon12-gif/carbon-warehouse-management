@@ -65,6 +65,8 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   final Set<String> _foundEpcs = <String>{};
 
   Timer? _poller;
+  // Latest-wins coalesce timer for the power slider (see _setPower).
+  Timer? _powerApplyTimer;
   bool _loading = false;
   String? _error;
 
@@ -166,6 +168,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   void dispose() {
     _poller?.cancel();
     _poller = null;
+    _powerApplyTimer?.cancel();
     unawaited(_uhfSub?.cancel());
     unawaited(_vendorSub?.cancel());
     unawaited(_triggerSub?.cancel());
@@ -222,14 +225,28 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   Future<void> _setPower(int dbm) async {
     final clamped = dbm.clamp(_minDbm, _maxDbm);
     if (clamped == _powerDbm) return;
+    // Update the visual label immediately so the slider tracks the finger,
+    // but coalesce the native radio push (see _schedulePowerApply).
     setState(() => _powerDbm = clamped);
-    final rfid = _rfid;
-    if (rfid != null) {
-      await rfid.setSessionPowerOverrideDbm(clamped);
-    }
-    try {
-      await RfidVendorChannel.setAntennaPowerDbm(clamped);
-    } catch (_) {}
+    _schedulePowerApply(clamped);
+  }
+
+  /// Latest-wins coalesce (~180 ms) before pushing power to the radio. On
+  /// the RFD8500 every push is a stop -> setAntennaRfConfig -> resume cycle,
+  /// so a fast drag without this queues one cycle per tick and stutters the
+  /// bulk-find sweep. Mirrors the Count / Transfer-In sliders.
+  void _schedulePowerApply(int dbm) {
+    _powerApplyTimer?.cancel();
+    _powerApplyTimer = Timer(const Duration(milliseconds: 180), () async {
+      if (!mounted) return;
+      final rfid = _rfid;
+      if (rfid != null) {
+        await rfid.setSessionPowerOverrideDbm(dbm);
+      }
+      try {
+        await RfidVendorChannel.setAntennaPowerDbm(dbm);
+      } catch (_) {}
+    });
   }
 
   void _onUhfRead(RfidTagRead read) {

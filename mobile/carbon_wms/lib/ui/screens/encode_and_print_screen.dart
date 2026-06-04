@@ -13,23 +13,26 @@ import 'package:carbon_wms/services/lan_zpl_printer.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
-import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart' show CatalogRowCard;
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 
-/// Handheld Encode & Print — 3-step commissioning flow:
+/// Handheld Encode & Print — 3-step commissioning flow, redesigned 2026-06
+/// on the Encode-screen visual system (approved HTML mockup):
 ///
 ///   Step 1 (SKU):   pull the trigger → 2D imager fires → the scanned barcode
-///                   (UPC/SKU) resolves the target SKU. Manual type-to-search
-///                   is the fallback. Picking a SKU → Step 2 (scanner → RFID).
-///   Step 2 (Encode): the radio scans CONTINUOUSLY (power-controlled by the
-///                   bottom slider so only the nearest tag is in range). The
-///                   nearest EPC shows live; pull the trigger (or tap Encode)
-///                   to commit — mint a fresh EPC, write the chip, and
-///                   re-read-verify (writeEpcTag returns true only when the
-///                   chip reads back the new EPC).
-///   Step 3 (Print): only on a verified write, print the non-RFID label to the
+///                   (UPC/SKU) resolves the target SKU. A full/unique match
+///                   auto-locks; otherwise the operator taps a result or types.
+///   Step 2 (Encode): the radio scans CONTINUOUSLY + SILENTLY (power-controlled
+///                   by the bottom slider so only the nearest tag is in range).
+///                   A hero readout shows the nearest EPC + a signal meter +
+///                   its decoded identity. One trigger pull = mint EPC → write
+///                   chip → re-read-verify (visible 3-tick progress).
+///   Step 3 (Print): only on a VERIFIED write, print the non-RFID label to the
 ///                   Zebra .220 (192.168.1.220) over raw TCP 9100.
+///
+/// On a verified encode the new EPC is promoted LIVE (in-stock) immediately
+/// (operator preference) — the done screen's status tray defaults to LIVE and
+/// is already saved; the operator can still flip it to UNKNOWN / TAG KILLED.
 class EncodeAndPrintScreen extends StatefulWidget {
   const EncodeAndPrintScreen({super.key});
 
@@ -41,7 +44,21 @@ class EncodeAndPrintScreen extends StatefulWidget {
 
 enum _Step { sku, encode, printing, done, error }
 
-const Color _danger = Color(0xFFDC2626);
+// ── Encode-screen design system palette ─────────────────────────────────
+const Color _kErrorRed = Color(0xFFD9534F);
+const Color _kSuccessGreen = Color(0xFF2A8E2A);
+const Color _kSuccessBg = Color(0xFFD6F5E6);
+const Color _kAmber = Color(0xFFE08A2C);
+const Color _kCardGrey = Color(0xFFECECEC);
+const Color _kTrayBg = Color(0xFFF4F7F7);
+const Color _kTealLight = Color(0xFF2BA3A3);
+const Color _kTextMuted = Color(0xFF8A9090);
+const Color _kTextSlate = Color(0xFF3F4A4A);
+const Color _kBorder = Color(0xFFD7DEDE);
+const Color _kHair = Color(0x14000000);
+const Color _kBtnDisabled = Color(0xFFBCC9C9);
+const Color _kErrBg = Color(0xFFFFF4F4);
+const Color _kPrimaryDk = Color(0xFF0F5757);
 
 class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   static const Duration _searchDebounce = Duration(milliseconds: 300);
@@ -68,26 +85,29 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   bool _scanning = false;
   int _powerDbm = 30;
 
+  /// 0 = minting EPC, 1 = writing + verifying chip. Drives the Step-2
+  /// progress ticks while [_busy].
+  int _encodeStage = 0;
+
   // live nearest tag (Step 2)
   String? _nearestEpc;
   int? _nearestRssi;
 
   String? _newEpc;
-  String _statusMsg = 'Pull the trigger to scan a barcode — or type to search.';
-  String? _errMsg;
+  String? _printErr; // null = printed OK, non-null = print failure reason
 
   // Decoded info for the live nearest tag (formula lookup).
   Map<String, dynamic>? _nearestInfo;
   String? _infoEpc;
   Timer? _lookupTimer;
 
-  // Post-encode status (operator picks; default unknown).
+  // Post-encode status (LIVE by default on a verified encode).
   static const _statusOptions = <(String, String)>[
-    ('unknown', 'UNKNOWN'),
     ('in-stock', 'LIVE'),
+    ('unknown', 'UNKNOWN'),
     ('tag_killed', 'TAG KILLED'),
   ];
-  String _doneStatus = 'unknown';
+  String _doneStatus = 'in-stock';
   bool _statusSaved = true;
   bool _savingStatus = false;
 
@@ -293,8 +313,8 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
       _nearestInfo = null;
       _infoEpc = null;
       _newEpc = null;
-      _errMsg = null;
-      _statusMsg = 'Bring a tag close, then pull the trigger to encode.';
+      _printErr = null;
+      _encodeStage = 0;
     });
     await _startScan();
   }
@@ -322,6 +342,21 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     setState(() => _scanning = false);
   }
 
+  /// Unconditional radio stop + beep silence. The native chip write RESUMES
+  /// inventory on exit (Zebra always, Chainway if it thought it was running),
+  /// and [_stopScan] is gated on [_scanning] (already false from the pre-write
+  /// stop) so it can't re-issue the stop. Without this the radio keeps
+  /// inventorying and the per-tag beep runs until the screen is disposed.
+  /// Call after every writeEpcTag (success or fail) and on any error path.
+  Future<void> _forceStopRadio() async {
+    _scanning = false;
+    try {
+      await _rfid?.stopLocateScanning();
+    } catch (_) {}
+    unawaited(_sounds.setTagBeepSuppressed(true));
+    if (mounted) setState(() {});
+  }
+
   Future<void> _goSku() async {
     await _stopScan();
     await _armBarcodeMode();
@@ -330,9 +365,9 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
       _selectedSku = null;
       _nearestEpc = null;
       _newEpc = null;
-      _errMsg = null;
+      _printErr = null;
+      _encodeStage = 0;
       _step = _Step.sku;
-      _statusMsg = 'Pull the trigger to scan a barcode — or type to search.';
     });
   }
 
@@ -355,38 +390,18 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     });
   }
 
-  Future<void> _saveDoneStatus() async {
-    final epc = _newEpc;
-    if (epc == null || _statusSaved || _savingStatus) return;
-    final api = context.read<WmsApiClient>();
-    setState(() => _savingStatus = true);
-    try {
-      await api.postBulkStatus(epcs: [epc], targetStatus: _doneStatus);
-      if (!mounted) return;
-      setState(() {
-        _statusSaved = true;
-        _savingStatus = false;
-      });
-      _sounds.play(ScanCue.success);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _savingStatus = false;
-        _errMsg = 'Status save failed: $e';
-      });
-      _sounds.play(ScanCue.error);
-    }
-  }
-
   // ── Step 2: commit = write + verify ─────────────────────────────────────
   void _fail(String msg) {
+    unawaited(_forceStopRadio());
     if (!mounted) return;
     setState(() {
       _busy = false;
       _step = _Step.error;
-      _errMsg = msg;
     });
+    _errText = msg;
   }
+
+  String? _errText; // last failure reason shown on the error screen
 
   Future<void> _runEncode() async {
     final sku = _selectedSku;
@@ -394,8 +409,7 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     final oldEpc = _nearestEpc;
     if (oldEpc == null) {
       _sounds.play(ScanCue.error);
-      setState(() => _statusMsg = 'No tag in range — bring it closer or raise the power, then pull again.');
-      return;
+      return; // hint already tells the operator to bring a tag closer
     }
     final customSku = sku['sku']?.toString() ?? '';
     if (customSku.isEmpty) {
@@ -405,9 +419,9 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     final api = context.read<WmsApiClient>();
     setState(() {
       _busy = true;
-      _errMsg = null;
+      _encodeStage = 0; // minting
       _newEpc = null;
-      _statusMsg = 'Minting EPC + writing chip + verifying…';
+      _errText = null;
     });
     _sounds.play(ScanCue.start);
     await _stopScan(); // release the radio for the chip write
@@ -430,12 +444,7 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
       return;
     }
     if (!mounted) return;
-    setState(() {
-      _newEpc = newEpc;
-      _doneStatus = 'unknown';
-      _statusSaved = true;
-      _savingStatus = false;
-    });
+    setState(() => _encodeStage = 1); // writing + verifying
 
     bool written = false;
     try {
@@ -443,23 +452,31 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     } catch (_) {
       written = false;
     }
+    // BEEP FIX: the native write resumes inventory on exit; the pre-write
+    // _stopScan() left _scanning=false so a post-write _stopScan() would
+    // no-op. Force an unconditional stop here (both outcomes) or the per-tag
+    // beep runs until dispose.
+    await _forceStopRadio();
     if (!written) {
       _sounds.play(ScanCue.error);
       _fail('Chip write/verify failed — tag NOT encoded. Re-present the tag and pull again.');
       return;
     }
     try {
-      // promoteNew:false → new EPC stays 'unknown'; the operator picks the
-      // final status from the post-encode dropdown. Old EPC is deleted.
-      await api.postEncodeFinalize(newEpc: newEpc, oldEpc: oldEpc, promoteNew: false);
+      // promoteNew:true → the new EPC goes LIVE (in-stock) immediately on a
+      // verified encode (operator preference). Old EPC is deleted.
+      await api.postEncodeFinalize(newEpc: newEpc, oldEpc: oldEpc, promoteNew: true);
     } catch (_) {/* chip written; finalize is best-effort */}
     _sounds.play(ScanCue.success);
 
     // Step 3 — print the companion non-RFID label.
     if (!mounted) return;
     setState(() {
+      _newEpc = newEpc;
+      _doneStatus = 'in-stock'; // LIVE
+      _statusSaved = true; // already promoted server-side
+      _savingStatus = false;
       _step = _Step.printing;
-      _statusMsg = 'Verified ✓ — printing label to .220…';
     });
     String? printErr;
     try {
@@ -476,225 +493,516 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     } catch (e) {
       printErr = 'Label fetch failed: $e';
     }
-    // Session done — make sure the radio is fully idle and silent so there's
-    // no lingering "searching nearby" beep on the done screen.
-    await _stopScan();
-    unawaited(_sounds.setTagBeepSuppressed(true));
     if (!mounted) return;
     setState(() {
       _busy = false;
       _step = _Step.done;
-      if (printErr != null) {
-        _errMsg = 'Encoded ✓ but print failed: $printErr';
-        _statusMsg = 'Tag $newEpc encoded. Label NOT printed — fix the .220 and reprint.';
-      } else {
-        _errMsg = null;
-        _statusMsg = 'Encoded ✓ and label printed.';
-      }
+      _printErr = printErr;
+    });
+  }
+
+  Future<void> _saveDoneStatus() async {
+    final epc = _newEpc;
+    if (epc == null || _statusSaved || _savingStatus) return;
+    final api = context.read<WmsApiClient>();
+    setState(() => _savingStatus = true);
+    try {
+      await api.postBulkStatus(epcs: [epc], targetStatus: _doneStatus);
+      if (!mounted) return;
+      setState(() {
+        _statusSaved = true;
+        _savingStatus = false;
+      });
+      _sounds.play(ScanCue.success);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _savingStatus = false);
+      _sounds.play(ScanCue.error);
+    }
+  }
+
+  void _setDoneStatus(String v) {
+    if (v == _doneStatus) return;
+    setState(() {
+      _doneStatus = v;
+      _statusSaved = false;
     });
   }
 
   // ── render ──────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final showPower = (_step == _Step.encode && !_busy) || _step == _Step.error;
     return CarbonScaffold(
       pageTitle: 'ENCODE & PRINT',
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(14.w),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _stepper(),
-              SizedBox(height: 12.h),
-              if (_selectedSku != null) ...[
-                _selectedSkuCard(),
-                SizedBox(height: 10.h),
-              ],
-              Expanded(child: _step == _Step.sku ? _skuPane() : _flowPane()),
-              // Antenna power — only meaningful in the RFID (encode) steps.
-              if (_step != _Step.sku) ...[
-                SizedBox(height: 8.h),
-                const RfidPowerSlider(),
-              ],
-              SizedBox(height: 10.h),
-              _primaryButton(),
-            ],
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildSteps(),
+            _buildStepHint(),
+            Expanded(child: _buildBody()),
+            if (showPower) const RfidPowerSlider(),
+            _buildToolbar(),
+          ],
         ),
       ),
     );
   }
 
-  Widget _stepper() {
-    const order = [_Step.sku, _Step.encode, _Step.printing];
-    const labels = ['1. SKU', '2. Encode', '3. Print'];
-    final curIdx = _step == _Step.error
-        ? 1
-        : _step == _Step.done
-            ? 2
-            : order.indexOf(_step);
-    return Row(
-      children: List.generate(3, (i) {
-        final active = i == curIdx && _step != _Step.done;
-        final done = i < curIdx || (_step == _Step.done && i <= 2);
-        final isErr = _step == _Step.error && i == 1;
-        final color = isErr
-            ? _danger
-            : active
-                ? AppColors.primary
-                : done
-                    ? AppColors.success
-                    : AppColors.border;
-        return Expanded(
-          child: Container(
-            margin: EdgeInsets.symmetric(horizontal: 3.w),
-            padding: EdgeInsets.symmetric(vertical: 7.h),
+  // ── big 3-step header ───────────────────────────────────────────────────
+  List<String> _stepStates() {
+    switch (_step) {
+      case _Step.sku:
+        return const ['active', 'idle', 'idle'];
+      case _Step.encode:
+        return const ['done', 'active', 'idle'];
+      case _Step.printing:
+        return const ['done', 'done', 'active'];
+      case _Step.done:
+        return const ['done', 'done', 'done'];
+      case _Step.error:
+        return const ['done', 'err', 'idle'];
+    }
+  }
+
+  Widget _buildSteps() {
+    final st = _stepStates();
+    const labels = ['SKU', 'ENCODE', 'PRINT'];
+
+    Widget cell(int i) {
+      final s = st[i];
+      final accent = s == 'done'
+          ? _kSuccessGreen
+          : s == 'active'
+              ? AppColors.primary
+              : s == 'err'
+                  ? _kErrorRed
+                  : _kBtnDisabled;
+      final bg = s == 'done'
+          ? _kSuccessGreen
+          : s == 'err'
+              ? _kErrorRed
+              : s == 'active'
+                  ? AppColors.primary.withValues(alpha: 0.08)
+                  : Colors.white;
+      final fg = (s == 'done' || s == 'err') ? Colors.white : accent;
+      final glyph = s == 'done'
+          ? '✓'
+          : s == 'err'
+              ? '!'
+              : '${i + 1}';
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36.w,
+            height: 36.w,
+            alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              border: Border.all(color: color, width: active || isErr ? 2 : 1),
+              color: bg,
+              shape: BoxShape.circle,
+              border: Border.all(color: accent, width: 2),
             ),
             child: Text(
-              '${labels[i]}${done ? ' ✓' : ''}',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.manrope(
-                fontSize: 11.sp,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                color: active || isErr ? color : AppColors.textMuted,
+              glyph,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.w700,
+                color: fg,
               ),
             ),
           ),
+          SizedBox(height: 5.h),
+          Text(
+            labels[i],
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 11.sp,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: s == 'idle' ? _kTextMuted : accent,
+            ),
+          ),
+        ],
+      );
+    }
+
+    Widget bar(int i) => Expanded(
+          child: Container(
+            margin: EdgeInsets.only(top: 17.w),
+            height: 2,
+            color: st[i] == 'done' ? _kSuccessGreen : _kBtnDisabled,
+          ),
         );
-      }),
+
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.fromLTRB(18.w, 12.h, 18.w, 4.h),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [cell(0), bar(0), cell(1), bar(1), cell(2)],
+      ),
     );
   }
 
+  String _hintText() {
+    switch (_step) {
+      case _Step.sku:
+        return 'Pull the trigger to scan the product barcode';
+      case _Step.encode:
+        if (_busy) return 'Hold the tag steady…';
+        return _nearestEpc == null
+            ? 'Bring a tag close, then pull the trigger'
+            : 'Tag in range — pull the trigger to encode';
+      case _Step.printing:
+        return 'Verified ✓ — printing the label';
+      case _Step.done:
+        return _printErr == null
+            ? 'All done — encode another or start a new item'
+            : 'Encoded ✓ — fix the printer and reprint';
+      case _Step.error:
+        return 'Encode failed — re-present the tag and try again';
+    }
+  }
+
+  Widget _buildStepHint() {
+    final isErr = _step == _Step.error;
+    return Container(
+      color: Colors.white,
+      padding: EdgeInsets.fromLTRB(18.w, 8.h, 18.w, 12.h),
+      child: Text(
+        _hintText(),
+        textAlign: TextAlign.center,
+        style: GoogleFonts.spaceGrotesk(
+          fontSize: 12.sp,
+          fontWeight: FontWeight.w600,
+          color: isErr ? _kErrorRed : _kTextSlate,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    switch (_step) {
+      case _Step.sku:
+        return _skuPane();
+      case _Step.encode:
+        return _busy ? _encodingBody() : _encodeBody();
+      case _Step.printing:
+        return _printingBody();
+      case _Step.done:
+        return _doneBody();
+      case _Step.error:
+        return _errorBody();
+    }
+  }
+
+  // ── Step 1 body ─────────────────────────────────────────────────────────
   Widget _skuPane() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _searchCtrl,
-          onChanged: _onSearchChanged,
-          style: GoogleFonts.spaceGrotesk(fontSize: 14.sp, color: AppColors.textMain),
-          decoration: const InputDecoration(
-            hintText: 'Scan a barcode (trigger) — or type SKU / UPC / name…',
-            prefixIcon: Icon(Icons.qr_code_scanner, color: AppColors.textMuted),
-            filled: true,
-            fillColor: AppColors.surface,
-            border: OutlineInputBorder(borderSide: BorderSide(color: AppColors.border), borderRadius: BorderRadius.zero),
-            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.border), borderRadius: BorderRadius.zero),
-            focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.primary, width: 2), borderRadius: BorderRadius.zero),
+        Padding(
+          padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 6.h),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: AppColors.primary, width: 2),
+                  borderRadius: BorderRadius.circular(3.r),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+                child: TextField(
+                  controller: _searchCtrl,
+                  onChanged: _onSearchChanged,
+                  decoration: const InputDecoration(
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                    hintText: 'scan barcode - or search',
+                  ),
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 17.sp,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMain,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: -9.h,
+                left: 12.w,
+                child: Container(
+                  color: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 6.w),
+                  child: Text(
+                    'Search item',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 11.sp,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      color: _kTextSlate,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: -9.h,
+                right: 12.w,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(3.r),
+                  ),
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 1.h),
+                  child: Text(
+                    '2D',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        SizedBox(height: 10.h),
+        if (_searchLoading) const LinearProgressIndicator(minHeight: 2),
         Expanded(child: _skuResults()),
       ],
     );
   }
 
   Widget _skuResults() {
-    if (_searchLoading) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-    }
     if (_searchError != null) {
-      return Center(child: Text(_searchError!, style: GoogleFonts.manrope(color: _danger, fontSize: 12.sp)));
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 28.w),
+          child: Text(_searchError!,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.manrope(color: _kErrorRed, fontSize: 12.sp)),
+        ),
+      );
     }
     if (_results.isEmpty) {
       return Center(
-        child: Text('Pull the trigger to scan a barcode,\nor type above to search.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.manrope(color: AppColors.textMuted, fontSize: 12.sp)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.qr_code_scanner, size: 40.sp, color: const Color(0xFF8FA1A1)),
+            SizedBox(height: 12.h),
+            Text(
+              'Pull the trigger to scan a barcode,\nor type above to search.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.manrope(color: const Color(0xFF6D7979), fontSize: 12.sp),
+            ),
+          ],
+        ),
       );
     }
-    return ListView.builder(
-      itemCount: _results.length,
-      itemBuilder: (_, i) {
-        final r = _results[i];
-        return CatalogRowCard(row: r, showQty: false, onQtyTap: () {}, onTap: () => _pickSku(r));
-      },
+    return Container(
+      margin: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: _kBorder),
+        borderRadius: BorderRadius.circular(2.r),
+      ),
+      child: ListView.separated(
+        padding: EdgeInsets.zero,
+        itemCount: _results.length,
+        separatorBuilder: (_, __) => const Divider(height: 1, thickness: 1, color: Color(0xFFF0F2F2)),
+        itemBuilder: (_, i) => _skuRow(_results[i]),
+      ),
     );
   }
 
-  Widget _selectedSkuCard() {
-    final s = _selectedSku!;
+  Widget _skuRow(Map<String, dynamic> row) {
+    final sku = row['sku']?.toString() ?? '';
+    final desc = [row['name'], row['color'], row['size']]
+        .map((e) => e?.toString() ?? '')
+        .where((e) => e.trim().isNotEmpty)
+        .join(' · ')
+        .toUpperCase();
+    return InkWell(
+      onTap: () => _pickSku(row),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 12.h),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              sku.isEmpty ? '—' : sku,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.robotoMono(fontSize: 17.sp, fontWeight: FontWeight.w700, color: AppColors.primary),
+            ),
+            if (desc.isNotEmpty) ...[
+              SizedBox(height: 3.h),
+              Text(
+                desc,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700, color: AppColors.textMain),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── shared cards ──────────────────────────────────────────────────────
+  Widget _targetCard() {
+    final s = _selectedSku;
+    if (s == null) return const SizedBox.shrink();
     final desc = [s['name'], s['color'], s['size']]
         .map((e) => e?.toString() ?? '')
         .where((e) => e.trim().isNotEmpty)
-        .join(' · ');
+        .join(' · ')
+        .toUpperCase();
     return Container(
-      padding: EdgeInsets.all(10.w),
-      decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.primary, width: 2)),
-      child: Row(
+      margin: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 0),
+      padding: EdgeInsets.fromLTRB(12.w, 9.h, 12.w, 9.h),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6.r),
+        border: const Border(left: BorderSide(color: AppColors.primary, width: 4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${s['sku'] ?? ''}',
-                    style: GoogleFonts.spaceGrotesk(fontSize: 14.sp, fontWeight: FontWeight.w700, color: AppColors.textMain)),
-                if (desc.isNotEmpty)
-                  Text(desc, style: GoogleFonts.manrope(fontSize: 11.sp, color: AppColors.textMuted)),
-              ],
-            ),
-          ),
-          if (!_busy && _step != _Step.printing)
-            TextButton(
-              onPressed: () => _goSku(),
-              child: Text('Change', style: GoogleFonts.manrope(fontSize: 12.sp, color: AppColors.primary, fontWeight: FontWeight.w600)),
-            ),
+          Text('TARGET SKU',
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 10.sp, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: _kPrimaryDk)),
+          SizedBox(height: 2.h),
+          Text('${s['sku'] ?? ''}',
+              style: GoogleFonts.robotoMono(fontSize: 15.sp, fontWeight: FontWeight.w700, color: AppColors.textMain)),
+          if (desc.isNotEmpty)
+            Text(desc, style: GoogleFonts.manrope(fontSize: 12.sp, fontWeight: FontWeight.w700, color: _kTextSlate)),
         ],
       ),
     );
   }
 
-  Widget _flowPane() {
-    final showEpc = _newEpc ?? _nearestEpc;
-    final epcLabel = _newEpc != null ? 'new EPC' : (_scanning ? 'nearest tag (live)' : 'tag');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(height: 6.h),
-        Container(
-          padding: EdgeInsets.all(12.w),
-          decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border)),
-          child: Column(
-            children: [
-              Text(epcLabel, style: GoogleFonts.manrope(fontSize: 11.sp, color: AppColors.textMuted)),
-              SizedBox(height: 4.h),
-              Text(showEpc ?? '—',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w700,
-                    color: showEpc == null ? AppColors.textMuted : AppColors.primary,
-                  )),
-              if (_newEpc == null && _nearestRssi != null)
-                Text('$_nearestRssi dBm', style: GoogleFonts.spaceGrotesk(fontSize: 11.sp, color: AppColors.textMuted)),
-              _decodedInfo(),
-            ],
-          ),
-        ),
-        _doneStatusTray(),
-        const Spacer(),
-        if (_busy) const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-        SizedBox(height: 12.h),
-        _statusLine(),
-        const Spacer(),
-      ],
+  // ── Step 2 body: hero live readout ──────────────────────────────────────
+  int _signalBars() {
+    final r = _nearestRssi;
+    if (_nearestEpc == null || r == null) return 0;
+    if (r >= -45) return 5;
+    if (r >= -55) return 4;
+    if (r >= -65) return 3;
+    if (r >= -75) return 2;
+    return 1;
+  }
+
+  Widget _signalMeter() {
+    final bars = _signalBars();
+    final color = bars >= 4 ? AppColors.primary : (bars >= 1 ? _kAmber : _kBtnDisabled);
+    const heights = [10.0, 16.0, 22.0, 28.0, 34.0];
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8.h),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: List.generate(5, (i) {
+          return Container(
+            margin: EdgeInsets.symmetric(horizontal: 2.w),
+            width: 7.w,
+            height: heights[i].h,
+            decoration: BoxDecoration(
+              color: i < bars ? color : _kBtnDisabled.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(1.r),
+            ),
+          );
+        }),
+      ),
     );
   }
 
-  /// Decoded SKU/description for the live nearest tag, shown under the EPC when
-  /// it passes the tenant formula.
+  Widget _encodeBody() {
+    final hasTag = _nearestEpc != null;
+    final bars = _signalBars();
+    final proximity = !hasTag
+        ? 'no tag in range'
+        : '${_nearestRssi ?? '—'} dBm · ${bars >= 4 ? 'very close' : bars >= 3 ? 'close' : bars >= 2 ? 'near' : 'far'}';
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _targetCard(),
+          Container(
+            margin: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: _kBorder),
+              borderRadius: BorderRadius.circular(10.r),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  color: _kTrayBg,
+                  padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(hasTag ? 'NEAREST TAG (LIVE)' : 'NEAREST TAG',
+                          style: GoogleFonts.spaceGrotesk(
+                              fontSize: 10.sp, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: _kTextMuted)),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8.w,
+                            height: 8.w,
+                            decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                          ),
+                          SizedBox(width: 6.w),
+                          Text(hasTag ? (bars >= 4 ? 'STRONG' : 'WEAK') : 'SCANNING',
+                              style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 10.sp, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(10.w, hasTag ? 16.h : 24.h, 10.w, 4.h),
+                  child: Text(
+                    hasTag ? _nearestEpc! : '— — —',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.robotoMono(
+                      fontSize: hasTag ? 18.sp : 22.sp,
+                      fontWeight: FontWeight.w700,
+                      color: hasTag ? AppColors.primary : _kTextMuted,
+                    ),
+                  ),
+                ),
+                _signalMeter(),
+                Text(proximity,
+                    style: GoogleFonts.robotoMono(fontSize: 11.sp, color: _kTextMuted)),
+                _decodedInfo(),
+                SizedBox(height: 10.h),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _decodedInfo() {
     final info = _nearestInfo;
-    if (_newEpc != null || info == null) return const SizedBox.shrink();
+    if (_nearestEpc == null || info == null) return const SizedBox.shrink();
     if (info['valid'] != true) {
       return Padding(
         padding: EdgeInsets.only(top: 6.h),
         child: Text('fails formula — not a Carbon tag',
-            style: GoogleFonts.manrope(fontSize: 11.sp, color: AppColors.textMuted)),
+            style: GoogleFonts.manrope(fontSize: 11.sp, color: _kTextMuted)),
       );
     }
     final sku = info['sku']?.toString() ?? '';
@@ -703,72 +1011,303 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
         .where((e) => e.trim().isNotEmpty)
         .join(' · ');
     final status = info['status']?.toString() ?? '';
-    return Padding(
-      padding: EdgeInsets.only(top: 6.h),
+    return Container(
+      margin: EdgeInsets.fromLTRB(12.w, 6.h, 12.w, 0),
+      padding: EdgeInsets.only(top: 10.h),
+      decoration: const BoxDecoration(border: Border(top: BorderSide(color: _kHair))),
       child: Column(
         children: [
           if (sku.isNotEmpty)
             Text(sku,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.spaceGrotesk(fontSize: 13.sp, fontWeight: FontWeight.w700, color: AppColors.textMain)),
+                style: GoogleFonts.robotoMono(fontSize: 14.sp, fontWeight: FontWeight.w700, color: AppColors.textMain)),
           if (desc.isNotEmpty)
-            Text(desc,
+            Text(desc.toUpperCase(),
                 textAlign: TextAlign.center,
-                style: GoogleFonts.manrope(fontSize: 11.sp, color: AppColors.textMuted)),
+                style: GoogleFonts.manrope(fontSize: 12.sp, fontWeight: FontWeight.w700, color: _kTextSlate)),
           if (status.isNotEmpty)
-            Text('status: $status', style: GoogleFonts.manrope(fontSize: 10.sp, color: AppColors.textMuted)),
+            Text('current status: $status',
+                style: GoogleFonts.manrope(fontSize: 10.sp, color: _kTextMuted)),
         ],
       ),
     );
   }
 
-  /// Post-encode status picker (UNKNOWN / LIVE / TAG KILLED) — the new EPC
-  /// stays 'unknown' until the operator saves a choice (same as the Encode
-  /// screen). Only shown once a tag is encoded.
+  // ── Step 2 body: encode in progress ─────────────────────────────────────
+  Widget _encodingBody() {
+    Widget tick(String label, String state) {
+      final Color bg;
+      final Color fg;
+      final String glyph;
+      if (state == 'done') {
+        bg = _kSuccessGreen;
+        fg = Colors.white;
+        glyph = '✓';
+      } else if (state == 'now') {
+        bg = AppColors.primary;
+        fg = Colors.white;
+        glyph = '●';
+      } else {
+        bg = const Color(0xFFEEEEEE);
+        fg = _kTextMuted;
+        glyph = '';
+      }
+      final txtColor = state == 'done'
+          ? AppColors.textMain
+          : state == 'now'
+              ? AppColors.primary
+              : _kTextMuted;
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: 6.h),
+        child: Row(
+          children: [
+            Container(
+              width: 24.w,
+              height: 24.w,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
+              child: Text(glyph, style: TextStyle(fontSize: 12.sp, color: fg, fontWeight: FontWeight.w800)),
+            ),
+            SizedBox(width: 12.w),
+            Text(label,
+                style: GoogleFonts.spaceGrotesk(fontSize: 14.sp, fontWeight: FontWeight.w700, color: txtColor)),
+          ],
+        ),
+      );
+    }
+
+    final minting = _encodeStage == 0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _targetCard(),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 36.w),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 54.w,
+                  height: 54.w,
+                  child: const CircularProgressIndicator(strokeWidth: 5, color: AppColors.primary),
+                ),
+                SizedBox(height: 24.h),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    tick('Mint new EPC', minting ? 'now' : 'done'),
+                    tick('Write chip', minting ? 'wait' : 'now'),
+                    tick('Verify (re-read)', minting ? 'wait' : 'now'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Step 3 body: printing ───────────────────────────────────────────────
+  Widget _printingBody() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _doneBand('Chip verified ✓', 'New EPC committed to silicon', _kSuccessBg, _kSuccessGreen, const Color(0xFF2C6B46)),
+        SizedBox(height: 16.h),
+        Container(
+          margin: EdgeInsets.symmetric(horizontal: 16.w),
+          padding: EdgeInsets.all(16.w),
+          decoration: BoxDecoration(
+            color: _kTrayBg,
+            border: Border.all(color: _kBorder),
+            borderRadius: BorderRadius.circular(10.r),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.print_outlined, size: 30.sp, color: _kTextSlate),
+              SizedBox(width: 14.w),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Printing non-RFID label…',
+                      style: GoogleFonts.spaceGrotesk(fontSize: 14.sp, fontWeight: FontWeight.w700, color: AppColors.textMain)),
+                  SizedBox(height: 2.h),
+                  Text('Zebra ZD500R · 192.168.1.220:9100',
+                      style: GoogleFonts.robotoMono(fontSize: 11.sp, color: _kTextMuted)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 26.h),
+        const Center(child: CircularProgressIndicator(strokeWidth: 5, color: AppColors.primary)),
+      ],
+    );
+  }
+
+  // ── Done body ─────────────────────────────────────────────────────────
+  Widget _doneBody() {
+    final printedOk = _printErr == null;
+    final s = _selectedSku;
+    final sku = s?['sku']?.toString() ?? '';
+    final desc = [s?['name'], s?['color'], s?['size']]
+        .map((e) => e?.toString() ?? '')
+        .where((e) => e.trim().isNotEmpty)
+        .join(' · ')
+        .toUpperCase();
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _doneBand(
+            printedOk ? 'Encoded ✓ & label printed' : 'Encoded ✓ · label NOT printed',
+            printedOk ? 'Tag committed · label sent to .220' : (_printErr ?? 'Print failed'),
+            printedOk ? _kSuccessBg : _kErrBg,
+            printedOk ? _kSuccessGreen : _kErrorRed,
+            printedOk ? const Color(0xFF2C6B46) : const Color(0xFFA23B38),
+          ),
+          // ITEM ENCODED card (above the EPC block).
+          Container(
+            margin: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
+            padding: EdgeInsets.fromLTRB(14.w, 11.h, 14.w, 11.h),
+            decoration: BoxDecoration(
+              color: _kCardGrey,
+              borderRadius: BorderRadius.circular(8.r),
+              border: const Border(left: BorderSide(color: _kSuccessGreen, width: 4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('ITEM ENCODED',
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 10.sp, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: _kTextMuted)),
+                SizedBox(height: 2.h),
+                Text(sku.isEmpty ? '—' : sku,
+                    style: GoogleFonts.robotoMono(fontSize: 16.sp, fontWeight: FontWeight.w700, color: AppColors.textMain)),
+                if (desc.isNotEmpty)
+                  Text(desc,
+                      style: GoogleFonts.manrope(fontSize: 12.sp, fontWeight: FontWeight.w700, color: _kTextSlate)),
+              ],
+            ),
+          ),
+          // new / old EPC pair
+          Container(
+            margin: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
+            padding: EdgeInsets.fromLTRB(14.w, 12.h, 14.w, 12.h),
+            decoration: BoxDecoration(color: _kCardGrey, borderRadius: BorderRadius.circular(8.r)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _epcRow('NEW EPC', _newEpc ?? '—', AppColors.textMain),
+                SizedBox(height: 6.h),
+                _epcRow('OLD EPC', _nearestEpc ?? '—', _kTextMuted),
+              ],
+            ),
+          ),
+          _doneStatusTray(),
+          Container(
+            margin: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 16.h),
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+            decoration: BoxDecoration(
+              color: printedOk ? _kSuccessBg : _kErrBg,
+              borderRadius: BorderRadius.circular(6.r),
+            ),
+            child: Text(
+              printedOk ? '✓ Label printed to Zebra .220' : '✗ ${_printErr ?? 'Print failed'} — fix .220 and reprint',
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 12.5.sp, fontWeight: FontWeight.w700, color: printedOk ? _kSuccessGreen : _kErrorRed),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _epcRow(String label, String value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: GoogleFonts.spaceGrotesk(
+                fontSize: 9.sp, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: _kTextMuted)),
+        Text(value,
+            style: GoogleFonts.robotoMono(fontSize: 15.sp, fontWeight: FontWeight.w700, color: color)),
+      ],
+    );
+  }
+
   Widget _doneStatusTray() {
-    if (_step != _Step.done || _newEpc == null) return const SizedBox.shrink();
+    final Color saveBg;
+    final Color saveFg;
+    final String saveLabel;
+    if (_savingStatus) {
+      saveBg = _kBtnDisabled;
+      saveFg = Colors.white;
+      saveLabel = 'SAVING…';
+    } else if (_statusSaved) {
+      saveBg = _kSuccessGreen;
+      saveFg = Colors.white;
+      saveLabel = 'SAVED';
+    } else {
+      saveBg = _kAmber;
+      saveFg = Colors.white;
+      saveLabel = 'SAVE';
+    }
     return Container(
-      margin: EdgeInsets.only(top: 10.h),
-      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-      decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.border)),
+      margin: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+      decoration: BoxDecoration(color: _kTrayBg, borderRadius: BorderRadius.circular(8.r)),
       child: Row(
         children: [
-          Text('STATUS', style: GoogleFonts.manrope(fontSize: 11.sp, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
-          SizedBox(width: 12.w),
+          Text('STATUS',
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 10.sp, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: _kTextMuted)),
+          SizedBox(width: 10.w),
           Expanded(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                isExpanded: true,
-                isDense: true,
-                value: _doneStatus,
-                items: _statusOptions
-                    .map((o) => DropdownMenuItem<String>(
-                          value: o.$1,
-                          child: Text(o.$2,
-                              style: GoogleFonts.spaceGrotesk(fontSize: 14.sp, fontWeight: FontWeight.w800, color: AppColors.textMain)),
-                        ))
-                    .toList(),
-                onChanged: _savingStatus
-                    ? null
-                    : (v) {
-                        if (v == null) return;
-                        setState(() {
-                          _doneStatus = v;
-                          _statusSaved = false;
-                        });
-                      },
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: _kBorder),
+                borderRadius: BorderRadius.circular(4.r),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  isDense: true,
+                  value: _doneStatus,
+                  items: _statusOptions
+                      .map((o) => DropdownMenuItem<String>(
+                            value: o.$1,
+                            child: Text(o.$2,
+                                style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 14.sp, fontWeight: FontWeight.w800, color: AppColors.textMain)),
+                          ))
+                      .toList(),
+                  onChanged: _savingStatus ? null : (v) => v == null ? null : _setDoneStatus(v),
+                ),
               ),
             ),
           ),
-          SizedBox(width: 8.w),
-          TextButton(
-            onPressed: (_statusSaved || _savingStatus) ? null : () => _saveDoneStatus(),
-            child: Text(
-              _savingStatus ? 'Saving…' : (_statusSaved ? 'Saved' : 'Save'),
-              style: GoogleFonts.manrope(
-                fontSize: 13.sp,
-                fontWeight: FontWeight.w700,
-                color: (_statusSaved || _savingStatus) ? AppColors.textMuted : AppColors.primary,
+          SizedBox(width: 10.w),
+          SizedBox(
+            height: 36.h,
+            child: Material(
+              color: saveBg,
+              borderRadius: BorderRadius.circular(4.r),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(4.r),
+                onTap: (_statusSaved || _savingStatus) ? null : () => _saveDoneStatus(),
+                child: Container(
+                  constraints: BoxConstraints(minWidth: 90.w),
+                  alignment: Alignment.center,
+                  padding: EdgeInsets.symmetric(horizontal: 16.w),
+                  child: Text(saveLabel,
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 13.sp, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: saveFg)),
+                ),
               ),
             ),
           ),
@@ -777,76 +1316,164 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     );
   }
 
-  Widget _statusLine() {
-    final isErr = _step == _Step.error || (_errMsg != null);
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(10.w),
-      decoration: BoxDecoration(
-        color: isErr ? _danger.withValues(alpha: 0.08) : AppColors.surface,
-        border: Border.all(color: isErr ? _danger : AppColors.border),
-      ),
-      child: Text(
-        _errMsg ?? _statusMsg,
-        style: GoogleFonts.manrope(
-          fontSize: 12.sp,
-          color: isErr ? _danger : (_step == _Step.done ? AppColors.primary : AppColors.textMain),
-          fontWeight: FontWeight.w600,
+  // ── Error body ────────────────────────────────────────────────────────
+  Widget _errorBody() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _targetCard(),
+        Container(
+          margin: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 0),
+          padding: EdgeInsets.all(16.w),
+          decoration: BoxDecoration(
+            color: _kErrBg,
+            border: Border.all(color: _kErrorRed),
+            borderRadius: BorderRadius.circular(10.r),
+          ),
+          child: Column(
+            children: [
+              Text('⚠ Chip write/verify failed',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.spaceGrotesk(fontSize: 17.sp, fontWeight: FontWeight.w700, color: _kErrorRed)),
+              SizedBox(height: 4.h),
+              Text(
+                _errText ?? 'Tag was NOT encoded and nothing was printed. Bring the tag closer (or raise power) and pull again.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.manrope(fontSize: 12.5.sp, fontWeight: FontWeight.w600, color: const Color(0xFFA23B38)),
+              ),
+            ],
+          ),
         ),
+        SizedBox(height: 18.h),
+        Center(
+          child: Container(
+            decoration: BoxDecoration(color: _kErrorRed.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(4.r)),
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+            child: Text('FAILED',
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 11.sp, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: _kErrorRed)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _doneBand(String big, String small, Color bg, Color fg, Color smallFg) {
+    return Container(
+      margin: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 0),
+      padding: EdgeInsets.all(16.w),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10.r)),
+      child: Column(
+        children: [
+          Text(big,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.spaceGrotesk(fontSize: 18.sp, fontWeight: FontWeight.w700, color: fg)),
+          SizedBox(height: 3.h),
+          Text(small,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.manrope(fontSize: 12.5.sp, fontWeight: FontWeight.w600, color: smallFg)),
+        ],
       ),
     );
   }
 
-  Widget _primaryButton() {
+  // ── bottom toolbar ──────────────────────────────────────────────────────
+  Widget _buildToolbar() {
+    final List<Widget> buttons;
     switch (_step) {
       case _Step.sku:
         return const SizedBox.shrink();
       case _Step.encode:
-        return _bigButton(
-          label: _busy ? 'Working…' : 'Encode & verify (or pull trigger)',
-          onTap: _busy ? null : () => _runEncode(),
-          icon: Icons.sensors,
-        );
-      case _Step.printing:
-        return _bigButton(label: 'Printing…', onTap: null, icon: Icons.print);
-      case _Step.done:
-        return Row(
-          children: [
-            Expanded(child: _bigButton(label: 'Same SKU →', onTap: () => _goEncode(), icon: Icons.refresh)),
+        if (_busy) {
+          buttons = [Expanded(child: _tbButton(label: 'WORKING…', bg: _kBtnDisabled, onTap: null))];
+        } else {
+          buttons = [
+            Expanded(flex: 14, child: _tbButton(label: 'CHANGE SKU', icon: Icons.swap_horiz, bg: _kTealLight, onTap: _goSku)),
             SizedBox(width: 10.w),
-            Expanded(child: _bigButton(label: 'New item', onTap: () => _goSku(), icon: Icons.qr_code_scanner, outlined: true)),
-          ],
-        );
+            Expanded(flex: 16, child: _tbButton(label: 'ENCODE & VERIFY', icon: Icons.bolt, bg: AppColors.primary, onTap: () => _runEncode())),
+          ];
+        }
+        break;
+      case _Step.printing:
+        buttons = [Expanded(child: _tbButton(label: 'PRINTING…', bg: _kBtnDisabled, onTap: null))];
+        break;
+      case _Step.done:
+        buttons = [
+          Expanded(child: _tbButton(label: 'SAME SKU', icon: Icons.replay, bg: AppColors.primary, onTap: _goEncode)),
+          SizedBox(width: 10.w),
+          Expanded(child: _tbButton(label: 'NEW ITEM', icon: Icons.qr_code_scanner, bg: Colors.white, fg: AppColors.primary, outlined: true, onTap: _goSku)),
+        ];
+        break;
       case _Step.error:
-        return _bigButton(label: 'Try again', onTap: () => _goEncode(), icon: Icons.refresh);
+        buttons = [
+          Expanded(flex: 14, child: _tbButton(label: 'CHANGE SKU', icon: Icons.swap_horiz, bg: _kTealLight, onTap: _goSku)),
+          SizedBox(width: 10.w),
+          Expanded(flex: 16, child: _tbButton(label: 'TRY AGAIN', icon: Icons.refresh, bg: _kAmber, onTap: _goEncode)),
+        ];
+        break;
     }
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Color(0x14000000), offset: Offset(0, -6), blurRadius: 20)],
+      ),
+      padding: EdgeInsets.fromLTRB(12.w, 12.h, 12.w, 12.h),
+      child: Row(children: buttons),
+    );
   }
 
-  Widget _bigButton({required String label, VoidCallback? onTap, required IconData icon, bool outlined = false}) {
-    final enabled = onTap != null;
+  Widget _tbButton({
+    required String label,
+    required Color bg,
+    required VoidCallback? onTap,
+    IconData? icon,
+    Color fg = Colors.white,
+    bool outlined = false,
+  }) {
     return SizedBox(
-      height: 54.h,
-      child: outlined
-          ? OutlinedButton.icon(
-              onPressed: onTap,
-              icon: Icon(icon, size: 20.sp, color: AppColors.primary),
-              label: Text(label, style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700, color: AppColors.primary)),
-              style: OutlinedButton.styleFrom(
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                side: const BorderSide(color: AppColors.primary),
-              ),
-            )
-          : ElevatedButton.icon(
-              onPressed: onTap,
-              icon: Icon(icon, size: 20.sp),
-              label: Text(label, style: GoogleFonts.manrope(fontSize: 15.sp, fontWeight: FontWeight.w700)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: enabled ? AppColors.primary : AppColors.border,
-                foregroundColor: Colors.white,
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                elevation: enabled ? 2 : 0,
-              ),
+      height: 56.h,
+      child: Material(
+        color: bg,
+        borderRadius: BorderRadius.circular(3.r),
+        shape: outlined
+            ? RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(3.r),
+                side: const BorderSide(color: AppColors.primary, width: 1.5),
+              )
+            : null,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(3.r),
+          onTap: onTap,
+          child: Container(
+            alignment: Alignment.center,
+            padding: EdgeInsets.symmetric(horizontal: 8.w),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, color: fg, size: 24.sp),
+                  SizedBox(width: 8.w),
+                ],
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 14.5.sp,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
+                      color: fg,
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
+        ),
+      ),
     );
   }
 }
