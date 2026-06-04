@@ -49,7 +49,9 @@ const Color _kErrorRed = Color(0xFFD9534F);
 const Color _kSuccessGreen = Color(0xFF2A8E2A);
 const Color _kSuccessBg = Color(0xFFD6F5E6);
 const Color _kAmber = Color(0xFFE08A2C);
-const Color _kCardGrey = Color(0xFFECECEC);
+// Result cards use a white fill (operator preference — no grey square inside
+// the container). Kept as a named constant so all result cards stay in sync.
+const Color _kCardGrey = Color(0xFFFFFFFF);
 const Color _kTrayBg = Color(0xFFF4F7F7);
 const Color _kTealLight = Color(0xFF2BA3A3);
 const Color _kTextMuted = Color(0xFF8A9090);

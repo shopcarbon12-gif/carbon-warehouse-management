@@ -27,7 +27,9 @@ class CleanBinScreen extends StatefulWidget {
 const Color _kSlate = Color(0xFF6A7575);
 const Color _kRed = Color(0xFFBF2E2E);
 const Color _kSuccess = Color(0xFF2A8E2A);
-const Color _kCard = Color(0xFFECECEC);
+// Item rows use a white fill (operator preference — no grey square inside the
+// container).
+const Color _kCard = Color(0xFFFFFFFF);
 const Color _kMuted = Color(0xFF8A9090);
 
 class _CleanItem {

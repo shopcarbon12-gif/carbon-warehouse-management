@@ -68,7 +68,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // dashboard stats
   int? _inventoryUnits;
-  int? _orderOpen;
+  // Count of OPEN incoming transfer slips (in-transit / partially_received)
+  // whose destination is this location — drives the RECEIVING KPI. 0 = none.
+  int? _receivingOpen;
   // Hardware Pulse — counts come from /api/dashboard/summary, scoped to the
   // session's location server-side.
   int? _hwReaders;
@@ -214,7 +216,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _currentLocationName = name;
         // Clear stats so the UI shows "…" while the new scope loads.
         _inventoryUnits = null;
-        _orderOpen = null;
+        _receivingOpen = null;
         _hwReaders = null;
         _hwReadersOnline = null;
         _hwAntennas = null;
@@ -278,7 +280,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       setState(() {
         _inventoryUnits = (stats['inventory_units'] as num?)?.toInt();
-        _orderOpen = (stats['order_open'] as num?)?.toInt();
         _hwReaders = (stats['hw_readers'] as num?)?.toInt();
         _hwReadersOnline = (stats['hw_readers_online'] as num?)?.toInt();
         _hwAntennas = (stats['hw_antennas'] as num?)?.toInt();
@@ -287,6 +288,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _hwPrintersOnline = (stats['hw_printers_online'] as num?)?.toInt();
         _statsLoading = false;
       });
+      // RECEIVING KPI — the count of open incoming transfer slips for this
+      // location. Separate light query (the dashboard stats endpoint doesn't
+      // track transfers); failures just leave the previous value.
+      try {
+        final pending = await api.fetchPendingIncomingTransfers();
+        if (mounted) setState(() => _receivingOpen = pending.length);
+      } catch (_) {/* keep last known value */}
     } catch (_) {
       if (mounted) setState(() => _statsLoading = false);
     }
@@ -674,18 +682,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     SizedBox(width: 8.w),
                     _StatCard(
                       label: 'RECEIVING',
-                      value:
-                          _statsLoading ? '…' : (_orderOpen?.toString() ?? '—'),
-                      onTap: () {
-                        if (_orderOpen == null) {
-                          unawaited(_refreshDashboardStats());
-                        } else {
-                          _pushGuarded(
-                            ScreenIds.transferInPending,
-                            (_) => const TransferInPendingScreen(),
-                          );
-                        }
-                      },
+                      value: (_statsLoading && _receivingOpen == null)
+                          ? '…'
+                          : (_receivingOpen?.toString() ?? '0'),
+                      onTap: () => _pushGuarded(
+                        ScreenIds.transferInPending,
+                        (_) => const TransferInPendingScreen(),
+                      ),
                       cardColor: cardColor,
                       mainColor: mainColor,
                       mutedColor: mutedColor,
