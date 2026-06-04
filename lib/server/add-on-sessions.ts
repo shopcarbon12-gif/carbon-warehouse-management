@@ -90,15 +90,32 @@ export async function getSession(
   tenantId: string,
   sessionId: string,
 ): Promise<AddOnSessionRow | null> {
+  // epc_ledger / failed_ledger are reconstructed from the add_on_session_epcs
+  // child table (the JSONB columns are no longer written per-EPC). This runs
+  // once per getSession call (session open / join / SSE-stream start), NOT on
+  // the per-EPC hot path, so the O(n) aggregate here is fine — the win is that
+  // each individual EPC write is now O(1).
   const r = await pool.query(
-    `SELECT id::text, tenant_id::text, source_type, source_id, source_slip,
-            owner_user_id::text AS owner_user_id, owner_device_id,
-            joined_user_ids::text[] AS joined_user_ids,
-            joined_device_ids::text[] AS joined_device_ids,
-            state, epc_ledger, failed_ledger,
-            started_at, last_activity_at, ended_at, report_id::text AS report_id
-       FROM add_on_sessions
-      WHERE id = $1::uuid AND tenant_id = $2::uuid
+    `SELECT s.id::text, s.tenant_id::text, s.source_type, s.source_id, s.source_slip,
+            s.owner_user_id::text AS owner_user_id, s.owner_device_id,
+            s.joined_user_ids::text[] AS joined_user_ids,
+            s.joined_device_ids::text[] AS joined_device_ids,
+            s.state,
+            COALESCE((
+              SELECT jsonb_object_agg(e.epc, jsonb_build_object(
+                       'u', e.u::text, 'd', e.d, 'at', to_jsonb(e.at)))
+                FROM add_on_session_epcs e
+               WHERE e.session_id = s.id AND e.failed = false
+            ), '{}'::jsonb) AS epc_ledger,
+            COALESCE((
+              SELECT jsonb_object_agg(e.epc, jsonb_build_object(
+                       'u', e.u::text, 'd', e.d, 'at', to_jsonb(e.at), 'r', e.reason))
+                FROM add_on_session_epcs e
+               WHERE e.session_id = s.id AND e.failed = true
+            ), '{}'::jsonb) AS failed_ledger,
+            s.started_at, s.last_activity_at, s.ended_at, s.report_id::text AS report_id
+       FROM add_on_sessions s
+      WHERE s.id = $1::uuid AND s.tenant_id = $2::uuid
       LIMIT 1`,
     [sessionId, tenantId],
   );
@@ -240,29 +257,31 @@ export async function submitEpc(
   deviceId: string | null,
 ): Promise<{ outcome: "new" | "duplicate"; ledgerSize: number }> {
   const cleanEpc = epc.replace(/\s/g, "").toUpperCase();
-  const nowIso = new Date().toISOString();
 
+  // O(1): insert one row into the child table, gated on the session belonging
+  // to this tenant. ON CONFLICT means a re-read of the same EPC is a no-op
+  // ("duplicate"). epc_count is bumped only when a row was actually added.
   const r = await pool.query<{ added: boolean; ledger_size: number }>(
-    `WITH upd AS (
+    `WITH ins AS (
+       INSERT INTO add_on_session_epcs (session_id, epc, failed, u, d)
+       SELECT $1::uuid, $3::text, false, $4::uuid, $5::text
+       WHERE EXISTS (
+         SELECT 1 FROM add_on_sessions WHERE id = $1::uuid AND tenant_id = $2::uuid
+       )
+       ON CONFLICT (session_id, epc) DO NOTHING
+       RETURNING true AS added
+     ),
+     upd AS (
        UPDATE add_on_sessions
-          SET epc_ledger = epc_ledger || jsonb_build_object(
-                $3::text,
-                jsonb_build_object('u', $4::text, 'd', $5::text, 'at', $6::text)
-              ),
-              epc_count        = epc_count + 1,
+          SET epc_count = epc_count + (SELECT COUNT(*)::int FROM ins),
               last_activity_at = now()
-        WHERE id = $1::uuid
-          AND tenant_id = $2::uuid
-          AND NOT (epc_ledger ? $3::text)
-       RETURNING true AS added, epc_count
+        WHERE id = $1::uuid AND tenant_id = $2::uuid
+        RETURNING epc_count
      )
      SELECT
-       COALESCE((SELECT added FROM upd), false) AS added,
-       COALESCE(
-         (SELECT epc_count FROM upd),
-         (SELECT epc_count FROM add_on_sessions WHERE id = $1::uuid AND tenant_id = $2::uuid)
-       ) AS ledger_size`,
-    [sessionId, tenantId, cleanEpc, userId, deviceId, nowIso],
+       COALESCE((SELECT added FROM ins), false) AS added,
+       COALESCE((SELECT epc_count FROM upd), 0) AS ledger_size`,
+    [sessionId, tenantId, cleanEpc, userId, deviceId],
   );
   const row = r.rows[0]!;
 
@@ -281,6 +300,115 @@ export async function submitEpc(
   };
 }
 
+/**
+ * Batch counterpart of {@link submitEpc} — the handheld buffers reads locally
+ * (counter ticks up per-tag with no network wait) and flushes them here in
+ * chunks. Inserts valid EPCs and failed-validation EPCs in two bulk statements
+ * (O(1) per row via ON CONFLICT), bumps the counters by the number actually
+ * added, and emits ONE `epc_new` SSE event carrying the freshly-added EPCs so
+ * other devices in the session dedup against them.
+ */
+export type BatchEpcInput = {
+  epc: string;
+  validationFailed?: boolean;
+  failureReason?: string;
+};
+
+export async function submitEpcsBatch(
+  pool: Pool,
+  tenantId: string,
+  sessionId: string,
+  items: BatchEpcInput[],
+  userId: string | null,
+  deviceId: string | null,
+): Promise<{
+  added: string[];
+  failedAdded: string[];
+  epcCount: number;
+  failedCount: number;
+}> {
+  const clean = (s: string) => s.replace(/\s/g, "").toUpperCase();
+  // De-dup within the batch and split valid vs failed.
+  const validSet = new Set<string>();
+  const failedMap = new Map<string, string>();
+  for (const it of items) {
+    const e = clean(it.epc);
+    if (!/^[0-9A-F]{24}$/.test(e)) continue;
+    if (it.validationFailed) {
+      if (!validSet.has(e)) failedMap.set(e, it.failureReason ?? "device_decode_failed");
+    } else {
+      validSet.add(e);
+      failedMap.delete(e);
+    }
+  }
+  const validEpcs = [...validSet];
+  const failedEpcs = [...failedMap.keys()];
+  const failedReasons = failedEpcs.map((e) => failedMap.get(e)!);
+
+  let added: string[] = [];
+  let failedAdded: string[] = [];
+
+  if (validEpcs.length > 0) {
+    const r = await pool.query<{ epc: string }>(
+      `INSERT INTO add_on_session_epcs (session_id, epc, failed, u, d)
+       SELECT $1::uuid, x.epc, false, $2::uuid, $3::text
+       FROM unnest($4::text[]) AS x(epc)
+       WHERE EXISTS (
+         SELECT 1 FROM add_on_sessions WHERE id = $1::uuid AND tenant_id = $5::uuid
+       )
+       ON CONFLICT (session_id, epc) DO NOTHING
+       RETURNING epc`,
+      [sessionId, userId, deviceId, validEpcs, tenantId],
+    );
+    added = r.rows.map((x) => x.epc);
+  }
+
+  if (failedEpcs.length > 0) {
+    const r = await pool.query<{ epc: string }>(
+      `INSERT INTO add_on_session_epcs (session_id, epc, failed, reason, u, d)
+       SELECT $1::uuid, x.epc, true, x.reason, $2::uuid, $3::text
+       FROM unnest($4::text[], $5::text[]) AS x(epc, reason)
+       WHERE EXISTS (
+         SELECT 1 FROM add_on_sessions WHERE id = $1::uuid AND tenant_id = $6::uuid
+       )
+       ON CONFLICT (session_id, epc) DO NOTHING
+       RETURNING epc`,
+      [sessionId, userId, deviceId, failedEpcs, failedReasons, tenantId],
+    );
+    failedAdded = r.rows.map((x) => x.epc);
+  }
+
+  const upd = await pool.query<{ epc_count: number; failed_count: number }>(
+    `UPDATE add_on_sessions
+        SET epc_count = epc_count + $2::int,
+            failed_count = failed_count + $3::int,
+            last_activity_at = now()
+      WHERE id = $1::uuid AND tenant_id = $4::uuid
+      RETURNING epc_count, failed_count`,
+    [sessionId, added.length, failedAdded.length, tenantId],
+  );
+
+  // One SSE event per batch (not per EPC) carrying the newly-added EPCs so
+  // other handhelds in the session mark them as duplicates.
+  if (added.length > 0) {
+    await logEvent(pool, {
+      sessionId,
+      tenantId,
+      userId,
+      deviceId,
+      eventType: "epc_new",
+      payload: { epcs: added },
+    });
+  }
+
+  return {
+    added,
+    failedAdded,
+    epcCount: upd.rows[0]?.epc_count ?? 0,
+    failedCount: upd.rows[0]?.failed_count ?? 0,
+  };
+}
+
 /** Record a failed-validation EPC into the failed_ledger (hidden during scan).
  *  Increments failed_count atomically so the review screen can read it cheap. */
 export async function recordFailedEpc(
@@ -294,12 +422,17 @@ export async function recordFailedEpc(
 ): Promise<void> {
   const cleanEpc = epc.replace(/\s/g, "").toUpperCase();
   await pool.query(
-    `UPDATE add_on_sessions
-        SET failed_ledger = failed_ledger || jsonb_build_object(
-              $1::text,
-              jsonb_build_object('u', $2::text, 'd', $3::text, 'at', $4::text, 'r', $5::text)
-            ),
-            failed_count     = failed_count + (CASE WHEN failed_ledger ? $1::text THEN 0 ELSE 1 END),
+    `WITH ins AS (
+       INSERT INTO add_on_session_epcs (session_id, epc, failed, reason, u, d)
+       SELECT $6::uuid, $1::text, true, $5::text, $2::uuid, $3::text
+       WHERE EXISTS (
+         SELECT 1 FROM add_on_sessions WHERE id = $6::uuid AND tenant_id = $7::uuid
+       )
+       ON CONFLICT (session_id, epc) DO NOTHING
+       RETURNING true AS added
+     )
+     UPDATE add_on_sessions
+        SET failed_count = failed_count + (SELECT COUNT(*)::int FROM ins),
             last_activity_at = now()
       WHERE id = $6::uuid AND tenant_id = $7::uuid`,
     [cleanEpc, userId, deviceId, new Date().toISOString(), reason, sessionId, tenantId],

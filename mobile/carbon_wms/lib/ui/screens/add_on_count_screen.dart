@@ -64,6 +64,15 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
   String? _previousScanContext;
   bool _scannerReady = false;
 
+  // Local-first scan buffer. Each tag is counted instantly in `_session`
+  // (ChangeNotifier → smooth per-tag UI) and queued here; a periodic flush
+  // POSTs them to the server in batches. This removes the per-tag network
+  // round-trip that made scanning stall around ~13–15k EPCs.
+  static const int _flushBatchMax = 200;
+  final List<Map<String, dynamic>> _flushBuffer = [];
+  Timer? _flushTimer;
+  bool _flushing = false;
+
   @override
   void initState() {
     super.initState();
@@ -107,6 +116,12 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     // this the screen has no way for the operator to scan via hardware
     // trigger; only the on-screen START button works.
     unawaited(_ensureScannerReady());
+
+    // Periodic batch flush of locally-counted EPCs to the server. Fast scans
+    // also trigger a size-based flush (see _queueFlush) so the buffer can't
+    // grow unbounded between ticks.
+    _flushTimer = Timer.periodic(
+        const Duration(milliseconds: 700), (_) => unawaited(_flush()));
   }
 
   /// Put the device in RFID-trigger mode and bind the hardware trigger to
@@ -176,9 +191,17 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     if (!mounted) return;
     switch (event.type) {
       case 'epc_new':
-        // Another device counted an EPC. Mark it locally so we don't re-submit.
+        // Another device counted an EPC (or a batch of them). Mark each
+        // locally so we don't re-submit. Single events carry `epc`; batched
+        // flushes carry `epcs: [...]`.
         final epc = event.payload['epc'] as String?;
         if (epc != null) _session.recordRemoteDuplicate(epc);
+        final epcs = event.payload['epcs'];
+        if (epcs is List) {
+          for (final e in epcs) {
+            if (e is String) _session.recordRemoteDuplicate(e);
+          }
+        }
         break;
       case 'join_requested':
         // We're the owner — show approve/decline popup.
@@ -263,26 +286,24 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     }
   }
 
-  Future<void> _onEpc(String epc) async {
+  // Local-first: decide new/duplicate/failed on-device and update the counter
+  // INSTANTLY (recordNew/recordFailed notify the UI), then queue the EPC for a
+  // batched background flush. No per-tag network round-trip — that's what made
+  // scanning stall at scale. Cross-device dedup still works: the SSE `epc_new`
+  // events mark EPCs another operator counted (see _handleSseEvent).
+  void _onEpc(String epc) {
     if (!_session.scanning) return;
     final clean = epc.replaceAll(RegExp(r'\s+'), '').toUpperCase();
     if (clean.length != 24) return;
 
-    // Note: _session.shouldSubmit returns false for any EPC already in the
-    // chosen source list (silent skip per Q16) AND for any EPC we already
-    // submitted this session — so anything reaching past this line is
-    // unambiguously a NEW-to-session, not-in-source tag.
+    // _session.shouldSubmit returns false for any EPC already in the chosen
+    // source list (silent skip per Q16) AND for any EPC already reserved this
+    // session — so anything past here is a NEW-to-device, not-in-source tag.
     if (!_session.shouldSubmit(clean)) return;
 
-    final api = context.read<WmsApiClient>();
-
-    // Carbon EPC formula gate. Defective tags (wrong prefix, bad hex,
-    // wrong length already filtered above) go in their own bucket — they
-    // are NOT shown in the main "new EPCs" list and do NOT beep. We still
-    // POST them with validationFailed=true so the server captures them
-    // in add_on_sessions.failed_ledger; scan-finalize then emits them as
-    // a separate "Defective" sheet on SAVE and through the defective-CSV
-    // pipeline on UPLOAD.
+    // Carbon EPC formula gate. Defective tags go in their own bucket — not
+    // shown in the main list, no beep. We still flush them with
+    // validationFailed=true so finalize surfaces them as the Defective sheet.
     final cfg = context.read<MobileSettingsRepository>().epcConfig;
     final decoded = decodeEpc(clean, cfg);
     if (!decoded.valid) {
@@ -292,46 +313,52 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
         reason: reason,
         scannedAtUtc: DateTime.now().toUtc(),
       ));
-      try {
-        await api.submitAddOnSessionEpc(
-          sessionId: widget.sessionId,
-          epc: clean,
-          inSource: false,
-          validationFailed: true,
-          failureReason: reason,
-        );
-      } catch (_) {/* best-effort — server reconciles on retry */}
+      _queueFlush({'epc': clean, 'validationFailed': true, 'failureReason': reason});
       return; // no display, no beep
     }
 
+    // Valid + new-to-this-device → count immediately, beep, buffer. system_id
+    // (from the decode we just did) is the only enrichment during scan; full
+    // catalog resolution happens server-side on UPLOAD.
+    _session.recordNew(NewEpcEntry(
+      epc: clean,
+      scannedAtUtc: DateTime.now().toUtc(),
+      systemId: decoded.systemId?.toString(),
+    ));
+    ScanSounds.instance.play(ScanCue.read);
+    unawaited(_maybeVibrate());
+    _queueFlush({'epc': clean, 'inSource': false});
+  }
+
+  void _queueFlush(Map<String, dynamic> item) {
+    _flushBuffer.add(item);
+    if (_flushBuffer.length >= _flushBatchMax) unawaited(_flush());
+  }
+
+  /// Drain the buffer to the server in [_flushBatchMax]-sized batches. Guarded
+  /// so only one flush runs at a time; on a network error the un-sent items
+  /// stay buffered and retry on the next tick. [drain] awaits everything (used
+  /// before review/finalize so the server has the full set).
+  Future<void> _flush() async {
+    if (_flushing || _flushBuffer.isEmpty || !mounted) return;
+    _flushing = true;
     try {
-      final result = await api.submitAddOnSessionEpc(
-        sessionId: widget.sessionId,
-        epc: clean,
-        inSource: false,
-      );
-      final outcome = result['outcome'] as String?;
-      if (outcome == 'new') {
-        // Decode is already done above (formula check passed → valid =
-        // true), so reuse decoded.systemId. This is the ONLY enrichment
-        // that happens during scan — no catalog network call, no
-        // /epc/lookup, nothing. system_id displays on the card so the
-        // operator can identify the item without any round-trip. Full
-        // catalog resolution (SKU, name, color, size) happens
-        // server-side during UPLOAD intent only.
-        _session.recordNew(NewEpcEntry(
-          epc: clean,
-          scannedAtUtc: DateTime.now().toUtc(),
-          systemId: decoded.systemId?.toString(),
-        ));
-        // Regular per-tag read tone (uhf-read-tag.mp3), not the heavier
-        // success cue.
-        ScanSounds.instance.play(ScanCue.read);
-        await _maybeVibrate();
+      final api = context.read<WmsApiClient>();
+      while (_flushBuffer.isNotEmpty) {
+        final take = _flushBuffer.length > _flushBatchMax
+            ? _flushBatchMax
+            : _flushBuffer.length;
+        final batch = List<Map<String, dynamic>>.from(_flushBuffer.take(take));
+        await api.submitAddOnSessionEpcsBatch(
+          sessionId: widget.sessionId,
+          items: batch,
+        );
+        _flushBuffer.removeRange(0, take);
       }
-      // 'duplicate' / 'failed' / server-side-inSource → silent (Q16 + spec).
     } catch (_) {
-      // Best-effort — server-mediated dedup will catch up on retries.
+      // Keep remaining buffered; periodic timer retries.
+    } finally {
+      _flushing = false;
     }
   }
 
@@ -351,6 +378,18 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       _session.setScanning(false);
     }
     if (!mounted) return;
+    // Drain every buffered EPC to the server BEFORE review — SAVE/UPLOAD
+    // finalize reads the server's child table, so anything still local would
+    // be missing from the upload otherwise.
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    for (var i = 0; i < 40 && mounted && _flushBuffer.isNotEmpty; i++) {
+      await _flush();
+      if (_flushBuffer.isNotEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+    if (!mounted) return;
     await context.pushGuarded<void>(
       ScreenIds.addOnCountReview,
       (_) => AddOnCountReviewScreen(
@@ -362,11 +401,17 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
         failedEntries: _session.failedEntries,
       ),
     );
+    if (!mounted) return;
+    // Back from review — resume the periodic flush in case the operator keeps
+    // scanning into the same session.
+    _flushTimer ??= Timer.periodic(
+        const Duration(milliseconds: 700), (_) => unawaited(_flush()));
   }
 
   @override
   void dispose() {
     _heartbeat?.cancel();
+    _flushTimer?.cancel();
     _sseSub?.cancel();
     unawaited(_sse?.dispose() ?? Future<void>.value());
     _directTagSub?.cancel();
@@ -551,7 +596,8 @@ class _NewList extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
       itemCount: entries.length,
       separatorBuilder: (_, __) => SizedBox(height: 8.h),
-      itemBuilder: (_, i) => AddOnEpcCard(entry: entries[i]),
+      // Newest-first: entries are appended (O(1)), so read from the end.
+      itemBuilder: (_, i) => AddOnEpcCard(entry: entries[entries.length - 1 - i]),
     );
   }
 }

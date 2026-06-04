@@ -66,7 +66,11 @@ class AddOnSessionState extends ChangeNotifier {
 
   void recordNew(NewEpcEntry entry) {
     if (_newSeen.add(entry.epc)) {
-      _newEntries.insert(0, entry);
+      // Append (O(1)) rather than insert(0) (O(n)) — at 10k+ EPCs the
+      // shift-everything insert was a per-tag cost that compounded into
+      // visible jank. The list view renders newest-first by reading from the
+      // end, so display order is unchanged.
+      _newEntries.add(entry);
       notifyListeners();
     }
   }

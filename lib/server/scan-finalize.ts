@@ -190,27 +190,27 @@ async function loadFailedLedgerAsDefective(
   tenantId: string,
   sessionId: string,
 ): Promise<DefectiveEpcRow[]> {
-  const r = await client.query<{ failed_ledger: Record<string, { u: string | null; d: string | null; at: string; r: string }> | null }>(
-    `SELECT failed_ledger
-       FROM add_on_sessions
-      WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+  const r = await client.query<{
+    epc: string;
+    at: Date | null;
+    reason: string | null;
+    d: string | null;
+    u: string | null;
+  }>(
+    `SELECT e.epc, e.at, e.reason, e.d, e.u::text AS u
+       FROM add_on_session_epcs e
+       INNER JOIN add_on_sessions s ON s.id = e.session_id AND s.tenant_id = $2::uuid
+      WHERE e.session_id = $1::uuid AND e.failed = true`,
     [sessionId, tenantId],
   );
-  const ledger = r.rows[0]?.failed_ledger;
-  if (!ledger || typeof ledger !== "object") return [];
-  const out: DefectiveEpcRow[] = [];
-  for (const [epc, meta] of Object.entries(ledger)) {
-    if (typeof epc !== "string" || !epc) continue;
-    out.push({
-      epc: epc.toUpperCase(),
-      scannedAtIso: meta?.at ?? new Date().toISOString(),
-      decodeReason: meta?.r ?? "invalid",
-      rawDecodedBits: epcHexToBits(epc),
-      deviceId: meta?.d ?? null,
-      operatorUserId: meta?.u ?? null,
-    });
-  }
-  return out;
+  return r.rows.map((row) => ({
+    epc: row.epc.toUpperCase(),
+    scannedAtIso: row.at ? row.at.toISOString() : new Date().toISOString(),
+    decodeReason: row.reason ?? "invalid",
+    rawDecodedBits: epcHexToBits(row.epc),
+    deviceId: row.d ?? null,
+    operatorUserId: row.u ?? null,
+  }));
 }
 
 /** Load the canonical EPC set for an add-on session from `epc_ledger`. This
@@ -228,24 +228,20 @@ async function loadSessionEpcLedger(
   tenantId: string,
   sessionId: string,
 ): Promise<ScanFinalizeRow[]> {
-  const r = await client.query<{ epc_ledger: Record<string, { u: string | null; d: string | null; at: string }> | null }>(
-    `SELECT epc_ledger
-       FROM add_on_sessions
-      WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+  // Canonical EPC set now lives in the add_on_session_epcs child table (one
+  // row per EPC) rather than the epc_ledger JSONB blob.
+  const r = await client.query<{ epc: string; at: Date | null }>(
+    `SELECT e.epc, e.at
+       FROM add_on_session_epcs e
+       INNER JOIN add_on_sessions s ON s.id = e.session_id AND s.tenant_id = $2::uuid
+      WHERE e.session_id = $1::uuid AND e.failed = false`,
     [sessionId, tenantId],
   );
-  const ledger = r.rows[0]?.epc_ledger;
-  if (!ledger || typeof ledger !== "object") return [];
-  const out: ScanFinalizeRow[] = [];
-  for (const [epc, meta] of Object.entries(ledger)) {
-    if (typeof epc !== "string" || !epc) continue;
-    out.push({
-      epc: epc.toUpperCase(),
-      first_seen_iso: meta?.at ?? null,
-      last_seen_iso: meta?.at ?? null,
-    });
-  }
-  return out;
+  return r.rows.map((row) => ({
+    epc: row.epc.toUpperCase(),
+    first_seen_iso: row.at ? row.at.toISOString() : null,
+    last_seen_iso: row.at ? row.at.toISOString() : null,
+  }));
 }
 
 /** Wipe existing live items for the SKUs covered by `scannedSkus` whose EPC

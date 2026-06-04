@@ -2046,6 +2046,31 @@ class WmsApiClient {
     return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
   }
 
+  /// Batch counterpart of [submitAddOnSessionEpc]. The screen counts each tag
+  /// locally (instant counter) and flushes buffered reads here in chunks, so
+  /// the per-tag network round-trip that stalled scanning at ~13–15k EPCs is
+  /// gone. [items] is a list of `{epc, inSource?, validationFailed?,
+  /// failureReason?}`. Returns `{added, failedAdded, epcCount, failedCount}`.
+  Future<Map<String, dynamic>> submitAddOnSessionEpcsBatch({
+    required String sessionId,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/add-on-sessions/$sessionId/epcs');
+    final body = jsonEncode({'deviceId': deviceId, 'epcs': items});
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      ...await handheldAuthHeaders(),
+    };
+    final res = await _http.post(uri, headers: headers, body: body);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> requestJoinAddOnSession(String sessionId) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
