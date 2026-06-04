@@ -290,6 +290,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   bool _externalScanner = false;
   bool _cameraEnabled = true;
 
+  /// Multi-items mode (persisted, default OFF). OFF = scan bin → scan item →
+  /// assign immediately → advance to next bin. ON = full add-another flow.
+  bool _multiItems = false;
+
   String? _userEmail;
 
   List<_StoredItem> _storedContents = [];
@@ -377,11 +381,18 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     _scanFocus.requestFocus();
   }
 
+  Future<void> _setMultiItems(bool v) async {
+    setState(() => _multiItems = v);
+    final p = await SharedPreferences.getInstance();
+    await p.setBool('bin_assign_multi_items', v);
+  }
+
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
       _scannerSource = p.getString('wms_scanner_source_v1') ?? 'hardware';
+      _multiItems = p.getBool('bin_assign_multi_items') ?? false;
       // Manual-mode flags are now in-memory (BinAssignSession) — they
       // survive navigation but reset on app kill, so a fresh login
       // never inherits the previous operator's manual state.
@@ -1484,6 +1495,27 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         return;
       }
     }
+
+    // Default (multi-items OFF): no questions — assign the scanned item to the
+    // bin straight away (single_color_all_sizes), then end the session so the
+    // next scan starts a fresh bin. The add-another / colour-picker flow below
+    // only runs when multi-items mode is ON.
+    if (!_multiItems) {
+      final ok = await _performAssign(
+        skuScanned: skuParts.baseColor,
+        itemName: itemName,
+        binCode: _currentBin,
+        binId: _currentBinId,
+      );
+      if (!mounted) return;
+      if (ok) {
+        _triggerEndOfSession();
+      } else {
+        _scanFocus.requestFocus();
+      }
+      return;
+    }
+
     // Step 1 — assign popup
     final assignYes = await _askAssignDialog(itemName: itemName);
     if (!mounted) return;
@@ -2166,6 +2198,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               manualBin: _manualBin,
               onManualBinSubmit: (code) => unawaited(_handleBinScan(code)),
               onBinDirectSelect: (id, code) => unawaited(_confirmBin(id, code)),
+              multiItems: _multiItems,
+              onMultiItemsChanged: (v) => unawaited(_setMultiItems(v)),
             ),
 
             // ── Fixed header: STORED ITEMS ──────────────────────────────────
@@ -2373,6 +2407,8 @@ class _BinInfoBlock extends StatefulWidget {
     this.manualBin = false,
     this.onManualBinSubmit,
     this.onBinDirectSelect,
+    this.multiItems = false,
+    this.onMultiItemsChanged,
   });
 
   final String binCode;
@@ -2386,6 +2422,11 @@ class _BinInfoBlock extends StatefulWidget {
   final bool manualBin;
   final ValueChanged<String>? onManualBinSubmit;
   final void Function(String id, String code)? onBinDirectSelect;
+  /// Multi-items mode: OFF (default) assigns a single scanned item to the bin
+  /// immediately and advances to the next bin; ON keeps the full add-another /
+  /// colour-picker flow on the same bin.
+  final bool multiItems;
+  final ValueChanged<bool>? onMultiItemsChanged;
 
   @override
   State<_BinInfoBlock> createState() => _BinInfoBlockState();
@@ -2563,7 +2604,10 @@ class _BinInfoBlockState extends State<_BinInfoBlock> {
                     color: widget.mutedColor,
                   ),
                 ),
-                _StatusBadge(active: widget.isActive),
+                _MultiItemsToggle(
+                  on: widget.multiItems,
+                  onChanged: widget.onMultiItemsChanged,
+                ),
               ],
             ),
           ),
@@ -2786,26 +2830,49 @@ class _BinCodeHyphenFormatter extends TextInputFormatter {
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.active});
-  final bool active;
+/// MULTI ITEMS on/off toggle — replaces the old ACTIVE/INACTIVE badge in the
+/// bin header. OFF (default) = scan bin → scan item → assign immediately →
+/// next bin. ON = keep the full add-another / colour-picker flow on this bin.
+class _MultiItemsToggle extends StatelessWidget {
+  const _MultiItemsToggle({required this.on, required this.onChanged});
+  final bool on;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 5.h),
-      decoration: BoxDecoration(
-        color: active ? AppColors.primary : AppColors.textMuted,
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Text(
-        active ? 'ACTIVE' : 'INACTIVE',
-        style: GoogleFonts.manrope(
-          fontSize: 11.sp,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1.0,
-          color: Colors.white,
-        ),
+    return GestureDetector(
+      onTap: onChanged == null ? null : () => onChanged!(!on),
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'MULTI ITEMS',
+            style: GoogleFonts.manrope(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.0,
+              color: AppColors.textMuted,
+            ),
+          ),
+          SizedBox(width: 8.w),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 5.h),
+            decoration: BoxDecoration(
+              color: on ? AppColors.primary : AppColors.textMuted,
+              borderRadius: BorderRadius.zero,
+            ),
+            child: Text(
+              on ? 'ON' : 'OFF',
+              style: GoogleFonts.manrope(
+                fontSize: 11.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.0,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

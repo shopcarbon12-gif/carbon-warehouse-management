@@ -35,11 +35,20 @@ export async function POST(req: Request) {
   }
 
   const code = parsed.data.binCode.trim().toUpperCase();
+  // Normalize both sides — strip every non-alphanumeric char — before matching.
+  // Mobile clients format 5-char codes with dashes for display (e.g. "1A01L" →
+  // "1-A-01-L") and ship the dashed form here, while the bins table stores the
+  // undashed canonical code. A plain equality test silently misses and the
+  // operator gets a 404, even though putaway-assign (same screen) matched the
+  // very same bin via this normalization.
   const bin = await pool.query<{ id: string }>(
     `SELECT b.id::text
      FROM bins b
      INNER JOIN locations l ON l.id = b.location_id
-     WHERE l.tenant_id = $1::uuid AND l.id = $2::uuid AND upper(trim(b.code)) = upper(trim($3)) AND b.archived_at IS NULL
+     WHERE l.tenant_id = $1::uuid AND l.id = $2::uuid
+       AND regexp_replace(upper(b.code), '[^A-Z0-9]', '', 'g')
+           = regexp_replace(upper($3), '[^A-Z0-9]', '', 'g')
+       AND b.archived_at IS NULL
      LIMIT 1`,
     [session.tid, session.lid, code],
   );
