@@ -24,8 +24,6 @@ class InventoryHubScreen extends StatelessWidget {
     final iconColor = isDark ? const Color(0xFF7A9090) : AppColors.slateAction;
     final textColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
     // Phase 2 — hide tiles for screen ids the operator's role can't see.
-    // RECOUNT / ADJUST stay visible regardless because they have no
-    // navigation today; they're placeholders the warehouse team uses.
     final perms = context.watch<MobilePermissions>();
 
     return CarbonScaffold(
@@ -65,13 +63,6 @@ class InventoryHubScreen extends StatelessWidget {
                     (_) => const AddOnCountSourcePickerScreen(),
                   ),
                 ),
-              _InventoryTile(
-                label: 'RECOUNT',
-                icon: LucideIcons.refreshCcw,
-                tileColor: tileColor,
-                iconColor: iconColor,
-                textColor: textColor,
-              ),
               // Catalog moved to the left (was Adjust's slot).
               if (perms.canView(ScreenIds.inventoryCatalog))
                 _InventoryTile(
