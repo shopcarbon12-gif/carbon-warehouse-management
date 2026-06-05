@@ -154,7 +154,9 @@ class _AddOnCountSourcePickerScreenState
   /// preserved server-side, so the operator walks into the scan screen
   /// with the prior session state intact and the counters resume.
   Future<void> _offerReopenCompleted(Map<String, dynamic> row) async {
-    final completedBy = (row['completed_by_user_email'] as String?) ?? '—';
+    final completedBy = (row['completed_by_user_name'] as String?) ??
+        (row['completed_by_user_email'] as String?) ??
+        '—';
     final completedAt = (row['completed_at'] as String?) ?? '';
     final slip = (row['slip'] as String?) ?? '—';
     final go = await showDialog<bool>(
@@ -468,7 +470,9 @@ class _SourceTile extends StatelessWidget {
     final type = (row['source_type'] as String?) ?? '';
     final uploadedAt = (row['uploaded_at'] as String?) ?? '';
     final rowCount = row['row_count'];
-    final by = (row['uploaded_by_email'] as String?) ?? '';
+    final by = (row['uploaded_by_name'] as String?) ??
+        (row['uploaded_by_email'] as String?) ??
+        '';
 
     final bg = switch (state) {
       'in_use' => const Color(0xFFFFF1E0),
@@ -543,11 +547,16 @@ class _SourceTile extends StatelessWidget {
       Map<String, dynamic> row) {
     final dateStr = at.isEmpty ? '—' : at.substring(0, at.length.clamp(0, 16));
     if (state == 'in_use') {
-      return 'In use by ${row['locked_by_user_email'] ?? '—'}';
+      final lockedBy = (row['locked_by_user_name'] as String?) ??
+          (row['locked_by_user_email'] as String?) ??
+          '—';
+      return 'In use by $lockedBy';
     }
     if (state == 'completed') {
       final completedAt = (row['completed_at'] as String?) ?? at;
-      final completedBy = (row['completed_by_user_email'] as String?) ?? by;
+      final completedBy = (row['completed_by_user_name'] as String?) ??
+          (row['completed_by_user_email'] as String?) ??
+          by;
       return 'Completed by $completedBy · ${completedAt.substring(0, completedAt.length.clamp(0, 16))}';
     }
     final live = rowCount is num ? '${rowCount.toInt()} EPCs' : '$rowCount EPCs';

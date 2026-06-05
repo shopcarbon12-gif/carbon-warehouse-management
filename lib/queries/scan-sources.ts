@@ -24,6 +24,8 @@ export type ScanSourceRow = {
   state: ScanSourceState;
   uploaded_at: string;
   uploaded_by_email: string | null;
+  /** "First L." display name (falls back to the email when no name is set). */
+  uploaded_by_name: string | null;
   device_id: string | null;
   row_count: number;
   /** When state='in_use', the active add_on_sessions.id. NULL otherwise.
@@ -31,10 +33,29 @@ export type ScanSourceRow = {
   locked_session_id: string | null;
   /** Email of the operator currently using the session (when locked). */
   locked_by_user_email: string | null;
+  locked_by_user_name: string | null;
   /** Filled when state = completed. */
   completed_at: string | null;
   completed_by_user_email: string | null;
+  completed_by_user_name: string | null;
 };
+
+/** "First L." — first name + last-initial + dot (e.g. "Elior P."). Falls back
+ *  to the email's local part, then the raw email, when no name is on file. */
+function formatDisplayName(
+  first: string | null,
+  last: string | null,
+  email: string | null,
+): string {
+  const f = (first ?? "").trim();
+  const l = (last ?? "").trim();
+  if (f) return l ? `${f} ${l[0].toUpperCase()}.` : f;
+  if (email) {
+    const local = email.split("@")[0]?.trim();
+    return local && local.length > 0 ? local : email;
+  }
+  return "";
+}
 
 /** 5-digit decimal slip from a UUID (Q25 lock: number, 5 digits). */
 function slipFromUuid(uuid: string, prefix: string): string {
@@ -216,13 +237,23 @@ export async function listScanSources(
     ),
   );
   const emails = new Map<string, string>();
+  const names = new Map<string, string>();
   if (userIds.length > 0) {
     try {
-      const er = await pool.query<{ id: string; email: string }>(
-        `SELECT id::text, email FROM users WHERE id = ANY($1::uuid[])`,
+      const er = await pool.query<{
+        id: string;
+        email: string;
+        first_name: string | null;
+        last_name: string | null;
+      }>(
+        `SELECT id::text, email, first_name, last_name
+           FROM users WHERE id = ANY($1::uuid[])`,
         [userIds],
       );
-      for (const row of er.rows) emails.set(row.id, row.email);
+      for (const row of er.rows) {
+        emails.set(row.id, row.email);
+        names.set(row.id, formatDisplayName(row.first_name, row.last_name, row.email));
+      }
     } catch {
       /* best-effort */
     }
@@ -253,14 +284,20 @@ export async function listScanSources(
       uploaded_at: row.uploaded_at.toISOString(),
       uploaded_by_email:
         row.uploaded_by_id ? emails.get(row.uploaded_by_id) ?? null : null,
+      uploaded_by_name:
+        row.uploaded_by_id ? names.get(row.uploaded_by_id) ?? null : null,
       device_id: row.device_id,
       row_count: Number(row.row_count) || 0,
       locked_session_id: row.locked_session_id,
       locked_by_user_email:
         row.locked_owner_id ? emails.get(row.locked_owner_id) ?? null : null,
+      locked_by_user_name:
+        row.locked_owner_id ? names.get(row.locked_owner_id) ?? null : null,
       completed_at: completedAt,
       completed_by_user_email:
         row.completed_by ? emails.get(row.completed_by) ?? null : null,
+      completed_by_user_name:
+        row.completed_by ? names.get(row.completed_by) ?? null : null,
     };
   });
 }
