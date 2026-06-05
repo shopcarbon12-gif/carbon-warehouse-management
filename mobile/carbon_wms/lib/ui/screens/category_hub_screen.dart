@@ -302,14 +302,14 @@ class _HubRow extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 54.w,
-                height: 54.w,
+                width: 56.w,
+                height: 56.w,
                 decoration: BoxDecoration(
                   color: const Color(0xFFEEF4F3),
-                  borderRadius: BorderRadius.circular(10.r),
+                  borderRadius: BorderRadius.circular(11.r),
                 ),
                 alignment: Alignment.center,
-                child: Icon(tile.icon, size: 27.sp, color: AppColors.primary),
+                child: Icon(tile.icon, size: 29.sp, color: AppColors.primary),
               ),
               SizedBox(width: 15.w),
               Expanded(
@@ -319,7 +319,7 @@ class _HubRow extends StatelessWidget {
                     Text(
                       tile.label,
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 18.sp,
+                        fontSize: 20.sp,
                         fontWeight: FontWeight.w800,
                         color: AppColors.textMain,
                       ),
@@ -328,9 +328,10 @@ class _HubRow extends StatelessWidget {
                     Text(
                       tile.description,
                       style: GoogleFonts.manrope(
-                        fontSize: 13.5.sp,
+                        fontSize: 15.sp,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.textMuted,
+                        // Darker slate (was light grey) for readability.
+                        color: const Color(0xFF3F4A4A),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -339,7 +340,7 @@ class _HubRow extends StatelessWidget {
                 ),
               ),
               Icon(LucideIcons.chevronRight,
-                  size: 22.sp, color: AppColors.textMuted),
+                  size: 24.sp, color: const Color(0xFF3F4A4A)),
             ],
           ),
         ),

@@ -447,9 +447,9 @@ class _SourceList extends StatelessWidget {
       );
     }
     return ListView.separated(
-      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 24.h),
+      padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 28.h),
       itemCount: rows.length,
-      separatorBuilder: (_, __) => SizedBox(height: 8.h),
+      separatorBuilder: (_, __) => SizedBox(height: 14.h),
       itemBuilder: (_, i) => _SourceTile(row: rows[i], onTap: () => onTap(rows[i])),
     );
   }
@@ -492,7 +492,7 @@ class _SourceTile extends StatelessWidget {
             border: Border.all(color: border),
             borderRadius: BorderRadius.circular(2.r),
           ),
-          padding: EdgeInsets.all(12.r),
+          padding: EdgeInsets.fromLTRB(16.w, 18.h, 12.w, 18.h),
           child: Row(
             children: [
               Expanded(
@@ -504,7 +504,7 @@ class _SourceTile extends StatelessWidget {
                         Text(
                           slip,
                           style: GoogleFonts.spaceGrotesk(
-                            fontSize: 14.sp,
+                            fontSize: 18.sp,
                             fontWeight: FontWeight.w800,
                             color: AppColors.textMain,
                           ),
@@ -514,22 +514,24 @@ class _SourceTile extends StatelessWidget {
                         if (state == 'completed') ...[
                           SizedBox(width: 6.w),
                           const Icon(Icons.check_circle,
-                              size: 16, color: Color(0xFF66B26B)),
+                              size: 18, color: Color(0xFF66B26B)),
                         ],
                       ],
                     ),
-                    SizedBox(height: 4.h),
+                    SizedBox(height: 5.h),
                     Text(
                       _subtitleFor(state, uploadedAt, rowCount, by, row),
                       style: GoogleFonts.manrope(
-                        fontSize: 11.sp,
-                        color: AppColors.textMuted,
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF3F4A4A),
                       ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textMuted),
+              const Icon(Icons.chevron_right,
+                  size: 26, color: Color(0xFF3F4A4A)),
             ],
           ),
         ),
