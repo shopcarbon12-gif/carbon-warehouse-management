@@ -304,6 +304,25 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
   void _addManual(Map<String, dynamic> row) {
     final id = row['custom_sku_id']?.toString() ?? '';
     if (id.isEmpty) return;
+    // RFID rule: an item that has RFID tags (epc_count > 0) cannot be added as
+    // a MANUAL line — it must be scanned. Only non-RFID items can be picked
+    // manually. (Manual lines are qty-based; RFID items are EPC-tracked, so
+    // adding one manually would double-count it against its scanned EPCs.)
+    final epcCount = (row['epc_count'] as num?)?.toInt() ??
+        (row['active_epc_count'] as num?)?.toInt() ??
+        0;
+    if (epcCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('That\'s an RFID item — scan it instead of adding it manually.'),
+        duration: Duration(seconds: 3),
+      ));
+      setState(() {
+        _searchCtrl.clear();
+        _query = '';
+        _searchResults = [];
+      });
+      return;
+    }
     setState(() {
       final existing = _manual.where((m) => m.id == id).toList().firstOrNull;
       if (existing != null) {
@@ -634,7 +653,11 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
             child: Container(
               height: 48.h,
               width: 48.w,
-              color: const Color(0xFFEEF4F3),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border:
+                    Border.all(color: const Color(0xFFBCC9C9), width: 1.5),
+              ),
               child: Icon(LucideIcons.camera, size: 22.sp, color: _primary),
             ),
           ),
@@ -717,7 +740,7 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: Color(0xFFEFF2F2))),
       ),
-      padding: EdgeInsets.fromLTRB(16.w, 8.h, 12.w, 8.h),
+      padding: EdgeInsets.fromLTRB(16.w, 14.h, 12.w, 14.h),
       child: Row(
         children: [
           Expanded(
@@ -726,10 +749,11 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
               children: [
                 Text(sku?.isNotEmpty == true ? sku! : epc,
                     style: GoogleFonts.robotoMono(
-                        fontSize: 13.sp,
+                        fontSize: 16.sp,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textMain)),
-                if (name != null && name.isNotEmpty)
+                if (name != null && name.isNotEmpty) ...[
+                  SizedBox(height: 3.h),
                   Text(
                     [
                       name,
@@ -739,26 +763,29 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.manrope(
-                        fontSize: 12.sp, color: const Color(0xFF6D7979)),
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF3F4A4A)),
                   ),
+                ],
               ],
             ),
           ),
           if (nonLive)
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+              padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 4.h),
               color: _transit.withValues(alpha: 0.16),
               child: Text(
                 status.toUpperCase().replaceAll('_', ' '),
                 style: GoogleFonts.spaceGrotesk(
-                    fontSize: 9.sp,
+                    fontSize: 11.sp,
                     fontWeight: FontWeight.w800,
                     letterSpacing: .6,
                     color: _transit),
               ),
             )
           else
-            Icon(LucideIcons.radio, size: 16.sp, color: _primary),
+            Icon(LucideIcons.radio, size: 20.sp, color: _primary),
         ],
       ),
     );
@@ -1047,7 +1074,7 @@ class _ManualRow extends StatelessWidget {
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: Color(0xFFEFF2F2))),
       ),
-      padding: EdgeInsets.fromLTRB(16.w, 8.h, 12.w, 8.h),
+      padding: EdgeInsets.fromLTRB(16.w, 14.h, 12.w, 14.h),
       child: Row(
         children: [
           Expanded(
@@ -1056,9 +1083,10 @@ class _ManualRow extends StatelessWidget {
               children: [
                 Text(sku,
                     style: GoogleFonts.robotoMono(
-                        fontSize: 13.sp,
+                        fontSize: 16.sp,
                         fontWeight: FontWeight.w700,
                         color: AppColors.textMain)),
+                SizedBox(height: 3.h),
                 Text(
                   [
                     if (name.isNotEmpty) name,
@@ -1068,7 +1096,9 @@ class _ManualRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.manrope(
-                      fontSize: 12.sp, color: const Color(0xFF6D7979)),
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF3F4A4A)),
                 ),
               ],
             ),
