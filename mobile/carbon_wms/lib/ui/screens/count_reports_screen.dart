@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/util/format_user_name.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 /// Reports → Count Reports.
@@ -232,10 +233,17 @@ class _CountReportCard extends StatelessWidget {
     final uploadedAtRaw = row['uploaded_at']?.toString();
     final dt = DateTime.tryParse(uploadedAtRaw ?? '')?.toLocal();
     final dateText = dt != null ? _formatLocal(dt) : (uploadedAtRaw ?? '—');
-    final email = row['uploaded_by_email']?.toString();
+    // Human-facing rule: "First L.", never the raw email.
+    final who = (row['uploaded_by_name']?.toString().trim().isNotEmpty ?? false)
+        ? row['uploaded_by_name'].toString()
+        : formatUserDisplayName(
+            row['uploaded_by_first']?.toString(),
+            row['uploaded_by_last']?.toString(),
+            row['uploaded_by_email']?.toString(),
+          );
     final deviceId = row['device_id']?.toString() ?? '';
-    final whoLine = (email != null && email.isNotEmpty)
-        ? email
+    final whoLine = who.isNotEmpty
+        ? who
         : (deviceId.isNotEmpty ? 'device $deviceId' : 'unknown user');
     final rowCount = (row['row_count'] as num?)?.toInt() ?? 0;
     final overrideCatalog = row['override_catalog'] == true;

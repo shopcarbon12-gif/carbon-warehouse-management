@@ -445,9 +445,9 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
     final id = _sentTransferId;
     if (id == null) return;
     try {
-      final html = await context.read<WmsApiClient>().fetchTransferSlipHtml(id);
+      final detail = await context.read<WmsApiClient>().fetchTransferDetail(id);
       await TransferSlipPrinter.printSlip(
-        html: html,
+        detail: detail,
         docName: 'Transfer Slip ${_sentSlipNumber ?? ''}'.trim(),
       );
     } catch (e) {
@@ -463,9 +463,9 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
     final id = _sentTransferId;
     if (id == null) return;
     try {
-      final html = await context.read<WmsApiClient>().fetchTransferSlipHtml(id);
+      final detail = await context.read<WmsApiClient>().fetchTransferDetail(id);
       await TransferSlipPrinter.shareSlip(
-        html: html,
+        detail: detail,
         docName: 'Transfer_Slip_${_sentSlipNumber ?? id}',
       );
     } catch (e) {

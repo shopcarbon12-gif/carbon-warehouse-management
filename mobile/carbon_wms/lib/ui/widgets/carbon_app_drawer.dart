@@ -38,12 +38,11 @@ class CarbonAppDrawer extends StatelessWidget {
         ? ''
         : email.split('@').first.replaceAll('.', ' ').replaceAll('_', ' ');
     final displayName = rawName.isEmpty
-        ? (email.isEmpty ? '—' : email)
+        ? (email.isEmpty ? '—' : email.split('@').first)
         : rawName
             .split(' ')
             .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
             .join(' ');
-    final emailLine = email.isEmpty ? '—' : email;
 
     return Drawer(
       backgroundColor: isDark ? const Color(0xFF1C2828) : Colors.white,
@@ -74,17 +73,6 @@ class CarbonAppDrawer extends StatelessWidget {
                     fontSize: 22.sp,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                SizedBox(height: 6.h),
-                Text(
-                  emailLine,
-                  style: GoogleFonts.manrope(
-                    fontSize: 14.sp,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white.withValues(alpha: 0.8),
                   ),
                   textAlign: TextAlign.center,
                   overflow: TextOverflow.ellipsis,

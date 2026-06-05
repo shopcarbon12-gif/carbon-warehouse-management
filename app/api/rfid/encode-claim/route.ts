@@ -209,10 +209,10 @@ export async function POST(req: Request) {
     await client.query(
       `INSERT INTO encode_events (
          old_epc, new_epc, system_id, serial,
-         warehouse_id, device_id, status, encoded_at
+         warehouse_id, device_id, status, encoded_at, created_by
        )
-       VALUES ($1, $2, $3::bigint, $4::bigint, $5, NULL, 'ok', now())`,
-      [oldEpc ?? null, newEpc, lsId, nextSerial, session.lid],
+       VALUES ($1, $2, $3::bigint, $4::bigint, $5, NULL, 'ok', now(), $6)`,
+      [oldEpc ?? null, newEpc, lsId, nextSerial, session.lid, session.sub],
     );
 
     // When the caller wants a physical chip write (Encode Items page),

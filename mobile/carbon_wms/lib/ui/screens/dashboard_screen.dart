@@ -807,7 +807,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         perms.canView(ScreenIds.statusChange))
                       _HeroTile(
                         icon: Icons.local_printshop_outlined,
-                        label: 'Encode & Print',
+                        label: 'Tags & Labels',
                         teal: true,
                         cardColor: cardColor,
                         cardHigh: cardHigh,

@@ -29,6 +29,9 @@ type SlipRow = {
   doc_number: string | null;
   ref_number: string | null;
   created_by_email: string | null;
+  /** "First L." display names (server-formatted) — use these, never the email. */
+  created_by_name: string | null;
+  received_by_name: string | null;
 };
 
 type ListResponse = {

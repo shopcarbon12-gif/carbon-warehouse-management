@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
+import { shortName } from "@/lib/format-name";
 import {
   classifyVarianceLive,
   formatScanDuration,
@@ -72,7 +73,14 @@ async function renderWorkbook(
     { k: "Bin", v: detail.bin_code ?? "(all bins at location)" },
     { k: "Status", v: detail.status },
     { k: "Session created", v: detail.started_at },
-    { k: "Started by", v: detail.started_by_email ?? "" },
+    {
+      k: "Started by",
+      v: shortName(
+        detail.started_by_first,
+        detail.started_by_last,
+        detail.started_by_email,
+      ),
+    },
     { k: "Completed", v: detail.completed_at ?? "" },
     { k: "Scan periods", v: detail.scan_periods.length },
     { k: "Total active scan time", v: formatScanDuration(totalMs) },

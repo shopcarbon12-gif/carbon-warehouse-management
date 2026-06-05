@@ -58,9 +58,9 @@ export async function POST(req: Request) {
     const r = await pool.query<{ id: string }>(
       `INSERT INTO encode_events (
          old_epc, new_epc, system_id, serial, custom_sku,
-         warehouse_id, device_id, status, encoded_at
+         warehouse_id, device_id, status, encoded_at, created_by
        )
-       VALUES ($1, $2, $3::bigint, $4::bigint, $5, $6, $7, COALESCE($8, 'ok'), $9)
+       VALUES ($1, $2, $3::bigint, $4::bigint, $5, $6, $7, COALESCE($8, 'ok'), $9, $10)
        RETURNING id`,
       [
         d.old_epc ?? null,
@@ -72,6 +72,7 @@ export async function POST(req: Request) {
         d.device_id ?? null,
         d.status ?? null,
         encodedAt,
+        session?.sub ?? null,
       ],
     );
 

@@ -32,6 +32,8 @@ export type TrackerItemDetail = {
    *  NULL for agent-discovered or imported rows. */
   created_by_user_id: string | null;
   created_by_email: string | null;
+  created_by_first: string | null;
+  created_by_last: string | null;
 };
 
 export type TrackerSearchPickRow = {

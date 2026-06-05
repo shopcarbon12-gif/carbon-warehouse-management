@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, ChevronDown, X as XIcon, Loader2 } from "lucide-react";
 import type { TrackerItemDetail } from "@/lib/rfid-tracker-types";
+import { shortName } from "@/lib/format-name";
 import {
   cellTruncate,
   DataTableContainer,
@@ -463,7 +464,11 @@ function EpcHistoryModal({ epc, onClose }: { epc: string; onClose: () => void })
                 />
                 <FieldRow
                   label="Added by"
-                  value={item?.created_by_email ?? "—"}
+                  value={shortName(
+                    item?.created_by_first,
+                    item?.created_by_last,
+                    item?.created_by_email,
+                  )}
                 />
               </div>
 

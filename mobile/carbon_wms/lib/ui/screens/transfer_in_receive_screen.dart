@@ -309,11 +309,11 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
   Future<void> _printSlip() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final html = await context
+      final detail = await context
           .read<WmsApiClient>()
-          .fetchTransferSlipHtml(widget.transferId);
+          .fetchTransferDetail(widget.transferId);
       await TransferSlipPrinter.printSlip(
-        html: html,
+        detail: detail,
         docName: 'Transfer Slip ${widget.slipNumber ?? ''}'.trim(),
       );
     } catch (e) {

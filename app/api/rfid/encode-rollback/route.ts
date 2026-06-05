@@ -88,10 +88,10 @@ export async function POST(req: Request) {
     await client.query(
       `INSERT INTO encode_events (
          old_epc, new_epc, system_id, serial,
-         warehouse_id, device_id, status, encoded_at
+         warehouse_id, device_id, status, encoded_at, created_by
        )
-       VALUES ($1, $2, NULL, NULL, $3, NULL, 'rolled_back', now())`,
-      [oldEpc ?? null, newEpc, session.lid],
+       VALUES ($1, $2, NULL, NULL, $3, NULL, 'rolled_back', now(), $4)`,
+      [oldEpc ?? null, newEpc, session.lid, session.sub],
     );
 
     await client.query("COMMIT");

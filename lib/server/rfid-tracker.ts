@@ -45,6 +45,8 @@ export async function getTrackerItemByEpc(
     source_antenna_name: string | null;
     created_by_user_id: string | null;
     created_by_email: string | null;
+    created_by_first: string | null;
+    created_by_last: string | null;
     custom_sku_id: string;
     sku: string;
     ls_system_id: string;
@@ -71,6 +73,8 @@ export async function getTrackerItemByEpc(
        sa.name AS source_antenna_name,
        i.created_by_user_id::text,
        cu.email AS created_by_email,
+       cu.first_name AS created_by_first,
+       cu.last_name AS created_by_last,
        i.custom_sku_id::text,
        cs.sku,
        cs.ls_system_id::text,
@@ -110,6 +114,8 @@ export async function getTrackerItemByEpc(
     source_antenna_name: row.source_antenna_name,
     created_by_user_id: row.created_by_user_id,
     created_by_email: row.created_by_email,
+    created_by_first: row.created_by_first,
+    created_by_last: row.created_by_last,
     custom_sku_id: row.custom_sku_id,
     sku: row.sku,
     ls_system_id: row.ls_system_id,

@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { ingestEpcs } from "@/lib/server/epc-ingress";
 import { decodeEpc } from "@/lib/server/epc-decode";
+import { shortName } from "@/lib/format-name";
 
 function normalizeEpc(s: string): string {
   return s.replace(/\s/g, "").toUpperCase();
@@ -1058,6 +1059,11 @@ export async function listTransferSlipReport(
     manual_count: number;
     received_qty: number;
     created_by_email: string | null;
+    created_by_first: string | null;
+    created_by_last: string | null;
+    received_by_email: string | null;
+    received_by_first: string | null;
+    received_by_last: string | null;
   }>(
     `SELECT
        tr.id::text,
@@ -1080,11 +1086,17 @@ export async function listTransferSlipReport(
              AND ia.side = 'destination' AND ia.state = 'settled'
          ), 0)
        ) AS received_qty,
-       u.email AS created_by_email
+       u.email AS created_by_email,
+       u.first_name AS created_by_first,
+       u.last_name AS created_by_last,
+       ru.email AS received_by_email,
+       ru.first_name AS received_by_first,
+       ru.last_name AS received_by_last
      FROM transfer_records tr
      INNER JOIN locations sl ON sl.id = tr.source_location_id
      INNER JOIN locations dl ON dl.id = tr.destination_location_id
      LEFT JOIN users u ON u.id = tr.created_by
+     LEFT JOIN users ru ON ru.id = tr.received_by
      WHERE ${whereSql}
      ORDER BY tr.created_at DESC
      LIMIT $${limIdx} OFFSET $${offIdx}`,
@@ -1113,6 +1125,17 @@ export async function listTransferSlipReport(
         doc_number: null,
         ref_number: null,
         created_by_email: r.created_by_email,
+        // Human-facing rule: "First L.", never the raw email.
+        created_by_name: shortName(
+          r.created_by_first,
+          r.created_by_last,
+          r.created_by_email,
+        ),
+        received_by_name: shortName(
+          r.received_by_first,
+          r.received_by_last,
+          r.received_by_email,
+        ),
       };
     }),
     total,

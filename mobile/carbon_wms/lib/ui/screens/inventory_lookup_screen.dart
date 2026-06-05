@@ -1,19 +1,34 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
+import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/epc_tenant_sync.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
-import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
-import 'package:carbon_wms/util/template_substitution.dart';
 
+/// Item Lookup — scan/type an EPC · UPC · SKU and get a centred product card
+/// (image, name, SKU, on-hand, retail, current bin) plus a one-tap Geiger
+/// LOCATE for chips. Rebuilt to the approved Item-Lookup-Redesign.html mockup.
+///
+/// Scanning model (handheld trigger drives ONE engine at a time):
+///   • BARCODE mode (default) — trigger fires the 2D imager → UPC/hang-tag.
+///   • RFID mode — trigger fires the UHF radio → nearest chip's EPC.
+/// The on-screen toggle picks the mode (remembered per device); the camera
+/// always scans a barcode and the keyboard always works.
 class InventoryLookupScreen extends StatefulWidget {
   const InventoryLookupScreen({super.key});
 
@@ -21,54 +36,252 @@ class InventoryLookupScreen extends StatefulWidget {
   State<InventoryLookupScreen> createState() => _InventoryLookupScreenState();
 }
 
+enum _Mode { barcode, rfid }
+
 class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
-  final _ctrl = TextEditingController();
-  _LookupRow? _row;
-  bool _busyLookup = false;
-  String? _lookupErr;
+  // ── mockup palette ──────────────────────────────────────────────────────────
+  static const Color _ink = Color(0xFF171D1D);
+  static const Color _slate = Color(0xFF3F4A4A);
+  static const Color _muted = Color(0xFF8A9090);
+  static const Color _teal = Color(0xFF1B7D7D);
+  static const Color _green = Color(0xFF2A8E2A);
+  static const Color _red = Color(0xFFD9534F);
+  static const Color _surface = Color(0xFFF5F7F7);
+  static const Color _card = Color(0xFFECECEC);
+  static const Color _tileBg = Color(0xFFEEF4F3);
+  static const Color _border2 = Color(0xFFBCC9C9);
+  static const Color _border = Color(0xFFD7DEDE);
+
+  static const String _modeKey = 'inventory_lookup_trigger_mode_v1';
+  static const String _recentKey = 'inventory_lookup_recent_v1';
 
   static final RegExp _epc24 = RegExp(r'^[0-9A-F]{24}$');
   static final RegExp _hexBody = RegExp(r'^[0-9A-F]{4,}$');
+  static final RegExp _digits = RegExp(r'^[0-9]{6,}$');
+
+  final _ctrl = TextEditingController();
+
+  _Mode _mode = _Mode.barcode;
+  _LookupRow? _row;
+  bool _busy = false;
+  String? _err;
+
+  /// Last few looked-up codes (client-side, no network) for one-tap rerun.
+  List<_Recent> _recent = [];
+
+  StreamSubscription<String>? _barcodeSub;
+  StreamSubscription<RfidTagRead>? _tagSub;
+  StreamSubscription<String>? _triggerSub;
+
+  // RFID single-read capture (strongest-RSSI tag during a trigger pull).
+  bool _rfidReading = false;
+  String? _nearestEpc;
+  int? _nearestRssi;
+  Timer? _rfidWindow;
+
+  RfidManager? _rfid;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadPrefs();
+      if (!mounted) return;
       context.read<RfidManager>().scanContext = 'INVENTORY_LOOKUP';
+      _wireStreams();
+      await _armMode(_mode);
+      if (mounted) setState(() {});
     });
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _rfid ??= context.read<RfidManager>();
+  }
+
+  @override
   void dispose() {
+    _rfidWindow?.cancel();
+    _barcodeSub?.cancel();
+    _tagSub?.cancel();
+    _triggerSub?.cancel();
+    final r = _rfid;
+    if (r != null) {
+      unawaited(r.pauseScanning());
+      unawaited(r.setSessionPowerOverrideDbm(null));
+    }
+    // Hand the next screen a ready 2D imager.
+    unawaited(RfidVendorChannel.open2dBarcode());
     _ctrl.dispose();
     super.dispose();
   }
 
-  static String? _epcProfileHint(TenantEpcProfile p) {
-    return '${p.name} · prefix ${p.epcPrefix} · item @${p.itemStartBit}+${p.itemLength} · serial @${p.serialStartBit}+${p.serialLength}';
+  // ── prefs ───────────────────────────────────────────────────────────────────
+  Future<void> _loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final m = prefs.getString(_modeKey);
+    _mode = m == 'rfid' ? _Mode.rfid : _Mode.barcode;
+    final raw = prefs.getString(_recentKey);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+        _recent = list
+            .map((e) => _Recent(
+                  code: (e['code'] ?? '').toString(),
+                  kind: (e['kind'] ?? 'SKU').toString(),
+                ))
+            .where((r) => r.code.isNotEmpty)
+            .toList();
+      } catch (_) {
+        _recent = [];
+      }
+    }
   }
 
-  Future<void> _performLookup() async {
-    final raw = _ctrl.text.trim().toUpperCase();
-    if (raw.isEmpty) {
-      setState(() {
-        _row = null;
-        _lookupErr = null;
-      });
-      return;
-    }
+  Future<void> _saveMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_modeKey, _mode == _Mode.rfid ? 'rfid' : 'barcode');
+  }
 
+  Future<void> _pushRecent(String code, String kind) async {
+    _recent.removeWhere((r) => r.code == code);
+    _recent.insert(0, _Recent(code: code, kind: kind));
+    if (_recent.length > 6) _recent = _recent.sublist(0, 6);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _recentKey,
+      jsonEncode(_recent.map((r) => {'code': r.code, 'kind': r.kind}).toList()),
+    );
+  }
+
+  // ── scanner wiring ────────────────────────────────────────────────────────────
+  void _wireStreams() {
+    _barcodeSub?.cancel();
+    _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((raw) {
+      if (!mounted || _mode != _Mode.barcode) return;
+      final code = raw.trim();
+      if (code.isNotEmpty) unawaited(_performLookup(code));
+    }, onError: (_) {});
+
+    _tagSub?.cancel();
+    _tagSub = RfidVendorChannel.tagReadStream().listen((read) {
+      if (_mode != _Mode.rfid || !_rfidReading) return;
+      final epc = read.epcHex24.toUpperCase();
+      if (epc.length != 24) return;
+      final rssi = read.rssi;
+      final stronger = _nearestEpc == null ||
+          (rssi != null && (_nearestRssi == null || rssi > _nearestRssi!));
+      if (stronger) {
+        _nearestEpc = epc;
+        if (rssi != null) _nearestRssi = rssi;
+      }
+    }, onError: (_) {});
+
+    _triggerSub?.cancel();
+    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+      if (_mode != _Mode.rfid) return; // barcode is handled natively
+      if (event == 'down' && !_busy) unawaited(_rfidSingleRead());
+    }, onError: (_) {});
+  }
+
+  Future<void> _armMode(_Mode mode) async {
+    try {
+      if (mode == _Mode.barcode) {
+        await RfidVendorChannel.scannerDisableTriggerRelay();
+        await RfidVendorChannel.disableRfidFunctionMode();
+        await RfidVendorChannel.open2dBarcode();
+        await RfidVendorChannel.scannerEnableTriggerRelay();
+        await RfidVendorChannel.setZebraTriggerMode2D();
+      } else {
+        await RfidVendorChannel.scannerDisableTriggerRelay();
+        await RfidVendorChannel.close2dBarcode();
+        await RfidVendorChannel.enableRfidFunctionMode();
+        await RfidVendorChannel.setZebraTriggerModeRfid();
+      }
+    } catch (_) {
+      /* optional — mode best-effort across vendors */
+    }
+  }
+
+  Future<void> _toggleMode(_Mode mode) async {
+    if (_mode == mode) return;
+    setState(() => _mode = mode);
+    await _saveMode();
+    await _armMode(mode);
+    try {
+      HapticFeedback.selectionClick();
+    } catch (_) {}
+  }
+
+  Future<void> _rfidSingleRead() async {
+    if (_rfidReading) return;
+    _rfidWindow?.cancel();
+    _nearestEpc = null;
+    _nearestRssi = null;
+    setState(() => _rfidReading = true);
+    try {
+      ScanSounds.instance.play(ScanCue.start);
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.startZebraInventory();
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.startChainwayInventory();
+    } catch (_) {}
+    // Single-shot window — collect the strongest tag, then resolve it.
+    _rfidWindow = Timer(const Duration(milliseconds: 700), () async {
+      try {
+        await RfidVendorChannel.stopZebraInventory();
+      } catch (_) {}
+      try {
+        await RfidVendorChannel.stopChainwayInventory();
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() => _rfidReading = false);
+      final epc = _nearestEpc;
+      if (epc != null) {
+        unawaited(_performLookup(epc));
+      } else {
+        setState(() {
+          _row = null;
+          _err = 'No chip detected — aim closer and pull again.';
+        });
+      }
+    });
+  }
+
+  // ── lookup ──────────────────────────────────────────────────────────────────
+  Future<void> _onCamera() async {
+    final code = await openCameraBarcodeScanner(context, title: 'SCAN BARCODE');
+    if (!mounted || code == null || code.trim().isEmpty) return;
+    await _performLookup(code.trim());
+  }
+
+  String _kindOf(String cleaned) {
+    if (_epc24.hasMatch(cleaned)) return 'EPC';
+    if (_digits.hasMatch(cleaned)) return 'UPC';
+    return 'SKU';
+  }
+
+  String? _epcProfileHint(TenantEpcProfile p) =>
+      '${p.name} · prefix ${p.epcPrefix} · item @${p.itemStartBit}+${p.itemLength} · serial @${p.serialStartBit}+${p.serialLength}';
+
+  Future<void> _performLookup(String input) async {
+    final raw = input.trim().toUpperCase();
+    if (raw.isEmpty) return;
+    _ctrl.text = raw;
     setState(() {
-      _busyLookup = true;
-      _lookupErr = null;
+      _busy = true;
+      _err = null;
     });
 
     final cleaned = raw.replaceAll(RegExp(r'\s'), '');
+    final isEpc = _epc24.hasMatch(cleaned);
     final profiles = context.read<MobileSettingsRepository>().epcProfiles;
-    TenantEpcProfile? prof;
-    if (_hexBody.hasMatch(cleaned)) {
-      prof = matchingEpcProfile(cleaned, profiles);
-    }
+    final prof = _hexBody.hasMatch(cleaned)
+        ? matchingEpcProfile(cleaned, profiles)
+        : null;
 
     try {
       final api = context.read<WmsApiClient>();
@@ -76,183 +289,723 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
       if (!mounted) return;
 
       if (map != null) {
-        final sku = map['sku']?.toString() ?? '';
-        final name = map['name']?.toString() ?? '';
-        final upc = (map['sku_upc'] ?? map['matrix_upc'])?.toString() ?? '';
-        final vendor = map['vendor']?.toString() ?? '';
-        final color = map['color']?.toString() ?? '';
-        final size = map['size']?.toString() ?? '';
-        final price = map['retail_price']?.toString() ?? '';
-        final qty = map['ls_on_hand_total']?.toString() ?? '';
-
-        var binStr = '—';
-        if (_epc24.hasMatch(cleaned)) {
+        var bin = '';
+        if (isEpc) {
           try {
             final detail = await api.fetchItemDetailByEpc(cleaned);
             final item = detail?['item'];
             if (item is Map<String, dynamic>) {
               final bc = item['bin_code']?.toString().trim();
-              if (bc != null && bc.isNotEmpty) binStr = bc;
+              if (bc != null && bc.isNotEmpty) bin = bc;
             }
-          } catch (_) {
-            /* optional enrichment */
-          }
+          } catch (_) {/* optional enrichment */}
         }
-
+        final upc =
+            (map['sku_upc'] ?? map['matrix_upc'])?.toString().trim() ?? '';
+        final sku = map['sku']?.toString().trim() ?? '';
+        if (!mounted) return;
         setState(() {
           _row = _LookupRow(
             code: raw,
+            isEpc: isEpc,
             sku: sku.isNotEmpty ? sku : upc,
-            name: name.isNotEmpty ? name : '—',
-            bin: binStr,
+            name: (map['name']?.toString().trim().isNotEmpty ?? false)
+                ? map['name'].toString().trim()
+                : '—',
             upc: upc,
-            vendor: vendor,
-            color: color,
-            size: size,
-            price: price,
-            quantity: qty,
-            epcDecodeHint: prof != null ? _epcProfileHint(prof) : null,
+            vendor: map['vendor']?.toString().trim() ?? '',
+            color: map['color']?.toString().trim() ?? '',
+            size: map['size']?.toString().trim() ?? '',
+            price: map['retail_price']?.toString().trim() ?? '',
+            quantity: map['ls_on_hand_total']?.toString().trim() ?? '',
+            bin: bin,
+            epcHint: prof != null ? _epcProfileHint(prof) : null,
           );
-          _busyLookup = false;
+          _busy = false;
         });
-        return;
-      }
-
-      if (prof != null) {
-        final hint = _epcProfileHint(prof);
-        setState(() {
-          _row = _LookupRow(
-            code: raw,
-            sku: '—',
-            name: 'No catalog row for this scan',
-            bin: '—',
-            epcDecodeHint: hint,
-          );
-          _lookupErr = null;
-          _busyLookup = false;
-        });
+        await _pushRecent(raw, _kindOf(cleaned));
+        if (mounted) setState(() {});
         return;
       }
 
       setState(() {
         _row = null;
-        _lookupErr =
-            'No catalog match. Sync handheld settings (EPC profiles) or try SKU / UPC.';
-        _busyLookup = false;
+        _err = prof != null
+            ? 'No catalog row for this scan. The chip decoded (${prof.name}) but isn\'t in the catalog yet.'
+            : 'No catalog match. Sync handheld settings (EPC profiles) or try the SKU / UPC.';
+        _busy = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _row = null;
-        _lookupErr = 'Lookup failed — check network and login.';
-        _busyLookup = false;
+        _err = 'Lookup failed — check network and login.';
+        _busy = false;
       });
     }
   }
 
+  void _clear() {
+    _ctrl.clear();
+    setState(() {
+      _row = null;
+      _err = null;
+    });
+  }
+
+  void _locate() {
+    final r = _row;
+    if (r == null || !r.isEpc) return;
+    final epc = r.code.replaceAll(RegExp(r'\s'), '');
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => LocateTagScreen(
+          targetEpc: epc,
+          targetBin: r.bin.isEmpty ? null : r.bin,
+          targetSku: r.sku.isEmpty ? null : r.sku,
+          targetName: r.name.isEmpty ? null : r.name,
+          targetColor: r.color.isEmpty ? null : r.color,
+          targetSize: r.size.isEmpty ? null : r.size,
+        ),
+      ),
+    );
+  }
+
+  // ── build ───────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
-      pageTitle: 'LOOKUP',
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16.r),
+      pageTitle: 'ITEM LOOKUP',
+      body: ColoredBox(
+        color: _surface,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('SCAN OR ENTER EPC / BARCODE', style: AppTheme.headline(context)),
-            SizedBox(height: 8.h),
-            TextField(
-              controller: _ctrl,
-              style: const TextStyle(
-                color: AppColors.textMain,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.9,
-              ),
-              decoration: const InputDecoration(
-                hintText: 'EPC, UPC, or internal code',
-              ),
-              onSubmitted: (_) => unawaited(_performLookup()),
+            _searchBar(),
+            _modeToggle(),
+            Expanded(
+              child: _busy
+                  ? const Center(child: CircularProgressIndicator(color: _teal))
+                  : _row != null
+                      ? _result(_row!)
+                      : _err != null
+                          ? _notFound(_err!)
+                          : _idle(),
             ),
-            SizedBox(height: 8.h),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final code = await openCameraBarcodeScanner(
-                  context,
-                  title: 'Scan barcode / QR',
-                );
-                if (!mounted || code == null || code.isEmpty) return;
-                _ctrl.text = code;
-                unawaited(_performLookup());
-              },
-              icon: const Icon(Icons.photo_camera_outlined),
-              label: const Text('Scan with camera'),
-            ),
-            SizedBox(height: 12.h),
-            if (_lookupErr != null)
-              Padding(
-                padding: EdgeInsets.only(bottom: 8.h),
-                child: Text(
-                  _lookupErr!,
-                  style: TextStyle(color: const Color(0xFFf87171), fontSize: 12.sp, fontFamily: 'monospace'),
-                ),
-              ),
-            FilledButton(
-              onPressed: _busyLookup ? null : () => unawaited(_performLookup()),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: 16.h),
-              ),
-              child: Text(
-                _busyLookup ? 'LOOKUP…' : 'LOOKUP',
-                style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
-              ),
-            ),
-            SizedBox(height: 24.h),
-            if (_row != null) ...[
-              _LookupCard(
-                row: _row!,
-                template: context.watch<MobileSettingsRepository>().config.itemDetailsTemplate,
-              ),
-              if (_epc24.hasMatch(_row!.code.trim().toUpperCase().replaceAll(RegExp(r'\s'), ''))) ...[
-                SizedBox(height: 16.h),
-                FilledButton.icon(
-                  onPressed: () {
-                    final r = _row!;
-                    final epc = r.code.trim().toUpperCase().replaceAll(RegExp(r'\s'), '');
-                    Navigator.of(context).push<void>(
-                      MaterialPageRoute<void>(
-                        builder: (_) => LocateTagScreen(
-                          targetEpc: epc,
-                          targetBin: r.bin.isEmpty ? null : r.bin,
-                          targetSku: r.sku.isEmpty ? null : r.sku,
-                          targetName: r.name.isEmpty ? null : r.name,
-                          targetColor: r.color.isEmpty ? null : r.color,
-                          targetSize: r.size.isEmpty ? null : r.size,
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.sensors),
-                  label: const Text('LOCATE TAG (GEIGER)'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(vertical: 16.h),
-                  ),
-                ),
-              ],
-            ],
           ],
         ),
       ),
     );
   }
+
+  Widget _searchBar() {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 10.h),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: _border2, width: 1.5),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 12.w),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.search, size: 20.sp, color: _muted),
+                  SizedBox(width: 9.w),
+                  Expanded(
+                    child: TextField(
+                      controller: _ctrl,
+                      onSubmitted: (v) => unawaited(_performLookup(v)),
+                      textInputAction: TextInputAction.search,
+                      style: GoogleFonts.robotoMono(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.w700,
+                        color: _ink,
+                      ),
+                      decoration: InputDecoration(
+                        filled: false,
+                        fillColor: Colors.transparent,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        isCollapsed: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 15.h),
+                        hintText: 'Scan or type EPC · UPC · SKU',
+                        hintStyle: GoogleFonts.manrope(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w600,
+                          color: _muted,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_ctrl.text.isNotEmpty)
+                    GestureDetector(
+                      onTap: _clear,
+                      child: Icon(Icons.close, size: 19.sp, color: _muted),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(width: 8.w),
+          GestureDetector(
+            onTap: _onCamera,
+            child: Container(
+              width: 52.w,
+              height: 52.w,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: _border2, width: 1.5),
+              ),
+              child: Icon(LucideIcons.camera, size: 24.sp, color: _teal),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _modeToggle() {
+    Widget seg(_Mode m, IconData icon, String label) {
+      final on = _mode == m;
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => _toggleMode(m),
+          child: Container(
+            padding: EdgeInsets.symmetric(vertical: 11.h),
+            color: on ? _teal : Colors.white,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 18.sp, color: on ? Colors.white : _muted),
+                SizedBox(width: 8.w),
+                Text(
+                  label,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: on ? Colors.white : _muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 10.h),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(left: 2.w, bottom: 6.h),
+            child: Text(
+              'TRIGGER SCANS',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 10.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.4,
+                color: _muted,
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration:
+                BoxDecoration(border: Border.all(color: _border2, width: 1.5)),
+            child: Row(
+              children: [
+                seg(_Mode.barcode, Icons.barcode_reader, 'BARCODE'),
+                Container(width: 1.5.w, color: _border2),
+                seg(_Mode.rfid, LucideIcons.radio, 'RFID'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── states ────────────────────────────────────────────────────────────────────
+  Widget _idle() {
+    return ListView(
+      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 24.h),
+      children: [
+        SizedBox(height: 18.h),
+        Center(
+          child: Container(
+            width: 108.w,
+            height: 108.w,
+            decoration: const BoxDecoration(
+                color: Color(0xFFEAF3F2), shape: BoxShape.circle),
+            child: Icon(
+              _rfidReading
+                  ? LucideIcons.radio
+                  : (_mode == _Mode.rfid
+                      ? LucideIcons.radio
+                      : Icons.barcode_reader),
+              size: 50.sp,
+              color: _teal,
+            ),
+          ),
+        ),
+        SizedBox(height: 16.h),
+        Text(
+          _rfidReading ? 'Reading chip…' : 'Pull the trigger to scan',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.spaceGrotesk(
+              fontSize: 20.sp, fontWeight: FontWeight.w800, color: _ink),
+        ),
+        SizedBox(height: 8.h),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 30.w),
+          child: Text(
+            _mode == _Mode.rfid
+                ? 'The trigger reads a chip (EPC). Flip the toggle to BARCODE for a printed tag. The camera and keyboard work too.'
+                : 'The trigger reads a barcode (UPC / hang-tag). Flip the toggle to RFID to read a chip. The camera and keyboard work too.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.manrope(
+                fontSize: 15.sp, fontWeight: FontWeight.w600, color: _muted),
+          ),
+        ),
+        if (_recent.isNotEmpty) ...[
+          SizedBox(height: 28.h),
+          Text(
+            'RECENT',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 11.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.6,
+              color: _muted,
+            ),
+          ),
+          SizedBox(height: 9.h),
+          for (final r in _recent) _recentRow(r),
+        ],
+      ],
+    );
+  }
+
+  Widget _recentRow(_Recent r) {
+    final icon = r.kind == 'EPC'
+        ? LucideIcons.radio
+        : r.kind == 'UPC'
+            ? Icons.barcode_reader
+            : LucideIcons.tag;
+    return GestureDetector(
+      onTap: () => unawaited(_performLookup(r.code)),
+      child: Container(
+        margin: EdgeInsets.only(bottom: 8.h),
+        color: _card,
+        padding: EdgeInsets.symmetric(horizontal: 13.w, vertical: 13.h),
+        child: Row(
+          children: [
+            Container(
+              width: 34.w,
+              height: 34.w,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: _border),
+              ),
+              child: Icon(icon, size: 18.sp, color: _muted),
+            ),
+            SizedBox(width: 11.w),
+            Expanded(
+              child: Text(
+                r.code,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.robotoMono(
+                    fontSize: 15.sp, fontWeight: FontWeight.w700, color: _ink),
+              ),
+            ),
+            SizedBox(width: 10.w),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 7.w, vertical: 3.h),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: _border),
+              ),
+              child: Text(
+                r.kind,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: _muted,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _result(_LookupRow r) {
+    final desc = [r.color, r.size]
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final price = r.price.isEmpty
+        ? '—'
+        : (r.price.startsWith('\$') ? r.price : '\$${r.price}');
+    return ListView(
+      padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 24.h),
+      children: [
+        // hero
+        Column(
+          children: [
+            Container(
+              width: 108.w,
+              height: 108.w,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF0F0),
+                borderRadius: BorderRadius.circular(6.r),
+                border: Border.all(color: _border),
+              ),
+              child: Icon(Icons.image_outlined, size: 44.sp, color: _muted),
+            ),
+            SizedBox(height: 14.h),
+            Text(
+              r.name,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 25.sp, fontWeight: FontWeight.w800, color: _ink),
+            ),
+            SizedBox(height: 7.h),
+            Text(
+              r.sku,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.robotoMono(
+                  fontSize: 17.sp, fontWeight: FontWeight.w700, color: _teal),
+            ),
+            if (r.vendor.isNotEmpty) ...[
+              SizedBox(height: 5.h),
+              Text(
+                r.vendor.toUpperCase(),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.manrope(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                    color: _muted),
+              ),
+            ],
+            if (desc.isNotEmpty) ...[
+              SizedBox(height: 12.h),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 7.w,
+                runSpacing: 7.h,
+                children: [for (final d in desc) _chip(d.toUpperCase())],
+              ),
+            ],
+          ],
+        ),
+        SizedBox(height: 14.h),
+        // tiles
+        Row(
+          children: [
+            _tile('ON HAND', r.quantity.isEmpty ? '—' : r.quantity,
+                color: _green),
+            SizedBox(width: 10.w),
+            _tile('RETAIL', price, color: _ink),
+          ],
+        ),
+        SizedBox(height: 14.h),
+        // location
+        _locationBlock(r),
+        SizedBox(height: 14.h),
+        // identifiers
+        _identifiers(r),
+        if (r.epcHint != null && r.epcHint!.isNotEmpty) ...[
+          SizedBox(height: 12.h),
+          Text(
+            r.epcHint!,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.robotoMono(
+                fontSize: 11.5.sp, fontWeight: FontWeight.w500, color: _muted),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _chip(String t) => Container(
+        padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 7.h),
+        decoration: BoxDecoration(
+          color: const Color(0xFFECF1F1),
+          border: Border.all(color: _border),
+        ),
+        child: Text(
+          t,
+          style: GoogleFonts.spaceGrotesk(
+              fontSize: 13.sp, fontWeight: FontWeight.w800, color: _slate),
+        ),
+      );
+
+  Widget _tile(String label, String value, {required Color color}) {
+    return Expanded(
+      child: Container(
+        height: 82.h,
+        color: _tileBg,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.manrope(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.6,
+                color: _muted,
+              ),
+            ),
+            SizedBox(height: 3.h),
+            Text(
+              value,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 34.sp,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -1,
+                height: 1.0,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _locationBlock(_LookupRow r) {
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: EdgeInsets.fromLTRB(14.w, 16.h, 14.w, 16.h),
+      child: Column(
+        children: [
+          Text(
+            'CURRENT BIN',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.6,
+              color: _muted,
+            ),
+          ),
+          SizedBox(height: 6.h),
+          if (r.isEpc && r.bin.isNotEmpty)
+            Text(
+              r.bin,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.robotoMono(
+                  fontSize: 32.sp, fontWeight: FontWeight.w700, color: _ink),
+            )
+          else
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: 6.h),
+              child: Text(
+                r.isEpc
+                    ? 'No bin on file for this chip'
+                    : 'Scan the chip to pinpoint a bin',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.manrope(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w600,
+                    color: _muted),
+              ),
+            ),
+          SizedBox(height: 14.h),
+          SizedBox(
+            height: 56.h,
+            width: double.infinity,
+            child: r.isEpc
+                ? FilledButton.icon(
+                    onPressed: _locate,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _teal,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(2.r)),
+                      textStyle: GoogleFonts.spaceGrotesk(
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8),
+                    ),
+                    icon: Icon(Icons.sensors, size: 22.sp),
+                    label: const Text('LOCATE TAG · GEIGER'),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: () => _toggleMode(_Mode.rfid),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: _muted,
+                      side: const BorderSide(color: _border2, width: 1.5),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(2.r)),
+                      textStyle: GoogleFonts.spaceGrotesk(
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8),
+                    ),
+                    icon: Icon(Icons.sensors, size: 22.sp),
+                    label: const Text('SCAN EPC TO LOCATE'),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _identifiers(_LookupRow r) {
+    final rows = <List<String>>[
+      if (r.isEpc) ['EPC', r.code] else ['SCANNED', r.code],
+      ['SKU', r.sku],
+      if (r.upc.isNotEmpty) ['UPC', r.upc],
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(14.w, 12.h, 14.w, 8.h),
+            child: Text(
+              'IDENTIFIERS',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 11.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.6,
+                color: _muted,
+              ),
+            ),
+          ),
+          for (final kv in rows)
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 11.h),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Color(0xFFECF1F1))),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    kv[0],
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: _slate,
+                    ),
+                  ),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: Text(
+                      kv[1].isEmpty ? '—' : kv[1],
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.robotoMono(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w700,
+                          color: _ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _notFound(String msg) {
+    return ListView(
+      padding: EdgeInsets.fromLTRB(30.w, 40.h, 30.w, 24.h),
+      children: [
+        Center(
+          child: Container(
+            width: 96.w,
+            height: 96.w,
+            decoration: const BoxDecoration(
+                color: Color(0xFFFDECEA), shape: BoxShape.circle),
+            child: Icon(Icons.search_off, size: 44.sp, color: _red),
+          ),
+        ),
+        SizedBox(height: 16.h),
+        Text(
+          'No catalog match',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.spaceGrotesk(
+              fontSize: 21.sp, fontWeight: FontWeight.w800, color: _ink),
+        ),
+        SizedBox(height: 14.h),
+        Center(
+          child: Container(
+            color: _card,
+            padding: EdgeInsets.symmetric(horizontal: 13.w, vertical: 9.h),
+            child: Text(
+              _ctrl.text.isEmpty ? '—' : _ctrl.text,
+              style: GoogleFonts.robotoMono(
+                  fontSize: 15.sp, fontWeight: FontWeight.w700, color: _slate),
+            ),
+          ),
+        ),
+        SizedBox(height: 14.h),
+        Text(
+          msg,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.manrope(
+              fontSize: 14.sp, fontWeight: FontWeight.w600, color: _muted),
+        ),
+        SizedBox(height: 18.h),
+        Center(
+          child: SizedBox(
+            height: 50.h,
+            child: OutlinedButton.icon(
+              onPressed: _ctrl.text.isEmpty
+                  ? null
+                  : () => unawaited(_performLookup(_ctrl.text)),
+              style: OutlinedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: _teal,
+                side: const BorderSide(color: _teal, width: 1.5),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(2.r)),
+                padding: EdgeInsets.symmetric(horizontal: 26.w),
+                textStyle: GoogleFonts.spaceGrotesk(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8),
+              ),
+              icon: Icon(Icons.refresh, size: 20.sp),
+              label: const Text('RETRY'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Recent {
+  const _Recent({required this.code, required this.kind});
+  final String code;
+  final String kind; // EPC | UPC | SKU
 }
 
 class _LookupRow {
   const _LookupRow({
     required this.code,
+    required this.isEpc,
     required this.sku,
     required this.name,
     required this.bin,
@@ -262,10 +1015,11 @@ class _LookupRow {
     this.size = '',
     this.price = '',
     this.quantity = '',
-    this.epcDecodeHint,
+    this.epcHint,
   });
 
   final String code;
+  final bool isEpc;
   final String sku;
   final String name;
   final String bin;
@@ -275,97 +1029,5 @@ class _LookupRow {
   final String size;
   final String price;
   final String quantity;
-  final String? epcDecodeHint;
-}
-
-class _LookupCard extends StatelessWidget {
-  const _LookupCard({required this.row, required this.template});
-
-  final _LookupRow row;
-  final String template;
-
-  @override
-  Widget build(BuildContext context) {
-    final summary = applyMustacheTemplate(template, {
-      'item.customSku': row.sku,
-      'item.name': row.name,
-      'item.upc': row.upc,
-      'item.vendor': row.vendor,
-      'item.color': row.color,
-      'item.size': row.size,
-      'item.price': row.price,
-      'item.quantity': row.quantity,
-    });
-
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16.r),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(8.r),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Center(
-                  child: Icon(Icons.image_outlined, size: 48.sp, color: AppColors.textMuted),
-                ),
-              ),
-            ),
-            SizedBox(height: 16.h),
-            Text(
-              summary,
-              style: TextStyle(
-                color: AppColors.textMain,
-                fontWeight: FontWeight.w800,
-                fontSize: 15.sp,
-                height: 1.35.h,
-              ),
-            ),
-            SizedBox(height: 16.h),
-            _line('CODE', row.code),
-            _line('SKU', row.sku),
-            _line('NAME', row.name),
-            _line('CURRENT BIN', row.bin),
-            if (row.epcDecodeHint != null && row.epcDecodeHint!.isNotEmpty) ...[
-              SizedBox(height: 8.h),
-              _line('EPC PROFILE (TENANT)', row.epcDecodeHint!),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _line(String k, String v) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            k,
-            style: TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 11.sp,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.2,
-            ),
-          ),
-          Text(
-            v,
-            style: TextStyle(
-              color: AppColors.textMain,
-              fontWeight: FontWeight.w700,
-              fontSize: 16.sp,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  final String? epcHint;
 }

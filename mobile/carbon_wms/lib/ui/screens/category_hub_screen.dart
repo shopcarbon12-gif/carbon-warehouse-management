@@ -67,6 +67,28 @@ class CategoryHubScreen extends StatelessWidget {
         title: 'inventory',
         tiles: [
           CategoryHubTile(
+            screenId: ScreenIds.inventoryLookup,
+            label: 'Item Lookup',
+            description: 'Look up an EPC · SKU · UPC',
+            icon: LucideIcons.search,
+            builder: (_) => const InventoryLookupScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.inventoryCatalog,
+            label: 'Catalog',
+            description: 'Browse the product catalog',
+            icon: LucideIcons.bookOpen,
+            builder: (_) => const InventoryCatalogScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.addOnCatalog,
+            label: 'Add-On Catalog',
+            description: 'Count uncatalogued tags → add LIVE',
+            icon: LucideIcons.bookPlus,
+            builder: (_) =>
+                const CountInventoryScreen(mode: CountMode.addOnCatalog),
+          ),
+          CategoryHubTile(
             screenId: ScreenIds.countInventory,
             label: 'Count Inventory',
             description: 'Full RFID cycle count',
@@ -79,28 +101,6 @@ class CategoryHubScreen extends StatelessWidget {
             description: 'Count tags not on a source list',
             icon: LucideIcons.plusCircle,
             builder: (_) => const AddOnCountSourcePickerScreen(),
-          ),
-          CategoryHubTile(
-            screenId: ScreenIds.inventoryCatalog,
-            label: 'Catalog',
-            description: 'Browse the product catalog',
-            icon: LucideIcons.bookOpen,
-            builder: (_) => const InventoryCatalogScreen(),
-          ),
-          CategoryHubTile(
-            screenId: ScreenIds.inventoryLookup,
-            label: 'Item Lookup',
-            description: 'Look up an EPC · SKU · UPC',
-            icon: LucideIcons.search,
-            builder: (_) => const InventoryLookupScreen(),
-          ),
-          CategoryHubTile(
-            screenId: ScreenIds.addOnCatalog,
-            label: 'Add-On Catalog',
-            description: 'Count uncatalogued tags → add LIVE',
-            icon: LucideIcons.bookPlus,
-            builder: (_) =>
-                const CountInventoryScreen(mode: CountMode.addOnCatalog),
           ),
         ],
       );
@@ -126,7 +126,7 @@ class CategoryHubScreen extends StatelessWidget {
       );
 
   factory CategoryHubScreen.encodePrint() => CategoryHubScreen(
-        title: 'encode & print',
+        title: 'tags & labels',
         tiles: [
           CategoryHubTile(
             screenId: ScreenIds.encode,
@@ -232,7 +232,7 @@ class CategoryHubScreen extends StatelessWidget {
           ),
           CategoryHubTile(
             screenId: ScreenIds.statusReports,
-            label: 'Status',
+            label: 'Status Change',
             description: 'Status-change reports',
             icon: LucideIcons.clipboardList,
             builder: (_) => const StatusReportsScreen(),

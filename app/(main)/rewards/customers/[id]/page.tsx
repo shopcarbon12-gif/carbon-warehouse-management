@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getPool } from "@/lib/db";
 import { loyaltyPost } from "@/lib/loyalty-client";
 import { getSession } from "@/lib/get-session";
+import { shortName } from "@/lib/format-name";
 import { AlertTriangle, UserSearch } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,8 @@ export default async function CustomerDetail({
     created_at_geo: string | null;
     pos_location_name: string | null;
     created_by_email: string | null;
+    created_by_first: string | null;
+    created_by_last: string | null;
   };
 
   type LedgerRow = {
@@ -77,7 +80,9 @@ export default async function CustomerDetail({
                 pc.created_via, pc.created_at_geo,
                 -- pos_locations has no name; resolve through WMS locations
                 l.name AS pos_location_name,
-                u.email AS created_by_email
+                u.email AS created_by_email,
+                u.first_name AS created_by_first,
+                u.last_name AS created_by_last
            FROM pos_customers pc
            LEFT JOIN pos_locations pl ON pl.id = pc.pos_location_id
            LEFT JOIN locations     l  ON l.id  = pl.wms_location_id
@@ -210,7 +215,8 @@ export default async function CustomerDetail({
               </span>
               <span aria-hidden>·</span>
               <span>
-                <b className="text-foreground">By:</b> {c.created_by_email ?? "—"}
+                <b className="text-foreground">By:</b>{" "}
+                {shortName(c.created_by_first, c.created_by_last, c.created_by_email)}
               </span>
               <span aria-hidden>·</span>
               <span>

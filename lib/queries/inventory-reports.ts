@@ -1,5 +1,7 @@
 import type { Pool } from "pg";
 
+import { formatUserDisplayName } from "@/lib/format-user-name";
+
 type CreatedAtRangeOpts = { dateFrom?: string; dateTo?: string };
 
 function appendCreatedAtRange(
@@ -221,6 +223,9 @@ export type CountSessionReportRow = {
   /// Convenience join — `users.email` for the row's `uploaded_by`. Null for
   /// edge-key (deviceId-authed) uploads where there's no logged-in user.
   uploaded_by_email: string | null;
+  /// Human-facing "First L." display name for `uploaded_by`. Preferred over
+  /// the email everywhere in the UI. Null for edge-key uploads.
+  uploaded_by_name: string | null;
   device_id: string | null;
   override_catalog: boolean;
   row_count: number;
@@ -282,9 +287,10 @@ export async function insertCountSessionReport(
     uploaded_at: row.uploaded_at.toISOString(),
     uploaded_by: row.uploaded_by,
     // Insert path doesn't JOIN to users — caller can re-fetch via the
-    // list endpoint when they need the email. Returning null here keeps
+    // list endpoint when they need the name. Returning null here keeps
     // the type narrow; list path populates it via the second-pass lookup.
     uploaded_by_email: null,
+    uploaded_by_name: null,
     device_id: row.device_id,
     override_catalog: row.override_catalog,
     row_count: row.row_count,
@@ -373,15 +379,29 @@ export async function listCountSessionReports(
     new Set(r.rows.map((row) => row.uploaded_by).filter((v): v is string => !!v)),
   );
   const emails = new Map<string, string>();
+  const names = new Map<string, string>();
   if (userIds.length > 0) {
     try {
-      const er = await pool.query<{ id: string; email: string }>(
-        `SELECT id::text, email FROM users WHERE id = ANY($1::uuid[])`,
+      const er = await pool.query<{
+        id: string;
+        email: string;
+        first_name: string | null;
+        last_name: string | null;
+      }>(
+        `SELECT id::text, email, first_name, last_name
+         FROM users WHERE id = ANY($1::uuid[])`,
         [userIds],
       );
-      for (const row of er.rows) emails.set(row.id, row.email);
+      for (const row of er.rows) {
+        emails.set(row.id, row.email);
+        // Human-facing rule: "First L." — never the raw email.
+        names.set(
+          row.id,
+          formatUserDisplayName(row.first_name, row.last_name, row.email),
+        );
+      }
     } catch {
-      /* best-effort — UI still renders the user UUID if email lookup fails */
+      /* best-effort — UI still renders the user UUID if lookup fails */
     }
   }
 
@@ -393,6 +413,8 @@ export async function listCountSessionReports(
       uploaded_by: row.uploaded_by,
       uploaded_by_email:
           row.uploaded_by ? emails.get(row.uploaded_by) ?? null : null,
+      uploaded_by_name:
+          row.uploaded_by ? names.get(row.uploaded_by) ?? null : null,
       device_id: row.device_id,
       override_catalog: row.override_catalog,
       row_count: row.row_count,
