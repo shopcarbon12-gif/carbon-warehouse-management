@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -17,8 +16,6 @@ import 'package:carbon_wms/services/transfer_slip_printer.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart'
     show CatalogRowCard;
-import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart'
-    show openCameraBarcodeScanner;
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 /// Transfer OUT — a standalone feature (separate from Transfer In). The
@@ -161,8 +158,8 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
     } catch (_) {/* optional */}
 
     await _tagSub?.cancel();
-    _tagSub = RfidVendorChannel.tagReadStream().listen(_onTagRead,
-        onError: (_) {});
+    _tagSub =
+        RfidVendorChannel.tagReadStream().listen(_onTagRead, onError: (_) {});
     await _barcodeSub?.cancel();
     _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((raw) {
       final epc = _extract24Hex(raw);
@@ -304,16 +301,15 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
   void _addManual(Map<String, dynamic> row) {
     final id = row['custom_sku_id']?.toString() ?? '';
     if (id.isEmpty) return;
-    // RFID rule: an item that has RFID tags (epc_count > 0) cannot be added as
-    // a MANUAL line — it must be scanned. Only non-RFID items can be picked
-    // manually. (Manual lines are qty-based; RFID items are EPC-tracked, so
-    // adding one manually would double-count it against its scanned EPCs.)
-    final epcCount = (row['epc_count'] as num?)?.toInt() ??
-        (row['active_epc_count'] as num?)?.toInt() ??
-        0;
-    if (epcCount > 0) {
+    // RFID rule: ONLY manual (non-RFID) matrices may be added as a manual line.
+    // The catalog's `is_manual_only` flag is the source of truth (same field the
+    // WMS desktop uses to split RFID vs manual). RFID items are EPC-tracked and
+    // must be scanned — adding one manually would double-count it.
+    final isManual = row['is_manual_only'] == true;
+    if (!isManual) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('That\'s an RFID item — scan it instead of adding it manually.'),
+        content: Text(
+            "That's an RFID item — scan it instead of adding it manually."),
         duration: Duration(seconds: 3),
       ));
       setState(() {
@@ -343,25 +339,6 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
     });
   }
 
-  Future<void> _onCameraTap() async {
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    try {
-      if (!mounted) return;
-      final code =
-          await openCameraBarcodeScanner(context, title: 'SCAN PRODUCT');
-      if (!mounted || code == null || code.trim().isEmpty) return;
-      _searchCtrl.text = code.trim();
-      _onSearchChanged(code.trim());
-    } finally {
-      await SystemChrome.setPreferredOrientations(
-          [DeviceOrientation.portraitUp]);
-    }
-  }
-
   // ── commit ──────────────────────────────────────────────────────────────────
   bool get _canCommit =>
       _destId != null &&
@@ -379,7 +356,9 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
       final sku = m.row['sku']?.toString();
       if (sku != null && sku.isNotEmpty) s.add(sku);
     }
-    return s.isEmpty ? (_epcs.isNotEmpty || _manual.isNotEmpty ? 1 : 0) : s.length;
+    return s.isEmpty
+        ? (_epcs.isNotEmpty || _manual.isNotEmpty ? 1 : 0)
+        : s.length;
   }
 
   Future<void> _commit() async {
@@ -459,24 +438,6 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
     }
   }
 
-  Future<void> _shareSlip() async {
-    final id = _sentTransferId;
-    if (id == null) return;
-    try {
-      final detail = await context.read<WmsApiClient>().fetchTransferDetail(id);
-      await TransferSlipPrinter.shareSlip(
-        detail: detail,
-        docName: 'Transfer_Slip_${_sentSlipNumber ?? id}',
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Share failed: $e')),
-        );
-      }
-    }
-  }
-
   // ── ui ───────────────────────────────────────────────────────────────────
   String _locName(String? id) {
     if (id == null) return '';
@@ -516,7 +477,8 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
             onTap: _pickSource,
             child: _LocBox(
               label: 'FROM',
-              value: _locName(_sourceId).isEmpty ? 'Choose…' : _locName(_sourceId),
+              value:
+                  _locName(_sourceId).isEmpty ? 'Choose…' : _locName(_sourceId),
               locked: true,
               placeholder: _sourceId == null,
             ),
@@ -584,7 +546,8 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
   }
 
   Future<void> _pickDestination() async {
-    final picked = await _pickLocation(title: 'DESTINATION', exclude: _sourceId);
+    final picked =
+        await _pickLocation(title: 'DESTINATION', exclude: _sourceId);
     if (picked != null && mounted) setState(() => _destId = picked);
   }
 
@@ -593,13 +556,14 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
       padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
       child: Row(
         children: [
-          _Tile(label: 'SKUs', value: _distinctSkus),
+          _Tile(label: 'SKUs', value: _distinctSkus, icon: Icons.inventory_2),
           SizedBox(width: 8.w),
-          _Tile(label: 'RFID', value: _epcs.length),
+          _Tile(label: 'RFID', value: _epcs.length, icon: Icons.wifi_tethering),
           SizedBox(width: 8.w),
           _Tile(
             label: 'Manual',
             value: _manual.fold<int>(0, (a, m) => a + m.qty),
+            icon: Icons.edit,
           ),
         ],
       ),
@@ -607,68 +571,60 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
   }
 
   Widget _searchBar() {
+    // Full-width search to add MANUAL (non-RFID) lines. RFID items are added by
+    // pulling the trigger — no camera here (this is the RFID module).
     return Padding(
       padding: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 6.h),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: const Color(0xFFBCC9C9), width: 1.5),
-              ),
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12.w),
-                child: Row(
-                  children: [
-                    Icon(Icons.search,
-                        size: 20.sp, color: const Color(0xFF6D7979)),
-                    SizedBox(width: 8.w),
-                    Expanded(
-                      child: TextField(
-                        controller: _searchCtrl,
-                        onChanged: _onSearchChanged,
-                        style: GoogleFonts.spaceGrotesk(
-                            fontSize: 14.sp, fontWeight: FontWeight.w600),
-                        decoration: const InputDecoration(
-                          // The global input theme fills grey AND draws an
-                          // outlined enabled/focused border — that's the
-                          // "box inside a box". Null EVERY border + the fill so
-                          // the field is pure white inside the search container.
-                          filled: false,
-                          fillColor: Colors.transparent,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          disabledBorder: InputBorder.none,
-                          errorBorder: InputBorder.none,
-                          focusedErrorBorder: InputBorder.none,
-                          isCollapsed: true,
-                          contentPadding: EdgeInsets.symmetric(vertical: 14),
-                          hintText: 'Search a SKU to add manually…',
-                        ),
-                      ),
-                    ),
-                  ],
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: const Color(0xFFBCC9C9), width: 1.5),
+        ),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 13.w),
+          child: Row(
+            children: [
+              Icon(Icons.search, size: 22.sp, color: const Color(0xFF6D7979)),
+              SizedBox(width: 10.w),
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  onChanged: _onSearchChanged,
+                  autofocus: false,
+                  style: GoogleFonts.manrope(
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMain),
+                  decoration: InputDecoration(
+                    filled: false,
+                    fillColor: Colors.transparent,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    isCollapsed: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 15.h),
+                    hintText: 'Search a SKU to add manually…',
+                    hintStyle: GoogleFonts.manrope(
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF8A9090)),
+                  ),
                 ),
               ),
-            ),
+              if (_searchCtrl.text.isNotEmpty)
+                GestureDetector(
+                  onTap: () => setState(() {
+                    _searchCtrl.clear();
+                    _query = '';
+                    _searchResults = [];
+                  }),
+                  child: Icon(Icons.close,
+                      size: 20.sp, color: const Color(0xFF6D7979)),
+                ),
+            ],
           ),
-          SizedBox(width: 8.w),
-          InkWell(
-            onTap: _onCameraTap,
-            child: Container(
-              height: 48.h,
-              width: 48.w,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border:
-                    Border.all(color: const Color(0xFFBCC9C9), width: 1.5),
-              ),
-              child: Icon(LucideIcons.camera, size: 22.sp, color: _primary),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -724,77 +680,139 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
       );
     }
 
-    final epcList = _epcs.toList();
     return ListView(
-      padding: EdgeInsets.fromLTRB(0, 6.h, 0, 16.h),
-      children: [
-        for (final m in _manual)
-          _ManualRow(line: m, onMinus: () => _bumpManual(m, -1), onPlus: () => _bumpManual(m, 1)),
-        for (final epc in epcList) _epcRow(epc),
-      ],
+      padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 16.h),
+      children: _stagedCards(),
     );
   }
 
-  Widget _epcRow(String epc) {
-    final info = _epcInfo[epc];
-    final sku = info?['sku']?.toString();
-    final name = info?['name']?.toString();
-    final color = info?['color']?.toString();
-    final size = info?['size']?.toString();
-    final nonLive = info?['nonLive'] == true;
-    final status = info?['status']?.toString() ?? '';
+  /// Grey item cards grouped by SKU — RFID → ×count, manual → ± stepper,
+  /// non-live → ×count + status chip (matches the approved mockup).
+  List<Widget> _stagedCards() {
+    String descOf(Map? info) => [info?['name'], info?['color'], info?['size']]
+        .map((e) => (e ?? '').toString().trim())
+        .where((e) => e.isNotEmpty)
+        .join(' · ')
+        .toUpperCase();
+
+    final live = <String, Map<String, dynamic>>{};
+    final dead = <String, Map<String, dynamic>>{};
+    for (final epc in _epcs) {
+      final info = _epcInfo[epc];
+      final sku = (info?['sku']?.toString().isNotEmpty ?? false)
+          ? info!['sku'].toString()
+          : epc;
+      if (info?['nonLive'] == true) {
+        final status = (info?['status'] ?? '').toString();
+        final g = dead.putIfAbsent(
+            '$sku|$status',
+            () => {
+                  'sku': sku,
+                  'desc': descOf(info),
+                  'count': 0,
+                  'status': status
+                });
+        g['count'] = (g['count'] as int) + 1;
+      } else {
+        final g =
+            live.putIfAbsent(sku, () => {'desc': descOf(info), 'count': 0});
+        g['count'] = (g['count'] as int) + 1;
+      }
+    }
+
+    return [
+      for (final m in _manual)
+        _stagedCard(
+          sku: m.row['sku']?.toString() ?? '',
+          desc: descOf(m.row),
+          trailing: _stepper(m),
+        ),
+      for (final e in live.entries)
+        _stagedCard(
+          sku: e.key,
+          desc: e.value['desc'] as String,
+          trailing: Text('×${e.value['count']}',
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.w800,
+                  color: _primary)),
+        ),
+      for (final e in dead.values)
+        _stagedCard(
+          sku: "${e['sku']} · ×${e['count']}",
+          desc: e['desc'] as String,
+          trailing: Container(
+            padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 4.h),
+            color: _transit.withValues(alpha: 0.16),
+            child: Text(
+              (e['status'] as String).toUpperCase().replaceAll('_', ' '),
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .6,
+                  color: _transit),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  Widget _stagedCard({
+    required String sku,
+    required String desc,
+    required Widget trailing,
+  }) {
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFEFF2F2))),
-      ),
-      padding: EdgeInsets.fromLTRB(16.w, 14.h, 12.w, 14.h),
+      margin: EdgeInsets.only(bottom: 8.h),
+      color: const Color(0xFFECECEC),
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 11.h),
       child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(sku?.isNotEmpty == true ? sku! : epc,
+                Text(sku.isEmpty ? '—' : sku,
                     style: GoogleFonts.robotoMono(
-                        fontSize: 16.sp,
+                        fontSize: 17.sp,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textMain)),
-                if (name != null && name.isNotEmpty) ...[
+                        color: const Color(0xFF171D1D))),
+                if (desc.isNotEmpty) ...[
                   SizedBox(height: 3.h),
-                  Text(
-                    [
-                      name,
-                      if (color != null && color.isNotEmpty) color,
-                      if (size != null && size.isNotEmpty) size,
-                    ].join(' · '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF3F4A4A)),
-                  ),
+                  Text(desc,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.manrope(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF3F4A4A))),
                 ],
               ],
             ),
           ),
-          if (nonLive)
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 4.h),
-              color: _transit.withValues(alpha: 0.16),
-              child: Text(
-                status.toUpperCase().replaceAll('_', ' '),
-                style: GoogleFonts.spaceGrotesk(
-                    fontSize: 11.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: .6,
-                    color: _transit),
-              ),
-            )
-          else
-            Icon(LucideIcons.radio, size: 20.sp, color: _primary),
+          SizedBox(width: 10.w),
+          trailing,
         ],
       ),
+    );
+  }
+
+  Widget _stepper(_ManualLine m) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _StepBtn(icon: Icons.remove, onTap: () => _bumpManual(m, -1)),
+        SizedBox(width: 8.w),
+        SizedBox(
+          width: 26.w,
+          child: Text('${m.qty}',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 18.sp, fontWeight: FontWeight.w800)),
+        ),
+        SizedBox(width: 8.w),
+        _StepBtn(icon: Icons.add, onTap: () => _bumpManual(m, 1)),
+      ],
     );
   }
 
@@ -810,63 +828,84 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
   }
 
   Widget _buildBottomBar() {
+    final needsDest = _destId == null;
     return SafeArea(
       top: false,
       child: Container(
-        color: Colors.white,
-        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 14.h),
-        child: Row(
+        color: const Color(0xFFF5F7F7),
+        padding: EdgeInsets.fromLTRB(16.w, 6.h, 16.w, 12.h),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: SizedBox(
-                height: 56.h,
-                child: OutlinedButton.icon(
-                  onPressed: _scanning ? _stopScan : _startScan,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _scanning ? _red : _primary,
-                    side: BorderSide(
-                        color: _scanning ? _red : _primary, width: 2.w),
-                    shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero),
-                    textStyle: GoogleFonts.spaceGrotesk(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.6),
-                  ),
-                  icon: Icon(_scanning ? LucideIcons.square : LucideIcons.scan,
-                      size: 20.sp),
-                  label: Text(_scanning ? 'STOP' : 'SCAN'),
+            Padding(
+              padding: EdgeInsets.fromLTRB(2.w, 2.h, 2.w, 8.h),
+              child: Text(
+                needsDest
+                    ? 'SELECT A DESTINATION TO BEGIN'
+                    : 'TRIGGER TO ADD MORE',
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.4,
+                  color: needsDest ? _red : const Color(0xFF8A9090),
                 ),
               ),
             ),
-            SizedBox(width: 10.w),
-            Expanded(
-              flex: 2,
-              child: SizedBox(
-                height: 56.h,
-                child: FilledButton.icon(
-                  onPressed: _canCommit ? _commit : null,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _primary,
-                    disabledBackgroundColor: const Color(0xFFBCC9C9),
-                    foregroundColor: Colors.white,
-                    shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero),
-                    textStyle: GoogleFonts.spaceGrotesk(
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.6),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 50.h,
+                    child: FilledButton.icon(
+                      onPressed: _scanning ? _stopScan : _startScan,
+                      style: FilledButton.styleFrom(
+                        backgroundColor:
+                            _scanning ? _red : const Color(0xFF0F5757),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(2.r)),
+                        textStyle: GoogleFonts.spaceGrotesk(
+                            fontSize: 15.sp,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8),
+                      ),
+                      icon: Icon(
+                          _scanning ? LucideIcons.square : LucideIcons.scan,
+                          size: 18.sp),
+                      label: Text(_scanning ? 'STOP' : 'SCAN'),
+                    ),
                   ),
-                  icon: _committing
-                      ? SizedBox(
-                          width: 20.w,
-                          height: 20.h,
-                          child: const CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : Icon(LucideIcons.send, size: 20.sp),
-                  label: Text(_committing ? 'SENDING…' : 'REVIEW & TRANSFER'),
                 ),
-              ),
+                SizedBox(width: 8.w),
+                Expanded(
+                  child: SizedBox(
+                    height: 50.h,
+                    child: FilledButton.icon(
+                      onPressed: _canCommit ? _commit : null,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _primary,
+                        disabledBackgroundColor: const Color(0xFFBCC9C9),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(2.r)),
+                        textStyle: GoogleFonts.spaceGrotesk(
+                            fontSize: 15.sp,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8),
+                      ),
+                      icon: _committing
+                          ? SizedBox(
+                              width: 18.w,
+                              height: 18.h,
+                              child: const CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : Icon(Icons.local_shipping, size: 18.sp),
+                      label: Text(_committing ? 'SENDING…' : 'TRANSFER'),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -875,95 +914,148 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
   }
 
   Widget _buildSent() {
-    final total = _sentLive + _sentNonLive;
+    final total = _sentLive + _sentNonLive + _sentManual;
     return CarbonScaffold(
       pageTitle: 'TRANSFER OUT',
+      bottomBar: SafeArea(
+        top: false,
+        child: Container(
+          color: const Color(0xFFF5F7F7),
+          padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 12.h),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 50.h,
+                  child: FilledButton.icon(
+                    onPressed: _printSlip,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(2.r)),
+                      textStyle: GoogleFonts.spaceGrotesk(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8),
+                    ),
+                    icon: Icon(LucideIcons.printer, size: 18.sp),
+                    label: const Text('PRINT SLIP'),
+                  ),
+                ),
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: SizedBox(
+                  height: 50.h,
+                  child: OutlinedButton.icon(
+                    onPressed: _resetForNew,
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: _primary,
+                      side: const BorderSide(color: _primary, width: 1.5),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(2.r)),
+                      textStyle: GoogleFonts.spaceGrotesk(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8),
+                    ),
+                    icon: Icon(LucideIcons.plus, size: 18.sp),
+                    label: const Text('NEW'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       body: ColoredBox(
         color: Colors.white,
         child: Column(
           children: [
             Container(
-              width: double.infinity,
-              color: _transit.withValues(alpha: 0.12),
-              padding: EdgeInsets.fromLTRB(16.w, 18.h, 16.w, 18.h),
+              margin: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 0),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1DD),
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 18.h),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('SENT · IN TRANSIT',
+                  Text('Sent · IN TRANSIT',
                       style: GoogleFonts.spaceGrotesk(
                           fontSize: 18.sp,
                           fontWeight: FontWeight.w800,
                           color: _transit)),
                   SizedBox(height: 4.h),
                   Text(
-                    '$total RFID${_sentNonLive > 0 ? " ($_sentNonLive non-live, kept)" : ""}'
-                    '${_sentManual > 0 ? " · $_sentManual manual" : ""} → ${_locName(_destId)}',
+                    '$total items → ${_locName(_destId)} · awaiting receive',
+                    textAlign: TextAlign.center,
                     style: GoogleFonts.manrope(
-                        fontSize: 13.sp, color: const Color(0xFF3F4A4A)),
+                        fontSize: 13.sp,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF3F4A4A)),
                   ),
-                  SizedBox(height: 6.h),
+                  SizedBox(height: 8.h),
                   Text('SLIP #${_sentSlipNumber ?? "—"}',
-                      style: GoogleFonts.robotoMono(
-                          fontSize: 13.sp,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textMain)),
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 28.sp,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF171D1D))),
                 ],
               ),
             ),
-            SizedBox(height: 16.h),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.w),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _SentBtn(
-                      label: 'PRINT SLIP',
-                      icon: LucideIcons.printer,
-                      filled: true,
-                      onTap: _printSlip,
-                    ),
-                  ),
-                  SizedBox(width: 10.w),
-                  Expanded(
-                    child: _SentBtn(
-                      label: 'SAVE / SHARE',
-                      icon: LucideIcons.share2,
-                      filled: false,
-                      onTap: _shareSlip,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            Padding(
-              padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 16.h),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _SentBtn(
-                      label: 'NEW TRANSFER',
-                      icon: LucideIcons.plus,
-                      filled: false,
-                      onTap: _resetForNew,
-                    ),
-                  ),
-                  SizedBox(width: 10.w),
-                  Expanded(
-                    child: _SentBtn(
-                      label: 'DONE',
-                      icon: LucideIcons.home,
-                      filled: true,
-                      onTap: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                ],
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 16.h),
+                children: _sentCards(),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// Sent-screen rows: SKU · ×qty + RFID / MANUAL badge (frame 3).
+  List<Widget> _sentCards() {
+    String descOf(Map? info) => [info?['name'], info?['color'], info?['size']]
+        .map((e) => (e ?? '').toString().trim())
+        .where((e) => e.isNotEmpty)
+        .join(' · ')
+        .toUpperCase();
+    final rfid = <String, Map<String, dynamic>>{};
+    for (final epc in _epcs) {
+      final info = _epcInfo[epc];
+      final sku = (info?['sku']?.toString().isNotEmpty ?? false)
+          ? info!['sku'].toString()
+          : epc;
+      final g = rfid.putIfAbsent(sku, () => {'desc': descOf(info), 'count': 0});
+      g['count'] = (g['count'] as int) + 1;
+    }
+    Widget badge(String t, bool isRfid) => Container(
+          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+          color: isRfid ? const Color(0x1F1B7D7D) : const Color(0x2E8A9090),
+          child: Text(t,
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                  color: isRfid ? _primary : const Color(0xFF3F4A4A))),
+        );
+    return [
+      for (final e in rfid.entries)
+        _stagedCard(
+            sku: "${e.key} · ×${e.value['count']}",
+            desc: e.value['desc'] as String,
+            trailing: badge('RFID', true)),
+      for (final m in _manual)
+        _stagedCard(
+            sku: "${m.row['sku'] ?? ''} · ×${m.qty}",
+            desc: descOf(m.row),
+            trailing: badge('MANUAL', false)),
+    ];
   }
 }
 
@@ -1021,7 +1113,8 @@ class _LocBox extends StatelessWidget {
           if (locked)
             Icon(LucideIcons.lock, size: 16.sp, color: const Color(0xFF8A9090))
           else
-            Icon(LucideIcons.chevronDown, size: 18.sp, color: AppColors.primary),
+            Icon(LucideIcons.chevronDown,
+                size: 18.sp, color: AppColors.primary),
         ],
       ),
     );
@@ -1029,99 +1122,51 @@ class _LocBox extends StatelessWidget {
 }
 
 class _Tile extends StatelessWidget {
-  const _Tile({required this.label, required this.value});
+  const _Tile({required this.label, required this.value, required this.icon});
   final String label;
   final int value;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        height: 58.h,
-        color: const Color(0xFFEEF4F3),
-        padding: EdgeInsets.fromLTRB(9.w, 4.h, 9.w, 4.h),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        height: 64.h,
+        decoration: BoxDecoration(
+          color: const Color(0xFFEEF4F3),
+          borderRadius: BorderRadius.circular(2.r),
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: Stack(
           children: [
-            Text(label,
-                style: GoogleFonts.manrope(
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF3F4A4A))),
-            Expanded(
-              child: Center(
-                child: Text('$value',
-                    style: GoogleFonts.spaceGrotesk(
-                        fontSize: 26.sp,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textMain)),
+            Positioned(
+              right: 6.w,
+              bottom: -2.h,
+              child: Icon(icon, size: 34.sp, color: const Color(0x14171D1D)),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 5.h),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(label,
+                      style: GoogleFonts.manrope(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF3F4A4A))),
+                  Text('$value',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 32.sp,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -1,
+                          height: 1.0,
+                          color: AppColors.textMain)),
+                ],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ManualRow extends StatelessWidget {
-  const _ManualRow(
-      {required this.line, required this.onMinus, required this.onPlus});
-  final _ManualLine line;
-  final VoidCallback onMinus;
-  final VoidCallback onPlus;
-
-  @override
-  Widget build(BuildContext context) {
-    final sku = line.row['sku']?.toString() ?? '';
-    final name = line.row['name']?.toString() ?? '';
-    final color = line.row['color']?.toString() ?? '';
-    final size = line.row['size']?.toString() ?? '';
-    return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Color(0xFFEFF2F2))),
-      ),
-      padding: EdgeInsets.fromLTRB(16.w, 14.h, 12.w, 14.h),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(sku,
-                    style: GoogleFonts.robotoMono(
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textMain)),
-                SizedBox(height: 3.h),
-                Text(
-                  [
-                    if (name.isNotEmpty) name,
-                    if (color.isNotEmpty) color,
-                    if (size.isNotEmpty) size,
-                  ].join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.manrope(
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF3F4A4A)),
-                ),
-              ],
-            ),
-          ),
-          _StepBtn(icon: Icons.remove, onTap: onMinus),
-          SizedBox(width: 8.w),
-          SizedBox(
-            width: 28.w,
-            child: Text('${line.qty}',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.spaceGrotesk(
-                    fontSize: 16.sp, fontWeight: FontWeight.w800)),
-          ),
-          SizedBox(width: 8.w),
-          _StepBtn(icon: Icons.add, onTap: onPlus),
-        ],
       ),
     );
   }
@@ -1142,45 +1187,6 @@ class _StepBtn extends StatelessWidget {
         decoration:
             BoxDecoration(border: Border.all(color: const Color(0xFFBCC9C9))),
         child: Icon(icon, size: 18.sp, color: const Color(0xFF3F4A4A)),
-      ),
-    );
-  }
-}
-
-class _SentBtn extends StatelessWidget {
-  const _SentBtn({
-    required this.label,
-    required this.icon,
-    required this.filled,
-    required this.onTap,
-  });
-  final String label;
-  final IconData icon;
-  final bool filled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = filled ? AppColors.primary : const Color(0xFFEEF4F3);
-    final fg = filled ? Colors.white : const Color(0xFF3F4A4A);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 54.h,
-        color: bg,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 18.sp, color: fg),
-            SizedBox(width: 8.w),
-            Text(label,
-                style: GoogleFonts.manrope(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.0,
-                    color: fg)),
-          ],
-        ),
       ),
     );
   }

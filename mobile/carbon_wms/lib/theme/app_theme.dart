@@ -55,8 +55,11 @@ abstract final class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
       ),
       inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: AppColors.surface,
+        // No grey fill by default — operator preference is clean/white inputs
+        // (search boxes sit inside their own white container). Fields keep a
+        // thin outline so standalone form inputs still read as inputs.
+        filled: false,
+        fillColor: Colors.transparent,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8.r),
           borderSide: const BorderSide(color: AppColors.border),
@@ -119,8 +122,8 @@ abstract final class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
       ),
       inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: const Color(0xFF243030),
+        filled: false,
+        fillColor: Colors.transparent,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8.r),
           borderSide: const BorderSide(color: Color(0xFF3A5050)),

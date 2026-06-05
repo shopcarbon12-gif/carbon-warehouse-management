@@ -26,7 +26,11 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 /// Data source is identical to the Catalog screen: `GET /api/inventory/catalog`
 /// scoped to `session.lid`. 100% web-mirror, read-only.
 class GeigerSearchScreen extends StatefulWidget {
-  const GeigerSearchScreen({super.key});
+  const GeigerSearchScreen({super.key, this.initialQuery});
+
+  /// Pre-fill the search (e.g. from Item Lookup → LOCATE on a SKU/UPC) so the
+  /// operator lands straight on that SKU's tags and can Geiger any of them.
+  final String? initialQuery;
 
   @override
   State<GeigerSearchScreen> createState() => _GeigerSearchScreenState();
@@ -77,7 +81,15 @@ class _GeigerSearchScreenState extends State<GeigerSearchScreen> {
           TextSelection.collapsed(offset: _searchCtrl.text.length);
       _onSearchChanged(code);
     }, onError: (_) {});
-    // Deliberately no _refresh() on init — start blank (per spec).
+    // Pre-filled from Item Lookup → LOCATE on a SKU: land on its tags directly.
+    final q = widget.initialQuery?.trim() ?? '';
+    if (q.isNotEmpty) {
+      _searchCtrl.text = q;
+      _searchCtrl.selection =
+          TextSelection.collapsed(offset: _searchCtrl.text.length);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onSearchChanged(q));
+    }
+    // Otherwise start blank (per spec).
   }
 
   @override
@@ -324,9 +336,9 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF0F5F4),
-        borderRadius: BorderRadius.all(Radius.circular(2)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFBCC9C9), width: 1.5),
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 12.w),
@@ -338,7 +350,7 @@ class _SearchBar extends StatelessWidget {
               child: TextField(
                 controller: controller,
                 onChanged: onChanged,
-                autofocus: true,
+                autofocus: false,
                 textInputAction: TextInputAction.search,
                 style: GoogleFonts.spaceGrotesk(
                   fontSize: 15.sp,
@@ -346,7 +358,12 @@ class _SearchBar extends StatelessWidget {
                   color: AppColors.textMain,
                 ),
                 decoration: InputDecoration(
+                  filled: false,
+                  fillColor: Colors.transparent,
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
                   isCollapsed: true,
                   contentPadding: EdgeInsets.symmetric(vertical: 16.h),
                   hintText: 'EPC · SKU · UPC · NAME · BIN',

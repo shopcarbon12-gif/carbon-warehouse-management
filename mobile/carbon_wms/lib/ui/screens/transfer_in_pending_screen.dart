@@ -137,6 +137,33 @@ class _TransferInPendingScreenState extends State<TransferInPendingScreen> {
           ),
         ),
       ],
+      bottomBar: SafeArea(
+        top: false,
+        child: Container(
+          color: const Color(0xFFF5F7F7),
+          padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 12.h),
+          child: SizedBox(
+            height: 50.h,
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _loading ? null : _reload,
+              style: OutlinedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: _accent,
+                side: BorderSide(color: _accent, width: 1.5),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(2.r)),
+                textStyle: GoogleFonts.spaceGrotesk(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8),
+              ),
+              icon: Icon(LucideIcons.refreshCw, size: 18.sp),
+              label: const Text('REFRESH'),
+            ),
+          ),
+        ),
+      ),
       body: ColoredBox(
         color: Colors.white,
         child: RefreshIndicator(

@@ -24,9 +24,9 @@ import 'package:carbon_wms/services/bin_assign_session.dart';
 import 'package:carbon_wms/ui/screens/bin_assign_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/epc_detail_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
-import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
-import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
-import 'package:carbon_wms/ui/screens/encode_screen.dart';
+import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart';
+import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
+import 'package:carbon_wms/ui/screens/print_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_app_drawer.dart';
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -3605,28 +3605,28 @@ class _BottomNavBar extends StatelessWidget {
                   active: false,
                   onTap: () => Navigator.of(context).maybePop()),
               _NavItem(
-                  icon: Icons.inventory_2_outlined,
-                  label: 'STOCK',
+                  icon: Icons.menu_book_outlined,
+                  label: 'CATALOG',
                   active: false,
                   onTap: () {
                     Navigator.of(context).push(MaterialPageRoute<void>(
-                        builder: (_) => const InventoryLookupScreen()));
+                        builder: (_) => const InventoryCatalogScreen()));
                   }),
               _NavItem(
-                  icon: Icons.precision_manufacturing_outlined,
-                  label: 'OPS',
+                  icon: Icons.radar,
+                  label: 'FIND',
                   active: false,
                   onTap: () {
                     Navigator.of(context).push(MaterialPageRoute<void>(
-                        builder: (_) => const TransferSlipsScreen()));
+                        builder: (_) => const GeigerSearchScreen()));
                   }),
               _NavItem(
-                  icon: Icons.qr_code_scanner,
+                  icon: Icons.local_offer_outlined,
                   label: 'TAGS',
                   active: false,
                   onTap: () {
                     Navigator.of(context).push(MaterialPageRoute<void>(
-                        builder: (_) => const EncodeScreen()));
+                        builder: (_) => const PrintScreen(mode: PrintMode.rfid)));
                   }),
             ],
           ),

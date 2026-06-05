@@ -364,7 +364,12 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
                   textCapitalization: TextCapitalization.characters,
                   decoration: InputDecoration(
                     isCollapsed: true,
+                    filled: false,
+                    fillColor: Colors.transparent,
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
                     hintText: 'Enter or scan a bin…',
                     hintStyle: GoogleFonts.spaceGrotesk(fontSize: 18.sp, color: const Color(0xFFB9C4C4), fontWeight: FontWeight.w700),
                   ),

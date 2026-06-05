@@ -553,11 +553,30 @@ export async function reopenSession(
   reopenedByUserId: string | null,
   reopenedByDeviceId: string | null,
 ): Promise<AddOnSessionRow | null> {
-  const session = await getSession(pool, tenantId, sessionId);
+  let session = await getSession(pool, tenantId, sessionId);
   if (!session) return null;
   if (session.state !== "completed") {
-    // Only re-open *completed* sessions. Cancelled / active stay as-is.
-    return null;
+    // The picker's `locked_session_id` deliberately lets an active/paused
+    // session win over a historical completed one (scan-sources LATERAL), so
+    // a "completed" picker row can hand us a non-completed id. Re-open is about
+    // the source's COMPLETED count — find the latest completed session for the
+    // same source and re-open that instead of 404'ing.
+    const completed = await pool.query<{ id: string }>(
+      `SELECT id::text
+         FROM add_on_sessions
+        WHERE tenant_id = $1::uuid
+          AND source_type = $2
+          AND source_id = $3
+          AND state = 'completed'
+        ORDER BY ended_at DESC NULLS LAST, last_activity_at DESC
+        LIMIT 1`,
+      [tenantId, session.source_type, session.source_id],
+    );
+    const completedId = completed.rows[0]?.id;
+    if (!completedId) return null;
+    sessionId = completedId;
+    session = await getSession(pool, tenantId, sessionId);
+    if (!session || session.state !== "completed") return null;
   }
 
   await pool.query(

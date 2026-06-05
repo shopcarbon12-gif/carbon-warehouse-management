@@ -639,9 +639,9 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF0F5F4),
-        borderRadius: BorderRadius.zero,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFBCC9C9), width: 1.5),
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 12.w),
@@ -661,7 +661,12 @@ class _SearchBar extends StatelessWidget {
                   color: AppColors.textMain,
                 ),
                 decoration: InputDecoration(
+                  filled: false,
+                  fillColor: Colors.transparent,
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
                   isCollapsed: true,
                   contentPadding: EdgeInsets.symmetric(vertical: 16.h),
                   hintText: 'EPC · SKU · UPC · NAME',

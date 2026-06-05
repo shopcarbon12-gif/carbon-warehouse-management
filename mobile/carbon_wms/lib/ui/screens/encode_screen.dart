@@ -778,9 +778,12 @@ class _EncodeScreenState extends State<EncodeScreen> {
                   onChanged: _onSearchChanged,
                   decoration: const InputDecoration(
                     isCollapsed: true,
+                    filled: false,
+                    fillColor: Colors.transparent,
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
                     hintText: 'scan barcode - or search',
                   ),

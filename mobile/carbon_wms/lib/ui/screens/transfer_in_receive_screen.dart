@@ -50,7 +50,6 @@ class TransferInReceiveScreen extends StatefulWidget {
 class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
   // Palette from the approved Transfer-Redesign-UI.html mockup.
   static const Color _accent = Color(0xFF1B7D7D); // primary teal
-  static const Color _amber = Color(0xFFE08A2C); // transit
   static const Color _missing = Color(0xFFD9534F); // red
   static const String _powerPrefsKey = 'transfer_in_power_dbm_v1';
 
@@ -402,33 +401,41 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
 
     final partialWarning = b.missing.isNotEmpty || manualMissing > 0;
     if (partialWarning) {
+      final c = _counts();
       final go = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r)),
           backgroundColor: Colors.white,
           title: Text(
-            'COMMIT PARTIAL?',
-            style: GoogleFonts.spaceGrotesk(
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.4,
+            'Receive partially?',
+            style: GoogleFonts.manrope(
+              fontSize: 18.sp,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF171D1D),
             ),
           ),
           content: Text(
-            '${b.found.length + confirmedManual.length} confirmed, '
-            '${b.missing.length + manualMissing} still pending.\n'
-            'Slip will be marked PARTIAL. You can return later to receive the rest.',
-            style: GoogleFonts.manrope(fontSize: 13.sp),
+            '${c.received} of ${c.expected} confirmed. The ${c.missing} missing '
+            'item${c.missing == 1 ? "" : "s"} stay in transit on slip '
+            '#${widget.slipNumber ?? "—"} and the transfer becomes partially '
+            'received — finish them on the next pass.',
+            style: GoogleFonts.manrope(
+                fontSize: 14.sp, color: const Color(0xFF3F4A4A)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('CANCEL'),
+              child: Text('KEEP SCANNING',
+                  style: GoogleFonts.manrope(
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF8A9090))),
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: _amber),
+            TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('COMMIT PARTIAL'),
+              child: Text('RECEIVE ${c.received}',
+                  style: GoogleFonts.manrope(
+                      fontWeight: FontWeight.w800, color: _accent)),
             ),
           ],
         ),
@@ -650,7 +657,7 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
             Expanded(
               child: SizedBox(
                 height: 50.h,
-                child: OutlinedButton(
+                child: OutlinedButton.icon(
                   onPressed: () => Navigator.of(context).pop(),
                   style: OutlinedButton.styleFrom(
                     backgroundColor: Colors.white,
@@ -663,7 +670,8 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.8),
                   ),
-                  child: const Text('NEW RECEIVE'),
+                  icon: Icon(LucideIcons.plus, size: 18.sp),
+                  label: const Text('NEW RECEIVE'),
                 ),
               ),
             ),
@@ -671,7 +679,7 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
             Expanded(
               child: SizedBox(
                 height: 50.h,
-                child: FilledButton(
+                child: FilledButton.icon(
                   onPressed: () =>
                       Navigator.of(context).popUntil((r) => r.isFirst),
                   style: FilledButton.styleFrom(
@@ -684,7 +692,8 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.8),
                   ),
-                  child: const Text('DONE'),
+                  icon: Icon(LucideIcons.home, size: 18.sp),
+                  label: const Text('DONE'),
                 ),
               ),
             ),
@@ -956,17 +965,17 @@ class _SkuGroupRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final dot = _dotColor(group.received, group.total);
     return Container(
-      margin: EdgeInsets.only(bottom: 8.h),
+      margin: EdgeInsets.only(bottom: 9.h),
       color: _kCard,
-      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 16.h),
       child: Row(
         children: [
           Container(
-            width: 10.w,
-            height: 10.w,
+            width: 12.w,
+            height: 12.w,
             decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
           ),
-          SizedBox(width: 10.w),
+          SizedBox(width: 12.w),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -974,19 +983,19 @@ class _SkuGroupRow extends StatelessWidget {
                 Text(
                   group.sku,
                   style: GoogleFonts.robotoMono(
-                    fontSize: 17.sp,
+                    fontSize: 18.sp,
                     fontWeight: FontWeight.w700,
                     color: _kInk,
                   ),
                 ),
                 if (group.desc.isNotEmpty) ...[
-                  SizedBox(height: 3.h),
+                  SizedBox(height: 4.h),
                   Text(
                     group.desc,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.manrope(
-                      fontSize: 15.sp,
+                      fontSize: 15.5.sp,
                       fontWeight: FontWeight.w700,
                       color: _kSlate,
                     ),
@@ -999,7 +1008,7 @@ class _SkuGroupRow extends StatelessWidget {
           Text(
             '${group.received}/${group.total}',
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 20.sp,
+              fontSize: 23.sp,
               fontWeight: FontWeight.w800,
               color: dot,
             ),

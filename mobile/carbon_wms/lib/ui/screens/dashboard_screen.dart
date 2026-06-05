@@ -14,11 +14,12 @@ import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
-import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
+import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart';
+import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
+import 'package:carbon_wms/ui/screens/print_screen.dart';
 import 'package:carbon_wms/ui/screens/category_hub_screen.dart';
-import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_in_pending_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_app_drawer.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show WmsText;
@@ -417,11 +418,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _navIndex = idx);
     switch (idx) {
       case 1:
-        _pushScreen(CategoryHubScreen.inventory());
+        _pushGuarded(
+            ScreenIds.inventoryCatalog, (_) => const InventoryCatalogScreen());
       case 2:
-        _pushGuarded(ScreenIds.transferSlips, (_) => const TransferSlipsScreen());
+        _pushGuarded(
+            ScreenIds.geigerSearch, (_) => const GeigerSearchScreen());
       case 3:
-        _pushGuarded(ScreenIds.encode, (_) => const EncodeScreen());
+        _pushGuarded(
+            ScreenIds.print, (_) => const PrintScreen(mode: PrintMode.rfid));
     }
     setState(() => _navIndex = 0);
   }
@@ -627,7 +631,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             //      moved into the side drawer's "Change Location" item.
             SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 0),
+                padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 0),
                 child: Text(
                   _currentLocationName,
                   style: GoogleFonts.manrope(
@@ -648,7 +652,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             //   current session location server-side.
             SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0.h),
+                padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 0.h),
                 child: Row(
                   children: [
                     _StatCard(
@@ -691,6 +695,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       mainColor: mainColor,
                       mutedColor: mutedColor,
                     ),
+                    SizedBox(width: 8.w),
+                    // Item Lookup — icon-only quick box on the right.
+                    GestureDetector(
+                      onTap: () => _pushGuarded(
+                        ScreenIds.inventoryLookup,
+                        (_) => const InventoryLookupScreen(),
+                      ),
+                      child: Container(
+                        width: 58.w,
+                        height: 58.w,
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(4.r),
+                        ),
+                        child: Icon(Icons.search,
+                            size: 26.sp, color: AppColors.primary),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -704,7 +726,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             //   per-device and not part of the fixed-hardware fleet.
             SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(20.w, 28.h, 20.w, 0.h),
+                padding: EdgeInsets.fromLTRB(20.w, 14.h, 20.w, 0.h),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -767,7 +789,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // the grid reflows from 4 to N. Empty grid hides the section
             // entirely (rare — would require all four to be hidden).
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 0.h),
+              padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 0.h),
               sliver: SliverToBoxAdapter(
                 child: GridView.count(
                   shrinkWrap: true,
@@ -898,9 +920,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const items = [
       (icon: Icons.dashboard, label: 'Dash'),
-      (icon: Icons.inventory_2_outlined, label: 'Stock'),
-      (icon: Icons.precision_manufacturing_outlined, label: 'Ops'),
-      (icon: Icons.qr_code_scanner, label: 'Tags'),
+      (icon: Icons.menu_book_outlined, label: 'Catalog'),
+      (icon: Icons.radar, label: 'Find'),
+      (icon: Icons.local_offer_outlined, label: 'Tags'),
     ];
 
     return Container(
@@ -1004,18 +1026,19 @@ class _StatCard extends StatelessWidget {
           decoration: BoxDecoration(
               color: cardColor, borderRadius: BorderRadius.circular(4.r)),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(label,
                   style: GoogleFonts.spaceGrotesk(
-                      fontSize: 12.sp,
+                      fontSize: 11.sp,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.4,
                       color: mutedColor)),
-              SizedBox(height: 6.h),
+              SizedBox(height: 2.h),
               Text(value,
                   style: GoogleFonts.manrope(
-                      fontSize: 28.sp,
+                      fontSize: 22.sp,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.5,
                       color: mainColor)),

@@ -2501,7 +2501,9 @@ class _CountInventoryContinueScreenState
                                   : Icon(Icons.cloud_upload, size: 20.sp),
                               SizedBox(width: 8.w),
                               Text(
-                                'UPLOAD',
+                                _uploadingReport
+                                    ? 'PROCESSING $totalItems ITEMS · ${widget.groupedRows.length} SKUS…'
+                                    : 'UPLOAD',
                                 style: GoogleFonts.spaceGrotesk(
                                   fontSize: 14.sp,
                                   fontWeight: FontWeight.w800,

@@ -795,6 +795,11 @@ class WmsApiClient {
     String q = '',
     int page = 1,
     int limit = 200,
+    String? sortBy,
+    String? sortDir,
+    String? brand,
+    String? category,
+    String? vendor,
   }) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/inventory/catalog').replace(
@@ -803,6 +808,11 @@ class WmsApiClient {
         'page': '$page',
         'limit': '$limit',
         if (q.trim().isNotEmpty) 'q': q.trim(),
+        if (sortBy != null && sortBy.isNotEmpty) 'sortBy': sortBy,
+        if (sortDir != null && sortDir.isNotEmpty) 'sortDir': sortDir,
+        if (brand != null && brand.isNotEmpty) 'brand': brand,
+        if (category != null && category.isNotEmpty) 'category': category,
+        if (vendor != null && vendor.isNotEmpty) 'vendor': vendor,
       },
     );
     final res = await _http.get(uri, headers: await sessionAuthHeaders());

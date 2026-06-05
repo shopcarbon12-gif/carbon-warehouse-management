@@ -40,6 +40,12 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
   Timer? _debounce;
 
   String _query = '';
+  // Sort + filter (server-side via the catalog grid endpoint).
+  String _sortBy = ''; // '', 'sku', 'name', 'active_epc_count', 'bin_location'
+  String _sortDir = 'asc';
+  String _brand = '';
+  String _category = '';
+  String _vendor = '';
   int _page = 1;
   int _total = 0;
   bool _loading = false;
@@ -97,6 +103,11 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
         q: _query,
         page: 1,
         limit: _pageSize,
+        sortBy: _sortBy,
+        sortDir: _sortDir,
+        brand: _brand,
+        category: _category,
+        vendor: _vendor,
       );
       if (!mounted) return;
       final rows = (res['rows'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
@@ -128,6 +139,11 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
         q: _query,
         page: next,
         limit: _pageSize,
+        sortBy: _sortBy,
+        sortDir: _sortDir,
+        brand: _brand,
+        category: _category,
+        vendor: _vendor,
       );
       if (!mounted) return;
       final rows = (res['rows'] as List?)?.whereType<Map<String, dynamic>>().toList() ?? [];
@@ -163,6 +179,272 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
     );
   }
 
+  // ── sort + filter ──────────────────────────────────────────────────────────
+  List<String> _distinct(String field) {
+    final s = <String>{};
+    for (final r in _rows) {
+      final v = r[field]?.toString().trim();
+      if (v != null && v.isNotEmpty) s.add(v);
+    }
+    final list = s.toList()..sort();
+    return list;
+  }
+
+  String _sortLabel() {
+    switch (_sortBy) {
+      case 'sku':
+        return _sortDir == 'asc' ? 'SKU A–Z' : 'SKU Z–A';
+      case 'name':
+        return 'Name A–Z';
+      case 'active_epc_count':
+        return _sortDir == 'desc' ? 'Qty high' : 'Qty low';
+      case 'bin_location':
+        return 'Bin';
+      default:
+        return 'Sort';
+    }
+  }
+
+  Widget _sortFilterBar() {
+    final hasFilter =
+        _brand.isNotEmpty || _category.isNotEmpty || _vendor.isNotEmpty;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 8.h),
+      child: Row(
+        children: [
+          Expanded(
+            child: _barBtn(
+                icon: Icons.swap_vert,
+                label: _sortLabel(),
+                active: _sortBy.isNotEmpty,
+                onTap: _openSort),
+          ),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: _barBtn(
+                icon: Icons.filter_list,
+                label: hasFilter ? 'Filtered' : 'Filter',
+                active: hasFilter,
+                onTap: _openFilter),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _barBtn({
+    required IconData icon,
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    final c = active ? AppColors.primary : const Color(0xFF6D7979);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 42.h,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(
+              color: active ? AppColors.primary : const Color(0xFFBCC9C9),
+              width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18.sp, color: c),
+            SizedBox(width: 7.w),
+            Text(label,
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                    color: c)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sheetTitle(String t) => Padding(
+        padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 8.h),
+        child: Text(t,
+            style: GoogleFonts.spaceGrotesk(
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.0,
+                color: AppColors.primary)),
+      );
+
+  Future<void> _openSort() async {
+    final opts = <(String, String, String)>[
+      ('Default', '', 'asc'),
+      ('SKU  ·  A–Z', 'sku', 'asc'),
+      ('SKU  ·  Z–A', 'sku', 'desc'),
+      ('Name  ·  A–Z', 'name', 'asc'),
+      ('On-hand  ·  high → low', 'active_epc_count', 'desc'),
+      ('On-hand  ·  low → high', 'active_epc_count', 'asc'),
+      ('Bin', 'bin_location', 'asc'),
+    ];
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _sheetTitle('SORT BY'),
+            for (final o in opts)
+              ListTile(
+                dense: true,
+                title: Text(o.$1,
+                    style: GoogleFonts.manrope(
+                        fontSize: 15.sp, fontWeight: FontWeight.w700)),
+                trailing: (_sortBy == o.$2 &&
+                        (o.$2.isEmpty || _sortDir == o.$3))
+                    ? Icon(Icons.check, color: AppColors.primary, size: 20.sp)
+                    : null,
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  setState(() {
+                    _sortBy = o.$2;
+                    _sortDir = o.$3;
+                  });
+                  unawaited(_refresh());
+                },
+              ),
+            SizedBox(height: 8.h),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openFilter() async {
+    final brands = _distinct('brand');
+    final cats = _distinct('category');
+    final vendors = _distinct('vendor');
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: 0.72.sh),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _sheetTitle('FILTER'),
+                  if (_brand.isNotEmpty ||
+                      _category.isNotEmpty ||
+                      _vendor.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.only(right: 16.w),
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          setState(() {
+                            _brand = '';
+                            _category = '';
+                            _vendor = '';
+                          });
+                          unawaited(_refresh());
+                        },
+                        child: Text('CLEAR',
+                            style: GoogleFonts.spaceGrotesk(
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFFD9534F))),
+                      ),
+                    ),
+                ],
+              ),
+              _filterGroup(ctx, 'BRAND', brands, _brand,
+                  (v) => setState(() => _brand = v)),
+              _filterGroup(ctx, 'CATEGORY', cats, _category,
+                  (v) => setState(() => _category = v)),
+              _filterGroup(ctx, 'VENDOR', vendors, _vendor,
+                  (v) => setState(() => _vendor = v)),
+              if (brands.isEmpty && cats.isEmpty && vendors.isEmpty)
+                Padding(
+                  padding: EdgeInsets.all(24.w),
+                  child: Text(
+                      'No filter values in the loaded catalog yet — scroll to load more, or search first.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.manrope(
+                          fontSize: 13.sp, color: const Color(0xFF8A9090))),
+                ),
+              SizedBox(height: 12.h),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _filterGroup(
+    BuildContext ctx,
+    String title,
+    List<String> opts,
+    String current,
+    void Function(String) onPick,
+  ) {
+    if (opts.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(20.w, 14.h, 20.w, 6.h),
+          child: Text(title,
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.4,
+                  color: const Color(0xFF8A9090))),
+        ),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w),
+          child: Wrap(
+            spacing: 8.w,
+            runSpacing: 8.h,
+            children: [
+              for (final o in opts)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    onPick(current == o ? '' : o);
+                    unawaited(_refresh());
+                  },
+                  child: Container(
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                    decoration: BoxDecoration(
+                      color: current == o
+                          ? AppColors.primary
+                          : const Color(0xFFECF1F1),
+                      border: Border.all(
+                          color: current == o
+                              ? AppColors.primary
+                              : const Color(0xFFD7DEDE)),
+                    ),
+                    child: Text(o,
+                        style: GoogleFonts.spaceGrotesk(
+                            fontSize: 13.sp,
+                            fontWeight: FontWeight.w700,
+                            color: current == o
+                                ? Colors.white
+                                : const Color(0xFF3F4A4A))),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
@@ -183,6 +465,7 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
               },
             ),
           ),
+          _sortFilterBar(),
           _ResultMeta(total: _total, loading: _loading, query: _query),
           if (_error != null)
             Padding(
@@ -264,9 +547,9 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFF0F5F4),
-        borderRadius: BorderRadius.all(Radius.circular(2)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFBCC9C9), width: 1.5),
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 12.w),
@@ -285,7 +568,12 @@ class _SearchBar extends StatelessWidget {
                   color: AppColors.textMain,
                 ),
                 decoration: InputDecoration(
+                  filled: false,
+                  fillColor: Colors.transparent,
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
                   isCollapsed: true,
                   contentPadding: EdgeInsets.symmetric(vertical: 16.h),
                   hintText: 'EPC · SKU · UPC · NAME · BIN',

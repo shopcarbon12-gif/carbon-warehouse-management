@@ -17,6 +17,7 @@ import 'package:carbon_wms/services/epc_tenant_sync.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
+import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -66,6 +67,10 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
   bool _busy = false;
   String? _err;
 
+  /// Typeahead suggestions while typing (catalog matches to pick from).
+  List<Map<String, dynamic>> _suggest = [];
+  Timer? _suggestTimer;
+
   /// Last few looked-up codes (client-side, no network) for one-tap rerun.
   List<_Recent> _recent = [];
 
@@ -103,6 +108,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
   @override
   void dispose() {
     _rfidWindow?.cancel();
+    _suggestTimer?.cancel();
     _barcodeSub?.cancel();
     _tagSub?.cancel();
     _triggerSub?.cancel();
@@ -267,13 +273,102 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
   String? _epcProfileHint(TenantEpcProfile p) =>
       '${p.name} · prefix ${p.epcPrefix} · item @${p.itemStartBit}+${p.itemLength} · serial @${p.serialStartBit}+${p.serialLength}';
 
+  /// Debounced typeahead — show catalog matches to pick from while typing.
+  void _onType(String v) {
+    final t = v.trim();
+    _suggestTimer?.cancel();
+    if (t.length < 2) {
+      if (_suggest.isNotEmpty) setState(() => _suggest = []);
+      return;
+    }
+    _suggestTimer = Timer(const Duration(milliseconds: 280), () async {
+      if (!mounted) return;
+      try {
+        final res =
+            await context.read<WmsApiClient>().fetchCatalogGrid(q: t, limit: 14);
+        if (!mounted) return;
+        setState(() {
+          _suggest = (res['rows'] as List?)
+                  ?.whereType<Map<String, dynamic>>()
+                  .toList() ??
+              [];
+          _row = null;
+          _err = null;
+        });
+      } catch (_) {/* keep last suggestions */}
+    });
+  }
+
+  Widget _suggestList() {
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(16.w, 6.h, 16.w, 16.h),
+      itemCount: _suggest.length,
+      separatorBuilder: (_, __) => SizedBox(height: 8.h),
+      itemBuilder: (_, i) {
+        final r = _suggest[i];
+        final sku = (r['sku'] ?? '').toString();
+        final desc = [r['name'], r['color'], r['size']]
+            .map((e) => (e ?? '').toString().trim())
+            .where((e) => e.isNotEmpty)
+            .join(' · ')
+            .toUpperCase();
+        final qty = (r['active_epc_count'] as num?)?.toInt() ?? 0;
+        return GestureDetector(
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            setState(() => _suggest = []);
+            unawaited(_performLookup(sku));
+          },
+          child: Container(
+            color: _card,
+            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(sku,
+                          style: GoogleFonts.robotoMono(
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.w700,
+                              color: _ink)),
+                      if (desc.isNotEmpty) ...[
+                        SizedBox(height: 3.h),
+                        Text(desc,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.manrope(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w600,
+                                color: _slate)),
+                      ],
+                    ],
+                  ),
+                ),
+                SizedBox(width: 10.w),
+                Text('$qty',
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w800,
+                        color: _teal)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _performLookup(String input) async {
     final raw = input.trim().toUpperCase();
     if (raw.isEmpty) return;
     _ctrl.text = raw;
+    _suggestTimer?.cancel();
     setState(() {
       _busy = true;
       _err = null;
+      _suggest = [];
     });
 
     final cleaned = raw.replaceAll(RegExp(r'\s'), '');
@@ -385,11 +480,13 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
             Expanded(
               child: _busy
                   ? const Center(child: CircularProgressIndicator(color: _teal))
-                  : _row != null
-                      ? _result(_row!)
-                      : _err != null
-                          ? _notFound(_err!)
-                          : _idle(),
+                  : _suggest.isNotEmpty
+                      ? _suggestList()
+                      : _row != null
+                          ? _result(_row!)
+                          : _err != null
+                              ? _notFound(_err!)
+                              : _idle(),
             ),
           ],
         ),
@@ -416,6 +513,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                   Expanded(
                     child: TextField(
                       controller: _ctrl,
+                      onChanged: _onType,
                       onSubmitted: (v) => unawaited(_performLookup(v)),
                       textInputAction: TextInputAction.search,
                       style: GoogleFonts.robotoMono(
@@ -841,12 +939,17 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                     icon: Icon(Icons.sensors, size: 22.sp),
                     label: const Text('LOCATE TAG · GEIGER'),
                   )
-                : OutlinedButton.icon(
-                    onPressed: () => _toggleMode(_Mode.rfid),
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: _muted,
-                      side: const BorderSide(color: _border2, width: 1.5),
+                : FilledButton.icon(
+                    // SKU/UPC has many units — Geiger any of them (nearest).
+                    onPressed: () => Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => GeigerSearchScreen(
+                            initialQuery: r.sku.isNotEmpty ? r.sku : r.upc),
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _teal,
+                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(2.r)),
                       textStyle: GoogleFonts.spaceGrotesk(
@@ -855,7 +958,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                           letterSpacing: 0.8),
                     ),
                     icon: Icon(Icons.sensors, size: 22.sp),
-                    label: const Text('SCAN EPC TO LOCATE'),
+                    label: const Text('LOCATE  ·  GEIGER'),
                   ),
           ),
         ],
