@@ -331,6 +331,15 @@ class _PrintScreenState extends State<PrintScreen> {
               }
             }
             printedTags += okCopies;
+            if (okCopies > 0) {
+              unawaited(api.logPrintEvent(
+                kind: 'non_rfid',
+                sku: skuLabel,
+                itemName: sku['name']?.toString(),
+                qty: okCopies,
+                printer: host,
+              ));
+            }
             if (okCopies < perSkuQty) {
               failures.add(
                   '$skuLabel: ${lastErr ?? 'partial'} [$host:9100/$uri] ($okCopies/$perSkuQty)');
@@ -393,6 +402,13 @@ class _PrintScreenState extends State<PrintScreen> {
           );
           if (tcpErr == null) {
             printedTags += inserted;
+            unawaited(api.logPrintEvent(
+              kind: 'rfid',
+              sku: skuLabel,
+              itemName: sku['name']?.toString(),
+              qty: inserted,
+              printer: host,
+            ));
           } else {
             // Surface host:port/uri in the error so a transport regression
             // is diagnosable without logcat.

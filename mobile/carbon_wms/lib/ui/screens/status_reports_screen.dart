@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/report_csv_export.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -86,11 +87,41 @@ class _StatusChangeReportViewState extends State<StatusChangeReportView> {
     return '${dt.year}-${two(dt.month)}-${two(dt.day)}  ${two(dt.hour)}:${two(dt.minute)}';
   }
 
+  Future<void> _export() async {
+    await exportReportCsv(
+      context,
+      header: const [
+        'epc',
+        'old_status',
+        'new_status',
+        'reason',
+        'changed_at',
+        'changed_by',
+      ],
+      rows: _rows
+          .map((r) => [
+                (r['epc'] ?? '').toString(),
+                (r['old_status'] ?? '').toString(),
+                (r['new_status'] ?? '').toString(),
+                (r['reason'] ?? '').toString(),
+                (r['changed_at'] ?? '').toString(),
+                (r['changed_by'] ?? '').toString(),
+              ])
+          .toList(),
+      filename: widget.damagedOnly ? 'damages' : 'status-changes',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
       pageTitle: widget.title,
       actions: [
+        IconButton(
+          tooltip: 'Export CSV',
+          onPressed: _rows.isEmpty ? null : _export,
+          icon: Icon(LucideIcons.download, size: 20.sp, color: AppColors.primary),
+        ),
         IconButton(
           tooltip: 'Refresh',
           onPressed: _loading ? null : _load,

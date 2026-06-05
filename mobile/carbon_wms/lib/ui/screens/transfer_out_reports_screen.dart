@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/report_csv_export.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -86,11 +87,53 @@ class _TransferReportListScreenState extends State<TransferReportListScreen> {
     }
   }
 
+  Future<void> _export() async {
+    final inbound = widget.direction == 'in';
+    await exportReportCsv(
+      context,
+      header: [
+        'slip',
+        'state',
+        'from',
+        'to',
+        'rfid',
+        'manual',
+        'sent',
+        'received',
+        'missing',
+        inbound ? 'received_at' : 'created_at',
+        inbound ? 'received_by' : 'created_by',
+      ],
+      rows: _rows.map((r) {
+        return [
+          (r['slip_number'] ?? '').toString(),
+          (r['state'] ?? '').toString(),
+          (r['source_location_name'] ?? '').toString(),
+          (r['destination_location_name'] ?? '').toString(),
+          (r['rfid_count'] ?? '').toString(),
+          (r['manual_count'] ?? '').toString(),
+          (r['sent_qty'] ?? '').toString(),
+          (r['received_qty'] ?? '').toString(),
+          (r['missing_qty'] ?? '').toString(),
+          ((inbound ? r['received_at'] : r['created_at']) ?? '').toString(),
+          ((inbound ? r['received_by_name'] : r['created_by_name']) ?? '')
+              .toString(),
+        ];
+      }).toList(),
+      filename: inbound ? 'transfer-in' : 'transfer-out',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
       pageTitle: widget.title,
       actions: [
+        IconButton(
+          tooltip: 'Export CSV',
+          onPressed: _rows.isEmpty ? null : _export,
+          icon: Icon(LucideIcons.download, size: 20.sp, color: _primary),
+        ),
         IconButton(
           tooltip: 'Refresh',
           onPressed: _loading ? null : _load,

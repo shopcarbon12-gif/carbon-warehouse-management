@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/report_csv_export.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -65,11 +66,45 @@ class _ReEncodeReportsScreenState extends State<ReEncodeReportsScreen> {
     }
   }
 
+  Future<void> _export() async {
+    await exportReportCsv(
+      context,
+      header: const [
+        'old_epc',
+        'new_epc',
+        'custom_sku',
+        'system_id',
+        'serial',
+        'status',
+        're_encoded_at',
+        're_encoded_by',
+      ],
+      rows: _rows
+          .map((r) => [
+                (r['oldEpc'] ?? '').toString(),
+                (r['newEpc'] ?? '').toString(),
+                (r['customSku'] ?? '').toString(),
+                (r['systemId'] ?? '').toString(),
+                (r['serial'] ?? '').toString(),
+                (r['status'] ?? '').toString(),
+                (r['encodedAt'] ?? r['createdAt'] ?? '').toString(),
+                (r['by'] ?? '').toString(),
+              ])
+          .toList(),
+      filename: 're-encode',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return CarbonScaffold(
       pageTitle: 're-encode',
       actions: [
+        IconButton(
+          onPressed: _rows.isEmpty ? null : () => unawaited(_export()),
+          icon: const Icon(Icons.download),
+          tooltip: 'Export CSV',
+        ),
         IconButton(
           onPressed: _loading ? null : () => unawaited(_load()),
           icon: const Icon(Icons.refresh),

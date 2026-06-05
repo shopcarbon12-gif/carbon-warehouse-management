@@ -905,6 +905,77 @@ class WmsApiClient {
     return <Map<String, dynamic>>[];
   }
 
+  Future<List<Map<String, dynamic>>> _reportRows(Uri uri) async {
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      return (decoded['rows'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList() ??
+          <Map<String, dynamic>>[];
+    }
+    return <Map<String, dynamic>>[];
+  }
+
+  /// Add-On Catalog report — uncatalogued tags promoted to LIVE.
+  Future<List<Map<String, dynamic>>> fetchAddOnCatalogReport({
+    String q = '',
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    return _reportRows(Uri.parse('$base/api/reports/add-on-catalog')
+        .replace(queryParameters: {if (q.trim().isNotEmpty) 'q': q.trim()}));
+  }
+
+  /// Label Print report (RFID hang-tags or Non-RFID price labels).
+  Future<List<Map<String, dynamic>>> fetchLabelPrintReport({
+    required bool nonRfid,
+    String q = '',
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    return _reportRows(Uri.parse('$base/api/reports/label-prints').replace(
+      queryParameters: {
+        'kind': nonRfid ? 'non_rfid' : 'rfid',
+        if (q.trim().isNotEmpty) 'q': q.trim(),
+      },
+    ));
+  }
+
+  /// Log a label print so it shows in the Label Print report. Best-effort —
+  /// failures never block the actual print.
+  Future<void> logPrintEvent({
+    required String kind, // 'rfid' | 'non_rfid'
+    String? epc,
+    String? sku,
+    String? itemName,
+    int qty = 1,
+    String? template,
+    String? printer,
+  }) async {
+    try {
+      final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+      final uri = Uri.parse('$base/api/handheld/print-event');
+      await _http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          ...await sessionAuthHeaders(),
+        },
+        body: jsonEncode({
+          'kind': kind,
+          if (epc != null) 'epc': epc,
+          if (sku != null) 'sku': sku,
+          if (itemName != null) 'itemName': itemName,
+          'qty': qty,
+          if (template != null) 'template': template,
+          if (printer != null) 'printer': printer,
+        }),
+      );
+    } catch (_) {/* never block printing */}
+  }
+
   /// EPC-level rows for one custom SKU at the active location.
   /// `GET /api/inventory/catalog?customSkuId=<uuid>` —
   /// each entry: `{serial_number, epc, status, bin_code, last_seen_at, sku, name, color, size}`.

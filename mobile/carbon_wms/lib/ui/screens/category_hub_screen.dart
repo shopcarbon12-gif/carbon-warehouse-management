@@ -34,7 +34,7 @@ import 'package:carbon_wms/ui/screens/status_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/damages_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/re_encode_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_reports_hub_screen.dart';
-import 'package:carbon_wms/ui/screens/bin_clearance_report_screen.dart';
+import 'package:carbon_wms/ui/screens/extra_report_screens.dart';
 
 /// One tool row inside a category hub.
 class CategoryHubTile {
@@ -232,16 +232,23 @@ class CategoryHubScreen extends StatelessWidget {
             icon: LucideIcons.fileText,
             builder: (_) => const CountReportsScreen(),
           ),
-          // ── Bin Management ─────────────────────────────────────────────────
           CategoryHubTile(
-            group: 'Bin Management',
-            screenId: ScreenIds.cleanBin,
-            label: 'Bin Clearance',
-            description: 'Cleared-bin log',
-            icon: LucideIcons.eraser,
-            builder: (_) => const BinClearanceReportScreen(),
+            group: 'Inventory',
+            screenId: ScreenIds.addOnCatalog,
+            label: 'Add-On Catalog',
+            description: 'Tags promoted to LIVE',
+            icon: LucideIcons.bookPlus,
+            builder: (_) => const AddOnCatalogReportScreen(),
           ),
           // ── Tags & Labels ──────────────────────────────────────────────────
+          CategoryHubTile(
+            group: 'Tags & Labels',
+            screenId: ScreenIds.encode,
+            label: 'Encode Commission',
+            description: 'Chips written / commissioned',
+            icon: Icons.nfc,
+            builder: (_) => const EncodeCommissionReportScreen(),
+          ),
           CategoryHubTile(
             group: 'Tags & Labels',
             screenId: ScreenIds.reEncodeReports,
@@ -249,6 +256,22 @@ class CategoryHubScreen extends StatelessWidget {
             description: 'Re-encode reports',
             icon: LucideIcons.refreshCw,
             builder: (_) => const ReEncodeReportsScreen(),
+          ),
+          CategoryHubTile(
+            group: 'Tags & Labels',
+            screenId: ScreenIds.print,
+            label: 'Label Print · RFID',
+            description: 'RFID hang-tag prints',
+            icon: LucideIcons.printer,
+            builder: (_) => const LabelPrintReportScreen(nonRfid: false),
+          ),
+          CategoryHubTile(
+            group: 'Tags & Labels',
+            screenId: ScreenIds.printNonRfid,
+            label: 'Label Print · Non-RFID',
+            description: 'Price-label prints',
+            icon: LucideIcons.tag,
+            builder: (_) => const LabelPrintReportScreen(nonRfid: true),
           ),
           CategoryHubTile(
             group: 'Tags & Labels',
