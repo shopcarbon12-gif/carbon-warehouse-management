@@ -8,35 +8,53 @@ import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+// Bin management
 import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
 import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
+// Encode & print
 import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_and_print_screen.dart';
 import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
 import 'package:carbon_wms/ui/screens/print_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
+// Find & locate
 import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
 import 'package:carbon_wms/ui/screens/cloud_geiger_screen.dart';
+// Transfers
 import 'package:carbon_wms/ui/screens/transfer_out_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_in_pending_screen.dart';
+// Inventory
+import 'package:carbon_wms/ui/screens/count_inventory_screen.dart';
+import 'package:carbon_wms/ui/screens/add_on_count_source_picker_screen.dart';
+import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart';
+import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
+// Reports
+import 'package:carbon_wms/ui/screens/count_reports_screen.dart';
+import 'package:carbon_wms/ui/screens/status_reports_screen.dart';
+import 'package:carbon_wms/ui/screens/damages_reports_screen.dart';
+import 'package:carbon_wms/ui/screens/re_encode_reports_screen.dart';
+import 'package:carbon_wms/ui/screens/transfer_reports_hub_screen.dart';
 
-/// One sub-tile inside a category hub.
+/// One tool row inside a category hub.
 class CategoryHubTile {
   const CategoryHubTile({
     required this.screenId,
     required this.label,
+    required this.description,
     required this.icon,
     required this.builder,
   });
   final String screenId;
   final String label;
+  final String description;
   final IconData icon;
   final WidgetBuilder builder;
 }
 
-/// Generic second-level hub. The dashboard's 6 "big squares" push one of these,
-/// each showing the small tiles that belong to that parent category. Visual
-/// twin of [InventoryHubScreen]; tiles the operator's role can't see drop out.
+/// Second-level hub opened from a dashboard "big square". Renders its tools as
+/// a vertical list of rows (icon chip + name + one-line description + chevron)
+/// — scales cleanly whether a category has 2 tools or 6, and tells a new
+/// operator what each does. Rows the role can't see drop out.
 class CategoryHubScreen extends StatelessWidget {
   const CategoryHubScreen({super.key, required this.title, required this.tiles});
 
@@ -45,18 +63,62 @@ class CategoryHubScreen extends StatelessWidget {
 
   // ── category configs ──────────────────────────────────────────────────────
 
+  factory CategoryHubScreen.inventory() => CategoryHubScreen(
+        title: 'inventory',
+        tiles: [
+          CategoryHubTile(
+            screenId: ScreenIds.countInventory,
+            label: 'Count Inventory',
+            description: 'Full RFID cycle count',
+            icon: LucideIcons.layers,
+            builder: (_) => const CountInventoryScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.addOnCountSourcePicker,
+            label: 'Add-On Count',
+            description: 'Count tags not on a source list',
+            icon: LucideIcons.plusCircle,
+            builder: (_) => const AddOnCountSourcePickerScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.inventoryCatalog,
+            label: 'Catalog',
+            description: 'Browse the product catalog',
+            icon: LucideIcons.bookOpen,
+            builder: (_) => const InventoryCatalogScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.inventoryLookup,
+            label: 'Item Lookup',
+            description: 'Look up an EPC · SKU · UPC',
+            icon: LucideIcons.search,
+            builder: (_) => const InventoryLookupScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.addOnCatalog,
+            label: 'Add-On Catalog',
+            description: 'Count uncatalogued tags → add LIVE',
+            icon: LucideIcons.bookPlus,
+            builder: (_) =>
+                const CountInventoryScreen(mode: CountMode.addOnCatalog),
+          ),
+        ],
+      );
+
   factory CategoryHubScreen.binManagement() => CategoryHubScreen(
         title: 'bin management',
         tiles: [
           CategoryHubTile(
             screenId: ScreenIds.fastPutaway,
             label: 'Bin Assign',
+            description: 'Scan a bin, scan items, assign',
             icon: Icons.qr_code_scanner,
             builder: (_) => const FastPutawayScreen(),
           ),
           CategoryHubTile(
             screenId: ScreenIds.cleanBin,
             label: 'Clean Bin',
+            description: "Empty a bin's assignments",
             icon: Icons.cleaning_services_outlined,
             builder: (_) => const CleanBinScreen(),
           ),
@@ -69,36 +131,42 @@ class CategoryHubScreen extends StatelessWidget {
           CategoryHubTile(
             screenId: ScreenIds.encode,
             label: 'Encode',
+            description: 'Write a single RFID tag',
             icon: Icons.nfc,
             builder: (_) => const EncodeScreen(),
           ),
           CategoryHubTile(
             screenId: ScreenIds.encodeAndPrint,
             label: 'Encode & Print',
+            description: 'Encode a chip + print its label',
             icon: LucideIcons.printer,
             builder: (_) => const EncodeAndPrintScreen(),
           ),
           CategoryHubTile(
             screenId: ScreenIds.searchAndEncode,
             label: 'Re-Encode',
+            description: 'Batch re-encode many tags',
             icon: LucideIcons.refreshCw,
             builder: (_) => const SearchAndEncodeScreen(),
           ),
           CategoryHubTile(
             screenId: ScreenIds.print,
             label: 'Print RFID',
+            description: 'Commission RFID hang-tags',
             icon: LucideIcons.printer,
             builder: (_) => const PrintScreen(mode: PrintMode.rfid),
           ),
           CategoryHubTile(
             screenId: ScreenIds.printNonRfid,
             label: 'Print Non-RFID',
+            description: 'Price labels to the Zebra .220',
             icon: LucideIcons.tag,
             builder: (_) => const PrintScreen(mode: PrintMode.nonRfid),
           ),
           CategoryHubTile(
             screenId: ScreenIds.statusChange,
-            label: 'Status',
+            label: 'Status Change',
+            description: 'Bulk-change EPC statuses',
             icon: LucideIcons.clipboardList,
             builder: (_) => const StatusChangeScreen(),
           ),
@@ -111,12 +179,14 @@ class CategoryHubScreen extends StatelessWidget {
           CategoryHubTile(
             screenId: ScreenIds.geigerSearch,
             label: 'Geiger',
+            description: 'Search a SKU, then locate a tag',
             icon: LucideIcons.radio,
             builder: (_) => const GeigerSearchScreen(),
           ),
           CategoryHubTile(
             screenId: ScreenIds.cloudGeiger,
             label: 'Cloud + Geiger',
+            description: 'Locate tags sent from the web',
             icon: LucideIcons.cloud,
             builder: (_) => const CloudGeigerScreen(),
           ),
@@ -129,98 +199,147 @@ class CategoryHubScreen extends StatelessWidget {
           CategoryHubTile(
             screenId: ScreenIds.transferSlips,
             label: 'Transfer Out',
+            description: 'Send items to another location',
             icon: Icons.outbound_outlined,
             builder: (_) => const TransferOutScreen(),
           ),
           CategoryHubTile(
             screenId: ScreenIds.transferInPending,
             label: 'Transfer In',
+            description: 'Receive incoming transfer slips',
             icon: Icons.move_to_inbox_outlined,
             builder: (_) => const TransferInPendingScreen(),
           ),
         ],
       );
 
+  factory CategoryHubScreen.reports() => CategoryHubScreen(
+        title: 'reports',
+        tiles: [
+          CategoryHubTile(
+            screenId: ScreenIds.countReports,
+            label: 'Counts',
+            description: 'Count session reports',
+            icon: LucideIcons.fileText,
+            builder: (_) => const CountReportsScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.transferReportsHub,
+            label: 'Transfers',
+            description: 'Transfer slip reports',
+            icon: Icons.swap_horiz,
+            builder: (_) => const TransferReportsHubScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.statusReports,
+            label: 'Status',
+            description: 'Status-change reports',
+            icon: LucideIcons.clipboardList,
+            builder: (_) => const StatusReportsScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.damagesReports,
+            label: 'Damages',
+            description: 'Damaged-item reports',
+            icon: LucideIcons.alertTriangle,
+            builder: (_) => const DamagesReportsScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.reEncodeReports,
+            label: 'Re-Encode',
+            description: 'Re-encode reports',
+            icon: LucideIcons.refreshCw,
+            builder: (_) => const ReEncodeReportsScreen(),
+          ),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final tileColor =
-        isDark ? const Color(0xFF1C2828) : const Color(0xFFEEF4F3);
-    final iconColor = isDark ? const Color(0xFF7A9090) : AppColors.slateAction;
-    final textColor = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
     final perms = context.watch<MobilePermissions>();
     final visible = tiles.where((t) => perms.canView(t.screenId)).toList();
 
     return CarbonScaffold(
       pageTitle: title,
       body: ColoredBox(
-        color: Colors.white,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 20.h),
-          child: GridView.count(
-            crossAxisCount: 3,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 1.1,
-            children: <Widget>[
-              for (final t in visible)
-                _CatTile(
-                  label: t.label,
-                  icon: t.icon,
-                  tileColor: tileColor,
-                  iconColor: iconColor,
-                  textColor: textColor,
-                  onTap: () => context.pushGuarded<void>(t.screenId, t.builder),
-                ),
-            ],
-          ),
+        color: const Color(0xFFF5F5F5),
+        child: ListView.separated(
+          padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 24.h),
+          itemCount: visible.length,
+          separatorBuilder: (_, __) => SizedBox(height: 10.h),
+          itemBuilder: (_, i) {
+            final t = visible[i];
+            return _HubRow(
+              tile: t,
+              onTap: () => context.pushGuarded<void>(t.screenId, t.builder),
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _CatTile extends StatelessWidget {
-  const _CatTile({
-    required this.label,
-    required this.icon,
-    required this.tileColor,
-    required this.iconColor,
-    required this.textColor,
-    this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final Color tileColor;
-  final Color iconColor;
-  final Color textColor;
-  final VoidCallback? onTap;
+class _HubRow extends StatelessWidget {
+  const _HubRow({required this.tile, required this.onTap});
+  final CategoryHubTile tile;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: tileColor,
-      borderRadius: BorderRadius.circular(2.r),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(8.r),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(2.r),
-        child: Padding(
-          padding: EdgeInsets.all(10.r),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        borderRadius: BorderRadius.circular(8.r),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8.r),
+            border: Border.all(color: const Color(0xFFD7DEDE)),
+          ),
+          padding: EdgeInsets.fromLTRB(13.w, 12.h, 12.w, 12.h),
+          child: Row(
             children: [
-              Icon(icon, color: iconColor, size: 20.sp),
-              const Spacer(),
-              Text(
-                label.toUpperCase(),
-                style: GoogleFonts.manrope(
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                  color: textColor,
+              Container(
+                width: 42.w,
+                height: 42.w,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF4F3),
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+                alignment: Alignment.center,
+                child: Icon(tile.icon, size: 22.sp, color: AppColors.primary),
+              ),
+              SizedBox(width: 13.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tile.label,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textMain,
+                      ),
+                    ),
+                    SizedBox(height: 1.h),
+                    Text(
+                      tile.description,
+                      style: GoogleFonts.manrope(
+                        fontSize: 11.5.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMuted,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
               ),
+              Icon(LucideIcons.chevronRight,
+                  size: 20.sp, color: AppColors.textMuted),
             ],
           ),
         ),

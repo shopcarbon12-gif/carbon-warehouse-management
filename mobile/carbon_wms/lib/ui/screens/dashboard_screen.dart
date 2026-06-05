@@ -17,9 +17,7 @@ import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_lookup_screen.dart';
-import 'package:carbon_wms/ui/screens/inventory_hub_screen.dart';
 import 'package:carbon_wms/ui/screens/category_hub_screen.dart';
-import 'package:carbon_wms/ui/screens/reports_hub_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_slips_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_in_pending_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_app_drawer.dart';
@@ -419,7 +417,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _navIndex = idx);
     switch (idx) {
       case 1:
-        _pushGuarded(ScreenIds.inventoryHub, (_) => const InventoryHubScreen());
+        _pushScreen(CategoryHubScreen.inventory());
       case 2:
         _pushGuarded(ScreenIds.transferSlips, (_) => const TransferSlipsScreen());
       case 3:
@@ -787,10 +785,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         cardColor: cardColor,
                         cardHigh: cardHigh,
                         mainColor: mainColor,
-                        onTap: () => _pushGuarded(
-                          ScreenIds.inventoryHub,
-                          (_) => const InventoryHubScreen(),
-                        ),
+                        onTap: () => _pushScreen(CategoryHubScreen.inventory()),
                       ),
                     if (perms.canView(ScreenIds.fastPutaway) ||
                         perms.canView(ScreenIds.cleanBin))
@@ -849,10 +844,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         cardColor: cardColor,
                         cardHigh: cardHigh,
                         mainColor: mainColor,
-                        onTap: () => _pushGuarded(
-                          ScreenIds.reportsHub,
-                          (_) => const ReportsHubScreen(),
-                        ),
+                        onTap: () => _pushScreen(CategoryHubScreen.reports()),
                       ),
                   ],
                 ),
