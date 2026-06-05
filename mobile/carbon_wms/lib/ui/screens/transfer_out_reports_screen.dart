@@ -2,95 +2,230 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
-/// Read-only mirror of outgoing transfer slips. Stubbed pending the
-/// `/api/reports/transfers?direction=out` endpoint.
-class TransferOutReportsScreen extends StatelessWidget {
-  const TransferOutReportsScreen({super.key});
+/// Transfer slip report — read-only history of transfer slips for a direction
+/// ('out' = sent, 'in' = received). Mirrors the desktop Reports → Transfers
+/// list. `by` columns render as "First L." (server-formatted).
+class TransferReportListScreen extends StatefulWidget {
+  const TransferReportListScreen({
+    super.key,
+    required this.direction,
+    required this.title,
+  });
+  final String direction; // 'out' | 'in'
+  final String title;
+
+  @override
+  State<TransferReportListScreen> createState() =>
+      _TransferReportListScreenState();
+}
+
+class _TransferReportListScreenState extends State<TransferReportListScreen> {
+  static const Color _ink = Color(0xFF171D1D);
+  static const Color _slate = Color(0xFF3F4A4A);
+  static const Color _muted = Color(0xFF8A9090);
+  static const Color _transit = Color(0xFFE08A2C);
+  static const Color _primary = AppColors.primary;
+
+  bool _loading = false;
+  String? _error;
+  List<Map<String, dynamic>> _rows = [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final rows = await context
+          .read<WmsApiClient>()
+          .fetchTransferReport(direction: widget.direction);
+      if (!mounted) return;
+      setState(() {
+        _rows = rows;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Could not load: $e';
+      });
+    }
+  }
+
+  String _fmtDate(String iso) {
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return iso;
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
+  }
+
+  ({Color bg, Color fg, String text}) _statePill(String s) {
+    switch (s) {
+      case 'received':
+        return (bg: const Color(0x142A8E2A), fg: const Color(0xFF2A8E2A), text: 'RECEIVED');
+      case 'partially_received':
+        return (bg: const Color(0x141B7D7D), fg: _primary, text: 'PARTIAL');
+      case 'cancelled':
+        return (bg: const Color(0x14D9534F), fg: const Color(0xFFD9534F), text: 'CANCELLED');
+      default:
+        return (bg: const Color(0x14E08A2C), fg: _transit, text: 'IN TRANSIT');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return const CarbonScaffold(
-      pageTitle: 'TRANSFER OUT',
-      body: _ComingSoon(
-        icon: LucideIcons.arrowUpFromLine,
-        accent: AppColors.primary,
-        title: 'OUTGOING SHIPMENTS',
-        body:
-            'Outbound transfer reports will land here once the dispatch feed is\nwired to the handheld. Destination, slip ID, and items-shipped totals\nwill mirror the web /reports/transfers view.',
+    return CarbonScaffold(
+      pageTitle: widget.title,
+      actions: [
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: _loading ? null : _load,
+          icon: Icon(LucideIcons.refreshCw, size: 20.sp, color: _primary),
+        ),
+      ],
+      body: ColoredBox(
+        color: const Color(0xFFF5F7F7),
+        child: RefreshIndicator(
+          color: _primary,
+          onRefresh: _load,
+          child: _loading && _rows.isEmpty
+              ? const Center(child: CircularProgressIndicator(color: _primary))
+              : _error != null
+                  ? _centered(_error!, const Color(0xFFD9534F))
+                  : _rows.isEmpty
+                      ? _centered('No transfer slips yet.', _muted)
+                      : ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
+                          itemCount: _rows.length,
+                          separatorBuilder: (_, __) => SizedBox(height: 10.h),
+                          itemBuilder: (_, i) => _card(_rows[i]),
+                        ),
+        ),
+      ),
+    );
+  }
+
+  Widget _centered(String msg, Color color) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(height: 140.h),
+          Center(
+            child: Text(msg,
+                style: GoogleFonts.manrope(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                    color: color)),
+          ),
+        ],
+      );
+
+  Widget _card(Map<String, dynamic> r) {
+    final inbound = widget.direction == 'in';
+    final slip = (r['slip_number']?.toString() ?? '—');
+    final state = (r['state'] ?? '').toString();
+    final pill = _statePill(state);
+    final from = (r['source_location_name'] ?? '').toString();
+    final to = (r['destination_location_name'] ?? '').toString();
+    final sent = (r['sent_qty'] as num?)?.toInt() ?? 0;
+    final recv = (r['received_qty'] as num?)?.toInt() ?? 0;
+    final missing = (r['missing_qty'] as num?)?.toInt() ?? 0;
+    final by = inbound
+        ? (r['received_by_name'] ?? '').toString()
+        : (r['created_by_name'] ?? '').toString();
+    final whenIso =
+        inbound ? (r['received_at'] ?? '').toString() : (r['created_at'] ?? '').toString();
+    final when = whenIso.isEmpty ? '' : _fmtDate(whenIso);
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+            left: BorderSide(color: AppColors.primary, width: 4)),
+      ),
+      padding: EdgeInsets.fromLTRB(13.w, 12.h, 13.w, 12.h),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('SLIP #$slip',
+                  style: GoogleFonts.spaceGrotesk(
+                      fontSize: 16.sp, fontWeight: FontWeight.w800, color: _ink)),
+              const Spacer(),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                color: pill.bg,
+                child: Text(pill.text,
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 9.sp,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                        color: pill.fg)),
+              ),
+            ],
+          ),
+          SizedBox(height: 6.h),
+          Row(
+            children: [
+              Flexible(
+                child: Text(from.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w700,
+                        color: _slate)),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6.w),
+                child: Icon(LucideIcons.arrowRight, size: 14.sp, color: _muted),
+              ),
+              Flexible(
+                child: Text(to.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w700,
+                        color: _slate)),
+              ),
+            ],
+          ),
+          SizedBox(height: 6.h),
+          Text(
+            'Sent $sent · Received $recv${missing > 0 ? " · Missing $missing" : ""}'
+            '${when.isEmpty ? "" : "  ·  $when"}${by.isEmpty ? "" : "  ·  $by"}',
+            style: GoogleFonts.manrope(
+                fontSize: 12.5.sp, fontWeight: FontWeight.w600, color: _muted),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon({
-    required this.icon,
-    required this.accent,
-    required this.title,
-    required this.body,
-  });
-
-  final IconData icon;
-  final Color accent;
-  final String title;
-  final String body;
+/// Outgoing transfer report tile entry point.
+class TransferOutReportsScreen extends StatelessWidget {
+  const TransferOutReportsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 32.w),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 88.w,
-              height: 88.w,
-              color: accent.withValues(alpha: 0.10),
-              child: Center(
-                child: Icon(icon, size: 40.sp, color: accent),
-              ),
-            ),
-            SizedBox(height: 20.h),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 16.sp,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.8,
-                color: AppColors.textMain,
-              ),
-            ),
-            SizedBox(height: 8.h),
-            Text(
-              'COMING SOON',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 10.sp,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2.4,
-                color: accent,
-              ),
-            ),
-            SizedBox(height: 12.h),
-            Text(
-              body,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.manrope(
-                fontSize: 13.sp,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF5A6464),
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return const TransferReportListScreen(
+        direction: 'out', title: 'TRANSFER OUT · SENT');
   }
 }

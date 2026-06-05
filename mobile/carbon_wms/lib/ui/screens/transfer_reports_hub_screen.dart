@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
-import 'package:carbon_wms/ui/screens/transfer_in_pending_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_out_reports_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -60,7 +59,9 @@ class TransferReportsHubScreen extends StatelessWidget {
                           direction: _LaneDirection.inbound,
                           onTap: () => context.pushGuarded<void>(
                             ScreenIds.transferInPending,
-                            (_) => const TransferInPendingScreen(),
+                            (_) => const TransferReportListScreen(
+                                direction: 'in',
+                                title: 'TRANSFER IN · RECEIVED'),
                           ),
                         ),
                       ),

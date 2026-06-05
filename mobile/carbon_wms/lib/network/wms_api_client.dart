@@ -854,6 +854,34 @@ class WmsApiClient {
     return <Map<String, dynamic>>[];
   }
 
+  /// Transfer slip report rows for a direction ('out' | 'in'). Server returns
+  /// created_by_name / received_by_name as "First L.".
+  /// `GET /api/reports/transfers?direction=`
+  Future<List<Map<String, dynamic>>> fetchTransferReport({
+    String direction = 'out',
+    String q = '',
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/reports/transfers').replace(
+      queryParameters: {
+        'direction': direction,
+        if (q.trim().isNotEmpty) 'q': q.trim(),
+      },
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) {
+      return (decoded['rows'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .toList() ??
+          <Map<String, dynamic>>[];
+    }
+    return <Map<String, dynamic>>[];
+  }
+
   /// EPC-level rows for one custom SKU at the active location.
   /// `GET /api/inventory/catalog?customSkuId=<uuid>` —
   /// each entry: `{serial_number, epc, status, bin_code, last_seen_at, sku, name, color, size}`.
