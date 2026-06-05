@@ -264,9 +264,9 @@ class CategoryHubScreen extends StatelessWidget {
       body: ColoredBox(
         color: const Color(0xFFF5F5F5),
         child: ListView.separated(
-          padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 24.h),
+          padding: EdgeInsets.fromLTRB(16.w, 18.h, 16.w, 28.h),
           itemCount: visible.length,
-          separatorBuilder: (_, __) => SizedBox(height: 10.h),
+          separatorBuilder: (_, __) => SizedBox(height: 16.h),
           itemBuilder: (_, i) {
             final t = visible[i];
             return _HubRow(
@@ -298,20 +298,20 @@ class _HubRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(8.r),
             border: Border.all(color: const Color(0xFFD7DEDE)),
           ),
-          padding: EdgeInsets.fromLTRB(13.w, 12.h, 12.w, 12.h),
+          padding: EdgeInsets.fromLTRB(16.w, 20.h, 14.w, 20.h),
           child: Row(
             children: [
               Container(
-                width: 42.w,
-                height: 42.w,
+                width: 54.w,
+                height: 54.w,
                 decoration: BoxDecoration(
                   color: const Color(0xFFEEF4F3),
-                  borderRadius: BorderRadius.circular(8.r),
+                  borderRadius: BorderRadius.circular(10.r),
                 ),
                 alignment: Alignment.center,
-                child: Icon(tile.icon, size: 22.sp, color: AppColors.primary),
+                child: Icon(tile.icon, size: 27.sp, color: AppColors.primary),
               ),
-              SizedBox(width: 13.w),
+              SizedBox(width: 15.w),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,16 +319,16 @@ class _HubRow extends StatelessWidget {
                     Text(
                       tile.label,
                       style: GoogleFonts.spaceGrotesk(
-                        fontSize: 15.sp,
+                        fontSize: 18.sp,
                         fontWeight: FontWeight.w800,
                         color: AppColors.textMain,
                       ),
                     ),
-                    SizedBox(height: 1.h),
+                    SizedBox(height: 4.h),
                     Text(
                       tile.description,
                       style: GoogleFonts.manrope(
-                        fontSize: 11.5.sp,
+                        fontSize: 13.5.sp,
                         fontWeight: FontWeight.w600,
                         color: AppColors.textMuted,
                       ),
@@ -339,7 +339,7 @@ class _HubRow extends StatelessWidget {
                 ),
               ),
               Icon(LucideIcons.chevronRight,
-                  size: 20.sp, color: AppColors.textMuted),
+                  size: 22.sp, color: AppColors.textMuted),
             ],
           ),
         ),
