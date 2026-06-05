@@ -757,6 +757,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             mutedColor: mutedColor,
                           ),
                         ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
             // ── D. 2×2 Hero tile grid ─────────────────────────────────
             // Each tile owns a Phase 2 screen id; hidden ones drop out so
@@ -848,12 +854,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           (_) => const ReportsHubScreen(),
                         ),
                       ),
-                  ],
-                ),
-              ),
-            ),
-                      ],
-                    ),
                   ],
                 ),
               ),
