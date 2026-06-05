@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/epc_tenant_sync.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
@@ -770,6 +771,11 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
         .where((e) => e.isNotEmpty)
         .toList();
     final price = _fmtPrice(r.price);
+    // Role-gated field visibility (e.g. employees may not see price/vendor/qty).
+    final perms = context.read<MobilePermissions>();
+    final showPrice = perms.showField(FieldFlags.showRetailPrice);
+    final showVendor = perms.showField(FieldFlags.showVendor);
+    final showOnHand = perms.showField(FieldFlags.showOnHand);
     return ListView(
       padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 24.h),
       children: [
@@ -818,7 +824,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                           color: _muted),
                     ),
                   ],
-                  if (r.vendor.isNotEmpty) ...[
+                  if (r.vendor.isNotEmpty && showVendor) ...[
                     SizedBox(height: 4.h),
                     Text(
                       r.vendor.toUpperCase(),
@@ -842,16 +848,18 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
           ],
         ),
         SizedBox(height: 14.h),
-        // tiles
-        Row(
-          children: [
-            _tile('ON HAND', r.quantity.isEmpty ? '—' : r.quantity,
-                color: _green),
-            SizedBox(width: 10.w),
-            _tile('RETAIL', price, color: _ink),
-          ],
-        ),
-        SizedBox(height: 14.h),
+        // tiles (role-gated: hide ON HAND / RETAIL per field visibility)
+        if (showOnHand || showPrice)
+          Row(
+            children: [
+              if (showOnHand)
+                _tile('ON HAND', r.quantity.isEmpty ? '—' : r.quantity,
+                    color: _green),
+              if (showOnHand && showPrice) SizedBox(width: 10.w),
+              if (showPrice) _tile('RETAIL', price, color: _ink),
+            ],
+          ),
+        if (showOnHand || showPrice) SizedBox(height: 14.h),
         // location
         _locationBlock(r),
         SizedBox(height: 14.h),

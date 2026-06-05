@@ -821,6 +821,15 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   }
 
   void _showCreateBinDialog(String code) {
+    // RBAC: roles without the create-bin action can't register new bins.
+    if (!context
+        .read<MobilePermissions>()
+        .canDo(ScreenIds.fastPutaway, 'create_bin')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Not allowed to create bins')),
+      );
+      return;
+    }
     final ctrl = TextEditingController(text: code);
     showDialog<void>(
       context: context,
@@ -1473,6 +1482,13 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     required _SkuParts skuParts,
     required String matrixId,
   }) async {
+    // RBAC: read-only roles can't assign items to bins.
+    if (!context.read<MobilePermissions>().canEdit(ScreenIds.fastPutaway)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Read-only access')),
+      );
+      return;
+    }
     // Pre-flight: gate on 0-EPC SKUs. Without this check the assign popup
     // looked like an honest YES/NO question even when no RFID tags had ever
     // been commissioned for the SKU — clicking YES then surfaced the
@@ -2073,6 +2089,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final perms = context.read<MobilePermissions>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF111A1A) : _surface;
     final bgLow = isDark ? const Color(0xFF1C2828) : _surfaceLow;
@@ -2257,6 +2274,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               binActive: _binActive,
               readyForNextEntry: _readyForNextEntry,
               cameraEnabled: _cameraEnabled,
+              canCleanBin:
+                  perms.canDo(ScreenIds.fastPutaway, 'clean_bin'),
+              canDeleteBin:
+                  perms.canDo(ScreenIds.fastPutaway, 'delete_bin'),
               onCleanBin: () => unawaited(_onCleanBin()),
               onDeleteBin: () => unawaited(_onDeleteBin()),
               onUndoClean: _onUndoTap,
@@ -3330,6 +3351,8 @@ class _BottomControlsBlock extends StatelessWidget {
     required this.binActive,
     required this.readyForNextEntry,
     required this.cameraEnabled,
+    required this.canCleanBin,
+    required this.canDeleteBin,
     required this.onCleanBin,
     required this.onDeleteBin,
     required this.onUndoClean,
@@ -3354,6 +3377,9 @@ class _BottomControlsBlock extends StatelessWidget {
   final bool readyForNextEntry;
 
   final bool cameraEnabled;
+  /// RBAC: hide the CLEAN / DELETE bin controls when the role can't do them.
+  final bool canCleanBin;
+  final bool canDeleteBin;
   final VoidCallback onCleanBin;
   final VoidCallback onDeleteBin;
   final VoidCallback onUndoClean;
@@ -3382,33 +3408,36 @@ class _BottomControlsBlock extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Broom icon — DELETE bin completely
-                _IconTapZone(
-                  onTap: onDeleteBin,
-                  child: Icon(
-                    Icons.cleaning_services_outlined,
-                    color: AppColors.textMuted,
-                    size: 22.sp,
-                  ),
-                ),
-                // Center label — main clean action
-                Expanded(
-                  child: InkWell(
-                    onTap: onCleanBin,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14.h),
-                      child: Text(
-                        'CLEAN & EMPTY BIN',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.manrope(
-                          fontSize: 14.sp,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.0,
-                          color: mainColor,
-                        ),
-                      ),
+                // Broom icon — DELETE bin completely (RBAC: hidden when denied)
+                if (canDeleteBin)
+                  _IconTapZone(
+                    onTap: onDeleteBin,
+                    child: Icon(
+                      Icons.cleaning_services_outlined,
+                      color: AppColors.textMuted,
+                      size: 22.sp,
                     ),
                   ),
+                // Center label — main clean action (RBAC: hidden when denied)
+                Expanded(
+                  child: canCleanBin
+                      ? InkWell(
+                          onTap: onCleanBin,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 14.h),
+                            child: Text(
+                              'CLEAN & EMPTY BIN',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.manrope(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.0,
+                                color: mainColor,
+                              ),
+                            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
                 ),
                 // Undo icon — reverses the last reversible action.
                 _IconTapZone(

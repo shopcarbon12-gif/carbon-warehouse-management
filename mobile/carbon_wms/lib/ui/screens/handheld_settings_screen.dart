@@ -12,6 +12,7 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
@@ -218,6 +219,13 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final perms = context.read<MobilePermissions>();
+    final canSetAntennaPower =
+        perms.canDo(ScreenIds.handheldSettings, 'set_antenna_power');
+    final canSetScannerSource =
+        perms.canDo(ScreenIds.handheldSettings, 'set_scanner_source');
+    final canToggleBiometric =
+        perms.canDo(ScreenIds.handheldSettings, 'toggle_biometric');
     final isDark      = Theme.of(context).brightness == Brightness.dark;
     final cardColor   = isDark ? const Color(0xFF1C2828) : Colors.white;
     final mutedColor  = isDark ? const Color(0xFF7A9090) : AppColors.textMuted;
@@ -349,7 +357,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                         ],
                       ),
                       SizedBox(height: 4.h),
-                      if (hwLinked) ...[
+                      if (hwLinked && canSetAntennaPower) ...[
                         Slider(
                           value: power.toDouble(),
                           min: 0, max: 30, divisions: 30,
@@ -359,6 +367,10 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                         ),
                         Text('Applies to transfer-in and transfer-out scans.',
                           style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.4.h)),
+                      ] else if (hwLinked) ...[
+                        Text('Antenna power is managed by an administrator.',
+                          style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.4.h,
+                            fontStyle: FontStyle.italic)),
                       ] else
                         Text('No RFID hardware detected on this device.',
                           style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.4.h,
@@ -387,7 +399,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                   groupValue: _scannerSource,
                   mainColor: mainColor,
                   mutedColor: mutedColor,
-                  onChanged: _setScannerSource,
+                  onChanged: canSetScannerSource ? _setScannerSource : null,
                 ),
                 Divider(height: 1.h, color: divColor),
                 _ScannerSourceTile(
@@ -398,7 +410,7 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
                   groupValue: _scannerSource,
                   mainColor: mainColor,
                   mutedColor: mutedColor,
-                  onChanged: _setScannerSource,
+                  onChanged: canSetScannerSource ? _setScannerSource : null,
                 ),
                 Divider(height: 1.h, color: divColor),
                 ListTile(
@@ -506,41 +518,43 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
           SizedBox(height: 24.h),
 
           // ── BIOMETRIC ────────────────────────────────────────────────────
-          _Label('Biometric Sign-in', mutedColor),
-          SizedBox(height: 8.h),
-          if (_bioReloading)
-            Center(child: Padding(
-              padding: EdgeInsets.all(16.r),
-              child: const CircularProgressIndicator(strokeWidth: 2),
-            ))
-          else if (!_bioEligible)
-            Padding(
-              padding: EdgeInsets.only(left: 4.w),
-              child: Text(
-                'Not available on this device.',
-                style: TextStyle(color: mutedColor, fontSize: 13.sp, height: 1.35.h),
-              ),
-            )
-          else
-            _Card(
-              color: cardColor,
-              child: SwitchListTile(
-                contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
-                title: Text('Fingerprint or face sign-in',
-                  style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700, color: mainColor)),
-                subtitle: Text(
-                  _bioEnrolled
-                      ? 'Enabled. Turn off to clear saved session token.'
-                      : _offerAfterSignIn
-                          ? 'You will be prompted after next password sign-in.'
-                          : 'Turn on to enable setup prompt after sign-in.',
-                  style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.35.h),
+          if (canToggleBiometric) ...[
+            _Label('Biometric Sign-in', mutedColor),
+            SizedBox(height: 8.h),
+            if (_bioReloading)
+              Center(child: Padding(
+                padding: EdgeInsets.all(16.r),
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              ))
+            else if (!_bioEligible)
+              Padding(
+                padding: EdgeInsets.only(left: 4.w),
+                child: Text(
+                  'Not available on this device.',
+                  style: TextStyle(color: mutedColor, fontSize: 13.sp, height: 1.35.h),
                 ),
-                value: _biometricSwitchValue,
-                activeThumbColor: AppColors.primary,
-                onChanged: _onBiometricSwitch,
+              )
+            else
+              _Card(
+                color: cardColor,
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 4.h),
+                  title: Text('Fingerprint or face sign-in',
+                    style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700, color: mainColor)),
+                  subtitle: Text(
+                    _bioEnrolled
+                        ? 'Enabled. Turn off to clear saved session token.'
+                        : _offerAfterSignIn
+                            ? 'You will be prompted after next password sign-in.'
+                            : 'Turn on to enable setup prompt after sign-in.',
+                    style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.35.h),
+                  ),
+                  value: _biometricSwitchValue,
+                  activeThumbColor: AppColors.primary,
+                  onChanged: _onBiometricSwitch,
+                ),
               ),
-            ),
+          ],
 
           SizedBox(height: 32.h),
         ],
@@ -607,13 +621,14 @@ class _ScannerSourceTile extends StatelessWidget {
   final String groupValue;
   final Color mainColor;
   final Color mutedColor;
-  final ValueChanged<String> onChanged;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     final selected = value == groupValue;
+    final cb = onChanged;
     return InkWell(
-      onTap: () => onChanged(value),
+      onTap: cb == null ? null : () => cb(value),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
         child: Row(

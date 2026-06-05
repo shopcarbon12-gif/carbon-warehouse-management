@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
@@ -745,8 +746,12 @@ class CatalogRowCard extends StatelessWidget {
     final size = row['size']?.toString() ?? '';
     final priceStr = row['retail_price']?.toString();
     final price = double.tryParse(priceStr ?? '');
-    final priceText =
-        (price != null && price > 0) ? '\$${price.toStringAsFixed(2)}' : '';
+    // Role-gated: hide retail price when the role can't see it.
+    final showPrice =
+        context.read<MobilePermissions>().showField(FieldFlags.showRetailPrice);
+    final priceText = (showPrice && price != null && price > 0)
+        ? '\$${price.toStringAsFixed(2)}'
+        : '';
     final qty = (row['active_epc_count'] as num?)?.toInt() ?? 0;
     final binRaw = row['bin_location']?.toString();
     final binText = (binRaw == null || binRaw.isEmpty)

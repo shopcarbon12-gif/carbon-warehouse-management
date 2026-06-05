@@ -531,6 +531,9 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   Widget build(BuildContext context) {
     final foundCount = _foundEpcs.length;
     final totalCount = _items.length;
+    final perms = context.read<MobilePermissions>();
+    final canDeleteAll = perms.canDo(ScreenIds.cloudGeiger, 'dismiss_all');
+    final canExportCsv = perms.canDo(ScreenIds.cloudGeiger, 'export_csv');
     return CarbonScaffold(
       pageTitle: 'cloud + geiger',
       body: ColoredBox(
@@ -586,27 +589,30 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
                       ),
                     ),
                   ),
-                  SizedBox(width: 8.w),
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: (_items.isEmpty || _uploading)
-                            ? null
-                            : () => unawaited(_confirmDeleteAll()),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _kLightTeal,
-                          disabledBackgroundColor: const Color(0xFFBCC9C9),
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.zero,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
+                  if (canDeleteAll) ...[
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: FilledButton(
+                          onPressed: (_items.isEmpty || _uploading)
+                              ? null
+                              : () => unawaited(_confirmDeleteAll()),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _kLightTeal,
+                            disabledBackgroundColor: const Color(0xFFBCC9C9),
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.zero,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
                           ),
+                          child: const Icon(Icons.delete_outline, size: 22),
                         ),
-                        child: const Icon(Icons.delete_outline, size: 22),
                       ),
                     ),
-                  ),
+                  ],
+                  if (canExportCsv) ...[
                   SizedBox(width: 8.w),
                   Expanded(
                     child: SizedBox(
@@ -639,6 +645,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
                       ),
                     ),
                   ),
+                  ],
                 ],
               ),
             ),

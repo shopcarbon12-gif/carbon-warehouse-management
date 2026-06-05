@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart' show openCameraBarcodeScanner;
@@ -191,6 +192,15 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
   // ── Clean + undo ────────────────────────────────────────────────────────
   Future<void> _clean() async {
     if (!_binActive || _currentBin.isEmpty || _busy) return;
+    // RBAC: roles without the clean-empty-bin action can't run this.
+    if (!context
+        .read<MobilePermissions>()
+        .canDo(ScreenIds.cleanBin, 'clean_empty_bin')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Not allowed')),
+      );
+      return;
+    }
     if (_contents.isEmpty) {
       setState(() => _status = 'Bin $_currentBin is already empty.');
       return;

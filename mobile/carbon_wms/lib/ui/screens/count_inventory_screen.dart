@@ -17,6 +17,7 @@ import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/epc/epc_codec.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
@@ -876,6 +877,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   String _priceText(_GroupedRow g) {
+    // RBAC: hide retail price for roles with the show_retail_price flag off.
+    if (!context.read<MobilePermissions>().showField(FieldFlags.showRetailPrice)) {
+      return '';
+    }
     if (!g.catalogResolved || g.catalogMissing || g.epcInvalid) return '';
     final price = double.tryParse(g.retailPriceStr ?? '');
     if (price == null || price <= 0) return '';
@@ -1061,6 +1066,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<bool> _confirmDeleteItem() async {
+    // RBAC: roles without the per-item delete action can't remove rows.
+    if (!context
+        .read<MobilePermissions>()
+        .canDo(ScreenIds.countInventory, 'delete_item')) {
+      return false;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2423,6 +2434,11 @@ class _CountInventoryContinueScreenState
 
     final canUpload = totalItems > 0;
 
+    // RBAC: hide the mutating actions for roles that can't perform them.
+    final perms = context.read<MobilePermissions>();
+    final canUploadAction = perms.canDo(ScreenIds.countInventory, 'upload');
+    final canExportCsv = perms.canDo(ScreenIds.countInventory, 'export_csv');
+
     // Auto-generated filename: count-MMDD-HMM-FirstName.csv
     // - MMDD: 2-digit month + 2-digit day
     // - HMM: hour (no leading zero) + 2-digit minute (matches the
@@ -2467,6 +2483,7 @@ class _CountInventoryContinueScreenState
             padding: EdgeInsets.fromLTRB(16.w, 0.h, 16.w, 0.h),
             child: Row(
               children: [
+                if (canUploadAction)
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 4.w),
@@ -2517,6 +2534,7 @@ class _CountInventoryContinueScreenState
                     ),
                   ),
                 ),
+                if (canExportCsv)
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 4.w),

@@ -12,6 +12,7 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/services/transfer_slip_printer.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
@@ -705,6 +706,10 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final canReceive = context.read<MobilePermissions>().canDo(
+          ScreenIds.transferInReceive,
+          'commit_receive',
+        );
     return CarbonScaffold(
       pageTitle: 'RECEIVE  ·  #${widget.slipNumber ?? "—"}',
       actions: [
@@ -753,37 +758,40 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
                         ),
                       ),
                     ),
-                    SizedBox(width: 8.w),
-                    Expanded(
-                      child: SizedBox(
-                        height: 50.h,
-                        child: FilledButton.icon(
-                          onPressed: _committing ? null : _commit,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _accent,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(2.r)),
-                            textStyle: GoogleFonts.spaceGrotesk(
-                              fontSize: 15.sp,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
+                    if (canReceive) ...[
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: SizedBox(
+                          height: 50.h,
+                          child: FilledButton.icon(
+                            onPressed: _committing ? null : _commit,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _accent,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(2.r)),
+                              textStyle: GoogleFonts.spaceGrotesk(
+                                fontSize: 15.sp,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                              ),
                             ),
+                            icon: _committing
+                                ? SizedBox(
+                                    width: 18.w,
+                                    height: 18.h,
+                                    child: const CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Icon(LucideIcons.checkCircle2, size: 18.sp),
+                            label:
+                                Text(_committing ? 'COMMITTING…' : 'RECEIVE'),
                           ),
-                          icon: _committing
-                              ? SizedBox(
-                                  width: 18.w,
-                                  height: 18.h,
-                                  child: const CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Icon(LucideIcons.checkCircle2, size: 18.sp),
-                          label: Text(_committing ? 'COMMITTING…' : 'RECEIVE'),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

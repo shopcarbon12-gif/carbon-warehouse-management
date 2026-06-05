@@ -7,6 +7,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
@@ -190,6 +191,10 @@ class _StatusPickScreenState extends State<StatusPickScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final perms = context.read<MobilePermissions>();
+    final canCommit = perms.canEdit(ScreenIds.statusPick);
+    final canOverride =
+        widget.isSuperAdmin && perms.canDo(ScreenIds.statusPick, 'override_risky');
     return CarbonScaffold(
       pageTitle: 'CHANGE STATUS',
       body: SafeArea(
@@ -213,7 +218,7 @@ class _StatusPickScreenState extends State<StatusPickScreen> {
                   ),
                 ),
               ),
-            if (widget.isSuperAdmin)
+            if (canOverride)
               Padding(
                 padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 4.h),
                 child: CheckboxListTile(
@@ -232,14 +237,15 @@ class _StatusPickScreenState extends State<StatusPickScreen> {
                   onChanged: (v) => setState(() => _override = v ?? false),
                 ),
               ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 16.h),
-              child: _CommitButton(
-                enabled: _selected != null && !_committing,
-                busy: _committing,
-                onTap: _commit,
+            if (canCommit)
+              Padding(
+                padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 16.h),
+                child: _CommitButton(
+                  enabled: _selected != null && !_committing,
+                  busy: _committing,
+                  onTap: _commit,
+                ),
               ),
-            ),
           ],
         ),
       ),

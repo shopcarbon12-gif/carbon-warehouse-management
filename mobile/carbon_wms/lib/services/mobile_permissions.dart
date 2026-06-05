@@ -73,6 +73,40 @@ class MobilePermissions extends ChangeNotifier {
     return !_hiddenScreens.contains(screenId);
   }
 
+  /// Capability tier for a screen: 'hidden' | 'view' (read-only) | 'edit'.
+  /// Encoded via the `<screenId>__edit` pseudo-permission the server sends in
+  /// `hiddenScreens` (see lib/settings/mobile-permission-catalog.ts).
+  String capOf(String screenId) {
+    if (!canView(screenId)) return 'hidden';
+    if (hasFullAccess) return 'edit';
+    return _hiddenScreens.contains('${screenId}__edit') ? 'view' : 'edit';
+  }
+
+  /// `true` when the operator may PERFORM actions on this screen (not just
+  /// read it). A screen with no `__edit` restriction defaults to editable.
+  bool canEdit(String screenId) {
+    if (!canView(screenId)) return false;
+    if (hasFullAccess) return true;
+    return !_hiddenScreens.contains('${screenId}__edit');
+  }
+
+  /// `true` when a specific action on a screen is allowed. Requires the screen
+  /// to be editable AND the action not individually denied
+  /// (`<screenId>__<actionId>`). Default-allow.
+  bool canDo(String screenId, String actionId) {
+    if (!canEdit(screenId)) return false;
+    if (hasFullAccess) return true;
+    return !_hiddenScreens.contains('${screenId}__$actionId');
+  }
+
+  /// `true` when a sensitive field is visible to this role. `flag` is one of
+  /// [FieldFlags]. Default-visible; an admin sets the matching toggle to Hide.
+  bool showField(String flag) {
+    if (flag.isEmpty) return true;
+    if (hasFullAccess) return true;
+    return !_hiddenScreens.contains(flag);
+  }
+
   /// Read the last cached payload from SharedPreferences. Safe to call at
   /// app boot before any network is available.
   Future<void> loadCached() async {
@@ -189,6 +223,7 @@ abstract final class ScreenIds {
 
   // Transfers
   static const String transferSlips = 'transfer_slips';
+  static const String transferOut = 'transfer_out';
   static const String transferInPending = 'transfer_in_pending';
   static const String transferInReceive = 'transfer_in_receive';
   static const String transferOutReports = 'transfer_out_reports';
@@ -204,6 +239,7 @@ abstract final class ScreenIds {
   static const String printNonRfid = 'print_non_rfid';
   static const String barcodeIntake = 'barcode_intake';
   static const String statusChange = 'status_change';
+  static const String statusPick = 'status_pick';
 
   // Find Tags
   static const String geigerSearch = 'geiger_search';
@@ -224,4 +260,18 @@ abstract final class ScreenIds {
 
   // Settings
   static const String handheldSettings = 'handheld_settings';
+}
+
+/// Sensitive-field visibility flags, matched against
+/// `MobilePermissions.showField(...)`. These mirror the `data_visibility`
+/// section ids in lib/settings/mobile-permission-catalog.ts. Default-visible;
+/// an admin sets the matching toggle to Hide to conceal the field from a role
+/// (e.g. employees not seeing item cost / retail price).
+abstract final class FieldFlags {
+  static const String showCost = 'show_cost';
+  static const String showRetailPrice = 'show_retail_price';
+  static const String showVendor = 'show_vendor';
+  static const String showOnHand = 'show_on_hand';
+  static const String showSystemIds = 'show_system_ids';
+  static const String showActorNames = 'show_actor_names';
 }

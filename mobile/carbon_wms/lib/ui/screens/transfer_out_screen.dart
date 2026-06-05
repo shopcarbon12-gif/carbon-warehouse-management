@@ -11,6 +11,7 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/services/transfer_slip_printer.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
@@ -842,6 +843,9 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
 
   Widget _buildBottomBar() {
     final needsDest = _destId == null;
+    final perms = context.read<MobilePermissions>();
+    final canCommit = perms.canEdit(ScreenIds.transferOut) &&
+        perms.canDo(ScreenIds.transferOut, 'commit_transfer');
     return SafeArea(
       top: false,
       child: Container(
@@ -890,34 +894,36 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
                     ),
                   ),
                 ),
-                SizedBox(width: 8.w),
-                Expanded(
-                  child: SizedBox(
-                    height: 50.h,
-                    child: FilledButton.icon(
-                      onPressed: _canCommit ? _commit : null,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _primary,
-                        disabledBackgroundColor: const Color(0xFFBCC9C9),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(2.r)),
-                        textStyle: GoogleFonts.spaceGrotesk(
-                            fontSize: 15.sp,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8),
+                if (canCommit) ...[
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: SizedBox(
+                      height: 50.h,
+                      child: FilledButton.icon(
+                        onPressed: _canCommit ? _commit : null,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _primary,
+                          disabledBackgroundColor: const Color(0xFFBCC9C9),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(2.r)),
+                          textStyle: GoogleFonts.spaceGrotesk(
+                              fontSize: 15.sp,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8),
+                        ),
+                        icon: _committing
+                            ? SizedBox(
+                                width: 18.w,
+                                height: 18.h,
+                                child: const CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : Icon(Icons.local_shipping, size: 18.sp),
+                        label: Text(_committing ? 'SENDING…' : 'TRANSFER'),
                       ),
-                      icon: _committing
-                          ? SizedBox(
-                              width: 18.w,
-                              height: 18.h,
-                              child: const CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
-                          : Icon(Icons.local_shipping, size: 18.sp),
-                      label: Text(_committing ? 'SENDING…' : 'TRANSFER'),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ],
@@ -928,6 +934,10 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
 
   Widget _buildSent() {
     final total = _sentLive + _sentNonLive + _sentManual;
+    final canPrint = context.read<MobilePermissions>().canDo(
+          ScreenIds.transferOut,
+          'print_slip',
+        );
     return CarbonScaffold(
       pageTitle: 'TRANSFER OUT',
       bottomBar: SafeArea(
@@ -937,27 +947,29 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
           padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 12.h),
           child: Row(
             children: [
-              Expanded(
-                child: SizedBox(
-                  height: 50.h,
-                  child: FilledButton.icon(
-                    onPressed: _printSlip,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(2.r)),
-                      textStyle: GoogleFonts.spaceGrotesk(
-                          fontSize: 15.sp,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8),
+              if (canPrint) ...[
+                Expanded(
+                  child: SizedBox(
+                    height: 50.h,
+                    child: FilledButton.icon(
+                      onPressed: _printSlip,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(2.r)),
+                        textStyle: GoogleFonts.spaceGrotesk(
+                            fontSize: 15.sp,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8),
+                      ),
+                      icon: Icon(LucideIcons.printer, size: 18.sp),
+                      label: const Text('PRINT SLIP'),
                     ),
-                    icon: Icon(LucideIcons.printer, size: 18.sp),
-                    label: const Text('PRINT SLIP'),
                   ),
                 ),
-              ),
-              SizedBox(width: 8.w),
+                SizedBox(width: 8.w),
+              ],
               Expanded(
                 child: SizedBox(
                   height: 50.h,
