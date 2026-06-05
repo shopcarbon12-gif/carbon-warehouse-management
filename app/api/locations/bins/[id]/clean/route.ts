@@ -47,7 +47,8 @@ export async function POST(req: Request, ctx: Ctx) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const result = await cleanBinContents(client, session.tid, id, skuPrefix);
+    const result = await cleanBinContents(
+        client, session.tid, id, skuPrefix, session.sub);
     await client.query("COMMIT");
     return NextResponse.json({ ok: true, cleared: result.cleared });
   } catch (e) {

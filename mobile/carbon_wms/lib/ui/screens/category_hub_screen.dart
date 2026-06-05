@@ -34,6 +34,7 @@ import 'package:carbon_wms/ui/screens/status_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/damages_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/re_encode_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_reports_hub_screen.dart';
+import 'package:carbon_wms/ui/screens/bin_clearance_report_screen.dart';
 
 /// One tool row inside a category hub.
 class CategoryHubTile {
@@ -230,6 +231,15 @@ class CategoryHubScreen extends StatelessWidget {
             description: 'Count session reports',
             icon: LucideIcons.fileText,
             builder: (_) => const CountReportsScreen(),
+          ),
+          // ── Bin Management ─────────────────────────────────────────────────
+          CategoryHubTile(
+            group: 'Bin Management',
+            screenId: ScreenIds.cleanBin,
+            label: 'Bin Clearance',
+            description: 'Cleared-bin log',
+            icon: LucideIcons.eraser,
+            builder: (_) => const BinClearanceReportScreen(),
           ),
           // ── Tags & Labels ──────────────────────────────────────────────────
           CategoryHubTile(

@@ -13,6 +13,7 @@ export async function cleanBinContents(
   tenantId: string,
   binId: string,
   skuPrefix?: string,
+  userId?: string | null,
 ): Promise<{ cleared: number }> {
   const bin = await client.query<{ code: string }>(
     `SELECT b.code
@@ -55,12 +56,12 @@ export async function cleanBinContents(
   for (const row of moved.rows) {
     await client.query(
       `INSERT INTO inventory_audit_logs (
-         tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id
+         tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id, user_uuid
        )
        VALUES (
-         $1::uuid, 'ADJUSTMENT', 'EPC', $2, $3, NULL, 'clean_bin', NULL
+         $1::uuid, 'ADJUSTMENT', 'EPC', $2, $3, NULL, 'clean_bin', NULL, $4::uuid
        )`,
-      [tenantId, row.epc, binCode],
+      [tenantId, row.epc, binCode, userId ?? null],
     );
   }
 
