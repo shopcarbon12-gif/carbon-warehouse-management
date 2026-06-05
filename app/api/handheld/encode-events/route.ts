@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { resolveTenantOrError } from "@/lib/auth/resolve-tenant";
+import { shortName } from "@/lib/format-name";
 
 /**
  * Phase 3 — Re-encode reports for the handheld Inventory → Reports tile.
@@ -70,6 +71,9 @@ export async function GET(req: Request) {
       status: string;
       encoded_at: Date | null;
       created_at: Date;
+      first_name: string | null;
+      last_name: string | null;
+      email: string | null;
     }>(
       `SELECT ee.id::text,
               ee.old_epc,
@@ -81,8 +85,10 @@ export async function GET(req: Request) {
               ee.device_id,
               ee.status,
               ee.encoded_at,
-              ee.created_at
+              ee.created_at,
+              u.first_name, u.last_name, u.email
          FROM encode_events ee
+         LEFT JOIN users u ON u.id = ee.created_by
         WHERE ${filters.join(" AND ")}
         ORDER BY COALESCE(ee.encoded_at, ee.created_at) DESC NULLS LAST
         LIMIT $${params.length}::int`,
@@ -103,6 +109,7 @@ export async function GET(req: Request) {
           status: r.status,
           encodedAt: r.encoded_at?.toISOString() ?? null,
           createdAt: r.created_at.toISOString(),
+          by: shortName(r.first_name, r.last_name, r.email),
         })),
         count: rows.rowCount ?? 0,
       },

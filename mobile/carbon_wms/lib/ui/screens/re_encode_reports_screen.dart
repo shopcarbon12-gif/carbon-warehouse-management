@@ -188,6 +188,7 @@ class _EventCardState extends State<_EventCard> {
     final oldEpc = row['oldEpc'] as String? ?? '—';
     final newEpc = row['newEpc'] as String? ?? '—';
     final ts = row['encodedAt'] as String? ?? row['createdAt'] as String?;
+    final by = (row['by'] as String?) ?? '';
     final tsLocal = _formatTs(ts);
 
     final summary = <String>[
@@ -253,7 +254,7 @@ class _EventCardState extends State<_EventCard> {
                       ),
                       SizedBox(height: 4.h),
                       Text(
-                        tsLocal,
+                        '$tsLocal${by.isEmpty ? "" : "  ·  $by"}',
                         style: GoogleFonts.spaceGrotesk(
                           fontSize: 11.sp,
                           fontWeight: FontWeight.w700,
