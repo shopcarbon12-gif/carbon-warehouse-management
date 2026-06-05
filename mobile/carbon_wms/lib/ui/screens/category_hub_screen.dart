@@ -33,7 +33,7 @@ import 'package:carbon_wms/ui/screens/count_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/status_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/damages_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/re_encode_reports_screen.dart';
-import 'package:carbon_wms/ui/screens/transfer_reports_hub_screen.dart';
+import 'package:carbon_wms/ui/screens/transfer_out_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/extra_report_screens.dart';
 
 /// One tool row inside a category hub.
@@ -289,14 +289,25 @@ class CategoryHubScreen extends StatelessWidget {
             icon: LucideIcons.alertTriangle,
             builder: (_) => const DamagesReportsScreen(),
           ),
-          // ── Transfers ──────────────────────────────────────────────────────
+          // ── Transfers (separate Out / In — no combined hub) ─────────────────
           CategoryHubTile(
             group: 'Transfers',
-            screenId: ScreenIds.transferReportsHub,
-            label: 'Transfers',
-            description: 'Transfer slip reports',
-            icon: Icons.swap_horiz,
-            builder: (_) => const TransferReportsHubScreen(),
+            screenId: ScreenIds.transferOutReports,
+            label: 'Transfer Out',
+            description: 'Outgoing transfer slips',
+            icon: Icons.north_east,
+            builder: (_) => const TransferOutReportsScreen(),
+          ),
+          CategoryHubTile(
+            group: 'Transfers',
+            screenId: ScreenIds.transferInPending,
+            label: 'Transfer In',
+            description: 'Incoming transfer slips',
+            icon: Icons.south_west,
+            builder: (_) => const TransferReportListScreen(
+              direction: 'in',
+              title: 'TRANSFER IN · RECEIVED',
+            ),
           ),
         ],
       );

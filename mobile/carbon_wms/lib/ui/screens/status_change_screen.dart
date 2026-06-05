@@ -271,6 +271,21 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
           wmsValue: effWms,
         ));
       }
+      // Operator-fixed layout (2026-06-05): the grid reads
+      //   Live · Sold / Damaged · Tag Killed / Stolen
+      // and the transit/pending-transaction options are not pickable here.
+      // (pending_visibility is already remapped to Tag Killed above.)
+      opts.removeWhere((o) =>
+          o.wmsValue == 'in-transit' || o.wmsValue == 'pending_transaction');
+      const order = <String, int>{
+        'in-stock': 0,
+        'sold': 1,
+        'damaged': 2,
+        'tag_killed': 3,
+        'stolen': 4,
+      };
+      opts.sort((a, b) =>
+          (order[a.wmsValue] ?? 50).compareTo(order[b.wmsValue] ?? 50));
       if (!mounted) return;
       setState(() {
         _statusOptions = opts;

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/report_csv_export.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/util/format_user_name.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
@@ -219,6 +220,50 @@ class _CountReportCard extends StatelessWidget {
 
   final Map<String, dynamic> row;
 
+  /// CSV column labels — shared by the per-row download. (This screen has no
+  /// separate full-report export; these are the fields the card surfaces.)
+  static const List<String> csvHeader = [
+    'activity',
+    'row_count',
+    'uploaded_by',
+    'uploaded_at',
+    'filename',
+    'override_catalog',
+    'device_id',
+  ];
+
+  /// One row's cells, in the same order as [csvHeader].
+  static List<String> csvCells(Map<String, dynamic> row) {
+    final who = (row['uploaded_by_name']?.toString().trim().isNotEmpty ?? false)
+        ? row['uploaded_by_name'].toString()
+        : formatUserDisplayName(
+            row['uploaded_by_first']?.toString(),
+            row['uploaded_by_last']?.toString(),
+            row['uploaded_by_email']?.toString(),
+          );
+    return [
+      (row['activity'] ?? '').toString(),
+      ((row['row_count'] as num?)?.toInt() ?? 0).toString(),
+      who,
+      (row['uploaded_at'] ?? '').toString(),
+      (row['filename'] ?? '').toString(),
+      (row['override_catalog'] == true).toString(),
+      (row['device_id'] ?? '').toString(),
+    ];
+  }
+
+  /// Stable, filesystem-safe id for the per-row CSV filename.
+  static String csvFilename(Map<String, dynamic> row) {
+    final raw = (row['session_id'] ??
+            row['id'] ??
+            row['uploaded_at'] ??
+            row['created_at'] ??
+            '')
+        .toString();
+    final safe = raw.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '-');
+    return 'counts-${safe.isEmpty ? 'report' : safe}';
+  }
+
   String _formatLocal(DateTime dt) {
     final l = dt.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
@@ -295,7 +340,7 @@ class _CountReportCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Column(
@@ -348,8 +393,14 @@ class _CountReportCard extends StatelessWidget {
             ),
             SizedBox(width: 4.w),
             Padding(
-              padding: const EdgeInsets.only(left: 6, right: 12),
+              padding: const EdgeInsets.only(left: 6, right: 4),
               child: Text('x$rowCount', style: qtyStyle),
+            ),
+            SizedBox(width: 4.w),
+            ReportRowDownloadButton(
+              header: csvHeader,
+              rows: [csvCells(row)],
+              filename: csvFilename(row),
             ),
           ],
         ),

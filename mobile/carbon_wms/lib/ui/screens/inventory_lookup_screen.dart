@@ -71,6 +71,9 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
   List<Map<String, dynamic>> _suggest = [];
   Timer? _suggestTimer;
 
+  /// RFID read power (dBm) — live slider in RFID mode. Default 10.
+  int _powerDbm = 10;
+
   /// Last few looked-up codes (client-side, no network) for one-tap rerun.
   List<_Recent> _recent = [];
 
@@ -204,6 +207,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
         await RfidVendorChannel.close2dBarcode();
         await RfidVendorChannel.enableRfidFunctionMode();
         await RfidVendorChannel.setZebraTriggerModeRfid();
+        await _applyPower();
       }
     } catch (_) {
       /* optional — mode best-effort across vendors */
@@ -226,9 +230,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
     _nearestEpc = null;
     _nearestRssi = null;
     setState(() => _rfidReading = true);
-    try {
-      ScanSounds.instance.play(ScanCue.start);
-    } catch (_) {}
+    // No beep on trigger-pull — only beep when a tag is actually read (below).
     try {
       await RfidVendorChannel.startZebraInventory();
     } catch (_) {}
@@ -247,6 +249,10 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
       setState(() => _rfidReading = false);
       final epc = _nearestEpc;
       if (epc != null) {
+        // Beep only when a chip was actually read.
+        try {
+          ScanSounds.instance.play(ScanCue.success);
+        } catch (_) {}
         unawaited(_performLookup(epc));
       } else {
         setState(() {
@@ -360,6 +366,27 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
     );
   }
 
+  /// Strip the "Carbon" brand word from a display string (operator request).
+  /// When the field is *only* the brand (e.g. vendor == "CARBON"), nothing is
+  /// left → fall back to the em-dash placeholder rather than echo the brand.
+  String _stripBrand(String s) {
+    final cleaned = s
+        .replaceAll(RegExp(r'\bcarbon\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return cleaned.isNotEmpty ? cleaned : '—';
+  }
+
+  /// $XX for whole-dollar prices, $XX.XX when there are cents.
+  String _fmtPrice(String raw) {
+    if (raw.trim().isEmpty) return '—';
+    final n = double.tryParse(raw.replaceAll('\$', '').trim());
+    if (n == null) return raw.startsWith('\$') ? raw : '\$$raw';
+    return n == n.truncateToDouble()
+        ? '\$${n.toInt()}'
+        : '\$${n.toStringAsFixed(2)}';
+  }
+
   Future<void> _performLookup(String input) async {
     final raw = input.trim().toUpperCase();
     if (raw.isEmpty) return;
@@ -404,15 +431,15 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
             code: raw,
             isEpc: isEpc,
             sku: sku.isNotEmpty ? sku : upc,
-            name: (map['name']?.toString().trim().isNotEmpty ?? false)
-                ? map['name'].toString().trim()
-                : '—',
+            name: _stripBrand(map['name']?.toString().trim() ?? ''),
             upc: upc,
-            vendor: map['vendor']?.toString().trim() ?? '',
+            vendor: _stripBrand(map['vendor']?.toString().trim() ?? ''),
             color: map['color']?.toString().trim() ?? '',
             size: map['size']?.toString().trim() ?? '',
             price: map['retail_price']?.toString().trim() ?? '',
-            quantity: map['ls_on_hand_total']?.toString().trim() ?? '',
+            // On-hand = LIVE EPC count from the catalog, NOT the Lightspeed
+            // on-hand total.
+            quantity: ((map['active_epc_count'] as num?)?.toInt() ?? 0).toString(),
             bin: bin,
             epcHint: prof != null ? _epcProfileHint(prof) : null,
           );
@@ -476,7 +503,6 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
         child: Column(
           children: [
             _searchBar(),
-            _modeToggle(),
             Expanded(
               child: _busy
                   ? const Center(child: CircularProgressIndicator(color: _teal))
@@ -488,6 +514,8 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                               ? _notFound(_err!)
                               : _idle(),
             ),
+            if (_mode == _Mode.rfid) _powerSlider(),
+            _bottomBar(),
           ],
         ),
       ),
@@ -508,7 +536,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
               padding: EdgeInsets.symmetric(horizontal: 12.w),
               child: Row(
                 children: [
-                  Icon(LucideIcons.search, size: 20.sp, color: _muted),
+                  Icon(LucideIcons.search, size: 23.sp, color: _muted),
                   SizedBox(width: 9.w),
                   Expanded(
                     child: TextField(
@@ -517,7 +545,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                       onSubmitted: (v) => unawaited(_performLookup(v)),
                       textInputAction: TextInputAction.search,
                       style: GoogleFonts.robotoMono(
-                        fontSize: 15.sp,
+                        fontSize: 17.sp,
                         fontWeight: FontWeight.w700,
                         color: _ink,
                       ),
@@ -528,11 +556,11 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
                         isCollapsed: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 15.h),
+                        contentPadding: EdgeInsets.symmetric(vertical: 16.h),
                         hintText: 'Scan or type EPC · UPC · SKU',
                         hintStyle: GoogleFonts.manrope(
-                          fontSize: 15.sp,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.w700,
                           color: _muted,
                         ),
                       ),
@@ -565,14 +593,16 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
     );
   }
 
-  Widget _modeToggle() {
+  /// Bottom bar: BARCODE · (refresh) · RFID. Refresh starts a fresh 2D session.
+  Widget _bottomBar() {
     Widget seg(_Mode m, IconData icon, String label) {
       final on = _mode == m;
       return Expanded(
         child: GestureDetector(
           onTap: () => _toggleMode(m),
           child: Container(
-            padding: EdgeInsets.symmetric(vertical: 11.h),
+            height: 48.h,
+            alignment: Alignment.center,
             color: on ? _teal : Colors.white,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -595,37 +625,97 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
       );
     }
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 10.h),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.only(left: 2.w, bottom: 6.h),
-            child: Text(
-              'TRIGGER SCANS',
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 10.sp,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.4,
-                color: _muted,
+    return SafeArea(
+      top: false,
+      child: Container(
+        color: _surface,
+        padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 12.h),
+        child: DecoratedBox(
+          decoration:
+              BoxDecoration(border: Border.all(color: _border2, width: 1.5)),
+          child: Row(
+            children: [
+              seg(_Mode.barcode, Icons.barcode_reader, 'BARCODE'),
+              Container(width: 1.5.w, color: _border2),
+              GestureDetector(
+                onTap: _newSession,
+                child: Container(
+                  width: 58.w,
+                  height: 48.h,
+                  color: Colors.white,
+                  alignment: Alignment.center,
+                  child: Icon(LucideIcons.refreshCw, size: 22.sp, color: _teal),
+                ),
               ),
+              Container(width: 1.5.w, color: _border2),
+              seg(_Mode.rfid, LucideIcons.radio, 'RFID'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Live read-power slider — only shown in RFID mode. Default 10 dBm.
+  Widget _powerSlider() {
+    return Container(
+      color: _surface,
+      padding: EdgeInsets.fromLTRB(16.w, 4.h, 16.w, 0),
+      child: Row(
+        children: [
+          Text('POWER',
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.0,
+                  color: _muted)),
+          Expanded(
+            child: Slider(
+              value: _powerDbm.toDouble(),
+              min: 0,
+              max: 30,
+              divisions: 30,
+              activeColor: _teal,
+              label: '$_powerDbm dBm',
+              onChanged: (v) => setState(() => _powerDbm = v.round()),
+              onChangeEnd: (_) => unawaited(_applyPower()),
             ),
           ),
-          DecoratedBox(
-            decoration:
-                BoxDecoration(border: Border.all(color: _border2, width: 1.5)),
-            child: Row(
-              children: [
-                seg(_Mode.barcode, Icons.barcode_reader, 'BARCODE'),
-                Container(width: 1.5.w, color: _border2),
-                seg(_Mode.rfid, LucideIcons.radio, 'RFID'),
-              ],
-            ),
+          SizedBox(width: 4.w),
+          SizedBox(
+            width: 56.w,
+            child: Text('$_powerDbm dBm',
+                textAlign: TextAlign.right,
+                style: GoogleFonts.robotoMono(
+                    fontSize: 13.sp, fontWeight: FontWeight.w700, color: _ink)),
           ),
         ],
       ),
     );
+  }
+
+  /// Refresh — clear the result and start a fresh BARCODE (2D-scan) session.
+  void _newSession() {
+    _ctrl.clear();
+    setState(() {
+      _row = null;
+      _err = null;
+      _suggest = [];
+    });
+    if (_mode != _Mode.barcode) {
+      unawaited(_toggleMode(_Mode.barcode));
+    } else {
+      unawaited(_armMode(_Mode.barcode));
+    }
+  }
+
+  Future<void> _applyPower() async {
+    try {
+      await _rfid?.setSessionPowerOverrideDbm(_powerDbm);
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
+    } catch (_) {}
   }
 
   // ── states ────────────────────────────────────────────────────────────────────
@@ -670,77 +760,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                 fontSize: 15.sp, fontWeight: FontWeight.w600, color: _muted),
           ),
         ),
-        if (_recent.isNotEmpty) ...[
-          SizedBox(height: 28.h),
-          Text(
-            'RECENT',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 11.sp,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.6,
-              color: _muted,
-            ),
-          ),
-          SizedBox(height: 9.h),
-          for (final r in _recent) _recentRow(r),
-        ],
       ],
-    );
-  }
-
-  Widget _recentRow(_Recent r) {
-    final icon = r.kind == 'EPC'
-        ? LucideIcons.radio
-        : r.kind == 'UPC'
-            ? Icons.barcode_reader
-            : LucideIcons.tag;
-    return GestureDetector(
-      onTap: () => unawaited(_performLookup(r.code)),
-      child: Container(
-        margin: EdgeInsets.only(bottom: 8.h),
-        color: _card,
-        padding: EdgeInsets.symmetric(horizontal: 13.w, vertical: 13.h),
-        child: Row(
-          children: [
-            Container(
-              width: 34.w,
-              height: 34.w,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: _border),
-              ),
-              child: Icon(icon, size: 18.sp, color: _muted),
-            ),
-            SizedBox(width: 11.w),
-            Expanded(
-              child: Text(
-                r.code,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.robotoMono(
-                    fontSize: 15.sp, fontWeight: FontWeight.w700, color: _ink),
-              ),
-            ),
-            SizedBox(width: 10.w),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 7.w, vertical: 3.h),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: _border),
-              ),
-              child: Text(
-                r.kind,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
-                  color: _muted,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -749,59 +769,76 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
-    final price = r.price.isEmpty
-        ? '—'
-        : (r.price.startsWith('\$') ? r.price : '\$${r.price}');
+    final price = _fmtPrice(r.price);
     return ListView(
       padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 24.h),
       children: [
-        // hero
-        Column(
+        // hero — bigger image on the LEFT, item info to its right (left-aligned)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 108.w,
-              height: 108.w,
+              width: 128.w,
+              height: 128.w,
               decoration: BoxDecoration(
                 color: const Color(0xFFEAF0F0),
                 borderRadius: BorderRadius.circular(6.r),
                 border: Border.all(color: _border),
               ),
-              child: Icon(Icons.image_outlined, size: 44.sp, color: _muted),
+              child: Icon(Icons.image_outlined, size: 56.sp, color: _muted),
             ),
-            SizedBox(height: 14.h),
-            Text(
-              r.name,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.spaceGrotesk(
-                  fontSize: 25.sp, fontWeight: FontWeight.w800, color: _ink),
-            ),
-            SizedBox(height: 7.h),
-            Text(
-              r.sku,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.robotoMono(
-                  fontSize: 17.sp, fontWeight: FontWeight.w700, color: _teal),
-            ),
-            if (r.vendor.isNotEmpty) ...[
-              SizedBox(height: 5.h),
-              Text(
-                r.vendor.toUpperCase(),
-                textAlign: TextAlign.center,
-                style: GoogleFonts.manrope(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w600,
-                    color: _muted),
+            SizedBox(width: 14.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    r.name,
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 22.sp,
+                        fontWeight: FontWeight.w800,
+                        color: _ink,
+                        height: 1.15),
+                  ),
+                  SizedBox(height: 6.h),
+                  Text(
+                    r.sku,
+                    style: GoogleFonts.robotoMono(
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w700,
+                        color: _teal),
+                  ),
+                  if (r.upc.isNotEmpty) ...[
+                    SizedBox(height: 4.h),
+                    Text(
+                      'UPC ${r.upc}',
+                      style: GoogleFonts.robotoMono(
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.w600,
+                          color: _muted),
+                    ),
+                  ],
+                  if (r.vendor.isNotEmpty) ...[
+                    SizedBox(height: 4.h),
+                    Text(
+                      r.vendor.toUpperCase(),
+                      style: GoogleFonts.manrope(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                          color: _muted),
+                    ),
+                  ],
+                  if (desc.isNotEmpty) ...[
+                    SizedBox(height: 10.h),
+                    Wrap(
+                      spacing: 7.w,
+                      runSpacing: 7.h,
+                      children: [for (final d in desc) _chip(d.toUpperCase())],
+                    ),
+                  ],
+                ],
               ),
-            ],
-            if (desc.isNotEmpty) ...[
-              SizedBox(height: 12.h),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 7.w,
-                runSpacing: 7.h,
-                children: [for (final d in desc) _chip(d.toUpperCase())],
-              ),
-            ],
+            ),
           ],
         ),
         SizedBox(height: 14.h),

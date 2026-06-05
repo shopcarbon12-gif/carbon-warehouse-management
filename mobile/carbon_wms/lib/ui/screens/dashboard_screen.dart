@@ -710,7 +710,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           borderRadius: BorderRadius.circular(4.r),
                         ),
                         child: Icon(Icons.search,
-                            size: 26.sp, color: AppColors.primary),
+                            size: 26.sp, color: mainColor),
                       ),
                     ),
                   ],

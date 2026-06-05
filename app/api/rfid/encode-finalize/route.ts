@@ -96,18 +96,33 @@ export async function POST(req: Request) {
       livePromoted = (livePromote.rowCount ?? 0) > 0;
     }
 
-    // DELETE the old EPC's items row entirely. Pre-2026-05-30 we only
-    // dismissed (`defective_acknowledged_at = now()`) which left the row
-    // in 'tag_killed' status — every cycle-count session's DEFECTIVE
-    // bucket, every catalog count, every dashboard KPI kept seeing
-    // these rows accumulate. After a successful chip write the operator's
-    // intent is unambiguous: the old chip ID is replaced by the new chip
-    // ID; treat the items row as obsolete. encode_events keeps the
-    // old→new mapping for audit. Hard-DELETE; items has no FK children
-    // so this is safe. Scoped by tenant + location so we can't reach
-    // across boundaries.
+    // Is the NEW EPC live for this tenant+location right now? True when we
+    // just promoted it, OR when a previous finalize already did (idempotent
+    // retry). The old EPC is only retired when the replacement is provably
+    // live — this is the safety gate that keeps a FAILED write (where the
+    // new EPC never went live) from deleting the still-good old chip's row.
+    const newLiveR = await client.query<{ n: string }>(
+      `SELECT count(*)::text AS n
+         FROM items i
+         JOIN locations l ON l.id = i.location_id
+        WHERE l.tenant_id = $1::uuid
+          AND i.location_id = $2::uuid
+          AND i.epc = $3
+          AND i.status = 'in-stock'`,
+      [session.tid, session.lid, newEpc],
+    );
+    const newIsLive = Number(newLiveR.rows[0]?.n ?? 0) > 0;
+
+    // DELETE the old EPC's items row entirely, but ONLY once the new EPC is
+    // confirmed live (newIsLive). After a confirmed re-encode the old chip
+    // ID is replaced — the row is obsolete; encode_events keeps the old→new
+    // mapping for audit. The status is no longer gated on 'tag_killed'
+    // because, as of 2026-06-05, claim no longer pre-kills the old row;
+    // it stays 'in-stock' until this point. We exclude 'sold' so a chip
+    // that was sold mid-flight is never silently deleted. Hard-DELETE;
+    // items has no FK children. Tenant+location scoped.
     let defectiveDeleted = false;
-    if (oldEpc && oldEpc !== newEpc) {
+    if (oldEpc && oldEpc !== newEpc && newIsLive) {
       const del = await client.query(
         `DELETE FROM items i
           USING locations l
@@ -115,10 +130,27 @@ export async function POST(req: Request) {
             AND l.tenant_id = $1::uuid
             AND i.location_id = $2::uuid
             AND i.epc = $3
-            AND i.status = 'tag_killed'`,
+            AND i.status <> 'sold'`,
         [session.tid, session.lid, oldEpc],
       );
       defectiveDeleted = (del.rowCount ?? 0) > 0;
+    }
+
+    // Promote the matching 'pending' audit row to 'ok' so the Re-Encode
+    // report reflects the confirmed write. Only the newest pending row for
+    // this new EPC is touched.
+    if (newIsLive) {
+      await client.query(
+        `UPDATE encode_events
+            SET status = 'ok', encoded_at = now()
+          WHERE ctid IN (
+            SELECT ctid FROM encode_events
+             WHERE new_epc = $1 AND status = 'pending'
+             ORDER BY created_at DESC
+             LIMIT 1
+          )`,
+        [newEpc],
+      );
     }
 
     await client.query("COMMIT");

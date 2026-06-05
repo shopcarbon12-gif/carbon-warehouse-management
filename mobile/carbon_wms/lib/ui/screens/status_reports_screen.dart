@@ -87,29 +87,67 @@ class _StatusChangeReportViewState extends State<StatusChangeReportView> {
     return '${dt.year}-${two(dt.month)}-${two(dt.day)}  ${two(dt.hour)}:${two(dt.minute)}';
   }
 
+  static const List<String> _csvHeader = [
+    'epc',
+    'old_status',
+    'new_status',
+    'reason',
+    'changed_at',
+    'changed_by',
+  ];
+
+  static List<String> _csvRow(Map<String, dynamic> r) => [
+        (r['epc'] ?? '').toString(),
+        (r['old_status'] ?? '').toString(),
+        (r['new_status'] ?? '').toString(),
+        (r['reason'] ?? '').toString(),
+        (r['changed_at'] ?? '').toString(),
+        (r['changed_by'] ?? '').toString(),
+      ];
+
   Future<void> _export() async {
     await exportReportCsv(
       context,
-      header: const [
-        'epc',
-        'old_status',
-        'new_status',
-        'reason',
-        'changed_at',
-        'changed_by',
-      ],
-      rows: _rows
-          .map((r) => [
-                (r['epc'] ?? '').toString(),
-                (r['old_status'] ?? '').toString(),
-                (r['new_status'] ?? '').toString(),
-                (r['reason'] ?? '').toString(),
-                (r['changed_at'] ?? '').toString(),
-                (r['changed_by'] ?? '').toString(),
-              ])
-          .toList(),
+      header: _csvHeader,
+      rows: _rows.map(_csvRow).toList(),
       filename: widget.damagedOnly ? 'damages' : 'status-changes',
     );
+  }
+
+  /// Group status changes into sessions: same user, consecutive changes within
+  /// a 30-minute gap. Newest first. One report row per session, each with its
+  /// own download icon (operator request 2026-06-05).
+  List<_StatusSession> _sessions() {
+    DateTime? ts(Map<String, dynamic> r) =>
+        DateTime.tryParse((r['changed_at'] ?? '').toString());
+    final rows = [..._rows]..sort((a, b) {
+        final ta = ts(a);
+        final tb = ts(b);
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return tb.compareTo(ta);
+      });
+    final out = <_StatusSession>[];
+    String? prevUser;
+    DateTime? prevTs;
+    for (final r in rows) {
+      final user = (r['changed_by'] ?? '').toString();
+      final t = ts(r);
+      final cont = out.isNotEmpty &&
+          user == prevUser &&
+          prevTs != null &&
+          t != null &&
+          prevTs.difference(t).inMinutes.abs() <= 30;
+      if (cont) {
+        out.last.events.add(r);
+      } else {
+        out.add(_StatusSession(user: user, events: [r]));
+      }
+      prevUser = user;
+      prevTs = t;
+    }
+    return out;
   }
 
   @override
@@ -145,14 +183,22 @@ class _StatusChangeReportViewState extends State<StatusChangeReportView> {
                               ? 'No damaged-item changes yet.'
                               : 'No status changes yet.',
                           _muted)
-                      : ListView.separated(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding:
-                              EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
-                          itemCount: _rows.length,
-                          separatorBuilder: (_, __) => SizedBox(height: 9.h),
-                          itemBuilder: (_, i) => _row(_rows[i]),
-                        ),
+                      : Builder(builder: (_) {
+                          final sessions = _sessions();
+                          return ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding:
+                                EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 24.h),
+                            itemCount: sessions.length,
+                            separatorBuilder: (_, __) => SizedBox(height: 10.h),
+                            itemBuilder: (_, i) => _StatusSessionCard(
+                              session: sessions[i],
+                              csvHeader: _csvHeader,
+                              csvRow: _csvRow,
+                              eventBuilder: _row,
+                            ),
+                          );
+                        }),
         ),
       ),
     );
@@ -231,6 +277,127 @@ class _StatusChangeReportViewState extends State<StatusChangeReportView> {
               color: c),
         ),
       );
+}
+
+/// One status-change work session — same user, events clustered within 30 min.
+class _StatusSession {
+  _StatusSession({required this.user, required this.events});
+  final String user;
+  final List<Map<String, dynamic>> events;
+}
+
+/// Session row: date · time-range · user · count, with its own download icon
+/// (exports just this session's changes). Tap to expand the individual rows.
+class _StatusSessionCard extends StatefulWidget {
+  const _StatusSessionCard({
+    required this.session,
+    required this.csvHeader,
+    required this.csvRow,
+    required this.eventBuilder,
+  });
+  final _StatusSession session;
+  final List<String> csvHeader;
+  final List<String> Function(Map<String, dynamic>) csvRow;
+  final Widget Function(Map<String, dynamic>) eventBuilder;
+
+  @override
+  State<_StatusSessionCard> createState() => _StatusSessionCardState();
+}
+
+class _StatusSessionCardState extends State<_StatusSessionCard> {
+  bool _expanded = false;
+
+  DateTime? _ts(Map<String, dynamic> r) =>
+      DateTime.tryParse((r['changed_at'] ?? '').toString());
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.session;
+    final times = s.events
+        .map(_ts)
+        .whereType<DateTime>()
+        .map((d) => d.toLocal())
+        .toList()
+      ..sort();
+    final start = times.isNotEmpty ? times.first : null;
+    final end = times.isNotEmpty ? times.last : null;
+    final total = s.events.length;
+    String two(int n) => n.toString().padLeft(2, '0');
+    String fmtDate(DateTime d) => '${d.year}-${two(d.month)}-${two(d.day)}';
+    String fmtTime(DateTime d) => '${two(d.hour)}:${two(d.minute)}';
+    final dateLabel = end != null ? fmtDate(end) : '—';
+    final timeLabel = (start != null && end != null)
+        ? (fmtTime(start) == fmtTime(end)
+            ? fmtTime(start)
+            : '${fmtTime(start)}–${fmtTime(end)}')
+        : '';
+    final stamp = end != null
+        ? '${fmtDate(end)}_${two(end.hour)}${two(end.minute)}'
+        : 'session';
+    final userFile = s.user.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '');
+
+    return Material(
+      color: const Color(0xFFECECEC),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(12.w, 10.h, 6.w, 10.h),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$dateLabel${timeLabel.isEmpty ? '' : '  ·  $timeLabel'}',
+                          style: GoogleFonts.spaceGrotesk(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF171D1D)),
+                        ),
+                        SizedBox(height: 3.h),
+                        Text(
+                          '${s.user.isEmpty ? '—' : s.user}  ·  $total change${total == 1 ? '' : 's'}',
+                          style: GoogleFonts.manrope(
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF6D7979)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ReportRowDownloadButton(
+                    header: widget.csvHeader,
+                    rows: s.events.map(widget.csvRow).toList(),
+                    filename:
+                        'status-${userFile.isEmpty ? 'session' : userFile}-$stamp',
+                  ),
+                  Icon(_expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 20.sp, color: const Color(0xFF6D7979)),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded)
+            Padding(
+              padding: EdgeInsets.fromLTRB(8.w, 0, 8.w, 8.h),
+              child: Column(
+                children: [
+                  for (final e in s.events)
+                    Padding(
+                      padding: EdgeInsets.only(top: 6.h),
+                      child: widget.eventBuilder(e),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Status Change report tile entry point.

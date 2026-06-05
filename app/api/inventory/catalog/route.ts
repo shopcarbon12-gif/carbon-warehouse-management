@@ -63,6 +63,12 @@ export async function GET(req: Request) {
     const showArchived = showArchivedRaw === "1" || showArchivedRaw === "true";
     const manualOnlyRaw = searchParams.get("manualOnly")?.trim().toLowerCase() ?? "";
     const manualOnly = manualOnlyRaw === "1" || manualOnlyRaw === "true";
+    // Stock filter — 'in' (has live EPCs), 'out' (zero), 'manual' (manual matrices).
+    const stockRaw = searchParams.get("stock")?.trim().toLowerCase() ?? "";
+    const stock =
+      stockRaw === "in" || stockRaw === "out" || stockRaw === "manual"
+        ? stockRaw
+        : "";
 
     try {
       const result = await listCatalogGrid(pool, {
@@ -78,6 +84,7 @@ export async function GET(req: Request) {
         sortDir,
         showArchived,
         manualOnly,
+        stock,
       });
       return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
     } catch (e) {

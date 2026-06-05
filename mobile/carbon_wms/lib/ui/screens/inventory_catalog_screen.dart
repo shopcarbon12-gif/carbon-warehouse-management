@@ -41,9 +41,9 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
 
   String _query = '';
   // Sort + filter (server-side via the catalog grid endpoint).
-  String _sortBy = ''; // '', 'sku', 'name', 'active_epc_count', 'bin_location'
+  String _sortBy = ''; // '', 'sku', 'name', 'qty_epc', 'bin'
   String _sortDir = 'asc';
-  String _brand = '';
+  String _stock = ''; // '', 'in', 'out', 'manual'
   String _category = '';
   String _vendor = '';
   int _page = 1;
@@ -105,7 +105,7 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
         limit: _pageSize,
         sortBy: _sortBy,
         sortDir: _sortDir,
-        brand: _brand,
+        stock: _stock,
         category: _category,
         vendor: _vendor,
       );
@@ -141,7 +141,7 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
         limit: _pageSize,
         sortBy: _sortBy,
         sortDir: _sortDir,
-        brand: _brand,
+        stock: _stock,
         category: _category,
         vendor: _vendor,
       );
@@ -195,10 +195,10 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
       case 'sku':
         return _sortDir == 'asc' ? 'SKU A–Z' : 'SKU Z–A';
       case 'name':
-        return 'Name A–Z';
-      case 'active_epc_count':
+        return _sortDir == 'desc' ? 'Name Z–A' : 'Name A–Z';
+      case 'qty_epc':
         return _sortDir == 'desc' ? 'Qty high' : 'Qty low';
-      case 'bin_location':
+      case 'bin':
         return 'Bin';
       default:
         return 'Sort';
@@ -207,7 +207,7 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
 
   Widget _sortFilterBar() {
     final hasFilter =
-        _brand.isNotEmpty || _category.isNotEmpty || _vendor.isNotEmpty;
+        _stock.isNotEmpty || _category.isNotEmpty || _vendor.isNotEmpty;
     return Padding(
       padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 8.h),
       child: Row(
@@ -242,7 +242,7 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 42.h,
+        height: 48.h,
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(
@@ -252,12 +252,12 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18.sp, color: c),
-            SizedBox(width: 7.w),
+            Icon(icon, size: 21.sp, color: c),
+            SizedBox(width: 8.w),
             Text(label,
                 style: GoogleFonts.spaceGrotesk(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w900,
                     letterSpacing: 0.6,
                     color: c)),
           ],
@@ -282,9 +282,10 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
       ('SKU  ·  A–Z', 'sku', 'asc'),
       ('SKU  ·  Z–A', 'sku', 'desc'),
       ('Name  ·  A–Z', 'name', 'asc'),
-      ('On-hand  ·  high → low', 'active_epc_count', 'desc'),
-      ('On-hand  ·  low → high', 'active_epc_count', 'asc'),
-      ('Bin', 'bin_location', 'asc'),
+      ('Name  ·  Z–A', 'name', 'desc'),
+      ('Qty  ·  high → low', 'qty_epc', 'desc'),
+      ('Qty  ·  low → high', 'qty_epc', 'asc'),
+      ('Bin', 'bin', 'asc'),
     ];
     await showModalBottomSheet<void>(
       context: context,
@@ -321,7 +322,6 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
   }
 
   Future<void> _openFilter() async {
-    final brands = _distinct('brand');
     final cats = _distinct('category');
     final vendors = _distinct('vendor');
     await showModalBottomSheet<void>(
@@ -338,7 +338,7 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _sheetTitle('FILTER'),
-                  if (_brand.isNotEmpty ||
+                  if (_stock.isNotEmpty ||
                       _category.isNotEmpty ||
                       _vendor.isNotEmpty)
                     Padding(
@@ -347,7 +347,7 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
                         onPressed: () {
                           Navigator.of(ctx).pop();
                           setState(() {
-                            _brand = '';
+                            _stock = '';
                             _category = '';
                             _vendor = '';
                           });
@@ -361,26 +361,78 @@ class _InventoryCatalogScreenState extends State<InventoryCatalogScreen> {
                     ),
                 ],
               ),
-              _filterGroup(ctx, 'BRAND', brands, _brand,
-                  (v) => setState(() => _brand = v)),
+              _stockGroup(ctx),
               _filterGroup(ctx, 'CATEGORY', cats, _category,
                   (v) => setState(() => _category = v)),
               _filterGroup(ctx, 'VENDOR', vendors, _vendor,
                   (v) => setState(() => _vendor = v)),
-              if (brands.isEmpty && cats.isEmpty && vendors.isEmpty)
-                Padding(
-                  padding: EdgeInsets.all(24.w),
-                  child: Text(
-                      'No filter values in the loaded catalog yet — scroll to load more, or search first.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.manrope(
-                          fontSize: 13.sp, color: const Color(0xFF8A9090))),
-                ),
               SizedBox(height: 12.h),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// Fixed STOCK filter — In stock / Out of stock / Manual items. Single-select
+  /// (tap the active chip again to clear). Values map to the server `stock`
+  /// param ('in' | 'out' | 'manual').
+  Widget _stockGroup(BuildContext ctx) {
+    const opts = <(String, String)>[
+      ('in', 'In stock'),
+      ('out', 'Out of stock'),
+      ('manual', 'Manual items'),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(20.w, 14.h, 20.w, 6.h),
+          child: Text('STOCK',
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.4,
+                  color: const Color(0xFF8A9090))),
+        ),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w),
+          child: Wrap(
+            spacing: 8.w,
+            runSpacing: 8.h,
+            children: [
+              for (final o in opts)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    setState(() => _stock = _stock == o.$1 ? '' : o.$1);
+                    unawaited(_refresh());
+                  },
+                  child: Container(
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 14.w, vertical: 9.h),
+                    decoration: BoxDecoration(
+                      color: _stock == o.$1
+                          ? AppColors.primary
+                          : const Color(0xFFECF1F1),
+                      border: Border.all(
+                          color: _stock == o.$1
+                              ? AppColors.primary
+                              : const Color(0xFFD7DEDE)),
+                    ),
+                    child: Text(o.$2,
+                        style: GoogleFonts.spaceGrotesk(
+                            fontSize: 14.sp,
+                            fontWeight: FontWeight.w800,
+                            color: _stock == o.$1
+                                ? Colors.white
+                                : const Color(0xFF3F4A4A))),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -555,7 +607,7 @@ class _SearchBar extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: 12.w),
         child: Row(
           children: [
-            Icon(Icons.search, size: 22.sp, color: const Color(0xFF6D7979)),
+            Icon(Icons.search, size: 24.sp, color: const Color(0xFF6D7979)),
             SizedBox(width: 10.w),
             Expanded(
               child: TextField(
@@ -563,8 +615,8 @@ class _SearchBar extends StatelessWidget {
                 onChanged: onChanged,
                 textInputAction: TextInputAction.search,
                 style: GoogleFonts.spaceGrotesk(
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 17.sp,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textMain,
                 ),
                 decoration: InputDecoration(
@@ -575,12 +627,12 @@ class _SearchBar extends StatelessWidget {
                   focusedBorder: InputBorder.none,
                   disabledBorder: InputBorder.none,
                   isCollapsed: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 16.h),
+                  contentPadding: EdgeInsets.symmetric(vertical: 17.h),
                   hintText: 'EPC · SKU · UPC · NAME · BIN',
                   hintStyle: GoogleFonts.spaceGrotesk(
-                    fontSize: 13.sp,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
                     color: const Color(0xFF6D7979),
                   ),
                 ),

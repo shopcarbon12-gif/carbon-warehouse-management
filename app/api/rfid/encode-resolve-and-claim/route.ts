@@ -155,22 +155,23 @@ export async function POST(req: Request) {
       );
     }
 
-    if (oldEpc && oldEpc !== newEpc) {
-      await client.query(
-        `UPDATE items SET status = 'tag_killed'
-           WHERE epc = $1
-             AND location_id = $2::uuid
-             AND status NOT IN ('tag_killed', 'sold')`,
-        [oldEpc, session.lid],
-      );
-    }
+    // The old EPC is intentionally NOT killed here (see /encode-claim for
+    // the full rationale). Killing it at claim time silently deleted live
+    // inventory whenever the subsequent chip write failed. The old row is
+    // retired only by /encode-finalize, once the new EPC is confirmed live.
 
+    // Audit row as 'pending' — claim succeeded, chip write not yet
+    // confirmed. The handheld posts the TRUE outcome ('ok' / 'write_failed')
+    // via /api/v1/rfid/encode-events after the physical write, and
+    // /encode-finalize promotes this row to 'ok' on success. Logging 'ok'
+    // here is what made the Re-Encode report show failed writes as
+    // successful.
     await client.query(
       `INSERT INTO encode_events (
          old_epc, new_epc, system_id, serial,
          warehouse_id, device_id, status, encoded_at, created_by
        )
-       VALUES ($1, $2, $3::bigint, $4::bigint, $5, NULL, 'ok', now(), $6)`,
+       VALUES ($1, $2, $3::bigint, $4::bigint, $5, NULL, 'pending', now(), $6)`,
       [oldEpc ?? null, newEpc, lsId, nextSerial, session.lid, session.sub],
     );
 

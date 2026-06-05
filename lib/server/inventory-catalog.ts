@@ -67,6 +67,7 @@ function buildWhere(
   locationId: string,
   showArchived: boolean,
   manualOnly: boolean,
+  stock: string,
 ): { sql: string; params: unknown[] } {
   const parts: string[] = ["1=1"];
   const params: unknown[] = [];
@@ -85,8 +86,26 @@ function buildWhere(
   /* MANUAL ITEMS toolbar toggle — restricts the grid to matrices flagged
      is_manual_only = TRUE. Sister concept to showArchived; both narrow
      the visible rows without changing any other behavior. */
-  if (manualOnly) {
+  if (manualOnly || stock === "manual") {
     parts.push(`COALESCE(m.is_manual_only, FALSE) = TRUE`);
+  }
+
+  /* STOCK filter — 'in' = at least one live EPC at this location, 'out' = none.
+     Mirrors the same location-scoped in-stock subquery used for the displayed
+     active_epc_count, so "in stock" here means exactly what the qty badge shows
+     for RFID rows (manual rows are handled by the 'manual' branch above). */
+  if ((stock === "in" || stock === "out") && locationId.trim().length > 0) {
+    params.push(locationId.trim());
+    const cmp = stock === "in" ? ">" : "=";
+    parts.push(
+      `(
+        SELECT COUNT(*) FROM items isf
+        WHERE isf.custom_sku_id = cs.id
+          AND isf.location_id = $${i}::uuid
+          AND isf.status = 'in-stock'
+      ) ${cmp} 0`,
+    );
+    i += 1;
   }
 
   // Exact variant-level system ID match — used by handheld EPC lookup
@@ -209,17 +228,19 @@ export async function listCatalogGrid(
     sortDir?: string;
     showArchived?: boolean;
     manualOnly?: boolean;
+    stock?: string;
   },
 ): Promise<CatalogGridResult> {
   const {
     page, limit, q, brand, category, vendor, locationId,
     systemId = "", sortBy = "", sortDir = "", showArchived = false, manualOnly = false,
+    stock = "",
   } = options;
   const safeLimit = Math.min(5000, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
 
   const { sql: whereSql, params: whereParams } = buildWhere(
-    q, brand, category, vendor, systemId, locationId, showArchived, manualOnly,
+    q, brand, category, vendor, systemId, locationId, showArchived, manualOnly, stock,
   );
 
   const countR = await pool.query<{ c: string }>(

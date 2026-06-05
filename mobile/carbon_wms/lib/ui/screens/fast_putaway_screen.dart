@@ -1551,11 +1551,29 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _scanFocus.requestFocus();
       return;
     }
-    // After the assign: keep going or wrap up. YES → stay on THIS bin and wait
-    // for the next item scan, which re-runs this whole flow (Assign? → Add
-    // another?) so the operator can pile several items into one bin. NO → end
-    // the session. (Multi-colour batch assignment is still available by
-    // scanning a base SKU with no colour, which opens the colour picker.)
+    // Step 3 — same product, other colours? (restored 2026-06-05) The operator
+    // just assigned ONE colour; offer to add the SAME item's remaining colours
+    // to this same bin via the (intact) colour picker — no re-scan needed.
+    final otherColours =
+        await _askSameProductOtherColoursDialog(itemName: itemName);
+    if (!mounted) return;
+    if (otherColours == true) {
+      final picked =
+          await _showColorPicker(matrixId: matrixId, base: skuParts.base);
+      if (!mounted) return;
+      if (picked != null && picked.isNotEmpty) {
+        await _performMultiColourAssign(
+          base: skuParts.base,
+          colours: picked,
+          itemName: itemName,
+        );
+        if (!mounted) return;
+      }
+    }
+
+    // Step 4 — keep going or wrap up. YES → stay on THIS bin and wait for the
+    // next item scan, which re-runs this whole flow so the operator can pile
+    // several items into one bin. NO → end the session.
     final addAnother = await _askAddAnotherItemDialog();
     if (!mounted) return;
     if (addAnother == true) {
@@ -1563,6 +1581,31 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     } else {
       _triggerEndOfSession();
     }
+  }
+
+  /// Step 3 of the multi-item assign flow — after assigning one colour, ask
+  /// whether the operator wants to add the SAME product's other colours to the
+  /// same bin. YES routes into [_showColorPicker] → [_performMultiColourAssign].
+  Future<bool?> _askSameProductOtherColoursDialog({required String itemName}) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('Same product, other colours?'),
+        content: Text(
+            "Add other colours of $itemName to this bin? You'll pick which colours next."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('NO'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('PICK COLOURS'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<bool?> _askAssignDialog({required String itemName}) {

@@ -189,29 +189,28 @@ export async function POST(req: Request) {
       );
     }
 
-    // Optional old-EPC kill: when the operator re-encodes a tag that was
-    // already known to Carbon WMS, mark the old row killed so it stops
-    // counting in inventory. Foreign-prefix tags won't have a row and
-    // this UPDATE no-ops cleanly.
-    if (oldEpc && oldEpc !== newEpc) {
-      await client.query(
-        `UPDATE items SET status = 'tag_killed'
-           WHERE epc = $1
-             AND location_id = $2::uuid
-             AND status NOT IN ('tag_killed', 'sold')`,
-        [oldEpc, session.lid],
-      );
-    }
+    // NOTE (2026-06-05): the old EPC is intentionally NOT touched here.
+    // Pre-fix this flipped the old row to 'tag_killed' at CLAIM time —
+    // before the physical chip write was confirmed. When the write then
+    // FAILED (verify false-fail, weak tag, etc.) the old chip was still
+    // perfectly live, but its WMS row had already been removed from
+    // inventory and was never restored — 100+ live items silently
+    // vanished. The old EPC is now retired ONLY by /encode-finalize,
+    // and ONLY once the new EPC is confirmed live. A failed write leaves
+    // the old row exactly as it was (in-stock), which is correct.
 
     // Encode-specific audit row in the existing encode_events table
-    // (migration 022). Same table the Re-Encode screen writes to via
-    // /api/v1/rfid/encode-events, so the two flows share one history.
+    // (migration 022). Logged as 'pending' — the claim succeeded but the
+    // chip write is NOT yet confirmed. /encode-finalize promotes the row
+    // to 'ok' on a confirmed write; a failed write leaves it 'pending'
+    // (and the device additionally logs a 'write_failed' event), so the
+    // Re-Encode report never shows a write as successful when it wasn't.
     await client.query(
       `INSERT INTO encode_events (
          old_epc, new_epc, system_id, serial,
          warehouse_id, device_id, status, encoded_at, created_by
        )
-       VALUES ($1, $2, $3::bigint, $4::bigint, $5, NULL, 'ok', now(), $6)`,
+       VALUES ($1, $2, $3::bigint, $4::bigint, $5, NULL, 'pending', now(), $6)`,
       [oldEpc ?? null, newEpc, lsId, nextSerial, session.lid, session.sub],
     );
 

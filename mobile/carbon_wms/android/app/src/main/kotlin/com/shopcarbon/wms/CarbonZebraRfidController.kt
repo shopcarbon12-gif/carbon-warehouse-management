@@ -140,28 +140,51 @@ class CarbonZebraRfidController(
         // change. On some RFD8500 firmware revisions the call returns true but does
         // NOT physically re-route the trigger — switchMode() is the hardware-level
         // fallback that toggles the radio↔imager routing on the device itself.
-        val accepted = try {
-          r.Config.setTriggerMode(ENUM_TRIGGER_MODE.BARCODE_MODE, true)
-        } catch (e: Exception) {
-          Log.w(TAG, "setTriggerMode(BARCODE_MODE) threw: ${e.message}")
-          false
-        }
-        Log.d(TAG, "setTriggerMode(BARCODE_MODE) returned=$accepted")
-        if (!accepted) {
-          // Fallback: call the hardware-level toggle. switchMode is unconditional;
-          // if the trigger was already in BARCODE this would put it back to RFID,
-          // so we only call it when setTriggerMode rejected the change.
-          try {
-            r.switchMode()
-            Log.d(TAG, "switchMode() invoked as BARCODE fallback")
+        // Wrapped in silenceModeSwitchBeep so the app-initiated switch is silent
+        // (no spurious chime when entering/leaving a 2D-scan screen).
+        silenceModeSwitchBeep(r) {
+          val accepted = try {
+            r.Config.setTriggerMode(ENUM_TRIGGER_MODE.BARCODE_MODE, true)
           } catch (e: Exception) {
-            Log.w(TAG, "switchMode() fallback threw: ${e.message}")
+            Log.w(TAG, "setTriggerMode(BARCODE_MODE) threw: ${e.message}")
+            false
+          }
+          Log.d(TAG, "setTriggerMode(BARCODE_MODE) returned=$accepted")
+          if (!accepted) {
+            // Fallback: call the hardware-level toggle. switchMode is unconditional;
+            // if the trigger was already in BARCODE this would put it back to RFID,
+            // so we only call it when setTriggerMode rejected the change.
+            try {
+              r.switchMode()
+              Log.d(TAG, "switchMode() invoked as BARCODE fallback")
+            } catch (e: Exception) {
+              Log.w(TAG, "switchMode() fallback threw: ${e.message}")
+            }
           }
         }
       } catch (e: Exception) {
         Log.w(TAG, "setTriggerModeBarcode failed: ${e.message}")
         lastError = e.message ?: e.javaClass.simpleName
       }
+    }
+  }
+
+  /**
+   * App-initiated trigger-mode switches (screen enter/leave) should be SILENT —
+   * the RFD8500 firmware fires a beeper chime on [Config.setTriggerMode], which
+   * operators heard as a spurious "beep when leaving" Bin Assign / Clean Bin /
+   * Locate / Cloud+Geiger. The chime obeys beeper volume (the same control the
+   * scan-start path uses at ~line 494), so we drop to QUIET_BEEP around the
+   * switch and restore HIGH_BEEP (the at-rest level) after a short settle so the
+   * next genuine decode still beeps. Best-effort; never throws.
+   */
+  private fun silenceModeSwitchBeep(r: RFIDReader, block: () -> Unit) {
+    runCatching { r.Config.setBeeperVolume(BEEPER_VOLUME.QUIET_BEEP) }
+    try {
+      block()
+    } finally {
+      try { Thread.sleep(150) } catch (_: InterruptedException) { /* ignore */ }
+      runCatching { r.Config.setBeeperVolume(BEEPER_VOLUME.HIGH_BEEP) }
     }
   }
 
@@ -176,19 +199,21 @@ class CarbonZebraRfidController(
         return@execute
       }
       try {
-        val accepted = try {
-          r.Config.setTriggerMode(ENUM_TRIGGER_MODE.RFID_MODE, true)
-        } catch (e: Exception) {
-          Log.w(TAG, "setTriggerMode(RFID_MODE) threw: ${e.message}")
-          false
-        }
-        Log.d(TAG, "setTriggerMode(RFID_MODE) returned=$accepted")
-        if (!accepted) {
-          try {
-            r.switchMode()
-            Log.d(TAG, "switchMode() invoked as RFID fallback")
+        silenceModeSwitchBeep(r) {
+          val accepted = try {
+            r.Config.setTriggerMode(ENUM_TRIGGER_MODE.RFID_MODE, true)
           } catch (e: Exception) {
-            Log.w(TAG, "switchMode() fallback threw: ${e.message}")
+            Log.w(TAG, "setTriggerMode(RFID_MODE) threw: ${e.message}")
+            false
+          }
+          Log.d(TAG, "setTriggerMode(RFID_MODE) returned=$accepted")
+          if (!accepted) {
+            try {
+              r.switchMode()
+              Log.d(TAG, "switchMode() invoked as RFID fallback")
+            } catch (e: Exception) {
+              Log.w(TAG, "switchMode() fallback threw: ${e.message}")
+            }
           }
         }
       } catch (e: Exception) {

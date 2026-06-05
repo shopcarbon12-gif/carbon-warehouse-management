@@ -1,8 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+
+import 'package:carbon_wms/theme/app_theme.dart';
 
 /// Shared CSV export for every report screen. Builds a CSV from the report's
 /// columns + rows, writes it to the device's `reports/` folder, AND opens the
@@ -57,5 +61,44 @@ Future<void> exportReportCsv(
     } catch (_) {/* save still succeeded */}
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+  }
+}
+
+/// Compact per-row download button used by every report list. Exports just the
+/// rows it's given (one record, or a whole session's records) as a CSV, so the
+/// operator can grab an individual slip / record / session instead of the whole
+/// report. Drop it on the right edge of any report row.
+class ReportRowDownloadButton extends StatelessWidget {
+  const ReportRowDownloadButton({
+    super.key,
+    required this.header,
+    required this.rows,
+    required this.filename,
+    this.size,
+    this.color,
+  });
+
+  final List<String> header;
+  final List<List<String>> rows;
+  final String filename;
+  final double? size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Download CSV',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: BoxConstraints(minWidth: 40.w, minHeight: 40.w),
+      icon: Icon(LucideIcons.download,
+          size: size ?? 18.sp, color: color ?? AppColors.primary),
+      onPressed: () => exportReportCsv(
+        context,
+        header: header,
+        rows: rows,
+        filename: filename,
+      ),
+    );
   }
 }

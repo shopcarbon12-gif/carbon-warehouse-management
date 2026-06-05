@@ -800,8 +800,11 @@ class WmsApiClient {
     String? brand,
     String? category,
     String? vendor,
+    String? stock,
   }) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final manual = stock == 'manual';
+    final stockSide = (stock == 'in' || stock == 'out') ? stock : null;
     final uri = Uri.parse('$base/api/inventory/catalog').replace(
       queryParameters: {
         'view': 'grid',
@@ -813,6 +816,8 @@ class WmsApiClient {
         if (brand != null && brand.isNotEmpty) 'brand': brand,
         if (category != null && category.isNotEmpty) 'category': category,
         if (vendor != null && vendor.isNotEmpty) 'vendor': vendor,
+        if (stockSide != null) 'stock': stockSide,
+        if (manual) 'manualOnly': 'true',
       },
     );
     final res = await _http.get(uri, headers: await sessionAuthHeaders());

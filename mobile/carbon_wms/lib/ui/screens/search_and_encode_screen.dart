@@ -662,13 +662,32 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     if (resolveEpc != null && resolveEpc == oldEpc.toUpperCase()) {
       unawaited(_dismissCloudGeiger(resolveEpc));
     }
-    try {
-      await context.read<WmsApiClient>().postEncodeFinalize(
-            newEpc: newEpc,
-            oldEpc: oldEpc,
-          );
-    } catch (_) {
-      /* swallow — chip is written, finalize is best-effort */
+    // Integrity-critical: this is the ONLY place the old EPC gets retired
+    // and the new EPC promoted to LIVE. A single transient failure here
+    // used to strand the new EPC at 'unknown' forever (11 such orphans
+    // found in prod 2026-06-05). Retry with backoff so a Wi-Fi blip can't
+    // leave the DB half-finished. Capture the client before the await gap.
+    final api = context.read<WmsApiClient>();
+    await _retry(() => api.postEncodeFinalize(newEpc: newEpc, oldEpc: oldEpc));
+  }
+
+  /// Best-effort retry for the integrity-critical finalize/rollback calls.
+  /// 4 attempts over ~7s total; swallows the final failure (the physical
+  /// chip state is already decided — this only reconciles the DB).
+  Future<void> _retry(Future<void> Function() op) async {
+    const delays = [
+      Duration(milliseconds: 400),
+      Duration(milliseconds: 1200),
+      Duration(seconds: 3),
+    ];
+    for (var attempt = 0; ; attempt++) {
+      try {
+        await op();
+        return;
+      } catch (_) {
+        if (attempt >= delays.length) return;
+        await Future<void>.delayed(delays[attempt]);
+      }
     }
   }
 
@@ -749,12 +768,11 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     required String oldEpc,
     required String newEpc,
   }) async {
-    try {
-      final api = context.read<WmsApiClient>();
-      await api.postEncodeRollback(oldEpc: oldEpc, newEpc: newEpc);
-    } catch (_) {
-      /* best-effort; server-side audit row still gets written when reachable */
-    }
+    // Integrity-critical: removes the phantom 'unknown' new-EPC row a failed
+    // write leaves behind. Retry so a transient error can't leave the failed
+    // new EPC orphaned in catalog. Capture the client before the await gap.
+    final api = context.read<WmsApiClient>();
+    await _retry(() => api.postEncodeRollback(oldEpc: oldEpc, newEpc: newEpc));
   }
 
   int? _toInt(Object? v) {

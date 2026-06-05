@@ -646,9 +646,11 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
         padding: EdgeInsets.fromLTRB(16.w, 4.h, 16.w, 12.h),
         itemCount: _searchResults.length,
         separatorBuilder: (_, __) => SizedBox(height: 10.h),
+        // showQty:true surfaces the source-location ON-HAND count (x{n})
+        // so the operator can see availability while building the slip.
         itemBuilder: (_, i) => CatalogRowCard(
           row: _searchResults[i],
-          showQty: false,
+          showQty: true,
           onTap: () => _addManual(_searchResults[i]),
           onQtyTap: () => _addManual(_searchResults[i]),
         ),
@@ -725,6 +727,7 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
         _stagedCard(
           sku: m.row['sku']?.toString() ?? '',
           desc: descOf(m.row),
+          onHand: (m.row['active_epc_count'] as num?)?.toInt(),
           trailing: _stepper(m),
         ),
       for (final e in live.entries)
@@ -761,6 +764,7 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
     required String sku,
     required String desc,
     required Widget trailing,
+    int? onHand,
   }) {
     return Container(
       margin: EdgeInsets.only(bottom: 8.h),
@@ -786,6 +790,15 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
                           fontSize: 15.sp,
                           fontWeight: FontWeight.w700,
                           color: const Color(0xFF3F4A4A))),
+                ],
+                if (onHand != null) ...[
+                  SizedBox(height: 4.h),
+                  Text('ON HAND ×$onHand',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 11.sp,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: const Color(0xFF6D7979))),
                 ],
               ],
             ),

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart' show openCameraBarcodeScanner;
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
@@ -227,6 +228,10 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
         _cleared = true;
         _status = 'Cleared $cleared item(s) from $_currentBin.';
       });
+      // Success cue — the bin was cleaned & emptied (operator request).
+      try {
+        ScanSounds.instance.play(ScanCue.success);
+      } catch (_) {}
     } catch (e) {
       if (mounted) setState(() => _status = 'Clean failed: $e');
     } finally {

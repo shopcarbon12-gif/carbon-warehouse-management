@@ -175,48 +175,68 @@ class _ReportListScreenState extends State<ReportListScreen> {
       orElse: () => widget.columns.first,
     );
     final secondary = widget.columns.where((c) => c != primaryCol).toList();
+    final header = widget.columns.map((c) => c.label).toList();
+    final rowCells = widget.columns.map((c) => _val(r, c.key)).toList();
+    final idPart = (r['id'] ?? _val(r, primaryCol.key))
+        .toString()
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '')
+        .trim();
     return Container(
       color: const Color(0xFFECECEC),
-      padding: EdgeInsets.symmetric(horizontal: 13.w, vertical: 12.h),
-      child: Column(
+      padding: EdgeInsets.fromLTRB(13.w, 12.h, 6.w, 12.h),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _fmt(primaryCol.key, _val(r, primaryCol.key)),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.robotoMono(
-                fontSize: 15.sp, fontWeight: FontWeight.w700, color: _ink),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _fmt(primaryCol.key, _val(r, primaryCol.key)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.robotoMono(
+                      fontSize: 15.sp, fontWeight: FontWeight.w700, color: _ink),
+                ),
+                SizedBox(height: 6.h),
+                Wrap(
+                  spacing: 14.w,
+                  runSpacing: 4.h,
+                  children: [
+                    for (final c in secondary)
+                      if (_val(r, c.key).isNotEmpty)
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: '${c.label}: ',
+                                style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 11.sp,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.3,
+                                    color: _muted),
+                              ),
+                              TextSpan(
+                                text: _fmt(c.key, _val(r, c.key)),
+                                style: GoogleFonts.manrope(
+                                    fontSize: 12.5.sp,
+                                    fontWeight: FontWeight.w700,
+                                    color: _slate),
+                              ),
+                            ],
+                          ),
+                        ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          SizedBox(height: 6.h),
-          Wrap(
-            spacing: 14.w,
-            runSpacing: 4.h,
-            children: [
-              for (final c in secondary)
-                if (_val(r, c.key).isNotEmpty)
-                  RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: '${c.label}: ',
-                          style: GoogleFonts.spaceGrotesk(
-                              fontSize: 11.sp,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.3,
-                              color: _muted),
-                        ),
-                        TextSpan(
-                          text: _fmt(c.key, _val(r, c.key)),
-                          style: GoogleFonts.manrope(
-                              fontSize: 12.5.sp,
-                              fontWeight: FontWeight.w700,
-                              color: _slate),
-                        ),
-                      ],
-                    ),
-                  ),
-            ],
+          SizedBox(width: 4.w),
+          ReportRowDownloadButton(
+            header: header,
+            rows: [rowCells],
+            filename:
+                '${widget.csvName}${idPart.isEmpty ? '' : '-$idPart'}',
           ),
         ],
       ),

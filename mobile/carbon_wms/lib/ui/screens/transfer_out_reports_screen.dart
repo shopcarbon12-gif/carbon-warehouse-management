@@ -180,6 +180,8 @@ class _TransferReportListScreenState extends State<TransferReportListScreen> {
   Widget _card(Map<String, dynamic> r) {
     final inbound = widget.direction == 'in';
     final slip = (r['slip_number']?.toString() ?? '—');
+    final slipFile = (r['slip_number']?.toString() ?? 'x')
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '');
     final state = (r['state'] ?? '').toString();
     final pill = _statePill(state);
     final from = (r['source_location_name'] ?? '').toString();
@@ -219,6 +221,47 @@ class _TransferReportListScreenState extends State<TransferReportListScreen> {
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.8,
                         color: pill.fg)),
+              ),
+              SizedBox(width: 4.w),
+              ReportRowDownloadButton(
+                size: 18.sp,
+                color: _primary,
+                header: [
+                  'slip',
+                  'state',
+                  'from',
+                  'to',
+                  'rfid',
+                  'manual',
+                  'sent',
+                  'received',
+                  'missing',
+                  inbound ? 'received_at' : 'created_at',
+                  inbound ? 'received_by' : 'created_by',
+                ],
+                rows: [
+                  [
+                    (r['slip_number'] ?? '').toString(),
+                    (r['state'] ?? '').toString(),
+                    (r['source_location_name'] ?? '').toString(),
+                    (r['destination_location_name'] ?? '').toString(),
+                    (r['rfid_count'] ?? '').toString(),
+                    (r['manual_count'] ?? '').toString(),
+                    (r['sent_qty'] ?? '').toString(),
+                    (r['received_qty'] ?? '').toString(),
+                    (r['missing_qty'] ?? '').toString(),
+                    ((inbound ? r['received_at'] : r['created_at']) ?? '')
+                        .toString(),
+                    ((inbound
+                                ? r['received_by_name']
+                                : r['created_by_name']) ??
+                            '')
+                        .toString(),
+                  ],
+                ],
+                filename: inbound
+                    ? 'transfer-in-slip-$slipFile'
+                    : 'transfer-out-slip-$slipFile',
               ),
             ],
           ),

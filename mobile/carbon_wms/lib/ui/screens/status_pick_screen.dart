@@ -88,7 +88,7 @@ class _StatusTileSpec {
 const Map<String, _StatusTileSpec> _kTileSpecByLabel = {
   'LIVE': _StatusTileSpec(
     icon: LucideIcons.checkCircle,
-    subtitle: 'READY FOR DISPATCH',
+    subtitle: 'SELLABLE\nREADY FOR DISPATCH',
     iconColor: Color(0xFF1B7D7D),
   ),
   'DAMAGED': _StatusTileSpec(

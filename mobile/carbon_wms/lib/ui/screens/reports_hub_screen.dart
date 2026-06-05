@@ -11,7 +11,7 @@ import 'package:carbon_wms/ui/screens/count_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/damages_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/re_encode_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/status_reports_screen.dart';
-import 'package:carbon_wms/ui/screens/transfer_reports_hub_screen.dart';
+import 'package:carbon_wms/ui/screens/transfer_out_reports_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 /// Inventory → Reports hub. Three families today (Counts / Transfers /
@@ -54,16 +54,31 @@ class ReportsHubScreen extends StatelessWidget {
                     (_) => const CountReportsScreen(),
                   ),
                 ),
-              if (perms.canView(ScreenIds.transferReportsHub))
+              if (perms.canView(ScreenIds.transferOutReports))
                 _ReportTile(
-                  label: 'TRANSFERS',
-                  icon: LucideIcons.arrowLeftRight,
+                  label: 'TRANSFER OUT',
+                  icon: LucideIcons.arrowUpFromLine,
                   tileColor: tileColor,
                   iconColor: iconColor,
                   textColor: textColor,
                   onTap: () => context.pushGuarded<void>(
-                    ScreenIds.transferReportsHub,
-                    (_) => const TransferReportsHubScreen(),
+                    ScreenIds.transferOutReports,
+                    (_) => const TransferOutReportsScreen(),
+                  ),
+                ),
+              if (perms.canView(ScreenIds.transferInPending))
+                _ReportTile(
+                  label: 'TRANSFER IN',
+                  icon: LucideIcons.arrowDownToLine,
+                  tileColor: tileColor,
+                  iconColor: iconColor,
+                  textColor: textColor,
+                  onTap: () => context.pushGuarded<void>(
+                    ScreenIds.transferInPending,
+                    (_) => const TransferReportListScreen(
+                      direction: 'in',
+                      title: 'TRANSFER IN · RECEIVED',
+                    ),
                   ),
                 ),
               if (perms.canView(ScreenIds.statusReports))
