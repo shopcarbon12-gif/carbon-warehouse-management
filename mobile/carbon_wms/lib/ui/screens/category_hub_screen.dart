@@ -43,12 +43,18 @@ class CategoryHubTile {
     required this.description,
     required this.icon,
     required this.builder,
+    this.group,
   });
   final String screenId;
   final String label;
   final String description;
   final IconData icon;
   final WidgetBuilder builder;
+
+  /// Optional section header this tile sits under. When set, the hub renders a
+  /// small uppercase divider above the first tile of each group — used by the
+  /// Reports hub to organise reports by their parent category.
+  final String? group;
 }
 
 /// Second-level hub opened from a dashboard "big square". Renders its tools as
@@ -216,21 +222,26 @@ class CategoryHubScreen extends StatelessWidget {
   factory CategoryHubScreen.reports() => CategoryHubScreen(
         title: 'reports',
         tiles: [
+          // ── Inventory ──────────────────────────────────────────────────────
           CategoryHubTile(
+            group: 'Inventory',
             screenId: ScreenIds.countReports,
             label: 'Counts',
             description: 'Count session reports',
             icon: LucideIcons.fileText,
             builder: (_) => const CountReportsScreen(),
           ),
+          // ── Tags & Labels ──────────────────────────────────────────────────
           CategoryHubTile(
-            screenId: ScreenIds.transferReportsHub,
-            label: 'Transfers',
-            description: 'Transfer slip reports',
-            icon: Icons.swap_horiz,
-            builder: (_) => const TransferReportsHubScreen(),
+            group: 'Tags & Labels',
+            screenId: ScreenIds.reEncodeReports,
+            label: 'Re-Encode',
+            description: 'Re-encode reports',
+            icon: LucideIcons.refreshCw,
+            builder: (_) => const ReEncodeReportsScreen(),
           ),
           CategoryHubTile(
+            group: 'Tags & Labels',
             screenId: ScreenIds.statusReports,
             label: 'Status Change',
             description: 'Status-change reports',
@@ -238,18 +249,21 @@ class CategoryHubScreen extends StatelessWidget {
             builder: (_) => const StatusReportsScreen(),
           ),
           CategoryHubTile(
+            group: 'Tags & Labels',
             screenId: ScreenIds.damagesReports,
             label: 'Damages',
             description: 'Damaged-item reports',
             icon: LucideIcons.alertTriangle,
             builder: (_) => const DamagesReportsScreen(),
           ),
+          // ── Transfers ──────────────────────────────────────────────────────
           CategoryHubTile(
-            screenId: ScreenIds.reEncodeReports,
-            label: 'Re-Encode',
-            description: 'Re-encode reports',
-            icon: LucideIcons.refreshCw,
-            builder: (_) => const ReEncodeReportsScreen(),
+            group: 'Transfers',
+            screenId: ScreenIds.transferReportsHub,
+            label: 'Transfers',
+            description: 'Transfer slip reports',
+            icon: Icons.swap_horiz,
+            builder: (_) => const TransferReportsHubScreen(),
           ),
         ],
       );
@@ -259,21 +273,55 @@ class CategoryHubScreen extends StatelessWidget {
     final perms = context.watch<MobilePermissions>();
     final visible = tiles.where((t) => perms.canView(t.screenId)).toList();
 
+    // Build a flat child list, inserting a section header above the first
+    // visible tile of each group (tiles with no group render header-less).
+    final children = <Widget>[];
+    String? lastGroup;
+    for (var i = 0; i < visible.length; i++) {
+      final t = visible[i];
+      if (t.group != null && t.group != lastGroup) {
+        children.add(_GroupHeader(label: t.group!, first: lastGroup == null));
+        lastGroup = t.group;
+      }
+      if (i > 0) children.add(SizedBox(height: 16.h));
+      children.add(
+        _HubRow(
+          tile: t,
+          onTap: () => context.pushGuarded<void>(t.screenId, t.builder),
+        ),
+      );
+    }
+
     return CarbonScaffold(
       pageTitle: title,
       body: ColoredBox(
         color: const Color(0xFFF5F5F5),
-        child: ListView.separated(
+        child: ListView(
           padding: EdgeInsets.fromLTRB(16.w, 18.h, 16.w, 28.h),
-          itemCount: visible.length,
-          separatorBuilder: (_, __) => SizedBox(height: 16.h),
-          itemBuilder: (_, i) {
-            final t = visible[i];
-            return _HubRow(
-              tile: t,
-              onTap: () => context.pushGuarded<void>(t.screenId, t.builder),
-            );
-          },
+          children: children,
+        ),
+      ),
+    );
+  }
+}
+
+/// Uppercase section divider used to group reports by their parent category.
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({required this.label, required this.first});
+  final String label;
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(top: first ? 0 : 26.h, bottom: 12.h),
+      child: Text(
+        label.toUpperCase(),
+        style: GoogleFonts.spaceGrotesk(
+          fontSize: 12.sp,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.8,
+          color: const Color(0xFF8A9090),
         ),
       ),
     );
