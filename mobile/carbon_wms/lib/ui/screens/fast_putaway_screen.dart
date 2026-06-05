@@ -451,10 +451,13 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     if (!_shouldUseHardwareScanner) return;
     try {
+      // Imager wake-up. Delays trimmed 150 → 80ms (2026-06-05) so the
+      // scanner is ready sooner on entry; the 2D engine boots well within
+      // 80ms on RFD8500. Best-effort — never blocks the screen.
       await RfidVendorChannel.open2dBarcode();
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
       await RfidVendorChannel.scannerStart2d();
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 80));
       await RfidVendorChannel.scannerStop2d();
     } catch (_) {
       /* best-effort: imager wake-up never blocks the screen */

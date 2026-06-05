@@ -690,9 +690,9 @@ class CarbonZebraRfidController(
 
       // Settle before the power cycle so the tag's charge pump has a
       // moment to finish its (attempted) EEPROM write before we kill
-      // RF. Lowered 150 → 80ms 2026-05-29 — Gen2 write-cycle finishes
-      // within ~50ms typical, so 80ms is enough margin.
-      Thread.sleep(80)
+      // RF. 150 → 80 (2026-05-29) → 60ms (2026-06-05) — Gen2 write-cycle
+      // finishes within ~50ms typical, so 60ms still covers it.
+      Thread.sleep(60)
 
       // Power-cycle the tag by dropping the reader's transmit power to index 0 for ~600 ms.
       // writeWait updates the tag's RAM response register regardless of whether EEPROM commit
@@ -711,14 +711,13 @@ class CarbonZebraRfidController(
         cfg.setTransmitPowerIndex(minIdx)
         r.Config.Antennas.setAntennaRfConfig(1, cfg)
       }.onFailure { Log.w(TAG, "power-cycle: setTransmitPowerIndex($minIdx) failed: ${it.message}") }
-      // 300ms RF-off dwell. 600ms was the original 2024 conservative
-      // value; on RFD8500 the chip charge pump drops below operating
-      // voltage within ~10ms of RF removal, so 300ms is plenty for
-      // the tag to lose RAM and reboot from EEPROM on the next read.
-      // This is the single biggest contributor to per-write latency
-      // on the steady-state re-encode pass.
-      Log.d(TAG, "power-cycle: dropped from boosted idx=$maxPowerIdx to idx=$minIdx (levels.size=${levels?.size ?: -1}); sleeping 300ms")
-      Thread.sleep(300)
+      // RF-off dwell. 600ms (2024) → 300ms → 200ms (2026-06-05); on
+      // RFD8500 the chip charge pump drops below operating voltage within
+      // ~10ms of RF removal, so 200ms is still a 20× margin for the tag to
+      // lose RAM and reboot from EEPROM on the next read. Biggest single
+      // contributor to per-write latency on the steady-state pass.
+      Log.d(TAG, "power-cycle: dropped from boosted idx=$maxPowerIdx to idx=$minIdx (levels.size=${levels?.size ?: -1}); sleeping 200ms")
+      Thread.sleep(200)
       // Bring power BACK UP to max for the verify window. The earlier
       // design restored to the operator's slider before verifying, on
       // the theory that "verify should match the read setting." In
@@ -775,6 +774,16 @@ class CarbonZebraRfidController(
         // SELECT mask — on the RFD8500 builds that DO honour the filter,
         // a non-null result for that probe is unambiguous proof the
         // write committed.
+        //
+        // SPEED (2026-06-05): cap the rescue readWaits at 600ms each (was
+        // the 1500ms write-window ceiling). A tag that's present at max
+        // verify power answers a readWait in ~50-150ms; the full ceiling
+        // only ever elapses when the tag is ABSENT, which on a genuine
+        // failure is exactly probe-2 (NEW mask). 600ms is plenty for a
+        // present tag and shaves ~1.8s off every genuine write_failed —
+        // the dominant contributor to the operator's "5-7s on failures".
+        // The rescue LOGIC is unchanged, so false-fail recovery still works.
+        runCatching { r.Config.setAccessOperationWaitTimeout(600) }
         val oldNorm = targetEpc.uppercase()
         val newNorm = newEpc.uppercase()
         var rescuedById: String? = null
