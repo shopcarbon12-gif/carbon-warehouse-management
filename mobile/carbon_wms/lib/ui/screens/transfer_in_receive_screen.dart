@@ -48,9 +48,10 @@ class TransferInReceiveScreen extends StatefulWidget {
 }
 
 class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
-  static const Color _accent = Color(0xFF1B7F4F);
-  static const Color _amber = Color(0xFFB87A00);
-  static const Color _missing = Color(0xFFB23A3A);
+  // Palette from the approved Transfer-Redesign-UI.html mockup.
+  static const Color _accent = Color(0xFF1B7D7D); // primary teal
+  static const Color _amber = Color(0xFFE08A2C); // transit
+  static const Color _missing = Color(0xFFD9534F); // red
   static const String _powerPrefsKey = 'transfer_in_power_dbm_v1';
 
   /// Per-screen power persisted across sessions; mirrors the count gear
@@ -535,7 +536,7 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
             received: c.received, missing: c.missing, expected: c.expected),
         Expanded(
           child: ListView(
-            padding: EdgeInsets.fromLTRB(12.w, 12.h, 12.w, 16.h),
+            padding: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 8.h),
             children: [
               for (final g in groups) _SkuGroupRow(group: g),
               for (final m in _manualLines)
@@ -556,24 +557,22 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
                   child: Center(
                     child: Text('Nothing on this slip.',
                         style: GoogleFonts.manrope(
-                            fontSize: 14.sp, color: const Color(0xFF6D7979))),
+                            fontSize: 14.sp, color: _kMuted)),
                   ),
                 ),
             ],
           ),
         ),
         const _Legend(),
-        Container(
-          width: double.infinity,
-          color: const Color(0xFFEFF2F2),
-          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 9.h),
+        Padding(
+          padding: EdgeInsets.fromLTRB(18.w, 2.h, 18.w, 8.h),
           child: Text(
-            _commitMsg ?? 'TRIGGER TO CONFIRM RFID    ·    ± MANUAL QTY',
+            _commitMsg ?? 'TRIGGER TO CONFIRM RFID  ·  ± MANUAL QTY',
             style: GoogleFonts.spaceGrotesk(
-              fontSize: 10.5.sp,
+              fontSize: 13.sp,
               fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-              color: _commitMsg != null ? _accent : const Color(0xFF6D7979),
+              letterSpacing: 1.5,
+              color: _commitMsg != null ? _missing : _kMuted,
             ),
           ),
         ),
@@ -583,43 +582,48 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
 
   /// Frame 8 — the received confirmation: done band + received rows w/ badges.
   Widget _receivedDoneBody() {
+    final total = _doneRfid + _doneManual;
     return Column(
       children: [
         Container(
-          width: double.infinity,
-          color: const Color(0x1A1B7F4F),
-          padding: EdgeInsets.fromLTRB(16.w, 18.h, 16.w, 18.h),
+          margin: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 0),
+          decoration: BoxDecoration(
+            color: _kGreenBg,
+            borderRadius: BorderRadius.circular(8.r),
+          ),
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 18.h),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                Icon(LucideIcons.checkCircle2, size: 20.sp, color: _accent),
-                SizedBox(width: 8.w),
-                Text('RECEIVED  ·  IN STOCK',
-                    style: GoogleFonts.spaceGrotesk(
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.0,
-                        color: _accent)),
-              ]),
-              SizedBox(height: 5.h),
+              Text('Received ✓ · IN STOCK',
+                  style: GoogleFonts.spaceGrotesk(
+                      fontSize: 18.sp,
+                      fontWeight: FontWeight.w800,
+                      color: _kGreen)),
+              SizedBox(height: 4.h),
               Text(
-                '$_doneRfid RFID${_doneManual > 0 ? "  ·  $_doneManual manual" : ""}  ·  slip #${widget.slipNumber ?? "—"} fully received',
+                '$total of $total · slip #${widget.slipNumber ?? "—"} fully received at ${widget.sourceName.isNotEmpty ? widget.sourceName.toUpperCase() : "DESTINATION"}',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.manrope(
-                    fontSize: 13.sp, color: const Color(0xFF3F4A4A)),
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                    color: _kSlate),
               ),
             ],
           ),
         ),
         Expanded(
           child: ListView(
-            padding: EdgeInsets.fromLTRB(12.w, 12.h, 12.w, 16.h),
+            padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 8.h),
             children: [
               for (final g in _rfidGroups())
-                _DoneRow(sku: g.sku, desc: g.desc, badge: 'RFID'),
+                _DoneRow(
+                    sku: '${g.sku} · ×${g.received}',
+                    desc: g.desc,
+                    badge: 'RFID'),
               for (final m in _manualLines)
                 _DoneRow(
-                  sku: (m['sku'] ?? '').toString(),
+                  sku:
+                      '${(m['sku'] ?? '').toString()} · ×${(m['qty'] as num?)?.toInt() ?? 0}',
                   desc: [m['name'], m['color'], m['size']]
                       .map((e) => (e ?? '').toString().trim())
                       .where((e) => e.isNotEmpty)
@@ -639,46 +643,46 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
     return SafeArea(
       top: false,
       child: Container(
-        color: Colors.white,
-        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 14.h),
+        color: _kSurface,
+        padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 12.h),
         child: Row(
           children: [
             Expanded(
               child: SizedBox(
-                height: 56.h,
+                height: 50.h,
                 child: OutlinedButton(
                   onPressed: () => Navigator.of(context).pop(),
                   style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white,
                     foregroundColor: _accent,
-                    side: const BorderSide(color: _accent, width: 2),
-                    shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero),
+                    side: const BorderSide(color: _accent, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(2.r)),
                     textStyle: GoogleFonts.spaceGrotesk(
-                        fontSize: 13.sp,
+                        fontSize: 15.sp,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 1.4),
+                        letterSpacing: 0.8),
                   ),
                   child: const Text('NEW RECEIVE'),
                 ),
               ),
             ),
-            SizedBox(width: 10.w),
+            SizedBox(width: 8.w),
             Expanded(
-              flex: 2,
               child: SizedBox(
-                height: 56.h,
+                height: 50.h,
                 child: FilledButton(
                   onPressed: () =>
                       Navigator.of(context).popUntil((r) => r.isFirst),
                   style: FilledButton.styleFrom(
                     backgroundColor: _accent,
                     foregroundColor: Colors.white,
-                    shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(2.r)),
                     textStyle: GoogleFonts.spaceGrotesk(
-                        fontSize: 13.sp,
+                        fontSize: 15.sp,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 1.8),
+                        letterSpacing: 0.8),
                   ),
                   child: const Text('DONE'),
                 ),
@@ -712,64 +716,61 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
           : SafeArea(
               top: false,
               child: Container(
-                color: Colors.white,
-                padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 14.h),
+                color: _kSurface,
+                padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 12.h),
                 child: Row(
                   children: [
                     Expanded(
                       child: SizedBox(
-                        height: 56.h,
-                        child: OutlinedButton.icon(
+                        height: 50.h,
+                        child: FilledButton.icon(
                           onPressed: _scanning ? _stopScan : _startScan,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: _scanning ? _missing : _accent,
-                            side: BorderSide(
-                                color: _scanning ? _missing : _accent,
-                                width: 2.w),
-                            shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _scanning ? _missing : _kTealDark,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(2.r)),
                             textStyle: GoogleFonts.spaceGrotesk(
-                              fontSize: 13.sp,
+                              fontSize: 15.sp,
                               fontWeight: FontWeight.w800,
-                              letterSpacing: 1.6,
+                              letterSpacing: 0.8,
                             ),
                           ),
                           icon: Icon(
                             _scanning ? LucideIcons.square : LucideIcons.play,
-                            size: 20.sp,
+                            size: 18.sp,
                           ),
-                          label: Text(_scanning ? 'STOP' : 'START'),
+                          label: Text(_scanning ? 'STOP' : 'SCAN'),
                         ),
                       ),
                     ),
-                    SizedBox(width: 10.w),
+                    SizedBox(width: 8.w),
                     Expanded(
-                      flex: 2,
                       child: SizedBox(
-                        height: 56.h,
+                        height: 50.h,
                         child: FilledButton.icon(
                           onPressed: _committing ? null : _commit,
                           style: FilledButton.styleFrom(
                             backgroundColor: _accent,
                             foregroundColor: Colors.white,
-                            shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(2.r)),
                             textStyle: GoogleFonts.spaceGrotesk(
-                              fontSize: 13.sp,
+                              fontSize: 15.sp,
                               fontWeight: FontWeight.w800,
-                              letterSpacing: 1.8,
+                              letterSpacing: 0.8,
                             ),
                           ),
                           icon: _committing
                               ? SizedBox(
-                                  width: 20.w,
-                                  height: 20.h,
+                                  width: 18.w,
+                                  height: 18.h,
                                   child: const CircularProgressIndicator(
                                     strokeWidth: 2,
                                     color: Colors.white,
                                   ),
                                 )
-                              : Icon(LucideIcons.checkCircle2, size: 20.sp),
+                              : Icon(LucideIcons.checkCircle2, size: 18.sp),
                           label: Text(_committing ? 'COMMITTING…' : 'RECEIVE'),
                         ),
                       ),
@@ -779,7 +780,7 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
               ),
             ),
       body: ColoredBox(
-        color: const Color(0xFFF5F5F5),
+        color: _kSurface,
         child: _loading && _detail == null
             ? const Center(child: CircularProgressIndicator(color: _accent))
             : _error != null
@@ -811,8 +812,30 @@ class _SkuGroup {
   int received = 0;
 }
 
-/// Frame 5 KPI tiles: received · missing · expected, each with a faint
-/// watermark glyph (mirrors the re-encode header tiles).
+// ── mockup palette (Transfer-Redesign-UI.html) ────────────────────────────────
+const Color _kTeal = Color(0xFF1B7D7D);
+const Color _kTealDark = Color(0xFF0F5757);
+const Color _kGreen = Color(0xFF2A8E2A);
+const Color _kGreenBg = Color(0xFFD6F5E6);
+const Color _kAmber = Color(0xFFE08A2C);
+const Color _kRed = Color(0xFFD9534F);
+const Color _kInk = Color(0xFF171D1D);
+const Color _kSlate = Color(0xFF3F4A4A);
+const Color _kMuted = Color(0xFF8A9090);
+const Color _kBorder2 = Color(0xFFBCC9C9);
+const Color _kSurface = Color(0xFFF5F7F7);
+const Color _kCard = Color(0xFFECECEC);
+const Color _kTileBg = Color(0xFFEEF4F3);
+
+Color _dotColor(int received, int total) {
+  if (total > 0 && received >= total) return _kGreen;
+  if (received == 0) return _kRed;
+  return _kAmber;
+}
+
+/// Frame 5 KPI tiles: received · missing · expected. Uniform pale-teal tile,
+/// lowercase Manrope label top-left, big centred number coloured by type, faint
+/// watermark glyph bottom-right (mirrors the re-encode header tiles).
 class _ReceiveTiles extends StatelessWidget {
   const _ReceiveTiles({
     required this.received,
@@ -825,39 +848,32 @@ class _ReceiveTiles extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.white,
-      padding: EdgeInsets.fromLTRB(12.w, 12.h, 12.w, 12.h),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 0),
       child: Row(
         children: [
           _Tile(
-            label: 'RECEIVED',
+            label: 'received',
             value: received,
-            color: const Color(0xFF1B7F4F),
-            bg: const Color(0x141B7F4F),
-            border: const Color(0x331B7F4F),
-            watermark: const Color(0x1A1B7F4F),
-            icon: LucideIcons.checkCircle2,
+            valueColor: _kGreen,
+            watermark: const Color(0x1A2A8E2A),
+            icon: Icons.check_circle,
           ),
-          SizedBox(width: 10.w),
+          SizedBox(width: 8.w),
           _Tile(
-            label: 'MISSING',
+            label: 'missing',
             value: missing,
-            color: const Color(0xFFB23A3A),
-            bg: const Color(0x14B23A3A),
-            border: const Color(0x33B23A3A),
-            watermark: const Color(0x1AB23A3A),
-            icon: LucideIcons.alertCircle,
+            valueColor: _kRed,
+            watermark: const Color(0x1AD9534F),
+            icon: Icons.cancel,
           ),
-          SizedBox(width: 10.w),
+          SizedBox(width: 8.w),
           _Tile(
-            label: 'EXPECTED',
+            label: 'expected',
             value: expected,
-            color: const Color(0xFF3F4A4A),
-            bg: const Color(0xFFF1F4F4),
-            border: const Color(0xFFD7DEDE),
-            watermark: const Color(0x143F4A4A),
-            icon: LucideIcons.package,
+            valueColor: _kInk,
+            watermark: const Color(0x1A171D1D),
+            icon: Icons.inventory_2,
           ),
         ],
       ),
@@ -869,17 +885,13 @@ class _Tile extends StatelessWidget {
   const _Tile({
     required this.label,
     required this.value,
-    required this.color,
-    required this.bg,
-    required this.border,
+    required this.valueColor,
     required this.watermark,
     required this.icon,
   });
   final String label;
   final int value;
-  final Color color;
-  final Color bg;
-  final Color border;
+  final Color valueColor;
   final Color watermark;
   final IconData icon;
 
@@ -887,42 +899,42 @@ class _Tile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        height: 92.h,
+        height: 62.h,
         decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10.r),
-          border: Border.all(color: border),
+          color: _kTileBg,
+          borderRadius: BorderRadius.circular(2.r),
         ),
         clipBehavior: Clip.hardEdge,
         child: Stack(
           children: [
             Positioned(
-              right: -6.w,
-              bottom: -10.h,
-              child: Icon(icon, size: 58.sp, color: watermark),
+              right: 6.w,
+              bottom: -2.h,
+              child: Icon(icon, size: 34.sp, color: watermark),
             ),
             Padding(
-              padding: EdgeInsets.fromLTRB(12.w, 11.h, 12.w, 11.h),
+              padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 4.h),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
                     label,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 10.5.sp,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                      color: color,
+                    style: GoogleFonts.manrope(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w700,
+                      color: _kSlate,
                     ),
                   ),
+                  SizedBox(height: 1.h),
                   Text(
                     '$value',
+                    textAlign: TextAlign.center,
                     style: GoogleFonts.spaceGrotesk(
-                      fontSize: 30.sp,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 32.sp,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -1,
                       height: 1.0,
-                      color: color,
+                      color: valueColor,
                     ),
                   ),
                 ],
@@ -935,46 +947,36 @@ class _Tile extends StatelessWidget {
   }
 }
 
-/// Frame 5 RFID row: status dot + SKU/desc + "received/total" qty.
+/// Frame 5 RFID row: grey card · status dot · SKU (mono) / desc · "N/N" qty.
 class _SkuGroupRow extends StatelessWidget {
   const _SkuGroupRow({required this.group});
   final _SkuGroup group;
 
   @override
   Widget build(BuildContext context) {
-    final all = group.total > 0 && group.received >= group.total;
-    final none = group.received == 0;
-    final dot = all
-        ? const Color(0xFF1B7F4F)
-        : none
-            ? const Color(0xFFB23A3A)
-            : const Color(0xFFB87A00);
+    final dot = _dotColor(group.received, group.total);
     return Container(
-      margin: EdgeInsets.only(bottom: 10.h),
-      padding: EdgeInsets.fromLTRB(14.w, 14.h, 14.w, 14.h),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10.r),
-        border: Border.all(color: const Color(0xFFE2E8E8)),
-      ),
+      margin: EdgeInsets.only(bottom: 8.h),
+      color: _kCard,
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
       child: Row(
         children: [
           Container(
-            width: 12.w,
-            height: 12.w,
+            width: 10.w,
+            height: 10.w,
             decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
           ),
-          SizedBox(width: 13.w),
+          SizedBox(width: 10.w),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   group.sku,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF171D1D),
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 17.sp,
+                    fontWeight: FontWeight.w700,
+                    color: _kInk,
                   ),
                 ),
                 if (group.desc.isNotEmpty) ...[
@@ -984,9 +986,9 @@ class _SkuGroupRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.manrope(
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF3F4A4A),
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.w700,
+                      color: _kSlate,
                     ),
                   ),
                 ],
@@ -996,9 +998,9 @@ class _SkuGroupRow extends StatelessWidget {
           SizedBox(width: 10.w),
           Text(
             '${group.received}/${group.total}',
-            style: GoogleFonts.robotoMono(
-              fontSize: 17.sp,
-              fontWeight: FontWeight.w700,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 20.sp,
+              fontWeight: FontWeight.w800,
               color: dot,
             ),
           ),
@@ -1008,7 +1010,7 @@ class _SkuGroupRow extends StatelessWidget {
   }
 }
 
-/// Frame 5 manual row: status dot + SKU + MANUAL badge + −/N/+ stepper.
+/// Frame 5 manual row: grey card · status dot · SKU/desc · −/N/+ stepper.
 class _ManualStepperRow extends StatelessWidget {
   const _ManualStepperRow({
     required this.line,
@@ -1028,66 +1030,32 @@ class _ManualStepperRow extends StatelessWidget {
         .where((e) => e.isNotEmpty)
         .join(' · ')
         .toUpperCase();
-    final all = qty > 0 && received >= qty;
-    final none = received == 0;
-    final dot = all
-        ? const Color(0xFF1B7F4F)
-        : none
-            ? const Color(0xFFB23A3A)
-            : const Color(0xFFB87A00);
+    final dot = _dotColor(received, qty);
     return Container(
-      margin: EdgeInsets.only(bottom: 10.h),
-      padding: EdgeInsets.fromLTRB(14.w, 10.h, 10.w, 10.h),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10.r),
-        border: Border.all(color: const Color(0xFFE2E8E8)),
-      ),
+      margin: EdgeInsets.only(bottom: 8.h),
+      color: _kCard,
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 9.h),
       child: Row(
         children: [
           Container(
-            width: 12.w,
-            height: 12.w,
+            width: 10.w,
+            height: 10.w,
             decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
           ),
-          SizedBox(width: 13.w),
+          SizedBox(width: 10.w),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        sku.isEmpty ? '—' : sku,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF171D1D),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 8.w),
-                    Container(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F4F4),
-                        borderRadius: BorderRadius.circular(4.r),
-                      ),
-                      child: Text(
-                        'MANUAL',
-                        style: GoogleFonts.spaceGrotesk(
-                          fontSize: 9.sp,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
-                          color: const Color(0xFF6D7979),
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  sku.isEmpty ? '—' : sku,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 17.sp,
+                    fontWeight: FontWeight.w700,
+                    color: _kInk,
+                  ),
                 ),
                 if (desc.isNotEmpty) ...[
                   SizedBox(height: 3.h),
@@ -1096,36 +1064,36 @@ class _ManualStepperRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.manrope(
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF3F4A4A),
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.w700,
+                      color: _kSlate,
                     ),
                   ),
                 ],
               ],
             ),
           ),
-          SizedBox(width: 8.w),
+          SizedBox(width: 10.w),
           _StepBtn(
-            icon: LucideIcons.minus,
+            icon: Icons.remove,
             onTap: received > 0 ? () => onChange(received - 1) : null,
           ),
           SizedBox(width: 8.w),
           SizedBox(
-            width: 30.w,
+            width: 24.w,
             child: Text(
               '$received',
               textAlign: TextAlign.center,
-              style: GoogleFonts.robotoMono(
-                fontSize: 17.sp,
-                fontWeight: FontWeight.w700,
-                color: dot,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w800,
+                color: _kInk,
               ),
             ),
           ),
           SizedBox(width: 8.w),
           _StepBtn(
-            icon: LucideIcons.plus,
+            icon: Icons.add,
             onTap: received < qty ? () => onChange(received + 1) : null,
           ),
         ],
@@ -1144,25 +1112,22 @@ class _StepBtn extends StatelessWidget {
     final on = onTap != null;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8.r),
       child: Container(
-        width: 38.w,
-        height: 38.w,
+        width: 28.w,
+        height: 28.w,
         decoration: BoxDecoration(
-          color: on ? const Color(0xFFEFF5F3) : const Color(0xFFF4F6F6),
-          borderRadius: BorderRadius.circular(8.r),
-          border: Border.all(
-              color: on ? const Color(0xFF1B7F4F) : const Color(0xFFD7DEDE)),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(2.r),
+          border: Border.all(color: _kBorder2),
         ),
         child: Icon(icon,
-            size: 20.sp,
-            color: on ? const Color(0xFF1B7F4F) : const Color(0xFFC2CCCC)),
+            size: 16.sp, color: on ? _kSlate : const Color(0xFFC2CCCC)),
       ),
     );
   }
 }
 
-/// Frame 8 received row: green check + SKU/desc + RFID|MANUAL badge.
+/// Frame 8 received row: grey card · green dot · SKU·×qty / desc · RFID|MANUAL.
 class _DoneRow extends StatelessWidget {
   const _DoneRow({required this.sku, required this.desc, required this.badge});
   final String sku;
@@ -1173,28 +1138,28 @@ class _DoneRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final manual = badge == 'MANUAL';
     return Container(
-      margin: EdgeInsets.only(bottom: 10.h),
-      padding: EdgeInsets.fromLTRB(14.w, 14.h, 14.w, 14.h),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10.r),
-        border: Border.all(color: const Color(0xFFE2E8E8)),
-      ),
+      margin: EdgeInsets.only(bottom: 8.h),
+      color: _kCard,
+      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
       child: Row(
         children: [
-          Icon(LucideIcons.checkCircle2,
-              size: 18.sp, color: const Color(0xFF1B7F4F)),
-          SizedBox(width: 12.w),
+          Container(
+            width: 10.w,
+            height: 10.w,
+            decoration:
+                const BoxDecoration(color: _kGreen, shape: BoxShape.circle),
+          ),
+          SizedBox(width: 10.w),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   sku.isEmpty ? '—' : sku,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF171D1D),
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 17.sp,
+                    fontWeight: FontWeight.w700,
+                    color: _kInk,
                   ),
                 ),
                 if (desc.isNotEmpty) ...[
@@ -1204,9 +1169,9 @@ class _DoneRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.manrope(
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF3F4A4A),
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.w700,
+                      color: _kSlate,
                     ),
                   ),
                 ],
@@ -1215,19 +1180,18 @@ class _DoneRow extends StatelessWidget {
           ),
           SizedBox(width: 10.w),
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+            padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 3.h),
             decoration: BoxDecoration(
-              color: manual ? const Color(0xFFF1F4F4) : const Color(0x141B7F4F),
-              borderRadius: BorderRadius.circular(5.r),
+              color: manual ? const Color(0x2E8A9090) : const Color(0x1F1B7D7D),
+              borderRadius: BorderRadius.circular(2.r),
             ),
             child: Text(
               badge,
               style: GoogleFonts.spaceGrotesk(
-                fontSize: 10.sp,
+                fontSize: 9.sp,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.8,
-                color:
-                    manual ? const Color(0xFF6D7979) : const Color(0xFF1B7F4F),
+                color: manual ? _kSlate : _kTeal,
               ),
             ),
           ),
@@ -1237,7 +1201,7 @@ class _DoneRow extends StatelessWidget {
   }
 }
 
-/// Frame 5 legend strip: all-found · partial · none.
+/// Frame 5 legend strip: all found · partial · none (inline, left-aligned).
 class _Legend extends StatelessWidget {
   const _Legend();
 
@@ -1247,32 +1211,30 @@ class _Legend extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 9.w,
-              height: 9.w,
+              width: 10.w,
+              height: 10.w,
               decoration: BoxDecoration(color: c, shape: BoxShape.circle),
             ),
-            SizedBox(width: 6.w),
+            SizedBox(width: 5.w),
             Text(
               t,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 10.sp,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
-                color: const Color(0xFF6D7979),
+              style: GoogleFonts.manrope(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w600,
+                color: _kMuted,
               ),
             ),
           ],
         );
-    return Container(
-      width: double.infinity,
-      color: Colors.white,
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 9.h),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16.w, 6.h, 16.w, 4.h),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          item(const Color(0xFF1B7F4F), 'ALL FOUND'),
-          item(const Color(0xFFB87A00), 'PARTIAL'),
-          item(const Color(0xFFB23A3A), 'NONE'),
+          item(_kGreen, 'all found'),
+          SizedBox(width: 12.w),
+          item(_kAmber, 'partial'),
+          SizedBox(width: 12.w),
+          item(_kRed, 'none'),
         ],
       ),
     );

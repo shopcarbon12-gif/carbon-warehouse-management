@@ -631,11 +631,18 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
                         style: GoogleFonts.spaceGrotesk(
                             fontSize: 14.sp, fontWeight: FontWeight.w600),
                         decoration: const InputDecoration(
-                          // The global input theme fills with grey; turn it off
-                          // so the field is pure white inside the search box
-                          // (no box-inside-a-box).
+                          // The global input theme fills grey AND draws an
+                          // outlined enabled/focused border — that's the
+                          // "box inside a box". Null EVERY border + the fill so
+                          // the field is pure white inside the search container.
                           filled: false,
+                          fillColor: Colors.transparent,
                           border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
                           isCollapsed: true,
                           contentPadding: EdgeInsets.symmetric(vertical: 14),
                           hintText: 'Search a SKU to add manually…',
