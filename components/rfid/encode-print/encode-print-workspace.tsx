@@ -22,8 +22,8 @@ import { LabelPreviewCanvas } from "@/components/tags-labels/label-preview-canva
 import { generateNonRfidTag203Batch } from "@/lib/utils/zpl-carbon-tag-203";
 import type { CarbonTagInput } from "@/lib/utils/zpl-carbon-tag";
 
-/** The .70 reader is the encode + register-area antenna this page is pinned to. */
-const READER_IP = "192.168.1.70";
+/** The .15 reader is the encode + register-area antenna this page is pinned to. */
+const READER_IP = "192.168.1.15";
 /** Non-RFID label printer — Zebra .220 (ZD500R, 203 dpi), browser-direct. */
 const PRINTER_URL = "http://192.168.1.220:80/pstprnt";
 
@@ -60,7 +60,7 @@ const STEPS: { key: Step; n: string; t: string }[] = [
 const STEP_ORDER: Step[] = ["scan", "encoding", "verify", "printing", "done"];
 
 export function EncodePrintWorkspace() {
-  // ── Resolve the .70 reader UUID ──────────────────────────────────────
+  // ── Resolve the .15 reader UUID ──────────────────────────────────────
   const { data: hc } = useSWR<HcTree>("/api/hardware-config", hcFetcher, {
     revalidateOnFocus: false,
   });
@@ -113,10 +113,10 @@ export function EncodePrintWorkspace() {
   const verifiedGuardRef = useRef(false);
   const printStartedRef = useRef(false);
 
-  const [statusMsg, setStatusMsg] = useState("Bring a tag to the .70 antenna to begin.");
+  const [statusMsg, setStatusMsg] = useState("Bring a tag to the .15 antenna to begin.");
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
-  // ── .70 scan-session: auto-start on mount, end on unmount ────────────
+  // ── .15 scan-session: auto-start on mount, end on unmount ────────────
   const startSession = useCallback(async (rid: string) => {
     try {
       const r = await fetch("/api/scan-sessions/start", {
@@ -132,10 +132,10 @@ export function EncodePrintWorkspace() {
         setSessionActive(true);
         setReaderErr(null);
       } else {
-        setReaderErr(`Could not start .70 (${j?.reason ?? j?.error ?? "unknown"}).`);
+        setReaderErr(`Could not start .15 (${j?.reason ?? j?.error ?? "unknown"}).`);
       }
     } catch {
-      setReaderErr("Network error starting the .70 reader.");
+      setReaderErr("Network error starting the .15 reader.");
     }
   }, []);
 
@@ -143,7 +143,7 @@ export function EncodePrintWorkspace() {
   useEffect(() => {
     if (appliedRef.current || !readerId) return;
     appliedRef.current = true;
-    // Mount-time external sync: wake the .70 reader. setState happens async
+    // Mount-time external sync: wake the .15 reader. setState happens async
     // inside startSession (after the fetch), not synchronously here.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void startSession(readerId);
@@ -164,7 +164,7 @@ export function EncodePrintWorkspace() {
     [],
   );
 
-  // ── SSE: stream EPCs from .70; in verify, watch for the new EPC ──────
+  // ── SSE: stream EPCs from .15; in verify, watch for the new EPC ──────
   useEffect(() => {
     if (!sessionActive || !readerId) return;
     const es = new EventSource("/api/edge/stream");
@@ -359,7 +359,7 @@ export function EncodePrintWorkspace() {
       }
       setNewEpc(j.epc);
       if (j.jobId) {
-        setStatusMsg("Writing chip via .70…");
+        setStatusMsg("Writing chip via .15…");
         const ok = await pollJob(j.jobId);
         if (!ok) {
           setStep("error");
@@ -372,7 +372,7 @@ export function EncodePrintWorkspace() {
       verifiedGuardRef.current = false;
       setSeen(new Map());
       setSelectedEpc(null);
-      setStatusMsg(`Wrote ✓ → ${j.epc}. Bring the tag back to .70 to confirm…`);
+      setStatusMsg(`Wrote ✓ → ${j.epc}. Bring the tag back to .15 to confirm…`);
       setStep("verify");
     } catch (e) {
       setErrMsg(e instanceof Error ? e.message : "network error");
@@ -427,7 +427,7 @@ export function EncodePrintWorkspace() {
     verifiedGuardRef.current = false;
     printStartedRef.current = false;
     setErrMsg(null);
-    setStatusMsg("Bring a tag to the .70 antenna to begin.");
+    setStatusMsg("Bring a tag to the .15 antenna to begin.");
     setStep("scan");
   }, []);
 
@@ -449,13 +449,13 @@ export function EncodePrintWorkspace() {
           }
         >
           <Radio className="h-3.5 w-3.5" />
-          Reader .70 · {readerErr ? "error" : sessionActive ? "on" : readerId ? "starting…" : "not found"}
+          Reader .15 · {readerErr ? "error" : sessionActive ? "on" : readerId ? "starting…" : "not found"}
         </span>
         <div className="min-w-[320px] flex-1">
           <RssiProximitySlider
             value={threshold}
             onChange={setThreshold}
-            hint=".70 proximity filter"
+            hint=".15 proximity filter"
           />
         </div>
       </div>
@@ -501,14 +501,14 @@ export function EncodePrintWorkspace() {
           {step === "scan" ? (
             <>
               <h2 className="mb-3 text-[11px] uppercase tracking-wider text-[var(--wms-muted)]">
-                1 · Scan a tag near .70
+                1 · Scan a tag near .15
               </h2>
               {/* reading list */}
               <div className="overflow-hidden rounded-lg border border-[var(--wms-border)]">
                 {visible.length === 0 ? (
                   <div className="px-4 py-6 text-center font-mono text-xs text-[var(--wms-muted)]">
                     {seen.size === 0
-                      ? "Listening… wave a tag in front of .70."
+                      ? "Listening… wave a tag in front of .15."
                       : `All ${seen.size} tag(s) are below the proximity threshold — bring one closer.`}
                   </div>
                 ) : (
@@ -613,7 +613,7 @@ export function EncodePrintWorkspace() {
                 </button>
                 <span className="font-mono text-[11px] text-[var(--wms-muted)]">
                   {!effectiveEpc
-                    ? "select the tag in front of .70"
+                    ? "select the tag in front of .15"
                     : !target
                       ? "pick a target SKU"
                       : `ready: ${effectiveEpc.slice(0, 8)}… → ${target.sku}`}
@@ -652,7 +652,7 @@ export function EncodePrintWorkspace() {
                 {step === "verify" ? (
                   <p className="text-[var(--wms-muted)]">
                     Reading section refreshed. The label prints <b className="text-[var(--wms-fg)]">only</b>{" "}
-                    when .70 re-reads the new tag above.
+                    when .15 re-reads the new tag above.
                   </p>
                 ) : null}
 

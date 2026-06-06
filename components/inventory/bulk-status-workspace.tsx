@@ -13,12 +13,12 @@ import {
 } from "@/components/shared/rssi-proximity-slider";
 
 /** IP of the reader the operator wants pre-selected when this workspace
- *  mounts. Operator request 2026-05-26: .70 covers the bulk-status table
+ *  mounts. Operator request 2026-05-26: .15 covers the bulk-status table
  *  area; auto-selecting it removes a click from the common flow. The
  *  default is applied once, on first data load, then never again — so a
  *  cashier who deselects it (or picks a different reader) isn't fought
  *  by a re-application. */
-const BULK_STATUS_DEFAULT_READER_IP = "192.168.1.70";
+const BULK_STATUS_DEFAULT_READER_IP = "192.168.1.15";
 
 type HardwareConfigZone = {
   readers?: Array<{ id: string; network_address: string | null }>;
@@ -104,7 +104,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     selectedReadersRef.current = selectedReaders;
   }, [selectedReaders]);
 
-  // Pre-select the default reader (currently .70) when this workspace
+  // Pre-select the default reader (currently .15) when this workspace
   // mounts. Fires exactly once — `appliedDefaultRef` guards against the
   // SWR cache re-firing the effect on focus/revalidate from re-applying
   // and stomping on the operator's manual edits.
@@ -199,7 +199,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     appliedDefaultRef.current = true; // mark applied either way — no retry
     if (defaultId) {
       setSelectedReaders(new Set([defaultId]));
-      // Operator request: entering the page auto-starts the default reader (.70).
+      // Operator request: entering the page auto-starts the default reader (.15).
       void startScan([defaultId]);
     }
   }, [hcData, startScan]);
@@ -231,7 +231,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
   // Trashed EPCs stay hidden for the session (re-surface on Clear staged).
   const suppressedRef = useRef<Set<string>>(new Set());
 
-  // RSSI proximity slider — shown ONLY when .70 is the single selected reader.
+  // RSSI proximity slider — shown ONLY when .15 is the single selected reader.
   const [rssiThreshold, setRssiThreshold] = useRssiThreshold("wms.bulk-status.rssi");
   const reader70Id = useMemo(() => {
     for (const loc of hcData?.locations ?? []) {
@@ -544,7 +544,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
         <RssiProximitySlider
           value={rssiThreshold}
           onChange={setRssiThreshold}
-          hint=".70 proximity filter"
+          hint=".15 proximity filter"
         />
       ) : null}
 

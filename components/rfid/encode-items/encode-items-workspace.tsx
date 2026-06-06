@@ -22,7 +22,7 @@
  * physically rewrite the tag via the C72E handheld OR a follow-up
  * commit that wires the fixed-reader write path through the agent.
  *
- * Default reader: .70 (matches the bulk-status workspace's default).
+ * Default reader: .15 (matches the bulk-status workspace's default).
  * Operator can change via the ReaderPicker.
  */
 
@@ -49,7 +49,7 @@ import {
   passesRssi,
 } from "@/components/shared/rssi-proximity-slider";
 
-const DEFAULT_READER_IP = "192.168.1.70";
+const DEFAULT_READER_IP = "192.168.1.15";
 
 type HardwareConfigReader = {
   id: string;
@@ -149,7 +149,7 @@ type Row = {
 };
 
 export function EncodeItemsWorkspace() {
-  // --- Reader picker + default to .70 ----------------------------------
+  // --- Reader picker + default to .15 ----------------------------------
   const [selectedReaders, setSelectedReaders] = useState<Set<string>>(new Set());
   const { data: hcData } = useSWR<HardwareConfigTree>(
     "/api/hardware-config",
@@ -184,7 +184,7 @@ export function EncodeItemsWorkspace() {
     if (defaultId) setSelectedReaders(new Set([defaultId]));
   }, [hcData]);
 
-  // RSSI proximity slider — shown ONLY when .70 is the single selected reader.
+  // RSSI proximity slider — shown ONLY when .15 is the single selected reader.
   // (RSSI across multiple readers at different distances is meaningless.)
   const [rssiThreshold, setRssiThreshold] = useRssiThreshold("wms.encode-items.rssi");
   const reader70Id = useMemo(() => {
@@ -244,7 +244,7 @@ export function EncodeItemsWorkspace() {
     if (cPrefixOnly) {
       arr = arr.filter((r) => /^[Cc]/.test(r.epc));
     }
-    // Proximity filter (only when .70 is the sole selected reader).
+    // Proximity filter (only when .15 is the sole selected reader).
     if (showRssi) {
       arr = arr.filter((r) => passesRssi(r.rssi, rssiThreshold));
     }
@@ -702,7 +702,7 @@ export function EncodeItemsWorkspace() {
           `C-prefix tags can't be encoded through the POS reader ` +
             `(${posDedicatedSelected.map((r) => r.network_address ?? r.id).join(", ")}) — ` +
             `the chip path on the WiFi extender doesn't support our write binary. ` +
-            `Pick a non-extender reader (e.g. 192.168.1.70) and bring the tag to its antenna.`,
+            `Pick a non-extender reader (e.g. 192.168.1.15) and bring the tag to its antenna.`,
         );
         return;
       }
@@ -1040,7 +1040,7 @@ export function EncodeItemsWorkspace() {
         <RssiProximitySlider
           value={rssiThreshold}
           onChange={setRssiThreshold}
-          hint=".70 proximity filter"
+          hint=".15 proximity filter"
         />
       ) : null}
 
