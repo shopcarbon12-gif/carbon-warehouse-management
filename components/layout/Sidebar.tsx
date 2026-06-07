@@ -102,6 +102,7 @@ const sections: NavSection[] = [
       p.startsWith("/rfid/exceptions") ||
       p.startsWith("/rfid/devices") ||
       p.startsWith("/rfid/hardware-config") ||
+      p.startsWith("/rfid/scan-epc") ||
       // Antenna Test page is no longer linked from the sidebar — operators
       // reach it via the per-antenna "Test" button in /rfid/hardware-config.
       // Section still highlights when an /antenna_test deep-link is open.
@@ -115,6 +116,7 @@ const sections: NavSection[] = [
       },
       { href: "/rfid/devices", label: "Devices", icon: Router },
       { href: "/rfid/hardware-config", label: "Hardware Config", icon: Cpu },
+      { href: "/rfid/scan-epc", label: "Scan EPC", icon: ScanLine },
     ],
   },
   {

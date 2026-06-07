@@ -40,6 +40,7 @@ const bodySchema = z.object({
     "bulk-import",
     "bulk-status",
     "bulk-geiger",
+    "scan-epc",
   ]),
   context: z.record(z.string(), z.unknown()).optional(),
 });
