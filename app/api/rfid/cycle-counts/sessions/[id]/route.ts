@@ -74,14 +74,17 @@ async function backfillFromCdmReads(
   const r = await client.query<{
     epc: string;
     reader_name: string;
+    antenna_number: string | null;
     first_seen_at: string;
   }>(
     `SELECT DISTINCT ON (upper(cr.epc_hex))
             upper(cr.epc_hex)                         AS epc,
             COALESCE(d.name, 'reader')                AS reader_name,
+            (a.config->>'antenna_number')             AS antenna_number,
             to_char(cr.read_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS first_seen_at
        FROM cdm_reads cr
        JOIN devices d ON d.id = cr.reader_id
+       LEFT JOIN devices a ON a.id = cr.antenna_id
       WHERE cr.tenant_id = $1::uuid
         AND d.location_id = $2::uuid
         AND cr.read_at >= $3::timestamptz
@@ -94,6 +97,38 @@ async function backfillFromCdmReads(
      polls within MIN_GAP_MS are skipped. */
   backfillState.set(sessionId, { lastAt: now, firstDone: true });
   if (r.rowCount === 0) return;
+
+  // Source label = reader name + antenna, e.g. "Aisle 3-4/1 · A2". The
+  // DISTINCT ON above kept the EARLIEST read per EPC, so the antenna shown is
+  // the one that saw the tag FIRST; appendSourceSightings is first-sighting-
+  // wins, so a later antenna/reader never overwrites it. (No antenna on the
+  // read → bare reader name.)
+  const sourceName = (row: {
+    reader_name: string;
+    antenna_number: string | null;
+  }): string =>
+    row.antenna_number
+      ? `${row.reader_name} · A${row.antenna_number}`
+      : row.reader_name;
+
+  // Stamp source for EVERY read-log EPC (not only ones missing from
+  // scanned_epcs). This is now the SOLE attribution path: the desktop
+  // live-scan POST no longer stamps a generic "desktop-scan" source, so each
+  // tag gets its true reader+antenna here regardless of which path first
+  // appended the EPC to scanned_epcs. Idempotent (first-sighting wins).
+  await appendSourceSightings(
+    client,
+    sessionId,
+    r.rows.map((row) => ({
+      epc: row.epc,
+      kind: "reader" as const,
+      name: sourceName(row),
+      ts: row.first_seen_at,
+    })),
+  );
+
+  // Append any EPCs the live SSE path missed into scanned_epcs (for the
+  // count + variance). Source is already stamped above.
   const haveSet = new Set(detail.scanned_epcs.map((e) => e.toUpperCase()));
   const missedRows = r.rows.filter((row) => !haveSet.has(row.epc));
   if (missedRows.length === 0) return;
@@ -119,22 +154,6 @@ async function backfillFromCdmReads(
         SET scanned_epcs = $3::jsonb
       WHERE tenant_id = $1::uuid AND id = $2::uuid`,
     [tenantId, sessionId, JSON.stringify(merged)],
-  );
-  // Stamp source attribution: each newly-ingested EPC gets the reader
-  // name + first-seen timestamp we resolved above. Existing entries in
-  // the source map are preserved (first-sighting wins).
-  const resultSet = new Set(results.map((res) => res.epc.toUpperCase()));
-  await appendSourceSightings(
-    client,
-    sessionId,
-    missedRows
-      .filter((row) => resultSet.has(row.epc))
-      .map((row) => ({
-        epc: row.epc,
-        kind: "reader" as const,
-        name: row.reader_name,
-        ts: row.first_seen_at,
-      })),
   );
   detail.scanned_epcs = merged;
 }

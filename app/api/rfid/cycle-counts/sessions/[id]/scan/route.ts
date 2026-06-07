@@ -13,10 +13,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Optional source attribution. Callers that want per-EPC provenance in
-// the workspace filter (mobile vs each reader by name) pass
+// the workspace filter (mobile add-on, or an explicit reader) pass
 // `source: { kind: 'mobile'|'reader', name: <device or reader name> }`.
-// Missing → tagged as `reader/desktop-scan-button` (the only thing today
-// that POSTs without a source is the desktop "scan manually" affordance).
+// Missing → NOT stamped here. The desktop live-scan flush POSTs without a
+// source; the server-side cdm_reads backfill (session GET route) attributes
+// those reads by true reader + antenna instead (e.g. "Aisle 3-4/1 · A2").
 const bodySchema = z.object({
   epcs: z
     .array(z.string().transform((s) => s.replace(/\s/g, "").toUpperCase()))
@@ -124,24 +125,26 @@ export async function POST(req: Request, { params }: Ctx) {
           WHERE tenant_id = $1::uuid AND id = $2::uuid`,
         [session.tid, id, JSON.stringify(merged)],
       );
-      // Source attribution — caller-supplied source wins; if missing,
-      // assume this came from the desktop manual-scan button so it
-      // gets a recognisable name in the filter dropdown.
-      const src = parsed.data.source ?? {
-        kind: "reader" as const,
-        name: "desktop-scan",
-      };
-      const nowIso = new Date().toISOString();
-      await appendSourceSightings(
-        client,
-        id,
-        results.map((r) => ({
-          epc: r.epc,
-          kind: src.kind,
-          name: src.name,
-          ts: nowIso,
-        })),
-      );
+      // Source attribution. An explicit caller source (mobile add-on close,
+      // or a named reader) is stamped here. The desktop live-scan flush POSTs
+      // WITHOUT a source — we deliberately DON'T stamp it (it used to become a
+      // catch-all "desktop-scan" bucket that hid the real reader/antenna). The
+      // server-side cdm_reads backfill (session GET route) attributes those
+      // reads by true reader + antenna, first-sighting wins.
+      if (parsed.data.source) {
+        const src = parsed.data.source;
+        const nowIso = new Date().toISOString();
+        await appendSourceSightings(
+          client,
+          id,
+          results.map((r) => ({
+            epc: r.epc,
+            kind: src.kind,
+            name: src.name,
+            ts: nowIso,
+          })),
+        );
+      }
     }
 
     // Refetch the session + variance in the same transaction so the workspace
