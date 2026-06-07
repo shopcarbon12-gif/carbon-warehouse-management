@@ -3540,30 +3540,40 @@ export class MonsoonSupervisor {
       // Per-antenna saved defaults from /antenna_test → "Save as default";
       // fall back to hardcoded normal-scan defaults when none set.
       //
-      // SAFETY: tag_focus + non-infinite cycle_mode are INTENTIONALLY ignored
-      // in normal scanning. Those settings make sense ONLY in an active
-      // antenna-test session (where the operator is watching live and the
-      // test sweep kills+respawns the binary every dwell, so the chip's
-      // session state never settles into the read-suppressed deadlock
-      // they trigger). Saved as persistent production defaults they
-      // silently kill `--infinite` mode — the reader looks slow / silent
-      // even though the chip is fine. Live evidence 2026-05-12: .15 had
-      // these saved by accident and looked "VSWR-protected" for hours
-      // until the actual cause surfaced. Ignoring them here is the
-      // belt-and-braces fix that protects every reader fleet-wide
-      // regardless of what saved configs leak through Save-Defaults
-      // clicks in the future.
+      // SAFETY: tag_focus is ALWAYS force-disabled in normal scanning. It
+      // suppresses re-reads of already-seen (static) inventory, so a normal
+      // scan looks slow / silent even though the chip is fine. Live evidence
+      // 2026-05-12: .15 had it saved by accident and looked "VSWR-protected"
+      // for hours. tag_focus makes sense ONLY in an active antenna-test
+      // session and is never honored as a persistent production default.
+      //
+      // cycle_mode IS honored (explicit operator opt-in). Some chassis go
+      // silent under sustained `--infinite` at the TOP of the power band:
+      // e.g. .77 (Aisle 3-4/2) at 33 dBm reads 0 on `--infinite` but 165
+      // unique on `--oscillating` (verified 2026-06-07; reads fine on
+      // --infinite up to 29 dBm, then cliffs to 0 at exactly 33). An operator
+      // opts such a reader into oscillating via the antenna's saved behaviour
+      // ("Save as default" with cycle_mode = oscillating) so the supervisor
+      // drives it the one way that keeps it reading at max power — instead of
+      // the records-judged recovery sweep endlessly dropping it to a working
+      // low power and then bouncing back to a silent 33 dBm.
       const beh = stampAnt?.behaviour;
-      if (beh?.tag_focus === true || (beh?.cycle_mode && beh.cycle_mode !== "infinite")) {
-        log.warn("supervisor: ignoring hostile saved defaults on antenna — using infinite + no tagfocus", {
+      if (beh?.tag_focus === true) {
+        log.warn("supervisor: ignoring saved tag_focus on antenna — forcing tagfocus OFF in normal scan", {
           readerId: spec.id,
           readerName: spec.name,
           antennaNumber: stampAntenna,
-          savedCycleMode: beh.cycle_mode,
-          savedTagFocus: beh.tag_focus === true,
+          savedTagFocus: true,
         });
       }
-      cycleMode = "infinite";
+      cycleMode = beh?.cycle_mode === "oscillating" ? "oscillating" : "infinite";
+      if (cycleMode === "oscillating") {
+        log.info("supervisor: honoring saved oscillating cycle_mode (top-of-band --infinite silence workaround)", {
+          readerId: spec.id,
+          readerName: spec.name,
+          antennaNumber: stampAntenna,
+        });
+      }
       // 1000ms inventory cycle. Earlier we ran 200ms for "smoother UI
       // ticks," but live evidence on .224 (2026-05-07) showed the chip
       // can't reliably enumerate at 200ms — binary exits clean with zero
