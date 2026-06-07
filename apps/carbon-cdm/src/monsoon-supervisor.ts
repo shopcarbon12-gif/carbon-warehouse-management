@@ -2443,6 +2443,13 @@ export class MonsoonSupervisor {
       bundle.readers
         .filter(
           (r) =>
+            // Live Scan master switch (dashboard "Start scan"): when active it
+            // forces EVERY reader on — including the POS reader (.34) and the
+            // office reader (.15) — for the duration of the session, overriding
+            // the default-paused model, per-reader schedules, and POS cashier-
+            // gating. "Stop scan" clears live_scan_active and everything reverts
+            // to the normal desired-set below. Operator request 2026-06-07.
+            bundle.live_scan_active === true ||
             !(r.effective_paused ?? false) ||
             this.activeScanSessionReaders.has(r.id) ||
             this.testWakeReaders.has(r.id) ||
