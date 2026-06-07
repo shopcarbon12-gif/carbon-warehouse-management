@@ -850,7 +850,9 @@ function MoneyInput({
  * Renders nothing-but-a-hint when the matrix has no synced imagery yet.
  */
 function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
-  const [zoomUrl, setZoomUrl] = useState<string | null>(null);
+  // null = closed; number = open carousel at that start index.
+  const [zoomIdx, setZoomIdx] = useState<number | null>(null);
+  const [mainIdx, setMainIdx] = useState(0);
   if (!urls || urls.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 px-3 py-4 text-center font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
@@ -858,6 +860,8 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
       </div>
     );
   }
+  const main = urls[Math.min(mainIdx, urls.length - 1)];
+  const rest = urls.map((u, i) => ({ u, i })).filter(({ i }) => i !== mainIdx);
   return (
     <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
       <div className="flex items-center justify-between border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5">
@@ -866,27 +870,51 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
         </span>
         <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">{urls.length}</span>
       </div>
-      <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-5 lg:grid-cols-6">
-        {urls.map((u, i) => (
-          <button
-            key={u}
-            type="button"
-            onClick={() => setZoomUrl(u)}
-            className="block cursor-zoom-in overflow-hidden rounded border border-[var(--wms-border)] bg-white"
-            title={`${title} — image ${i + 1} (click to enlarge)`}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={u}
-              alt={`${title} ${i + 1}`}
-              className="aspect-square w-full object-contain"
-              loading="lazy"
-            />
-          </button>
-        ))}
+      <div className="flex flex-col gap-3 p-3 sm:flex-row">
+        {/* Main (big) picture — click to open the full slider at this image. */}
+        <button
+          type="button"
+          onClick={() => setZoomIdx(mainIdx)}
+          className="block w-full shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white sm:w-1/2"
+          title={`${title} — click to enlarge`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={main}
+            alt={`${title} main`}
+            className="aspect-square w-full object-contain"
+          />
+        </button>
+        {/* The rest — smaller. Click to make main; click again (it's main) to zoom. */}
+        {rest.length > 0 ? (
+          <div className="grid flex-1 grid-cols-4 gap-2 sm:grid-cols-5 sm:content-start">
+            {rest.map(({ u, i }) => (
+              <button
+                key={u}
+                type="button"
+                onClick={() => setMainIdx(i)}
+                className="block aspect-square cursor-pointer overflow-hidden rounded border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
+                title={`${title} — image ${i + 1} (click to feature, then enlarge)`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={u}
+                  alt={`${title} ${i + 1}`}
+                  className="h-full w-full object-contain"
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
-      {zoomUrl ? (
-        <CatalogImageLightbox url={zoomUrl} alt={title} onClose={() => setZoomUrl(null)} />
+      {zoomIdx !== null ? (
+        <CatalogImageLightbox
+          images={urls}
+          startIndex={zoomIdx}
+          alt={title}
+          onClose={() => setZoomIdx(null)}
+        />
       ) : null}
     </div>
   );

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, PackageOpen, Pin, Radio } from "lucide-react";
+import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, ImageIcon, PackageOpen, Pin, Radio } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { computeSkuPrefix } from "@/lib/queries/bin-code";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
@@ -12,6 +12,7 @@ import { ManualItemsModal } from "@/components/inventory/catalog/manual-items-mo
 import { ItemHistoryModal } from "@/components/inventory/catalog/item-history-modal";
 import { CatalogItemDetailsModal } from "@/components/inventory/catalog/catalog-item-details-modal";
 import { CatalogMatrixModal } from "@/components/inventory/catalog/catalog-matrix-modal";
+import { CatalogImageLightbox } from "@/components/inventory/catalog/catalog-image-lightbox";
 import { CatalogBinMoveDialog } from "@/components/inventory/catalog/catalog-bin-move-dialog";
 import { SyncPreviewModal } from "@/components/inventory/sync/sync-preview-modal";
 import { startSyncJobTracking } from "@/components/inventory/sync/sync-progress-floater";
@@ -188,6 +189,8 @@ export function CatalogWorkspace({
   const [detailsRow, setDetailsRow] = useState<CatalogGridRow | null>(null);
   // Matrix window opened by clicking a UPC cell — keyed by matrix id.
   const [matrixModalId, setMatrixModalId] = useState<string | null>(null);
+  // Variant picture popup opened by the small image icon on a catalog row.
+  const [imgPreview, setImgPreview] = useState<{ url: string; alt: string } | null>(null);
   const [movingRow, setMovingRow] = useState<CatalogGridRow | null>(null);
   const [manualMatrixUpc, setManualMatrixUpc] = useState("");
   const [manualDesc, setManualDesc] = useState("");
@@ -796,14 +799,40 @@ export function CatalogWorkspace({
                         {r.sku_ls_system_id ?? "—"}
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setDetailsRow(r)}
-                          className="text-left text-[var(--wms-accent)] underline-offset-2 hover:underline"
-                          title="View item details"
-                        >
-                          {r.sku}
-                        </button>
+                        <span className="inline-flex items-center gap-1.5">
+                          {r.shopify_image_url ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setImgPreview({
+                                  url: r.shopify_image_url as string,
+                                  alt: `${r.name} ${r.color ?? ""}`.trim(),
+                                })
+                              }
+                              title="View picture"
+                              aria-label="View picture"
+                              className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border border-[var(--wms-border)] text-[var(--wms-muted)] hover:border-[var(--wms-accent)] hover:text-[var(--wms-accent)]"
+                            >
+                              <ImageIcon className="h-3 w-3" />
+                            </button>
+                          ) : (
+                            <span
+                              className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border border-dashed border-[var(--wms-border)] text-[var(--wms-border)]"
+                              title="No picture"
+                              aria-hidden
+                            >
+                              <ImageIcon className="h-3 w-3" />
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setDetailsRow(r)}
+                            className="text-left text-[var(--wms-accent)] underline-offset-2 hover:underline"
+                            title="View item details"
+                          >
+                            {r.sku}
+                          </button>
+                        </span>
                       </td>
                       <td className="whitespace-nowrap px-2 py-1.5">
                         {displayUpc(r) === "—" ? (
@@ -1130,6 +1159,14 @@ export function CatalogWorkspace({
           canManage={canManageCatalog}
           onClose={() => setMatrixModalId(null)}
           onMutated={() => void mutate()}
+        />
+      ) : null}
+
+      {imgPreview ? (
+        <CatalogImageLightbox
+          images={[imgPreview.url]}
+          alt={imgPreview.alt}
+          onClose={() => setImgPreview(null)}
         />
       ) : null}
 
