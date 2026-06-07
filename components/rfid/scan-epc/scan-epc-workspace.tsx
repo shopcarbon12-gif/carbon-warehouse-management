@@ -25,8 +25,8 @@ type ScanRow = {
   epc: string;
   sourceReaderId: string;
   readerIds: Set<string>;
-  /** antenna_id (UUID) of the strongest sighting. */
-  antennaId: string | null;
+  /** every antenna (antenna_id UUID) that has read this EPC. */
+  antennaIds: Set<string>;
   /** strongest (closest) RSSI seen, dBm (negative). */
   rssi: number | null;
   firstSeen: number;
@@ -317,7 +317,7 @@ export function ScanEpcWorkspace() {
             epc,
             sourceReaderId: deviceId,
             readerIds: new Set(deviceId ? [deviceId] : []),
-            antennaId: antId,
+            antennaIds: new Set(antId ? [antId] : []),
             rssi,
             firstSeen: now,
             lastSeen: now,
@@ -336,14 +336,16 @@ export function ScanEpcWorkspace() {
         } else {
           const readerIds = cur.readerIds;
           if (deviceId && !readerIds.has(deviceId)) readerIds.add(deviceId);
+          const antennaIds = cur.antennaIds;
+          if (antId) antennaIds.add(antId);
           const stronger = rssi != null && (cur.rssi == null || rssi > cur.rssi);
           next.set(epc, {
             ...cur,
             readerIds,
+            antennaIds,
             count: cur.count + 1,
             lastSeen: now,
             rssi: stronger ? rssi : cur.rssi,
-            antennaId: stronger ? antId : cur.antennaId,
           });
           changed = true;
         }
@@ -440,10 +442,14 @@ export function ScanEpcWorkspace() {
   );
   const antennaLabel = useCallback(
     (row: ScanRow) => {
-      if (!row.antennaId) return "—";
-      const a = antennaById.get(row.antennaId);
-      if (!a) return row.antennaId.slice(0, 8);
-      return a.number != null ? `Ant ${a.number}` : a.name;
+      if (row.antennaIds.size === 0) return "—";
+      return [...row.antennaIds]
+        .map((id) => {
+          const a = antennaById.get(id);
+          return a?.number != null ? `Ant ${a.number}` : a?.name ?? id.slice(0, 8);
+        })
+        .sort()
+        .join(", ");
     },
     [antennaById],
   );
