@@ -36,6 +36,10 @@ type MatrixHeader = {
   subcategory_1: string | null;
   upc: string | null;
   archived: boolean;
+  /** Full Shopify product gallery (ordered cdn.shopify.com URLs) for the matrix window. */
+  image_urls: string[];
+  /** Shopify featured image (or gallery[0]); convenience for a hero/thumbnail. */
+  featured_image_url: string | null;
 };
 
 type MatrixVariant = {
@@ -64,7 +68,13 @@ export async function GET(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: "Invalid matrix id" }, { status: 400 });
   }
 
-  const m = await pool.query<MatrixHeader & { all_archived: boolean }>(
+  const m = await pool.query<
+    Omit<MatrixHeader, "image_urls" | "featured_image_url"> & {
+      all_archived: boolean;
+      image_urls: string[] | null;
+      featured_image_url: string | null;
+    }
+  >(
     `SELECT
        m.id::text                  AS id,
        m.ls_system_id::text        AS ls_system_id,
@@ -74,6 +84,8 @@ export async function GET(req: Request, { params }: Ctx) {
        m.category                  AS category,
        m.subcategory_1             AS subcategory_1,
        m.upc                       AS upc,
+       m.shopify_image_urls        AS image_urls,
+       m.shopify_featured_image_url AS featured_image_url,
        COALESCE(bool_and(cs.archived), FALSE) AS all_archived
      FROM matrices m
      LEFT JOIN custom_skus cs ON cs.matrix_id = m.id
@@ -132,6 +144,8 @@ export async function GET(req: Request, { params }: Ctx) {
       subcategory_1: head.subcategory_1,
       upc: head.upc,
       archived: head.all_archived,
+      image_urls: Array.isArray(head.image_urls) ? head.image_urls : [],
+      featured_image_url: head.featured_image_url ?? null,
     },
     variants: v.rows.map<MatrixVariant>((r) => ({
       id: r.id,

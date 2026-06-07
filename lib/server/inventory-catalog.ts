@@ -48,6 +48,12 @@ export type CatalogGridRow = {
    * gets set.
    */
   pinned_bin_code: string | null;
+  /**
+   * Variant's color-specific Shopify image (cdn.shopify.com URL), or null
+   * when not synced. Rendered as the single picture in the item popup.
+   * Populated by lib/server/shopify-catalog-images.ts.
+   */
+  shopify_image_url: string | null;
 };
 
 export type CatalogGridResult = {
@@ -282,9 +288,11 @@ export async function listCatalogGrid(
     is_manual_only: boolean;
     manual_qty: number | null;
     pinned_bin_code: string | null;
+    shopify_image_url: string | null;
   }>(
     `SELECT
        cs.id::text AS custom_sku_id,
+       cs.shopify_image_url AS shopify_image_url,
        m.id::text AS matrix_id,
        m.ls_system_id::text AS matrix_ls_system_id,
        cs.ls_system_id::text AS sku_ls_system_id,
@@ -429,6 +437,7 @@ export async function listCatalogGrid(
         matrix_archived: row.matrix_archived === true,
         is_manual_only: manual,
         pinned_bin_code: row.pinned_bin_code ?? null,
+        shopify_image_url: row.shopify_image_url ?? null,
       };
     }),
     total,

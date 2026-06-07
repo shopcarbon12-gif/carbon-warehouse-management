@@ -50,6 +50,7 @@ export async function getTrackerItemByEpc(
     custom_sku_id: string;
     sku: string;
     ls_system_id: string;
+    shopify_image_url: string | null;
     upc: string;
     description: string;
     location_id: string;
@@ -78,6 +79,7 @@ export async function getTrackerItemByEpc(
        i.custom_sku_id::text,
        cs.sku,
        cs.ls_system_id::text,
+       cs.shopify_image_url,
        m.upc,
        m.description,
        i.location_id::text,
@@ -119,6 +121,7 @@ export async function getTrackerItemByEpc(
     custom_sku_id: row.custom_sku_id,
     sku: row.sku,
     ls_system_id: row.ls_system_id,
+    shopify_image_url: row.shopify_image_url ?? null,
     upc: row.upc,
     description: row.description,
     location_id: row.location_id,

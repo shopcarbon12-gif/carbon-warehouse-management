@@ -441,6 +441,9 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
             // On-hand = LIVE EPC count from the catalog, NOT the Lightspeed
             // on-hand total.
             quantity: ((map['active_epc_count'] as num?)?.toInt() ?? 0).toString(),
+            // Variant color image — same Shopify CDN link the desktop catalog
+            // shows; empty when the SKU has no synced picture.
+            imageUrl: map['shopify_image_url']?.toString().trim() ?? '',
             bin: bin,
             epcHint: prof != null ? _epcProfileHint(prof) : null,
           );
@@ -765,6 +768,90 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
     );
   }
 
+  /// Hero thumbnail for the lookup result. Shows the variant's color picture
+  /// (Shopify CDN URL) when available — tap to open a full-screen preview —
+  /// and falls back to the grey image placeholder otherwise.
+  Widget _heroImage(_LookupRow r) {
+    final box = BoxDecoration(
+      color: const Color(0xFFEAF0F0),
+      borderRadius: BorderRadius.circular(6.r),
+      border: Border.all(color: _border),
+    );
+    if (r.imageUrl.isEmpty) {
+      return Container(
+        width: 128.w,
+        height: 128.w,
+        decoration: box,
+        child: Icon(Icons.image_outlined, size: 56.sp, color: _muted),
+      );
+    }
+    return GestureDetector(
+      onTap: () => _openImagePreview(r.imageUrl, r.name),
+      child: Container(
+        width: 128.w,
+        height: 128.w,
+        clipBehavior: Clip.antiAlias,
+        decoration: box,
+        child: Image.network(
+          r.imageUrl,
+          fit: BoxFit.contain,
+          loadingBuilder: (ctx, child, progress) => progress == null
+              ? child
+              : Center(
+                  child: SizedBox(
+                    width: 24.w,
+                    height: 24.w,
+                    child: const CircularProgressIndicator(
+                        strokeWidth: 2, color: _muted),
+                  ),
+                ),
+          errorBuilder: (ctx, _, __) =>
+              Icon(Icons.broken_image_outlined, size: 48.sp, color: _muted),
+        ),
+      ),
+    );
+  }
+
+  /// Full-screen, pinch-to-zoom preview of a product picture. The image is
+  /// streamed straight from Shopify's CDN (never stored on our server).
+  void _openImagePreview(String url, String label) {
+    showDialog<void>(
+      context: context,
+      barrierColor: const Color(0xEB000000), // ~92% black
+      builder: (ctx) => GestureDetector(
+        onTap: () => Navigator.of(ctx).pop(),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: InteractiveViewer(
+                minScale: 1,
+                maxScale: 5,
+                child: Center(
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, _, __) => Icon(
+                        Icons.broken_image_outlined,
+                        size: 80.sp,
+                        color: Colors.white54),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 40.h,
+              right: 16.w,
+              child: IconButton(
+                icon: Icon(Icons.close, color: Colors.white, size: 28.sp),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _result(_LookupRow r) {
     final desc = [r.color, r.size]
         .map((e) => e.trim())
@@ -783,16 +870,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 128.w,
-              height: 128.w,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEAF0F0),
-                borderRadius: BorderRadius.circular(6.r),
-                border: Border.all(color: _border),
-              ),
-              child: Icon(Icons.image_outlined, size: 56.sp, color: _muted),
-            ),
+            _heroImage(r),
             SizedBox(width: 14.w),
             Expanded(
               child: Column(
@@ -1163,6 +1241,7 @@ class _LookupRow {
     this.size = '',
     this.price = '',
     this.quantity = '',
+    this.imageUrl = '',
     this.epcHint,
   });
 
@@ -1177,5 +1256,8 @@ class _LookupRow {
   final String size;
   final String price;
   final String quantity;
+  /// Variant's color-specific Shopify image URL (cdn.shopify.com), or ''.
+  /// Same picture as the desktop catalog item popup.
+  final String imageUrl;
   final String? epcHint;
 }

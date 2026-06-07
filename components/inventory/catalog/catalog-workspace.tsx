@@ -11,6 +11,7 @@ import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epc
 import { ManualItemsModal } from "@/components/inventory/catalog/manual-items-modal";
 import { ItemHistoryModal } from "@/components/inventory/catalog/item-history-modal";
 import { CatalogItemDetailsModal } from "@/components/inventory/catalog/catalog-item-details-modal";
+import { CatalogMatrixModal } from "@/components/inventory/catalog/catalog-matrix-modal";
 import { CatalogBinMoveDialog } from "@/components/inventory/catalog/catalog-bin-move-dialog";
 import { SyncPreviewModal } from "@/components/inventory/sync/sync-preview-modal";
 import { startSyncJobTracking } from "@/components/inventory/sync/sync-progress-floater";
@@ -185,6 +186,8 @@ export function CatalogWorkspace({
   const [manualItemsOpen, setManualItemsOpen] = useState(false);
   const [historyForSku, setHistoryForSku] = useState<string | null>(null);
   const [detailsRow, setDetailsRow] = useState<CatalogGridRow | null>(null);
+  // Matrix window opened by clicking a UPC cell — keyed by matrix id.
+  const [matrixModalId, setMatrixModalId] = useState<string | null>(null);
   const [movingRow, setMovingRow] = useState<CatalogGridRow | null>(null);
   const [manualMatrixUpc, setManualMatrixUpc] = useState("");
   const [manualDesc, setManualDesc] = useState("");
@@ -802,7 +805,20 @@ export function CatalogWorkspace({
                           {r.sku}
                         </button>
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]">{displayUpc(r)}</td>
+                      <td className="whitespace-nowrap px-2 py-1.5">
+                        {displayUpc(r) === "—" ? (
+                          <span className="text-[var(--wms-muted)]">—</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setMatrixModalId(r.matrix_id)}
+                            className="text-left text-[var(--wms-accent)] underline-offset-2 hover:underline"
+                            title="Open matrix (pictures + all sizes/colors)"
+                          >
+                            {displayUpc(r)}
+                          </button>
+                        )}
+                      </td>
                       <td className="whitespace-nowrap px-2 py-1.5 text-[var(--wms-fg)]" title={r.name}>
                         {r.pinned_bin_code ? (
                           <span
@@ -1104,6 +1120,15 @@ export function CatalogWorkspace({
           row={detailsRow}
           canManage={canManageCatalog}
           onClose={() => setDetailsRow(null)}
+          onMutated={() => void mutate()}
+        />
+      ) : null}
+
+      {matrixModalId ? (
+        <CatalogMatrixModal
+          matrixId={matrixModalId}
+          canManage={canManageCatalog}
+          onClose={() => setMatrixModalId(null)}
           onMutated={() => void mutate()}
         />
       ) : null}

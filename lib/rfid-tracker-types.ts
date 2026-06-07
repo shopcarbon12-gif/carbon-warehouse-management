@@ -11,6 +11,9 @@ export type TrackerItemDetail = {
   ls_system_id: string;
   upc: string;
   description: string;
+  /** Variant's color-specific Shopify image (cdn.shopify.com URL), or null.
+   *  Same picture shown in the desktop catalog item popup. */
+  shopify_image_url: string | null;
   location_id: string;
   location_code: string;
   location_name: string;

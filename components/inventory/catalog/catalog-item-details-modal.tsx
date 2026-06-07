@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { X as XIcon } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { CatalogMatrixModal } from "./catalog-matrix-modal";
+import { CatalogImageLightbox } from "./catalog-image-lightbox";
 import { ItemSalesTab, ItemCustomersTab, ItemHistoryTab } from "./item-report-tabs";
 import { printRfidLabel } from "./print-label";
 
@@ -445,8 +446,10 @@ function DetailsTab({
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.2fr_1fr_1fr]">
-      {/* Column 1 — Name, Color/Size, IDs, Organize, eCommerce */}
+      {/* Column 1 — Picture, Name, Color/Size, IDs, Organize, eCommerce */}
       <div className="space-y-3">
+        <ItemImage url={row.shopify_image_url} alt={`${form.name} ${form.color}`.trim()} />
+
         <Section title="Item">
           <EditRow
             label="Name"
@@ -584,6 +587,43 @@ function PlaceholderTab({ label }: { label: string }) {
       {label} view — coming soon. Sales / Customers / Inventory / History data
       isn&apos;t wired into the WMS yet; this is the same Details data for now.
     </p>
+  );
+}
+
+/**
+ * Single product picture for the item popup — the variant's color-specific
+ * Shopify image (one per color). Renders a dashed placeholder when the SKU
+ * has no synced image yet. Image links are Shopify CDN URLs (never re-hosted).
+ */
+function ItemImage({ url, alt }: { url: string | null; alt: string }) {
+  const [zoom, setZoom] = useState(false);
+  if (!url) {
+    return (
+      <div className="flex aspect-square w-full items-center justify-center rounded-md border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+        No picture
+      </div>
+    );
+  }
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setZoom(true)}
+        className="block w-full cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white"
+        title="Click to enlarge"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt={alt || "Product image"}
+          className="aspect-square w-full object-contain"
+          loading="lazy"
+        />
+      </button>
+      {zoom ? (
+        <CatalogImageLightbox url={url} alt={alt} onClose={() => setZoom(false)} />
+      ) : null}
+    </>
   );
 }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Plus, Printer, X as XIcon, RotateCcw } from "lucide-react";
 import { printRfidLabel } from "./print-label";
+import { CatalogImageLightbox } from "./catalog-image-lightbox";
 
 /**
  * Lightspeed-style matrix EDITOR. Opens from CatalogItemDetailsModal's "Matrix"
@@ -27,6 +28,9 @@ type Matrix = {
   subcategory_1: string | null;
   upc: string | null;
   archived: boolean;
+  /** Full Shopify product gallery (ordered cdn.shopify.com URLs). */
+  image_urls?: string[];
+  featured_image_url?: string | null;
 };
 
 type Variant = {
@@ -530,6 +534,11 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
               </nav>
 
               <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5">
+                <MatrixGallery
+                  urls={data.matrix.image_urls ?? []}
+                  title={data.matrix.description}
+                />
+
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_0.6fr_0.6fr]">
                   {/* Shared Values */}
                   <Section title="Shared Values · applied to all items in this matrix">
@@ -832,6 +841,54 @@ function MoneyInput({
       onBlur={() => onChange(money2(value))}
       className={`${wide ? "w-28" : "w-full"} rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-left font-mono text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none`}
     />
+  );
+}
+
+/**
+ * Full Shopify product gallery for the matrix window — every product image
+ * Shopify has, in Shopify order. Links are Shopify CDN URLs (never re-hosted).
+ * Renders nothing-but-a-hint when the matrix has no synced imagery yet.
+ */
+function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
+  const [zoomUrl, setZoomUrl] = useState<string | null>(null);
+  if (!urls || urls.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 px-3 py-4 text-center font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+        No Shopify pictures synced for this matrix
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
+      <div className="flex items-center justify-between border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5">
+        <span className="font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          Pictures · from Shopify
+        </span>
+        <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">{urls.length}</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 p-3 sm:grid-cols-5 lg:grid-cols-6">
+        {urls.map((u, i) => (
+          <button
+            key={u}
+            type="button"
+            onClick={() => setZoomUrl(u)}
+            className="block cursor-zoom-in overflow-hidden rounded border border-[var(--wms-border)] bg-white"
+            title={`${title} — image ${i + 1} (click to enlarge)`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={u}
+              alt={`${title} ${i + 1}`}
+              className="aspect-square w-full object-contain"
+              loading="lazy"
+            />
+          </button>
+        ))}
+      </div>
+      {zoomUrl ? (
+        <CatalogImageLightbox url={zoomUrl} alt={title} onClose={() => setZoomUrl(null)} />
+      ) : null}
+    </div>
   );
 }
 
