@@ -41,7 +41,6 @@ type ScanRow = {
   status: string | null;
   location_code: string | null;
   bin_code: string | null;
-  looked_up: boolean;
 };
 
 type LookupRow = {
@@ -273,10 +272,9 @@ export function ScanEpcWorkspace() {
 
   // ── EPC table (one row per unique EPC) ──────────────────────────────
   const [rows, setRows] = useState<Map<string, ScanRow>>(new Map());
-  const rowsRef = useRef(rows);
-  useEffect(() => {
-    rowsRef.current = rows;
-  }, [rows]);
+  /** EPCs already sent to the catalog lookup (in-flight or done) — a ref so
+   *  rapid stream updates can't re-fire or clobber enrichment. */
+  const enrichReqRef = useRef<Set<string>>(new Set());
 
   // Edge-stream subscription. Each payload is from ONE reader (deviceId);
   // we attribute each EPC to its source reader + antenna + RSSI, deduped.
@@ -306,68 +304,69 @@ export function ScanEpcWorkspace() {
       const rssiMap = p.epcRssiMap ?? {};
       const antMap = p.epcAntennaMap ?? {};
       const now = Date.now();
-      const next = new Map(rowsRef.current);
-      let changed = false;
-      for (const epc of list) {
-        const rssi = typeof rssiMap[epc] === "number" ? rssiMap[epc] : null;
-        const antId = antMap[epc] ?? null;
-        const cur = next.get(epc);
-        if (!cur) {
-          next.set(epc, {
-            epc,
-            sourceReaderId: deviceId,
-            readerIds: new Set(deviceId ? [deviceId] : []),
-            antennaIds: new Set(antId ? [antId] : []),
-            rssi,
-            firstSeen: now,
-            lastSeen: now,
-            count: 1,
-            sku: null,
-            ls_system_id: null,
-            name: null,
-            color: null,
-            size: null,
-            status: null,
-            location_code: null,
-            bin_code: null,
-            looked_up: false,
-          });
-          changed = true;
-        } else {
-          const readerIds = cur.readerIds;
-          if (deviceId && !readerIds.has(deviceId)) readerIds.add(deviceId);
-          const antennaIds = cur.antennaIds;
-          if (antId) antennaIds.add(antId);
-          const stronger = rssi != null && (cur.rssi == null || rssi > cur.rssi);
-          next.set(epc, {
-            ...cur,
-            readerIds,
-            antennaIds,
-            count: cur.count + 1,
-            lastSeen: now,
-            rssi: stronger ? rssi : cur.rssi,
-          });
-          changed = true;
+      setRows((prev) => {
+        const next = new Map(prev);
+        let changed = false;
+        for (const epc of list) {
+          const rssi = typeof rssiMap[epc] === "number" ? rssiMap[epc] : null;
+          const antId = antMap[epc] ?? null;
+          const cur = next.get(epc);
+          if (!cur) {
+            next.set(epc, {
+              epc,
+              sourceReaderId: deviceId,
+              readerIds: new Set(deviceId ? [deviceId] : []),
+              antennaIds: new Set(antId ? [antId] : []),
+              rssi,
+              firstSeen: now,
+              lastSeen: now,
+              count: 1,
+              sku: null,
+              ls_system_id: null,
+              name: null,
+              color: null,
+              size: null,
+              status: null,
+              location_code: null,
+              bin_code: null,
+            });
+            changed = true;
+          } else {
+            const readerIds = cur.readerIds;
+            if (deviceId && !readerIds.has(deviceId)) readerIds.add(deviceId);
+            const antennaIds = cur.antennaIds;
+            if (antId) antennaIds.add(antId);
+            const stronger =
+              rssi != null && (cur.rssi == null || rssi > cur.rssi);
+            next.set(epc, {
+              ...cur,
+              readerIds,
+              antennaIds,
+              count: cur.count + 1,
+              lastSeen: now,
+              rssi: stronger ? rssi : cur.rssi,
+            });
+            changed = true;
+          }
         }
-      }
-      if (changed) setRows(next);
+        return changed ? next : prev;
+      });
     };
     return () => es.close();
   }, []);
 
-  // Catalog enrichment — chunked at 200 (lookup endpoint zod cap).
+  // Catalog enrichment — request each EPC's catalog row exactly once
+  // (dedup via enrichReqRef, NOT a flag on the row, so streaming updates
+  // can't clobber it). Results are merged with a functional setRows so a
+  // concurrent stream tick never overwrites freshly-enriched fields.
+  // Chunked at 200 (lookup endpoint zod cap). A failed chunk is released
+  // from the ref so it retries on the next tick.
   useEffect(() => {
     const pending: string[] = [];
-    for (const r of rows.values()) if (!r.looked_up) pending.push(r.epc);
+    for (const epc of rows.keys())
+      if (!enrichReqRef.current.has(epc)) pending.push(epc);
     if (pending.length === 0) return;
-    {
-      const next = new Map(rows);
-      for (const epc of pending) {
-        const cur = next.get(epc);
-        if (cur) next.set(epc, { ...cur, looked_up: true });
-      }
-      setRows(next);
-    }
+    for (const e of pending) enrichReqRef.current.add(e);
     void (async () => {
       for (let i = 0; i < pending.length; i += LOOKUP_CHUNK) {
         const chunk = pending.slice(i, i + LOOKUP_CHUNK);
@@ -378,40 +377,37 @@ export function ScanEpcWorkspace() {
             body: JSON.stringify({ epcs: chunk }),
           });
           if (!res.ok) {
-            const next = new Map(rowsRef.current);
-            for (const e of chunk) {
-              const cur = next.get(e);
-              if (cur) next.set(e, { ...cur, looked_up: false });
-            }
-            setRows(next);
+            for (const e of chunk) enrichReqRef.current.delete(e);
             continue;
           }
           const data = (await res.json()) as { rows?: LookupRow[] };
-          const next = new Map(rowsRef.current);
-          for (const r of data.rows ?? []) {
-            const epc = r.epc.toUpperCase();
-            const cur = next.get(epc);
-            if (!cur) continue;
-            next.set(epc, {
-              ...cur,
-              sku: r.sku ?? null,
-              ls_system_id: r.sku_ls_system_id ?? null,
-              name: r.name,
-              color: r.color,
-              size: r.size,
-              status: r.status,
-              location_code: r.location_code ?? null,
-              bin_code: r.bin_code,
-            });
-          }
-          setRows(next);
+          const byEpc = new Map(
+            (data.rows ?? []).map((r) => [r.epc.toUpperCase(), r]),
+          );
+          setRows((prev) => {
+            const next = new Map(prev);
+            let changed = false;
+            for (const epc of chunk) {
+              const cur = next.get(epc);
+              const r = byEpc.get(epc);
+              if (!cur || !r) continue;
+              next.set(epc, {
+                ...cur,
+                sku: r.sku ?? null,
+                ls_system_id: r.sku_ls_system_id ?? null,
+                name: r.name,
+                color: r.color,
+                size: r.size,
+                status: r.status,
+                location_code: r.location_code ?? null,
+                bin_code: r.bin_code,
+              });
+              changed = true;
+            }
+            return changed ? next : prev;
+          });
         } catch {
-          const next = new Map(rowsRef.current);
-          for (const e of chunk) {
-            const cur = next.get(e);
-            if (cur) next.set(e, { ...cur, looked_up: false });
-          }
-          setRows(next);
+          for (const e of chunk) enrichReqRef.current.delete(e);
         }
       }
     })();
@@ -419,6 +415,7 @@ export function ScanEpcWorkspace() {
 
   const clearAll = () => {
     setRows(new Map());
+    enrichReqRef.current.clear();
     setMsg(null);
   };
 
