@@ -700,6 +700,12 @@ type ReaderSlot = {
    *  state). The freshly-created slot's slotCreatedAt > recover_requested_at,
    *  so the same stamp won't keep retriggering. */
   slotCreatedAt: number;
+  /** Set by the autonomous long-stuck recovery to request the SAME full
+   *  hard-reset the manual Hardware Config Reset performs (bridge reset +
+   *  radio cold-stop + fresh slot rebuild). reconcile() honours this exactly
+   *  like an operator hard-reset stamp, so a wedged chip self-heals without
+   *  anyone clicking anything. 0/undefined = none. */
+  internalHardResetAt?: number;
   /**
    * Pending stopSlot belt-and-braces abort timer. stopSlot() schedules
    * `ensureRadioStopped()` 11 s after kill to GUARANTEE the chip's radio
@@ -2532,9 +2538,15 @@ export class MonsoonSupervisor {
       //       respawn with clean state.
       // Wedge counters and power suggestions are also cleared so the slot
       // starts grading itself from zero.
-      const resetStampMs = spec.reader_recover_requested_at
-        ? new Date(spec.reader_recover_requested_at).getTime()
-        : 0;
+      const resetStampMs = Math.max(
+        spec.reader_recover_requested_at
+          ? new Date(spec.reader_recover_requested_at).getTime()
+          : 0,
+        // Autonomous long-stuck recovery stamps internalHardResetAt to request
+        // the same full hard-reset — so the watchdog self-heals a wedged chip
+        // exactly like an operator clicking Hardware Config → Reset.
+        existing?.internalHardResetAt ?? 0,
+      );
       if (existing && resetStampMs > existing.slotCreatedAt) {
         log.info("supervisor: hard-reset requested — bridge reset + tear down + respawn", {
           readerId: spec.id,
@@ -3965,9 +3977,18 @@ export class MonsoonSupervisor {
             this.startRecoverySweep(slot);
           }
         } else if (cycles === LONG_STUCK_BRIDGE_RESET_AFTER_CYCLES && cooldownPassed) {
-          log.warn("supervisor: long-stuck — escalating to bridge reset", baseInfo);
           slot.lastLongStuckRecoveryAt = Date.now();
-          this.tryBridgeReset(spec);
+          if (posReader) {
+            log.warn("supervisor: long-stuck — escalating to bridge reset", baseInfo);
+            this.tryBridgeReset(spec);
+          } else {
+            // Chip reset (cycle 3) only poked the wedged inventory session and
+            // didn't clear it. Escalate to the SAME full hard-reset the manual
+            // Hardware Config Reset runs — bridge reset + radio cold-stop +
+            // fresh slot rebuild — which is what actually un-sticks the chip,
+            // and it keeps the operator's configured power (no downgrade).
+            this.requestAutonomousHardReset(slot, baseInfo);
+          }
         } else if (cycles === LONG_STUCK_CHIP_RESET_AFTER_CYCLES && cooldownPassed) {
           log.warn("supervisor: long-stuck — escalating to chip reset", baseInfo);
           slot.lastLongStuckRecoveryAt = Date.now();
@@ -4452,13 +4473,37 @@ export class MonsoonSupervisor {
    * power (chip naturally recovered, no downgrade needed).
    */
   getPowerSuggestions(): { readerId: string; suggestedDbm: number }[] {
-    const out: { readerId: string; suggestedDbm: number }[] = [];
-    for (const slot of this.slots.values()) {
-      if (slot.suggestedPowerDbm !== null) {
-        out.push({ readerId: slot.spec.id, suggestedDbm: slot.suggestedPowerDbm });
-      }
+    // DISABLED 2026-06-07 (operator request): no "lower to N dBm" suggestion
+    // notices. The operator's configured power is the source of truth and the
+    // autonomous hard-reset (requestAutonomousHardReset) now self-heals wedged
+    // readers AT their configured power instead of advising a downgrade.
+    // Returning [] makes the WMS heartbeat clear any stale suggested_power_dbm.
+    return [];
+  }
+
+  /** Autonomously trigger the full manual-Hard-Reset sequence for a wedged
+   *  reader: stamp internalHardResetAt and kick a (deferred) reconcile so the
+   *  hard-reset block tears the slot down (bridge reset + radio cold-stop) and
+   *  rebuilds it fresh AT the operator-configured power. Deferred via setTimeout
+   *  so we never mutate this.slots while the watchdog is iterating it. */
+  private requestAutonomousHardReset(
+    slot: ReaderSlot,
+    baseInfo: Record<string, unknown>,
+  ): void {
+    if (slot.internalHardResetAt && Date.now() - slot.internalHardResetAt < 5_000) {
+      return; // a hard-reset is already in flight for this slot
     }
-    return out;
+    log.warn(
+      "supervisor: autonomous hard-reset — mirroring manual Hardware Config Reset (bridge reset + radio cold-stop + fresh rebuild)",
+      baseInfo,
+    );
+    slot.internalHardResetAt = Date.now();
+    const lb = this.lastBundle;
+    if (lb) {
+      setTimeout(() => {
+        if (this.lastBundle === lb) this.reconcile(lb);
+      }, 100);
+    }
   }
 
   /**
