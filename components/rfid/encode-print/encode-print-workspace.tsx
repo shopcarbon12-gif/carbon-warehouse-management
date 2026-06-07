@@ -18,6 +18,7 @@ import {
   useRssiThreshold,
   passesRssi,
 } from "@/components/shared/rssi-proximity-slider";
+import { useReaderWake } from "@/components/shared/use-reader-wake";
 import { LabelPreviewCanvas } from "@/components/tags-labels/label-preview-canvas";
 import { generateNonRfidTag203Batch } from "@/lib/utils/zpl-carbon-tag-203";
 import type { CarbonTagInput } from "@/lib/utils/zpl-carbon-tag";
@@ -80,13 +81,17 @@ export function EncodePrintWorkspace() {
     stepRef.current = step;
   }, [step]);
 
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    sessionIdRef.current = sessionId;
-  }, [sessionId]);
-  const [sessionActive, setSessionActive] = useState(false);
-  const [readerErr, setReaderErr] = useState<string | null>(null);
+  // The reader is kept WARM by useReaderWake (below) for as long as this page
+  // is open. `sessionActive` simply mirrors "is the .15 reader resolved &
+  // being warmed" so the SSE subscription + status pill light up. No
+  // scan-session start/end is issued from this page anymore.
+  const [readerErr] = useState<string | null>(null);
+
+  // Warm .15 the moment we land on the page (ready before the operator brings
+  // a tag to the antenna). Capturing/encoding is still driven by the flow's
+  // Encode button + SSE re-read interlock — only the WAKE changed.
+  useReaderWake({ active: true, kind: "encode-items", networkAddresses: [READER_IP] });
+  const sessionActive = readerId !== null;
 
   const [threshold, setThreshold] = useRssiThreshold("wms.encode-print.rssi");
   const thresholdRef = useRef(threshold);
@@ -115,54 +120,6 @@ export function EncodePrintWorkspace() {
 
   const [statusMsg, setStatusMsg] = useState("Bring a tag to the .15 antenna to begin.");
   const [errMsg, setErrMsg] = useState<string | null>(null);
-
-  // ── .15 scan-session: auto-start on mount, end on unmount ────────────
-  const startSession = useCallback(async (rid: string) => {
-    try {
-      const r = await fetch("/api/scan-sessions/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ readerId: rid, kind: "encode-items", context: { page: "encode-print" } }),
-      });
-      const j = (await r.json().catch(() => null)) as
-        | { ok?: boolean; sessionId?: string; reason?: string; error?: string }
-        | null;
-      if (j?.ok && j.sessionId) {
-        setSessionId(j.sessionId);
-        setSessionActive(true);
-        setReaderErr(null);
-      } else {
-        setReaderErr(`Could not start .15 (${j?.reason ?? j?.error ?? "unknown"}).`);
-      }
-    } catch {
-      setReaderErr("Network error starting the .15 reader.");
-    }
-  }, []);
-
-  const appliedRef = useRef(false);
-  useEffect(() => {
-    if (appliedRef.current || !readerId) return;
-    appliedRef.current = true;
-    // Mount-time external sync: wake the .15 reader. setState happens async
-    // inside startSession (after the fetch), not synchronously here.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void startSession(readerId);
-  }, [readerId, startSession]);
-
-  useEffect(
-    () => () => {
-      const id = sessionIdRef.current;
-      if (id) {
-        void fetch("/api/scan-sessions/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          keepalive: true,
-          body: JSON.stringify({ sessionId: id }),
-        });
-      }
-    },
-    [],
-  );
 
   // ── SSE: stream EPCs from .15; in verify, watch for the new EPC ──────
   useEffect(() => {

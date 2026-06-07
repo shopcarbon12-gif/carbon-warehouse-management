@@ -82,10 +82,45 @@ export type ScanSession = {
   startedBy: string | null;
   /** ms-since-epoch of session creation. */
   startedAt: number;
+  /** ms-since-epoch of the last page heartbeat (/touch or idempotent start).
+   *  When a page is closed/navigated-away the heartbeat stops; the janitor
+   *  ends the session GRACE_MS later → reader goes cold ~30s after you leave. */
+  lastSeenAt: number;
+  /** ms-since-epoch of the last tag read on this reader (bumped from the
+   *  read-ingest path). Drives the 10-min no-movement auto-stop for
+   *  non-cycle-count pages. Starts equal to startedAt. */
+  lastReadAt: number;
 };
+
+/** Reader goes cold this long after the page stops heart-beating (left/closed). */
+export const SCAN_SESSION_GRACE_MS = 30_000;
+/** Non-cycle-count sessions auto-end after this long with no tag movement. */
+export const SCAN_SESSION_IDLE_MS = 10 * 60_000;
 
 const byReader = new Map<string, ScanSession>();
 const byId = new Map<string, ScanSession>();
+
+/**
+ * Prune sessions that have gone stale. Called on every read of the active set
+ * (the agent polls /api/cdm-agents/active-sessions constantly, so this runs
+ * far more often than any setInterval would survive in serverless):
+ *   - left/closed page: now − lastSeenAt > GRACE_MS  → end (~30s after leave)
+ *   - idle, non-cycle-count: now − lastReadAt > IDLE_MS → end (10-min no reads)
+ * Cycle counts are EXEMPT from the idle rule (a 2-hour count can sit with no
+ * movement between bins) — they end only via the leave-grace or explicit stop.
+ * POS readers never have scan-sessions, so they're untouched here.
+ */
+function pruneStaleSessions(now = Date.now()): void {
+  for (const s of Array.from(byId.values())) {
+    const left = now - s.lastSeenAt > SCAN_SESSION_GRACE_MS;
+    const idle =
+      s.kind !== "cycle-count" && now - s.lastReadAt > SCAN_SESSION_IDLE_MS;
+    if (left || idle) {
+      byId.delete(s.id);
+      byReader.delete(s.readerId);
+    }
+  }
+}
 
 export function createSession(input: {
   tenantId: string;
@@ -115,10 +150,13 @@ export function createSession(input: {
       existing.startedBy !== null &&
       existing.startedBy === input.startedBy
     ) {
+      // Idempotent re-claim doubles as a heartbeat — keep it alive.
+      existing.lastSeenAt = Date.now();
       return { ok: true, session: existing };
     }
     return { ok: false, reason: "reader_busy", existing };
   }
+  const now = Date.now();
   const session: ScanSession = {
     id: randomUUID(),
     tenantId: input.tenantId,
@@ -127,7 +165,9 @@ export function createSession(input: {
     kind: input.kind,
     context: input.context ?? {},
     startedBy: input.startedBy,
-    startedAt: Date.now(),
+    startedAt: now,
+    lastSeenAt: now,
+    lastReadAt: now,
   };
   byId.set(session.id, session);
   byReader.set(session.readerId, session);
@@ -153,12 +193,42 @@ export function endSessionForReader(readerId: string): boolean {
   return endSession(s.id);
 }
 
-/** List active sessions for a given location (agent filter). */
+/** Heartbeat one or more sessions (page is still open). Unknown ids ignored.
+ *  Returns the count that were refreshed. */
+export function touchSessions(ids: readonly string[]): number {
+  const now = Date.now();
+  let n = 0;
+  for (const id of ids) {
+    const s = byId.get(id);
+    if (s) {
+      s.lastSeenAt = now;
+      n += 1;
+    }
+  }
+  return n;
+}
+
+/** Record tag-read activity for a reader (bumps its session's lastReadAt).
+ *  Called from the read-ingest path so the 10-min idle rule reflects real
+ *  tag movement. No-op if the reader has no active session. */
+export function recordReadActivity(readerIds: Iterable<string>): void {
+  const now = Date.now();
+  for (const rid of readerIds) {
+    const s = byReader.get(rid);
+    if (s) s.lastReadAt = now;
+  }
+}
+
+/** List active sessions for a given location (agent filter). Prunes stale
+ *  sessions first — the agent polls this constantly, so it's the reliable
+ *  place to enforce the leave-grace + idle rules. */
 export function listActiveSessionsForLocation(locationId: string): ScanSession[] {
+  pruneStaleSessions();
   return Array.from(byId.values()).filter((s) => s.locationId === locationId);
 }
 
 /** Is a reader currently woken by any scan-session? */
 export function isReaderActivelyScanning(readerId: string): boolean {
+  pruneStaleSessions();
   return byReader.has(readerId);
 }

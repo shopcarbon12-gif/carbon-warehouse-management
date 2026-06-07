@@ -18,6 +18,7 @@ import {
   CircleSlash,
 } from "lucide-react";
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { useReaderWake } from "@/components/shared/use-reader-wake";
 import { useCountUp } from "@/components/dashboard/use-count-up";
 import { CycleCountCommitModal } from "./cycle-count-commit-modal";
 import { CycleCountManualItemsModal } from "./cycle-count-manual-items-modal";
@@ -631,6 +632,13 @@ function ActiveSessionView({
     selectedReadersRef.current = selectedReaders;
   }, [selectedReaders]);
 
+  // Warm ALL non-POS readers at the location ONLY while this count is active.
+  // Omitting networkAddresses/readerIds tells the shared hook to pre-warm every
+  // non-POS reader; they go cold ~30 s after `active` turns false. The
+  // ReaderPicker below stays a live-display filter only and no longer wakes
+  // readers.
+  useReaderWake({ active: detail?.status === "active", kind: "cycle-count" });
+
   const [tab, setTab] = useState<"all" | "by_sku" | "by_bin">("all");
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>({ kind: "all" });
@@ -827,141 +835,12 @@ function ActiveSessionView({
   // operator hit on 2026-05-10. Hooks now run unconditionally; runtime
   // safety lives inside each effect via `if (!detail) return;`.
 
-  // Track scan-session ids per reader so we can release them on status flip.
-  // Keyed by reader id since cycle counts may use multiple readers and the
-  // scan-session API is per-reader.
-  const scanSessionIdsRef = useRef<Map<string, string>>(new Map());
-
-  // Reader-busy conflicts (409 from /api/scan-sessions/start). Maps
-  // readerId → conflicting session id (the OTHER workflow's session). The
-  // operator can take any of them over via the busy banner. The map
-  // updates whenever a multi-reader pickup encounters a busy reader.
-  const [conflicts, setConflicts] = useState<Map<string, { sessionId: string; kind: string }>>(
-    () => new Map(),
-  );
-
-  const startScanSessionsForSelectedReaders = useCallback(async () => {
-    const readerIds = [...selectedReadersRef.current];
-    if (readerIds.length === 0) return;
-    for (const rid of readerIds) {
-      if (scanSessionIdsRef.current.has(rid)) continue;
-      try {
-        const r = await fetch("/api/scan-sessions/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ readerId: rid, kind: "cycle-count" }),
-        });
-        const j = (await r.json()) as {
-          ok?: boolean;
-          sessionId?: string;
-          reason?: string;
-          existing?: { id: string; kind: string };
-        };
-        if (r.ok && j.ok && j.sessionId) {
-          scanSessionIdsRef.current.set(rid, j.sessionId);
-          setConflicts((prev) => {
-            if (!prev.has(rid)) return prev;
-            const next = new Map(prev);
-            next.delete(rid);
-            return next;
-          });
-        } else if (j.reason === "reader_busy" && j.existing?.id) {
-          setConflicts((prev) => {
-            const next = new Map(prev);
-            next.set(rid, { sessionId: j.existing!.id, kind: j.existing!.kind });
-            return next;
-          });
-        }
-      } catch {
-        /* server-side idle expiry will release within 60s */
-      }
-    }
-  }, []);
-
-  // Stop every workflow that currently owns any of the selected readers, then
-  // claim them all in one shot. Operators don't want to see which reader is
-  // busy — one button takes them all over.
-  const takeoverAllReaders = useCallback(async () => {
-    const entries = [...conflicts.entries()];
-    if (entries.length === 0) return;
-    await Promise.all(
-      entries.map(([, c]) =>
-        fetch("/api/scan-sessions/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: c.sessionId }),
-        }).catch(() => {}),
-      ),
-    );
-    setConflicts(new Map());
-    await new Promise((r) => setTimeout(r, 300));
-    void startScanSessionsForSelectedReaders();
-  }, [conflicts, startScanSessionsForSelectedReaders]);
-
-  const endAllScanSessions = useCallback(async () => {
-    const entries = [...scanSessionIdsRef.current.entries()];
-    scanSessionIdsRef.current.clear();
-    for (const [, sid] of entries) {
-      try {
-        await fetch("/api/scan-sessions/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: sid }),
-        });
-      } catch {
-        /* network blip — operator can re-pause from Hardware Config if needed */
-      }
-    }
-  }, []);
-
-  // On unmount: end all sessions so readers return to paused state when the
-  // operator navigates away. There is NO server-side idle expiry — sessions
-  // only end on explicit click or this unmount keepalive.
+  // When the count goes active, remember that we've been scanning so the
+  // primary button label flips to "Resume" after a pause. Reader waking is
+  // handled by the shared useReaderWake hook above.
   useEffect(() => {
-    return () => {
-      for (const [, sid] of scanSessionIdsRef.current.entries()) {
-        void fetch("/api/scan-sessions/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: sid }),
-          keepalive: true,
-        }).catch(() => {});
-      }
-      scanSessionIdsRef.current.clear();
-    };
-  }, []);
-
-  // When the count goes active, wake selected readers and remember that
-  // we've been scanning. When it goes paused/canceled (or committed
-  // elsewhere), release them.
-  useEffect(() => {
-    if (!detail) return;
-    if (detail.status === "active") {
-      setWasEverActive(true);
-      void startScanSessionsForSelectedReaders();
-    } else {
-      void endAllScanSessions();
-    }
-  }, [detail?.status, startScanSessionsForSelectedReaders, endAllScanSessions]);
-
-  // If the operator changes selected readers mid-count, re-sync sessions.
-  useEffect(() => {
-    if (!detail || detail.status !== "active") return;
-    const wantIds = selectedReaders;
-    // Release any session for a reader no longer selected.
-    for (const [rid, sid] of [...scanSessionIdsRef.current.entries()]) {
-      if (!wantIds.has(rid)) {
-        scanSessionIdsRef.current.delete(rid);
-        void fetch("/api/scan-sessions/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: sid }),
-        }).catch(() => {});
-      }
-    }
-    // Wake any newly-selected readers.
-    void startScanSessionsForSelectedReaders();
-  }, [selectedReaders, detail?.status, startScanSessionsForSelectedReaders]);
+    if (detail?.status === "active") setWasEverActive(true);
+  }, [detail?.status]);
 
   // KPI counters: for Matched / Missing / Coverage we compute LOCALLY from
   // localScanned ∩ expected, identical to how the dashboard's Live Scan tile
@@ -1092,13 +971,27 @@ function ActiveSessionView({
       if (defectiveSet.has(epc)) existing.defective += 1;
       agg.set(key, existing);
     }
+    // Fixed display order so tiles DON'T reshuffle as counts change. Aisle
+    // readers first in natural aisle/reader/antenna order (Aisle 1-2/1, 1-2/2,
+    // 1-2/3, 3-4/1 … 5/1 … 6/1, 6/2), then other zones (store / office / POS …)
+    // alphabetically; mobile sources last. The antenna suffix ("· A2") sorts
+    // within its reader. Zero-padded numeric segments keep 003 < 010.
+    const orderKey = (name: string): string => {
+      const m = name.match(/^Aisle\s+(\d+)(?:-\d+)?\/(\d+)/i);
+      const am = name.match(/·\s*A(\d+)/i);
+      const ant = String(am ? parseInt(am[1], 10) : 0).padStart(3, "0");
+      if (m) {
+        const aisle = String(parseInt(m[1], 10)).padStart(3, "0");
+        const reader = String(parseInt(m[2], 10)).padStart(3, "0");
+        return `0:${aisle}:${reader}:${ant}:${name.toLowerCase()}`;
+      }
+      return `1:${name.toLowerCase()}:${ant}`;
+    };
     return Array.from(agg.entries())
       .map(([key, v]) => ({ key, ...v }))
       .sort((a, b) => {
         if (a.kind !== b.kind) return a.kind === "reader" ? -1 : 1;
-        const ta = a.matched + a.addedHere + a.defective;
-        const tb = b.matched + b.addedHere + b.defective;
-        return tb - ta;
+        return orderKey(a.name).localeCompare(orderKey(b.name));
       });
   }, [
     detail?.scanned_epc_sources,
@@ -1157,11 +1050,8 @@ function ActiveSessionView({
         body: JSON.stringify({ status: next }),
       });
       await mutate();
-      // Release readers immediately on pause/cancel — don't wait for
-      // the next reconcile tick. (active path handled by useEffect above.)
-      if (next !== "active") {
-        await endAllScanSessions();
-      }
+      // Readers go cold automatically ~30 s after status leaves "active"
+      // (useReaderWake stops its heartbeat once active===false).
       setToast(`Session ${next}`);
     } finally {
       setBusyAction(null);
@@ -1184,9 +1074,9 @@ function ActiveSessionView({
     );
     const j = (await res.json()) as { error?: string };
     if (!res.ok) throw new Error(j.error ?? "Commit failed");
-    // Release all readers immediately on commit — antennas off the moment
-    // the action is done, per the spec.
-    await endAllScanSessions();
+    // Readers go cold automatically once the session leaves "active"
+    // (useReaderWake stops its heartbeat → server janitor ends the warm
+    // session ~30 s later).
     await mutate();
     setToast("Cycle count committed");
   };
@@ -1358,17 +1248,6 @@ function ActiveSessionView({
             >
               <ScanLine className="h-4 w-4" /> Clear scans
             </button>
-            {conflicts.size > 0 ? (
-              <button
-                type="button"
-                onClick={() => void takeoverAllReaders()}
-                title="Some selected readers are busy on another screen. Stop them there and take them all here in one click."
-                className="inline-flex items-center gap-2 rounded-lg border border-amber-500/60 bg-amber-950/40 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-amber-100 hover:bg-amber-900/40"
-              >
-                <Radio className="h-3.5 w-3.5 text-amber-300" />
-                Take all readers here ({conflicts.size})
-              </button>
-            ) : null}
           </>
         ) : null}
 

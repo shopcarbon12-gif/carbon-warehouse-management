@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { Radio, Download, Trash2 } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { useReaderWake } from "@/components/shared/use-reader-wake";
 import { DataTableContainer } from "@/components/shared/data-table";
 import { rowsToCsv, downloadCsv } from "@/lib/csv-export";
 import type {
@@ -117,90 +118,35 @@ export function ScanEpcWorkspace() {
     selectedReadersRef.current = selectedReaders;
   }, [selectedReaders]);
 
+  // ── Reader wake ─────────────────────────────────────────────────────
+  // Entering this page warms ALL non-POS readers at the location (omitting
+  // networkAddresses/readerIds → all; POS .34 auto-excluded). They stay warm
+  // while mounted and go cold ~30 s after we leave. Selection below only
+  // filters which reads we DISPLAY — it does not toggle readers on/off.
+  useReaderWake({ active: true, kind: "scan-epc" });
+
   // ── Scan lifecycle ──────────────────────────────────────────────────
+  // `scanning` is purely a display gate: it controls whether incoming SSE
+  // reads are counted. Readers are kept warm by useReaderWake above.
   const [scanning, setScanning] = useState(false);
   const scanningRef = useRef(scanning);
   useEffect(() => {
     scanningRef.current = scanning;
   }, [scanning]);
-  const scanSessionIdsRef = useRef<string[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const stopScan = useCallback(() => {
-    const ids = scanSessionIdsRef.current;
-    scanSessionIdsRef.current = [];
-    setScanning(false);
-    for (const id of ids) {
-      void fetch("/api/scan-sessions/end", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: id }),
-        keepalive: true,
-      }).catch(() => {});
+  const onScanToggle = useCallback(() => {
+    if (scanning) {
+      setScanning(false);
+      return;
     }
-  }, []);
-
-  const startScan = useCallback(async (readerIds: string[]) => {
-    if (readerIds.length === 0) {
+    if (selectedReadersRef.current.size === 0) {
       setMsg("Pick at least one reader first.");
       return;
     }
     setMsg(null);
-    const newIds: string[] = [];
-    for (const readerId of readerIds) {
-      try {
-        const res = await fetch("/api/scan-sessions/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            readerId,
-            kind: "scan-epc",
-            context: { page: "scan-epc" },
-          }),
-        });
-        const j = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          sessionId?: string;
-          reason?: string;
-          error?: string;
-        };
-        if (res.ok && j.ok && j.sessionId) newIds.push(j.sessionId);
-        else
-          setMsg(
-            `Could not start ${readerById.get(readerId)?.name ?? "a reader"} (${
-              j.reason ?? j.error ?? "unknown"
-            }).`,
-          );
-      } catch {
-        setMsg("Network error starting a reader.");
-      }
-    }
-    if (newIds.length > 0) {
-      scanSessionIdsRef.current = [...scanSessionIdsRef.current, ...newIds];
-      setScanning(true);
-    }
-  }, [readerById]);
-
-  const onScanToggle = useCallback(() => {
-    if (scanning) stopScan();
-    else void startScan(Array.from(selectedReadersRef.current));
-  }, [scanning, startScan, stopScan]);
-
-  // End all sessions on unmount so readers return to default-paused.
-  useEffect(() => {
-    return () => {
-      const ids = scanSessionIdsRef.current;
-      scanSessionIdsRef.current = [];
-      for (const id of ids) {
-        void fetch("/api/scan-sessions/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: id }),
-          keepalive: true,
-        }).catch(() => {});
-      }
-    };
-  }, []);
+    setScanning(true);
+  }, [scanning]);
 
   // ── Per-reader power sliders ────────────────────────────────────────
   // dBm per selected reader. Seeded from the reader's antenna config on

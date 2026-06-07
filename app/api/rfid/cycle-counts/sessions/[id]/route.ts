@@ -46,7 +46,13 @@ async function backfillFromCdmReads(
   detail: NonNullable<Awaited<ReturnType<typeof getSession>>>,
   userId: string | null,
 ): Promise<void> {
-  if (detail.status === "committed" || detail.status === "canceled") return;
+  // Only ingest while ACTIVELY scanning. Paused / draft / closed → do NOT
+  // pull new reads. The fleet may still be scanning (e.g. master Live Scan
+  // is on), but a PAUSED count must stop counting. Verified 2026-06-07: a
+  // paused #026 kept climbing 12,051 → 12,150 because this guard previously
+  // only checked committed/canceled — pause stopped the UI feed but not this
+  // server-side reconciler.
+  if (detail.status !== "active") return;
 
   const now = Date.now();
   const state = backfillState.get(sessionId);
@@ -89,8 +95,26 @@ async function backfillFromCdmReads(
         AND d.location_id = $2::uuid
         AND cr.read_at >= $3::timestamptz
         AND cr.passes_formula = true
+        -- Only reads that fall INSIDE an active scan period. Reads during a
+        -- paused gap (between one period's ended_at and the next started_at)
+        -- are excluded, so resuming never retro-pulls reads taken while
+        -- paused. Empty periods array → no restriction (safety fallback).
+        AND (
+          $4::jsonb = '[]'::jsonb
+          OR EXISTS (
+            SELECT 1
+              FROM jsonb_array_elements($4::jsonb) AS p
+             WHERE cr.read_at >= (p->>'started_at')::timestamptz
+               AND cr.read_at <= COALESCE(NULLIF(p->>'ended_at', '')::timestamptz, now())
+          )
+        )
       ORDER BY upper(cr.epc_hex), cr.read_at ASC`,
-    [tenantId, detail.location_id, sinceIso],
+    [
+      tenantId,
+      detail.location_id,
+      sinceIso,
+      JSON.stringify(detail.scan_periods ?? []),
+    ],
   );
 
   /* Record that this pass ran (even if nothing was missed) so subsequent

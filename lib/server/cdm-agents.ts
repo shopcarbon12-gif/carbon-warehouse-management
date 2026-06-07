@@ -6,6 +6,7 @@ import { filterIgnoredReads } from "@/lib/server/ignored-epcs";
 import { decodeEpc } from "@/lib/server/epc-decode";
 import { loadEpcConfig } from "@/lib/server/epc-ingress";
 import { isLiveScanActive } from "@/lib/server/live-scan-sessions";
+import { recordReadActivity } from "@/lib/server/scan-sessions";
 import {
   isReaderEffectivelyPaused,
   type ScanSchedule,
@@ -955,6 +956,11 @@ export async function ingestAgentReads(
   // tag_killed. See lib/server/ignored-epcs.ts.
   body = { ...body, reads: filterIgnoredReads(body.reads) };
   if (body.reads.length === 0) return { inserted: 0 };
+
+  // Bump this reader's scan-session read-activity so the 10-min no-movement
+  // auto-stop (non-cycle-count pages) reflects real tag reads. No-op if the
+  // reader has no active scan-session.
+  recordReadActivity([body.readerId]);
 
   // ── Live-scan formula evaluation (no items mutation) ──
   // Background reads from fixed readers must NEVER write to the items

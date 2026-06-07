@@ -74,6 +74,36 @@ export function LiveScanWidget() {
   // so SSE ticks and the 1-s poll never disagree on attribution.
   const epcFirstAntennaRef = useRef<Map<string, string>>(new Map());
 
+  // Scan-session heartbeat. The CDM agent no longer wakes readers off the
+  // old master live-scan toggle; readers are woken via scan-sessions. We
+  // re-POST /api/scan-sessions/prewarm every 15 s for the ENABLED reader
+  // set so the server janitor keeps them warm (it colds them ~30 s after
+  // the heartbeat stops). Holds the setInterval id while running.
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Mirrors of the latest perAntenna / disabledReaders so the heartbeat
+  // interval (set up once in onStart) reads fresh values without restarting.
+  const perAntennaRef = useRef<PerAntennaRow[]>([]);
+  const disabledReadersRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    perAntennaRef.current = perAntenna;
+  }, [perAntenna]);
+  useEffect(() => {
+    disabledReadersRef.current = disabledReaders;
+  }, [disabledReaders]);
+
+  // Unmount cleanup: clear the heartbeat only. Do NOT POST stop — the
+  // server janitor colds readers ~30 s after the heartbeat stops, so a
+  // navigation away leaves them to expire naturally rather than racing a
+  // stop against a possible quick remount.
+  useEffect(() => {
+    return () => {
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+    };
+  }, []);
+
   // Resume detection on mount.
   useEffect(() => {
     let cancelled = false;
@@ -269,6 +299,40 @@ export function LiveScanWidget() {
     try {
       const res = await fetch("/api/dashboard/live-scan/start", { method: "POST" });
       if (!res.ok) return;
+      // Wake ALL non-POS readers at this location via scan-sessions (the
+      // CDM agent no longer honors the old master toggle to wake readers).
+      await fetch("/api/scan-sessions/prewarm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "scan-epc" }),
+      });
+      // 15 s heartbeat re-prewarms the ENABLED set so the server janitor
+      // keeps them warm. Empty disabledReaders → prewarm all; otherwise
+      // prewarm only the perAntenna reader_ids that are NOT disabled.
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      heartbeatRef.current = setInterval(() => {
+        const disabled = disabledReadersRef.current;
+        if (disabled.size === 0) {
+          void fetch("/api/scan-sessions/prewarm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "scan-epc" }),
+          });
+        } else {
+          const readerIds = Array.from(
+            new Set(
+              perAntennaRef.current
+                .map((r) => r.reader_id)
+                .filter((id) => !disabled.has(id)),
+            ),
+          );
+          void fetch("/api/scan-sessions/prewarm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "scan-epc", readerIds }),
+          });
+        }
+      }, 15000);
       setCount(0);
       setFrozenCount(null);
       setFrozenPerAntenna(null);
@@ -283,17 +347,39 @@ export function LiveScanWidget() {
   // disabledReaders only; per-antenna polling/SSE keep filling the
   // background data so flipping back on instantly restores the tile's
   // current count.
-  const toggleReader = useCallback((readerId: string) => {
-    setDisabledReaders((prev) => {
-      const next = new Set(prev);
-      if (next.has(readerId)) {
-        next.delete(readerId);
-      } else {
-        next.add(readerId);
-      }
-      return next;
-    });
-  }, []);
+  const toggleReader = useCallback(
+    (readerId: string) => {
+      setDisabledReaders((prev) => {
+        const next = new Set(prev);
+        const wasDisabled = next.has(readerId);
+        if (wasDisabled) {
+          next.delete(readerId);
+        } else {
+          next.add(readerId);
+        }
+        // Drive the actual reader via scan-sessions, but only while a live
+        // session is running. Re-enabling (wasDisabled=true) → prewarm it;
+        // disabling (wasDisabled=false) → stop its session so it goes cold.
+        if (state === "running") {
+          if (wasDisabled) {
+            void fetch("/api/scan-sessions/prewarm", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ kind: "scan-epc", readerIds: [readerId] }),
+            });
+          } else {
+            void fetch("/api/scan-sessions/stop", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ readerIds: [readerId] }),
+            });
+          }
+        }
+        return next;
+      });
+    },
+    [state],
+  );
 
   const onPause = useCallback(async () => {
     if (busy) return;
@@ -319,6 +405,16 @@ export function LiveScanWidget() {
       setFrozenCount(serverCount);
       setFrozenPerAntenna(serverPerAnt);
       await fetch("/api/dashboard/live-scan/stop", { method: "POST" });
+      // End scan-sessions → readers go cold. Stop the heartbeat.
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+      await fetch("/api/scan-sessions/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
       setState("paused");
     } finally {
       setBusy(false);
@@ -344,6 +440,18 @@ export function LiveScanWidget() {
         }
         await fetch("/api/dashboard/live-scan/stop", { method: "POST" });
       }
+      // End scan-sessions → readers go cold. Stop the heartbeat. Runs for
+      // both the running→stop and paused→stop paths (idempotent if paused
+      // already cleared the heartbeat / stopped sessions).
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+      await fetch("/api/scan-sessions/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
       setFrozenCount(finalCount);
       setFrozenPerAntenna(null); // collapse the grid
       setPerAntenna([]);

@@ -4,11 +4,13 @@
  * Bulk Import workspace — read tags that have NEVER been in the system
  * at this location and commit them to inventory as LIVE.
  *
+ * The reader is kept WARM the whole time the page is open via useReaderWake
+ * (.16 by default); the controls below only gate local capture, not wake/sleep.
+ *
  * Three controls above a sortable table:
- *   - Start scanning button (toggles to Stop) — wakes the picked reader
- *     via /api/scan-sessions/start (kind="bulk-import"), subscribes to
- *     /api/edge/stream. Batches incoming EPCs and ships them to
- *     /api/inventory/bulk-import/scan which decodes, filters out
+ *   - Start scanning button (toggles to Stop) — flips the local capture gate
+ *     and subscribes to /api/edge/stream. Batches incoming EPCs and ships them
+ *     to /api/inventory/bulk-import/scan which decodes, filters out
  *     anything already in items at THIS location, returns enriched
  *     rows (custom_sku, name, color, size, etc).
  *   - Clear list button — wipes the local state but does NOT touch the
@@ -46,6 +48,7 @@ import {
 } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { useReaderWake } from "@/components/shared/use-reader-wake";
 
 const DEFAULT_READER_IP = "192.168.1.16";
 
@@ -90,6 +93,11 @@ type GroupedRow = {
 type SortKey = "sku" | "upc" | "name" | "color" | "size" | "qty";
 
 export function BulkImportWorkspace() {
+  // Keep the default Bulk Import reader (.16) WARM while this page is open, so
+  // it's ready before the operator clicks Start scanning. Capture (writing
+  // inventory) is still gated behind the manual Start scanning toggle below.
+  useReaderWake({ active: true, kind: "bulk-import", networkAddresses: ["192.168.1.16"] });
+
   // --- Reader picker + default to .16 ---------------------------------
   const [selectedReaders, setSelectedReaders] = useState<Set<string>>(new Set());
   const { data: hcData } = useSWR<HardwareConfigTree>(
@@ -123,34 +131,14 @@ export function BulkImportWorkspace() {
     }
     appliedDefaultRef.current = true;
     if (defaultId) {
+      // Pre-select .16 in the picker. The reader is kept warm by useReaderWake
+      // above; capture only begins when the operator clicks Start scanning.
       setSelectedReaders(new Set([defaultId]));
-      // Operator request: entering the page auto-starts the default reader (.16),
-      // matching Bulk Status. Releases on unmount via the existing cleanup.
-      const startId = defaultId;
-      void (async () => {
-        try {
-          const r = await fetch("/api/scan-sessions/start", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ readerId: startId, kind: "bulk-import" }),
-          });
-          const j = (await r.json().catch(() => null)) as
-            | { ok?: boolean; sessionId?: string }
-            | null;
-          if (j?.ok && j.sessionId) {
-            setScanSessionId(j.sessionId);
-            setScanning(true);
-          }
-        } catch {
-          /* non-fatal: operator can still click Start scanning */
-        }
-      })();
     }
   }, [hcData]);
 
   // --- Scan state ------------------------------------------------------
   const [scanning, setScanning] = useState(false);
-  const [scanSessionId, setScanSessionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [commitMsg, setCommitMsg] = useState<string | null>(null);
@@ -288,73 +276,23 @@ export function BulkImportWorkspace() {
   // ------------------------------------------------------------------
   // Start / Stop / Clear list buttons
   // ------------------------------------------------------------------
-  const onScanToggle = useCallback(async () => {
+  // Start/Stop only toggles the local capture gate now — the reader is kept
+  // warm for the whole page lifetime by useReaderWake above, so there is no
+  // per-session wake/sleep to manage here.
+  const onScanToggle = useCallback(() => {
     setErrorMsg(null);
     setCommitMsg(null);
     if (busy) return;
-    setBusy(true);
-    try {
-      if (scanning) {
-        if (scanSessionId) {
-          await fetch("/api/scan-sessions/end", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId: scanSessionId }),
-          });
-        }
-        setScanning(false);
-        setScanSessionId(null);
-        return;
-      }
-      const readerIds = Array.from(selectedReaders);
-      if (readerIds.length === 0) {
-        setErrorMsg("Pick at least one reader first.");
-        return;
-      }
-      const sessionIds: string[] = [];
-      for (const readerId of readerIds) {
-        const r = await fetch("/api/scan-sessions/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ readerId, kind: "bulk-import" }),
-        });
-        const j = (await r.json().catch(() => null)) as
-          | { ok: boolean; sessionId?: string; reason?: string }
-          | null;
-        if (!j?.ok || !j.sessionId) {
-          setErrorMsg(`Could not start reader (${j?.reason ?? "unknown"}).`);
-          for (const id of sessionIds) {
-            void fetch("/api/scan-sessions/end", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sessionId: id }),
-            });
-          }
-          return;
-        }
-        sessionIds.push(j.sessionId);
-      }
-      setScanSessionId(sessionIds[0] ?? null);
-      setScanning(true);
-    } finally {
-      setBusy(false);
+    if (scanning) {
+      setScanning(false);
+      return;
     }
-  }, [busy, scanning, scanSessionId, selectedReaders]);
-
-  // Make sure a closed tab doesn't leave the reader awake.
-  useEffect(() => {
-    return () => {
-      if (scanSessionId) {
-        void fetch("/api/scan-sessions/end", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          keepalive: true,
-          body: JSON.stringify({ sessionId: scanSessionId }),
-        });
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (selectedReaders.size === 0) {
+      setErrorMsg("Pick at least one reader first.");
+      return;
+    }
+    setScanning(true);
+  }, [busy, scanning, selectedReaders]);
 
   const onClearList = useCallback(() => {
     setGroups(new Map());

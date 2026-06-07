@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Upload, Radio, Loader2, Plus } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { useReaderWake } from "@/components/shared/use-reader-wake";
 
 /**
  * Bulk Geiger — upload a CSV/XLSX EPC list, auto-resolve each EPC to its
@@ -62,6 +63,10 @@ function statusLabel(status: string): string {
 }
 
 export function BulkGeigerWorkspace() {
+  // Warm the .15 reader while this page is open so it's ready before the
+  // operator clicks Start scan. Capture is still gated by the Start button.
+  useReaderWake({ active: true, kind: "bulk-geiger", networkAddresses: ["192.168.1.15"] });
+
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const rowsRef = useRef(rows);

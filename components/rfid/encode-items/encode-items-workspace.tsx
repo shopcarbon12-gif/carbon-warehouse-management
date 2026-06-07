@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { useReaderWake } from "@/components/shared/use-reader-wake";
 import {
   RssiProximitySlider,
   useRssiThreshold,
@@ -149,6 +150,11 @@ type Row = {
 };
 
 export function EncodeItemsWorkspace() {
+  // Warm the .15 reader while this page is open so it's ready before the
+  // operator clicks Read. Capture (the SSE subscription) is still gated by
+  // the Read button via `reading`.
+  useReaderWake({ active: true, kind: "encode-items", networkAddresses: ["192.168.1.15"] });
+
   // --- Reader picker + default to .15 ----------------------------------
   const [selectedReaders, setSelectedReaders] = useState<Set<string>>(new Set());
   const { data: hcData } = useSWR<HardwareConfigTree>(

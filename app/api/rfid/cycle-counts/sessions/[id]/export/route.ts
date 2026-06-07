@@ -119,108 +119,157 @@ async function renderWorkbook(
     });
   });
 
-  // Matched / Missing — same columns (from expected snapshot)
-  const expectedCols = [
-    { header: "EPC", key: "epc", width: 30 },
+  // ───────────── Per-EPC sheets ─────────────
+  // First-sighting reader + antenna for each EPC, split out of the source map
+  // (names look like "Aisle 3-4/1 · A2"). The source map is already
+  // first-sighting-wins, so this is the reader+antenna that saw the tag FIRST
+  // — never a duplicate. Mobile sources show the device name, blank antenna.
+  const sources = detail.scanned_epc_sources ?? {};
+  const srcFor = (epc: string): { reader: string; antenna: string } => {
+    const s = sources[epc.toUpperCase()];
+    if (!s) return { reader: "", antenna: "" };
+    if (s.kind === "mobile") return { reader: s.name || "mobile", antenna: "" };
+    const m = s.name.match(/^(.*?)\s*·\s*A(\d+)\s*$/);
+    return m ? { reader: m[1], antenna: m[2] } : { reader: s.name, antenna: "" };
+  };
+  // Requested column order (2026-06-07): SKU, UPC, Description, Color, Size,
+  // Expected bin, Reader, Antenna, EPC. "Expected bin" stays a SINGLE column
+  // (the item's home/expected bin) — same as before, just reordered.
+  const scannedCols = [
     { header: "SKU", key: "sku", width: 18 },
-    { header: "Description", key: "description", width: 36 },
     { header: "UPC", key: "upc", width: 16 },
+    { header: "Description", key: "description", width: 36 },
     { header: "Color", key: "color", width: 12 },
     { header: "Size", key: "size", width: 8 },
     { header: "Expected bin", key: "bin", width: 14 },
+    { header: "Reader", key: "reader", width: 18 },
+    { header: "Antenna", key: "antenna", width: 9 },
+    { header: "EPC", key: "epc", width: 30 },
+  ];
+  // Live buckets show the item's CURRENT bin + status/location.
+  const liveCols = [
+    { header: "SKU", key: "sku", width: 18 },
+    { header: "UPC", key: "upc", width: 16 },
+    { header: "Description", key: "description", width: 36 },
+    { header: "Color", key: "color", width: 12 },
+    { header: "Size", key: "size", width: 8 },
+    { header: "Current bin", key: "bin", width: 14 },
+    { header: "Reader", key: "reader", width: 18 },
+    { header: "Antenna", key: "antenna", width: 9 },
+    { header: "EPC", key: "epc", width: 30 },
+    { header: "Current status", key: "current_status", width: 14 },
+    { header: "Current location", key: "loc", width: 16 },
+  ];
+  // Missing items were never scanned → no reader/antenna.
+  const missingCols = [
+    { header: "SKU", key: "sku", width: 18 },
+    { header: "UPC", key: "upc", width: 16 },
+    { header: "Description", key: "description", width: 36 },
+    { header: "Color", key: "color", width: 12 },
+    { header: "Size", key: "size", width: 8 },
+    { header: "Expected bin", key: "bin", width: 14 },
+    { header: "EPC", key: "epc", width: 30 },
   ];
 
   const matched = wb.addWorksheet("Matched");
-  matched.columns = expectedCols;
+  matched.columns = scannedCols;
   matched.getRow(1).font = { bold: true };
   for (const r of variance.matched) {
+    const s = srcFor(r.epc);
     matched.addRow({
-      epc: r.epc,
-      sku: r.sku,
-      description: r.description ?? "",
+      sku: r.sku ?? "",
       upc: r.upc ?? "",
+      description: r.description ?? "",
       color: r.color ?? "",
       size: r.size ?? "",
       bin: r.bin_code ?? "",
+      reader: s.reader,
+      antenna: s.antenna,
+      epc: r.epc,
     });
   }
 
   const missing = wb.addWorksheet("Missing");
-  missing.columns = expectedCols;
+  missing.columns = missingCols;
   missing.getRow(1).font = { bold: true };
   for (const r of variance.missing) {
     missing.addRow({
-      epc: r.epc,
-      sku: r.sku,
-      description: r.description ?? "",
+      sku: r.sku ?? "",
       upc: r.upc ?? "",
+      description: r.description ?? "",
       color: r.color ?? "",
       size: r.size ?? "",
       bin: r.bin_code ?? "",
+      epc: r.epc,
     });
   }
 
-  // Live buckets — added_here / defective / locked share a shape
-  const liveCols = [
-    { header: "EPC", key: "epc", width: 30 },
-    { header: "SKU", key: "sku", width: 18 },
-    { header: "Description", key: "description", width: 36 },
-    { header: "UPC", key: "upc", width: 16 },
-    { header: "Color", key: "color", width: 12 },
-    { header: "Size", key: "size", width: 8 },
-    { header: "Current bin", key: "bin", width: 14 },
-    { header: "Current status", key: "current_status", width: 14 },
-    { header: "Current location", key: "loc", width: 14 },
-  ];
+  const addLiveSheet = (
+    title: string,
+    rows: LiveVariance["added_here"],
+  ): void => {
+    const ws = wb.addWorksheet(title);
+    ws.columns = liveCols;
+    ws.getRow(1).font = { bold: true };
+    for (const r of rows) {
+      const s = srcFor(r.epc);
+      ws.addRow({
+        sku: r.sku ?? "",
+        upc: r.upc ?? "",
+        description: r.description ?? "",
+        color: r.color ?? "",
+        size: r.size ?? "",
+        bin: r.bin_code ?? "",
+        reader: s.reader,
+        antenna: s.antenna,
+        epc: r.epc,
+        current_status: r.current_status,
+        loc: r.current_location_code ?? "",
+      });
+    }
+  };
+  addLiveSheet("Added here", variance.added_here);
+  addLiveSheet("Defective", variance.defective);
+  addLiveSheet("Locked", variance.locked);
 
-  const added = wb.addWorksheet("Added here");
-  added.columns = liveCols;
-  added.getRow(1).font = { bold: true };
-  for (const r of variance.added_here) {
-    added.addRow({
-      epc: r.epc,
-      sku: r.sku ?? "",
-      description: r.description ?? "",
-      upc: r.upc ?? "",
-      color: r.color ?? "",
-      size: r.size ?? "",
-      bin: r.bin_code ?? "",
-      current_status: r.current_status,
-      loc: r.current_location_code ?? "",
-    });
+  // ───────────── All scanned items — one row per EPC, deduped ─────────────
+  // Every unique scanned EPC, attributed to the reader+antenna that saw it
+  // FIRST. detail.scanned_epcs is already de-duplicated, so no EPC repeats.
+  type CatRow = {
+    sku?: string | null;
+    upc?: string | null;
+    description?: string | null;
+    color?: string | null;
+    size?: string | null;
+    bin_code?: string | null;
+  };
+  const catalog = new Map<string, CatRow>();
+  for (const r of [
+    ...variance.matched,
+    ...variance.added_here,
+    ...variance.defective,
+    ...variance.locked,
+    ...variance.missing,
+  ]) {
+    const k = r.epc.toUpperCase();
+    if (!catalog.has(k)) catalog.set(k, r);
   }
-
-  const defective = wb.addWorksheet("Defective");
-  defective.columns = liveCols;
-  defective.getRow(1).font = { bold: true };
-  for (const r of variance.defective) {
-    defective.addRow({
-      epc: r.epc,
-      sku: r.sku ?? "",
-      description: r.description ?? "",
-      upc: r.upc ?? "",
-      color: r.color ?? "",
-      size: r.size ?? "",
-      bin: r.bin_code ?? "",
-      current_status: r.current_status,
-      loc: r.current_location_code ?? "",
-    });
-  }
-
-  const locked = wb.addWorksheet("Locked");
-  locked.columns = liveCols;
-  locked.getRow(1).font = { bold: true };
-  for (const r of variance.locked) {
-    locked.addRow({
-      epc: r.epc,
-      sku: r.sku ?? "",
-      description: r.description ?? "",
-      upc: r.upc ?? "",
-      color: r.color ?? "",
-      size: r.size ?? "",
-      bin: r.bin_code ?? "",
-      current_status: r.current_status,
-      loc: r.current_location_code ?? "",
+  const allScanned = wb.addWorksheet("All scanned");
+  allScanned.columns = scannedCols;
+  allScanned.getRow(1).font = { bold: true };
+  for (const epc of detail.scanned_epcs) {
+    const c = catalog.get(epc.toUpperCase());
+    const s = srcFor(epc);
+    allScanned.addRow({
+      sku: c?.sku ?? "",
+      upc: c?.upc ?? "",
+      description: c?.description ?? "",
+      color: c?.color ?? "",
+      size: c?.size ?? "",
+      bin: c?.bin_code ?? "",
+      reader: s.reader,
+      antenna: s.antenna,
+      epc,
     });
   }
 

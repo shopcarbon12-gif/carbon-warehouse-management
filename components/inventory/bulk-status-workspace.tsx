@@ -6,6 +6,7 @@ import { Radio, ScanLine, Trash2 } from "lucide-react";
 
 import { bulkStatusOptionsForUi } from "@/lib/inventory/bulk-wms-status-options";
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { useReaderWake } from "@/components/shared/use-reader-wake";
 import {
   RssiProximitySlider,
   useRssiThreshold,
@@ -80,6 +81,10 @@ type LookupRow = {
 const LOOKUP_CHUNK = 200;
 
 export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+  // Warm the .15 reader while this page is open so it's ready before the
+  // operator clicks Start scan. Capture is gated by the Start button.
+  useReaderWake({ active: true, kind: "bulk-status", networkAddresses: ["192.168.1.15"] });
+
   const options = bulkStatusOptionsForUi(isSuperAdmin);
   const [target, setTarget] = useState<string>(options[0]?.value ?? "in-stock");
   const [override, setOverride] = useState(false);
@@ -198,11 +203,11 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     }
     appliedDefaultRef.current = true; // mark applied either way — no retry
     if (defaultId) {
+      // Pre-select .15 only. The reader is kept WARM by useReaderWake while
+      // this page is open; capture starts when the operator clicks Start scan.
       setSelectedReaders(new Set([defaultId]));
-      // Operator request: entering the page auto-starts the default reader (.15).
-      void startScan([defaultId]);
     }
-  }, [hcData, startScan]);
+  }, [hcData]);
 
   // End all sessions when leaving the page so readers return to default-paused.
   useEffect(() => {

@@ -2443,13 +2443,14 @@ export class MonsoonSupervisor {
       bundle.readers
         .filter(
           (r) =>
-            // Live Scan master switch (dashboard "Start scan"): when active it
-            // forces EVERY reader on — including the POS reader (.34) and the
-            // office reader (.15) — for the duration of the session, overriding
-            // the default-paused model, per-reader schedules, and POS cashier-
-            // gating. "Stop scan" clears live_scan_active and everything reverts
-            // to the normal desired-set below. Operator request 2026-06-07.
-            bundle.live_scan_active === true ||
+            // NO master switch (2026-06-07 redesign). A reader is driven ONLY
+            // when something explicitly wants it on:
+            //   - it is not paused (manual resume / inside its schedule window)
+            //   - a scan-session is active for it (page pre-warm OR active scan)
+            //   - an antenna test woke it
+            //   - it is the POS reader and a cashier armed it
+            // `live_scan_active` (the old dashboard master toggle) is no longer
+            // consulted — pages drive their own readers via scan-sessions.
             !(r.effective_paused ?? false) ||
             this.activeScanSessionReaders.has(r.id) ||
             this.testWakeReaders.has(r.id) ||

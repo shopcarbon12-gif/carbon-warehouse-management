@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { Radio, ScanLine, RefreshCw, ChevronDown, ChevronRight, Printer } from "lucide-react";
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { useReaderWake } from "@/components/shared/use-reader-wake";
 import { PrintActionsModal } from "./print-actions-modal";
 
 type LocationRow = { id: string; code: string; name: string };
@@ -348,6 +349,11 @@ function StatusPill({ status }: { status: "pending" | "checked" | "received" }) 
 }
 
 export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
+  // Keep the Transfer Bin reader (.16) WARM while this page is open so it's
+  // ready before the operator clicks Start scan. Capture is still gated by the
+  // `scanning` toggle + SSE handler below.
+  useReaderWake({ active: true, kind: "transfer-out", networkAddresses: ["192.168.1.16"] });
+
   const { data: locData } = useSWR<LocationRow[]>("/api/locations", fetcher);
   const locations = locData ?? [];
 
