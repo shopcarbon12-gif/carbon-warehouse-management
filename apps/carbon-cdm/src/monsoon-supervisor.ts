@@ -1341,7 +1341,7 @@ export class MonsoonSupervisor {
    * the supervisor resumes spawning even when the write throws.
    */
   public async acquireBridgeForExternalOp(readerId: string): Promise<
-    { host: string; serialPort: number } | null
+    { host: string; serialPort: number; writePowerTenths: number } | null
   > {
     const slot = this.slots.get(readerId);
     if (!slot) return null;
@@ -1367,7 +1367,26 @@ export class MonsoonSupervisor {
     // .30 worse, not better — chip enters a "reader unreachable, all
     // ports exhausted" recovery cooldown when bridge resets cascade).
     await new Promise<void>((resolve) => setTimeout(resolve, 4_000));
-    return { host, serialPort };
+    // Chip-write Tx power: the reader's configured power, capped at 30 dBm
+    // (the historical hardcoded write power). A low-power reader — e.g. the
+    // worn-amp .15 "office - POS" pinned at 12 dBm, whose PA emits nothing
+    // above ~13 dBm — would radiate ZERO at the old fixed 30 dBm, so the
+    // write never reaches the tag (no_tag_access_write_line). Healthy
+    // readers (configured >=30 dBm) are unaffected: min(300, ...) holds 30.
+    // Write power: a per-reader FIXED override (devices.config.write_power_dbm)
+    // wins — used for worn-amp readers (e.g. .15) where the write must stay at
+    // a specific low power ALWAYS, regardless of read/antenna power or the
+    // encode page's proximity slider (which is display-only). Falls back to
+    // the reader's configured read power. Either way capped at 30 dBm.
+    const writeBaseDbm =
+      slot.spec.write_power_dbm != null && slot.spec.write_power_dbm > 0
+        ? slot.spec.write_power_dbm
+        : this.avgPower(slot.spec);
+    const writePowerTenths = Math.min(
+      300,
+      Math.max(1, Math.round(writeBaseDbm * 10)),
+    );
+    return { host, serialPort, writePowerTenths };
   }
 
   /**

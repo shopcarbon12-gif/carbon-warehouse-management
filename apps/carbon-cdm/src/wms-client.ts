@@ -85,6 +85,11 @@ export type AgentConfigReader = {
    *  behaviour in normal scanning. Pulled from `devices.config.force_
    *  respawn_interval_ms`. NULL/missing → no forced respawn (default). */
   force_respawn_interval_ms?: number | null;
+  /** Fixed chip-write power (dBm), decoupled from read power. From
+   *  devices.config.write_power_dbm. Used on worn-amp readers (.15) so the
+   *  write stays at a set low power regardless of read power / proximity.
+   *  NULL/missing → derive the write power from configured read power. */
+  write_power_dbm?: number | null;
   /** True for readers dedicated to Carbon-POS (.34). The supervisor's
    *  `desired` filter keeps these always-warm — POS cashier clicks
    *  ("Update Status Item") expect reads within a couple seconds, so

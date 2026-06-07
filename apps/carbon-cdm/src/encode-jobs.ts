@@ -110,7 +110,7 @@ async function runOne(
   log.info("encode-jobs: starting write", jobLogCtx);
 
   // Step 1: borrow the bridge slot from the supervisor.
-  let slot: { host: string; serialPort: number } | null;
+  let slot: { host: string; serialPort: number; writePowerTenths: number } | null;
   try {
     slot = await supervisor.acquireBridgeForExternalOp(job.reader_id);
   } catch (e) {
@@ -126,7 +126,7 @@ async function runOne(
   log.info("encode-jobs: acquired bridge slot", { ...jobLogCtx, ...slot });
 
   try {
-    const outcome = await runWriteTag(slot.host, slot.serialPort, job.old_epc, job.new_epc);
+    const outcome = await runWriteTag(slot.host, slot.serialPort, job.old_epc, job.new_epc, slot.writePowerTenths);
     if (outcome.ok) {
       log.info("encode-jobs: write success", { ...jobLogCtx, ...outcome });
       await postEncodeJobResult(env, job.id, {
@@ -181,6 +181,7 @@ async function runWriteTag(
   serialPort: number,
   oldEpc: string,
   newEpc: string,
+  writePowerTenths: number,
 ): Promise<WriteOutcome> {
   // Chip-state pre-flight is handled by acquireBridgeForExternalOp's
   // `wiznet-cli --reset` step (see supervisor). By the time we get here
@@ -216,7 +217,11 @@ async function runWriteTag(
       "--serial_host", effectiveHost,
       "--serial_port", String(effectivePort),
       "--num", "1",
-      "-p", "300",
+      // Per-reader write power (tenths-dBm), capped at 30 dBm upstream in
+      // acquireBridgeForExternalOp. Was hardcoded "300"; low-power readers
+      // (worn-amp .15 @12 dBm) emit nothing at 30 dBm so the write never
+      // reached the tag. healthy readers still resolve to 300 (30 dBm).
+      "-p", String(writePowerTenths),
       "--target_tag", targetForBinary,
       "--write_tag", newEpc.toUpperCase(),
     ];
