@@ -445,11 +445,14 @@ function DetailsTab({
   const reserved = 0;
 
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.2fr_1fr_1fr]">
-      {/* Column 1 — Picture, Name, Color/Size, IDs, Organize, eCommerce */}
-      <div className="space-y-3">
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+      {/* Left media rail — the product picture (3:4, modest size) */}
+      <div className="mx-auto w-52 shrink-0 lg:mx-0">
         <ItemImage url={row.shopify_image_url} alt={`${form.name} ${form.color}`.trim()} />
+      </div>
 
+      {/* Right content — tidy 2-column masonry of detail cards */}
+      <div className="min-w-0 flex-1 gap-3 sm:columns-2 [&>*]:mb-3 [&>*]:break-inside-avoid">
         <Section title="Item">
           <EditRow
             label="Name"
@@ -529,10 +532,7 @@ function DetailsTab({
             </label>
           </div>
         </Section>
-      </div>
 
-      {/* Column 2 — Pricing + Inventory Defaults */}
-      <div className="space-y-3">
         <Section title="Pricing">
           <PriceHeader />
           <EditPriceRow
@@ -556,10 +556,7 @@ function DetailsTab({
             money
           />
         </Section>
-      </div>
 
-      {/* Column 3 — Stock + Sales History (derived / read-only) */}
-      <div className="space-y-3">
         <Section title="Stock">
           <Row label="Available" value={String(available)} mono />
           <Row label="Reserved" value={String(reserved)} mono />

@@ -852,7 +852,6 @@ function MoneyInput({
 function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
   // null = closed; number = open carousel at that start index.
   const [zoomIdx, setZoomIdx] = useState<number | null>(null);
-  const [mainIdx, setMainIdx] = useState(0);
   if (!urls || urls.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 px-3 py-4 text-center font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
@@ -860,8 +859,7 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
       </div>
     );
   }
-  const main = urls[Math.min(mainIdx, urls.length - 1)];
-  const rest = urls.map((u, i) => ({ u, i })).filter(({ i }) => i !== mainIdx);
+  const [main, ...rest] = urls;
   return (
     <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
       <div className="flex items-center justify-between border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5">
@@ -870,41 +868,40 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
         </span>
         <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">{urls.length}</span>
       </div>
-      <div className="flex flex-col gap-3 p-3 sm:flex-row">
-        {/* Main picture — 3:4 portrait, click to open the full slider here. */}
+      {/* Every picture — main + thumbnails — opens the full-screen slider at
+          its own index. No "feature as main" swapping. */}
+      <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start">
         <button
           type="button"
-          onClick={() => setZoomIdx(mainIdx)}
-          className="block w-40 shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white"
-          title={`${title} — click to enlarge`}
+          onClick={() => setZoomIdx(0)}
+          className="block w-36 shrink-0 self-start aspect-[3/4] cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
+          title={`${title} — click to open slider`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={main}
-            alt={`${title} main`}
-            className="aspect-[3/4] w-full object-cover"
-          />
+          <img src={main} alt={`${title} 1`} className="h-full w-full object-cover" />
         </button>
-        {/* The rest — smaller 3:4. Click to feature; click the main to zoom. */}
         {rest.length > 0 ? (
           <div className="grid flex-1 grid-cols-4 gap-2 sm:grid-cols-6 sm:content-start">
-            {rest.map(({ u, i }) => (
-              <button
-                key={u}
-                type="button"
-                onClick={() => setMainIdx(i)}
-                className="block aspect-[3/4] cursor-pointer overflow-hidden rounded border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
-                title={`${title} — image ${i + 1} (click to feature, then enlarge)`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={u}
-                  alt={`${title} ${i + 1}`}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              </button>
-            ))}
+            {rest.map((u, idx) => {
+              const i = idx + 1;
+              return (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => setZoomIdx(i)}
+                  className="block aspect-[3/4] cursor-zoom-in overflow-hidden rounded border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
+                  title={`${title} — image ${i + 1} (click to open slider)`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={u}
+                    alt={`${title} ${i + 1}`}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                </button>
+              );
+            })}
           </div>
         ) : null}
       </div>
