@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import type { InfrastructureSettingsDto } from "@/lib/server/infrastructure-settings";
+import { ShopifyImagesPanel } from "./shopify-images-panel";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -13,7 +14,7 @@ const fetcher = async (url: string) => {
   return res.json();
 };
 
-type Tab = "rfid" | "integrations" | "bins";
+type Tab = "rfid" | "integrations" | "shopify" | "bins";
 
 function LightspeedLiveReadiness({
   data,
@@ -242,6 +243,7 @@ export function SettingsWorkspace() {
           [
             ["rfid", "RFID defaults"],
             ["integrations", "Integrations"],
+            ["shopify", "Shopify"],
             ["bins", "Locations / bins"],
           ] as const
         ).map(([k, label]) => (
@@ -265,6 +267,8 @@ export function SettingsWorkspace() {
           {error instanceof Error ? error.message : "Load failed"}
         </p>
       ) : null}
+
+      {tab === "shopify" ? <ShopifyImagesPanel /> : null}
 
       {tab === "bins" ? (
         <div className="space-y-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-5">

@@ -1,6 +1,7 @@
 import { loadEnvConfig } from "@next/env";
 import { Pool } from "pg";
 import { executeLightspeedCatalogJob } from "@/lib/server/inventory-sync";
+import { executeShopifyImageSyncJob } from "@/lib/server/shopify-catalog-images";
 
 loadEnvConfig(process.cwd());
 
@@ -43,6 +44,12 @@ function sleep(ms: number) {
 }
 
 const CATALOG_SYNC_JOB_TYPES = new Set(["lightspeed_catalog", "lightspeed_pull"]);
+// Job types whose executor sets its own terminal status/progress — the main
+// loop must NOT slap a generic 'completed' over them.
+const SELF_TERMINAL_JOB_TYPES = new Set([
+  ...CATALOG_SYNC_JOB_TYPES,
+  "shopify_image_sync",
+]);
 
 const REPORT_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 let lastReportCleanupAt: Date | null = null;
@@ -80,6 +87,11 @@ async function processStub(pool: Pool, job: JobRow): Promise<void> {
     /* Terminal status + payload are set inside the catalog sync (no generic completed UPDATE). */
     return;
   }
+  if (job.job_type === "shopify_image_sync") {
+    await executeShopifyImageSyncJob(pool, job.id);
+    /* Sets its own terminal status + result payload. */
+    return;
+  }
   // Stub: reconcile / future job types. Idempotency is enforced by idempotency_key on insert.
   await sleep(50 + Math.floor(Math.random() * 80));
 }
@@ -106,7 +118,7 @@ async function main() {
       }
       try {
         await processStub(pool, job);
-        if (!CATALOG_SYNC_JOB_TYPES.has(job.job_type)) {
+        if (!SELF_TERMINAL_JOB_TYPES.has(job.job_type)) {
           await pool.query(
             `UPDATE sync_jobs
              SET status = 'completed', error = NULL, updated_at = now()

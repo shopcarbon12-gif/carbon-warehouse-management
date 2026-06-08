@@ -255,6 +255,90 @@ export async function matrixIdForUpc(pool: Pool, upc: string): Promise<string | 
 }
 
 /**
+ * Worker entry point for a `shopify_image_sync` job. Reads the job's payload
+ * (optional `matrixId` for a single product; otherwise the whole catalog),
+ * runs the sync, and writes live progress + a final result summary onto the
+ * sync_jobs row. Sets its own terminal `completed` status; the worker only
+ * flips it to `failed` if this throws.
+ */
+export async function executeShopifyImageSyncJob(pool: Pool, jobId: string): Promise<void> {
+  const jr = await pool.query<{ payload: { matrixId?: string } | null }>(
+    `SELECT payload FROM sync_jobs WHERE id = $1::uuid`,
+    [jobId],
+  );
+  const payload = jr.rows[0]?.payload ?? {};
+  const single =
+    typeof payload.matrixId === "string" && payload.matrixId.trim()
+      ? payload.matrixId.trim()
+      : null;
+
+  const ids = single
+    ? [single]
+    : (
+        await pool.query<{ id: string }>(
+          `SELECT DISTINCT m.id::text AS id
+             FROM matrices m JOIN custom_skus cs ON cs.matrix_id = m.id
+            ORDER BY 1`,
+        )
+      ).rows.map((r) => r.id);
+
+  const total = ids.length;
+  let done = 0;
+  let synced = 0;
+  let withPics = 0;
+  let skipped = 0;
+
+  await pool.query(
+    `UPDATE sync_jobs
+        SET status = 'running', started_at = COALESCE(started_at, now()),
+            progress_total = $2, progress_done = 0, progress_pct = 0,
+            progress_message = $3, updated_at = now()
+      WHERE id = $1::uuid`,
+    [jobId, total, `Starting — ${total} product${total === 1 ? "" : "s"}`],
+  );
+
+  for (const id of ids) {
+    try {
+      const r = await syncShopifyImagesForMatrix(pool, id);
+      if (r.ok) {
+        synced += 1;
+        if (r.galleryCount > 0) withPics += 1;
+      } else {
+        skipped += 1;
+      }
+    } catch {
+      skipped += 1;
+    }
+    done += 1;
+    if (done % 5 === 0 || done === total) {
+      const pct = total ? Math.round((done / total) * 100) : 100;
+      await pool.query(
+        `UPDATE sync_jobs
+            SET progress_done = $2, progress_pct = $3, progress_message = $4, updated_at = now()
+          WHERE id = $1::uuid`,
+        [jobId, done, pct, `${done}/${total} · ${withPics} with pictures`],
+      );
+    }
+  }
+
+  await pool.query(
+    `UPDATE sync_jobs
+        SET status = 'completed', progress_done = $2, progress_total = $2,
+            progress_pct = 100, finished_at = now(), error = NULL,
+            progress_message = $3,
+            payload = COALESCE(payload, '{}'::jsonb) || $4::jsonb,
+            updated_at = now()
+      WHERE id = $1::uuid`,
+    [
+      jobId,
+      total,
+      `Done — ${synced} synced, ${withPics} with pictures, ${skipped} skipped`,
+      JSON.stringify({ result: { total, synced, withPics, skipped } }),
+    ],
+  );
+}
+
+/**
  * Full sweep — sync every matrix that has at least one variant. Sequential to
  * stay friendly to Shopify's cost budget (the GraphQL client already backs
  * off on THROTTLED). This is the "after verify, adjust to all" entry point.
