@@ -14,6 +14,7 @@ import {
   Cpu,
   Download,
   FolderInput,
+  Image as ImageIcon,
   LayoutDashboard,
   Layers,
   Map,
@@ -157,6 +158,7 @@ const sections: NavSection[] = [
     items: [
       { href: "/integrations/sync", label: "Lightspeed Sync", icon: RefreshCw },
       { href: "/integrations/lightspeed-sales", label: "LS Sales", icon: Banknote },
+      { href: "/integrations/shopify", label: "Shopify", icon: ImageIcon },
     ],
   },
   {
