@@ -599,7 +599,7 @@ function ItemImage({ url, alt }: { url: string | null; alt: string }) {
   const [zoom, setZoom] = useState(false);
   if (!url) {
     return (
-      <div className="flex aspect-square w-full items-center justify-center rounded-md border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <div className="flex aspect-[3/4] w-full items-center justify-center rounded-md border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
         No picture
       </div>
     );
@@ -616,12 +616,12 @@ function ItemImage({ url, alt }: { url: string | null; alt: string }) {
         <img
           src={url}
           alt={alt || "Product image"}
-          className="aspect-square w-full object-contain"
+          className="aspect-[3/4] w-full object-cover"
           loading="lazy"
         />
       </button>
       {zoom ? (
-        <CatalogImageLightbox url={url} alt={alt} onClose={() => setZoom(false)} />
+        <CatalogImageLightbox images={[url]} alt={alt} onClose={() => setZoom(false)} />
       ) : null}
     </>
   );

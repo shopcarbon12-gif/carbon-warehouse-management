@@ -811,17 +811,23 @@ export function CatalogWorkspace({
                               }
                               title="View picture"
                               aria-label="View picture"
-                              className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border border-[var(--wms-border)] text-[var(--wms-muted)] hover:border-[var(--wms-accent)] hover:text-[var(--wms-accent)]"
+                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
                             >
-                              <ImageIcon className="h-3 w-3" />
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={r.shopify_image_url}
+                                alt=""
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
                             </button>
                           ) : (
                             <span
-                              className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border border-dashed border-[var(--wms-border)] text-[var(--wms-border)]"
+                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-dashed border-[var(--wms-border)] text-[var(--wms-muted)]"
                               title="No picture"
                               aria-hidden
                             >
-                              <ImageIcon className="h-3 w-3" />
+                              <ImageIcon className="h-4 w-4" />
                             </span>
                           )}
                           <button

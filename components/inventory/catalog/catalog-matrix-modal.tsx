@@ -871,36 +871,36 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
         <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">{urls.length}</span>
       </div>
       <div className="flex flex-col gap-3 p-3 sm:flex-row">
-        {/* Main (big) picture — click to open the full slider at this image. */}
+        {/* Main picture — 3:4 portrait, click to open the full slider here. */}
         <button
           type="button"
           onClick={() => setZoomIdx(mainIdx)}
-          className="block w-full shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white sm:w-1/2"
+          className="block w-40 shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white"
           title={`${title} — click to enlarge`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={main}
             alt={`${title} main`}
-            className="aspect-square w-full object-contain"
+            className="aspect-[3/4] w-full object-cover"
           />
         </button>
-        {/* The rest — smaller. Click to make main; click again (it's main) to zoom. */}
+        {/* The rest — smaller 3:4. Click to feature; click the main to zoom. */}
         {rest.length > 0 ? (
-          <div className="grid flex-1 grid-cols-4 gap-2 sm:grid-cols-5 sm:content-start">
+          <div className="grid flex-1 grid-cols-4 gap-2 sm:grid-cols-6 sm:content-start">
             {rest.map(({ u, i }) => (
               <button
                 key={u}
                 type="button"
                 onClick={() => setMainIdx(i)}
-                className="block aspect-square cursor-pointer overflow-hidden rounded border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
+                className="block aspect-[3/4] cursor-pointer overflow-hidden rounded border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
                 title={`${title} — image ${i + 1} (click to feature, then enlarge)`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={u}
                   alt={`${title} ${i + 1}`}
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-cover"
                   loading="lazy"
                 />
               </button>
