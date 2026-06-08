@@ -657,12 +657,6 @@ export type AgentConfigReader = {
    *  from `devices.config.force_respawn_interval_ms`. NULL/missing =
    *  no forced respawn (default for healthy chassis). */
   force_respawn_interval_ms?: number | null;
-  /** Fixed chip-WRITE power in dBm, decoupled from read/antenna power.
-   *  Pulled from `devices.config.write_power_dbm`. Used on worn-amp readers
-   *  (e.g. .15) where the write must stay at a specific low power regardless
-   *  of read power or the encode-page proximity slider. NULL/missing =
-   *  derive the write power from the reader's configured (read) power. */
-  write_power_dbm?: number | null;
   /** True for readers dedicated to Carbon-POS (.34). Supervisor keeps
    *  these always-warm — POS cashier clicks expect reads within a
    *  couple seconds, so the chip can't be stopped between POS
@@ -798,7 +792,6 @@ export async function getAgentConfigBundle(
       epc_prefix?: string;
       monsoon_driver?: string;
       force_respawn_interval_ms?: number;
-      write_power_dbm?: number;
       skip_arp_pin?: boolean;
     };
     const list = antennasByParent.get(d.id) ?? [];
@@ -826,10 +819,6 @@ export async function getAgentConfigBundle(
       force_respawn_interval_ms:
         cfg.force_respawn_interval_ms && cfg.force_respawn_interval_ms > 0
           ? Number(cfg.force_respawn_interval_ms)
-          : null,
-      write_power_dbm:
-        cfg.write_power_dbm && cfg.write_power_dbm > 0
-          ? Number(cfg.write_power_dbm)
           : null,
       mac_address: d.mac_address,
       skip_arp_pin: cfg.skip_arp_pin === true,
