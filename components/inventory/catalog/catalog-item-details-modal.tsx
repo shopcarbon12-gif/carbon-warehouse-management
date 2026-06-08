@@ -409,6 +409,7 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
           matrixId={row.matrix_id}
           canManage={canManage}
           onClose={() => setMatrixOpen(false)}
+          onBack={() => setMatrixOpen(false)}
           onMutated={onMutated}
         />
       ) : null}

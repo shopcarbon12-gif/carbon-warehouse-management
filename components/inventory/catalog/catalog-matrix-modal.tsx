@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { Plus, Printer, X as XIcon, RotateCcw } from "lucide-react";
+import { Plus, Printer, X as XIcon, RotateCcw, ChevronLeft } from "lucide-react";
 import { printRfidLabel } from "./print-label";
 import { CatalogImageLightbox } from "./catalog-image-lightbox";
 
@@ -53,6 +53,8 @@ type Props = {
   canManage: boolean;
   onClose: () => void;
   onMutated?: () => void;
+  /** When set (matrix opened from the item card), a Back button returns there. */
+  onBack?: () => void;
 };
 
 type MatrixForm = {
@@ -144,7 +146,7 @@ function rowFromVariant(v: Variant): RowState {
 let tempSeq = 0;
 const nextTempKey = () => `new-${(tempSeq += 1)}`;
 
-export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: Props) {
+export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, onBack }: Props) {
   const { data, error, mutate, isLoading } = useSWR<MatrixDetailResp>(
     `/api/inventory/catalog/matrices/${matrixId}`,
     fetcher,
@@ -153,6 +155,10 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  // Two real tabs: "matrix" (pictures, shared values, color/size, variant tree)
+  // and "setup" (the Group Items grid). State below is shared, so adding a
+  // color/size on the Matrix tab shows up as new Group-Item rows in Setup.
+  const [tab, setTab] = useState<"matrix" | "setup">("matrix");
 
   const [mForm, setMForm] = useState<MatrixForm | null>(null);
   const [rows, setRows] = useState<RowState[]>([]);
@@ -461,6 +467,16 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
         <div className="my-4 w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5">
             <div className="flex items-center gap-2">
+              {onBack ? (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  title="Back to item card"
+                  className="flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" /> Back
+                </button>
+              ) : null}
               <button
                 type="button"
                 disabled={!canManage || !dirty || busy !== null}
@@ -525,19 +541,27 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
           ) : (
             <div className="flex flex-col sm:flex-row">
               <nav className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3">
-                <div className="whitespace-nowrap border-transparent px-4 py-1.5 font-mono text-xs text-[var(--wms-muted)] sm:border-l-2">
-                  Setup
-                </div>
-                <div className="whitespace-nowrap border-[var(--wms-accent)] bg-[var(--wms-surface)] px-4 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] sm:border-l-2">
-                  Matrix
-                </div>
+                {(["setup", "matrix"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTab(t)}
+                    className={`block w-full whitespace-nowrap px-4 py-1.5 text-left font-mono text-xs capitalize sm:border-l-2 ${
+                      tab === t
+                        ? "border-[var(--wms-accent)] bg-[var(--wms-surface)] font-semibold text-[var(--wms-fg)]"
+                        : "border-transparent text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
               </nav>
 
               <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5">
-                <MatrixGallery
-                  urls={data.matrix.image_urls ?? []}
-                  title={data.matrix.description}
-                />
+                {tab === "matrix" ? (
+                <>
+                {/* Top matrix + its custom SKUs as sub-items */}
+                <MatrixVariantTree matrix={data.matrix} variants={data.variants} />
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_0.6fr_0.6fr]">
                   {/* Shared Values */}
@@ -654,7 +678,16 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                   </Section>
                 </div>
 
-                {/* Group Items */}
+                {/* Pictures — sits BELOW the shared-values / type / color / size
+                    sections; frozen main + 2-row horizontally-scrollable thumbs. */}
+                <MatrixGallery
+                  urls={data.matrix.image_urls ?? []}
+                  title={data.matrix.description}
+                />
+                </>
+                ) : (
+                /* Setup tab — Group Items (color/size added on the Matrix tab
+                   show up here as new rows because the state is shared). */
                 <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
                   <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
                     Group Items
@@ -732,6 +765,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated }: 
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           )}
@@ -845,12 +879,65 @@ function MoneyInput({
 }
 
 /**
- * Full Shopify product gallery for the matrix window — every product image
- * Shopify has, in Shopify order. Links are Shopify CDN URLs (never re-hosted).
- * Renders nothing-but-a-hint when the matrix has no synced imagery yet.
+ * The matrix as a parent with its custom SKUs listed as indented sub-items,
+ * so the variant set reads as "children" of the matrix.
+ */
+function MatrixVariantTree({ matrix, variants }: { matrix: Matrix; variants: Variant[] }) {
+  return (
+    <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-2">
+        <span className="font-mono text-xs font-semibold text-[var(--wms-fg)]">
+          {matrix.description}
+        </span>
+        {matrix.upc ? (
+          <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">UPC {matrix.upc}</span>
+        ) : null}
+        <span className="ml-auto font-mono text-[0.6rem] text-[var(--wms-muted)]">
+          {variants.length} custom SKU{variants.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="pl-3 sm:pl-6">
+        {variants.length === 0 ? (
+          <p className="px-3 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+            (no custom SKUs yet)
+          </p>
+        ) : (
+          variants.map((v) => (
+            <div
+              key={v.id}
+              className={`flex flex-wrap items-center gap-2 border-l border-[var(--wms-accent)]/30 px-3 py-1.5 font-mono text-xs ${
+                v.archived ? "opacity-50" : ""
+              }`}
+            >
+              <span className="text-[var(--wms-muted)]">└</span>
+              <span className="text-[var(--wms-accent)]">{v.sku}</span>
+              <span className="text-[var(--wms-muted)]">
+                {[v.color, v.size].filter(Boolean).join(" / ") || "—"}
+              </span>
+              {v.archived ? (
+                <span className="rounded border border-amber-500/40 bg-amber-950/40 px-1.5 text-[0.5rem] uppercase tracking-wide text-amber-200">
+                  archived
+                </span>
+              ) : null}
+              <span className="ml-auto text-[0.6rem] text-[var(--wms-muted)]">
+                {v.active_epc_count} EPC
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Full Shopify product gallery for the matrix window. Links are Shopify CDN
+ * URLs (never re-hosted). Layout: one FROZEN main picture (~4 thumbnail cards)
+ * on the left, plus the rest in a 2-row strip that scrolls horizontally inside
+ * its own container. Clicking any picture opens the full-screen slider.
  */
 function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
-  // null = closed; number = open carousel at that start index.
+  // null = closed; number = open slider at that start index.
   const [zoomIdx, setZoomIdx] = useState<number | null>(null);
   if (!urls || urls.length === 0) {
     return (
@@ -868,40 +955,42 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
         </span>
         <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">{urls.length}</span>
       </div>
-      {/* Every picture — main + thumbnails — opens the full-screen slider at
-          its own index. No "feature as main" swapping. */}
-      <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start">
+      <div className="flex gap-3 p-3">
+        {/* FROZEN main picture — stays put while the thumbnails scroll. */}
         <button
           type="button"
           onClick={() => setZoomIdx(0)}
-          className="block w-64 sm:w-80 lg:w-96 shrink-0 self-start aspect-[3/4] cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
+          className="block w-56 shrink-0 self-start aspect-[3/4] cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
           title={`${title} — click to open slider`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={main} alt={`${title} 1`} className="h-full w-full object-cover" />
         </button>
+        {/* The rest — 2 rows, hidden in the container, scroll/slide to see all. */}
         {rest.length > 0 ? (
-          <div className="grid flex-1 grid-cols-3 gap-2 sm:grid-cols-4 sm:content-start">
-            {rest.map((u, idx) => {
-              const i = idx + 1;
-              return (
-                <button
-                  key={u}
-                  type="button"
-                  onClick={() => setZoomIdx(i)}
-                  className="block aspect-[3/4] cursor-zoom-in overflow-hidden rounded border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
-                  title={`${title} — image ${i + 1} (click to open slider)`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={u}
-                    alt={`${title} ${i + 1}`}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                </button>
-              );
-            })}
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <div className="grid w-max auto-cols-max grid-flow-col grid-rows-2 gap-2">
+              {rest.map((u, idx) => {
+                const i = idx + 1;
+                return (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => setZoomIdx(i)}
+                    className="block h-[8.75rem] aspect-[3/4] shrink-0 cursor-zoom-in overflow-hidden rounded border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
+                    title={`${title} — image ${i + 1} (click to open slider)`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={u}
+                      alt={`${title} ${i + 1}`}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ) : null}
       </div>
