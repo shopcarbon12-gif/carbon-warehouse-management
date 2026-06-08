@@ -874,14 +874,14 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
         <button
           type="button"
           onClick={() => setZoomIdx(0)}
-          className="block w-36 shrink-0 self-start aspect-[3/4] cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
+          className="block w-64 sm:w-80 lg:w-96 shrink-0 self-start aspect-[3/4] cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
           title={`${title} — click to open slider`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={main} alt={`${title} 1`} className="h-full w-full object-cover" />
         </button>
         {rest.length > 0 ? (
-          <div className="grid flex-1 grid-cols-4 gap-2 sm:grid-cols-6 sm:content-start">
+          <div className="grid flex-1 grid-cols-3 gap-2 sm:grid-cols-4 sm:content-start">
             {rest.map((u, idx) => {
               const i = idx + 1;
               return (
