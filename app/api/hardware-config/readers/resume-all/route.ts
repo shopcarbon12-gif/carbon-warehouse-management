@@ -26,6 +26,9 @@ export async function POST(req: Request) {
         AND l.tenant_id = $1::uuid
         AND ($2::uuid IS NULL OR d.location_id = $2::uuid)
         AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
+        -- Never touch the POS reader (.34): it is cashier/schedule-driven and
+        -- must stay independent of the fleet-wide Start All.
+        AND d.is_pos_dedicated IS NOT TRUE
         AND d.scan_paused_at IS NOT NULL
       RETURNING d.id::text`,
     [session.tid, session.lid ?? null],

@@ -29,9 +29,22 @@ export async function POST(req: Request) {
         AND l.tenant_id = $1::uuid
         AND ($3::uuid IS NULL OR d.location_id = $3::uuid)
         AND d.device_type IN ('fixed_reader','transaction_reader','door_reader')
+        -- Never touch the POS reader (.34): it is cashier/schedule-driven and
+        -- must stay independent of the fleet-wide Stop All.
+        AND d.is_pos_dedicated IS NOT TRUE
         AND d.scan_paused_at IS NULL
       RETURNING d.id::text`,
     [session.tid, session.sub, session.lid ?? null],
+  );
+  // True master-off: also disarm the dashboard Live Scan so it can't keep
+  // readers awake past Stop All (the override that previously left the whole
+  // fleet running for hours). POS is excluded above, so its arming is untouched.
+  await pool.query(
+    `UPDATE cdm_agents
+        SET live_scan_active = FALSE
+      WHERE tenant_id = $1::uuid
+        AND live_scan_active = TRUE`,
+    [session.tid],
   );
   // Force-end any in-flight scan-sessions on the readers we just paused, so
   // an operator's open workflow can't keep a reader awake past Pause-All.

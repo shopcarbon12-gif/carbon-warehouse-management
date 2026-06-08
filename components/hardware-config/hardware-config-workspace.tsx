@@ -151,11 +151,13 @@ export function HardwareConfigWorkspace() {
   const pauseAllReaders = async () => {
     if (
       !window.confirm(
-        "Stop every reader at this tenant?\n\n" +
+        "Stop every reader EXCEPT the POS register?\n\n" +
           "The agent will SIGTERM each reader's binary, give it 10 s to issue " +
           "RFID_RadioAbortOperation to the chip, then run a belt-and-braces " +
           "abort cycle to GUARANTEE the radio is off — not just disconnected. " +
-          "Use this when readers feel hot or when you actually need them off.",
+          "This also disarms Live Scan so nothing keeps them awake. The POS " +
+          "reader (.34) is left running. Use this when readers feel hot or " +
+          "when you actually need them off.",
       )
     )
       return;
@@ -547,7 +549,7 @@ function HardwareTreeSection(props: TreeProps) {
         <button
           type="button"
           onClick={onPauseAllReaders}
-          title="Stop every reader at this tenant — radios go cold, not just agent-disconnected"
+          title="Stop every reader EXCEPT POS — radios go cold + Live Scan disarmed (POS .34 left running)"
           className="inline-flex items-center gap-0.5 rounded border border-amber-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-amber-300 hover:bg-amber-400/15"
         >
           <Square className="h-2.5 w-2.5" /> Stop all
@@ -555,7 +557,7 @@ function HardwareTreeSection(props: TreeProps) {
         <button
           type="button"
           onClick={onResumeAllReaders}
-          title="Start every stopped reader at this tenant"
+          title="Start every stopped reader EXCEPT POS (POS .34 stays on its own schedule)"
           className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15"
         >
           <Play className="h-2.5 w-2.5" /> Start all
