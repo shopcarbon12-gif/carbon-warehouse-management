@@ -542,27 +542,42 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
             <div className="flex flex-col sm:flex-row">
               <nav className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3">
                 {(["setup", "matrix"] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTab(t)}
-                    className={`block w-full whitespace-nowrap px-4 py-1.5 text-left font-mono text-xs capitalize sm:border-l-2 ${
-                      tab === t
-                        ? "border-[var(--wms-accent)] bg-[var(--wms-surface)] font-semibold text-[var(--wms-fg)]"
-                        : "border-transparent text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
-                    }`}
-                  >
-                    {t}
-                  </button>
+                  <div key={t}>
+                    <button
+                      type="button"
+                      onClick={() => setTab(t)}
+                      className={`block w-full whitespace-nowrap px-4 py-1.5 text-left font-mono text-xs capitalize sm:border-l-2 ${
+                        tab === t
+                          ? "border-[var(--wms-accent)] bg-[var(--wms-surface)] font-semibold text-[var(--wms-fg)]"
+                          : "border-transparent text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                      }`}
+                    >
+                      {t}
+                    </button>
+                    {/* Bare custom-SKU numbers listed under the Matrix menu item
+                        (desktop sidebar only — mobile uses the horizontal tab bar). */}
+                    {t === "matrix" && data.variants.length > 0 ? (
+                      <div className="hidden sm:block sm:border-l-2 sm:border-transparent">
+                        {data.variants.map((v) => (
+                          <div
+                            key={v.id}
+                            title={v.sku}
+                            className={`truncate px-4 py-0.5 pl-7 text-left font-mono text-[0.6rem] text-[var(--wms-muted)] ${
+                              v.archived ? "opacity-50" : ""
+                            }`}
+                          >
+                            {v.sku}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </nav>
 
               <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5">
                 {tab === "matrix" ? (
                 <>
-                {/* Top matrix + its custom SKUs as sub-items */}
-                <MatrixVariantTree matrix={data.matrix} variants={data.variants} />
-
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_0.6fr_0.6fr]">
                   {/* Shared Values */}
                   <Section title="Shared Values · applied to all items in this matrix">
@@ -875,58 +890,6 @@ function MoneyInput({
       onBlur={() => onChange(money2(value))}
       className={`${wide ? "w-28" : "w-full"} rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-left font-mono text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none`}
     />
-  );
-}
-
-/**
- * The matrix as a parent with its custom SKUs listed as indented sub-items,
- * so the variant set reads as "children" of the matrix.
- */
-function MatrixVariantTree({ matrix, variants }: { matrix: Matrix; variants: Variant[] }) {
-  return (
-    <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-2">
-        <span className="font-mono text-xs font-semibold text-[var(--wms-fg)]">
-          {matrix.description}
-        </span>
-        {matrix.upc ? (
-          <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">UPC {matrix.upc}</span>
-        ) : null}
-        <span className="ml-auto font-mono text-[0.6rem] text-[var(--wms-muted)]">
-          {variants.length} custom SKU{variants.length === 1 ? "" : "s"}
-        </span>
-      </div>
-      <div className="pl-3 sm:pl-6">
-        {variants.length === 0 ? (
-          <p className="px-3 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-            (no custom SKUs yet)
-          </p>
-        ) : (
-          variants.map((v) => (
-            <div
-              key={v.id}
-              className={`flex flex-wrap items-center gap-2 border-l border-[var(--wms-accent)]/30 px-3 py-1.5 font-mono text-xs ${
-                v.archived ? "opacity-50" : ""
-              }`}
-            >
-              <span className="text-[var(--wms-muted)]">└</span>
-              <span className="text-[var(--wms-accent)]">{v.sku}</span>
-              <span className="text-[var(--wms-muted)]">
-                {[v.color, v.size].filter(Boolean).join(" / ") || "—"}
-              </span>
-              {v.archived ? (
-                <span className="rounded border border-amber-500/40 bg-amber-950/40 px-1.5 text-[0.5rem] uppercase tracking-wide text-amber-200">
-                  archived
-                </span>
-              ) : null}
-              <span className="ml-auto text-[0.6rem] text-[var(--wms-muted)]">
-                {v.active_epc_count} EPC
-              </span>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
   );
 }
 
