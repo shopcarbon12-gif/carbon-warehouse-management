@@ -44,6 +44,7 @@ function buildGridUrl(
   sortDir: SortDir,
   showArchived: boolean,
   manualOnly: boolean,
+  hasImage: boolean,
   limit: number,
 ): string {
   const p = new URLSearchParams({
@@ -55,6 +56,7 @@ function buildGridUrl(
   if (sortBy) { p.set("sortBy", sortBy); p.set("sortDir", sortDir); }
   if (showArchived) p.set("showArchived", "1");
   if (manualOnly) p.set("manualOnly", "1");
+  if (hasImage) p.set("hasImage", "1");
   return `/api/inventory/catalog?${p}`;
 }
 
@@ -208,6 +210,7 @@ export function CatalogWorkspace({
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [manualOnly, setManualOnly] = useState(false);
+  const [picturesOnly, setPicturesOnly] = useState(false);
   const [pageSizeChoice, setPageSizeChoice] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(
     DEFAULT_PAGE_SIZE,
   );
@@ -233,13 +236,17 @@ export function CatalogWorkspace({
   }, [sortBy, sortDir]);
 
   const url = useMemo(
-    () => buildGridUrl(page, debounced, sortBy, sortDir, showArchived, manualOnly, effectivePageSize),
-    [page, debounced, sortBy, sortDir, showArchived, manualOnly, effectivePageSize],
+    () => buildGridUrl(page, debounced, sortBy, sortDir, showArchived, manualOnly, picturesOnly, effectivePageSize),
+    [page, debounced, sortBy, sortDir, showArchived, manualOnly, picturesOnly, effectivePageSize],
   );
 
   useEffect(() => {
     setPage(1);
   }, [showArchived]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [picturesOnly]);
 
   useEffect(() => {
     setPage(1);
@@ -528,6 +535,24 @@ export function CatalogWorkspace({
             >
               <Archive className="h-3.5 w-3.5" />
               {showArchived ? "Archived only" : "Show archived"}
+            </button>
+            <button
+              type="button"
+              aria-pressed={picturesOnly}
+              onClick={() => setPicturesOnly((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-xs font-semibold shadow-sm ${
+                picturesOnly
+                  ? "border-emerald-500/55 bg-emerald-500/15 text-emerald-200 hover:opacity-90 dark:bg-emerald-950/40"
+                  : "border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))]"
+              }`}
+              title={
+                picturesOnly
+                  ? "Showing only items that have a picture — click to show all"
+                  : "Show only items that have a picture"
+              }
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+              {picturesOnly ? "Pictures only" : "With pictures"}
             </button>
             <button
               type="button"

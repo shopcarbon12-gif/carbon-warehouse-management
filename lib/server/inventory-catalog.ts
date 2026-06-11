@@ -74,10 +74,17 @@ function buildWhere(
   showArchived: boolean,
   manualOnly: boolean,
   stock: string,
+  hasImage: boolean,
 ): { sql: string; params: unknown[] } {
   const parts: string[] = ["1=1"];
   const params: unknown[] = [];
   let i = 1;
+
+  /* PICTURES filter — restrict to variants that have a synced product image
+     (cs.shopify_image_url). Narrows the grid like showArchived/manualOnly. */
+  if (hasImage) {
+    parts.push(`cs.shopify_image_url IS NOT NULL AND cs.shopify_image_url <> ''`);
+  }
 
   /* Archived visibility:
    *  • A search query (q) shows everything incl. archived, regardless of the
@@ -235,18 +242,19 @@ export async function listCatalogGrid(
     showArchived?: boolean;
     manualOnly?: boolean;
     stock?: string;
+    hasImage?: boolean;
   },
 ): Promise<CatalogGridResult> {
   const {
     page, limit, q, brand, category, vendor, locationId,
     systemId = "", sortBy = "", sortDir = "", showArchived = false, manualOnly = false,
-    stock = "",
+    stock = "", hasImage = false,
   } = options;
   const safeLimit = Math.min(5000, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
 
   const { sql: whereSql, params: whereParams } = buildWhere(
-    q, brand, category, vendor, systemId, locationId, showArchived, manualOnly, stock,
+    q, brand, category, vendor, systemId, locationId, showArchived, manualOnly, stock, hasImage,
   );
 
   const countR = await pool.query<{ c: string }>(
