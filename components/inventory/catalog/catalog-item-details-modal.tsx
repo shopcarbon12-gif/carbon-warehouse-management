@@ -6,7 +6,7 @@ import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import { CatalogMatrixModal } from "./catalog-matrix-modal";
 import { CatalogImageLightbox } from "./catalog-image-lightbox";
 import { ItemSalesTab, ItemCustomersTab, ItemHistoryTab } from "./item-report-tabs";
-import { printRfidLabel } from "./print-label";
+import { printRfidLabel, printNonRfidLabel } from "./print-label";
 
 /**
  * Lightspeed-style item-details popup. Opens when the operator clicks
@@ -228,6 +228,26 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
     setBusy(null);
   }, [canManage, row.custom_sku_id, onMutated]);
 
+  const onPrintNonRfidLabel = useCallback(async () => {
+    if (!canManage) return;
+    setBusy("print-nonrfid");
+    setErr(null);
+    setOkMsg(null);
+    const r = await printNonRfidLabel({
+      customSkuId: row.custom_sku_id,
+      itemName: row.name,
+      color: row.color,
+      size: row.size,
+      // Match the print page / commission UPC resolution: variant UPC, else matrix UPC.
+      upc: row.sku_upc?.trim() ? row.sku_upc : row.matrix_upc,
+      sku: row.sku,
+      retailPrice: row.retail_price,
+    });
+    if (r.ok) setOkMsg(r.message);
+    else setErr(r.message);
+    setBusy(null);
+  }, [canManage, row.custom_sku_id, row.name, row.color, row.size, row.sku_upc, row.matrix_upc, row.sku, row.retail_price]);
+
   const archive = useCallback(async () => {
     if (!canManage) return;
     if (
@@ -309,7 +329,20 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
                 }
                 className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {busy === "print" ? "Printing…" : "Print Label"}
+                {busy === "print" ? "Printing…" : "Print RFID Label"}
+              </button>
+              <button
+                type="button"
+                disabled={!canManage || busy !== null}
+                onClick={() => void onPrintNonRfidLabel()}
+                title={
+                  canManage
+                    ? "Print one non-RFID (no-chip) tag for this SKU to 192.168.1.220"
+                    : "Admin scope required"
+                }
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy === "print-nonrfid" ? "Printing…" : "Print Non-RFID Label"}
               </button>
             </div>
             <div className="flex items-center gap-2">
