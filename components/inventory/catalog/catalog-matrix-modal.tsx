@@ -600,6 +600,13 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
               <div className="min-w-0 flex-1 space-y-4 p-3 sm:p-5">
                 {tab === "matrix" ? (
                 <>
+                {/* Pictures FIRST — above the shared-values / type / color / size
+                    sections; frozen main + 2-row horizontally-scrollable thumbs. */}
+                <MatrixGallery
+                  urls={data.matrix.image_urls ?? []}
+                  title={data.matrix.description}
+                />
+
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_0.6fr_0.6fr]">
                   {/* Shared Values */}
                   <Section title="Shared Values · applied to all items in this matrix">
@@ -714,13 +721,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     ) : null}
                   </Section>
                 </div>
-
-                {/* Pictures — sits BELOW the shared-values / type / color / size
-                    sections; frozen main + 2-row horizontally-scrollable thumbs. */}
-                <MatrixGallery
-                  urls={data.matrix.image_urls ?? []}
-                  title={data.matrix.description}
-                />
                 </>
                 ) : (
                 /* Setup tab — Group Items (color/size added on the Matrix tab
