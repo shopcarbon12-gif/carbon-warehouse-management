@@ -483,6 +483,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   <ChevronLeft className="h-3.5 w-3.5" /> Back
                 </button>
               ) : null}
+            </div>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 disabled={!canManage || !dirty || busy !== null}
@@ -492,8 +494,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
               >
                 {busy === "save" ? "Saving…" : "Save Changes"}
               </button>
-            </div>
-            <div className="flex items-center gap-2">
               <button
                 type="button"
                 disabled={!canManage || busy !== null || !data}
