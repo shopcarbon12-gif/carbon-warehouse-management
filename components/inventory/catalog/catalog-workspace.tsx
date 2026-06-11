@@ -270,6 +270,36 @@ export function CatalogWorkspace({
 
   const closeModal = useCallback(() => setModalSku(null), []);
 
+  // Open a variant's item-details pop-up from a SKU clicked in the matrix
+  // window. The matrix modal only carries minimal variant data, so resolve the
+  // full grid row: prefer one already loaded in the grid, else fetch by SKU
+  // (the variant may be archived or outside the current page/filter).
+  const openSkuFromMatrix = useCallback(
+    async (variant: { id: string; sku: string }) => {
+      const local = rows.find((r) => r.custom_sku_id === variant.id);
+      if (local) {
+        setMatrixModalId(null);
+        setDetailsRow(local);
+        return;
+      }
+      try {
+        const res = await fetch(
+          `/api/inventory/catalog?view=grid&q=${encodeURIComponent(variant.sku)}&showArchived=1&limit=100`,
+        );
+        if (!res.ok) return;
+        const j = (await res.json()) as { rows?: CatalogGridRow[] };
+        const found = j.rows?.find((r) => r.custom_sku_id === variant.id);
+        if (found) {
+          setMatrixModalId(null);
+          setDetailsRow(found);
+        }
+      } catch (e) {
+        console.error("[catalog] open item from matrix SKU failed", e);
+      }
+    },
+    [rows],
+  );
+
   const submitManualCatalogLine = useCallback(async () => {
     setManualErr(null);
     setManualBusy(true);
@@ -1150,6 +1180,7 @@ export function CatalogWorkspace({
           canManage={canManageCatalog}
           onClose={() => setDetailsRow(null)}
           onMutated={() => void mutate()}
+          onOpenSku={openSkuFromMatrix}
         />
       ) : null}
 
@@ -1159,6 +1190,7 @@ export function CatalogWorkspace({
           canManage={canManageCatalog}
           onClose={() => setMatrixModalId(null)}
           onMutated={() => void mutate()}
+          onOpenSku={openSkuFromMatrix}
         />
       ) : null}
 

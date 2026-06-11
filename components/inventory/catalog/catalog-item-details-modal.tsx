@@ -28,6 +28,11 @@ type Props = {
   onClose: () => void;
   /** Called after any mutation that should refresh the catalog grid. */
   onMutated?: () => void;
+  /**
+   * Open a sibling variant's item-details pop-up (clicked from the SKU list on
+   * the nested matrix window's Matrix tab). Resolved to a full row by the parent.
+   */
+  onOpenSku?: (variant: { id: string; sku: string }) => void;
 };
 
 type LeftTab = "details" | "inventory" | "sales" | "customers" | "history";
@@ -95,7 +100,7 @@ function formFromRow(row: CatalogGridRow): Form {
   };
 }
 
-export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: Props) {
+export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, onOpenSku }: Props) {
   const [tab, setTab] = useState<LeftTab>("details");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -411,6 +416,16 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated }: 
           onClose={() => setMatrixOpen(false)}
           onBack={() => setMatrixOpen(false)}
           onMutated={onMutated}
+          onOpenSku={
+            onOpenSku
+              ? (v) => {
+                  // Close this matrix overlay, then ask the parent to switch the
+                  // item card to the clicked sibling SKU.
+                  setMatrixOpen(false);
+                  onOpenSku(v);
+                }
+              : undefined
+          }
         />
       ) : null}
     </>

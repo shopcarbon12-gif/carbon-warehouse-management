@@ -55,6 +55,12 @@ type Props = {
   onMutated?: () => void;
   /** When set (matrix opened from the item card), a Back button returns there. */
   onBack?: () => void;
+  /**
+   * When set, each custom SKU listed under the Matrix tab becomes a link that
+   * opens that variant's item-details pop-up. Receives the variant's
+   * custom_sku id and SKU code so the parent can resolve the full grid row.
+   */
+  onOpenSku?: (variant: { id: string; sku: string }) => void;
 };
 
 type MatrixForm = {
@@ -146,7 +152,7 @@ function rowFromVariant(v: Variant): RowState {
 let tempSeq = 0;
 const nextTempKey = () => `new-${(tempSeq += 1)}`;
 
-export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, onBack }: Props) {
+export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, onBack, onOpenSku }: Props) {
   const { data, error, mutate, isLoading } = useSWR<MatrixDetailResp>(
     `/api/inventory/catalog/matrices/${matrixId}`,
     fetcher,
@@ -555,20 +561,36 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       {t}
                     </button>
                     {/* Bare custom-SKU numbers listed under the Matrix menu item
-                        (desktop sidebar only — mobile uses the horizontal tab bar). */}
+                        (desktop sidebar only — mobile uses the horizontal tab bar).
+                        Each one links to its item-details pop-up when onOpenSku is
+                        wired; otherwise it renders as plain text. */}
                     {t === "matrix" && data.variants.length > 0 ? (
                       <div className="hidden sm:block sm:border-l-2 sm:border-transparent">
-                        {data.variants.map((v) => (
-                          <div
-                            key={v.id}
-                            title={v.sku}
-                            className={`truncate px-4 py-0.5 pl-7 text-left font-mono text-[0.6rem] text-[var(--wms-muted)] ${
-                              v.archived ? "opacity-50" : ""
-                            }`}
-                          >
-                            {v.sku}
-                          </div>
-                        ))}
+                        {data.variants.map((v) =>
+                          onOpenSku ? (
+                            <button
+                              key={v.id}
+                              type="button"
+                              title={`View item ${v.sku}`}
+                              onClick={() => onOpenSku({ id: v.id, sku: v.sku })}
+                              className={`block w-full truncate px-4 py-0.5 pl-7 text-left font-mono text-[0.6rem] text-[var(--wms-accent)] underline-offset-2 hover:underline ${
+                                v.archived ? "opacity-50" : ""
+                              }`}
+                            >
+                              {v.sku}
+                            </button>
+                          ) : (
+                            <div
+                              key={v.id}
+                              title={v.sku}
+                              className={`truncate px-4 py-0.5 pl-7 text-left font-mono text-[0.6rem] text-[var(--wms-muted)] ${
+                                v.archived ? "opacity-50" : ""
+                              }`}
+                            >
+                              {v.sku}
+                            </div>
+                          ),
+                        )}
                       </div>
                     ) : null}
                   </div>
