@@ -63,9 +63,9 @@ export async function GET(req: Request) {
     const showArchived = showArchivedRaw === "1" || showArchivedRaw === "true";
     const manualOnlyRaw = searchParams.get("manualOnly")?.trim().toLowerCase() ?? "";
     const manualOnly = manualOnlyRaw === "1" || manualOnlyRaw === "true";
-    // Pictures filter — only variants that have a synced product image.
-    const hasImageRaw = searchParams.get("hasImage")?.trim().toLowerCase() ?? "";
-    const hasImage = hasImageRaw === "1" || hasImageRaw === "true";
+    // Pictures filter — 'with' (has a synced image), 'without' (none), '' (all).
+    const pictureRaw = searchParams.get("picture")?.trim().toLowerCase() ?? "";
+    const picture = pictureRaw === "with" || pictureRaw === "without" ? pictureRaw : "";
     // Stock filter — 'in' (has live EPCs), 'out' (zero), 'manual' (manual matrices).
     const stockRaw = searchParams.get("stock")?.trim().toLowerCase() ?? "";
     const stock =
@@ -88,7 +88,7 @@ export async function GET(req: Request) {
         showArchived,
         manualOnly,
         stock,
-        hasImage,
+        picture,
       });
       return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
     } catch (e) {

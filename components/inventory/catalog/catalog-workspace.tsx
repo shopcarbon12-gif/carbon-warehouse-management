@@ -44,7 +44,7 @@ function buildGridUrl(
   sortDir: SortDir,
   showArchived: boolean,
   manualOnly: boolean,
-  hasImage: boolean,
+  picture: string,
   limit: number,
 ): string {
   const p = new URLSearchParams({
@@ -56,7 +56,7 @@ function buildGridUrl(
   if (sortBy) { p.set("sortBy", sortBy); p.set("sortDir", sortDir); }
   if (showArchived) p.set("showArchived", "1");
   if (manualOnly) p.set("manualOnly", "1");
-  if (hasImage) p.set("hasImage", "1");
+  if (picture) p.set("picture", picture);
   return `/api/inventory/catalog?${p}`;
 }
 
@@ -210,7 +210,7 @@ export function CatalogWorkspace({
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [manualOnly, setManualOnly] = useState(false);
-  const [picturesOnly, setPicturesOnly] = useState(false);
+  const [pictureFilter, setPictureFilter] = useState<"" | "with" | "without">("");
   const [pageSizeChoice, setPageSizeChoice] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(
     DEFAULT_PAGE_SIZE,
   );
@@ -236,8 +236,8 @@ export function CatalogWorkspace({
   }, [sortBy, sortDir]);
 
   const url = useMemo(
-    () => buildGridUrl(page, debounced, sortBy, sortDir, showArchived, manualOnly, picturesOnly, effectivePageSize),
-    [page, debounced, sortBy, sortDir, showArchived, manualOnly, picturesOnly, effectivePageSize],
+    () => buildGridUrl(page, debounced, sortBy, sortDir, showArchived, manualOnly, pictureFilter, effectivePageSize),
+    [page, debounced, sortBy, sortDir, showArchived, manualOnly, pictureFilter, effectivePageSize],
   );
 
   useEffect(() => {
@@ -246,7 +246,7 @@ export function CatalogWorkspace({
 
   useEffect(() => {
     setPage(1);
-  }, [picturesOnly]);
+  }, [pictureFilter]);
 
   useEffect(() => {
     setPage(1);
@@ -536,24 +536,38 @@ export function CatalogWorkspace({
               <Archive className="h-3.5 w-3.5" />
               {showArchived ? "Archived only" : "Show archived"}
             </button>
-            <button
-              type="button"
-              aria-pressed={picturesOnly}
-              onClick={() => setPicturesOnly((v) => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-xs font-semibold shadow-sm ${
-                picturesOnly
-                  ? "border-emerald-500/55 bg-emerald-500/15 text-emerald-200 hover:opacity-90 dark:bg-emerald-950/40"
-                  : "border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))]"
-              }`}
-              title={
-                picturesOnly
-                  ? "Showing only items that have a picture — click to show all"
-                  : "Show only items that have a picture"
-              }
+            {/* Three-way picture filter: All / only With pictures / only Without. */}
+            <div
+              role="group"
+              aria-label="Filter by picture"
+              title="Show all items, only items with a picture, or only items without a picture"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-2 py-1.5 font-mono text-xs font-semibold shadow-sm"
             >
-              <ImageIcon className="h-3.5 w-3.5" />
-              {picturesOnly ? "Pictures only" : "With pictures"}
-            </button>
+              <ImageIcon className="h-3.5 w-3.5 text-[var(--wms-muted)]" aria-hidden />
+              {([
+                { v: "", label: "All" },
+                { v: "with", label: "With pics" },
+                { v: "without", label: "No pics" },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.v || "all"}
+                  type="button"
+                  aria-pressed={pictureFilter === opt.v}
+                  onClick={() => setPictureFilter(opt.v)}
+                  className={`rounded px-2 py-0.5 ${
+                    pictureFilter === opt.v
+                      ? opt.v === "with"
+                        ? "bg-emerald-500/20 text-emerald-200"
+                        : opt.v === "without"
+                          ? "bg-amber-500/20 text-amber-200"
+                          : "bg-[var(--wms-accent)]/25 text-[var(--wms-fg)]"
+                      : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={() => exportLightspeedCatalogCsv(rows)}

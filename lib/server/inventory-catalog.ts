@@ -74,16 +74,19 @@ function buildWhere(
   showArchived: boolean,
   manualOnly: boolean,
   stock: string,
-  hasImage: boolean,
+  picture: string,
 ): { sql: string; params: unknown[] } {
   const parts: string[] = ["1=1"];
   const params: unknown[] = [];
   let i = 1;
 
-  /* PICTURES filter — restrict to variants that have a synced product image
-     (cs.shopify_image_url). Narrows the grid like showArchived/manualOnly. */
-  if (hasImage) {
+  /* PICTURES filter — 'with' = only variants that have a synced product image
+     (cs.shopify_image_url), 'without' = only those missing one, '' = no filter.
+     Narrows the grid like showArchived/manualOnly. */
+  if (picture === "with") {
     parts.push(`cs.shopify_image_url IS NOT NULL AND cs.shopify_image_url <> ''`);
+  } else if (picture === "without") {
+    parts.push(`(cs.shopify_image_url IS NULL OR cs.shopify_image_url = '')`);
   }
 
   /* Archived visibility:
@@ -242,19 +245,19 @@ export async function listCatalogGrid(
     showArchived?: boolean;
     manualOnly?: boolean;
     stock?: string;
-    hasImage?: boolean;
+    picture?: string;
   },
 ): Promise<CatalogGridResult> {
   const {
     page, limit, q, brand, category, vendor, locationId,
     systemId = "", sortBy = "", sortDir = "", showArchived = false, manualOnly = false,
-    stock = "", hasImage = false,
+    stock = "", picture = "",
   } = options;
   const safeLimit = Math.min(5000, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
 
   const { sql: whereSql, params: whereParams } = buildWhere(
-    q, brand, category, vendor, systemId, locationId, showArchived, manualOnly, stock, hasImage,
+    q, brand, category, vendor, systemId, locationId, showArchived, manualOnly, stock, picture,
   );
 
   const countR = await pool.query<{ c: string }>(
