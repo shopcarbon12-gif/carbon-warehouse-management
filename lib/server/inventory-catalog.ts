@@ -75,6 +75,7 @@ function buildWhere(
   manualOnly: boolean,
   stock: string,
   picture: string,
+  includeArchived: boolean,
 ): { sql: string; params: unknown[] } {
   const parts: string[] = ["1=1"];
   const params: unknown[] = [];
@@ -93,8 +94,14 @@ function buildWhere(
    * toggle is authoritative in ALL cases, including while searching.
    *  • Default (toggle OFF) → active (non-archived) ONLY — archived never show,
    *    even when a search query is typed.
-   *  • Toggle ON → archived ONLY. */
-  parts.push(showArchived ? `cs.archived = TRUE` : `cs.archived = FALSE`);
+   *  • Toggle ON → archived ONLY.
+   * EXCEPTION — `includeArchived` (mobile scan lookups): resolve ANY item by
+   * SKU regardless of archive state. The catalog TABLE hiding archived must
+   * NOT break the handheld's "what did I just scan" resolution (it left
+   * matrixId empty → the colour picker silently never opened). */
+  if (!includeArchived) {
+    parts.push(showArchived ? `cs.archived = TRUE` : `cs.archived = FALSE`);
+  }
 
   /* MANUAL ITEMS toolbar toggle — restricts the grid to matrices flagged
      is_manual_only = TRUE. Sister concept to showArchived; both narrow
@@ -243,18 +250,19 @@ export async function listCatalogGrid(
     manualOnly?: boolean;
     stock?: string;
     picture?: string;
+    includeArchived?: boolean;
   },
 ): Promise<CatalogGridResult> {
   const {
     page, limit, q, brand, category, vendor, locationId,
     systemId = "", sortBy = "", sortDir = "", showArchived = false, manualOnly = false,
-    stock = "", picture = "",
+    stock = "", picture = "", includeArchived = false,
   } = options;
   const safeLimit = Math.min(5000, Math.max(1, limit));
   const offset = Math.max(0, (page - 1) * safeLimit);
 
   const { sql: whereSql, params: whereParams } = buildWhere(
-    q, brand, category, vendor, systemId, locationId, showArchived, manualOnly, stock, picture,
+    q, brand, category, vendor, systemId, locationId, showArchived, manualOnly, stock, picture, includeArchived,
   );
 
   const countR = await pool.query<{ c: string }>(

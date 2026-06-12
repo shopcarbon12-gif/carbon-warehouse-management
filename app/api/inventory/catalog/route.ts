@@ -66,6 +66,11 @@ export async function GET(req: Request) {
     // Pictures filter — 'with' (has a synced image), 'without' (none), '' (all).
     const pictureRaw = searchParams.get("picture")?.trim().toLowerCase() ?? "";
     const picture = pictureRaw === "with" || pictureRaw === "without" ? pictureRaw : "";
+    // includeArchived — handheld scan lookups resolve ANY item by SKU,
+    // archived or not (the catalog table's archive-hiding must not break the
+    // mobile "what did I just scan" resolution). Bypasses the archived filter.
+    const incArchRaw = searchParams.get("includeArchived")?.trim().toLowerCase() ?? "";
+    const includeArchived = incArchRaw === "1" || incArchRaw === "true";
     // Stock filter — 'in' (has live EPCs), 'out' (zero), 'manual' (manual matrices).
     const stockRaw = searchParams.get("stock")?.trim().toLowerCase() ?? "";
     const stock =
@@ -89,6 +94,7 @@ export async function GET(req: Request) {
         manualOnly,
         stock,
         picture,
+        includeArchived,
       });
       return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
     } catch (e) {

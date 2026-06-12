@@ -489,6 +489,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _manualAddItem = BinAssignSession.manualAddItem;
       _externalScanner = BinAssignSession.externalScanner;
     });
+    // Re-evaluate the trigger relay: manual mode now also enables hardware
+    // scanning into the bin/item fields, so this must run on every mode change.
+    _syncHardwareBarcodeStream();
     _resetForNextEntry();
   }
 
@@ -571,10 +574,13 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     _hardwareBarcodeSub = null;
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
 
-    // Trigger relay (whether the physical trigger pull fires the 2D laser)
-    // respects the user's Scanner Source preference: only enable it when the
-    // user picked Hardware (or toggled External scanner on).
-    final useHwTrigger = _shouldUseHardwareScanner;
+    // Trigger relay (whether the physical trigger pull fires the 2D laser).
+    // Enable it for the Hardware/External scanner preference AND whenever manual
+    // entry is on — operators want to SCAN into the bin AND stored-item fields
+    // in manual mode too, not only type. The decoded value still routes through
+    // the unconditional EventChannel below (bin vs item by _awaitingBinScan).
+    final useHwTrigger =
+        _shouldUseHardwareScanner || _manualBin || _manualAddItem;
     if (useHwTrigger) {
       unawaited(RfidVendorChannel.scannerEnableTriggerRelay());
     } else {
@@ -1024,34 +1030,24 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     // either MOVE the items here or ADD this bin to their existing
     // multi-bin list. Tapping outside the dialog falls through to null
     // → mid-session no-op, same as cancel was before.
-    return showDialog<_MoveOrAddChoice>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Item already in another bin'),
-        content: Text(
-          'This SKU is currently in: $binSummary.\n\n'
-          'MOVE — pull every EPC out of those bins and into $_currentBin.\n'
-          'ADD — also list these EPCs in $_currentBin (multi-bin); '
-          'their original bin keeps them for qty totals.'
-          '${homeless > 0 ? '\n\n$homeless unassigned EPC${homeless == 1 ? '' : 's'} will be placed here either way.' : ''}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, _MoveOrAddChoice.add),
-            child: const Text('ADD'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              shape:
-                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-            ),
-            onPressed: () => Navigator.pop(ctx, _MoveOrAddChoice.move),
-            child: const Text('MOVE'),
-          ),
-        ],
-      ),
-    );
+    return _showActionSheet<_MoveOrAddChoice>((ctx, close) => _sheetPrompt(
+          title: 'Item already in another bin',
+          message: 'This SKU is currently in: $binSummary.\n\n'
+              'MOVE — pull every EPC out of those bins and into $_currentBin.\n'
+              'ADD — also list these EPCs in $_currentBin (multi-bin); '
+              'their original bin keeps them for qty totals.'
+              '${homeless > 0 ? '\n\n$homeless unassigned EPC${homeless == 1 ? '' : 's'} will be placed here either way.' : ''}',
+          actions: [
+            _sheetButton(
+                label: 'ADD',
+                onPressed: () => close(_MoveOrAddChoice.add)),
+            SizedBox(width: 12.w),
+            _sheetButton(
+                label: 'MOVE',
+                filled: true,
+                onPressed: () => close(_MoveOrAddChoice.move)),
+          ],
+        ));
   }
 
   void _surfaceAssignOutcome(_AssignOutcome out, {required String sku}) {
@@ -1595,54 +1591,121 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   /// Step 3 of the multi-item assign flow — after assigning one colour, ask
   /// whether the operator wants to add the SAME product's other colours to the
   /// same bin. YES routes into [_showColorPicker] → [_performMultiColourAssign].
-  Future<bool?> _askSameProductOtherColoursDialog({required String itemName}) {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Same product, other colours?'),
-        content: Text(
-            "Add other colours of $itemName to this bin? You'll pick which colours next."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('NO'),
+  /// Shows a NON-modal bottom sheet (no barrier) so the operator can still
+  /// SCROLL the stored-items list behind it while it's open — the popup never
+  /// hides what's already in the bin. Resolves to the value passed to `close`,
+  /// or null if the sheet is dismissed another way.
+  Future<T?> _showActionSheet<T>(
+    Widget Function(BuildContext ctx, void Function(T? value) close) builder,
+  ) {
+    final state = _scaffoldKey.currentState;
+    if (state == null) return Future<T?>.value(null);
+    final completer = Completer<T?>();
+    var closed = false;
+    T? result; // captured choice; resolved AFTER the sheet finishes closing so
+    // the next sheet never opens on top of a still-animating one.
+    dynamic controller; // PersistentBottomSheetController (generic varies by SDK)
+    void close(T? value) {
+      if (closed) return;
+      closed = true;
+      result = value;
+      controller?.close();
+    }
+
+    controller = state.showBottomSheet(
+      (ctx) => Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: AppColors.primary, width: 2)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 16.h),
+            child: builder(ctx, close),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('PICK COLOURS'),
-          ),
-        ],
+        ),
       ),
+      backgroundColor: Colors.transparent,
+      elevation: 12,
+    );
+    controller.closed.then((_) {
+      closed = true;
+      if (!completer.isCompleted) completer.complete(result);
+    });
+    return completer.future;
+  }
+
+  /// Title + message + button-row body for the simple yes/no sheets.
+  Widget _sheetPrompt({
+    required String title,
+    required String message,
+    required List<Widget> actions,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(title,
+            style: GoogleFonts.spaceGrotesk(
+                fontSize: 16.sp, fontWeight: FontWeight.w700)),
+        SizedBox(height: 8.h),
+        Text(message, style: GoogleFonts.manrope(fontSize: 13.sp)),
+        SizedBox(height: 16.h),
+        Row(children: actions),
+      ],
     );
   }
 
-  Future<bool?> _askAddAnotherItemDialog() {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Add another item?'),
-        content: const Text(
-          'You can keep assigning more items to this bin, '
-          'or wrap up and return to the bin overview.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('NO'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              shape:
-                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('YES'),
-          ),
-        ],
-      ),
+  Widget _sheetButton({
+    required String label,
+    required VoidCallback onPressed,
+    bool filled = false,
+  }) {
+    final shape =
+        const RoundedRectangleBorder(borderRadius: BorderRadius.zero);
+    return Expanded(
+      child: filled
+          ? FilledButton(
+              style: FilledButton.styleFrom(shape: shape),
+              onPressed: onPressed,
+              child: Text(label))
+          : OutlinedButton(
+              style: OutlinedButton.styleFrom(shape: shape),
+              onPressed: onPressed,
+              child: Text(label)),
     );
+  }
+
+  Future<bool?> _askSameProductOtherColoursDialog({required String itemName}) {
+    return _showActionSheet<bool>((ctx, close) => _sheetPrompt(
+          title: 'Same product, other colours?',
+          message:
+              "Add other colours of $itemName to this bin? You'll pick which colours next.",
+          actions: [
+            _sheetButton(label: 'NO', onPressed: () => close(false)),
+            SizedBox(width: 12.w),
+            _sheetButton(
+                label: 'PICK COLOURS',
+                filled: true,
+                onPressed: () => close(true)),
+          ],
+        ));
+  }
+
+  Future<bool?> _askAddAnotherItemDialog() {
+    return _showActionSheet<bool>((ctx, close) => _sheetPrompt(
+          title: 'Add another item?',
+          message:
+              'Keep assigning more items to this bin, or wrap up and return to the bin overview.',
+          actions: [
+            _sheetButton(label: 'NO', onPressed: () => close(false)),
+            SizedBox(width: 12.w),
+            _sheetButton(
+                label: 'YES', filled: true, onPressed: () => close(true)),
+          ],
+        ));
   }
 
   /// Returns the list of two-letter colour codes the operator confirmed,
@@ -1672,23 +1735,22 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       if (mounted) setState(() => _busy = false);
     }
     if (!mounted) return null;
-    // Already-assigned colour codes for this bin (compared against
-    // _StoredItem.colorCode which is `cs.color_code`). Filter them out so
-    // the picker only shows colours we still need to assign.
-    final assignedColours = _storedContents
-        .where((s) => s.qty > 0)
-        .map((s) => s.colorCode.toUpperCase())
-        .toSet();
+    // Show EVERY colour of this product so the operator can always pick the one
+    // in their hand. A prior "hide colours already in the bin" filter dropped a
+    // colour the operator still wanted (item 1125445: WHITE was already in the
+    // bin, so the picker offered only BROWN). The assign is additive
+    // (homeless_only), so re-picking a present colour just places any new tags.
+    //
     // Map each display colour NAME → the matrix+colour SKU prefix (base + the
-    // 2-digit colour CODE embedded in the REAL custom SKU, e.g. 122224804).
-    // The server assign matches `sku LIKE '<prefix>%'`, so we must hand back the
+    // 2-digit colour CODE embedded in the REAL custom SKU, e.g. 122224804). The
+    // server assign matches `sku LIKE '<prefix>%'`, so we must hand back the
     // coded prefix — NOT the colour name (GREY), which matched zero rows and
     // silently assigned nothing (operator: "pick grey → not adding").
     final prefixByColour = <String, String>{};
     for (final r in rows) {
       final name =
           (r['color_code'] ?? r['color'] ?? '').toString().toUpperCase();
-      if (name.isEmpty || assignedColours.contains(name)) continue;
+      if (name.isEmpty) continue;
       final skuStr = (r['sku'] ?? '').toString();
       if (skuStr.isEmpty) continue;
       final prefix = _SkuParts.parse(skuStr).baseColor; // base + 2-digit code
@@ -1698,7 +1760,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (prefixByColour.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('All colours of this product are already in the bin.'),
+          content: Text('This product has no colours to assign.'),
           duration: Duration(seconds: 3),
         ),
       );
@@ -1706,58 +1768,66 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     }
     final ordered = prefixByColour.keys.toList()..sort(); // colour NAMES
     final selected = <String>{}; // selected colour NAMES
-    return showDialog<List<String>>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          title: const Text('Pick colours to assign'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: ordered.length,
-              itemBuilder: (_, i) {
-                final name = ordered[i];
-                final on = selected.contains(name);
-                return CheckboxListTile(
-                  value: on,
-                  onChanged: (v) {
-                    setLocal(() {
-                      if (v == true) {
-                        selected.add(name);
-                      } else {
-                        selected.remove(name);
-                      }
-                    });
+    // Non-modal bottom sheet so the operator can scroll the stored items behind
+    // it (it only covers the lower portion of the screen).
+    return _showActionSheet<List<String>>((ctx, close) => StatefulBuilder(
+          builder: (ctx, setLocal) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Pick colours to assign',
+                  style: GoogleFonts.spaceGrotesk(
+                      fontSize: 16.sp, fontWeight: FontWeight.w700)),
+              SizedBox(height: 8.h),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: 0.35.sh),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: ordered.length,
+                  itemBuilder: (_, i) {
+                    final name = ordered[i];
+                    final on = selected.contains(name);
+                    return CheckboxListTile(
+                      value: on,
+                      onChanged: (v) {
+                        setLocal(() {
+                          if (v == true) {
+                            selected.add(name);
+                          } else {
+                            selected.remove(name);
+                          }
+                        });
+                      },
+                      title: Text(name),
+                      subtitle: Text('all sizes · ${prefixByColour[name]}'),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    );
                   },
-                  title: Text(name),
-                  subtitle: Text('all sizes · ${prefixByColour[name]}'),
-                  controlAffinity: ListTileControlAffinity.leading,
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, null),
-              child: const Text('CANCEL'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero),
+                ),
               ),
-              onPressed: selected.isEmpty
-                  ? null
-                  : () => Navigator.pop(
-                      ctx, selected.map((n) => prefixByColour[n]!).toList()),
-              child: const Text('YES'),
-            ),
-          ],
-        ),
-      ),
-    );
+              SizedBox(height: 12.h),
+              Row(
+                children: [
+                  _sheetButton(label: 'CANCEL', onPressed: () => close(null)),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                          shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero)),
+                      onPressed: selected.isEmpty
+                          ? null
+                          : () => close(selected
+                              .map((n) => prefixByColour[n]!)
+                              .toList()),
+                      child: const Text('YES'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ));
   }
 
   /// Returns true if at least one colour of [matrixId] has no assignment in
@@ -2766,13 +2836,27 @@ class _MultiItemsToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onChanged == null ? null : () => onChanged!(!on),
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Bigger, unmistakable toggle sitting to the LEFT of the label — moved
+        // off the far-right edge so it isn't tapped when reaching for settings.
+        Transform.scale(
+          scale: 1.3,
+          child: Switch(
+            value: on,
+            onChanged: onChanged,
+            activeThumbColor: Colors.white,
+            activeTrackColor: AppColors.primary,
+            inactiveThumbColor: Colors.white,
+            inactiveTrackColor: AppColors.textMuted,
+          ),
+        ),
+        SizedBox(width: 10.w),
+        GestureDetector(
+          onTap: onChanged == null ? null : () => onChanged!(!on),
+          behavior: HitTestBehavior.opaque,
+          child: Text(
             'MULTI ITEMS',
             style: GoogleFonts.manrope(
               fontSize: 10.sp,
@@ -2781,25 +2865,8 @@ class _MultiItemsToggle extends StatelessWidget {
               color: AppColors.textMuted,
             ),
           ),
-          SizedBox(width: 8.w),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 5.h),
-            decoration: BoxDecoration(
-              color: on ? AppColors.primary : AppColors.textMuted,
-              borderRadius: BorderRadius.zero,
-            ),
-            child: Text(
-              on ? 'ON' : 'OFF',
-              style: GoogleFonts.manrope(
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.0,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -26,32 +26,47 @@ export async function cleanBinContents(
   const binCode = bin.rows[0]?.code;
   if (!binCode) throw new Error("NOT_FOUND");
 
-  const moved = skuPrefix
-    ? await client.query<{ epc: string }>(
-        `UPDATE items i
-         SET bin_id = NULL
-         FROM bins b
-         INNER JOIN locations l ON l.id = b.location_id
-         WHERE i.bin_id = b.id
-           AND b.id = $1::uuid
-           AND l.tenant_id = $2::uuid
-           AND i.custom_sku_id IN (
-             SELECT id FROM custom_skus WHERE sku LIKE $3
-           )
-         RETURNING i.epc`,
-        [binId, tenantId, `${skuPrefix}%`],
-      )
-    : await client.query<{ epc: string }>(
-        `UPDATE items i
-         SET bin_id = NULL
-         FROM bins b
-         INNER JOIN locations l ON l.id = b.location_id
-         WHERE i.bin_id = b.id
-           AND b.id = $1::uuid
-           AND l.tenant_id = $2::uuid
-         RETURNING i.epc`,
-        [binId, tenantId],
-      );
+  // A bin lists an item if THIS bin is its primary `bin_id` OR appears in
+  // `additional_bin_ids` (multi-bin). Clearing only `bin_id` left multi-binned
+  // items still showing in the bin — they "came back" after every Empty Bin
+  // (operator hit this on 1A011R, had to swipe-delete each one). Clear BOTH.
+  const prefixClause = skuPrefix
+    ? `AND i.custom_sku_id IN (SELECT id FROM custom_skus WHERE sku LIKE $3)`
+    : ``;
+  const params: unknown[] = skuPrefix
+    ? [binId, tenantId, `${skuPrefix}%`]
+    : [binId, tenantId];
+
+  // 1. Items whose PRIMARY home is this bin → homeless.
+  const primary = await client.query<{ epc: string }>(
+    `UPDATE items i
+       SET bin_id = NULL
+     FROM bins b
+     INNER JOIN locations l ON l.id = b.location_id
+     WHERE i.bin_id = b.id
+       AND b.id = $1::uuid
+       AND l.tenant_id = $2::uuid
+       ${prefixClause}
+     RETURNING i.epc`,
+    params,
+  );
+
+  // 2. Items that merely LIST this bin as an additional (multi-bin) home.
+  const secondary = await client.query<{ epc: string }>(
+    `UPDATE items i
+       SET additional_bin_ids = array_remove(i.additional_bin_ids, $1::uuid)
+     FROM bins b
+     INNER JOIN locations l ON l.id = b.location_id
+     WHERE b.id = $1::uuid
+       AND l.tenant_id = $2::uuid
+       AND i.location_id = b.location_id
+       AND $1::uuid = ANY(i.additional_bin_ids)
+       ${prefixClause}
+     RETURNING i.epc`,
+    params,
+  );
+
+  const moved = { rows: [...primary.rows, ...secondary.rows] };
 
   for (const row of moved.rows) {
     await client.query(

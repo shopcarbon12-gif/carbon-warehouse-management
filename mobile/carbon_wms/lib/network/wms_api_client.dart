@@ -753,6 +753,9 @@ class WmsApiClient {
         'page': '1',
         'limit': '8',
         'q': qt,
+        // Scan resolution must find ANY item — incl. archived — so the matrix
+        // lookup / colour picker never silently fails on a now-hidden row.
+        'includeArchived': '1',
       },
     );
     final res = await _http.get(uri, headers: await sessionAuthHeaders());
