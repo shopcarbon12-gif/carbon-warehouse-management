@@ -1544,19 +1544,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       return;
     }
 
-    // Step 1 — assign popup
-    final assignYes = await _askAssignDialog(itemName: itemName);
-    if (!mounted) return;
-    if (assignYes != true) {
-      // NO / dismiss path — pre-1.2.43 this called _triggerEndOfSession
-      // which plays the success cue + green flash bar (the operator
-      // reported "huh?! it gave me a yellow bar and made a success
-      // sound when I said NO"). NO means "don't assign right now"; we
-      // stay mid-session, drop focus back to the scanner, and wait for
-      // the next product scan. No sound, no flash.
-      _enterMidSessionForNewItem();
-      return;
-    }
+    // Step 1 — NO "Assign to bin?" confirm. A scan in multi-items mode means
+    // "add it" (operator: "if I scanned the item it should be added auto").
+    // The item assigns straight away; the MOVE/ADD prompt still fires inside
+    // _performAssign only if the SKU's tags currently live in another bin.
     final binCodeAtAssign = _currentBin;
     final binIdAtAssign = _currentBinId;
     final firstAssignOk = await _performAssign(
@@ -1582,8 +1573,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       if (!mounted) return;
       if (picked != null && picked.isNotEmpty) {
         await _performMultiColourAssign(
-          base: skuParts.base,
-          colours: picked,
+          colourSkus: picked,
           itemName: itemName,
         );
         if (!mounted) return;
@@ -1621,31 +1611,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('PICK COLOURS'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<bool?> _askAssignDialog({required String itemName}) {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text('Assign to bin?'),
-        content: Text('Would you like to assign $itemName to this bin?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('NO'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              shape:
-                  const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('YES'),
           ),
         ],
       ),
@@ -1714,14 +1679,23 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         .where((s) => s.qty > 0)
         .map((s) => s.colorCode.toUpperCase())
         .toSet();
-    final candidateColours = <String>{};
+    // Map each display colour NAME → the matrix+colour SKU prefix (base + the
+    // 2-digit colour CODE embedded in the REAL custom SKU, e.g. 122224804).
+    // The server assign matches `sku LIKE '<prefix>%'`, so we must hand back the
+    // coded prefix — NOT the colour name (GREY), which matched zero rows and
+    // silently assigned nothing (operator: "pick grey → not adding").
+    final prefixByColour = <String, String>{};
     for (final r in rows) {
-      final c = (r['color_code'] ?? r['color'] ?? '').toString().toUpperCase();
-      if (c.isEmpty) continue;
-      if (assignedColours.contains(c)) continue;
-      candidateColours.add(c);
+      final name =
+          (r['color_code'] ?? r['color'] ?? '').toString().toUpperCase();
+      if (name.isEmpty || assignedColours.contains(name)) continue;
+      final skuStr = (r['sku'] ?? '').toString();
+      if (skuStr.isEmpty) continue;
+      final prefix = _SkuParts.parse(skuStr).baseColor; // base + 2-digit code
+      if (prefix.isEmpty) continue;
+      prefixByColour.putIfAbsent(name, () => prefix);
     }
-    if (candidateColours.isEmpty) {
+    if (prefixByColour.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('All colours of this product are already in the bin.'),
@@ -1730,16 +1704,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       );
       return null;
     }
-
-    // Show EVERY colour of this product that isn't already in the bin so the
-    // operator can always pick one. A previous homeless-only pre-filter
-    // (preview each colour, keep only `homeless > 0`) hid colours whose items
-    // sit in other bins — when none qualified it returned null with a brief
-    // snackbar, which the operator experienced as "I can't choose the colour".
-    // If a picked colour has no homeless items, _performMultiColourAssign
-    // already reports that via its "0 items assigned…" result snackbar.
-    final ordered = candidateColours.toList()..sort();
-    final selected = <String>{};
+    final ordered = prefixByColour.keys.toList()..sort(); // colour NAMES
+    final selected = <String>{}; // selected colour NAMES
     return showDialog<List<String>>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1752,21 +1718,21 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               shrinkWrap: true,
               itemCount: ordered.length,
               itemBuilder: (_, i) {
-                final c = ordered[i];
-                final on = selected.contains(c);
+                final name = ordered[i];
+                final on = selected.contains(name);
                 return CheckboxListTile(
                   value: on,
                   onChanged: (v) {
                     setLocal(() {
                       if (v == true) {
-                        selected.add(c);
+                        selected.add(name);
                       } else {
-                        selected.remove(c);
+                        selected.remove(name);
                       }
                     });
                   },
-                  title: Text(c),
-                  subtitle: Text('all sizes of $base$c'),
+                  title: Text(name),
+                  subtitle: Text('all sizes · ${prefixByColour[name]}'),
                   controlAffinity: ListTileControlAffinity.leading,
                 );
               },
@@ -1784,7 +1750,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
               ),
               onPressed: selected.isEmpty
                   ? null
-                  : () => Navigator.pop(ctx, selected.toList()..sort()),
+                  : () => Navigator.pop(
+                      ctx, selected.map((n) => prefixByColour[n]!).toList()),
               child: const Text('YES'),
             ),
           ],
@@ -1853,23 +1820,22 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   /// server call (each is `single_color_all_sizes` so all sizes flow with
   /// the colour). Returns true if every colour assigned successfully.
   Future<bool> _performMultiColourAssign({
-    required String base,
-    required List<String> colours,
+    required List<String> colourSkus,
     required String itemName,
   }) async {
-    if (colours.isEmpty) return false;
+    if (colourSkus.isEmpty) return false;
     setState(() => _busy = true);
     final binCode = _currentBin;
     final binId = _currentBinId;
     try {
       int totalUpdated = 0;
-      for (final c in colours) {
-        // Multi-colour batch is a deliberate operator choice from the picker
-        // (which already filters out colours sitting in this bin). Suppress
-        // the per-colour Move/Add prompt so the batch isn't 5 dialogs deep —
-        // we always run homeless_only here.
+      for (final sku in colourSkus) {
+        // `sku` is the matrix+colour CODE prefix (e.g. 122224804) the picker
+        // resolved from the real custom SKU — NOT the colour name. Suppress the
+        // per-colour Move/Add prompt so the batch isn't 5 dialogs deep; runs
+        // homeless_only.
         final outcome = await _doAssign(
-          skuScanned: '$base$c',
+          skuScanned: sku,
           scope: 'single_color_all_sizes',
           allowMoveOrAddPrompt: false,
         );
@@ -1880,7 +1846,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       if (totalUpdated == 0) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
-              '0 items assigned across ${colours.length} colour${colours.length == 1 ? '' : 's'} — every matching EPC may already be placed elsewhere.'),
+              '0 items assigned across ${colourSkus.length} colour${colourSkus.length == 1 ? '' : 's'} — every matching EPC may already be placed elsewhere.'),
           duration: const Duration(seconds: 4),
         ));
         return false;
@@ -1889,7 +1855,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         // Snapshot the final colour as the undoable assignment — operators
         // generally remember the last action they took; also matches the
         // single-undo behaviour the user signed off on (spec answer #9).
-        final lastSku = '$base${colours.last}';
+        final lastSku = colourSkus.last;
         _lastAssignSnapshot = _AssignSnapshot(
           binCode: binCode,
           binId: binId,
@@ -1978,8 +1944,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           return;
         }
         final ok = await _performMultiColourAssign(
-          base: skuParts.base,
-          colours: picked,
+          colourSkus: picked,
           itemName: itemName,
         );
         if (!mounted) return;
