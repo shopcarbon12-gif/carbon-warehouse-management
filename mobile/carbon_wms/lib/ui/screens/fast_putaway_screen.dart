@@ -703,6 +703,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       return;
     }
     _hiddenCtrl.clear();
+    // Scanning a new bin = moving on: drop any lingering "Bin cleaned/deleted ·
+    // UNDO" bar immediately (before its 3s auto-dismiss) so it doesn't trail
+    // across the next bin / other screens.
+    ScaffoldMessenger.of(context).clearSnackBars();
     final wasBinActive = _binActive;
     setState(() => _busy = true);
     try {
@@ -1144,16 +1148,18 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         _storedContents = [];
         _busy = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 8),
-          content: const Text('Bin cleaned.'),
-          action: SnackBarAction(
-            label: 'UNDO',
-            onPressed: () => unawaited(_onUndoClean()),
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 3),
+            content: const Text('Bin cleaned.'),
+            action: SnackBarAction(
+              label: 'UNDO',
+              onPressed: () => unawaited(_onUndoClean()),
+            ),
           ),
-        ),
-      );
+        );
     } catch (e) {
       if (mounted) {
         setState(() => _busy = false);
@@ -1204,17 +1210,19 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         _busy = false;
       });
       _resetForNextEntry();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 8),
-          content: Text('Bin $deletedBin deleted.'),
-          action: SnackBarAction(
-            label: 'UNDO',
-            onPressed: () =>
-                unawaited(_onUndoDeleteBin(deletedBin, deletedBinId, snapshot)),
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 3),
+            content: Text('Bin $deletedBin deleted.'),
+            action: SnackBarAction(
+              label: 'UNDO',
+              onPressed: () => unawaited(
+                  _onUndoDeleteBin(deletedBin, deletedBinId, snapshot)),
+            ),
           ),
-        ),
-      );
+        );
     } catch (e) {
       if (mounted) {
         setState(() => _busy = false);
