@@ -89,7 +89,7 @@ class _StatusTileSpec {
 const Map<String, _StatusTileSpec> _kTileSpecByLabel = {
   'LIVE': _StatusTileSpec(
     icon: LucideIcons.checkCircle,
-    subtitle: 'SELLABLE\nREADY FOR DISPATCH',
+    subtitle: 'READY FOR DISPATCH',
     iconColor: Color(0xFF1B7D7D),
   ),
   'DAMAGED': _StatusTileSpec(
@@ -108,14 +108,14 @@ const Map<String, _StatusTileSpec> _kTileSpecByLabel = {
     iconColor: Color(0xFF4C4FA1),
   ),
   'SOLD': _StatusTileSpec(
-    icon: LucideIcons.tag,
-    subtitle: 'POS COMPLETE',
-    iconColor: Color(0xFF3F4A4A),
+    icon: LucideIcons.clock,
+    subtitle: 'QUALITY CHECK',
+    iconColor: Color(0xFF3F6565),
   ),
   'TAG KILLED': _StatusTileSpec(
     icon: LucideIcons.trash2,
-    subtitle: 'RIP PROTOCOL',
-    iconColor: Color(0xFF3F4A4A),
+    subtitle: 'DISPOSAL PROTOCOL',
+    iconColor: Color(0xFF6D7979),
   ),
   'PENDING VISIBILITY': _StatusTileSpec(
     icon: LucideIcons.eye,

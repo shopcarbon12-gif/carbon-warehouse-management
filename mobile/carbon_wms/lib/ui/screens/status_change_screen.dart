@@ -256,13 +256,15 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
         // Operator request: the Status screen offers TAG KILLED in place of
         // PENDING VISIBILITY. Remap that option (value + label) and de-dup so
         // we never show a second TAG KILLED if the server already lists one.
-        var effWms = wms;
-        var effDisplay = (raw['display_label']?.toString().trim().isNotEmpty ?? false)
-            ? raw['display_label'].toString()
-            : name;
-        if (wms == 'pending_visibility') {
-          effWms = 'tag_killed';
-          effDisplay = 'Tag Killed';
+        final effWms = wms;
+        // Card title = the clean status NAME ("LIVE", "DAMAGED", "SOLD"), NOT
+        // the long settings description carried in display_label ("Live —
+        // sellable, visible everywhere"). The picker follows settings/statuses
+        // visibility, so only scanner-visible + applicable statuses arrive here.
+        var effDisplay = name;
+        // The return status' label name is "RETURN"; show it as "RETURNED".
+        if (wms == 'return') {
+          effDisplay = 'Returned';
         }
         if (opts.any((o) => o.wmsValue == effWms)) continue;
         opts.add(StatusOption(
@@ -271,18 +273,19 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
           wmsValue: effWms,
         ));
       }
-      // Operator-fixed layout (2026-06-05): the grid reads
-      //   Live · Sold / Damaged · Tag Killed / Stolen
+      // Operator-fixed layout (2026-06-13): the grid reads
+      //   Live · Tag Killed / Damaged · Returned / Stolen · Sold
       // and the transit/pending-transaction options are not pickable here.
       // (pending_visibility is already remapped to Tag Killed above.)
       opts.removeWhere((o) =>
           o.wmsValue == 'in-transit' || o.wmsValue == 'pending_transaction');
       const order = <String, int>{
-        'in-stock': 0,
-        'sold': 1,
-        'damaged': 2,
-        'tag_killed': 3,
-        'stolen': 4,
+        'in-stock': 0, // LIVE
+        'tag_killed': 1, // TAG KILLED
+        'damaged': 2, // DAMAGED
+        'return': 3, // RETURNED
+        'stolen': 4, // STOLEN
+        'sold': 5, // SOLD
       };
       opts.sort((a, b) =>
           (order[a.wmsValue] ?? 50).compareTo(order[b.wmsValue] ?? 50));
