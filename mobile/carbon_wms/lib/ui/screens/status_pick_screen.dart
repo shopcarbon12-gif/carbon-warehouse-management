@@ -155,6 +155,11 @@ class _StatusPickScreenState extends State<StatusPickScreen> {
         epcs: widget.epcs,
         targetStatus: picked.wmsValue,
         override: _override,
+        // Status Change is a "dumb collector": foreign / uncommissioned tags
+        // that aren't yet in inventory get a ghosted row created so the
+        // status (e.g. TAG KILLED) sticks and future cycle counts skip them
+        // instead of routing to defective.
+        createIfAbsent: true,
       );
       if (!mounted) return;
       final updated = (res['updated'] as num?)?.toInt() ?? 0;

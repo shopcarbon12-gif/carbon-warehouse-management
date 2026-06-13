@@ -5,13 +5,13 @@ const { Pool } = require("pg");
 const env = readFileSync(".env.coolify.local", "utf8");
 const m = env.match(/^DATABASE_URL=(.+)$/m);
 if (!m) { console.error("no DATABASE_URL"); process.exit(1); }
-// Tunnel localhost:16543 → 178.156.136.112:3000 via .219
+// Tunnel localhost:16543 → 152.53.210.171:3000 via .219
 const raw = m[1].trim().replace(/^["']|["']$/g, "");
 // Print host:port so we can see what we're connecting to (no creds).
 const u = new URL(raw);
 console.log(`source DATABASE_URL host:port = ${u.host}, db=${u.pathname}`);
 // Stale .env.coolify.local has :3000; Coolify API confirms public port = 2040.
-// Tunnel localhost:16543 → 178.156.136.112:2040 via .219.
+// Tunnel localhost:16543 → 152.53.210.171:2040 via .219.
 const url = raw.replace(/@178\.156\.136\.112:\d+/, "@localhost:16543");
 const pool = new Pool({ connectionString: url, ssl: false });
 const r = await pool.query(`

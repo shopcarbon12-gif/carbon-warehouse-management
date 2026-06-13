@@ -1735,6 +1735,7 @@ class WmsApiClient {
     required List<String> epcs,
     required String targetStatus,
     bool override = false,
+    bool createIfAbsent = false,
   }) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/inventory/bulk-status');
@@ -1748,6 +1749,7 @@ class WmsApiClient {
         'epcs': epcs,
         'targetStatus': targetStatus,
         if (override) 'override': true,
+        if (createIfAbsent) 'createIfAbsent': true,
       }),
     );
     if (res.statusCode < 200 || res.statusCode >= 300) {

@@ -310,24 +310,22 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     unawaited(_resolveAndAppend(epc));
   }
 
-  /// Resolve the EPC against the tenant-scoped handheld lookup. Carbon
-  /// formula validation lives server-side; if `valid` is false we drop
-  /// the read silently (formula failures aren't user-actionable here).
-  /// Items rows are tenant-scoped — multiple locations of this tenant
-  /// share the EPC space — so the lookup is NOT location-gated. The
-  /// commit at the end goes through `/api/inventory/bulk-status` which
-  /// is session-location-scoped; off-location EPCs commit-as-no-op
-  /// (`updated=0`) and the snackbar surfaces that.
+  /// Dumb collector: append EVERY EPC the reader hears, regardless of
+  /// whether it passes the Carbon formula. Formula-passing tags are
+  /// enriched with their catalog details; foreign / undecodable / unknown
+  /// tags are listed as-is so the operator can still assign a status to
+  /// them on the next screen (e.g. TAG KILLED → ghost so cycle counts and
+  /// fixed readers ignore them). The commit at the end goes through
+  /// `/api/inventory/bulk-status` which CREATES a ghosted row for any EPC
+  /// not already in items, so the status sticks for foreign tags too.
+  ///
+  /// Lookup is best-effort enrichment only — never a gate. A lookup error
+  /// must NOT drop the EPC: we still add it as an unknown tag.
   Future<void> _resolveAndAppend(String epc) async {
     final api = context.read<WmsApiClient>();
+    Map<String, dynamic>? row;
     try {
       final rows = await api.lookupEpcs([epc]);
-      if (!mounted) {
-        _inFlightEpcs.remove(epc);
-        return;
-      }
-      _inFlightEpcs.remove(epc);
-      Map<String, dynamic>? row;
       for (final r in rows) {
         final e = (r['epcHex'] as String?)?.toUpperCase();
         if (e == epc) {
@@ -335,38 +333,34 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
           break;
         }
       }
-      if (row == null || row['valid'] != true) {
-        // Formula failed (wrong prefix / non-hex / wrong length) or
-        // server returned no row. Silent skip — the operator can keep
-        // scanning; no error sound and no toast spam.
-        return;
-      }
-      setState(() {
-        _seenEpcs.add(epc);
-        _scanned.insert(
-          0,
-          _ScannedEpc(
-            epc: epc,
-            sku: _str(row?['sku']),
-            productName: _str(row?['productName']),
-            color: _str(row?['color']),
-            size: _str(row?['size']),
-            status: _str(row?['status']),
-          ),
-        );
-      });
-      // No `ScanCue.success` here — the native per-tag beep fires from
-      // the vendor controller's emitTag path and is the only audible cue
-      // we want on a successful add. Operator asked for a single beep
-      // per scan, not a beep + a separate "success" jingle.
-    } catch (e) {
-      _inFlightEpcs.remove(epc);
-      if (!mounted) return;
-      ScanSounds.instance.play(ScanCue.error);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lookup failed: $e')),
-      );
+    } catch (_) {
+      // Enrichment failed — fall through and add the EPC unenriched.
+      row = null;
     }
+    if (!mounted) {
+      _inFlightEpcs.remove(epc);
+      return;
+    }
+    _inFlightEpcs.remove(epc);
+    final enriched = row != null && row['valid'] == true;
+    setState(() {
+      _seenEpcs.add(epc);
+      _scanned.insert(
+        0,
+        _ScannedEpc(
+          epc: epc,
+          sku: enriched ? _str(row?['sku']) : null,
+          productName: enriched ? _str(row?['productName']) : null,
+          color: enriched ? _str(row?['color']) : null,
+          size: enriched ? _str(row?['size']) : null,
+          status: enriched ? _str(row?['status']) : null,
+        ),
+      );
+    });
+    // No `ScanCue.success` here — the native per-tag beep fires from
+    // the vendor controller's emitTag path and is the only audible cue
+    // we want on a successful add. Operator asked for a single beep
+    // per scan, not a beep + a separate "success" jingle.
   }
 
   static String? _str(Object? v) {
@@ -653,11 +647,17 @@ class _EpcContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final desc = [
+    final descParts = [
       if ((card.productName ?? '').isNotEmpty) card.productName!,
       if ((card.color ?? '').isNotEmpty) card.color!,
       if ((card.size ?? '').isNotEmpty) card.size!,
-    ].join(' · ');
+    ];
+    // Foreign / undecodable tag — no catalog match. Surface it plainly so
+    // the operator knows they can still assign a status (e.g. TAG KILLED).
+    final isUnknown = (card.sku ?? '').isEmpty &&
+        descParts.isEmpty &&
+        (card.status ?? '').isEmpty;
+    final desc = isUnknown ? 'Unknown tag' : descParts.join(' · ');
 
     return Container(
       color: _kCardGrey,
