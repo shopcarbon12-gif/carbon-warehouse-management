@@ -28,7 +28,15 @@ export async function GET(req: Request) {
     const all = await listStatusLabels(pool);
     const superAdmin = isSuperAdminRole(session.role);
     const rows = all
-      .filter((r) => r.is_visible_to_scanner && r.is_visible_in_ui)
+      // Change-status TARGET list = every operator-settable status, i.e. NOT
+      // the system-workflow ones (in-transit / pending_transaction /
+      // pending_visibility). Deliberately decoupled from is_visible_to_scanner:
+      // that flag governs whether tags ALREADY IN a status are ghost-filtered
+      // during inventory scans (stolen / tag-killed stay ignored there) — it
+      // must NOT stop an operator from SETTING a tag to that status. Per-status
+      // permission is still enforced below (applicable) and again on commit by
+      // /api/inventory/bulk-status (super-admin locks, risky transitions).
+      .filter((r) => !r.is_system_only)
       .map((r) => ({
         id: r.id,
         legacy_id: r.legacy_id,
