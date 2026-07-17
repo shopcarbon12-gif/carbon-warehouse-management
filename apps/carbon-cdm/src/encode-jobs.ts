@@ -110,7 +110,7 @@ async function runOne(
   log.info("encode-jobs: starting write", jobLogCtx);
 
   // Step 1: borrow the bridge slot from the supervisor.
-  let slot: { host: string; serialPort: number; writePowerTenths: number } | null;
+  let slot: { host: string; serialPort: number; writePowerTenths: number; antennas: number[] } | null;
   try {
     slot = await supervisor.acquireBridgeForExternalOp(job.reader_id);
   } catch (e) {
@@ -126,9 +126,34 @@ async function runOne(
   log.info("encode-jobs: acquired bridge slot", { ...jobLogCtx, ...slot });
 
   try {
-    const outcome = await runWriteTag(slot.host, slot.serialPort, job.old_epc, job.new_epc, slot.writePowerTenths);
+    // Rotate the write across the reader's enabled antennas. A tag in the bin
+    // may only be reachable on one antenna's field; the write defaults to
+    // antenna 1, so without this a tag coupled to antenna 2 fails every time
+    // with `no_tag_access_write_line` even though mux inventory reads it fine.
+    // Advance to the next antenna ONLY when the tag wasn't accessible on this
+    // one — a chip-level rejection (write_rejected_by_chip) or infra error
+    // (bridge_unreachable, radio_not_present) won't improve elsewhere.
+    const antennas = slot.antennas.length > 0 ? slot.antennas : [1];
+    const ACCESS_MISS = new Set(["no_tag_access_write_line", "tag_not_in_field"]);
+    let outcome: WriteOutcome = {
+      ok: false,
+      error_msg: "no_antennas",
+      meta: { antennas },
+    };
+    for (const antenna of antennas) {
+      outcome = await runWriteTag(
+        slot.host, slot.serialPort, job.old_epc, job.new_epc, slot.writePowerTenths, antenna,
+      );
+      if (outcome.ok) {
+        log.info("encode-jobs: write success", { ...jobLogCtx, antenna, ...outcome });
+        break;
+      }
+      if (!ACCESS_MISS.has(outcome.error_msg)) break;
+      if (antenna !== antennas[antennas.length - 1]) {
+        log.info("encode-jobs: no tag access — trying next antenna", { ...jobLogCtx, antenna });
+      }
+    }
     if (outcome.ok) {
-      log.info("encode-jobs: write success", { ...jobLogCtx, ...outcome });
       await postEncodeJobResult(env, job.id, {
         status: "done",
         meta: outcome.meta,
@@ -182,6 +207,7 @@ async function runWriteTag(
   oldEpc: string,
   newEpc: string,
   writePowerTenths: number,
+  antenna: number,
 ): Promise<WriteOutcome> {
   // Chip-state pre-flight is handled by acquireBridgeForExternalOp's
   // `wiznet-cli --reset` step (see supervisor). By the time we get here
@@ -217,6 +243,14 @@ async function runWriteTag(
       "--serial_host", effectiveHost,
       "--serial_port", String(effectivePort),
       "--num", "1",
+      // Antenna to drive for this write. A multi-antenna reader (e.g. the
+      // 2-port Transfer Bin .16) energises each antenna's field separately;
+      // MonsoonReader defaults to antenna 1, so a tag coupled only to another
+      // antenna reads during mux inventory but can never be written from
+      // antenna 1 (symptom: exit 0, no TAG_ACCESS line → no_tag_access_write_line).
+      // runOne rotates this across the reader's enabled antennas until one
+      // gains access.
+      "-a", String(antenna),
       // Per-reader write power (tenths-dBm), capped at 30 dBm upstream in
       // acquireBridgeForExternalOp. Was hardcoded "300"; low-power readers
       // (worn-amp .15 @12 dBm) emit nothing at 30 dBm so the write never

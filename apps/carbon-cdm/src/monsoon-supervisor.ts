@@ -1347,7 +1347,7 @@ export class MonsoonSupervisor {
    * the supervisor resumes spawning even when the write throws.
    */
   public async acquireBridgeForExternalOp(readerId: string): Promise<
-    { host: string; serialPort: number; writePowerTenths: number } | null
+    { host: string; serialPort: number; writePowerTenths: number; antennas: number[] } | null
   > {
     const slot = this.slots.get(readerId);
     if (!slot) return null;
@@ -1382,7 +1382,13 @@ export class MonsoonSupervisor {
       330,
       Math.max(1, Math.round(this.avgPower(slot.spec) * 10)),
     );
-    return { host, serialPort, writePowerTenths };
+    // Enabled antenna numbers, so the encode worker can rotate the write
+    // across every antenna on a multi-antenna reader (a tag coupled only to
+    // antenna 2 can't be written from antenna 1). Falls back to [1] for
+    // single-antenna readers or an empty sequence.
+    const antennas =
+      slot.muxAntennaSequence.length > 0 ? [...slot.muxAntennaSequence] : [1];
+    return { host, serialPort, writePowerTenths, antennas };
   }
 
   /**
