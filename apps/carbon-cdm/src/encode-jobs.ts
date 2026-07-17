@@ -134,7 +134,13 @@ async function runOne(
     // one — a chip-level rejection (write_rejected_by_chip) or infra error
     // (bridge_unreachable, radio_not_present) won't improve elsewhere.
     const antennas = slot.antennas.length > 0 ? slot.antennas : [1];
-    const ACCESS_MISS = new Set(["no_tag_access_write_line", "tag_not_in_field"]);
+    const ACCESS_MISS = new Set([
+      "no_tag_access_write_line",
+      "tag_not_in_field",
+      // Accessed but committed 0 bytes on this antenna — the other antenna's
+      // stronger coupling may have the link-budget to actually program it.
+      "write_committed_zero_bytes",
+    ]);
     let outcome: WriteOutcome = {
       ok: false,
       error_msg: "no_antennas",
@@ -251,11 +257,18 @@ async function runWriteTag(
       // runOne rotates this across the reader's enabled antennas until one
       // gains access.
       "-a", String(antenna),
-      // Per-reader write power (tenths-dBm), capped at 30 dBm upstream in
+      // Per-reader power (tenths-dBm), capped at 33 dBm upstream in
       // acquireBridgeForExternalOp. Was hardcoded "300"; low-power readers
       // (worn-amp .15 @12 dBm) emit nothing at 30 dBm so the write never
-      // reached the tag. healthy readers still resolve to 300 (30 dBm).
+      // reached the tag. healthy readers still resolve to 330 (33 dBm).
       "-p", String(writePowerTenths),
+      // Drive the ACCESS WRITE at the SAME (max) power, not the binary's 30 dBm
+      // default. A tag can be READ/accessed at one power but its EEPROM charge
+      // pump needs materially more link-budget to COMMIT the write — under-
+      // powered writes gain access but program 0 bytes (`write_bytes = 0`),
+      // which the tag reflects by keeping its OLD EPC. Matches the handheld
+      // path, which also boosts to max for the write window.
+      "--write_power", String(writePowerTenths),
       "--target_tag", targetForBinary,
       "--write_tag", newEpc.toUpperCase(),
     ];
@@ -327,8 +340,18 @@ async function runWriteTag(
       // stayed C-prefix. New heuristic refuses any outcome that
       // can't produce a TAG_ACCESS WRITE line.
       const lc = (stderr + stdout).toLowerCase();
-      const sawWrite = /tag_access\s*:\s*cmd\s*=\s*write/i.test(stdout);
-      if (code === 0 && sawWrite) {
+      // Success requires a TAG_ACCESS WRITE line that actually COMMITTED bytes.
+      // The 2016 binary prints `write_bytes = N` per ACCESS write; N=0 means the
+      // tag was accessed but nothing was programmed — the chip keeps its old
+      // EPC. Live evidence: the agent reported "Wrote ✓" on `write_bytes = 0`
+      // while the physical tag still read the OLD EPC. Only a non-zero
+      // write_bytes proves the EPC bank was written.
+      const committed =
+        /tag_access\s*:\s*cmd\s*=\s*write\s*,\s*write_bytes\s*=\s*[1-9]\d*/i.test(stdout);
+      const accessedZeroBytes =
+        !committed &&
+        /tag_access\s*:\s*cmd\s*=\s*write\s*,\s*write_bytes\s*=\s*0\b/i.test(stdout);
+      if (code === 0 && committed) {
         resolve({ ok: true, meta });
         return;
       }
@@ -339,7 +362,10 @@ async function runWriteTag(
       else if (/unable to connect/i.test(lc)) errSummary = "bridge_unreachable";
       else if (/tag not found/i.test(lc)) errSummary = "tag_not_in_field";
       else if (/write fail/i.test(lc)) errSummary = "write_rejected_by_chip";
-      else if (code === 0 && !sawWrite) errSummary = "no_tag_access_write_line";
+      // Accessed the tag but committed 0 bytes — under-power / locked EPC bank.
+      // Retriable on another antenna (stronger coupling may commit).
+      else if (accessedZeroBytes) errSummary = "write_committed_zero_bytes";
+      else if (code === 0) errSummary = "no_tag_access_write_line";
       resolve({ ok: false, error_msg: errSummary, meta });
     });
   });
