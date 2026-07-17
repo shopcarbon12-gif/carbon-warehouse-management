@@ -171,7 +171,15 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
     _barcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen((raw) {
       if (!mounted || _mode != _Mode.barcode) return;
       final code = raw.trim();
-      if (code.isNotEmpty) unawaited(_performLookup(code));
+      if (code.isEmpty) return;
+      // Reset the native 2D toggle after each decode. The trigger relay flips
+      // scanActive on every KEY_DOWN and leaves it TRUE after a successful
+      // decode (it expects the Dart side to call stop2d — see
+      // CarbonHardwareBarcodeRelay). Without this, the NEXT trigger pull toggles
+      // the laser OFF instead of firing a fresh scan, so re-scanning on this
+      // screen silently does nothing until the 15 s idle timeout self-heals.
+      unawaited(RfidVendorChannel.scannerStop2d());
+      unawaited(_performLookup(code));
     }, onError: (_) {});
 
     _tagSub?.cancel();
@@ -412,13 +420,19 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
       if (!mounted) return;
 
       if (map != null) {
-        var bin = '';
+        // SKU/UPC (barcode) scans: the catalog grid row already carries a
+        // location-scoped, comma-joined summary of every bin that holds a live
+        // EPC for this SKU (`bin_location`). Show it so barcode mode surfaces
+        // the same CURRENT BIN block RFID mode does.
+        var bin = map['bin_location']?.toString().trim() ?? '';
         if (isEpc) {
           try {
             final detail = await api.fetchItemDetailByEpc(cleaned);
             final item = detail?['item'];
             if (item is Map<String, dynamic>) {
               final bc = item['bin_code']?.toString().trim();
+              // A single-chip scan pinpoints ONE bin — let it override the
+              // SKU-wide summary.
               if (bc != null && bc.isNotEmpty) bin = bc;
             }
           } catch (_) {/* optional enrichment */}
@@ -1005,6 +1019,8 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
   }
 
   Widget _locationBlock(_LookupRow r) {
+    // A SKU/UPC can live in several bins — bin_location comes back comma-joined.
+    final multiBin = r.bin.contains(',');
     return Container(
       width: double.infinity,
       color: Colors.white,
@@ -1012,7 +1028,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
       child: Column(
         children: [
           Text(
-            'CURRENT BIN',
+            multiBin ? 'CURRENT BINS' : 'CURRENT BIN',
             style: GoogleFonts.spaceGrotesk(
               fontSize: 12.sp,
               fontWeight: FontWeight.w800,
@@ -1021,12 +1037,15 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
             ),
           ),
           SizedBox(height: 6.h),
-          if (r.isEpc && r.bin.isNotEmpty)
+          if (r.bin.isNotEmpty)
             Text(
               r.bin,
               textAlign: TextAlign.center,
+              // Shrink for multi-bin lists so a long summary stays on-card.
               style: GoogleFonts.robotoMono(
-                  fontSize: 32.sp, fontWeight: FontWeight.w700, color: _ink),
+                  fontSize: multiBin ? 22.sp : 32.sp,
+                  fontWeight: FontWeight.w700,
+                  color: _ink),
             )
           else
             Padding(
@@ -1034,7 +1053,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
               child: Text(
                 r.isEpc
                     ? 'No bin on file for this chip'
-                    : 'Scan the chip to pinpoint a bin',
+                    : 'No bin on file for this item',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.manrope(
                     fontSize: 16.sp,

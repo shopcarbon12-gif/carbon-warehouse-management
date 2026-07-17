@@ -984,6 +984,27 @@ class WmsApiClient {
     } catch (_) {/* never block printing */}
   }
 
+  /// Every variant (custom SKU) under one matrix at the active location.
+  /// `GET /api/inventory/catalog?matrixId=<uuid>` — each entry:
+  /// `{id, sku, ls_system_id, color_code, size, epc_count}`. Used by Item Bin
+  /// Lookup to expand a scanned tag into the whole product's colour/size grid.
+  Future<List<Map<String, dynamic>>> fetchCatalogVariantsForMatrix(
+      String matrixId) async {
+    final id = matrixId.trim();
+    if (id.isEmpty) return [];
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/inventory/catalog').replace(
+      queryParameters: {'matrixId': id},
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! List) return [];
+    return decoded.whereType<Map<String, dynamic>>().toList();
+  }
+
   /// EPC-level rows for one custom SKU at the active location.
   /// `GET /api/inventory/catalog?customSkuId=<uuid>` —
   /// each entry: `{serial_number, epc, status, bin_code, last_seen_at, sku, name, color, size}`.

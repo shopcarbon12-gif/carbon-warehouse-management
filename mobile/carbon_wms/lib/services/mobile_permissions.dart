@@ -210,6 +210,8 @@ abstract final class ScreenIds {
   static const String countInventory = 'count_inventory';
   static const String fastPutaway = 'fast_putaway';
   static const String cleanBin = 'clean_bin';
+  // Item Bin Lookup — barcode-driven read-only "which bins is this item in?".
+  static const String itemBinLookup = 'item_bin_lookup';
   static const String binAssignSettings = 'bin_assign_settings';
   static const String inventoryCsvSession = 'inventory_csv_session';
   // Add-On Catalog — Count Inventory clone that adds not-yet-cataloged EPCs LIVE.

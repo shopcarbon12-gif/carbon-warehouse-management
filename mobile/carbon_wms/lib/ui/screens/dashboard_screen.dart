@@ -810,7 +810,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         onTap: () => _pushScreen(CategoryHubScreen.inventory()),
                       ),
                     if (perms.canView(ScreenIds.fastPutaway) ||
-                        perms.canView(ScreenIds.cleanBin))
+                        perms.canView(ScreenIds.cleanBin) ||
+                        perms.canView(ScreenIds.itemBinLookup))
                       _HeroTile(
                         icon: Icons.qr_code_scanner,
                         label: 'Bin Management',
@@ -836,7 +837,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         mainColor: mainColor,
                         onTap: () => _pushScreen(CategoryHubScreen.encodePrint()),
                       ),
-                    if (perms.canView(ScreenIds.geigerSearch) ||
+                    if (perms.canView(ScreenIds.inventoryLookup) ||
+                        perms.canView(ScreenIds.geigerSearch) ||
                         perms.canView(ScreenIds.cloudGeiger))
                       _HeroTile(
                         icon: Icons.radar,

@@ -315,6 +315,9 @@ class _EncodeScreenState extends State<EncodeScreen> {
     if (!mounted) return;
     setState(() {
       _step = _Step.encode;
+      // Force the scan latch open so the SAME-SKU re-arm below always starts a
+      // fresh radio session — see _startScan's clean-restart note.
+      _scanning = false;
       _nearestEpc = null;
       _nearestRssi = null;
       _nearestInfo = null;
@@ -328,6 +331,20 @@ class _EncodeScreenState extends State<EncodeScreen> {
 
   Future<void> _startScan() async {
     if (_scanning) return;
+    // Clean stop→settle→start. On a FRESH entry the radio comes straight from
+    // barcode mode so a plain start arms fine. But on the DONE → SAME SKU
+    // re-arm we're right after a chip write: performWriteEpc power-cycles the
+    // tag (setCW(0)/setPower(5)/setCW(1)) and the auto-confirm start/stop can
+    // leave the native inventory latch (`scanning.getAndSet`) or the antenna PA
+    // gate stale, so the next plain startInventory silently produces zero reads
+    // — the operator sees "the RFID scanner won't trigger" for the same SKU.
+    // An explicit stop first guarantees the native latch is cleared (and the
+    // SDK path re-runs engageAntennaPaGate on the following start), so the
+    // radio always re-arms.
+    try {
+      await _rfid?.stopLocateScanning();
+    } catch (_) {}
+    await Future<void>.delayed(const Duration(milliseconds: 60));
     try {
       await _rfid?.startLocateScanning();
     } catch (_) {/* simulated reads still arrive via the stream */}

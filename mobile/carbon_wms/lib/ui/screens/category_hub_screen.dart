@@ -11,6 +11,7 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 // Bin management
 import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
 import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
+import 'package:carbon_wms/ui/screens/item_bin_lookup_screen.dart';
 // Encode & print
 import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_and_print_screen.dart';
@@ -116,6 +117,13 @@ class CategoryHubScreen extends StatelessWidget {
         title: 'bin management',
         tiles: [
           CategoryHubTile(
+            screenId: ScreenIds.itemBinLookup,
+            label: 'Item Bin Lookup',
+            description: 'Scan an item → see all its bins',
+            icon: LucideIcons.mapPin,
+            builder: (_) => const ItemBinLookupScreen(),
+          ),
+          CategoryHubTile(
             screenId: ScreenIds.fastPutaway,
             label: 'Bin Assign',
             description: 'Scan a bin, scan items, assign',
@@ -183,6 +191,13 @@ class CategoryHubScreen extends StatelessWidget {
   factory CategoryHubScreen.findLocate() => CategoryHubScreen(
         title: 'find & locate',
         tiles: [
+          CategoryHubTile(
+            screenId: ScreenIds.inventoryLookup,
+            label: 'Item Lookup',
+            description: 'Look up an EPC · SKU · UPC',
+            icon: LucideIcons.search,
+            builder: (_) => const InventoryLookupScreen(),
+          ),
           CategoryHubTile(
             screenId: ScreenIds.geigerSearch,
             label: 'Geiger',

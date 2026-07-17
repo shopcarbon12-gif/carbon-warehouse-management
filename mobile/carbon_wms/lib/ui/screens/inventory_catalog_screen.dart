@@ -1063,8 +1063,6 @@ class _CatalogEpcListScreenState extends State<CatalogEpcListScreen> {
                                         [
                                           'serial: $serial',
                                           if (status.isNotEmpty) status,
-                                          if (binCode.isNotEmpty)
-                                            'BIN $binCode',
                                         ].join(' · '),
                                         style: GoogleFonts.manrope(
                                           fontSize: 13.sp,
@@ -1076,6 +1074,15 @@ class _CatalogEpcListScreenState extends State<CatalogEpcListScreen> {
                                     ],
                                   ),
                                 ),
+                                SizedBox(width: 8.w),
+                                // Dedicated per-EPC bin location — the bin this
+                                // exact chip is pinned to. Muted '—' when the
+                                // chip has no bin on file.
+                                _EpcBinPill(
+                                    binCode:
+                                        (binCode.isEmpty || binCode == '—')
+                                            ? ''
+                                            : binCode),
                                 SizedBox(width: 8.w),
                                 Tooltip(
                                   message: 'Locate this tag (Geiger)',
@@ -1127,6 +1134,53 @@ class _CatalogEpcListScreenState extends State<CatalogEpcListScreen> {
                           );
                         },
                       ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact per-EPC bin badge on the EPCs drilldown list. Teal-tinted with the
+/// bin code when the chip is pinned to a bin; muted '—' when it has none.
+class _EpcBinPill extends StatelessWidget {
+  const _EpcBinPill({required this.binCode});
+  final String binCode;
+
+  @override
+  Widget build(BuildContext context) {
+    final has = binCode.isNotEmpty;
+    return Container(
+      constraints: BoxConstraints(minWidth: 56.w),
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+      decoration: BoxDecoration(
+        color: has ? const Color(0xFFEAF3F2) : const Color(0xFFF0F2F2),
+        borderRadius: BorderRadius.circular(6.r),
+        border: Border.all(color: const Color(0xFFD7DEDE)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'BIN',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+              color: const Color(0xFF8A9090),
+              height: 1.1,
+            ),
+          ),
+          SizedBox(height: 2.h),
+          Text(
+            has ? binCode : '—',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.robotoMono(
+              fontSize: 15.sp,
+              fontWeight: FontWeight.w700,
+              color: has ? AppColors.primary : const Color(0xFF8A9090),
+              height: 1.15,
+            ),
           ),
         ],
       ),
