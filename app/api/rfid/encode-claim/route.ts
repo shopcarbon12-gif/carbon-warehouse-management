@@ -89,6 +89,73 @@ export async function POST(req: Request) {
   const oldEpc = parsed.data.oldEpc?.toUpperCase();
   const readerIdForWrite = parsed.data.readerId;
 
+  // ── Pre-flight: never rotate the DB for a chip-write we can't deliver ───────
+  // When the Encode Items page asks for a physical fixed-reader write it passes
+  // `readerId`. Historically we rotated the items row (killed old EPC, minted
+  // new) and THEN queued the encode_jobs row — but if the chosen reader isn't
+  // managed by a live carbon-cdm agent (e.g. the multi-antenna .16, which is
+  // unassigned / Senitron-owned), no agent ever claims the job and it fails
+  // with `reader_unmanaged_or_in_test` AFTER the DB was already rotated. The
+  // operator was left with a rotated row and a still-old chip ("DB rotated,
+  // retry from handheld"). Validate manageability up front and bail cleanly —
+  // WITHOUT touching the DB — so the tag stays intact and the operator can pick
+  // a live reader or use the handheld.
+  if (readerIdForWrite && oldEpc) {
+    try {
+      const chk = await pool.query<{
+        name: string | null;
+        network_address: string | null;
+        cdm_agent_id: string | null;
+        agent_status: string | null;
+        agent_live: boolean | null;
+      }>(
+        `SELECT
+           d.name,
+           d.network_address,
+           d.cdm_agent_id::text AS cdm_agent_id,
+           a.status            AS agent_status,
+           (a.last_heartbeat_at > now() - interval '2 minutes') AS agent_live
+         FROM devices d
+         LEFT JOIN cdm_agents a ON a.id = d.cdm_agent_id
+         WHERE d.id = $1::uuid
+         LIMIT 1`,
+        [readerIdForWrite],
+      );
+      const row = chk.rows[0];
+      const label = (row?.name || row?.network_address || "This reader").trim();
+      if (!row) {
+        return NextResponse.json(
+          { error: "Reader not found", code: "READER_NOT_FOUND" },
+          { status: 404 },
+        );
+      }
+      if (!row.cdm_agent_id) {
+        return NextResponse.json(
+          {
+            error: `${label} isn't assigned to a CDM agent, so it can't program a chip. Encode this tag from the handheld instead.`,
+            code: "READER_UNMANAGED",
+          },
+          { status: 409 },
+        );
+      }
+      if (row.agent_status === "offline" || row.agent_live !== true) {
+        return NextResponse.json(
+          {
+            error: `${label}'s CDM agent is offline — no fixed-reader write is possible right now. Encode this tag from the handheld instead.`,
+            code: "READER_AGENT_OFFLINE",
+          },
+          { status: 409 },
+        );
+      }
+    } catch (e) {
+      console.error("[rfid/encode-claim] reader preflight", e);
+      return NextResponse.json(
+        { error: "Reader check failed — try again." },
+        { status: 503 },
+      );
+    }
+  }
+
   // Resolve the encoding handheld so source_device_id is set on the
   // items row. Mobile sends the alias via `x-wms-device-id` (same
   // convention as /api/handheld/epc-queue). null when missing or

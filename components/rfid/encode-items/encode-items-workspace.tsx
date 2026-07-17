@@ -150,13 +150,25 @@ type Row = {
 };
 
 export function EncodeItemsWorkspace() {
-  // Warm the .15 reader while this page is open so it's ready before the
-  // operator clicks Read. Capture (the SSE subscription) is still gated by
-  // the Read button via `reading`.
-  useReaderWake({ active: true, kind: "encode-items", networkAddresses: ["192.168.1.15"] });
-
   // --- Reader picker + default to .15 ----------------------------------
   const [selectedReaders, setSelectedReaders] = useState<Set<string>>(new Set());
+
+  // Keep the SELECTED reader(s) WARM the whole time this page is open — not a
+  // hardcoded reader. Default-paused fixed readers (e.g. the multi-antenna
+  // .16 "Transfer Bin") get pulled from the agent's bundle ~30 s after their
+  // last wake, so if we only woke them during Read, they'd be paused again by
+  // the time the operator clicks Encode — the encode_jobs write then lands on
+  // a reader that's no longer in the supervisor's slots and fails with
+  // `reader_unmanaged_or_in_test` ("DB rotated, retry from handheld"). Warming
+  // the picked reader continuously (15 s heartbeat + 30 s server grace) keeps
+  // it in the bundle across the read→encode gap so the fixed-reader write can
+  // borrow the bridge. Capture (SSE) is still gated by the Read button.
+  useReaderWake({
+    active: selectedReaders.size > 0,
+    kind: "encode-items",
+    readerIds: Array.from(selectedReaders),
+  });
+
   const { data: hcData } = useSWR<HardwareConfigTree>(
     "/api/hardware-config",
     hcFetcher,
