@@ -575,8 +575,20 @@ class CarbonChainwayRfidController(private val context: Context) {
                   // Brief settle so the chip's pending Q round drains before the
                   // restart — without this the next startInventoryTag often
                   // returns false on the fast path and forces a full re-init.
+                  var interruptedDuringSettle = false
                   try { Thread.sleep(40L) } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()
+                    interruptedDuringSettle = true
+                  }
+                  // If a stop arrived during the settle (trigger released / screen
+                  // left), do NOT restart. Otherwise the kick re-arms the radio
+                  // AFTER stopInventoryAsync already stopped it, and since the poll
+                  // thread then exits there's nothing left to turn it off — the
+                  // reader "keeps reading after the trigger is toggled off".
+                  if (interruptedDuringSettle || !scanning.get() ||
+                      Thread.currentThread().isInterrupted) {
+                    Log.d(TAG, "TRACE TagThread: kick aborted — stop arrived during settle")
+                    break
                   }
                   val restarted = runCatching { reader.startInventoryTag() }.getOrDefault(false)
                   Log.d(TAG, "TRACE TagThread: kick startInventoryTag -> $restarted")
@@ -594,6 +606,13 @@ class CarbonChainwayRfidController(private val context: Context) {
           }
         }
       } finally {
+        // Whatever exited the loop (interrupt, scanning=false, aborted kick),
+        // if we're no longer meant to be scanning make sure the radio is
+        // actually stopped — so a kick or SDK quirk can never leave it
+        // transmitting after the trigger is toggled off. Safe to call twice.
+        if (!scanning.get()) {
+          runCatching { reader.stopInventory() }
+        }
         Log.d(TAG, "TRACE TagThread: STOPPED scanning=${scanning.get()} loops=$loops hits=$hits nulls=$nullReads kicks=$kicks")
       }
     }, "CarbonChainway-TagThread").apply { isDaemon = true }
