@@ -187,9 +187,17 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
 
   const batchZpl = useMemo(() => {
     if (!carbonInput || !selected) return "";
-    return rfid
-      ? generateRfidTagPreviewBatch(carbonInput, selected.ls_system_id, companyPrefix, nextSerial, qty)
-      : generateNonRfidTag203Batch(carbonInput, qty);
+    // Never let preview generation throw during render — that unmounts the
+    // React tree and blanks the whole page. The RFID path throws when a SKU has
+    // no Lightspeed System ID (deriveItemNumber); fall back to an empty preview
+    // instead of crashing.
+    try {
+      return rfid
+        ? generateRfidTagPreviewBatch(carbonInput, selected.ls_system_id, companyPrefix, nextSerial, qty)
+        : generateNonRfidTag203Batch(carbonInput, qty);
+    } catch {
+      return "";
+    }
   }, [carbonInput, selected, rfid, companyPrefix, nextSerial, qty]);
 
   function pick(m: Match) {

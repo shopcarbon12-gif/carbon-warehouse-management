@@ -29,7 +29,16 @@ const MEDIA: Record<Mode, { caption: string; wCm: number; hCm: number }> = {
 /* Code 93 — the symbology the tag ZPL actually uses (^BAB). Each character is a
  * 9-module pattern (bar,space,bar,space,bar,space widths); the barcode is
  * *<data><C-check><K-check>* plus a final termination bar. */
-const C93_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%";
+// Code 93 has 47 data values but only 43 are printable. The checksum is taken
+// mod 47, so a check value of 43-46 maps to one of the four "shift" characters
+// (($),(%),(/),(+)). They never appear in the (sanitized, printable) data, only
+// as a computed checksum — but they MUST exist in the table or the lookup
+// returns undefined and the barcode draw throws, blanking the whole page.
+// Pre-fix C93_CHARS held only 43 entries, so ~15% of SKUs (any whose C/K check
+// landed on 43-46) crashed both the non-RFID and RFID print previews on the
+// first keystroke. The four shift chars are stored under placeholder keys
+// a/b/c/d (lowercase never occurs in the uppercased data).
+const C93_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%abcd";
 const C93_PATTERNS: Record<string, string> = {
   "0": "131112", "1": "111213", "2": "111312", "3": "111411", "4": "121113",
   "5": "121212", "6": "121311", "7": "111114", "8": "131211", "9": "141111",
@@ -39,6 +48,8 @@ const C93_PATTERNS: Record<string, string> = {
   S: "211122", T: "211221", U: "221121", V: "222111", W: "112122", X: "112221",
   Y: "122121", Z: "123111", "-": "121131", ".": "311112", " ": "311211",
   $: "321111", "/": "112131", "+": "113121", "%": "211131", "*": "111141",
+  // Code 93 shift chars ($),(%),(/),(+) at values 43,44,45,46 (checksum-only).
+  a: "121221", b: "312111", c: "311121", d: "122211",
 };
 function c93Sanitize(text: string): string {
   return text.toUpperCase().replace(/[^0-9A-Z\-. $/+%]/g, "");
@@ -58,7 +69,11 @@ function code93Width(text: string, nw: number): number {
   const data = c93Sanitize(text);
   const [c, k] = c93Checks(data);
   let total = 0;
-  for (const ch of `*${data}${c}${k}*`) for (const d of C93_PATTERNS[ch]) total += Number(d) * nw;
+  for (const ch of `*${data}${c}${k}*`) {
+    const pat = C93_PATTERNS[ch];
+    if (!pat) continue; // never crash the preview on an unmapped char
+    for (const d of pat) total += Number(d) * nw;
+  }
   return total + nw; // termination bar
 }
 function drawCode93(ctx: CanvasRenderingContext2D, x: number, y: number, nw: number, h: number, text: string) {
@@ -68,6 +83,7 @@ function drawCode93(ctx: CanvasRenderingContext2D, x: number, y: number, nw: num
   ctx.fillStyle = "#000";
   for (const ch of `*${data}${c}${k}*`) {
     const p = C93_PATTERNS[ch];
+    if (!p) continue; // never crash the preview on an unmapped char
     for (let i = 0; i < 6; i += 1) {
       const w = Number(p[i]) * nw;
       if (i % 2 === 0) ctx.fillRect(cx, y, w, h);
@@ -226,22 +242,32 @@ export function LabelPreviewCanvas({
     ctx.restore();
   }, [input, mode]);
 
+  // Never let a canvas draw error escape into React's render/commit and unmount
+  // the page — the preview simply stays blank on the rare bad input instead.
+  const safeDraw = useCallback(() => {
+    try {
+      draw();
+    } catch {
+      /* preview-only: swallow so a draw error can't blank the page */
+    }
+  }, [draw]);
+
   useEffect(() => {
     if (boxImg.current) {
-      draw();
+      safeDraw();
       return;
     }
     const im = new Image();
     im.onload = () => {
       boxImg.current = im;
-      draw();
+      safeDraw();
     };
     im.src = "/carbon-box-icon.png";
-  }, [draw]);
+  }, [safeDraw]);
 
   useEffect(() => {
-    draw();
-  }, [draw, serial]);
+    safeDraw();
+  }, [safeDraw, serial]);
 
   return (
     <>
