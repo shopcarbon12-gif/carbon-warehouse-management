@@ -177,6 +177,14 @@ class _EncodeScreenState extends State<EncodeScreen> {
   }
 
   Future<void> _armBarcodeMode() async {
+    // Fully leave RFID mode first. Without disableRfidFunctionMode() the
+    // scanner service stays in RFID-trigger mode after an encode (armRfidMode
+    // enabled it), so the trigger keeps firing the radio and the 2D laser never
+    // lights when we return to the SKU step — the operator had to leave the
+    // whole screen to recover. Mirrors the Item-Lookup barcode arm.
+    await _rfid?.stopLocateScanning();
+    await RfidVendorChannel.scannerDisableTriggerRelay();
+    await RfidVendorChannel.disableRfidFunctionMode();
     await RfidVendorChannel.open2dBarcode();
     await RfidVendorChannel.scannerEnableTriggerRelay();
     await RfidVendorChannel.setZebraTriggerMode2D();

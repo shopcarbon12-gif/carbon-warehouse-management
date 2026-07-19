@@ -1003,6 +1003,27 @@ class CarbonChainwayRfidController(private val context: Context) {
             startDrainLoop(cls, inst)
           }
         }
+      } else {
+        // We were NOT inventorying before this write (e.g. the Encode screen
+        // stops scanning before writing). The power-cycle above turned the CW
+        // carrier back ON (setCW(1)) and verify ran its own inventory, so the
+        // radio can be left transmitting. Because `scanning` is false, the
+        // caller's stopInventory() early-returns and can never quiet it —
+        // the reader stays "stuck on" until the app is force-restarted.
+        // Force the radio to a clean OFF state so the caller owns it cleanly.
+        val reader = uhfReader
+        if (reader != null) {
+          runCatching { reader.stopInventory() }
+          runCatching { reader.setCW(0) }
+        } else {
+          val cls = uhfClass; val inst = uhfInstance
+          if (cls != null && inst != null && uartOwned) {
+            invokeNoArgs(cls, inst, "UHFStopGet", "stopInventoryTag", "stopInventory")
+          }
+        }
+        uhfInventoryActive = false
+        scanning.set(false)
+        stopTagPollThread()
       }
     }
   }
