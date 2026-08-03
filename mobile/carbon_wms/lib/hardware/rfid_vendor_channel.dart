@@ -272,6 +272,13 @@ class RfidVendorChannel {
           'targetEpc': targetEpc,
           'newEpc': newEpc,
         },
+      ).timeout(
+        // Belt outside the native watchdog (~9s). If the platform channel goes
+        // dead (native thread wedged on a half-open BT link and even the
+        // watchdog can't answer), fail the write here so the UI never freezes
+        // on "writing…" and force-closing the app is never required.
+        const Duration(seconds: 12),
+        onTimeout: () => false,
       );
       return ok == true;
     } on MissingPluginException {

@@ -78,6 +78,28 @@ class CarbonZebraRfidController(
   // into the UI (SDK buffer on RFD8500 sometimes flushes for ~1s post-stop).
   @Volatile private var inventoryActive: Boolean = false
 
+  // Dedicated executor for the (potentially blocking) tag-write. Kept OFF the
+  // shared `executor` so a half-open-BT `writeWait` that hangs can never stall
+  // stop/disconnect/setTriggerMode — those must always stay responsive or the
+  // operator is forced to kill the app. Volatile + replaceable: on a hard
+  // watchdog timeout we shutdownNow() (interrupt) and swap in a fresh one, so
+  // the next write gets a clean thread even if the old one is still stuck in a
+  // native BT call that ignores interruption.
+  @Volatile private var writeExec: java.util.concurrent.ExecutorService =
+    Executors.newSingleThreadExecutor()
+  private val writeWatchdog = Executors.newSingleThreadExecutor()
+  // Hard ceiling for a single write. Worst-case healthy write (1.5s writeWait +
+  // 0.26s power-cycle + 3s verify + resume) is ~5s; 9s gives margin before we
+  // declare the link wedged. The Dart side (rfid_vendor_channel.writeEpcTag)
+  // carries a 12s belt-timeout outside this.
+  private val writeHardTimeoutMs = 9000L
+
+  // Set true whenever the CoreScanner barcode session is not known-alive, so
+  // setTriggerModeBarcode only pays the multi-second full-rediscovery cost when
+  // it's actually needed. Cleared only when a session is truly established (see
+  // BarcodeDelegate); re-armed on scanner disappearance / session termination.
+  @Volatile private var needsBarcodeRebind: Boolean = true
+
   fun getLastError(): String? = lastError
 
   fun setTagSink(sink: EventChannel.EventSink?) {
@@ -129,7 +151,15 @@ class CarbonZebraRfidController(
         // Fixes the Bin Assign symptom "scan green-beeps but bin code
         // never appears in the app" on Zebra hardware.
         initBarcodeSdkOnce()
-        forceRebindBarcodeScanner()
+        // Only pay the multi-second CoreScanner rediscovery when the session
+        // actually needs it (first arm, or after a BT drop / session drop).
+        // Running it on EVERY 2D arm was the dominant cause of "switching to
+        // 2D takes forever" across the app. needsBarcodeRebind stays true until
+        // a session is genuinely established (BarcodeDelegate clears it), so a
+        // still-failing session keeps retrying on each arm rather than latching.
+        if (needsBarcodeRebind) {
+          forceRebindBarcodeScanner()
+        }
         // Stop any in-flight UHF inventory before switching: leaving inventory running
         // while the trigger flips to BARCODE wedges the SDK's read state on some
         // firmware builds (it never emits the EndOfInventory status notification, so
@@ -357,6 +387,8 @@ class CarbonZebraRfidController(
 
     override fun dcssdkEventScannerDisappeared(scannerID: Int) {
       Log.d(TAG, "barcode SDK: scannerDisappeared id=$scannerID")
+      // Link/session is no longer trustworthy — force the next 2D arm to rebind.
+      needsBarcodeRebind = true
       if (barcodeScannerId == scannerID) {
         barcodeScannerId = -1
       }
@@ -364,11 +396,14 @@ class CarbonZebraRfidController(
 
     override fun dcssdkEventCommunicationSessionEstablished(scanner: DCSScannerInfo) {
       barcodeScannerId = scanner.scannerID
+      // Session is live — stop paying the rediscovery cost on subsequent arms.
+      needsBarcodeRebind = false
       Log.d(TAG, "barcode SDK: sessionEstablished id=${scanner.scannerID} name='${scanner.scannerName}'")
     }
 
     override fun dcssdkEventCommunicationSessionTerminated(scannerID: Int) {
       Log.d(TAG, "barcode SDK: sessionTerminated id=$scannerID")
+      needsBarcodeRebind = true
       if (barcodeScannerId == scannerID) {
         barcodeScannerId = -1
       }
@@ -574,12 +609,72 @@ class CarbonZebraRfidController(
       mainHandler.post { result.success(false) }
       return
     }
-    executor.execute {
-      val ok = runCatching { performWriteEpc(tgt, new) }.getOrElse {
-        lastError = it.message ?: it.javaClass.simpleName
+    // Run the write on the DEDICATED write executor (never the shared one) and
+    // bound it with a hard watchdog. If a half-open BT link makes writeWait hang
+    // past writeHardTimeoutMs, we answer Dart `false`, abandon + recreate the
+    // write thread, and force a link recovery — so a wedged write can no longer
+    // brick the radio and force the operator to restart the app.
+    val future = writeExec.submit(
+      java.util.concurrent.Callable {
+        runCatching { performWriteEpc(tgt, new) }.getOrElse {
+          lastError = it.message ?: it.javaClass.simpleName
+          false
+        }
+      },
+    )
+    writeWatchdog.execute {
+      val ok = try {
+        future.get(writeHardTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+      } catch (te: java.util.concurrent.TimeoutException) {
+        Log.e(
+          TAG,
+          "writeEpcOnce: HARD TIMEOUT after ${writeHardTimeoutMs}ms — link wedged; " +
+            "abandoning write thread + recovering (was target=$tgt new=$new)",
+        )
+        lastError = "write_hard_timeout"
+        future.cancel(true)
+        recoverWedgedLink()
+        false
+      } catch (e: Exception) {
+        lastError = e.message ?: e.javaClass.simpleName
         false
       }
       mainHandler.post { result.success(ok) }
+    }
+  }
+
+  /**
+   * Recover from a wedged tag-write. A native BT `writeWait` that hangs past the
+   * watchdog cannot be interrupted cooperatively, so we (a) replace the write
+   * executor so the next write gets a live thread, and (b) tear the reader link
+   * down + rebuild it on the shared executor. Tearing the link is also what
+   * unblocks the stuck SDK call on most RFD8500 firmware, letting the abandoned
+   * thread finally die. Best-effort; never throws.
+   */
+  private fun recoverWedgedLink() {
+    try { writeExec.shutdownNow() } catch (_: Throwable) { /* ignore */ }
+    writeExec = Executors.newSingleThreadExecutor()
+    needsBarcodeRebind = true
+    inventoryActive = false
+    executor.execute {
+      try {
+        disconnectSync()
+        try { Thread.sleep(500) } catch (_: InterruptedException) { /* ignore */ }
+        openReaders()
+        val r = pickReader()
+        if (r != null) {
+          reader = r
+          connectAndConfigureReader()
+          initBarcodeSdkOnce()
+          lastError = null
+          Log.d(TAG, "recoverWedgedLink: reader reconnected after write wedge")
+        } else {
+          Log.w(TAG, "recoverWedgedLink: no reader found on reconnect")
+        }
+      } catch (e: Throwable) {
+        lastError = e.message ?: e.javaClass.simpleName
+        Log.w(TAG, "recoverWedgedLink: reconnect failed", e)
+      }
     }
   }
 

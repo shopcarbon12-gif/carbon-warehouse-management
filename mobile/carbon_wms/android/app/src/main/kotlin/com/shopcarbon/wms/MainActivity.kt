@@ -237,19 +237,27 @@ class MainActivity : FlutterFragmentActivity() {
           result.success(true)
         }
         "scanner.enableRfidFunctionMode" -> {
+          // RSCJA (Chainway) scanner-service path only. On a Zebra/Motorola
+          // sled there is no com.rscja.scanner service — the broadcasts hit
+          // nothing and the SystemClock.sleep(80) inside just blocks the UI
+          // thread for no benefit. Skip entirely when a Zebra reader is active.
+          if (zebra.isReady()) { result.success(true); return@setMethodCallHandler }
           enableScannerRfidMode(this, "MainActivity")
           result.success(true)
         }
         "scanner.disableRfidFunctionMode" -> {
+          if (zebra.isReady()) { result.success(true); return@setMethodCallHandler }
           stopSystemScannerInventory(this, "MainActivity")
           disableScannerRfidMode(this, "MainActivity")
           result.success(true)
         }
         "scanner.close2dBarcode" -> {
+          if (zebra.isReady()) { result.success(true); return@setMethodCallHandler }
           closeScanner2dEngine(this, "MainActivity")
           result.success(true)
         }
         "scanner.open2dBarcode" -> {
+          if (zebra.isReady()) { result.success(true); return@setMethodCallHandler }
           openScanner2dEngine(this, "MainActivity")
           result.success(true)
         }
