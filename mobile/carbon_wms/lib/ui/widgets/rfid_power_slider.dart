@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/services/handheld_runtime_config.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
@@ -28,7 +29,15 @@ import 'package:carbon_wms/theme/app_theme.dart';
 /// label is moving. Same pattern the POS antenna slider needed
 /// (rate-limit + coalesce, project_pos_power_rate_limit_2026_05_26).
 class RfidPowerSlider extends StatefulWidget {
-  const RfidPowerSlider({super.key});
+  const RfidPowerSlider({super.key, this.defaultDbm});
+
+  /// When non-null the slider runs in **LOCAL mode**: it seeds to this value on
+  /// first mount and pushes changes straight to the radio via
+  /// [RfidVendorChannel.setAntennaPowerDbm], WITHOUT reading or writing the
+  /// shared global power setting. This lets a screen carry its own default
+  /// power (e.g. Encode 20 dBm, Locate 30 dBm) without changing the power other
+  /// screens inherit. When null the slider stays bound to the global power.
+  final int? defaultDbm;
 
   /// Lower bound in the UI. We allow "off-ish" (1 dBm) on the bottom end
   /// so operators can intentionally cut range — sled minimums are typically
@@ -57,24 +66,53 @@ class _RfidPowerSliderState extends State<RfidPowerSlider> {
   /// latest-wins coalesce.
   Timer? _coalesceTimer;
 
+  /// Authoritative value while in LOCAL mode ([RfidPowerSlider.defaultDbm]
+  /// non-null). Seeded on mount, never touches the shared global setting.
+  int? _localDbm;
+
+  bool get _isLocal => widget.defaultDbm != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isLocal) {
+      final seed = widget.defaultDbm!
+          .clamp(RfidPowerSlider._minDbm, kAntennaPowerDbmMax);
+      _localDbm = seed;
+      // Push the per-screen default to the radio once mounted (the native
+      // controller clamps to the nearest supported level for the sled).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(RfidVendorChannel.setAntennaPowerDbm(seed));
+      });
+    }
+  }
+
   @override
   void dispose() {
     _coalesceTimer?.cancel();
     super.dispose();
   }
 
+  /// Apply a committed power value: straight to the radio in local mode, or via
+  /// the shared global setter in global mode (which also pushes to the radio).
+  void _apply(MobileSettingsRepository repo, int dbm) {
+    if (_isLocal) {
+      _localDbm = dbm;
+      unawaited(RfidVendorChannel.setAntennaPowerDbm(dbm));
+    } else {
+      unawaited(repo.setGlobalAntennaPower(dbm));
+    }
+  }
+
   void _scheduleCoalescedPush(MobileSettingsRepository repo, int dbm) {
     _coalesceTimer?.cancel();
     _coalesceTimer = Timer(RfidPowerSlider._coalesceWindow, () {
       if (!mounted) return;
-      // Hand off to the repo's existing global-power setter — it persists
-      // prefs AND calls RfidVendorChannel.setAntennaPowerDbm in the same
-      // tick. The native controller then does its stop→apply→start dance
-      // exactly once for this drag.
-      unawaited(repo.setGlobalAntennaPower(dbm));
-      // Drop the local override so the UI re-syncs to the canonical repo
-      // value (in case the native side clamped to a different supported
-      // power level than what we requested).
+      // The native controller does its stop→apply→start dance exactly once for
+      // this drag (global setter persists prefs too).
+      _apply(repo, dbm);
+      // Drop the local override so the UI re-syncs to the canonical value
+      // (in case the native side clamped to a different supported level).
       if (mounted) setState(() => _dragOverride = null);
     });
   }
@@ -87,7 +125,9 @@ class _RfidPowerSliderState extends State<RfidPowerSlider> {
         // reading either is fine.
         final repoValue = repo.config.transferOutAntennaPower
             .clamp(RfidPowerSlider._minDbm, kAntennaPowerDbmMax);
-        final displayed = _dragOverride ?? repoValue;
+        // Local mode shows its own value; global mode tracks the shared power.
+        final base = _isLocal ? (_localDbm ?? repoValue) : repoValue;
+        final displayed = _dragOverride ?? base;
         return Container(
           color: const Color(0xFFF0F5F4),
           padding: EdgeInsets.fromLTRB(14.w, 4.h, 14.w, 4.h),
@@ -137,8 +177,7 @@ class _RfidPowerSliderState extends State<RfidPowerSlider> {
                       // wait. Cancel the pending timer first so we don't
                       // double-push.
                       _coalesceTimer?.cancel();
-                      final next = v.round();
-                      unawaited(repo.setGlobalAntennaPower(next));
+                      _apply(repo, v.round());
                       if (mounted) setState(() => _dragOverride = null);
                     },
                   ),

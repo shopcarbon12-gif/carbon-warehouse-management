@@ -19,6 +19,7 @@ import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
+import 'package:carbon_wms/ui/screens/epc_detail_screen.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
@@ -67,6 +68,14 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
   _LookupRow? _row;
   bool _busy = false;
   String? _err;
+
+  /// Sibling size run — every size of the SAME colour under the resolved item's
+  /// matrix. Replaces the old IDENTIFIERS block. Loaded async after a lookup.
+  List<_SizeRow> _sizes = [];
+  String _sizeColor = ''; // colour label the size run belongs to (for the header)
+  bool _sizesBusy = false;
+  /// Custom-SKU id currently being opened into the EPC screen (spinner guard).
+  String? _openingEpcsFor;
 
   /// Typeahead suggestions while typing (catalog matches to pick from).
   List<Map<String, dynamic>> _suggest = [];
@@ -459,11 +468,16 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
             // shows; empty when the SKU has no synced picture.
             imageUrl: map['shopify_image_url']?.toString().trim() ?? '',
             bin: bin,
+            matrixId: map['matrix_id']?.toString().trim() ?? '',
             epcHint: prof != null ? _epcProfileHint(prof) : null,
           );
           _busy = false;
+          // Reset the size run for the new item; _loadSiblingSizes repopulates.
+          _sizes = [];
+          _sizeColor = '';
         });
         await _pushRecent(raw, _kindOf(cleaned));
+        unawaited(_loadSiblingSizes(_row!));
         if (mounted) setState(() {});
         return;
       }
@@ -490,6 +504,8 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
     setState(() {
       _row = null;
       _err = null;
+      _sizes = [];
+      _sizeColor = '';
     });
   }
 
@@ -955,8 +971,8 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
         // location
         _locationBlock(r),
         SizedBox(height: 14.h),
-        // identifiers
-        _identifiers(r),
+        // size run (same colour) — replaces the old identifiers block
+        _sizeList(r),
         if (r.epcHint != null && r.epcHint!.isNotEmpty) ...[
           SizedBox(height: 12.h),
           Text(
@@ -1108,12 +1124,135 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
     );
   }
 
-  Widget _identifiers(_LookupRow r) {
-    final rows = <List<String>>[
-      if (r.isEpc) ['EPC', r.code] else ['SCANNED', r.code],
-      ['SKU', r.sku],
-      if (r.upc.isNotEmpty) ['UPC', r.upc],
-    ];
+  /// Load the size run for the SAME colour under the resolved item's matrix.
+  /// Finds the resolved variant inside the matrix to read its authoritative
+  /// colour_code, then keeps only the variants that share it, sorted into a
+  /// natural apparel size order.
+  Future<void> _loadSiblingSizes(_LookupRow r) async {
+    if (r.matrixId.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _sizes = [];
+          _sizeColor = r.color;
+        });
+      }
+      return;
+    }
+    setState(() => _sizesBusy = true);
+    try {
+      final variants = await context
+          .read<WmsApiClient>()
+          .fetchCatalogVariantsForMatrix(r.matrixId);
+      if (!mounted || _row?.matrixId != r.matrixId) return;
+      // Authoritative colour = the resolved variant's own colour_code.
+      String selfColor = '';
+      for (final v in variants) {
+        if ((v['sku'] ?? '').toString().trim().toUpperCase() ==
+            r.sku.trim().toUpperCase()) {
+          selfColor = (v['color_code'] ?? '').toString().trim();
+          break;
+        }
+      }
+      // Fall back to the lookup row's colour when the self-variant wasn't found.
+      final colorKey = selfColor.isNotEmpty ? selfColor : r.color.trim();
+      final rows = <_SizeRow>[];
+      for (final v in variants) {
+        final vColor = (v['color_code'] ?? '').toString().trim();
+        // Same colour only. With no colour key at all, show everything.
+        if (colorKey.isNotEmpty &&
+            vColor.toUpperCase() != colorKey.toUpperCase()) {
+          continue;
+        }
+        rows.add(_SizeRow(
+          customSkuId: (v['id'] ?? '').toString(),
+          sku: (v['sku'] ?? '').toString().trim(),
+          size: (v['size'] ?? '').toString().trim(),
+          qty: (v['epc_count'] as num?)?.toInt() ??
+              int.tryParse('${v['epc_count'] ?? ''}') ??
+              0,
+        ));
+      }
+      rows.sort((a, b) => _sizeRank(a.size).compareTo(_sizeRank(b.size)));
+      if (!mounted) return;
+      setState(() {
+        _sizes = rows;
+        _sizeColor = colorKey.isNotEmpty ? colorKey : r.color;
+        _sizesBusy = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _sizes = [];
+        _sizesBusy = false;
+      });
+    }
+  }
+
+  /// Natural apparel size ordering (XS < S < M < L < XL < 2XL …); numeric sizes
+  /// sort by value after lettered ones; unknowns sort last.
+  double _sizeRank(String size) {
+    final s = size.trim().toUpperCase();
+    const order = <String, int>{
+      'XXS': 0, '2XS': 0,
+      'XS': 1,
+      'S': 2, 'SM': 2, 'SMALL': 2,
+      'M': 3, 'MD': 3, 'MED': 3, 'MEDIUM': 3,
+      'L': 4, 'LG': 4, 'LARGE': 4,
+      'XL': 5, 'X-LARGE': 5,
+      'XXL': 6, '2XL': 6,
+      'XXXL': 7, '3XL': 7,
+      'XXXXL': 8, '4XL': 8,
+    };
+    final known = order[s];
+    if (known != null) return known.toDouble();
+    final numeric = double.tryParse(s.replaceAll(RegExp(r'[^0-9.]'), ''));
+    if (numeric != null) return 100 + numeric; // numeric sizes after lettered
+    return 9999; // unknown → last
+  }
+
+  /// Open the EPC screen for one size: fetch every EPC for the custom SKU and
+  /// push EpcDetailScreen, which lists them and geigers any tag on tap.
+  Future<void> _openEpcs(_SizeRow s) async {
+    if (s.customSkuId.isEmpty || _openingEpcsFor != null) return;
+    setState(() => _openingEpcsFor = s.customSkuId);
+    try {
+      final rows =
+          await context.read<WmsApiClient>().fetchCatalogEpcs(s.customSkuId);
+      final epcs = rows
+          .map((e) => (e['epc'] ?? '').toString().trim().toUpperCase())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (!mounted) return;
+      final name = _row?.name ?? '';
+      final desc = [name, _sizeColor, s.size]
+          .where((e) => e.trim().isNotEmpty)
+          .join(' · ');
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => EpcDetailScreen(
+            sku: s.sku,
+            description: desc,
+            epcs: epcs,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not load EPCs — check network.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _openingEpcsFor = null);
+    }
+  }
+
+  /// The size run for the same colour — item name, SKU, size, and a teal qty
+  /// button that opens the EPC screen. Replaces the old IDENTIFIERS block.
+  Widget _sizeList(_LookupRow r) {
+    final header = _sizeColor.trim().isEmpty
+        ? 'SIZES'
+        : 'SIZES · ${_sizeColor.toUpperCase()}';
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1125,7 +1264,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
           Padding(
             padding: EdgeInsets.fromLTRB(14.w, 12.h, 14.w, 8.h),
             child: Text(
-              'IDENTIFIERS',
+              header,
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 11.sp,
                 fontWeight: FontWeight.w800,
@@ -1134,40 +1273,129 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
               ),
             ),
           ),
-          for (final kv in rows)
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 11.h),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: Color(0xFFECF1F1))),
-              ),
+          if (_sizesBusy)
+            Padding(
+              padding: EdgeInsets.fromLTRB(14.w, 4.h, 14.w, 16.h),
               child: Row(
                 children: [
-                  Text(
-                    kv[0],
-                    style: GoogleFonts.spaceGrotesk(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                      color: _slate,
-                    ),
+                  SizedBox(
+                    width: 16.w,
+                    height: 16.w,
+                    child: const CircularProgressIndicator(
+                        strokeWidth: 2, color: _teal),
                   ),
-                  SizedBox(width: 12.w),
-                  Expanded(
-                    child: Text(
-                      kv[1].isEmpty ? '—' : kv[1],
-                      textAlign: TextAlign.right,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.robotoMono(
-                          fontSize: 15.sp,
-                          fontWeight: FontWeight.w700,
-                          color: _ink),
-                    ),
-                  ),
+                  SizedBox(width: 10.w),
+                  Text('Loading sizes…',
+                      style: GoogleFonts.manrope(
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.w600,
+                          color: _muted)),
                 ],
               ),
-            ),
+            )
+          else if (_sizes.isEmpty)
+            Padding(
+              padding: EdgeInsets.fromLTRB(14.w, 4.h, 14.w, 16.h),
+              child: Text('No other sizes in this colour.',
+                  style: GoogleFonts.manrope(
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w600,
+                      color: _muted)),
+            )
+          else
+            for (final s in _sizes) _sizeRow(r, s),
         ],
+      ),
+    );
+  }
+
+  Widget _sizeRow(_LookupRow r, _SizeRow s) {
+    final isSelf = s.sku.trim().toUpperCase() == r.sku.trim().toUpperCase();
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+      decoration: BoxDecoration(
+        color: isSelf ? const Color(0xFFF2F8F7) : Colors.transparent,
+        border: const Border(top: BorderSide(color: Color(0xFFECF1F1))),
+      ),
+      child: Row(
+        children: [
+          // size badge
+          Container(
+            width: 54.w,
+            alignment: Alignment.center,
+            padding: EdgeInsets.symmetric(vertical: 6.h),
+            decoration: BoxDecoration(
+              color: const Color(0xFFECF1F1),
+              border: Border.all(color: _border),
+            ),
+            child: Text(
+              s.size.isEmpty ? '—' : s.size.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 14.sp, fontWeight: FontWeight.w800, color: _ink),
+            ),
+          ),
+          SizedBox(width: 12.w),
+          // item name + sku number
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  r.name.isEmpty ? '—' : r.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.manrope(
+                      fontSize: 13.sp, fontWeight: FontWeight.w700, color: _ink),
+                ),
+                SizedBox(height: 2.h),
+                Text(
+                  s.sku.isEmpty ? '—' : s.sku,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.robotoMono(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w600,
+                      color: _slate),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 10.w),
+          // teal qty button → EPC screen
+          _qtyButton(s),
+        ],
+      ),
+    );
+  }
+
+  Widget _qtyButton(_SizeRow s) {
+    final opening = _openingEpcsFor == s.customSkuId;
+    return Material(
+      color: _teal,
+      child: InkWell(
+        onTap: () => unawaited(_openEpcs(s)),
+        child: Container(
+          constraints: BoxConstraints(minWidth: 48.w),
+          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+          alignment: Alignment.center,
+          child: opening
+              ? SizedBox(
+                  width: 16.w,
+                  height: 16.w,
+                  child: const CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                )
+              : Text(
+                  '${s.qty}',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+        ),
       ),
     );
   }
@@ -1261,6 +1489,7 @@ class _LookupRow {
     this.price = '',
     this.quantity = '',
     this.imageUrl = '',
+    this.matrixId = '',
     this.epcHint,
   });
 
@@ -1278,5 +1507,22 @@ class _LookupRow {
   /// Variant's color-specific Shopify image URL (cdn.shopify.com), or ''.
   /// Same picture as the desktop catalog item popup.
   final String imageUrl;
+  /// Matrix (product) UUID — used to fetch the sibling size run in the same colour.
+  final String matrixId;
   final String? epcHint;
+}
+
+/// One size within the resolved item's colour — a row in the size run.
+class _SizeRow {
+  const _SizeRow({
+    required this.customSkuId,
+    required this.sku,
+    required this.size,
+    required this.qty,
+  });
+
+  final String customSkuId;
+  final String sku;
+  final String size;
+  final int qty;
 }

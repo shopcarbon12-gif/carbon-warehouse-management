@@ -14,6 +14,7 @@ import 'package:carbon_wms/services/lan_zpl_printer.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 
@@ -129,7 +130,7 @@ class _EncodeScreenState extends State<EncodeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       context.read<RfidManager>().scanContext = 'RE_ENCODE';
-      _powerDbm = context.read<MobileSettingsRepository>().config.transferOutAntennaPower;
+      _powerDbm = 20; // Encode default antenna power (per-screen)
       unawaited(_sounds.init());
       _wireStreams();
       await _armBarcodeMode();
@@ -226,6 +227,14 @@ class _EncodeScreenState extends State<EncodeScreen> {
   }
 
   // ── Step 1: SKU selection (barcode + manual) ────────────────────────────
+  /// Scan a SKU/UPC with the device camera and resolve it exactly like a
+  /// hardware barcode scan.
+  Future<void> _onCamera() async {
+    final code = await openCameraBarcodeScanner(context, title: 'SCAN SKU');
+    if (!mounted || code == null || code.trim().isEmpty) return;
+    await _onBarcode(code.trim());
+  }
+
   Future<void> _onBarcode(String code) async {
     _searchCtrl.text = code;
     _searchCtrl.selection = TextSelection.collapsed(offset: code.length);
@@ -623,7 +632,7 @@ class _EncodeScreenState extends State<EncodeScreen> {
             _buildSteps(),
             _buildStepHint(),
             Expanded(child: _buildBody()),
-            if (showPower) const RfidPowerSlider(),
+            if (showPower) const RfidPowerSlider(defaultDbm: 20),
             _buildToolbar(),
           ],
         ),
@@ -798,21 +807,35 @@ class _EncodeScreenState extends State<EncodeScreen> {
                   borderRadius: BorderRadius.circular(2.r),
                 ),
                 padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
-                child: TextField(
-                  controller: _searchCtrl,
-                  onChanged: _onSearchChanged,
-                  decoration: const InputDecoration(
-                    isCollapsed: true,
-                    filled: false,
-                    fillColor: Colors.transparent,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    disabledBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                    hintText: 'scan barcode - or search',
-                  ),
-                  style: GoogleFonts.robotoMono(fontSize: 17.sp, fontWeight: FontWeight.w700, color: AppColors.textMain),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchCtrl,
+                        onChanged: _onSearchChanged,
+                        decoration: const InputDecoration(
+                          isCollapsed: true,
+                          filled: false,
+                          fillColor: Colors.transparent,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          hintText: 'scan barcode - or search',
+                        ),
+                        style: GoogleFonts.robotoMono(fontSize: 17.sp, fontWeight: FontWeight.w700, color: AppColors.textMain),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: _onCamera,
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: EdgeInsets.only(left: 8.w),
+                        child: Icon(Icons.photo_camera_outlined, size: 22.sp, color: AppColors.primary),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Positioned(

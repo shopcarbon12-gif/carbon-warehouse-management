@@ -10,6 +10,7 @@ import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart'
     show CatalogEpcListScreen, CatalogRowCard;
+import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 /// Search-first entry point to the Locate flow.
@@ -115,6 +116,16 @@ class _GeigerSearchScreenState extends State<GeigerSearchScreen> {
     if (pos.pixels >= pos.maxScrollExtent - 240) {
       unawaited(_loadNextPage());
     }
+  }
+
+  /// Scan a SKU/UPC with the device camera and drop it into the search.
+  Future<void> _onCamera() async {
+    final code = await openCameraBarcodeScanner(context, title: 'SCAN SKU');
+    if (!mounted || code == null || code.trim().isEmpty) return;
+    _searchCtrl.text = code.trim();
+    _searchCtrl.selection =
+        TextSelection.collapsed(offset: _searchCtrl.text.length);
+    _onSearchChanged(code.trim());
   }
 
   void _onSearchChanged(String value) {
@@ -242,6 +253,7 @@ class _GeigerSearchScreenState extends State<GeigerSearchScreen> {
                 _searchCtrl.clear();
                 _onSearchChanged('');
               },
+              onCamera: _onCamera,
             ),
           ),
           if (_query.isNotEmpty)
@@ -327,11 +339,13 @@ class _SearchBar extends StatelessWidget {
     required this.controller,
     required this.onChanged,
     required this.onClear,
+    this.onCamera,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final VoidCallback onClear;
+  final VoidCallback? onCamera;
 
   @override
   Widget build(BuildContext context) {
@@ -383,6 +397,16 @@ class _SearchBar extends StatelessWidget {
                   padding: EdgeInsets.symmetric(horizontal: 6.w),
                   child: Icon(Icons.close,
                       size: 20.sp, color: const Color(0xFF6D7979)),
+                ),
+              ),
+            if (onCamera != null)
+              GestureDetector(
+                onTap: onCamera,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6.w),
+                  child: Icon(Icons.photo_camera_outlined,
+                      size: 22.sp, color: AppColors.primary),
                 ),
               ),
           ],

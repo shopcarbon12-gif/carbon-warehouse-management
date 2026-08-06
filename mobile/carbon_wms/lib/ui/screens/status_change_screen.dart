@@ -93,7 +93,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   /// previous slider until the native callback lands.
   int _minDbm = 1;
   int _maxDbm = 30;
-  int _powerDbm = 10;
+  int _powerDbm = 3; // default: minimum-range so far tags aren't re-statused (radio floors ~5 dBm)
   // Latest-wins coalesce timer for the power slider (see _setPower).
   Timer? _powerApplyTimer;
 

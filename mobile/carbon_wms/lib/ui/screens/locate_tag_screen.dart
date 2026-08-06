@@ -721,7 +721,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                 enabled: _epcValid,
               ),
               SizedBox(height: 8.h),
-              const RfidPowerSlider(),
+              const RfidPowerSlider(defaultDbm: 30),
               SizedBox(height: 4.h),
             ],
           ),

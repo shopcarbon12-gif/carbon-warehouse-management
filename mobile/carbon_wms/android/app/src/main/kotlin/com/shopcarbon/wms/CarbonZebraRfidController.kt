@@ -502,21 +502,9 @@ class CarbonZebraRfidController(
       val ok = applyTransmitPowerDbm(r)
       Log.d(TAG, "setAntennaPowerDbm($clamped) prior=$prior appliedOk=$ok wasRunning=$wasRunning")
       if (wasRunning) {
-        try {
-          r.Actions.Inventory.perform()
-          // Only flip the gate back true AFTER perform returns without
-          // throwing. The old code left this to "inventoryActive stays
-          // whatever it was", relying on the variable never having been
-          // touched — that broke as soon as we (correctly) cleared it
-          // before stop above. Be explicit.
-          inventoryActive = true
-        } catch (e: Exception) {
-          Log.w(TAG, "setAntennaPowerDbm: post-apply Inventory.perform failed: ${e.message}")
-          // Surfaces in lastError so the diagnostics card and the count
-          // screen's RfidManager can flag the radio as broken.
-          lastError = e.message ?: e.javaClass.simpleName
-          inventoryActive = false
-        }
+        // Retry the resume so a single transient RFD8500 perform() rejection
+        // can't strand the radio stopped with the screen still "scanning".
+        resumeInventoryWithRetry(r)
       }
     }
   }
@@ -556,9 +544,20 @@ class CarbonZebraRfidController(
         } catch (e: Exception) {
           Log.w(TAG, "scan-start setBeeperVolume failed: ${e.message}")
         }
-        r.Actions.Inventory.perform()
-        inventoryActive = true
-        mainHandler.post { result.success(null) }
+        // Retry the START perform() the same way the resume/stop paths do. A
+        // single silent BUSY here used to strand inventoryActive=false — which
+        // the eventReadNotify gate then turned into a "scanning but frozen, zero
+        // reads" radio. This is the site the encode / encode-and-print screens
+        // hit intermittently: their stop→60ms→start clean-restart and the
+        // post-chip-write power-cycle re-arm land inside the RFD8500's settle
+        // window, where perform() throws OperationFailureException.
+        if (resumeInventoryWithRetry(r)) {
+          mainHandler.post { result.success(null) }
+        } else {
+          mainHandler.post {
+            result.error("INVENTORY_FAILED", lastError ?: "perform failed", null)
+          }
+        }
       } catch (e: InvalidUsageException) {
         lastError = e.message ?: e.javaClass.simpleName
         mainHandler.post { result.error("INVENTORY_FAILED", e.message ?: "perform failed", null) }
@@ -569,6 +568,54 @@ class CarbonZebraRfidController(
     }
   }
 
+  /**
+   * Resume inventory after a mid-stream reconfigure (power / session / prefilter).
+   * The RFD8500 intermittently rejects Inventory.perform() with
+   * OperationFailureException when it lands too close to a config write. A single
+   * silent failure used to strand inventoryActive=false, which the eventReadNotify
+   * gate then turned into a permanently FROZEN geiger/scan (reads dropped, screen
+   * still "scanning"). Retry a few times with a short settle; only give up — and
+   * record lastError — after every attempt fails. Sets inventoryActive on success.
+   */
+  private fun resumeInventoryWithRetry(r: RFIDReader, attempts: Int = 4): Boolean {
+    for (i in 0 until attempts) {
+      try {
+        r.Actions.Inventory.perform()
+        inventoryActive = true
+        if (i > 0) Log.d(TAG, "resumeInventoryWithRetry: perform ok on attempt ${i + 1}")
+        return true
+      } catch (e: Exception) {
+        Log.w(TAG, "resumeInventoryWithRetry: perform ${i + 1}/$attempts failed: ${e.message}")
+        try { Thread.sleep(60) } catch (_: InterruptedException) { /* ignore */ }
+      }
+    }
+    lastError = "resume_perform_failed"
+    inventoryActive = false
+    return false
+  }
+
+  /**
+   * Stop inventory reliably. A fire-and-forget stop() with a bare catch used to
+   * leave the RFD8500 still transmitting when stop() threw (OperationFailureException
+   * issued mid-cycle) — the "reader keeps scanning after the operator toggled the
+   * trigger off" symptom on Status Change. stop() is idempotent, so retry a few
+   * times; each attempt is cheap.
+   */
+  private fun stopInventoryWithRetry(r: RFIDReader, attempts: Int = 4): Boolean {
+    for (i in 0 until attempts) {
+      try {
+        r.Actions.Inventory.stop()
+        if (i > 0) Log.d(TAG, "stopInventoryWithRetry: stop ok on attempt ${i + 1}")
+        return true
+      } catch (e: Exception) {
+        Log.w(TAG, "stopInventoryWithRetry: stop ${i + 1}/$attempts failed: ${e.message}")
+        try { Thread.sleep(50) } catch (_: InterruptedException) { /* ignore */ }
+      }
+    }
+    Log.w(TAG, "stopInventoryWithRetry: all $attempts stops failed — radio may still be transmitting")
+    return false
+  }
+
   fun stopInventoryAsync() {
     // Set the gate flag FIRST, inline, so late reads from the SDK buffer are dropped
     // immediately. The actual SDK .stop() call runs on the executor as before but no
@@ -576,7 +623,7 @@ class CarbonZebraRfidController(
     inventoryActive = false
     executor.execute {
       try {
-        reader?.takeIf { it.isConnected }?.Actions?.Inventory?.stop()
+        reader?.takeIf { it.isConnected }?.let { stopInventoryWithRetry(it) }
       } catch (_: Exception) {
         /* ignore */
       }
@@ -1333,7 +1380,7 @@ class CarbonZebraRfidController(
           addedOk = true
         }
         if (wasActive) {
-          try { r.Actions.Inventory.perform(); inventoryActive = true } catch (_: Exception) {}
+          resumeInventoryWithRetry(r)
         }
         mainHandler.post { result.success(addedOk) }
       } catch (e: Exception) {
@@ -1382,7 +1429,7 @@ class CarbonZebraRfidController(
           Log.w(TAG, "setSingulationSession: $target rejected (${e.javaClass.simpleName}: ${e.message})")
         }
         if (wasActive) {
-          try { r.Actions.Inventory.perform(); inventoryActive = true } catch (_: Exception) {}
+          resumeInventoryWithRetry(r)
         }
         mainHandler.post { result.success(ok) }
       } catch (e: Exception) {

@@ -470,6 +470,7 @@ class _PrintScreenState extends State<PrintScreen> {
                   _searchCtrl.clear();
                   _onSearchChanged('');
                 },
+                onCamera: _printing ? null : _onCameraTap,
               ),
             ),
             Padding(
@@ -646,11 +647,13 @@ class _SearchBar extends StatelessWidget {
     required this.controller,
     required this.onChanged,
     required this.onClear,
+    this.onCamera,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
   final VoidCallback onClear;
+  final VoidCallback? onCamera;
 
   @override
   Widget build(BuildContext context) {
@@ -702,6 +705,16 @@ class _SearchBar extends StatelessWidget {
                   padding: EdgeInsets.symmetric(horizontal: 6.w),
                   child: Icon(Icons.close,
                       size: 20.sp, color: const Color(0xFF6D7979)),
+                ),
+              ),
+            if (onCamera != null)
+              GestureDetector(
+                onTap: onCamera,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6.w),
+                  child: Icon(Icons.photo_camera_outlined,
+                      size: 22.sp, color: AppColors.primary),
                 ),
               ),
           ],
