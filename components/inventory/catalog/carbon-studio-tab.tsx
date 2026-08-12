@@ -50,6 +50,18 @@ type Props = {
 
 const PANELS = [1, 2, 3, 4];
 
+/** Download an image (data-url or remote url) as a file. */
+function downloadImage(src: string, name: string) {
+  const a = document.createElement("a");
+  a.href = src;
+  a.download = name;
+  a.target = "_blank";
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export function CarbonStudioTab({
   matrixId,
   shopifyProductId,
@@ -78,10 +90,13 @@ export function CarbonStudioTab({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const colors = useMemo(() => {
+    // All colours (independent of link status); prefer a linked variant when one
+    // exists so the push has a target, but never hide colours from generation.
     const seen = new Map<string, StudioVariant>();
     for (const v of variants) {
       const key = (v.color || "").trim() || "—";
-      if (!seen.has(key) && v.shopify_variant_id) seen.set(key, v);
+      const existing = seen.get(key);
+      if (!existing || (!existing.shopify_variant_id && v.shopify_variant_id)) seen.set(key, v);
     }
     return Array.from(seen.entries()).map(([color, v]) => ({ color, variant: v }));
   }, [variants]);
@@ -369,15 +384,6 @@ export function CarbonStudioTab({
     }
   }, [matrixId, mediaItems, colors, color]);
 
-  if (!shopifyProductId) {
-    return (
-      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-xs text-[var(--wms-muted)]">
-        Publish this product to Shopify first (use{" "}
-        <span className="text-[var(--wms-accent)]">✔ Check &amp; Publish</span>), then generate here.
-      </div>
-    );
-  }
-
   const label = "block text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
   const field =
     "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)]";
@@ -535,6 +541,13 @@ export function CarbonStudioTab({
         {err ? <span className="font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}
       </div>
 
+      {!shopifyProductId ? (
+        <p className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
+          Generation &amp; download work here without Shopify. To <b>push</b> images, link this
+          product (🔗 Link to Shopify) or ✔ Check &amp; Publish it first.
+        </p>
+      ) : null}
+
       {crops.length ? (
         <div className="flex flex-wrap gap-3">
           {crops.map((c) =>
@@ -563,6 +576,17 @@ export function CarbonStudioTab({
                   className="absolute right-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[0.7rem] leading-none text-white"
                 >
                   🔍
+                </button>
+                <button
+                  type="button"
+                  title="Download"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    downloadImage(`data:image/png;base64,${c.b64}`, `carbon-studio-${c.id}.png`);
+                  }}
+                  className="absolute right-1 top-8 rounded bg-black/60 px-1.5 py-0.5 text-[0.7rem] leading-none text-white"
+                >
+                  ⬇
                 </button>
                 <span className="block px-1 py-0.5 text-center font-mono text-[0.55rem] text-[var(--wms-muted)]">
                   {c.label} {c.selected ? "✓" : ""}
@@ -652,6 +676,7 @@ export function CarbonStudioTab({
                     <button type="button" onClick={() => moveMedia(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↑</button>
                     <button type="button" onClick={() => moveMedia(m.key, 1)} disabled={idx === mediaItems.length - 1} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↓</button>
                     <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
+                    <button type="button" onClick={() => downloadImage(m.url, `${m.kind === "new" ? "carbon-studio" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)]">⬇</button>
                     <button type="button" onClick={() => removeMedia(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-status-danger-fg)]">✕</button>
                   </div>
                 </div>
