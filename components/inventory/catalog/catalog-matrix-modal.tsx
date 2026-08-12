@@ -178,10 +178,16 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   // Two real tabs: "matrix" (pictures, shared values, color/size, variant tree)
   // and "setup" (the Group Items grid). State below is shared, so adding a
   // color/size on the Matrix tab shows up as new Group-Item rows in Setup.
-  const [tab, setTab] = useState<"matrix" | "setup" | "images">("matrix");
+  const [tab, setTab] = useState<"matrix" | "setup" | "images" | "seo">("matrix");
   // Per-variant image upload state (Images tab, M2).
   const [imgBusy, setImgBusy] = useState<string | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  // SEO tab (M3) state.
+  const [seoBusy, setSeoBusy] = useState<string | null>(null);
+  const [seoCurrent, setSeoCurrent] = useState<Record<string, unknown> | null>(null);
+  const [seoProposed, setSeoProposed] = useState<Record<string, unknown> | null>(null);
+  const [seoScores, setSeoScores] = useState<{ cur: number; prop: number } | null>(null);
+  const [seoAccept, setSeoAccept] = useState<Record<string, boolean>>({});
 
   const [mForm, setMForm] = useState<MatrixForm | null>(null);
   const [rows, setRows] = useState<RowState[]>([]);
@@ -580,6 +586,87 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     [matrixId, mutate, onMutated],
   );
 
+  // SEO tab (M3): audit current Shopify SEO, then AI-optimize.
+  const runSeo = useCallback(async () => {
+    const pid = data?.matrix.shopify_product_id;
+    if (!pid) return;
+    setSeoBusy("run");
+    setErr(null);
+    setOkMsg("Reading Shopify SEO…");
+    try {
+      const a = await fetch("/api/shopify/seo/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: pid }),
+      });
+      const aj = (await a.json().catch(() => ({}))) as {
+        current?: Record<string, unknown>;
+        context?: unknown;
+        error?: string;
+      };
+      if (!a.ok || !aj.current) throw new Error(aj.error ?? "SEO audit failed");
+      setSeoCurrent(aj.current);
+      setOkMsg("Optimizing with AI…");
+      const o = await fetch("/api/shopify/seo/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context: aj.context, current: aj.current }),
+      });
+      const oj = (await o.json().catch(() => ({}))) as {
+        proposed?: Record<string, unknown>;
+        currentScorecard?: { overall?: number };
+        proposedScorecard?: { overall?: number };
+        skipped?: boolean;
+        error?: string;
+      };
+      if (!o.ok || !oj.proposed) throw new Error(oj.error ?? "SEO optimize failed");
+      setSeoProposed(oj.proposed);
+      setSeoScores({
+        cur: Math.round(oj.currentScorecard?.overall ?? 0),
+        prop: Math.round(oj.proposedScorecard?.overall ?? 0),
+      });
+      setSeoAccept({ seoTitle: true, metaDescription: true, bodyHtml: true, tags: true });
+      setOkMsg(oj.skipped ? "Already well-optimized." : "Review the proposal, then Save to Shopify.");
+    } catch (e) {
+      setOkMsg(null);
+      setErr(e instanceof Error ? e.message : "SEO failed");
+    } finally {
+      setSeoBusy(null);
+    }
+  }, [data]);
+
+  const saveSeo = useCallback(async () => {
+    const pid = data?.matrix.shopify_product_id;
+    if (!pid || !seoProposed) return;
+    setSeoBusy("save");
+    setErr(null);
+    try {
+      const fields: Record<string, unknown> = {};
+      for (const f of ["seoTitle", "metaDescription", "bodyHtml", "tags"]) {
+        if (seoAccept[f]) fields[f] = seoProposed[f];
+      }
+      const r = await fetch("/api/shopify/seo/write", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: pid,
+          matrixId,
+          fields,
+          oldHandle: seoCurrent?.handle,
+          markOptimized: true,
+        }),
+      });
+      const rj = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) throw new Error(rj.error ?? "Save failed");
+      setOkMsg("SEO saved to Shopify.");
+      onMutated?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSeoBusy(null);
+    }
+  }, [data, seoProposed, seoAccept, seoCurrent, matrixId, onMutated]);
+
   return (
     <>
       <button
@@ -681,7 +768,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
           ) : (
             <div className="flex flex-col sm:flex-row">
               <nav className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3">
-                {(["setup", "matrix", "images"] as const).map((t) => (
+                {(["setup", "matrix", "images", "seo"] as const).map((t) => (
                   <div key={t}>
                     <button
                       type="button"
@@ -925,6 +1012,107 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                         </Section>
                       ),
                     )
+                  )}
+                </div>
+                ) : tab === "seo" ? (
+                /* SEO tab (M3) — read current Shopify SEO, AI-optimize, save. */
+                <div className="space-y-3">
+                  {!data.matrix.shopify_product_id ? (
+                    <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-xs text-[var(--wms-muted)]">
+                      Publish this product to Shopify first (use{" "}
+                      <span className="text-[var(--wms-accent)]">✔ Check &amp; Publish</span>), then
+                      optimize its SEO here.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          disabled={!canManage || seoBusy !== null}
+                          onClick={() => void runSeo()}
+                          className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
+                        >
+                          {seoBusy === "run" ? "Optimizing…" : "✦ Optimize with AI"}
+                        </button>
+                        {seoScores ? (
+                          <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                            score {seoScores.cur} →{" "}
+                            <span className="text-[var(--wms-status-success-fg)]">{seoScores.prop}</span>
+                          </span>
+                        ) : null}
+                        <div className="flex-1" />
+                        {seoProposed ? (
+                          <button
+                            type="button"
+                            disabled={!canManage || seoBusy !== null}
+                            onClick={() => void saveSeo()}
+                            className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
+                          >
+                            {seoBusy === "save" ? "Saving…" : "Save to Shopify"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {seoProposed ? (
+                        <div className="overflow-hidden rounded-md border border-[var(--wms-border)]">
+                          {(["seoTitle", "metaDescription", "bodyHtml", "tags"] as const).map((f) => {
+                            const label =
+                              f === "seoTitle"
+                                ? "SEO title"
+                                : f === "metaDescription"
+                                  ? "Meta description"
+                                  : f === "bodyHtml"
+                                    ? "Description"
+                                    : "Tags";
+                            const cur = seoCurrent?.[f];
+                            const prop = seoProposed?.[f];
+                            const fmt = (v: unknown) =>
+                              Array.isArray(v) ? v.join(", ") : String(v ?? "");
+                            return (
+                              <div
+                                key={f}
+                                className="grid grid-cols-[110px_1fr_1fr_46px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-2 text-[0.7rem] last:border-b-0"
+                              >
+                                <span className="font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+                                  {label}
+                                </span>
+                                <span className="truncate text-[var(--wms-muted)]" title={fmt(cur)}>
+                                  {fmt(cur) || "—"}
+                                </span>
+                                <span className="text-[var(--wms-fg)]" title={fmt(prop)}>
+                                  {fmt(prop).slice(0, 160)}
+                                  {fmt(prop).length > 160 ? "…" : ""}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSeoAccept((s) => ({ ...s, [f]: !s[f] }))
+                                  }
+                                  title={seoAccept[f] ? "Will be saved" : "Keep current"}
+                                  className={`h-5 w-9 rounded-full transition ${
+                                    seoAccept[f]
+                                      ? "bg-[var(--wms-accent)]"
+                                      : "bg-[var(--wms-border)]"
+                                  } relative`}
+                                >
+                                  <span
+                                    className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
+                                      seoAccept[f] ? "left-[18px]" : "left-0.5"
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="font-mono text-xs text-[var(--wms-muted)]">
+                          Click <span className="text-[var(--wms-accent)]">Optimize with AI</span> to
+                          read the current Shopify SEO and propose improvements (title, meta,
+                          description, tags). Existing values are never overwritten unless you keep
+                          the toggle on.
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
                 ) : (

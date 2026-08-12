@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import net from "node:net";
 // WMS SEO/vision flows fetch Shopify CDN images only (allow-listed below).
 // No R2 host needed here (unlike carbon-gen), so this is a no-op stub.

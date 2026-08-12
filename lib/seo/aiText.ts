@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Small, self-contained LLM text helpers for the SEO routes.
 // Mirrors the patterns used in app/api/generate/route.ts but kept standalone
 // so SEO features don't depend on the image-generation route internals.
