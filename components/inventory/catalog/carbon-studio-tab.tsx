@@ -334,6 +334,35 @@ export function CarbonStudioTab({
     [mediaItems],
   );
 
+  const genAllAlts = useCallback(async () => {
+    if (!mediaItems.length) return;
+    setMediaBusy("alt-all");
+    setErr(null);
+    try {
+      const results = await Promise.allSettled(
+        mediaItems.map(async (m) => {
+          const r = await fetch("/api/openai/image-alt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageUrl: m.url }),
+          });
+          const j = (await r.json().catch(() => ({}))) as { alt?: string; altText?: string };
+          return { key: m.key, alt: (j.alt || j.altText || "").trim() };
+        }),
+      );
+      const alts = new Map<string, string>();
+      for (const res of results) {
+        if (res.status === "fulfilled" && res.value.alt) alts.set(res.value.key, res.value.alt);
+      }
+      setMediaItems((prev) => prev.map((m) => (alts.has(m.key) ? { ...m, alt: alts.get(m.key) as string } : m)));
+      setMsg(`Generated alt text for ${alts.size}/${mediaItems.length} image(s).`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Alt generation failed");
+    } finally {
+      setMediaBusy(null);
+    }
+  }, [mediaItems]);
+
   const moveMedia = (key: string, dir: -1 | 1) =>
     setMediaItems((prev) => {
       const i = prev.findIndex((m) => m.key === key);
@@ -376,13 +405,19 @@ export function CarbonStudioTab({
         warnings?: string[];
       };
       if (!r.ok) throw new Error(j.error ?? "Publish failed");
+      const newCount = mediaItems.filter((m) => m.kind === "new").length;
       setMediaItems(
         (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "" })),
       );
       setCrops((prev) => prev.filter((c) => !c.selected)); // pushed crops consumed
-      setMsg(
-        `Media saved to Shopify (${(j.media || []).length} image(s))${j.warnings?.length ? ` — ${j.warnings.length} warning(s)` : ""}.`,
-      );
+      if (j.warnings?.length) {
+        // Surface WHY images may not have pushed (e.g. staging/create failures).
+        setErr(`Some images failed: ${j.warnings.slice(0, 3).join(" · ")}`);
+        setMsg(null);
+      } else {
+        setErr(null);
+        setMsg(`Saved to Shopify — ${(j.media || []).length} image(s) live${newCount ? `, ${newCount} new` : ""}.`);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Publish failed");
     } finally {
@@ -632,6 +667,15 @@ export function CarbonStudioTab({
             <div className="flex-1" />
             <button
               type="button"
+              disabled={!canManage || mediaBusy !== null || mediaItems.length === 0}
+              onClick={() => void genAllAlts()}
+              title="Generate alt text for every image"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+            >
+              {mediaBusy === "alt-all" ? "Generating alt…" : "✨ Alt all"}
+            </button>
+            <button
+              type="button"
               disabled={!canManage || mediaBusy !== null}
               onClick={() => void publishMedia()}
               className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
@@ -646,6 +690,12 @@ export function CarbonStudioTab({
               Close
             </button>
           </div>
+          {!shopifyProductId ? (
+            <p className="mb-2 rounded border border-[var(--wms-table-clean-border)] bg-[var(--wms-table-clean-bg)] p-2 font-mono text-[0.55rem] text-[var(--wms-table-clean-fg)]">
+              This product isn&apos;t on Shopify yet — arrange &amp; download here, but to PUSH images
+              you must Link it (🔗 Link to Shopify) or ✔ Check &amp; Publish first.
+            </p>
+          ) : null}
           {mediaItems.length === 0 ? (
             <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
               No images yet — generate or upload, then manage here.
@@ -704,6 +754,11 @@ export function CarbonStudioTab({
               ))}
             </div>
           )}
+          {err ? (
+            <p className="mt-2 font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</p>
+          ) : msg ? (
+            <p className="mt-2 font-mono text-[0.6rem] text-[var(--wms-status-success-fg)]">{msg}</p>
+          ) : null}
         </div>
       ) : null}
 
