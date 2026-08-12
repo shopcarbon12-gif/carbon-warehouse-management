@@ -73,6 +73,7 @@ export function CarbonStudioTab({
   const [models, setModels] = useState<Model[]>([]);
   const [modelId, setModelId] = useState<string>("");
   const [itemType, setItemType] = useState<string>(defaultItemType);
+  const [instruction, setInstruction] = useState<string>("");
   const [panels, setPanels] = useState<number[]>([...PANELS]);
   const [itemRefs, setItemRefs] = useState<ItemRef[]>(
     (itemRefUrls || []).map((u) => ({ url: u, preview: u })),
@@ -131,12 +132,16 @@ export function CarbonStudioTab({
     let alive = true;
     const timer = setInterval(async () => {
       try {
-        const r = await fetch(`/api/image-handoff/session/${qr.sessionId}?consume=1`);
+        const r = await fetch(`/api/image-handoff/session/${qr.sessionId}`);
         if (!r.ok) return;
-        const j = (await r.json().catch(() => ({}))) as { ready?: boolean; imageUrl?: string };
+        const j = (await r.json().catch(() => ({}))) as {
+          ready?: boolean;
+          imageUrl?: string;
+          previewUrl?: string;
+        };
+        // Keep the QR open so the phone can "send another"; each photo appears.
         if (alive && j.ready && j.imageUrl) {
-          setItemRefs((prev) => [...prev, { url: j.imageUrl as string }]);
-          setQr(null);
+          setItemRefs((prev) => [...prev, { url: j.imageUrl as string, preview: j.previewUrl }]);
           setMsg("Photo received from phone.");
         }
       } catch {
@@ -219,6 +224,7 @@ export function CarbonStudioTab({
         modelRefs: model.ref_image_urls,
         itemRefs: refUrls,
         itemType,
+        itemStyleInstructions: instruction,
       });
       const resp = await fetch("/api/generate", {
         method: "POST",
@@ -277,7 +283,7 @@ export function CarbonStudioTab({
       setBusy(null);
       setProgress("");
     }
-  }, [model, itemRefs, panels, itemType, crops]);
+  }, [model, itemRefs, panels, itemType, instruction, crops]);
 
   // ---- Media manager (matches carbon-gen's Publish step) ----
   const openMediaManager = useCallback(async () => {
@@ -444,9 +450,14 @@ export function CarbonStudioTab({
           <div className="mt-3 flex items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
             <img src={qr.url} alt="Scan with your phone" className="h-32 w-32 rounded bg-white p-1" />
             <div className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
-              Scan with your phone camera to take a product photo. Waiting for the photo…
-              <button type="button" onClick={() => setQr(null)} className="mt-2 block text-[var(--wms-status-danger-fg)]">
-                Cancel
+              Scan with your phone to take product photos. Each photo you send appears here — send as
+              many as you like, then click Done.
+              <button
+                type="button"
+                onClick={() => setQr(null)}
+                className="mt-2 block rounded border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-2 py-1 text-[var(--wms-fg)]"
+              >
+                ✓ Done
               </button>
             </div>
           </div>
@@ -480,6 +491,16 @@ export function CarbonStudioTab({
             ))}
           </select>
         </div>
+      </div>
+
+      <div>
+        <span className={label}>Item instruction (optional)</span>
+        <input
+          className={field}
+          placeholder="e.g. oversized cut, super skinny fit, high-waist…"
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+        />
       </div>
 
       {/* Panels */}

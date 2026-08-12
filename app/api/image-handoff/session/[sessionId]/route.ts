@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getHandoffSession, setHandoffImage, consumeHandoffImage } from "@/lib/image-handoff-store";
+import { getHandoffSession, addHandoffImage, takeNextHandoffImage } from "@/lib/image-handoff-store";
 import { uploadBytesToStorage } from "@/lib/storageProvider";
 
 export const runtime = "nodejs";
@@ -8,22 +8,24 @@ export const maxDuration = 120;
 
 type Ctx = { params: Promise<{ sessionId: string }> };
 
-/** Desktop poll. `?consume=1` returns + clears the captured image. Public
- * (gated by the unguessable session id). */
-export async function GET(req: Request, { params }: Ctx) {
+/** Desktop poll — returns the next photo the phone sent (session stays alive so
+ * the phone can send more). Public (gated by the unguessable session id). */
+export async function GET(_req: Request, { params }: Ctx) {
   const { sessionId } = await params;
-  const consume = new URL(req.url).searchParams.get("consume") === "1";
   const s = getHandoffSession(sessionId);
   if (!s) return NextResponse.json({ error: "Session not found or expired." }, { status: 404 });
-  if (!s.imageUrl) return NextResponse.json({ ready: false });
-  if (consume) {
-    const url = consumeHandoffImage(sessionId);
-    return NextResponse.json({ ready: true, imageUrl: url });
-  }
-  return NextResponse.json({ ready: true, imageUrl: s.imageUrl });
+  const next = takeNextHandoffImage(sessionId);
+  if (!next) return NextResponse.json({ ready: false });
+  return NextResponse.json({
+    ready: true,
+    imageId: next.id,
+    imageUrl: next.url, // used server-side for generation (authed R2 fallback)
+    previewUrl: `/api/image-handoff/image?s=${encodeURIComponent(sessionId)}&i=${encodeURIComponent(next.id)}`,
+  });
 }
 
-/** Phone upload — no WMS session (gated by session id). Stores to R2. */
+/** Phone upload — no WMS session (gated by session id). Stores to R2 + keeps
+ * the session alive so "send another" works. */
 export async function POST(req: Request, { params }: Ctx) {
   const { sessionId } = await params;
   const s = getHandoffSession(sessionId);
@@ -46,6 +48,6 @@ export async function POST(req: Request, { params }: Ctx) {
   const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
   const path = `carbon-studio/handoff/${sessionId}/${Date.now()}.${ext}`;
   const uploaded = await uploadBytesToStorage({ path, bytes, contentType: ct });
-  setHandoffImage(sessionId, uploaded.url);
+  addHandoffImage(sessionId, { url: uploaded.url, path: uploaded.path });
   return NextResponse.json({ ok: true });
 }

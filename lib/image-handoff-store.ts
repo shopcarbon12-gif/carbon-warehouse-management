@@ -1,17 +1,15 @@
 /**
- * Carbon Studio phone-camera hand-off — minimal in-memory session store.
- * Desktop creates a session (QR), the phone POSTs a captured photo (stored to
- * R2, url recorded here), desktop polls + consumes. Single web instance in
- * prod, so a module-level Map persists across requests. Sessions expire in 10m.
+ * Carbon Studio phone-camera hand-off — in-memory session store.
+ * Desktop creates a session (QR), the phone POSTs captured photos (stored to
+ * R2), the desktop polls + picks them up one at a time. The session stays alive
+ * (not deleted on pickup) so the phone can send more photos ("send another").
+ * Single web instance in prod, so a module-level Map persists. TTL 15 min,
+ * refreshed on every phone upload.
  */
-export type HandoffSession = {
-  id: string;
-  createdAt: number;
-  expiresAt: number;
-  imageUrl: string | null;
-};
+export type HandoffImage = { id: string; url: string; path: string; taken: boolean };
+export type HandoffSession = { id: string; createdAt: number; expiresAt: number; images: HandoffImage[] };
 
-const TTL_MS = 10 * 60 * 1000;
+const TTL_MS = 15 * 60 * 1000;
 const SESSIONS = new Map<string, HandoffSession>();
 
 function prune() {
@@ -22,7 +20,7 @@ function prune() {
 export function createHandoffSession(): HandoffSession {
   prune();
   const now = Date.now();
-  const s: HandoffSession = { id: crypto.randomUUID(), createdAt: now, expiresAt: now + TTL_MS, imageUrl: null };
+  const s: HandoffSession = { id: crypto.randomUUID(), createdAt: now, expiresAt: now + TTL_MS, images: [] };
   SESSIONS.set(s.id, s);
   return s;
 }
@@ -32,18 +30,28 @@ export function getHandoffSession(id: string): HandoffSession | null {
   return SESSIONS.get(id) || null;
 }
 
-export function setHandoffImage(id: string, url: string): boolean {
+/** Phone uploaded a photo (already stored to R2). Keeps the session alive. */
+export function addHandoffImage(id: string, img: { url: string; path: string }): string | null {
   const s = SESSIONS.get(id);
-  if (!s) return false;
-  s.imageUrl = url;
+  if (!s) return null;
+  const imgId = crypto.randomUUID();
+  s.images.push({ id: imgId, url: img.url, path: img.path, taken: false });
   s.expiresAt = Date.now() + TTL_MS;
-  return true;
+  return imgId;
 }
 
-export function consumeHandoffImage(id: string): string | null {
+/** Desktop poll: return the next not-yet-taken image (marks it taken). */
+export function takeNextHandoffImage(id: string): HandoffImage | null {
   const s = SESSIONS.get(id);
-  if (!s?.imageUrl) return null;
-  const url = s.imageUrl;
-  SESSIONS.delete(id);
-  return url;
+  if (!s) return null;
+  const next = s.images.find((i) => !i.taken);
+  if (!next) return null;
+  next.taken = true;
+  return next;
+}
+
+/** Look up a specific image (for the display proxy). */
+export function findHandoffImage(id: string, imageId: string): HandoffImage | null {
+  const s = SESSIONS.get(id);
+  return s?.images.find((i) => i.id === imageId) || null;
 }
