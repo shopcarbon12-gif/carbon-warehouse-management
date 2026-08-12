@@ -59,7 +59,10 @@ export async function listCatalogMatrices(
        m.upc,
        m.description,
        COUNT(DISTINCT cs.id)::text AS custom_sku_count,
-       COUNT(i.id)::text AS epc_count,
+       -- Qty = LIVE inventory only. Terminal statuses (tag_killed, sold, …) are
+       -- decommissioned tags and must NOT inflate the on-hand count. Matches
+       -- active_epc_count in the grid, the stats route, and the Shopify sync.
+       COUNT(i.id) FILTER (WHERE i.status = 'in-stock')::text AS epc_count,
        CASE
          WHEN COUNT(DISTINCT cs.id) = 0 THEN 'no_custom_skus'
          WHEN COUNT(i.id) = 0 THEN 'no_inventory'
@@ -105,7 +108,8 @@ export async function listCatalogCustomSkus(
        cs.ls_system_id::text AS ls_system_id,
        cs.color_code,
        cs.size,
-       COUNT(i.id)::text AS epc_count
+       -- Live inventory only (see listCatalogMatrices) — exclude killed/sold tags.
+       COUNT(i.id) FILTER (WHERE i.status = 'in-stock')::text AS epc_count
      FROM custom_skus cs
      LEFT JOIN items i ON i.custom_sku_id = cs.id AND i.location_id = $2::uuid
      WHERE cs.matrix_id = $1::uuid
