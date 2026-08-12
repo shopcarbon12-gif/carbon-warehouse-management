@@ -3,6 +3,10 @@ import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { withDb } from "@/lib/db";
 import { enqueueSyncJob, listSyncJobs } from "@/lib/queries/syncJobs";
+import {
+  isLightspeedCatalogSyncEnabled,
+  LIGHTSPEED_SYNC_DISABLED_MESSAGE,
+} from "@/lib/server/lightspeed-sync-flag";
 
 export async function GET(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -31,6 +35,14 @@ export async function POST(req: Request) {
   const parsed = postSchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  }
+
+  // Lightspeed catalog pull is retired as a source (WMS owns the catalog).
+  if (parsed.data.jobType === "lightspeed_pull" && !isLightspeedCatalogSyncEnabled()) {
+    return NextResponse.json(
+      { error: LIGHTSPEED_SYNC_DISABLED_MESSAGE, code: "LS_SYNC_DISABLED" },
+      { status: 409 },
+    );
   }
 
   const idempotencyKey = `${parsed.data.jobType}:${session.lid}:${Date.now()}`;

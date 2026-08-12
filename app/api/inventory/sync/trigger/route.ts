@@ -4,6 +4,10 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { performLightspeedCatalogSync } from "@/lib/server/lightspeed-sync";
+import {
+  isLightspeedCatalogSyncEnabled,
+  LIGHTSPEED_SYNC_DISABLED_MESSAGE,
+} from "@/lib/server/lightspeed-sync-flag";
 import { randomUUID } from "node:crypto";
 
 export async function POST(req: Request) {
@@ -19,6 +23,15 @@ export async function POST(req: Request) {
 
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
+
+  // WMS is the catalog source of truth — the Lightspeed pull is retired as a
+  // source so it can't overwrite WMS-authored fields. Gate the trigger.
+  if (!isLightspeedCatalogSyncEnabled()) {
+    return NextResponse.json(
+      { error: LIGHTSPEED_SYNC_DISABLED_MESSAGE, code: "LS_SYNC_DISABLED" },
+      { status: 409 },
+    );
+  }
 
   const idempotency_key = `ls-cat-${randomUUID()}`;
   try {

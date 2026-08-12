@@ -7,6 +7,10 @@ import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { getLightspeedCredentialsForSync, credentialsLookUsableForLiveFetch } from "@/lib/server/infrastructure-settings-table";
 import { tryFetchLightspeedCatalogProducts } from "@/lib/services/lightspeed-catalog-fetch";
 import { computeLightspeedSyncDiff } from "@/lib/server/lightspeed-sync-diff";
+import {
+  isLightspeedCatalogSyncEnabled,
+  LIGHTSPEED_SYNC_DISABLED_MESSAGE,
+} from "@/lib/server/lightspeed-sync-flag";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +53,14 @@ export async function POST(req: Request) {
 
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
+
+  // WMS is the catalog source of truth — Lightspeed pull retired as a source.
+  if (!isLightspeedCatalogSyncEnabled()) {
+    return NextResponse.json(
+      { error: LIGHTSPEED_SYNC_DISABLED_MESSAGE, code: "LS_SYNC_DISABLED" },
+      { status: 409 },
+    );
+  }
 
   const creds = await getLightspeedCredentialsForSync(pool, session.tid);
   if (!credentialsLookUsableForLiveFetch(creds)) {

@@ -5,6 +5,10 @@ import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
 import { performLightspeedCatalogSync } from "@/lib/server/lightspeed-sync";
+import {
+  isLightspeedCatalogSyncEnabled,
+  LIGHTSPEED_SYNC_DISABLED_MESSAGE,
+} from "@/lib/server/lightspeed-sync-flag";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +23,14 @@ export async function POST(req: Request) {
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
+
+  // WMS is the catalog source of truth — Lightspeed pull retired as a source.
+  if (!isLightspeedCatalogSyncEnabled()) {
+    return NextResponse.json(
+      { error: LIGHTSPEED_SYNC_DISABLED_MESSAGE, code: "LS_SYNC_DISABLED" },
+      { status: 409 },
+    );
+  }
 
   const idempotency_key = `ls-pull-${randomUUID()}`;
   try {
