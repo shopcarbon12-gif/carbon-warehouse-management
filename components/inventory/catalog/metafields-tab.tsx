@@ -44,6 +44,27 @@ export function MetafieldsTab({ matrixId, shopifyProductId, canManage }: Props) 
     };
   }, [matrixId, shopifyProductId]);
 
+  const aiFill = useCallback(async () => {
+    setBusy("ai");
+    setErr(null);
+    setMsg(null);
+    try {
+      const r = await fetch("/api/shopify/metafields/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrixId }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { values?: Record<string, string>; error?: string };
+      if (!r.ok || !j.values) throw new Error(j.error ?? "AI scan failed");
+      setValues((v) => ({ ...v, ...j.values }));
+      setMsg("Filled from the hero image — review, then push.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "AI scan failed");
+    } finally {
+      setBusy(null);
+    }
+  }, [matrixId]);
+
   const push = useCallback(async () => {
     setBusy("push");
     setErr(null);
@@ -156,7 +177,16 @@ export function MetafieldsTab({ matrixId, shopifyProductId, canManage }: Props) 
               </select>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={!canManage || busy !== null}
+              onClick={() => void aiFill()}
+              title="Scan the product's hero image and fill these fields"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+            >
+              {busy === "ai" ? "Scanning…" : "✨ AI fill from hero"}
+            </button>
             <button
               type="button"
               disabled={!canManage || busy !== null}

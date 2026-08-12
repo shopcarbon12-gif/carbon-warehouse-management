@@ -57,6 +57,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const productId = toProductGid(String(body?.productId || ""));
+  const matrixId = String(body?.matrixId || "").trim();
   if (!productId) return NextResponse.json({ error: "Missing productId." }, { status: 400 });
 
   const ctx = await resolveShopContext();
@@ -76,7 +77,31 @@ export async function POST(req: Request) {
     );
   }
   const product = result.data?.product;
-  if (!product) return NextResponse.json({ error: "Product not found." }, { status: 404 });
+  if (!product) {
+    // Self-heal: the stored Shopify product was deleted. Clear the stale link so
+    // the product shows as unlinked and can be re-linked or re-published.
+    if (matrixId) {
+      await pool
+        .query(
+          `UPDATE matrices SET shopify_product_id = NULL, shopify_sync_status = NULL WHERE id = $1::uuid`,
+          [matrixId],
+        )
+        .catch(() => {});
+      await pool
+        .query(
+          `UPDATE custom_skus SET shopify_variant_id = NULL, shopify_inventory_item_id = NULL WHERE matrix_id = $1::uuid`,
+          [matrixId],
+        )
+        .catch(() => {});
+    }
+    return NextResponse.json(
+      {
+        error: "This product no longer exists on Shopify — the link was cleared. Re-link (🔗) or Check & Publish it.",
+        code: "STALE_LINK",
+      },
+      { status: 404 },
+    );
+  }
 
   const mediaNodes = (product.media?.nodes || []).filter((n) => n && n.id);
   const variantNodes = product.variants?.nodes || [];

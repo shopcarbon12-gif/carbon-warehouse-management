@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CarbonStudioTab } from "./carbon-studio-tab";
 import { MetafieldsTab } from "./metafields-tab";
+import { MediaManager } from "./media-manager";
 import useSWR from "swr";
 import { Plus, Printer, X as XIcon, RotateCcw, ChevronLeft } from "lucide-react";
 import { printRfidLabel } from "./print-label";
@@ -158,15 +159,6 @@ function rowFromVariant(v: Variant): RowState {
 let tempSeq = 0;
 const nextTempKey = () => `new-${(tempSeq += 1)}`;
 
-/** Group variants by colour (first-seen order) for the Images tab. */
-function groupByColor(variants: Variant[]): Record<string, Variant[]> {
-  const out: Record<string, Variant[]> = {};
-  for (const v of variants) {
-    const key = (v.color || "").trim() || "—";
-    (out[key] ||= []).push(v);
-  }
-  return out;
-}
 
 export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, onBack, onOpenSku }: Props) {
   const { data, error, mutate, isLoading } = useSWR<MatrixDetailResp>(
@@ -183,9 +175,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   const [tab, setTab] = useState<
     "matrix" | "setup" | "images" | "seo" | "studio" | "meta"
   >("matrix");
-  // Per-variant image upload state (Images tab, M2).
-  const [imgBusy, setImgBusy] = useState<string | null>(null);
-  const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
   // SEO tab (M3) state.
   const [seoBusy, setSeoBusy] = useState<string | null>(null);
   const [seoCurrent, setSeoCurrent] = useState<Record<string, unknown> | null>(null);
@@ -591,36 +580,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [matrixId, mutate, onMutated]);
 
-  // Upload a per-variant image and push it to Shopify (M2, gap-fill).
-  const uploadImage = useCallback(
-    async (variantId: string, file: File) => {
-      setImgBusy(variantId);
-      setErr(null);
-      setOkMsg(null);
-      try {
-        const fd = new FormData();
-        fd.append("matrixId", matrixId);
-        fd.append("customSkuId", variantId);
-        fd.append("force", "1");
-        fd.append("file", file);
-        const res = await fetch("/api/shopify/image-upload", { method: "POST", body: fd });
-        const j = (await res.json().catch(() => ({}))) as { error?: string; skipped?: boolean };
-        if (!res.ok) {
-          setErr(j.error ?? "Image push failed");
-        } else {
-          setOkMsg(j.skipped ? "Variant already had a Shopify image." : "Image pushed to Shopify.");
-          await mutate();
-          onMutated?.();
-        }
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : "Upload failed");
-      } finally {
-        setImgBusy(null);
-      }
-    },
-    [matrixId, mutate, onMutated],
-  );
-
   // SEO tab (M3): audit current Shopify SEO, then AI-optimize.
   const runSeo = useCallback(async () => {
     const pid = data?.matrix.shopify_product_id;
@@ -632,13 +591,20 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
       const a = await fetch("/api/shopify/seo/audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId: pid }),
+        body: JSON.stringify({ productId: pid, matrixId }),
       });
       const aj = (await a.json().catch(() => ({}))) as {
         current?: Record<string, unknown>;
         context?: unknown;
         error?: string;
+        code?: string;
       };
+      if (aj.code === "STALE_LINK") {
+        // The Shopify product was deleted; the link was cleared server-side.
+        await mutate();
+        onMutated?.();
+        throw new Error(aj.error ?? "Product no longer on Shopify.");
+      }
       if (!a.ok || !aj.current) throw new Error(aj.error ?? "SEO audit failed");
       setSeoCurrent(aj.current);
       setOkMsg("Optimizing with AI…");
@@ -668,7 +634,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     } finally {
       setSeoBusy(null);
     }
-  }, [data]);
+  }, [data, mutate, onMutated]);
 
   const saveSeo = useCallback(async () => {
     const pid = data?.matrix.shopify_product_id;
@@ -990,76 +956,21 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 </div>
                 </>
                 ) : tab === "images" ? (
-                /* Images tab (M2) — per-colour Shopify imagery. Upload pushes to
-                   Shopify (staged upload → media → variant attach) and stores the
-                   returned CDN url. Requires the product to be published first. */
-                <div className="space-y-4">
-                  {!data.matrix.shopify_product_id ? (
-                    <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-xs text-[var(--wms-muted)]">
-                      Publish this product to Shopify first (use{" "}
-                      <span className="text-[var(--wms-accent)]">✔ Check &amp; Publish</span>), then
-                      upload per-colour images here.
-                    </div>
-                  ) : (
-                    Object.entries(groupByColor(data.variants.filter((v) => !v.archived))).map(
-                      ([color, vs]) => (
-                        <Section key={color} title={color || "—"}>
-                          <div className="flex flex-wrap gap-3 p-2">
-                            {vs.map((v) => (
-                              <div key={v.id} className="flex flex-col items-center gap-1">
-                                {v.shopify_image_url ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={v.shopify_image_url}
-                                    alt={v.sku}
-                                    className="h-24 w-20 rounded-md border border-[var(--wms-border)] object-cover"
-                                  />
-                                ) : (
-                                  <div className="flex h-24 w-20 items-center justify-center rounded-md border border-dashed border-[var(--wms-border)] text-center font-mono text-[0.55rem] text-[var(--wms-muted)]">
-                                    no image
-                                  </div>
-                                )}
-                                <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
-                                  {v.size ?? "—"}
-                                </span>
-                                <input
-                                  ref={(el) => {
-                                    fileInputs.current[v.id] = el;
-                                  }}
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={(e) => {
-                                    const f = e.target.files?.[0];
-                                    if (f) void uploadImage(v.id, f);
-                                    e.target.value = "";
-                                  }}
-                                />
-                                <button
-                                  type="button"
-                                  disabled={!canManage || imgBusy !== null || !v.shopify_variant_id}
-                                  onClick={() => fileInputs.current[v.id]?.click()}
-                                  title={
-                                    v.shopify_variant_id
-                                      ? "Upload an image and push it to Shopify"
-                                      : "Publish this product first"
-                                  }
-                                  className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-2 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  {imgBusy === v.id
-                                    ? "…"
-                                    : v.shopify_image_url
-                                      ? "Replace"
-                                      : "Upload"}
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </Section>
-                      ),
-                    )
-                  )}
-                </div>
+                /* Images tab — full Shopify media manager (upload/delete/reorder/
+                   hero/variant/alt), decoupled from AI generation. */
+                <MediaManager
+                  matrixId={matrixId}
+                  shopifyProductId={data.matrix.shopify_product_id ?? null}
+                  variants={data.variants
+                    .filter((v) => !v.archived)
+                    .map((v) => ({
+                      id: v.id,
+                      color: v.color,
+                      size: v.size,
+                      shopify_variant_id: v.shopify_variant_id ?? null,
+                    }))}
+                  canManage={canManage}
+                />
                 ) : tab === "seo" ? (
                 /* SEO tab (M3) — read current Shopify SEO, AI-optimize, save. */
                 <div className="space-y-3">

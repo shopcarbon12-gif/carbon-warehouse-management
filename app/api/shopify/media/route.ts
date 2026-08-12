@@ -31,8 +31,8 @@ export const maxDuration = 180;
  *   image. Quantity/price/etc. are never touched.
  */
 type Item =
-  | { kind: "existing"; mediaId: string; alt?: string }
-  | { kind: "new"; b64: string; alt?: string };
+  | { kind: "existing"; mediaId: string; alt?: string; variantId?: string }
+  | { kind: "new"; b64: string; alt?: string; variantId?: string };
 
 async function resolveProductId(pool: ReturnType<typeof getPool>, matrixId: string) {
   const r = await pool!.query<{ shopify_product_id: string | null }>(
@@ -84,12 +84,15 @@ export async function POST(req: Request) {
   const warnings: string[] = [];
   const current = await listProductMedia(ctx, productId);
 
-  // 1) Create new media (stage → createProductMedia) and build the final order.
+  // 1) Create new media (stage → createProductMedia) and build the final order
+  //    + per-image variant assignments.
   const finalOrder: string[] = [];
+  const variantAssignments: Array<{ mediaId: string; variantId: string }> = [];
   const keptExisting = new Set<string>();
   for (const it of items) {
+    let mediaId = "";
     if (it.kind === "existing") {
-      finalOrder.push(it.mediaId);
+      mediaId = it.mediaId;
       keptExisting.add(it.mediaId);
     } else {
       const bytes = new Uint8Array(Buffer.from(it.b64, "base64"));
@@ -103,8 +106,10 @@ export async function POST(req: Request) {
         warnings.push(`create: ${media.error}`);
         continue;
       }
-      finalOrder.push(media.mediaId);
+      mediaId = media.mediaId;
     }
+    finalOrder.push(mediaId);
+    if (it.variantId) variantAssignments.push({ mediaId, variantId: it.variantId });
   }
 
   // 2) Delete existing media the user removed.
@@ -129,9 +134,14 @@ export async function POST(req: Request) {
     if (!r.ok) warnings.push(`reorder: ${r.error}`);
   }
 
-  // 5) Optionally set the hero as the colour's variant image.
-  if (body.heroVariantId && finalOrder[0]) {
-    const av = await appendMediaToVariant(ctx, productId, body.heroVariantId, finalOrder[0]);
+  // 5) Variant images: per-image assignments, plus the hero→heroVariant
+  //    (backward-compatible with Carbon Studio).
+  const assigns = [...variantAssignments];
+  if (body.heroVariantId && finalOrder[0] && !assigns.some((a) => a.mediaId === finalOrder[0])) {
+    assigns.push({ mediaId: finalOrder[0], variantId: body.heroVariantId });
+  }
+  for (const a of assigns) {
+    const av = await appendMediaToVariant(ctx, productId, a.variantId, a.mediaId);
     if (!av.ok) warnings.push(`variant image: ${av.error}`);
   }
 
