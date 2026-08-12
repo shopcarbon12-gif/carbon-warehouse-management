@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import net from "node:net";
-// WMS SEO/vision flows fetch Shopify CDN images only (allow-listed below).
-// No R2 host needed here (unlike carbon-gen), so this is a no-op stub.
+// Allow-list the R2 host so Carbon Studio can read model reference images.
+// The account's S3 endpoint (needs auth — the caller falls back to the S3
+// client) plus any configured public base.
 function getR2AllowedHost(): string {
+  const acct = (process.env.R2_ACCOUNT_ID || "").trim();
+  if (acct) return `${acct}.r2.cloudflarestorage.com`;
   return (process.env.R2_PUBLIC_URL_BASE || "").trim().replace(/^https?:\/\//, "").split("/")[0] || "";
 }
 
