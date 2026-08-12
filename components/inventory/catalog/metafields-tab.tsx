@@ -1,19 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react";
 
 /**
- * Metafields tab (M4) — custom text + Google-feed tiers pushed to Shopify, plus
- * a "create new collection" affordance (product→collection assignment already
- * happens automatically on publish via the taxonomy mapper).
+ * Metafields panel (M4) — custom text + Google-feed tiers pushed to Shopify.
+ * Rendered inside the SEO tab. Its "AI fill from hero" and "push" actions are
+ * exposed imperatively (via ref) so the SEO tab can drive them from its single
+ * combined "Optimize with AI" / "Push to Shopify" buttons. Collections now live
+ * in their own tab.
  */
-type Props = { matrixId: string; shopifyProductId: string | null; canManage: boolean };
+type Props = {
+  matrixId: string;
+  shopifyProductId: string | null;
+  canManage: boolean;
+  /** Show this panel's own AI-fill / push buttons. Off when the SEO tab drives them. */
+  showActions?: boolean;
+};
+
+export type MetafieldsHandle = {
+  aiFill: () => Promise<void>;
+  push: () => Promise<void>;
+};
 
 const label = "block text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
 const field =
   "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)]";
 
-export function MetafieldsTab({ matrixId, shopifyProductId, canManage }: Props) {
+export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function MetafieldsTab(
+  { matrixId, shopifyProductId, canManage, showActions = true },
+  ref,
+) {
   const [values, setValues] = useState({
     fullDescription: "",
     gender: "",
@@ -23,7 +39,6 @@ export function MetafieldsTab({ matrixId, shopifyProductId, canManage }: Props) 
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [newCollection, setNewCollection] = useState("");
 
   useEffect(() => {
     if (!shopifyProductId) return;
@@ -85,28 +100,7 @@ export function MetafieldsTab({ matrixId, shopifyProductId, canManage }: Props) 
     }
   }, [matrixId, values]);
 
-  const createCollection = useCallback(async () => {
-    const title = newCollection.trim();
-    if (!title) return;
-    setBusy("collection");
-    setErr(null);
-    setMsg(null);
-    try {
-      const r = await fetch("/api/shopify/collections/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      const j = (await r.json().catch(() => ({}))) as { error?: string; handle?: string };
-      if (!r.ok) throw new Error(j.error ?? "Create failed");
-      setMsg(`Created collection "${title}".`);
-      setNewCollection("");
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Create failed");
-    } finally {
-      setBusy(null);
-    }
-  }, [newCollection]);
+  useImperativeHandle(ref, () => ({ aiFill, push }), [aiFill, push]);
 
   if (!shopifyProductId) {
     return (
@@ -177,55 +171,35 @@ export function MetafieldsTab({ matrixId, shopifyProductId, canManage }: Props) 
               </select>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              disabled={!canManage || busy !== null}
-              onClick={() => void aiFill()}
-              title="Scan the product's hero image and fill these fields"
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
-            >
-              {busy === "ai" ? "Scanning…" : "✨ AI fill from hero"}
-            </button>
-            <button
-              type="button"
-              disabled={!canManage || busy !== null}
-              onClick={() => void push()}
-              className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
-            >
-              {busy === "push" ? "Pushing…" : "⤴ Push metafields"}
-            </button>
+          {showActions ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={!canManage || busy !== null}
+                onClick={() => void aiFill()}
+                title="Scan the product's hero image and fill these fields"
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+              >
+                {busy === "ai" ? "Scanning…" : "✨ AI fill from hero"}
+              </button>
+              <button
+                type="button"
+                disabled={!canManage || busy !== null}
+                onClick={() => void push()}
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
+              >
+                {busy === "push" ? "Pushing…" : "⤴ Push metafields"}
+              </button>
+              <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
+                Google fields apply to every variant.
+              </span>
+            </div>
+          ) : (
             <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
-              Google fields apply to every variant.
+              Filled by ✦ Optimize with AI · saved by ⤴ Push to Shopify (above). Google fields apply
+              to every variant.
             </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
-        <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
-          Collections
-        </div>
-        <div className="space-y-2 p-3">
-          <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
-            Products are auto-assigned to collections on publish. Create a new collection:
-          </p>
-          <div className="flex gap-2">
-            <input
-              className={field}
-              placeholder="New collection title…"
-              value={newCollection}
-              onChange={(e) => setNewCollection(e.target.value)}
-            />
-            <button
-              type="button"
-              disabled={!canManage || busy !== null || !newCollection.trim()}
-              onClick={() => void createCollection()}
-              className="whitespace-nowrap rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
-            >
-              {busy === "collection" ? "…" : "＋ Create"}
-            </button>
-          </div>
+          )}
         </div>
       </div>
 
@@ -233,4 +207,4 @@ export function MetafieldsTab({ matrixId, shopifyProductId, canManage }: Props) 
       {err ? <p className="font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</p> : null}
     </div>
   );
-}
+});

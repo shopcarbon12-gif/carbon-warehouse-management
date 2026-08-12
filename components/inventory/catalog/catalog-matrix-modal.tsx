@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CarbonStudioTab } from "./carbon-studio-tab";
-import { MetafieldsTab } from "./metafields-tab";
+import { MetafieldsTab, type MetafieldsHandle } from "./metafields-tab";
+import { CollectionsTab } from "./collections-tab";
 import { MediaManager } from "./media-manager";
 import useSWR from "swr";
 import { Plus, Printer, X as XIcon, RotateCcw, ChevronLeft } from "lucide-react";
@@ -172,7 +173,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   // Two real tabs: "matrix" (pictures, shared values, color/size, variant tree)
   // and "setup" (the Group Items grid). State below is shared, so adding a
   // color/size on the Matrix tab shows up as new Group-Item rows in Setup.
-  const [tab, setTab] = useState<"matrix" | "setup" | "images" | "seo" | "studio">("matrix");
+  const [tab, setTab] = useState<"matrix" | "setup" | "images" | "seo" | "collections" | "studio">("matrix");
   // SEO tab (M3) state.
   const [seoBusy, setSeoBusy] = useState<string | null>(null);
   const [seoCurrent, setSeoCurrent] = useState<Record<string, unknown> | null>(null);
@@ -703,6 +704,29 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [data, seoProposed, seoAccept, seoCurrent, matrixId, onMutated]);
 
+  // SEO tab combined actions: one button optimizes SEO + fills metafields from
+  // the hero; one button pushes SEO + metafields to Shopify — all at once.
+  const metaRef = useRef<MetafieldsHandle>(null);
+  const [seoAllBusy, setSeoAllBusy] = useState<null | "opt" | "push">(null);
+
+  const optimizeAll = useCallback(async () => {
+    setSeoAllBusy("opt");
+    try {
+      await Promise.allSettled([runSeo(), metaRef.current?.aiFill() ?? Promise.resolve()]);
+    } finally {
+      setSeoAllBusy(null);
+    }
+  }, [runSeo]);
+
+  const pushAll = useCallback(async () => {
+    setSeoAllBusy("push");
+    try {
+      await Promise.allSettled([saveSeo(), metaRef.current?.push() ?? Promise.resolve()]);
+    } finally {
+      setSeoAllBusy(null);
+    }
+  }, [saveSeo]);
+
   return (
     <>
       <button
@@ -815,7 +839,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
           ) : (
             <div className="flex flex-col sm:flex-row">
               <nav className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3">
-                {(["setup", "matrix", "images", "seo", "studio"] as const).map((t) => (
+                {(["setup", "matrix", "images", "seo", "collections", "studio"] as const).map((t) => (
                   <div key={t}>
                     <button
                       type="button"
@@ -1020,11 +1044,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       <div className="flex flex-wrap items-center gap-3">
                         <button
                           type="button"
-                          disabled={!canManage || seoBusy !== null}
-                          onClick={() => void runSeo()}
+                          disabled={!canManage || seoBusy !== null || seoAllBusy !== null}
+                          onClick={() => void optimizeAll()}
+                          title="Optimize SEO with AI and fill metafields from the hero image — all at once"
                           className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
                         >
-                          {seoBusy === "run" ? "Optimizing…" : "✦ Optimize with AI"}
+                          {seoAllBusy === "opt" ? "Optimizing…" : "✦ Optimize with AI"}
                         </button>
                         {seoScores ? (
                           <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
@@ -1033,16 +1058,15 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                           </span>
                         ) : null}
                         <div className="flex-1" />
-                        {seoProposed ? (
-                          <button
-                            type="button"
-                            disabled={!canManage || seoBusy !== null}
-                            onClick={() => void saveSeo()}
-                            className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
-                          >
-                            {seoBusy === "save" ? "Saving…" : "Save to Shopify"}
-                          </button>
-                        ) : null}
+                        <button
+                          type="button"
+                          disabled={!canManage || seoBusy !== null || seoAllBusy !== null}
+                          onClick={() => void pushAll()}
+                          title="Push SEO + metafields to Shopify — all at once"
+                          className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
+                        >
+                          {seoAllBusy === "push" ? "Pushing…" : "⤴ Push to Shopify"}
+                        </button>
                       </div>
                       {seoProposed ? (
                         <div className="overflow-hidden rounded-md border border-[var(--wms-border)]">
@@ -1140,12 +1164,22 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   )}
                   <div className="border-t border-[var(--wms-border)] pt-3">
                     <MetafieldsTab
+                      ref={metaRef}
                       matrixId={matrixId}
                       shopifyProductId={data.matrix.shopify_product_id ?? null}
                       canManage={canManage}
+                      showActions={false}
                     />
                   </div>
                 </div>
+                ) : tab === "collections" ? (
+                /* Collections tab — per-product menu-tree mapping (auto-suggest
+                   + push to Shopify), scoped to this parent UPC. */
+                <CollectionsTab
+                  upc={data.matrix.upc ?? null}
+                  shopifyProductId={data.matrix.shopify_product_id ?? null}
+                  canManage={canManage}
+                />
                 ) : tab === "studio" ? (
                 /* Carbon Studio (M2) — the OpenAI V2 generator, product-scoped. */
                 <CarbonStudioTab
