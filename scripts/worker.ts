@@ -4,6 +4,7 @@ import { executeLightspeedCatalogJob } from "@/lib/server/inventory-sync";
 import { executeShopifyImageSyncJob } from "@/lib/server/shopify-catalog-images";
 import { isLightspeedCatalogSyncEnabled } from "@/lib/server/lightspeed-sync-flag";
 import { executeShopifyProductPush } from "@/lib/server/shopify-publish";
+import { executeShopifyLinkAll } from "@/lib/server/shopify-link";
 
 loadEnvConfig(process.cwd());
 
@@ -52,6 +53,7 @@ const SELF_TERMINAL_JOB_TYPES = new Set([
   ...CATALOG_SYNC_JOB_TYPES,
   "shopify_image_sync",
   "shopify_product_push",
+  "shopify_link_all",
 ]);
 
 const REPORT_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -112,6 +114,11 @@ async function processStub(pool: Pool, job: JobRow): Promise<void> {
   }
   if (job.job_type === "shopify_product_push") {
     await executeShopifyProductPush(pool, job.id);
+    /* Sets its own terminal status. */
+    return;
+  }
+  if (job.job_type === "shopify_link_all") {
+    await executeShopifyLinkAll(pool, job.id);
     /* Sets its own terminal status. */
     return;
   }

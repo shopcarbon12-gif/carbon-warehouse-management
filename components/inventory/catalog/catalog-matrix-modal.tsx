@@ -560,6 +560,37 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [canManage, matrixId, mutate, onMutated]);
 
+  // Link this product to its EXISTING Shopify product by SKU (backfills ids so
+  // it's recognised as published without re-creating it).
+  const linkShopify = useCallback(async () => {
+    setBusy("link");
+    setErr(null);
+    setOkMsg("Matching to Shopify by SKU…");
+    try {
+      const res = await fetch("/api/shopify/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrixId }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        linked?: boolean;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(j.error ?? "Link failed");
+      setOkMsg(j.linked ? j.message ?? "Linked to Shopify." : j.message ?? "No matching Shopify product.");
+      if (j.linked) {
+        await mutate();
+        onMutated?.();
+      }
+    } catch (e) {
+      setOkMsg(null);
+      setErr(e instanceof Error ? e.message : "Link failed");
+    } finally {
+      setBusy(null);
+    }
+  }, [matrixId, mutate, onMutated]);
+
   // Upload a per-variant image and push it to Shopify (M2, gap-fill).
   const uploadImage = useCallback(
     async (variantId: string, file: File) => {
@@ -704,6 +735,17 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
               >
                 {busy === "save" ? "Saving…" : "Save Changes"}
               </button>
+              {data && !data.matrix.shopify_product_id ? (
+                <button
+                  type="button"
+                  disabled={!canManage || busy !== null}
+                  onClick={() => void linkShopify()}
+                  title="This product already exists on Shopify — match it by SKU and link it (no duplicate)."
+                  className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                >
+                  {busy === "link" ? "Linking…" : "🔗 Link to Shopify"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 disabled={!canManage || busy !== null || !data || dirty}
