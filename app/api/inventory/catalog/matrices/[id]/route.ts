@@ -36,6 +36,8 @@ type MatrixHeader = {
   subcategory_1: string | null;
   upc: string | null;
   archived: boolean;
+  shopify_product_id: string | null;
+  shopify_sync_status: string | null;
   /** Full Shopify product gallery (ordered cdn.shopify.com URLs) for the matrix window. */
   image_urls: string[];
   /** Shopify featured image (or gallery[0]); convenience for a hero/thumbnail. */
@@ -52,6 +54,8 @@ type MatrixVariant = {
   retail_price: string | null;
   default_cost: string | null;
   archived: boolean;
+  shopify_variant_id: string | null;
+  shopify_image_url: string | null;
   active_epc_count: number;
 };
 
@@ -84,6 +88,8 @@ export async function GET(req: Request, { params }: Ctx) {
        m.category                  AS category,
        m.subcategory_1             AS subcategory_1,
        m.upc                       AS upc,
+       m.shopify_product_id        AS shopify_product_id,
+       m.shopify_sync_status       AS shopify_sync_status,
        m.shopify_image_urls        AS image_urls,
        m.shopify_featured_image_url AS featured_image_url,
        COALESCE(bool_and(cs.archived), FALSE) AS all_archived
@@ -108,6 +114,8 @@ export async function GET(req: Request, { params }: Ctx) {
     retail_price: string | null;
     default_cost: string | null;
     archived: boolean;
+    shopify_variant_id: string | null;
+    shopify_image_url: string | null;
     active_epc_count: string;
   }>(
     `SELECT
@@ -120,6 +128,8 @@ export async function GET(req: Request, { params }: Ctx) {
        cs.retail_price::text   AS retail_price,
        cs.default_cost::text   AS default_cost,
        cs.archived             AS archived,
+       cs.shopify_variant_id   AS shopify_variant_id,
+       cs.shopify_image_url    AS shopify_image_url,
        (
          SELECT COUNT(*)::text
          FROM items i
@@ -144,6 +154,8 @@ export async function GET(req: Request, { params }: Ctx) {
       subcategory_1: head.subcategory_1,
       upc: head.upc,
       archived: head.all_archived,
+      shopify_product_id: head.shopify_product_id ?? null,
+      shopify_sync_status: head.shopify_sync_status ?? null,
       image_urls: Array.isArray(head.image_urls) ? head.image_urls : [],
       featured_image_url: head.featured_image_url ?? null,
     },
@@ -157,6 +169,8 @@ export async function GET(req: Request, { params }: Ctx) {
       retail_price: r.retail_price,
       default_cost: r.default_cost,
       archived: r.archived,
+      shopify_variant_id: r.shopify_variant_id,
+      shopify_image_url: r.shopify_image_url,
       active_epc_count: Number(r.active_epc_count ?? 0),
     })),
   });

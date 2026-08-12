@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { Plus, Printer, X as XIcon, RotateCcw, ChevronLeft } from "lucide-react";
 import { printRfidLabel } from "./print-label";
@@ -28,6 +28,8 @@ type Matrix = {
   subcategory_1: string | null;
   upc: string | null;
   archived: boolean;
+  shopify_product_id?: string | null;
+  shopify_sync_status?: string | null;
   /** Full Shopify product gallery (ordered cdn.shopify.com URLs). */
   image_urls?: string[];
   featured_image_url?: string | null;
@@ -43,6 +45,8 @@ type Variant = {
   retail_price: string | null;
   default_cost: string | null;
   archived: boolean;
+  shopify_variant_id?: string | null;
+  shopify_image_url?: string | null;
   active_epc_count: number;
 };
 
@@ -152,6 +156,16 @@ function rowFromVariant(v: Variant): RowState {
 let tempSeq = 0;
 const nextTempKey = () => `new-${(tempSeq += 1)}`;
 
+/** Group variants by colour (first-seen order) for the Images tab. */
+function groupByColor(variants: Variant[]): Record<string, Variant[]> {
+  const out: Record<string, Variant[]> = {};
+  for (const v of variants) {
+    const key = (v.color || "").trim() || "—";
+    (out[key] ||= []).push(v);
+  }
+  return out;
+}
+
 export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, onBack, onOpenSku }: Props) {
   const { data, error, mutate, isLoading } = useSWR<MatrixDetailResp>(
     `/api/inventory/catalog/matrices/${matrixId}`,
@@ -164,7 +178,10 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   // Two real tabs: "matrix" (pictures, shared values, color/size, variant tree)
   // and "setup" (the Group Items grid). State below is shared, so adding a
   // color/size on the Matrix tab shows up as new Group-Item rows in Setup.
-  const [tab, setTab] = useState<"matrix" | "setup">("matrix");
+  const [tab, setTab] = useState<"matrix" | "setup" | "images">("matrix");
+  // Per-variant image upload state (Images tab, M2).
+  const [imgBusy, setImgBusy] = useState<string | null>(null);
+  const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const [mForm, setMForm] = useState<MatrixForm | null>(null);
   const [rows, setRows] = useState<RowState[]>([]);
@@ -533,6 +550,36 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [canManage, matrixId, mutate, onMutated]);
 
+  // Upload a per-variant image and push it to Shopify (M2, gap-fill).
+  const uploadImage = useCallback(
+    async (variantId: string, file: File) => {
+      setImgBusy(variantId);
+      setErr(null);
+      setOkMsg(null);
+      try {
+        const fd = new FormData();
+        fd.append("matrixId", matrixId);
+        fd.append("customSkuId", variantId);
+        fd.append("force", "1");
+        fd.append("file", file);
+        const res = await fetch("/api/shopify/image-upload", { method: "POST", body: fd });
+        const j = (await res.json().catch(() => ({}))) as { error?: string; skipped?: boolean };
+        if (!res.ok) {
+          setErr(j.error ?? "Image push failed");
+        } else {
+          setOkMsg(j.skipped ? "Variant already had a Shopify image." : "Image pushed to Shopify.");
+          await mutate();
+          onMutated?.();
+        }
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Upload failed");
+      } finally {
+        setImgBusy(null);
+      }
+    },
+    [matrixId, mutate, onMutated],
+  );
+
   return (
     <>
       <button
@@ -634,7 +681,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
           ) : (
             <div className="flex flex-col sm:flex-row">
               <nav className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3">
-                {(["setup", "matrix"] as const).map((t) => (
+                {(["setup", "matrix", "images"] as const).map((t) => (
                   <div key={t}>
                     <button
                       type="button"
@@ -809,6 +856,77 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   </Section>
                 </div>
                 </>
+                ) : tab === "images" ? (
+                /* Images tab (M2) — per-colour Shopify imagery. Upload pushes to
+                   Shopify (staged upload → media → variant attach) and stores the
+                   returned CDN url. Requires the product to be published first. */
+                <div className="space-y-4">
+                  {!data.matrix.shopify_product_id ? (
+                    <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-xs text-[var(--wms-muted)]">
+                      Publish this product to Shopify first (use{" "}
+                      <span className="text-[var(--wms-accent)]">✔ Check &amp; Publish</span>), then
+                      upload per-colour images here.
+                    </div>
+                  ) : (
+                    Object.entries(groupByColor(data.variants.filter((v) => !v.archived))).map(
+                      ([color, vs]) => (
+                        <Section key={color} title={color || "—"}>
+                          <div className="flex flex-wrap gap-3 p-2">
+                            {vs.map((v) => (
+                              <div key={v.id} className="flex flex-col items-center gap-1">
+                                {v.shopify_image_url ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={v.shopify_image_url}
+                                    alt={v.sku}
+                                    className="h-24 w-20 rounded-md border border-[var(--wms-border)] object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-24 w-20 items-center justify-center rounded-md border border-dashed border-[var(--wms-border)] text-center font-mono text-[0.55rem] text-[var(--wms-muted)]">
+                                    no image
+                                  </div>
+                                )}
+                                <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
+                                  {v.size ?? "—"}
+                                </span>
+                                <input
+                                  ref={(el) => {
+                                    fileInputs.current[v.id] = el;
+                                  }}
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) void uploadImage(v.id, f);
+                                    e.target.value = "";
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  disabled={!canManage || imgBusy !== null || !v.shopify_variant_id}
+                                  onClick={() => fileInputs.current[v.id]?.click()}
+                                  title={
+                                    v.shopify_variant_id
+                                      ? "Upload an image and push it to Shopify"
+                                      : "Publish this product first"
+                                  }
+                                  className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-2 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {imgBusy === v.id
+                                    ? "…"
+                                    : v.shopify_image_url
+                                      ? "Replace"
+                                      : "Upload"}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </Section>
+                      ),
+                    )
+                  )}
+                </div>
                 ) : (
                 /* Setup tab — Group Items (color/size added on the Matrix tab
                    show up here as new rows because the state is shared). */

@@ -212,6 +212,135 @@ export async function publishToPublication(
   return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
 }
 
+// ── Media (images) ─────────────────────────────────────────────────────────
+// Uses Shopify STAGED UPLOADS: PUT the bytes to a temporary Shopify target,
+// then productCreateMedia from the returned resourceUrl. No external storage
+// (no R2) and nothing is kept locally — Shopify hosts the final CDN image.
+
+type StagedTarget = { url: string; resourceUrl: string; parameters: Array<{ name: string; value: string }> };
+
+/** Stage bytes on Shopify's temporary target; returns the resourceUrl to hand
+ * to productCreateMedia. Uploads via multipart POST (httpMethod POST). */
+export async function stageImageUpload(
+  ctx: ShopCtx,
+  filename: string,
+  mimeType: string,
+  bytes: Uint8Array,
+): Promise<{ ok: true; resourceUrl: string } | { ok: false; error: string }> {
+  const res = await gql<{
+    stagedUploadsCreate?: {
+      stagedTargets?: StagedTarget[];
+      userErrors?: Array<{ message: string }>;
+    };
+  }>(
+    ctx,
+    `mutation stagedUploadsCreate($input: [StagedUploadInput!]!) {
+      stagedUploadsCreate(input: $input) {
+        stagedTargets { url resourceUrl parameters { name value } }
+        userErrors { field message }
+      }
+    }`,
+    {
+      input: [
+        {
+          filename,
+          mimeType,
+          resource: "IMAGE",
+          httpMethod: "POST",
+          fileSize: String(bytes.byteLength),
+        },
+      ],
+    },
+  );
+  const errs = res.data?.stagedUploadsCreate?.userErrors || [];
+  if (errs.length) return { ok: false, error: errs.map((e) => e.message).join("; ") };
+  const target = res.data?.stagedUploadsCreate?.stagedTargets?.[0];
+  if (!target?.url || !target.resourceUrl) {
+    return { ok: false, error: "stagedUploadsCreate returned no target" };
+  }
+  const form = new FormData();
+  for (const p of target.parameters) form.append(p.name, p.value);
+  form.append("file", new Blob([bytes as unknown as BlobPart], { type: mimeType }), filename);
+  const put = await fetch(target.url, { method: "POST", body: form });
+  if (!put.ok) {
+    return { ok: false, error: `staged upload PUT failed: HTTP ${put.status}` };
+  }
+  return { ok: true, resourceUrl: target.resourceUrl };
+}
+
+/** Create product media from a source URL/resourceUrl, then poll until the
+ * image is READY and return its Shopify CDN url + media id. */
+export async function createProductMedia(
+  ctx: ShopCtx,
+  productId: string,
+  source: string,
+  alt: string,
+): Promise<{ ok: true; mediaId: string; imageUrl: string } | { ok: false; error: string }> {
+  const create = await gql<{
+    productCreateMedia?: {
+      media?: Array<{ id: string; status?: string; image?: { url?: string } }>;
+      mediaUserErrors?: Array<{ message: string }>;
+    };
+  }>(
+    ctx,
+    `mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+      productCreateMedia(productId: $productId, media: $media) {
+        media { ... on MediaImage { id status image { url } } }
+        mediaUserErrors { field message }
+      }
+    }`,
+    {
+      productId: toProductGid(productId),
+      media: [{ mediaContentType: "IMAGE", originalSource: source, alt }],
+    },
+  );
+  const errs = create.data?.productCreateMedia?.mediaUserErrors || [];
+  if (errs.length) return { ok: false, error: errs.map((e) => e.message).join("; ") };
+  const media = create.data?.productCreateMedia?.media?.[0];
+  if (!media?.id) return { ok: false, error: "productCreateMedia returned no media" };
+
+  // Poll until READY (Shopify ingests the image asynchronously).
+  for (let i = 0; i < 20; i++) {
+    const q = await gql<{
+      node?: { id: string; status?: string; image?: { url?: string } };
+    }>(
+      ctx,
+      `query($id: ID!) { node(id: $id) { ... on MediaImage { id status image { url } } } }`,
+      { id: media.id },
+    );
+    const n = q.data?.node;
+    if (n?.status === "READY" && n.image?.url) {
+      return { ok: true, mediaId: media.id, imageUrl: n.image.url };
+    }
+    if (n?.status === "FAILED") return { ok: false, error: "media processing FAILED" };
+    await new Promise((r) => setTimeout(r, 800));
+  }
+  return { ok: false, error: "media not READY after timeout" };
+}
+
+/** Attach existing product media to a specific variant (per-colour image). */
+export async function appendMediaToVariant(
+  ctx: ShopCtx,
+  productId: string,
+  variantId: string,
+  mediaId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await gql<{ productVariantAppendMedia?: { userErrors?: Array<{ message: string }> } }>(
+    ctx,
+    `mutation productVariantAppendMedia($productId: ID!, $variantMedia: [ProductVariantAppendMediaInput!]!) {
+      productVariantAppendMedia(productId: $productId, variantMedia: $variantMedia) {
+        userErrors { field message }
+      }
+    }`,
+    {
+      productId: toProductGid(productId),
+      variantMedia: [{ variantId, mediaIds: [mediaId] }],
+    },
+  );
+  const errs = res.data?.productVariantAppendMedia?.userErrors || [];
+  return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
 /** Delete a product (used only to clean up verification/test products). */
 export async function deleteProduct(
   ctx: ShopCtx,
