@@ -2,6 +2,8 @@ import { loadEnvConfig } from "@next/env";
 import { Pool } from "pg";
 import { executeLightspeedCatalogJob } from "@/lib/server/inventory-sync";
 import { executeShopifyImageSyncJob } from "@/lib/server/shopify-catalog-images";
+import { isLightspeedCatalogSyncEnabled } from "@/lib/server/lightspeed-sync-flag";
+import { executeShopifyProductPush } from "@/lib/server/shopify-publish";
 
 loadEnvConfig(process.cwd());
 
@@ -49,6 +51,7 @@ const CATALOG_SYNC_JOB_TYPES = new Set(["lightspeed_catalog", "lightspeed_pull"]
 const SELF_TERMINAL_JOB_TYPES = new Set([
   ...CATALOG_SYNC_JOB_TYPES,
   "shopify_image_sync",
+  "shopify_product_push",
 ]);
 
 const REPORT_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -83,6 +86,21 @@ async function runReportRetentionCleanup(pool: Pool): Promise<void> {
 
 async function processStub(pool: Pool, job: JobRow): Promise<void> {
   if (CATALOG_SYNC_JOB_TYPES.has(job.job_type)) {
+    // WMS is the catalog source of truth — Lightspeed pull retired as a source.
+    // Any stale queued catalog job is skipped (not run) so it can't overwrite
+    // WMS-authored fields. These job types are self-terminal, so set status here.
+    if (!isLightspeedCatalogSyncEnabled()) {
+      await pool.query(
+        `UPDATE sync_jobs
+            SET status = 'completed',
+                progress_message = 'skipped: Lightspeed catalog sync disabled (WMS is source of truth)',
+                finished_at = now()
+          WHERE id = $1`,
+        [job.id],
+      );
+      console.log(`[worker] catalog job ${job.id} skipped — LS sync disabled`);
+      return;
+    }
     await executeLightspeedCatalogJob(pool, job.id);
     /* Terminal status + payload are set inside the catalog sync (no generic completed UPDATE). */
     return;
@@ -90,6 +108,11 @@ async function processStub(pool: Pool, job: JobRow): Promise<void> {
   if (job.job_type === "shopify_image_sync") {
     await executeShopifyImageSyncJob(pool, job.id);
     /* Sets its own terminal status + result payload. */
+    return;
+  }
+  if (job.job_type === "shopify_product_push") {
+    await executeShopifyProductPush(pool, job.id);
+    /* Sets its own terminal status. */
     return;
   }
   // Stub: reconcile / future job types. Idempotency is enforced by idempotency_key on insert.
