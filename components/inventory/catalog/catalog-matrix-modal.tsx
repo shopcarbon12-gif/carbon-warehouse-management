@@ -461,6 +461,78 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [canManage, data, matrixId, mutate, onMutated]);
 
+  // Check & Publish to Shopify (M1): validate + enqueue the push job, then
+  // poll its progress. Errors from the validation gate are shown inline.
+  const publish = useCallback(async () => {
+    if (!canManage) return;
+    setBusy("publish");
+    setErr(null);
+    setOkMsg("Validating…");
+    try {
+      const res = await fetch("/api/shopify/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrixId }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        job_id?: string;
+        error?: string;
+        errors?: string[];
+      };
+      if (res.status === 422) {
+        setOkMsg(null);
+        setErr(`Cannot publish — ${(j.errors ?? []).join(" ")}`);
+        setBusy(null);
+        return;
+      }
+      if (!res.ok || !j.job_id) {
+        setOkMsg(null);
+        setErr(j.error ?? "Publish failed");
+        setBusy(null);
+        return;
+      }
+      setOkMsg("Publishing to Shopify…");
+      const jobId = j.job_id;
+      let tries = 0;
+      const poll = async () => {
+        tries += 1;
+        try {
+          const pr = await fetch(`/api/shopify/sync/jobs/${jobId}/progress`);
+          const pj = (await pr.json().catch(() => ({}))) as {
+            status?: string;
+            message?: string | null;
+          };
+          if (pj.status === "completed") {
+            setOkMsg(pj.message ?? "Published to Shopify.");
+            setBusy(null);
+            await mutate();
+            onMutated?.();
+            return;
+          }
+          if (pj.status === "failed") {
+            setOkMsg(null);
+            setErr(pj.message ?? "Publish failed.");
+            setBusy(null);
+            return;
+          }
+        } catch {
+          /* transient — keep polling */
+        }
+        if (tries > 80) {
+          setOkMsg("Still publishing… check the Shopify queue.");
+          setBusy(null);
+          return;
+        }
+        setTimeout(() => void poll(), 1500);
+      };
+      void poll();
+    } catch (e) {
+      setOkMsg(null);
+      setErr(e instanceof Error ? e.message : "Publish failed");
+      setBusy(null);
+    }
+  }, [canManage, matrixId, mutate, onMutated]);
+
   return (
     <>
       <button
@@ -493,6 +565,21 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy === "save" ? "Saving…" : "Save Changes"}
+              </button>
+              <button
+                type="button"
+                disabled={!canManage || busy !== null || !data || dirty}
+                onClick={() => void publish()}
+                title={
+                  dirty
+                    ? "Save your changes first"
+                    : canManage
+                      ? "Validate, then create/update this product on Shopify"
+                      : "Admin scope required"
+                }
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/25 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy === "publish" ? "Publishing…" : "✔ Check & Publish"}
               </button>
               <button
                 type="button"
