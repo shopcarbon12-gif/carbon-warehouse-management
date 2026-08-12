@@ -31,8 +31,8 @@ export const maxDuration = 180;
  *   image. Quantity/price/etc. are never touched.
  */
 type Item =
-  | { kind: "existing"; mediaId: string; alt?: string; variantId?: string }
-  | { kind: "new"; b64: string; alt?: string; variantId?: string };
+  | { kind: "existing"; mediaId: string; alt?: string; variantId?: string; variantIds?: string[] }
+  | { kind: "new"; b64: string; alt?: string; variantId?: string; variantIds?: string[] };
 
 async function resolveProductId(pool: ReturnType<typeof getPool>, matrixId: string) {
   const r = await pool!.query<{ shopify_product_id: string | null }>(
@@ -109,7 +109,11 @@ export async function POST(req: Request) {
       mediaId = media.mediaId;
     }
     finalOrder.push(mediaId);
-    if (it.variantId) variantAssignments.push({ mediaId, variantId: it.variantId });
+    // Per-image variant assignment. `variantIds` (all sizes of one colour) takes
+    // precedence over the legacy single `variantId`.
+    const vids =
+      it.variantIds && it.variantIds.length ? it.variantIds : it.variantId ? [it.variantId] : [];
+    for (const vid of vids) variantAssignments.push({ mediaId, variantId: vid });
   }
 
   // 2) Delete existing media the user removed.

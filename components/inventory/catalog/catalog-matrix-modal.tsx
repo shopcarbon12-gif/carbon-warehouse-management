@@ -578,6 +578,43 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [matrixId, mutate, onMutated]);
 
+  // SEO tab (M3): read the product's CURRENT Shopify SEO (title/meta/description/
+  // tags) so it's visible before running the AI optimizer.
+  const loadSeoCurrent = useCallback(async () => {
+    const pid = data?.matrix.shopify_product_id;
+    if (!pid) return;
+    setSeoBusy("current");
+    try {
+      const a = await fetch("/api/shopify/seo/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: pid, matrixId }),
+      });
+      const aj = (await a.json().catch(() => ({}))) as {
+        current?: Record<string, unknown>;
+        code?: string;
+        error?: string;
+      };
+      if (aj.code === "STALE_LINK") {
+        await mutate();
+        onMutated?.();
+        return;
+      }
+      if (a.ok && aj.current) setSeoCurrent(aj.current);
+    } catch {
+      /* non-fatal — the Optimize button still works */
+    } finally {
+      setSeoBusy(null);
+    }
+  }, [data, matrixId, mutate, onMutated]);
+
+  // Auto-load current Shopify SEO the first time the SEO tab is opened.
+  useEffect(() => {
+    if (tab === "seo" && data?.matrix.shopify_product_id && !seoCurrent && !seoProposed && seoBusy === null) {
+      void loadSeoCurrent();
+    }
+  }, [tab, data?.matrix.shopify_product_id, seoCurrent, seoProposed, seoBusy, loadSeoCurrent]);
+
   // SEO tab (M3): audit current Shopify SEO, then AI-optimize.
   const runSeo = useCallback(async () => {
     const pid = data?.matrix.shopify_product_id;
@@ -632,7 +669,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     } finally {
       setSeoBusy(null);
     }
-  }, [data, mutate, onMutated]);
+  }, [data, matrixId, mutate, onMutated]);
 
   const saveSeo = useCallback(async () => {
     const pid = data?.matrix.shopify_product_id;
@@ -1060,12 +1097,44 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                           })}
                         </div>
                       ) : (
-                        <p className="font-mono text-xs text-[var(--wms-muted)]">
-                          Click <span className="text-[var(--wms-accent)]">Optimize with AI</span> to
-                          read the current Shopify SEO and propose improvements (title, meta,
-                          description, tags). Existing values are never overwritten unless you keep
-                          the toggle on.
-                        </p>
+                        <div className="space-y-2">
+                          <div className="overflow-hidden rounded-md border border-[var(--wms-border)]">
+                            <div className="border-b border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/60 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                              {seoBusy === "current" ? "Reading current Shopify SEO…" : "Current on Shopify"}
+                            </div>
+                            {(["seoTitle", "metaDescription", "bodyHtml", "tags"] as const).map((f) => {
+                              const label =
+                                f === "seoTitle"
+                                  ? "SEO title"
+                                  : f === "metaDescription"
+                                    ? "Meta description"
+                                    : f === "bodyHtml"
+                                      ? "Description"
+                                      : "Tags";
+                              const cur = seoCurrent?.[f];
+                              const fmt = (v: unknown) => (Array.isArray(v) ? v.join(", ") : String(v ?? ""));
+                              const text = fmt(cur);
+                              return (
+                                <div
+                                  key={f}
+                                  className="grid grid-cols-[110px_1fr] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-2 text-[0.7rem] last:border-b-0"
+                                >
+                                  <span className="font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+                                    {label}
+                                  </span>
+                                  <span className="text-[var(--wms-fg)]" title={text}>
+                                    {text ? `${text.slice(0, 200)}${text.length > 200 ? "…" : ""}` : <span className="text-[var(--wms-muted)]">— empty —</span>}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <p className="font-mono text-xs text-[var(--wms-muted)]">
+                            Click <span className="text-[var(--wms-accent)]">Optimize with AI</span> to
+                            propose improvements. Existing values are never overwritten unless you keep
+                            the toggle on.
+                          </p>
+                        </div>
                       )}
                     </>
                   )}

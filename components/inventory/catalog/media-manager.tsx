@@ -18,7 +18,7 @@ type MediaItem = {
   b64?: string;
   url: string;
   alt: string;
-  variantId: string;
+  color: string; // colour name — the image attaches to every size of that colour
 };
 type Props = { matrixId: string; shopifyProductId: string | null; variants: MVariant[]; canManage: boolean };
 
@@ -54,18 +54,22 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
   const [err, setErr] = useState<string | null>(null);
   const [zoom, setZoom] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [dragKey, setDragKey] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const variantOpts = useMemo(
-    () =>
-      variants
-        .filter((v) => v.shopify_variant_id)
-        .map((v) => ({
-          id: v.shopify_variant_id as string,
-          label: [v.color, v.size].filter(Boolean).join(" · ") || "—",
-        })),
-    [variants],
-  );
+  // Variant images are assigned per COLOUR: one colour → every size's variant.
+  const colorOpts = useMemo(() => {
+    const byColor = new Map<string, string[]>();
+    for (const v of variants) {
+      if (!v.shopify_variant_id) continue;
+      const c = (v.color || "").trim();
+      if (!c) continue;
+      const arr = byColor.get(c) || [];
+      arr.push(v.shopify_variant_id);
+      byColor.set(c, arr);
+    }
+    return Array.from(byColor.entries()).map(([color, variantIds]) => ({ color, variantIds }));
+  }, [variants]);
 
   const load = useCallback(async () => {
     if (!shopifyProductId) {
@@ -78,7 +82,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       const r = await fetch(`/api/shopify/media?matrixId=${matrixId}`);
       const j = (await r.json().catch(() => ({}))) as { media?: Array<{ id: string; url: string; alt: string }> };
       setItems(
-        (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", variantId: "" })),
+        (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })),
       );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load images");
@@ -100,7 +104,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       for (const f of Array.from(files)) {
         if (!f.type.startsWith("image/")) continue;
         const [b64, dataUrl] = await Promise.all([readB64(f), readDataUrl(f)]);
-        added.push({ key: `new-${f.name}-${added.length}-${b64.length}`, kind: "new", b64, url: dataUrl, alt: "", variantId: "" });
+        added.push({ key: `new-${f.name}-${added.length}-${b64.length}`, kind: "new", b64, url: dataUrl, alt: "", color: "" });
       }
       setItems((prev) => [...prev, ...added]);
     } finally {
@@ -170,6 +174,17 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       copy.unshift(it);
       return copy;
     });
+  const dropOn = (targetKey: string) =>
+    setItems((prev) => {
+      if (!dragKey || dragKey === targetKey) return prev;
+      const from = prev.findIndex((m) => m.key === dragKey);
+      const to = prev.findIndex((m) => m.key === targetKey);
+      if (from < 0 || to < 0) return prev;
+      const copy = [...prev];
+      const [it] = copy.splice(from, 1);
+      copy.splice(to, 0, it);
+      return copy;
+    });
   const remove = (key: string) => setItems((prev) => prev.filter((m) => m.key !== key));
 
   const publish = useCallback(async () => {
@@ -177,11 +192,12 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
     setErr(null);
     setMsg(null);
     try {
-      const payload = items.map((m) =>
-        m.kind === "existing"
-          ? { kind: "existing", mediaId: m.mediaId, alt: m.alt, variantId: m.variantId || undefined }
-          : { kind: "new", b64: m.b64, alt: m.alt, variantId: m.variantId || undefined },
-      );
+      const payload = items.map((m) => {
+        const variantIds = m.color ? colorOpts.find((o) => o.color === m.color)?.variantIds : undefined;
+        return m.kind === "existing"
+          ? { kind: "existing", mediaId: m.mediaId, alt: m.alt, variantIds }
+          : { kind: "new", b64: m.b64, alt: m.alt, variantIds };
+      });
       const r = await fetch("/api/shopify/media", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -193,7 +209,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
         warnings?: string[];
       };
       if (!r.ok) throw new Error(j.error ?? "Publish failed");
-      setItems((j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", variantId: "" })));
+      setItems((j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })));
       if (j.warnings?.length) setErr(`Some images failed: ${j.warnings.slice(0, 3).join(" · ")}`);
       else setMsg(`Saved — ${(j.media || []).length} image(s) live on Shopify.`);
     } catch (e) {
@@ -201,7 +217,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
     } finally {
       setBusy(null);
     }
-  }, [items, matrixId]);
+  }, [items, matrixId, colorOpts]);
 
   const field =
     "rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.55rem] text-[var(--wms-fg)]";
@@ -220,7 +236,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)]">Images</span>
-        <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">first = hero · ↑↓ order · ★ hero · assign colour · ✨ alt</span>
+        <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">first = hero · drag or ↑↓ order · ★ hero · assign colour · ✨ alt</span>
         <div className="flex-1" />
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { void addFiles(e.target.files); e.target.value = ""; }} />
         <button type="button" disabled={!canManage || busy !== null} onClick={() => fileRef.current?.click()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
@@ -240,7 +256,12 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
 
       <div className="space-y-2">
         {items.map((m, idx) => (
-          <div key={m.key} className="flex items-start gap-3 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] p-2">
+          <div
+            key={m.key}
+            onDragOver={(e) => { if (dragKey) e.preventDefault(); }}
+            onDrop={() => { dropOn(m.key); setDragKey(null); }}
+            className={`flex items-start gap-3 rounded border bg-[var(--wms-surface)] p-2 ${dragKey === m.key ? "opacity-50" : ""} ${dragKey && dragKey !== m.key ? "border-dashed border-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
+          >
             <div className="relative shrink-0">
               <img src={m.url} alt={m.alt} className="h-24 w-20 cursor-pointer rounded border border-[var(--wms-border)] object-cover" onClick={() => setZoom(m.url)} />
               {idx === 0 ? <span className="absolute left-0 top-0 rounded-br bg-[var(--wms-accent)] px-1 text-[0.5rem] font-bold text-[var(--wms-accent-fg)]">HERO</span> : null}
@@ -251,13 +272,14 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" disabled={busy !== null} onClick={() => void genAlt(m.key)} className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.55rem] text-[var(--wms-accent)] disabled:opacity-50">{busy === `alt-${m.key}` ? "…" : "✨ alt"}</button>
                 <label className="font-mono text-[0.55rem] text-[var(--wms-muted)]">colour:</label>
-                <select className={field} value={m.variantId} onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, variantId: v } : x))); }}>
+                <select className={field} value={m.color} onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, color: v } : x))); }}>
                   <option value="">— none —</option>
-                  {variantOpts.map((v) => (<option key={v.id} value={v.id}>{v.label}</option>))}
+                  {colorOpts.map((o) => (<option key={o.color} value={o.color}>{o.color}</option>))}
                 </select>
               </div>
             </div>
             <div className="flex shrink-0 flex-col gap-1">
+              <div draggable onDragStart={() => setDragKey(m.key)} onDragEnd={() => setDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-1.5 text-center text-[0.7rem] text-[var(--wms-muted)]">⠿</div>
               <button type="button" onClick={() => move(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↑</button>
               <button type="button" onClick={() => move(m.key, 1)} disabled={idx === items.length - 1} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↓</button>
               <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
