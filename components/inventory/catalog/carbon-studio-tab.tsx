@@ -21,7 +21,8 @@ type Crop = { id: string; b64: string; label: string; selected: boolean };
 /** url = what the generator fetches (may be an auth'd R2 URL); preview = a
  * browser-renderable thumbnail (data URL for uploads, public URL for Shopify). */
 type ItemRef = { url: string; preview?: string };
-/** A media-manager row: an existing Shopify image or a new crop to add. */
+/** A media-manager row: an existing Shopify image or a new crop to add.
+ * `color` = the variant colour this image is the MAIN pic for (all sizes). */
 type MediaItem = {
   key: string;
   kind: "existing" | "new";
@@ -29,6 +30,7 @@ type MediaItem = {
   b64?: string;
   url: string; // display src (cdn url for existing, data-url for new)
   alt: string;
+  color: string;
 };
 
 function readAsDataUrl(file: File): Promise<string> {
@@ -102,6 +104,22 @@ export function CarbonStudioTab({
     return Array.from(seen.entries()).map(([color, v]) => ({ color, variant: v }));
   }, [variants]);
   const [color, setColor] = useState<string>("");
+
+  // Per-colour image assignment (matches Images tab): one colour → every size's
+  // variant. Used to set a generated pic as the MAIN pic for a variant colour.
+  const colorOpts = useMemo(() => {
+    const byColor = new Map<string, string[]>();
+    for (const v of variants) {
+      const c = (v.color || "").trim();
+      if (!c) continue;
+      const arr = byColor.get(c) || [];
+      if (v.shopify_variant_id) arr.push(v.shopify_variant_id);
+      byColor.set(c, arr);
+    }
+    return Array.from(byColor.entries())
+      .filter(([, ids]) => ids.length > 0)
+      .map(([c, variantIds]) => ({ color: c, variantIds }));
+  }, [variants]);
 
   useEffect(() => {
     let alive = true;
@@ -298,10 +316,13 @@ export function CarbonStudioTab({
         mediaId: m.id,
         url: m.url,
         alt: m.alt || "",
+        color: "",
       }));
+      // New crops were generated for the selected colour → pre-assign it (the
+      // user can still change or clear the colour per image before publishing).
       const news: MediaItem[] = crops
         .filter((c) => c.selected && c.b64)
-        .map((c) => ({ key: `new-${c.id}`, kind: "new", b64: c.b64, url: `data:image/png;base64,${c.b64}`, alt: "" }));
+        .map((c) => ({ key: `new-${c.id}`, kind: "new", b64: c.b64, url: `data:image/png;base64,${c.b64}`, alt: "", color: color || "" }));
       setMediaItems([...existing, ...news]);
       setShowMedia(true);
     } catch (e) {
@@ -309,7 +330,7 @@ export function CarbonStudioTab({
     } finally {
       setMediaBusy(null);
     }
-  }, [matrixId, crops]);
+  }, [matrixId, crops, color]);
 
   const genAlt = useCallback(
     async (key: string) => {
@@ -388,16 +409,18 @@ export function CarbonStudioTab({
     setErr(null);
     setMsg(null);
     try {
-      const heroVariantId = colors.find((c) => c.color === color)?.variant?.shopify_variant_id || undefined;
-      const items = mediaItems.map((m) =>
-        m.kind === "existing"
-          ? { kind: "existing", mediaId: m.mediaId, alt: m.alt }
-          : { kind: "new", b64: m.b64, alt: m.alt },
-      );
+      // Each image can be set as the MAIN pic for a variant colour → attach it
+      // to every size's variant of that colour (variantIds).
+      const items = mediaItems.map((m) => {
+        const variantIds = m.color ? colorOpts.find((o) => o.color === m.color)?.variantIds : undefined;
+        return m.kind === "existing"
+          ? { kind: "existing", mediaId: m.mediaId, alt: m.alt, variantIds }
+          : { kind: "new", b64: m.b64, alt: m.alt, variantIds };
+      });
       const r = await fetch("/api/shopify/media", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matrixId, items, heroVariantId }),
+        body: JSON.stringify({ matrixId, items }),
       });
       const j = (await r.json().catch(() => ({}))) as {
         error?: string;
@@ -407,7 +430,7 @@ export function CarbonStudioTab({
       if (!r.ok) throw new Error(j.error ?? "Publish failed");
       const newCount = mediaItems.filter((m) => m.kind === "new").length;
       setMediaItems(
-        (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "" })),
+        (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })),
       );
       setCrops((prev) => prev.filter((c) => !c.selected)); // pushed crops consumed
       if (j.warnings?.length) {
@@ -423,7 +446,7 @@ export function CarbonStudioTab({
     } finally {
       setMediaBusy(null);
     }
-  }, [matrixId, mediaItems, colors, color]);
+  }, [matrixId, mediaItems, colorOpts]);
 
   const label = "block text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
   const field =
@@ -662,7 +685,7 @@ export function CarbonStudioTab({
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)]">Manage images</span>
             <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
-              first = hero · ↑↓ reorder · ★ hero · ✨ alt · ✕ remove
+              first = hero · ↑↓ reorder · ★ hero · colour = variant main pic (all sizes) · ✨ alt · ✕ remove
             </span>
             <div className="flex-1" />
             <button
@@ -734,14 +757,33 @@ export function CarbonStudioTab({
                         setMediaItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, alt: v } : x)));
                       }}
                     />
-                    <button
-                      type="button"
-                      disabled={mediaBusy !== null}
-                      onClick={() => void genAlt(m.key)}
-                      className="mt-1 rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.55rem] text-[var(--wms-accent)] disabled:opacity-50"
-                    >
-                      {mediaBusy === `alt-${m.key}` ? "…" : "✨ Generate alt"}
-                    </button>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={mediaBusy !== null}
+                        onClick={() => void genAlt(m.key)}
+                        className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.55rem] text-[var(--wms-accent)] disabled:opacity-50"
+                      >
+                        {mediaBusy === `alt-${m.key}` ? "…" : "✨ Generate alt"}
+                      </button>
+                      <label className="font-mono text-[0.55rem] text-[var(--wms-muted)]">main pic for colour:</label>
+                      <select
+                        className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.55rem] text-[var(--wms-fg)]"
+                        value={m.color}
+                        title="Sets this image as the main picture for every size of the chosen colour"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setMediaItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, color: v } : x)));
+                        }}
+                      >
+                        <option value="">— none —</option>
+                        {colorOpts.map((o) => (
+                          <option key={o.color} value={o.color}>
+                            {o.color} · all {o.variantIds.length} size{o.variantIds.length === 1 ? "" : "s"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                   <div className="flex shrink-0 flex-col gap-1">
                     <button type="button" onClick={() => moveMedia(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↑</button>
