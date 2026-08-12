@@ -172,9 +172,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   // Two real tabs: "matrix" (pictures, shared values, color/size, variant tree)
   // and "setup" (the Group Items grid). State below is shared, so adding a
   // color/size on the Matrix tab shows up as new Group-Item rows in Setup.
-  const [tab, setTab] = useState<
-    "matrix" | "setup" | "images" | "seo" | "studio" | "meta"
-  >("matrix");
+  const [tab, setTab] = useState<"matrix" | "setup" | "images" | "seo" | "studio">("matrix");
   // SEO tab (M3) state.
   const [seoBusy, setSeoBusy] = useState<string | null>(null);
   const [seoCurrent, setSeoCurrent] = useState<Record<string, unknown> | null>(null);
@@ -780,7 +778,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
           ) : (
             <div className="flex flex-col sm:flex-row">
               <nav className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3">
-                {(["setup", "matrix", "images", "seo", "studio", "meta"] as const).map((t) => (
+                {(["setup", "matrix", "images", "seo", "studio"] as const).map((t) => (
                   <div key={t}>
                     <button
                       type="button"
@@ -1071,6 +1069,13 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       )}
                     </>
                   )}
+                  <div className="border-t border-[var(--wms-border)] pt-3">
+                    <MetafieldsTab
+                      matrixId={matrixId}
+                      shopifyProductId={data.matrix.shopify_product_id ?? null}
+                      canManage={canManage}
+                    />
+                  </div>
                 </div>
                 ) : tab === "studio" ? (
                 /* Carbon Studio (M2) — the OpenAI V2 generator, product-scoped. */
@@ -1084,13 +1089,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     color: v.color,
                     shopify_variant_id: v.shopify_variant_id ?? null,
                   }))}
-                  canManage={canManage}
-                />
-                ) : tab === "meta" ? (
-                /* Metafields tab (M4) — custom + Google-feed metafields + create collection. */
-                <MetafieldsTab
-                  matrixId={matrixId}
-                  shopifyProductId={data.matrix.shopify_product_id ?? null}
                   canManage={canManage}
                 />
                 ) : (
