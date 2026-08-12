@@ -91,6 +91,7 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
     "Retail Price",
     "Bin",
     "Qty (EPC)",
+    "Shopify Linked",
     "Category",
     "Subcategory 1",
   ];
@@ -109,6 +110,7 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
         r.retail_price?.trim() ?? "",
         r.bin_location ?? "",
         String(r.active_epc_count ?? 0),
+        r.shopify_linked ? "Yes" : "No",
         r.category?.trim() ?? "",
         r.subcategory_1?.trim() ?? "",
       ]
@@ -132,7 +134,7 @@ type SortKey =
   | "color" | "size" | "default_cost" | "retail_price" | "bin"
   | "qty_epc" | "category" | "subcategory_1";
 
-const COL_COUNT = 13;
+const COL_COUNT = 14;
 
 /**
  * Default column widths — same order as the header config below
@@ -156,6 +158,7 @@ const DEFAULT_COL_WIDTHS: (number | null)[] = [
   80,   // bin
   90,   // qty (epc) — centered numerals
   90,   // rfid (fits 78px badge + table padding)
+  80,   // shopify (linked/not-linked logo)
   110,  // category
   120,  // subcategory 1
 ];
@@ -794,9 +797,10 @@ export function CatalogWorkspace({
                       { key: "bin", label: "Bin" },
                       { key: "qty_epc", label: "Qty (EPC)", align: "center" },
                       { key: "rfid", label: "RFID", sortable: false },
+                      { key: "shopify", label: "Shopify", sortable: false, align: "center" },
                       { key: "category", label: "Category" },
                       { key: "subcategory_1", label: "Subcategory 1" },
-                    ] as { key: SortKey | "rfid"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean; noClip?: boolean }[]
+                    ] as { key: SortKey | "rfid" | "shopify"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean; noClip?: boolean }[]
                   ).map(({ key, label, cls, align, sortable, hidden, noClip }, colIdx) => {
                     const isSortable = sortable !== false;
                     const active = isSortable && sortBy === key;
@@ -840,13 +844,13 @@ export function CatalogWorkspace({
               <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={13} className="px-4 py-10 text-center text-[var(--wms-muted)]">
+                    <td colSpan={14} className="px-4 py-10 text-center text-[var(--wms-muted)]">
                       Loading catalog…
                     </td>
                   </tr>
                 ) : showNoMatches ? (
                   <tr>
-                    <td colSpan={13} className="px-4 py-14 text-center text-[var(--wms-muted)]">
+                    <td colSpan={14} className="px-4 py-14 text-center text-[var(--wms-muted)]">
                       <p className="font-mono text-sm text-[var(--wms-muted)]">No rows match your search.</p>
                     </td>
                   </tr>
@@ -986,6 +990,26 @@ export function CatalogWorkspace({
                             EPCs
                           </button>
                         )}
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <span
+                          className="inline-block h-5 w-5 align-middle"
+                          style={{
+                            backgroundColor: r.shopify_linked ? "var(--wms-accent)" : "var(--wms-muted)",
+                            opacity: r.shopify_linked ? 1 : 0.55,
+                            WebkitMaskImage: "url(/shopify-mark.png)",
+                            maskImage: "url(/shopify-mark.png)",
+                            WebkitMaskRepeat: "no-repeat",
+                            maskRepeat: "no-repeat",
+                            WebkitMaskPosition: "center",
+                            maskPosition: "center",
+                            WebkitMaskSize: "contain",
+                            maskSize: "contain",
+                          }}
+                          title={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
+                          aria-label={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
+                          role="img"
+                        />
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]" title={r.category ?? undefined}>
                         {r.category?.trim() || "—"}

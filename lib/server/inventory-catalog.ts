@@ -28,6 +28,8 @@ export type CatalogGridRow = {
   ls_on_hand_total: number | null;
   active_epc_count: number;
   bin_location: string | null;
+  /** True when this variant is linked to a Shopify variant (has shopify_variant_id). */
+  shopify_linked: boolean;
   /** Variant archive flag synced from Lightspeed. */
   archived: boolean;
   /** True only when every variant under the same matrix is archived. */
@@ -305,10 +307,12 @@ export async function listCatalogGrid(
     manual_qty: number | null;
     pinned_bin_code: string | null;
     shopify_image_url: string | null;
+    shopify_linked: boolean;
   }>(
     `SELECT
        cs.id::text AS custom_sku_id,
        cs.shopify_image_url AS shopify_image_url,
+       (cs.shopify_variant_id IS NOT NULL) AS shopify_linked,
        m.id::text AS matrix_id,
        m.ls_system_id::text AS matrix_ls_system_id,
        cs.ls_system_id::text AS sku_ls_system_id,
@@ -449,6 +453,7 @@ export async function listCatalogGrid(
         ls_on_hand_total: lsOnHand,
         active_epc_count: displayQty,
         bin_location: row.bin_location ?? null,
+        shopify_linked: row.shopify_linked === true,
         archived: row.archived === true,
         matrix_archived: row.matrix_archived === true,
         is_manual_only: manual,
