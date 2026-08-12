@@ -353,6 +353,86 @@ export async function createProductMedia(
   return { ok: false, error: "media not READY after timeout" };
 }
 
+export type ProductMedia = { id: string; url: string; alt: string };
+
+/** List a product's IMAGE media (id, url, alt) in current order. */
+export async function listProductMedia(ctx: ShopCtx, productId: string): Promise<ProductMedia[]> {
+  const res = await gql<{
+    product?: {
+      media?: { nodes?: Array<{ id: string; mediaContentType?: string; image?: { url?: string; altText?: string | null } }> };
+    };
+  }>(
+    ctx,
+    `query($id: ID!) {
+      product(id: $id) {
+        media(first: 250) { nodes { ... on MediaImage { id image { url altText } } mediaContentType } }
+      }
+    }`,
+    { id: toProductGid(productId) },
+  );
+  return (res.data?.product?.media?.nodes || [])
+    .filter((n) => String(n.mediaContentType || "").toUpperCase() === "IMAGE" && n.id)
+    .map((n) => ({ id: n.id, url: n.image?.url || "", alt: n.image?.altText || "" }));
+}
+
+/** Delete product media (removes the images from Shopify). */
+export async function deleteProductMedia(
+  ctx: ShopCtx,
+  productId: string,
+  mediaIds: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  if (!mediaIds.length) return { ok: true };
+  const res = await gql<{ productDeleteMedia?: { mediaUserErrors?: Array<{ message: string }> } }>(
+    ctx,
+    `mutation productDeleteMedia($productId: ID!, $mediaIds: [ID!]!) {
+      productDeleteMedia(productId: $productId, mediaIds: $mediaIds) { deletedMediaIds mediaUserErrors { field message } }
+    }`,
+    { productId: toProductGid(productId), mediaIds },
+  );
+  const errs = res.data?.productDeleteMedia?.mediaUserErrors || [];
+  return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
+/** Set alt text on existing media. */
+export async function updateMediaAlt(
+  ctx: ShopCtx,
+  productId: string,
+  items: Array<{ id: string; alt: string }>,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!items.length) return { ok: true };
+  const res = await gql<{ productUpdateMedia?: { mediaUserErrors?: Array<{ message: string }> } }>(
+    ctx,
+    `mutation productUpdateMedia($productId: ID!, $media: [UpdateMediaInput!]!) {
+      productUpdateMedia(productId: $productId, media: $media) { mediaUserErrors { field message } }
+    }`,
+    { productId: toProductGid(productId), media: items.map((i) => ({ id: i.id, alt: i.alt || null })) },
+  );
+  const errs = res.data?.productUpdateMedia?.mediaUserErrors || [];
+  return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
+/** Reorder media to the given order (index 0 = hero / first). */
+export async function reorderProductMedia(
+  ctx: ShopCtx,
+  productId: string,
+  orderedMediaIds: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  if (orderedMediaIds.length < 2) return { ok: true };
+  const moves = orderedMediaIds.map((id, idx) => ({ id, newPosition: String(idx + 1) }));
+  const res = await gql<{ productReorderMedia?: { userErrors?: Array<{ message: string }>; mediaUserErrors?: Array<{ message: string }> } }>(
+    ctx,
+    `mutation productReorderMedia($id: ID!, $moves: [MoveInput!]!) {
+      productReorderMedia(id: $id, moves: $moves) { mediaUserErrors { field message } userErrors { field message } }
+    }`,
+    { id: toProductGid(productId), moves },
+  );
+  const errs = [
+    ...(res.data?.productReorderMedia?.mediaUserErrors || []),
+    ...(res.data?.productReorderMedia?.userErrors || []),
+  ];
+  return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
 /** Attach existing product media to a specific variant (per-colour image). */
 export async function appendMediaToVariant(
   ctx: ShopCtx,

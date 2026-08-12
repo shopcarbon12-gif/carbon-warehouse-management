@@ -21,6 +21,15 @@ type Crop = { id: string; b64: string; label: string; selected: boolean };
 /** url = what the generator fetches (may be an auth'd R2 URL); preview = a
  * browser-renderable thumbnail (data URL for uploads, public URL for Shopify). */
 type ItemRef = { url: string; preview?: string };
+/** A media-manager row: an existing Shopify image or a new crop to add. */
+type MediaItem = {
+  key: string;
+  kind: "existing" | "new";
+  mediaId?: string;
+  b64?: string;
+  url: string; // display src (cdn url for existing, data-url for new)
+  alt: string;
+};
 
 function readAsDataUrl(file: File): Promise<string> {
   return new Promise((res) => {
@@ -40,13 +49,6 @@ type Props = {
 };
 
 const PANELS = [1, 2, 3, 4];
-
-function b64ToFile(b64: string, name: string): File {
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) arr[i] = bin.charCodeAt(i);
-  return new File([arr], name, { type: "image/png" });
-}
 
 export function CarbonStudioTab({
   matrixId,
@@ -69,6 +71,9 @@ export function CarbonStudioTab({
   const [err, setErr] = useState<string | null>(null);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [zoom, setZoom] = useState<string | null>(null);
+  const [showMedia, setShowMedia] = useState(false);
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [mediaBusy, setMediaBusy] = useState<string | null>(null);
   const [qr, setQr] = useState<{ url: string; scanUrl: string; sessionId: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -259,33 +264,110 @@ export function CarbonStudioTab({
     }
   }, [model, itemRefs, panels, itemType, crops]);
 
-  const push = useCallback(async () => {
-    const target = colors.find((c) => c.color === color)?.variant;
-    if (!target?.shopify_variant_id) return setErr("Pick a published colour.");
-    const chosen = crops.filter((c) => c.selected && c.b64);
-    if (!chosen.length) return setErr("Select at least one crop.");
-    setBusy("push");
+  // ---- Media manager (matches carbon-gen's Publish step) ----
+  const openMediaManager = useCallback(async () => {
+    setMediaBusy("load");
     setErr(null);
-    setMsg(`Pushing ${chosen.length} image(s) to Shopify…`);
     try {
-      let ok = 0;
-      for (const c of chosen) {
-        const fd = new FormData();
-        fd.append("matrixId", matrixId);
-        fd.append("customSkuId", target.id);
-        fd.append("force", "1");
-        fd.append("alt", `${color} on-model`);
-        fd.append("file", b64ToFile(c.b64, `carbon-studio-${c.id}.png`));
-        const r = await fetch("/api/shopify/image-upload", { method: "POST", body: fd });
-        if (r.ok) ok += 1;
-      }
-      setMsg(`Pushed ${ok}/${chosen.length} image(s) to Shopify (${color}). See the Images tab.`);
+      const r = await fetch(`/api/shopify/media?matrixId=${matrixId}`);
+      const j = (await r.json().catch(() => ({}))) as { media?: Array<{ id: string; url: string; alt: string }> };
+      const existing: MediaItem[] = (j.media || []).map((m) => ({
+        key: `ex-${m.id}`,
+        kind: "existing",
+        mediaId: m.id,
+        url: m.url,
+        alt: m.alt || "",
+      }));
+      const news: MediaItem[] = crops
+        .filter((c) => c.selected && c.b64)
+        .map((c) => ({ key: `new-${c.id}`, kind: "new", b64: c.b64, url: `data:image/png;base64,${c.b64}`, alt: "" }));
+      setMediaItems([...existing, ...news]);
+      setShowMedia(true);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Push failed");
+      setErr(e instanceof Error ? e.message : "Could not load media");
     } finally {
-      setBusy(null);
+      setMediaBusy(null);
     }
-  }, [colors, color, crops, matrixId]);
+  }, [matrixId, crops]);
+
+  const genAlt = useCallback(
+    async (key: string) => {
+      const item = mediaItems.find((m) => m.key === key);
+      if (!item) return;
+      setMediaBusy(`alt-${key}`);
+      try {
+        const r = await fetch("/api/openai/image-alt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: item.url }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { alt?: string; altText?: string };
+        const alt = (j.alt || j.altText || "").trim();
+        if (alt) setMediaItems((prev) => prev.map((m) => (m.key === key ? { ...m, alt } : m)));
+      } catch {
+        /* ignore */
+      } finally {
+        setMediaBusy(null);
+      }
+    },
+    [mediaItems],
+  );
+
+  const moveMedia = (key: string, dir: -1 | 1) =>
+    setMediaItems((prev) => {
+      const i = prev.findIndex((m) => m.key === key);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const copy = [...prev];
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+      return copy;
+    });
+  const makeHero = (key: string) =>
+    setMediaItems((prev) => {
+      const i = prev.findIndex((m) => m.key === key);
+      if (i <= 0) return prev;
+      const copy = [...prev];
+      const [it] = copy.splice(i, 1);
+      copy.unshift(it);
+      return copy;
+    });
+  const removeMedia = (key: string) => setMediaItems((prev) => prev.filter((m) => m.key !== key));
+
+  const publishMedia = useCallback(async () => {
+    setMediaBusy("publish");
+    setErr(null);
+    setMsg(null);
+    try {
+      const heroVariantId = colors.find((c) => c.color === color)?.variant?.shopify_variant_id || undefined;
+      const items = mediaItems.map((m) =>
+        m.kind === "existing"
+          ? { kind: "existing", mediaId: m.mediaId, alt: m.alt }
+          : { kind: "new", b64: m.b64, alt: m.alt },
+      );
+      const r = await fetch("/api/shopify/media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrixId, items, heroVariantId }),
+      });
+      const j = (await r.json().catch(() => ({}))) as {
+        error?: string;
+        media?: Array<{ id: string; url: string; alt: string }>;
+        warnings?: string[];
+      };
+      if (!r.ok) throw new Error(j.error ?? "Publish failed");
+      setMediaItems(
+        (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "" })),
+      );
+      setCrops((prev) => prev.filter((c) => !c.selected)); // pushed crops consumed
+      setMsg(
+        `Media saved to Shopify (${(j.media || []).length} image(s))${j.warnings?.length ? ` — ${j.warnings.length} warning(s)` : ""}.`,
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Publish failed");
+    } finally {
+      setMediaBusy(null);
+    }
+  }, [matrixId, mediaItems, colors, color]);
 
   if (!shopifyProductId) {
     return (
@@ -439,16 +521,15 @@ export function CarbonStudioTab({
               ? `↻ Regenerate ${panels.length}`
               : `✦ Generate ${panels.length} panel(s)`}
         </button>
-        {crops.some((c) => c.selected && c.b64) ? (
-          <button
-            type="button"
-            disabled={!canManage || busy !== null}
-            onClick={() => void push()}
-            className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
-          >
-            {busy === "push" ? "Pushing…" : `⤴ Push to Shopify (${color})`}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          disabled={!canManage || mediaBusy !== null}
+          onClick={() => void openMediaManager()}
+          title="Arrange images, set the hero, alt text, delete, and publish to Shopify"
+          className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
+        >
+          {mediaBusy === "load" ? "Loading…" : "🖼 Manage & publish images"}
+        </button>
         {progress ? <span className="font-mono text-[0.6rem] text-[var(--wms-accent)]">{progress}</span> : null}
         {msg ? <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">{msg}</span> : null}
         {err ? <span className="font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}
@@ -477,7 +558,7 @@ export function CarbonStudioTab({
                   title="View full size"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setZoom(c.b64);
+                    setZoom(`data:image/png;base64,${c.b64}`);
                   }}
                   className="absolute right-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[0.7rem] leading-none text-white"
                 >
@@ -496,16 +577,96 @@ export function CarbonStudioTab({
         </div>
       ) : null}
 
+      {showMedia ? (
+        <div className="rounded-md border border-[var(--wms-accent)]/40 bg-[var(--wms-surface-elevated)]/40 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)]">Manage images</span>
+            <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
+              first = hero · ↑↓ reorder · ★ hero · ✨ alt · ✕ remove
+            </span>
+            <div className="flex-1" />
+            <button
+              type="button"
+              disabled={!canManage || mediaBusy !== null}
+              onClick={() => void publishMedia()}
+              className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
+            >
+              {mediaBusy === "publish" ? "Publishing…" : "⤴ Publish to Shopify"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowMedia(false)}
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-fg)]"
+            >
+              Close
+            </button>
+          </div>
+          {mediaItems.length === 0 ? (
+            <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+              No images yet — generate or upload, then manage here.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {mediaItems.map((m, idx) => (
+                <div
+                  key={m.key}
+                  className="flex items-start gap-3 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] p-2"
+                >
+                  <div className="relative shrink-0">
+                    <img
+                      src={m.url}
+                      alt={m.alt}
+                      className="h-20 w-16 cursor-pointer rounded border border-[var(--wms-border)] object-cover"
+                      onClick={() => setZoom(m.url)}
+                    />
+                    {idx === 0 ? (
+                      <span className="absolute left-0 top-0 rounded-br bg-[var(--wms-accent)] px-1 text-[0.5rem] font-bold text-[var(--wms-accent-fg)]">
+                        HERO
+                      </span>
+                    ) : null}
+                    <span className="absolute bottom-0 right-0 rounded-tl bg-black/60 px-1 text-[0.5rem] text-white">
+                      {m.kind === "new" ? "NEW" : "◆"}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <textarea
+                      className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.6rem] text-[var(--wms-fg)]"
+                      rows={2}
+                      placeholder="alt text"
+                      value={m.alt}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMediaItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, alt: v } : x)));
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={mediaBusy !== null}
+                      onClick={() => void genAlt(m.key)}
+                      className="mt-1 rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.55rem] text-[var(--wms-accent)] disabled:opacity-50"
+                    >
+                      {mediaBusy === `alt-${m.key}` ? "…" : "✨ Generate alt"}
+                    </button>
+                  </div>
+                  <div className="flex shrink-0 flex-col gap-1">
+                    <button type="button" onClick={() => moveMedia(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↑</button>
+                    <button type="button" onClick={() => moveMedia(m.key, 1)} disabled={idx === mediaItems.length - 1} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↓</button>
+                    <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
+                    <button type="button" onClick={() => removeMedia(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-status-danger-fg)]">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {zoom ? (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-6"
           onClick={() => setZoom(null)}
         >
-          <img
-            src={`data:image/png;base64,${zoom}`}
-            alt="Generated (full size)"
-            className="max-h-full max-w-full rounded-lg"
-          />
+          <img src={zoom} alt="Full size" className="max-h-full max-w-full rounded-lg" />
           <button
             type="button"
             onClick={() => setZoom(null)}
