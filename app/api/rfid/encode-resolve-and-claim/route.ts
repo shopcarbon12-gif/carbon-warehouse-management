@@ -96,6 +96,12 @@ export async function POST(req: Request) {
          FROM custom_skus cs
          LEFT JOIN matrices m ON m.id = cs.matrix_id
         WHERE LOWER(cs.sku) = LOWER($1::text)
+        -- A replacement product can inherit the old one's UPC *and* per-size
+        -- SKU codes from Lightspeed (e.g. active "Leroy" reusing archived
+        -- "Jacob"'s 122225004L). Without ordering, LIMIT 1 returned an
+        -- arbitrary row and encoded the ARCHIVED item's system_id. Active
+        -- always wins; cs.id is a deterministic tiebreak.
+        ORDER BY cs.archived ASC, cs.id ASC
         LIMIT 1`,
       [customSku],
     );

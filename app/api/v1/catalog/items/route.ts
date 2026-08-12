@@ -35,6 +35,10 @@ export async function GET(req: Request) {
        FROM custom_skus cs
        LEFT JOIN matrices m ON m.id = cs.matrix_id
        WHERE LOWER(cs.sku) = LOWER($1::text)
+       -- Duplicate SKU codes across an archived + active matrix (a Lightspeed
+       -- replacement reusing the old UPC/SKU) must resolve to the ACTIVE row,
+       -- else re-encode targets the archived item. Deterministic tiebreak on id.
+       ORDER BY cs.archived ASC, cs.id ASC
        LIMIT 1`,
       [customSku],
     );
