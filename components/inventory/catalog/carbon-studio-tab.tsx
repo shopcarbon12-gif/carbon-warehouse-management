@@ -180,57 +180,72 @@ export function CarbonStudioTab({
     setMsg(null);
     setCrops([]);
     const chosen = [...panels].sort((a, b) => a - b);
-    const all: Crop[] = [];
-    try {
-      for (let i = 0; i < chosen.length; i += 1) {
-        const panel = chosen[i];
-        setProgress(`Generating panel ${panel} (${i + 1}/${chosen.length})…`);
-        const [poseA, poseB] = getPanelPosePair(model.gender, panel);
-        const panelLabel = getPanelButtonLabel(model.gender, panel);
-        const prompt = buildMasterPanelPrompt({
-          panelNumber: panel,
-          panelLabel,
-          poseA,
-          poseB,
-          modelName: model.name,
-          modelGender: model.gender,
+    setProgress(`Generating ${chosen.length} panel(s) in parallel…`);
+
+    const genOnePanel = async (panel: number): Promise<Crop[]> => {
+      const [poseA, poseB] = getPanelPosePair(model.gender, panel);
+      const panelLabel = getPanelButtonLabel(model.gender, panel);
+      const prompt = buildMasterPanelPrompt({
+        panelNumber: panel,
+        panelLabel,
+        poseA,
+        poseB,
+        modelName: model.name,
+        modelGender: model.gender,
+        modelRefs: model.ref_image_urls,
+        itemRefs: refUrls,
+        itemType,
+      });
+      const resp = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          prompt,
+          size: "1536x1024",
           modelRefs: model.ref_image_urls,
           itemRefs: refUrls,
-          itemType,
-        });
-        const resp = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({
-            prompt,
-            size: "1536x1024",
-            modelRefs: model.ref_image_urls,
-            itemRefs: refUrls,
-            panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType },
-          }),
-        });
-        const json = (await resp.json().catch(() => ({}))) as {
-          imageBase64?: string;
-          degraded?: boolean;
-          warning?: string;
-          error?: unknown;
-        };
-        if (!resp.ok || json.degraded || !json.imageBase64) {
-          const e = json.error;
-          all.push({
+          panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType },
+        }),
+      });
+      const json = (await resp.json().catch(() => ({}))) as {
+        imageBase64?: string;
+        degraded?: boolean;
+        warning?: string;
+        error?: unknown;
+      };
+      if (!resp.ok || json.degraded || !json.imageBase64) {
+        const e = json.error;
+        return [
+          {
             id: `p${panel}-err`,
             b64: "",
             label: `Panel ${panel}: ${(typeof e === "string" ? e : (e as { message?: string })?.message) || json.warning || "failed"}`,
             selected: false,
-          });
-          continue;
-        }
-        const { left, right } = await splitPanelToThreeByFour(json.imageBase64);
-        all.push({ id: `p${panel}-l`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: true });
-        all.push({ id: `p${panel}-r`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: true });
-        setCrops([...all]);
+          },
+        ];
       }
-      setProgress("");
+      const { left, right } = await splitPanelToThreeByFour(json.imageBase64);
+      return [
+        { id: `p${panel}-l`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: true },
+        { id: `p${panel}-r`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: true },
+      ];
+    };
+
+    try {
+      // Fire every selected panel AT ONCE (like carbon-gen), not one at a time.
+      const settled = await Promise.allSettled(chosen.map((p) => genOnePanel(p)));
+      const all: Crop[] = [];
+      settled.forEach((s, i) => {
+        if (s.status === "fulfilled") all.push(...s.value);
+        else
+          all.push({
+            id: `p${chosen[i]}-fail`,
+            b64: "",
+            label: `Panel ${chosen[i]}: ${s.reason instanceof Error ? s.reason.message : "failed"}`,
+            selected: false,
+          });
+      });
+      setCrops(all);
       setMsg(`Generated ${all.filter((c) => c.b64).length} crop(s). Select what to keep, then push.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Generation failed");
