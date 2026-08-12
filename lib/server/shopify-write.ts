@@ -341,6 +341,80 @@ export async function appendMediaToVariant(
   return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
 }
 
+export type MetafieldInput = {
+  ownerId: string;
+  namespace: string;
+  key: string;
+  type: string;
+  value: string;
+};
+
+/** metafieldsSet in batches of 25 (Shopify's per-call limit). */
+export async function setMetafields(
+  ctx: ShopCtx,
+  metafields: MetafieldInput[],
+): Promise<{ ok: boolean; error?: string }> {
+  const errors: string[] = [];
+  for (let i = 0; i < metafields.length; i += 25) {
+    const batch = metafields.slice(i, i + 25);
+    const res = await gql<{ metafieldsSet?: { userErrors?: Array<{ message: string }> } }>(
+      ctx,
+      `mutation metafieldsSet($m: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $m) { userErrors { field message } }
+      }`,
+      { m: batch },
+    );
+    const errs = res.data?.metafieldsSet?.userErrors || [];
+    if (!res.ok) errors.push(JSON.stringify(res.errors));
+    else if (errs.length) errors.push(...errs.map((e) => e.message));
+  }
+  return errors.length ? { ok: false, error: errors.join("; ") } : { ok: true };
+}
+
+/** Create a manual Shopify collection (M4). */
+export async function collectionCreate(
+  ctx: ShopCtx,
+  input: { title: string; descriptionHtml?: string },
+): Promise<{ ok: true; id: string; handle: string } | { ok: false; error: string }> {
+  const res = await gql<{
+    collectionCreate?: {
+      collection?: { id: string; handle: string };
+      userErrors?: Array<{ message: string }>;
+    };
+  }>(
+    ctx,
+    `mutation collectionCreate($input: CollectionInput!) {
+      collectionCreate(input: $input) {
+        collection { id handle }
+        userErrors { field message }
+      }
+    }`,
+    { input: { title: input.title, ...(input.descriptionHtml ? { descriptionHtml: input.descriptionHtml } : {}) } },
+  );
+  const errs = res.data?.collectionCreate?.userErrors || [];
+  if (!res.ok) return { ok: false, error: JSON.stringify(res.errors) };
+  if (errs.length) return { ok: false, error: errs.map((e) => e.message).join("; ") };
+  const c = res.data?.collectionCreate?.collection;
+  if (!c?.id) return { ok: false, error: "collectionCreate returned no collection" };
+  return { ok: true, id: c.id, handle: c.handle };
+}
+
+/** Delete a collection (used only to clean up verification/test collections). */
+export async function collectionDelete(
+  ctx: ShopCtx,
+  collectionId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await gql<{ collectionDelete?: { userErrors?: Array<{ message: string }> } }>(
+    ctx,
+    `mutation collectionDelete($input: CollectionDeleteInput!) {
+      collectionDelete(input: $input) { deletedCollectionId userErrors { field message } }
+    }`,
+    { input: { id: collectionId } },
+  );
+  const errs = res.data?.collectionDelete?.userErrors || [];
+  return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
 /** Delete a product (used only to clean up verification/test products). */
 export async function deleteProduct(
   ctx: ShopCtx,

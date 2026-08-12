@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CarbonStudioTab } from "./carbon-studio-tab";
+import { MetafieldsTab } from "./metafields-tab";
 import useSWR from "swr";
 import { Plus, Printer, X as XIcon, RotateCcw, ChevronLeft } from "lucide-react";
 import { printRfidLabel } from "./print-label";
@@ -179,7 +180,9 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   // Two real tabs: "matrix" (pictures, shared values, color/size, variant tree)
   // and "setup" (the Group Items grid). State below is shared, so adding a
   // color/size on the Matrix tab shows up as new Group-Item rows in Setup.
-  const [tab, setTab] = useState<"matrix" | "setup" | "images" | "seo" | "studio">("matrix");
+  const [tab, setTab] = useState<
+    "matrix" | "setup" | "images" | "seo" | "studio" | "meta"
+  >("matrix");
   // Per-variant image upload state (Images tab, M2).
   const [imgBusy, setImgBusy] = useState<string | null>(null);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -769,7 +772,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
           ) : (
             <div className="flex flex-col sm:flex-row">
               <nav className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3">
-                {(["setup", "matrix", "images", "seo", "studio"] as const).map((t) => (
+                {(["setup", "matrix", "images", "seo", "studio", "meta"] as const).map((t) => (
                   <div key={t}>
                     <button
                       type="button"
@@ -1128,6 +1131,13 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     color: v.color,
                     shopify_variant_id: v.shopify_variant_id ?? null,
                   }))}
+                  canManage={canManage}
+                />
+                ) : tab === "meta" ? (
+                /* Metafields tab (M4) — custom + Google-feed metafields + create collection. */
+                <MetafieldsTab
+                  matrixId={matrixId}
+                  shopifyProductId={data.matrix.shopify_product_id ?? null}
                   canManage={canManage}
                 />
                 ) : (
