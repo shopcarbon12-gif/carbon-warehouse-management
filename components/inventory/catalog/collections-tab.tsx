@@ -122,10 +122,17 @@ export function CollectionsTab({ upc, shopifyProductId, canManage }: Props) {
     const idToTitle = new Map(data.collections.map((c) => [c.id, c.title]));
     const handleToTitle = new Map(data.collections.map((c) => [c.handle, c.title]));
 
+    // Only nodes that are enabled AND mapped to a Shopify collection can be
+    // pushed — the server rejects any other nodeKey ("not mapped to a
+    // collection"). Everything we select/send is filtered to this set.
+    const assignableKeys = new Set(
+      data.nodes.filter((n) => n.enabled && !!n.collectionId).map((n) => n.nodeKey),
+    );
+
     const suggestedNodeKeys = new Set<string>();
     for (const p of [...data.row.autoMappedPaths, ...data.row.suggestedPaths]) {
       const k = keyByPath.get(normPath(p));
-      if (k) suggestedNodeKeys.add(k);
+      if (k && assignableKeys.has(k)) suggestedNodeKeys.add(k);
     }
     const suggestedDirect = new Set<string>([
       ...data.row.directCollectionsToAssign,
@@ -137,14 +144,19 @@ export function CollectionsTab({ upc, shopifyProductId, canManage }: Props) {
       new Set([...data.row.currentDirectCollections, ...suggestedDirect]),
     ).filter((h) => !nodeHandles.has(h));
 
-    return { children, suggestedNodeKeys, suggestedDirect, handleToId, idToTitle, handleToTitle, directHandles };
+    return { children, assignableKeys, suggestedNodeKeys, suggestedDirect, handleToId, idToTitle, handleToTitle, directHandles };
   }, [data]);
 
   // Auto path: pre-select current ∪ suggested whenever fresh data lands.
   useEffect(() => {
     if (!data || !tree) return;
-    setSelNodes(new Set([...data.row.checkedNodeKeys, ...tree.suggestedNodeKeys]));
-    setSelDirect(new Set([...data.row.currentDirectCollections, ...tree.suggestedDirect].filter((h) => tree.handleToId.has(h))));
+    // Pre-select current + suggested TREE nodes (mapped only). For "Other
+    // collections" pre-check ONLY the ones the product is already in — suggested
+    // ones are shown unchecked so the user opts in.
+    setSelNodes(
+      new Set([...data.row.checkedNodeKeys, ...tree.suggestedNodeKeys].filter((k) => tree.assignableKeys.has(k))),
+    );
+    setSelDirect(new Set(data.row.currentDirectCollections.filter((h) => tree.handleToId.has(h))));
   }, [data, tree]);
 
   const currentTitles = useMemo(() => {
@@ -174,9 +186,11 @@ export function CollectionsTab({ upc, shopifyProductId, canManage }: Props) {
     setErr(null);
     setMsg(null);
     try {
-      const curNodes = new Set(data.row.checkedNodeKeys);
+      // Reconcile only within mapped/assignable nodes so we never send a nodeKey
+      // the server would reject as "not mapped to a collection".
+      const curNodes = new Set(data.row.checkedNodeKeys.filter((k) => tree.assignableKeys.has(k)));
       const curDirect = new Set(data.row.currentDirectCollections);
-      const addNodes = [...selNodes].filter((k) => !curNodes.has(k));
+      const addNodes = [...selNodes].filter((k) => !curNodes.has(k) && tree.assignableKeys.has(k));
       const remNodes = [...curNodes].filter((k) => !selNodes.has(k));
       const toGid = (h: string) => tree.handleToId.get(h);
       const addDirect = [...selDirect].filter((h) => !curDirect.has(h)).map(toGid).filter(Boolean) as string[];
