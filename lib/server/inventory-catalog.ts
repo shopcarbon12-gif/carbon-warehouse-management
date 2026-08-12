@@ -36,9 +36,10 @@ export type CatalogGridRow = {
   matrix_archived: boolean;
   /**
    * True when the parent matrix is flagged as a manual (non-RFID) item.
-   * For manual rows, `active_epc_count` is the LS on-hand total + settled
-   * adjustments instead of an EPC count, and the UI swaps the RFID button
-   * for a "Manual" badge.
+   * For manual rows, `active_epc_count` carries the manual_item_qty set-up
+   * quantity instead of an EPC count, and the UI swaps the RFID button for a
+   * "Manual" badge. For RFID rows, `active_epc_count` is exactly the live
+   * in-stock EPC count — no inventory-adjustment overlay.
    */
   is_manual_only: boolean;
   /**
@@ -399,52 +400,22 @@ export async function listCatalogGrid(
 
   const filters = await listCatalogFilterOptions(pool);
 
-  // Second-pass: overlay settled inventory_adjustments onto active_epc_count for
-  // the SKUs we just fetched. Wrapped in try/catch so a missing or broken table
-  // never breaks the whole catalog response.
-  const adjustmentsBySku = new Map<string, number>();
-  if (data.rows.length > 0) {
-    const skuIds = data.rows.map((r) => r.custom_sku_id);
-    try {
-      const adj = await pool.query<{ custom_sku_id: string; delta: string }>(
-        `SELECT custom_sku_id::text, COALESCE(SUM(qty_delta), 0)::text AS delta
-         FROM inventory_adjustments
-         WHERE custom_sku_id = ANY($1::uuid[])
-           AND location_id = $2::uuid
-           AND state = 'settled'
-         GROUP BY custom_sku_id`,
-        [skuIds, locationId],
-      );
-      for (const r of adj.rows) {
-        adjustmentsBySku.set(r.custom_sku_id, Number(r.delta) || 0);
-      }
-    } catch (e) {
-      // inventory_adjustments table not yet migrated, or transient DB issue.
-      // Don't propagate — catalog should always render.
-      console.warn(
-        "[inventory_catalog] inventory_adjustments overlay skipped:",
-        e instanceof Error ? e.message : e,
-      );
-    }
-  }
-
   return {
     rows: data.rows.map((row) => {
       const epcCount = Number(row.active_epc_count ?? 0);
-      const delta = adjustmentsBySku.get(row.custom_sku_id) ?? 0;
       const lsOnHand = (() => {
         if (row.ls_on_hand_total == null || row.ls_on_hand_total === "") return null;
         const n = Number(row.ls_on_hand_total);
         return Number.isFinite(n) ? n : null;
       })();
       const manual = row.is_manual_only === true;
-      // Manual matrices: qty is the absolute value stored in manual_item_qty
-      // for this (sku, location). No fallback — if no row exists yet (never
-      // synced, never counted) the operator sees 0 until something writes one.
-      // RFID matrices: unchanged — EPC count + settled inventory_adjustments delta.
-      const displayQty = manual
-        ? Number(row.manual_qty ?? 0)
-        : epcCount + delta;
+      // Manual (non-RFID) matrices: qty is the value stored in manual_item_qty
+      // for this (sku, location) — the item was set up as a manual item.
+      // RFID matrices: qty is EXACTLY the live in-stock EPC count. We do NOT add
+      // any inventory_adjustments overlay — a settled transfer with no physical
+      // EPC must never show as phantom (or negative) stock. Qty always equals
+      // what the RFID tags say is actually here.
+      const displayQty = manual ? Number(row.manual_qty ?? 0) : epcCount;
       return {
         custom_sku_id: row.custom_sku_id,
         matrix_id: row.matrix_id,
