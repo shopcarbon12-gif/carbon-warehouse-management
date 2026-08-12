@@ -251,6 +251,17 @@ export async function moveSkuPrefixToBin(
     );
   }
 
+  // Variant-level home-bin assignment: mark EVERY size of this colour as
+  // assigned to the target bin — INCLUDING zero-qty sizes with no EPCs — so the
+  // catalog shows the whole colour as assigned. This is display metadata only;
+  // it never creates inventory and bin SCANNING still reads live items only.
+  await client.query(
+    `UPDATE custom_skus cs
+        SET assigned_bin_id = $2::uuid
+      WHERE (CASE WHEN cs.sku LIKE 'C%' THEN LEFT(cs.sku, 11) ELSE LEFT(cs.sku, 9) END) = $1`,
+    [params.skuPrefix, params.targetBinId],
+  );
+
   void sourceCode; // captured above for potential future use
   return { moved: moved.rows.length };
 }

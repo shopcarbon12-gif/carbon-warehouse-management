@@ -345,15 +345,27 @@ export async function listCatalogGrid(
          WHERE miq.custom_sku_id = cs.id
            AND miq.location_id = $${locIdx}::uuid
        ) AS manual_qty,
-       (
-         SELECT string_agg(DISTINCT b.code, ', ' ORDER BY b.code)
-         FROM items i
-         INNER JOIN bins b ON b.id = i.bin_id
-         WHERE i.custom_sku_id = cs.id
-           AND i.location_id = $${locIdx}::uuid
-           AND i.status = 'in-stock'
-           AND i.bin_id IS NOT NULL
-           AND b.archived_at IS NULL
+       COALESCE(
+         (
+           SELECT string_agg(DISTINCT b.code, ', ' ORDER BY b.code)
+           FROM items i
+           INNER JOIN bins b ON b.id = i.bin_id
+           WHERE i.custom_sku_id = cs.id
+             AND i.location_id = $${locIdx}::uuid
+             AND i.status = 'in-stock'
+             AND i.bin_id IS NOT NULL
+             AND b.archived_at IS NULL
+         ),
+         -- Fallback for zero-qty sizes: the colour's assigned home bin (only if
+         -- that bin is at the active location and still active).
+         (
+           SELECT b.code
+           FROM bins b
+           INNER JOIN locations l ON l.id = b.location_id
+           WHERE b.id = cs.assigned_bin_id
+             AND l.id = $${locIdx}::uuid
+             AND b.archived_at IS NULL
+         )
        ) AS bin_location,
        -- "store" pin indicator: first (alphabetically) bin code with a
        -- pinned EPC under this SKU. Null when no EPC is pinned. The UI
