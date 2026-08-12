@@ -13,6 +13,7 @@ import {
   stageImageUpload,
   appendMediaToVariant,
 } from "@/lib/server/shopify-write";
+import { syncShopifyImagesForMatrix } from "@/lib/server/shopify-catalog-images";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -149,5 +150,25 @@ export async function POST(req: Request) {
     if (!av.ok) warnings.push(`variant image: ${av.error}`);
   }
 
-  return NextResponse.json({ ok: true, media: await listProductMedia(ctx, productId), warnings });
+  // Auto-writeback: pull the just-published Shopify links back into WMS —
+  // matrix gallery (matrices.shopify_image_urls) + per-variant colour image
+  // (custom_skus.shopify_image_url). No manual "sync images" step needed.
+  let imageWriteback: { variantsMatched: number; galleryCount: number } | null = null;
+  try {
+    const sync = await syncShopifyImagesForMatrix(pool, matrixId, productId);
+    if (sync.ok) {
+      imageWriteback = { variantsMatched: sync.variantsMatched, galleryCount: sync.galleryCount };
+    } else {
+      warnings.push(`image writeback: ${sync.reason ?? "skipped"}`);
+    }
+  } catch (e) {
+    warnings.push(`image writeback: ${e instanceof Error ? e.message : "failed"}`);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    media: await listProductMedia(ctx, productId),
+    warnings,
+    imageWriteback,
+  });
 }

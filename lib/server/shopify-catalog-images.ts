@@ -4,6 +4,7 @@ import {
   getShopifyAdminToken,
   normalizeShopDomain,
   runShopifyGraphql,
+  toProductGid,
 } from "@/lib/shopify";
 
 /**
@@ -51,6 +52,22 @@ const PRODUCT_BY_QUERY = /* GraphQL */ `
             nodes { sku image { url } }
           }
         }
+      }
+    }
+  }
+`;
+
+const PRODUCT_BY_ID = /* GraphQL */ `
+  query CatalogImagesById($id: ID!) {
+    product(id: $id) {
+      id
+      title
+      featuredImage { url }
+      media(first: 50) {
+        nodes { ... on MediaImage { image { url } } }
+      }
+      variants(first: 100) {
+        nodes { sku image { url } }
       }
     }
   }
@@ -135,14 +152,38 @@ async function fetchProductForMatrix(
   return null;
 }
 
+/** Fetch a Shopify product by its known id (gid or numeric) — used right after
+ *  a media push, when we already know exactly which product to read back. */
+async function fetchProductById(
+  auth: { shop: string; token: string; apiVersion: string },
+  productId: string,
+): Promise<ShopifyProductNode | null> {
+  const gid = toProductGid(productId);
+  if (!gid) return null;
+  const res = await runShopifyGraphql<{ product?: ShopifyProductNode | null }>({
+    shop: auth.shop,
+    token: auth.token,
+    apiVersion: auth.apiVersion,
+    query: PRODUCT_BY_ID,
+    variables: { id: gid },
+  });
+  if (!res.ok || !res.data?.product) return null;
+  return res.data.product;
+}
+
 /**
  * Sync Shopify imagery for ONE matrix. Returns a structured result; never
  * throws for "no product found" / "no shopify creds" — those come back as
  * ok:false with a reason so callers (scripts, future endpoint) can report.
+ *
+ * `knownProductId` (a gid or numeric id) skips the UPC/SKU product search and
+ * reads back the exact product — used by the media route immediately after a
+ * push so WMS picks up the Shopify links automatically.
  */
 export async function syncShopifyImagesForMatrix(
   pool: Pool,
   matrixId: string,
+  knownProductId?: string | null,
 ): Promise<MatrixImageSyncResult> {
   const m = await pool.query<{ id: string; upc: string | null; description: string }>(
     `SELECT id::text, upc, description FROM matrices WHERE id = $1::uuid`,
@@ -181,11 +222,9 @@ export async function syncShopifyImagesForMatrix(
     return { ...base, ok: false, reason: "Shopify admin token/domain not configured" };
   }
 
-  const product = await fetchProductForMatrix(
-    auth,
-    matrix.upc,
-    variants.map((v) => v.sku),
-  );
+  const product =
+    (knownProductId ? await fetchProductById(auth, knownProductId) : null) ??
+    (await fetchProductForMatrix(auth, matrix.upc, variants.map((v) => v.sku)));
   if (!product) {
     return { ...base, ok: false, reason: "no matching Shopify product" };
   }

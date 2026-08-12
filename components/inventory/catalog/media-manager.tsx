@@ -210,11 +210,16 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
         error?: string;
         media?: Array<{ id: string; url: string; alt: string }>;
         warnings?: string[];
+        imageWriteback?: { variantsMatched: number; galleryCount: number } | null;
       };
       if (!r.ok) throw new Error(j.error ?? "Publish failed");
       setItems((j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })));
       if (j.warnings?.length) setErr(`Some images failed: ${j.warnings.slice(0, 3).join(" · ")}`);
-      else setMsg(`Saved — ${(j.media || []).length} image(s) live on Shopify.`);
+      else {
+        const wb = j.imageWriteback;
+        const back = wb ? ` · synced ${wb.galleryCount} link(s) + ${wb.variantsMatched} colour image(s) back to WMS` : "";
+        setMsg(`Saved — ${(j.media || []).length} image(s) live on Shopify${back}.`);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Publish failed");
     } finally {
