@@ -5,6 +5,7 @@ import { executeShopifyImageSyncJob } from "@/lib/server/shopify-catalog-images"
 import { isLightspeedCatalogSyncEnabled } from "@/lib/server/lightspeed-sync-flag";
 import { executeShopifyProductPush } from "@/lib/server/shopify-publish";
 import { executeShopifyLinkAll } from "@/lib/server/shopify-link";
+import { executeShopifyInventorySync } from "@/lib/server/shopify-inventory-sync";
 
 loadEnvConfig(process.cwd());
 
@@ -54,6 +55,7 @@ const SELF_TERMINAL_JOB_TYPES = new Set([
   "shopify_image_sync",
   "shopify_product_push",
   "shopify_link_all",
+  "shopify_inventory_sync",
 ]);
 
 const REPORT_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -83,6 +85,45 @@ async function runReportRetentionCleanup(pool: Pool): Promise<void> {
   } catch (e) {
     /* Don't update lastReportCleanupAt — let the next iteration retry. */
     console.error("[worker] inventory_reports cleanup failed", e);
+  }
+}
+
+const INVENTORY_AUTOSYNC_INTERVAL_MS = 5 * 60 * 1000;
+let lastInventoryAutoSyncAt: Date | null = null;
+
+/**
+ * Periodic Shopify inventory auto-sync: every ~5 min enqueue a DELTA inventory
+ * sync (only variants whose WMS on-hand changed since last push) unless one is
+ * already pending. WMS is the source of truth for quantities.
+ */
+async function maybeEnqueueInventoryAutoSync(pool: Pool): Promise<void> {
+  const now = new Date();
+  if (
+    lastInventoryAutoSyncAt &&
+    now.getTime() - lastInventoryAutoSyncAt.getTime() < INVENTORY_AUTOSYNC_INTERVAL_MS
+  ) {
+    return;
+  }
+  try {
+    const active = await pool.query(
+      `SELECT 1 FROM sync_jobs WHERE job_type = 'shopify_inventory_sync' AND status IN ('queued','running') LIMIT 1`,
+    );
+    if (active.rowCount === 0) {
+      const seed = await pool.query<{ tenant_id: string; location_id: string }>(
+        `SELECT tenant_id::text, location_id::text FROM sync_jobs ORDER BY created_at DESC LIMIT 1`,
+      );
+      const s = seed.rows[0];
+      if (s) {
+        await pool.query(
+          `INSERT INTO sync_jobs (tenant_id, location_id, job_type, status, idempotency_key, payload)
+           VALUES ($1::uuid, $2::uuid, 'shopify_inventory_sync', 'queued', $3, '{"full":false,"trigger":"auto"}'::jsonb)`,
+          [s.tenant_id, s.location_id, `shopify_inventory_sync:auto:${now.getTime()}`],
+        );
+      }
+    }
+    lastInventoryAutoSyncAt = now;
+  } catch (e) {
+    console.error("[worker] inventory auto-sync enqueue failed", e);
   }
 }
 
@@ -122,6 +163,11 @@ async function processStub(pool: Pool, job: JobRow): Promise<void> {
     /* Sets its own terminal status. */
     return;
   }
+  if (job.job_type === "shopify_inventory_sync") {
+    await executeShopifyInventorySync(pool, job.id);
+    /* Sets its own terminal status. */
+    return;
+  }
   // Stub: reconcile / future job types. Idempotency is enforced by idempotency_key on insert.
   await sleep(50 + Math.floor(Math.random() * 80));
 }
@@ -141,6 +187,7 @@ async function main() {
   while (running) {
     try {
       await runReportRetentionCleanup(pool);
+      await maybeEnqueueInventoryAutoSync(pool);
       const job = await claimJob(pool);
       if (!job) {
         await sleep(800);

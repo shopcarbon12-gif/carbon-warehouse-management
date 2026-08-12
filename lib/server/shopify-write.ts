@@ -186,6 +186,41 @@ export async function setInventoryQuantity(
   return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
 }
 
+/** Turn on "track quantity" for an inventory item (required to control qty). */
+export async function enableInventoryTracking(
+  ctx: ShopCtx,
+  inventoryItemId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await gql<{ inventoryItemUpdate?: { userErrors?: Array<{ message: string }> } }>(
+    ctx,
+    `mutation inventoryItemUpdate($id: ID!, $input: InventoryItemInput!) {
+      inventoryItemUpdate(id: $id, input: $input) { userErrors { message } }
+    }`,
+    { id: inventoryItemId, input: { tracked: true } },
+  );
+  const errs = res.data?.inventoryItemUpdate?.userErrors || [];
+  return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
+/** Activate an inventory item at a location (so quantities can be set there). */
+export async function activateInventory(
+  ctx: ShopCtx,
+  inventoryItemId: string,
+  locationId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await gql<{ inventoryActivate?: { userErrors?: Array<{ message: string }> } }>(
+    ctx,
+    `mutation inventoryActivate($inventoryItemId: ID!, $locationId: ID!) {
+      inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) {
+        userErrors { message }
+      }
+    }`,
+    { inventoryItemId, locationId },
+  );
+  const errs = res.data?.inventoryActivate?.userErrors || [];
+  return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
 /** Online Store publication id (for publishablePublish), if the channel exists. */
 export async function onlineStorePublicationId(ctx: ShopCtx): Promise<string | null> {
   const res = await gql<{ publications?: { nodes?: Array<{ id: string; name: string }> } }>(
