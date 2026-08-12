@@ -57,18 +57,21 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
   const [dragKey, setDragKey] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Variant images are assigned per COLOUR: one colour → every size's variant.
+  // Variant images are assigned per COLOUR: pick one colour and the image is
+  // attached to EVERY size's variant under that colour. No per-size picking.
   const colorOpts = useMemo(() => {
     const byColor = new Map<string, string[]>();
     for (const v of variants) {
-      if (!v.shopify_variant_id) continue;
       const c = (v.color || "").trim();
       if (!c) continue;
       const arr = byColor.get(c) || [];
-      arr.push(v.shopify_variant_id);
+      if (v.shopify_variant_id) arr.push(v.shopify_variant_id); // all sizes of this colour
       byColor.set(c, arr);
     }
-    return Array.from(byColor.entries()).map(([color, variantIds]) => ({ color, variantIds }));
+    // Only colours with at least one Shopify-linked size can receive an image.
+    return Array.from(byColor.entries())
+      .filter(([, variantIds]) => variantIds.length > 0)
+      .map(([color, variantIds]) => ({ color, variantIds }));
   }, [variants]);
 
   const load = useCallback(async () => {
@@ -236,7 +239,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)]">Images</span>
-        <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">first = hero · drag or ↑↓ order · ★ hero · assign colour · ✨ alt</span>
+        <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">first = hero · drag or ↑↓ order · ★ hero · colour → all its sizes · ✨ alt</span>
         <div className="flex-1" />
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { void addFiles(e.target.files); e.target.value = ""; }} />
         <button type="button" disabled={!canManage || busy !== null} onClick={() => fileRef.current?.click()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
@@ -272,9 +275,9 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" disabled={busy !== null} onClick={() => void genAlt(m.key)} className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.55rem] text-[var(--wms-accent)] disabled:opacity-50">{busy === `alt-${m.key}` ? "…" : "✨ alt"}</button>
                 <label className="font-mono text-[0.55rem] text-[var(--wms-muted)]">colour:</label>
-                <select className={field} value={m.color} onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, color: v } : x))); }}>
+                <select className={field} value={m.color} onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, color: v } : x))); }} title="Attaches this image to every size of the chosen colour">
                   <option value="">— none —</option>
-                  {colorOpts.map((o) => (<option key={o.color} value={o.color}>{o.color}</option>))}
+                  {colorOpts.map((o) => (<option key={o.color} value={o.color}>{o.color} · all {o.variantIds.length} size{o.variantIds.length === 1 ? "" : "s"}</option>))}
                 </select>
               </div>
             </div>
