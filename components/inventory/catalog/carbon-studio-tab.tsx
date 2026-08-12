@@ -68,6 +68,7 @@ export function CarbonStudioTab({
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [crops, setCrops] = useState<Crop[]>([]);
+  const [zoom, setZoom] = useState<string | null>(null);
   const [qr, setQr] = useState<{ url: string; scanUrl: string; sessionId: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -178,7 +179,10 @@ export function CarbonStudioTab({
     setBusy("generate");
     setErr(null);
     setMsg(null);
-    setCrops([]);
+    // Regenerate flow (carbon-gen): keep the crops you selected, append fresh
+    // ones below; unselected old crops are dropped. runTag keeps ids unique.
+    const kept = crops.length > 0 ? crops.filter((c) => c.selected && c.b64) : [];
+    const runTag = Date.now().toString(36);
     const chosen = [...panels].sort((a, b) => a - b);
     setProgress(`Generating ${chosen.length} panel(s) in parallel…`);
 
@@ -217,7 +221,7 @@ export function CarbonStudioTab({
         const e = json.error;
         return [
           {
-            id: `p${panel}-err`,
+            id: `p${panel}-err-${runTag}`,
             b64: "",
             label: `Panel ${panel}: ${(typeof e === "string" ? e : (e as { message?: string })?.message) || json.warning || "failed"}`,
             selected: false,
@@ -226,8 +230,8 @@ export function CarbonStudioTab({
       }
       const { left, right } = await splitPanelToThreeByFour(json.imageBase64);
       return [
-        { id: `p${panel}-l`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: true },
-        { id: `p${panel}-r`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: true },
+        { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: true },
+        { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: true },
       ];
     };
 
@@ -239,21 +243,21 @@ export function CarbonStudioTab({
         if (s.status === "fulfilled") all.push(...s.value);
         else
           all.push({
-            id: `p${chosen[i]}-fail`,
+            id: `p${chosen[i]}-fail-${runTag}`,
             b64: "",
             label: `Panel ${chosen[i]}: ${s.reason instanceof Error ? s.reason.message : "failed"}`,
             selected: false,
           });
       });
-      setCrops(all);
-      setMsg(`Generated ${all.filter((c) => c.b64).length} crop(s). Select what to keep, then push.`);
+      setCrops([...kept, ...all]);
+      setMsg(`Generated ${all.filter((c) => c.b64).length} crop(s). Select what to keep, then push${kept.length ? ` (kept ${kept.length})` : ""}.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Generation failed");
     } finally {
       setBusy(null);
       setProgress("");
     }
-  }, [model, itemRefs, panels, itemType]);
+  }, [model, itemRefs, panels, itemType, crops]);
 
   const push = useCallback(async () => {
     const target = colors.find((c) => c.color === color)?.variant;
@@ -429,7 +433,11 @@ export function CarbonStudioTab({
           onClick={() => void generate()}
           className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
         >
-          {busy === "generate" ? "Generating…" : `✦ Generate ${panels.length} panel(s)`}
+          {busy === "generate"
+            ? "Generating…"
+            : crops.length
+              ? `↻ Regenerate ${panels.length}`
+              : `✦ Generate ${panels.length} panel(s)`}
         </button>
         {crops.some((c) => c.selected && c.b64) ? (
           <button
@@ -450,27 +458,61 @@ export function CarbonStudioTab({
         <div className="flex flex-wrap gap-3">
           {crops.map((c) =>
             c.b64 ? (
-              <button
+              <div
                 key={c.id}
-                type="button"
-                onClick={() =>
-                  setCrops((prev) => prev.map((x) => (x.id === c.id ? { ...x, selected: !x.selected } : x)))
-                }
-                className={`overflow-hidden rounded-md border ${
+                className={`relative overflow-hidden rounded-md border ${
                   c.selected ? "border-[var(--wms-accent)] ring-1 ring-[var(--wms-accent)]" : "border-[var(--wms-border)]"
                 }`}
               >
-                <img src={`data:image/png;base64,${c.b64}`} alt={c.label} className="h-48 w-36 object-cover" />
+                <img
+                  src={`data:image/png;base64,${c.b64}`}
+                  alt={c.label}
+                  className="h-48 w-36 cursor-pointer object-cover"
+                  onClick={() =>
+                    setCrops((prev) => prev.map((x) => (x.id === c.id ? { ...x, selected: !x.selected } : x)))
+                  }
+                />
+                <button
+                  type="button"
+                  title="View full size"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setZoom(c.b64);
+                  }}
+                  className="absolute right-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[0.7rem] leading-none text-white"
+                >
+                  🔍
+                </button>
                 <span className="block px-1 py-0.5 text-center font-mono text-[0.55rem] text-[var(--wms-muted)]">
                   {c.label} {c.selected ? "✓" : ""}
                 </span>
-              </button>
+              </div>
             ) : (
               <span key={c.id} className="max-w-[240px] font-mono text-[0.55rem] text-[var(--wms-status-danger-fg)]">
                 {c.label}
               </span>
             ),
           )}
+        </div>
+      ) : null}
+
+      {zoom ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-6"
+          onClick={() => setZoom(null)}
+        >
+          <img
+            src={`data:image/png;base64,${zoom}`}
+            alt="Generated (full size)"
+            className="max-h-full max-w-full rounded-lg"
+          />
+          <button
+            type="button"
+            onClick={() => setZoom(null)}
+            className="absolute right-4 top-4 rounded-md bg-white/10 px-3 py-1.5 font-mono text-xs text-white"
+          >
+            ✕ Close
+          </button>
         </div>
       ) : null}
     </div>
