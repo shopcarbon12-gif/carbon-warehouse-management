@@ -19,6 +19,7 @@ const ALLOWED_STATUS = new Set([
   "sold",
   "stolen",
   "tag_killed",
+  "unknown",
   "pending_visibility",
   "in-transit",
   "pending_transaction",

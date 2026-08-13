@@ -33,6 +33,7 @@ import {
   Settings,
   Shield,
   SlidersHorizontal,
+  Truck,
   Smartphone,
   Stamp,
   Tags,
@@ -94,6 +95,7 @@ const sections: NavSection[] = [
       { href: "/tags-labels/encode-items", label: "Encode Items", icon: Tags },
       { href: "/tags-labels/encode-print", label: "Encode & Print", icon: Stamp },
       { href: "/tags-labels/bulk-status", label: "Bulk status", icon: SlidersHorizontal },
+      { href: "/tags-labels/ship-scan-out", label: "Ship / Scan-out", icon: Truck },
     ],
   },
   {

@@ -13,6 +13,7 @@ export const BULK_WMS_STATUS_OPTIONS: BulkWmsStatusOption[] = [
   { value: "sold", label: "Sold", systemOnly: false },
   { value: "stolen", label: "Stolen", systemOnly: false },
   { value: "tag_killed", label: "Tag killed", systemOnly: false },
+  { value: "unknown", label: "Unknown (Shopify sale — pending)", systemOnly: false },
   { value: "pending_visibility", label: "Pending visibility (system)", systemOnly: true },
   { value: "in-transit", label: "In transit (system)", systemOnly: true },
   { value: "pending_transaction", label: "Pending transaction (system)", systemOnly: true },
