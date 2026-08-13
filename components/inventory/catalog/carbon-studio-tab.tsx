@@ -89,6 +89,7 @@ export function CarbonStudioTab({
   const [showMedia, setShowMedia] = useState(false);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [mediaBusy, setMediaBusy] = useState<string | null>(null);
+  const [mediaDragKey, setMediaDragKey] = useState<string | null>(null);
   const [qr, setQr] = useState<{ url: string; scanUrl: string; sessionId: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -402,6 +403,17 @@ export function CarbonStudioTab({
       copy.unshift(it);
       return copy;
     });
+  const dropOnMedia = (targetKey: string) =>
+    setMediaItems((prev) => {
+      if (!mediaDragKey || mediaDragKey === targetKey) return prev;
+      const from = prev.findIndex((m) => m.key === mediaDragKey);
+      const to = prev.findIndex((m) => m.key === targetKey);
+      if (from < 0 || to < 0) return prev;
+      const copy = [...prev];
+      const [it] = copy.splice(from, 1);
+      copy.splice(to, 0, it);
+      return copy;
+    });
   const removeMedia = (key: string) => setMediaItems((prev) => prev.filter((m) => m.key !== key));
 
   const publishMedia = useCallback(async () => {
@@ -685,7 +697,7 @@ export function CarbonStudioTab({
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)]">Manage images</span>
             <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
-              first = hero · ↑↓ reorder · ★ hero · colour = variant main pic (all sizes) · ✨ alt · ✕ remove
+              first = hero · drag or ↑↓ reorder · ★ hero · colour = variant main pic (all sizes) · ✨ alt · ✕ remove
             </span>
             <div className="flex-1" />
             <button
@@ -728,7 +740,9 @@ export function CarbonStudioTab({
               {mediaItems.map((m, idx) => (
                 <div
                   key={m.key}
-                  className="flex items-start gap-3 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] p-2"
+                  onDragOver={(e) => { if (mediaDragKey) e.preventDefault(); }}
+                  onDrop={() => { dropOnMedia(m.key); setMediaDragKey(null); }}
+                  className={`flex items-start gap-3 rounded border bg-[var(--wms-surface)] p-2 ${mediaDragKey === m.key ? "opacity-50" : ""} ${mediaDragKey && mediaDragKey !== m.key ? "border-dashed border-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
                 >
                   <div className="relative shrink-0">
                     <img
@@ -786,6 +800,7 @@ export function CarbonStudioTab({
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col gap-1">
+                    <div draggable onDragStart={() => setMediaDragKey(m.key)} onDragEnd={() => setMediaDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-1.5 text-center text-[0.7rem] text-[var(--wms-muted)]">⠿</div>
                     <button type="button" onClick={() => moveMedia(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↑</button>
                     <button type="button" onClick={() => moveMedia(m.key, 1)} disabled={idx === mediaItems.length - 1} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↓</button>
                     <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
