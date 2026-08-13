@@ -65,7 +65,7 @@ function statusLabel(status: string): string {
 export function BulkGeigerWorkspace() {
   // Warm the .15 reader while this page is open so it's ready before the
   // operator clicks Start scan. Capture is still gated by the Start button.
-  useReaderWake({ active: true, kind: "bulk-geiger", networkAddresses: ["192.168.1.15"] });
+  useReaderWake({ active: true, kind: "bulk-geiger", networkAddresses: ["192.168.1.87"] });
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<Row[]>([]);

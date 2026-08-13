@@ -24,7 +24,7 @@ import { generateNonRfidTag203Batch } from "@/lib/utils/zpl-carbon-tag-203";
 import type { CarbonTagInput } from "@/lib/utils/zpl-carbon-tag";
 
 /** The .15 reader is the encode + register-area antenna this page is pinned to. */
-const READER_IP = "192.168.1.15";
+const READER_IP = "192.168.1.87";
 /** Non-RFID label printer — Zebra .220 (ZD500R, 203 dpi), browser-direct. */
 const PRINTER_URL = "http://192.168.1.220:80/pstprnt";
 

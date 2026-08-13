@@ -50,7 +50,7 @@ import {
   passesRssi,
 } from "@/components/shared/rssi-proximity-slider";
 
-const DEFAULT_READER_IP = "192.168.1.15";
+const DEFAULT_READER_IP = "192.168.1.87";
 
 type HardwareConfigReader = {
   id: string;
@@ -720,7 +720,7 @@ export function EncodeItemsWorkspace() {
           `C-prefix tags can't be encoded through the POS reader ` +
             `(${posDedicatedSelected.map((r) => r.network_address ?? r.id).join(", ")}) — ` +
             `the chip path on the WiFi extender doesn't support our write binary. ` +
-            `Pick a non-extender reader (e.g. 192.168.1.15) and bring the tag to its antenna.`,
+            `Pick a non-extender reader (e.g. 192.168.1.87) and bring the tag to its antenna.`,
         );
         return;
       }

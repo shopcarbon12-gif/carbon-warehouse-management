@@ -19,7 +19,7 @@ import {
  *  default is applied once, on first data load, then never again — so a
  *  cashier who deselects it (or picks a different reader) isn't fought
  *  by a re-application. */
-const BULK_STATUS_DEFAULT_READER_IP = "192.168.1.15";
+const BULK_STATUS_DEFAULT_READER_IP = "192.168.1.87";
 
 type HardwareConfigZone = {
   readers?: Array<{ id: string; network_address: string | null }>;
@@ -83,7 +83,7 @@ const LOOKUP_CHUNK = 200;
 export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   // Warm the .15 reader while this page is open so it's ready before the
   // operator clicks Start scan. Capture is gated by the Start button.
-  useReaderWake({ active: true, kind: "bulk-status", networkAddresses: ["192.168.1.15"] });
+  useReaderWake({ active: true, kind: "bulk-status", networkAddresses: ["192.168.1.87"] });
 
   const options = bulkStatusOptionsForUi(isSuperAdmin);
   const [target, setTarget] = useState<string>(options[0]?.value ?? "in-stock");

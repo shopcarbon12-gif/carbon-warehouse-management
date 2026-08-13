@@ -4756,7 +4756,7 @@ export class MonsoonSupervisor {
     }
 
     // Fallback: resolve MAC from the kernel ARP table via `ip neigh show IP`.
-    // Format: "192.168.1.15 dev wlp2s0 lladdr 00:08:dc:1e:19:80 STALE"
+    // Format: "192.168.1.87 dev wlp2s0 lladdr 00:08:dc:1e:19:ec STALE"
     try {
       const arpProbe = spawn("ip", ["neigh", "show", host], { stdio: ["ignore", "pipe", "pipe"] });
       let out = "";
