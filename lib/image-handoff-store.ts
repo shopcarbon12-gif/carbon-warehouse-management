@@ -50,6 +50,16 @@ export function takeNextHandoffImage(id: string): HandoffImage | null {
   return next;
 }
 
+/** Desktop poll: return ALL not-yet-taken images at once (marks them taken).
+ * Used so a phone burst of up to 6 photos all appear in one poll tick. */
+export function takeAllHandoffImages(id: string): HandoffImage[] {
+  const s = SESSIONS.get(id);
+  if (!s) return [];
+  const fresh = s.images.filter((i) => !i.taken);
+  for (const i of fresh) i.taken = true;
+  return fresh;
+}
+
 /** Look up a specific image (for the display proxy). */
 export function findHandoffImage(id: string, imageId: string): HandoffImage | null {
   const s = SESSIONS.get(id);

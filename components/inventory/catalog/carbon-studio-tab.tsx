@@ -46,11 +46,22 @@ type Props = {
   shopifyProductId: string | null;
   itemRefUrls: string[];
   defaultItemType: string;
+  /** Merchandise category (e.g. "WOMEN" / "MEN") — used to filter models by gender. */
+  category?: string;
   variants: StudioVariant[];
   canManage: boolean;
 };
 
 const PANELS = [1, 2, 3, 4];
+
+/** Derive the item's gender from its category/type text. Women-first because
+ * "WOMEN" contains "MEN". Returns null when it can't be determined (show all). */
+function deriveGender(...text: (string | undefined)[]): "male" | "female" | null {
+  const s = text.filter(Boolean).join(" ").toLowerCase();
+  if (/(women|woman|female|ladies|lady|girl)/.test(s)) return "female";
+  if (/\b(men|man|male|boy|mens|guys?)\b/.test(s) || /\bmen('s)?\b/.test(s)) return "male";
+  return null;
+}
 
 /** Download an image (data-url or remote url) as a file. */
 function downloadImage(src: string, name: string) {
@@ -69,6 +80,7 @@ export function CarbonStudioTab({
   shopifyProductId,
   itemRefUrls,
   defaultItemType,
+  category,
   variants,
   canManage,
 }: Props) {
@@ -90,6 +102,15 @@ export function CarbonStudioTab({
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [mediaBusy, setMediaBusy] = useState<string | null>(null);
   const [mediaDragKey, setMediaDragKey] = useState<string | null>(null);
+  const [mediaSel, setMediaSel] = useState<Set<string>>(new Set());
+
+  const toggleMediaSel = (key: string) =>
+    setMediaSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const [qr, setQr] = useState<{ url: string; scanUrl: string; sessionId: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -155,13 +176,22 @@ export function CarbonStudioTab({
         if (!r.ok) return;
         const j = (await r.json().catch(() => ({}))) as {
           ready?: boolean;
+          images?: { imageUrl: string; previewUrl?: string }[];
           imageUrl?: string;
           previewUrl?: string;
         };
-        // Keep the QR open so the phone can "send another"; each photo appears.
-        if (alive && j.ready && j.imageUrl) {
-          setItemRefs((prev) => [...prev, { url: j.imageUrl as string, preview: j.previewUrl }]);
-          setMsg("Photo received from phone.");
+        // Keep the QR open so the phone can send more; a burst of up to 6 photos
+        // all arrive in one tick via `images`.
+        if (alive && j.ready) {
+          const batch = j.images?.length
+            ? j.images.map((im) => ({ url: im.imageUrl, preview: im.previewUrl }))
+            : j.imageUrl
+              ? [{ url: j.imageUrl, preview: j.previewUrl }]
+              : [];
+          if (batch.length) {
+            setItemRefs((prev) => [...prev, ...batch]);
+            setMsg(`Received ${batch.length} photo${batch.length === 1 ? "" : "s"} from phone.`);
+          }
         }
       } catch {
         /* keep polling */
@@ -174,6 +204,22 @@ export function CarbonStudioTab({
       clearTimeout(stop);
     };
   }, [qr]);
+
+  // Show only models whose gender matches the item (men→male, women→female).
+  // Falls back to all models when the item's gender can't be determined.
+  const itemGender = useMemo(
+    () => deriveGender(category, defaultItemType, itemType),
+    [category, defaultItemType, itemType],
+  );
+  const visibleModels = useMemo(
+    () => (itemGender ? models.filter((m) => (m.gender || "").toLowerCase() === itemGender) : models),
+    [models, itemGender],
+  );
+  useEffect(() => {
+    if (visibleModels.length && !visibleModels.some((m) => m.model_id === modelId)) {
+      setModelId(visibleModels[0].model_id);
+    }
+  }, [visibleModels, modelId]);
 
   const model = models.find((m) => m.model_id === modelId) || null;
 
@@ -403,16 +449,19 @@ export function CarbonStudioTab({
       copy.unshift(it);
       return copy;
     });
+  // Drop reorder — moves the whole multi-selection together when the dragged row
+  // is selected, otherwise just the dragged row; inserted before the drop target.
   const dropOnMedia = (targetKey: string) =>
     setMediaItems((prev) => {
-      if (!mediaDragKey || mediaDragKey === targetKey) return prev;
-      const from = prev.findIndex((m) => m.key === mediaDragKey);
-      const to = prev.findIndex((m) => m.key === targetKey);
-      if (from < 0 || to < 0) return prev;
-      const copy = [...prev];
-      const [it] = copy.splice(from, 1);
-      copy.splice(to, 0, it);
-      return copy;
+      if (!mediaDragKey) return prev;
+      const movingKeys =
+        mediaSel.has(mediaDragKey) && mediaSel.size > 0 ? new Set(mediaSel) : new Set<string>([mediaDragKey]);
+      if (movingKeys.has(targetKey)) return prev;
+      const moved = prev.filter((m) => movingKeys.has(m.key));
+      const rest = prev.filter((m) => !movingKeys.has(m.key));
+      const ti = rest.findIndex((m) => m.key === targetKey);
+      if (ti < 0 || moved.length === 0) return prev;
+      return [...rest.slice(0, ti), ...moved, ...rest.slice(ti)];
     });
   const removeMedia = (key: string) => setMediaItems((prev) => prev.filter((m) => m.key !== key));
 
@@ -444,6 +493,7 @@ export function CarbonStudioTab({
       setMediaItems(
         (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })),
       );
+      setMediaSel(new Set());
       setCrops((prev) => prev.filter((c) => !c.selected)); // pushed crops consumed
       if (j.warnings?.length) {
         // Surface WHY images may not have pushed (e.g. staging/create failures).
@@ -537,10 +587,14 @@ export function CarbonStudioTab({
       {/* Options */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div>
-          <span className={label}>Model</span>
+          <span className={label}>
+            Model{itemGender ? <span className="text-[var(--wms-muted)]"> · {itemGender} only</span> : null}
+          </span>
           <select className={field} value={modelId} onChange={(e) => setModelId(e.target.value)}>
-            {models.length === 0 ? <option value="">No models</option> : null}
-            {models.map((m) => (
+            {visibleModels.length === 0 ? (
+              <option value="">{models.length ? `No ${itemGender ?? ""} models` : "No models"}</option>
+            ) : null}
+            {visibleModels.map((m) => (
               <option key={m.model_id} value={m.model_id}>
                 {m.name} ({m.gender})
               </option>
@@ -652,22 +706,24 @@ export function CarbonStudioTab({
                 <img
                   src={`data:image/png;base64,${c.b64}`}
                   alt={c.label}
-                  className="h-48 w-36 cursor-pointer object-cover"
-                  onClick={() =>
-                    setCrops((prev) => prev.map((x) => (x.id === c.id ? { ...x, selected: !x.selected } : x)))
-                  }
+                  className="h-48 w-36 cursor-zoom-in object-cover"
+                  title="Click to view full size"
+                  onClick={() => setZoom(`data:image/png;base64,${c.b64}`)}
                 />
-                <button
-                  type="button"
-                  title="View full size"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setZoom(`data:image/png;base64,${c.b64}`);
-                  }}
-                  className="absolute right-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[0.7rem] leading-none text-white"
+                <label
+                  className="absolute left-1 top-1 flex cursor-pointer items-center gap-1 rounded bg-black/60 px-1 py-0.5 text-[0.6rem] text-white"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  🔍
-                </button>
+                  <input
+                    type="checkbox"
+                    checked={c.selected}
+                    onChange={() =>
+                      setCrops((prev) => prev.map((x) => (x.id === c.id ? { ...x, selected: !x.selected } : x)))
+                    }
+                    className="h-3 w-3 accent-[var(--wms-accent)]"
+                  />
+                  keep
+                </label>
                 <button
                   type="button"
                   title="Download"
@@ -675,7 +731,7 @@ export function CarbonStudioTab({
                     e.stopPropagation();
                     downloadImage(`data:image/png;base64,${c.b64}`, `carbon-studio-${c.id}.png`);
                   }}
-                  className="absolute right-1 top-8 rounded bg-black/60 px-1.5 py-0.5 text-[0.7rem] leading-none text-white"
+                  className="absolute right-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[0.7rem] leading-none text-white"
                 >
                   ⬇
                 </button>
@@ -697,7 +753,7 @@ export function CarbonStudioTab({
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)]">Manage images</span>
             <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
-              first = hero · drag or ↑↓ reorder · ★ hero · colour = variant main pic (all sizes) · ✨ alt · ✕ remove
+              first = hero · drag or ↑↓ reorder · ☑ select many + drag together · ★ hero · colour = variant main pic (all sizes) · ✨ alt · ✕ remove
             </span>
             <div className="flex-1" />
             <button
@@ -742,8 +798,15 @@ export function CarbonStudioTab({
                   key={m.key}
                   onDragOver={(e) => { if (mediaDragKey) e.preventDefault(); }}
                   onDrop={() => { dropOnMedia(m.key); setMediaDragKey(null); }}
-                  className={`flex items-start gap-3 rounded border bg-[var(--wms-surface)] p-2 ${mediaDragKey === m.key ? "opacity-50" : ""} ${mediaDragKey && mediaDragKey !== m.key ? "border-dashed border-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
+                  className={`flex items-start gap-3 rounded border bg-[var(--wms-surface)] p-2 ${mediaDragKey === m.key || (mediaDragKey && mediaSel.has(mediaDragKey) && mediaSel.has(m.key)) ? "opacity-50" : ""} ${mediaSel.has(m.key) ? "ring-1 ring-[var(--wms-accent)] " : ""}${mediaDragKey && mediaDragKey !== m.key ? "border-dashed border-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
                 >
+                  <input
+                    type="checkbox"
+                    checked={mediaSel.has(m.key)}
+                    onChange={() => toggleMediaSel(m.key)}
+                    title="Select for multi-drag (drag any selected row to move them all)"
+                    className="mt-1 h-3.5 w-3.5 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
+                  />
                   <div className="relative shrink-0">
                     <img
                       src={m.url}

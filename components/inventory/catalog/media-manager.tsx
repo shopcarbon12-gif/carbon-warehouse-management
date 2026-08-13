@@ -55,6 +55,15 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
   const [zoom, setZoom] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+
+  const toggleSel = (key: string) =>
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Variant images are assigned per COLOUR: pick one colour and the image is
@@ -177,16 +186,20 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       copy.unshift(it);
       return copy;
     });
+  // Drop reorder. If the dragged row is part of a multi-selection, the WHOLE
+  // selection moves together (kept in their existing order), inserted before the
+  // drop target; otherwise just the dragged row moves.
   const dropOn = (targetKey: string) =>
     setItems((prev) => {
-      if (!dragKey || dragKey === targetKey) return prev;
-      const from = prev.findIndex((m) => m.key === dragKey);
-      const to = prev.findIndex((m) => m.key === targetKey);
-      if (from < 0 || to < 0) return prev;
-      const copy = [...prev];
-      const [it] = copy.splice(from, 1);
-      copy.splice(to, 0, it);
-      return copy;
+      if (!dragKey) return prev;
+      const movingKeys =
+        sel.has(dragKey) && sel.size > 0 ? new Set(sel) : new Set<string>([dragKey]);
+      if (movingKeys.has(targetKey)) return prev;
+      const moved = prev.filter((m) => movingKeys.has(m.key));
+      const rest = prev.filter((m) => !movingKeys.has(m.key));
+      const ti = rest.findIndex((m) => m.key === targetKey);
+      if (ti < 0 || moved.length === 0) return prev;
+      return [...rest.slice(0, ti), ...moved, ...rest.slice(ti)];
     });
   const remove = (key: string) => setItems((prev) => prev.filter((m) => m.key !== key));
 
@@ -214,6 +227,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       };
       if (!r.ok) throw new Error(j.error ?? "Publish failed");
       setItems((j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })));
+      setSel(new Set());
       if (j.warnings?.length) setErr(`Some images failed: ${j.warnings.slice(0, 3).join(" · ")}`);
       else {
         const wb = j.imageWriteback;
@@ -244,7 +258,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)]">Images</span>
-        <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">first = hero · drag or ↑↓ order · ★ hero · colour → all its sizes · ✨ alt</span>
+        <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">first = hero · drag or ↑↓ order · ☑ select many + drag together · ★ hero · colour → all its sizes · ✨ alt</span>
         <div className="flex-1" />
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { void addFiles(e.target.files); e.target.value = ""; }} />
         <button type="button" disabled={!canManage || busy !== null} onClick={() => fileRef.current?.click()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
@@ -268,8 +282,15 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
             key={m.key}
             onDragOver={(e) => { if (dragKey) e.preventDefault(); }}
             onDrop={() => { dropOn(m.key); setDragKey(null); }}
-            className={`flex items-start gap-3 rounded border bg-[var(--wms-surface)] p-2 ${dragKey === m.key ? "opacity-50" : ""} ${dragKey && dragKey !== m.key ? "border-dashed border-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
+            className={`flex items-start gap-3 rounded border bg-[var(--wms-surface)] p-2 ${dragKey === m.key || (dragKey && sel.has(dragKey) && sel.has(m.key)) ? "opacity-50" : ""} ${sel.has(m.key) ? "ring-1 ring-[var(--wms-accent)] " : ""}${dragKey && dragKey !== m.key ? "border-dashed border-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
           >
+            <input
+              type="checkbox"
+              checked={sel.has(m.key)}
+              onChange={() => toggleSel(m.key)}
+              title="Select for multi-drag (drag any selected row to move them all)"
+              className="mt-1 h-3.5 w-3.5 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
+            />
             <div className="relative shrink-0">
               <img src={m.url} alt={m.alt} className="h-24 w-20 cursor-pointer rounded border border-[var(--wms-border)] object-cover" onClick={() => setZoom(m.url)} />
               {idx === 0 ? <span className="absolute left-0 top-0 rounded-br bg-[var(--wms-accent)] px-1 text-[0.5rem] font-bold text-[var(--wms-accent-fg)]">HERO</span> : null}
