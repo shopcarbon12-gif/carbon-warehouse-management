@@ -6,10 +6,12 @@ import {
   CheckCircle2,
   Loader2,
   Pencil,
+  Play,
   Printer,
   Radio,
   RefreshCw,
   Search,
+  Square,
   XCircle,
 } from "lucide-react";
 
@@ -23,7 +25,7 @@ import { LabelPreviewCanvas } from "@/components/tags-labels/label-preview-canva
 import { generateNonRfidTag203Batch } from "@/lib/utils/zpl-carbon-tag-203";
 import type { CarbonTagInput } from "@/lib/utils/zpl-carbon-tag";
 
-/** The .15 reader is the encode + register-area antenna this page is pinned to. */
+/** The .87 reader is the encode + register-area antenna this page is pinned to. */
 const READER_IP = "192.168.1.87";
 /** Non-RFID label printer — Zebra .220 (ZD500R, 203 dpi), browser-direct. */
 const PRINTER_URL = "http://192.168.1.220:80/pstprnt";
@@ -61,7 +63,7 @@ const STEPS: { key: Step; n: string; t: string }[] = [
 const STEP_ORDER: Step[] = ["scan", "encoding", "verify", "printing", "done"];
 
 export function EncodePrintWorkspace() {
-  // ── Resolve the .15 reader UUID ──────────────────────────────────────
+  // ── Resolve the .87 reader UUID ──────────────────────────────────────
   const { data: hc } = useSWR<HcTree>("/api/hardware-config", hcFetcher, {
     revalidateOnFocus: false,
   });
@@ -81,17 +83,16 @@ export function EncodePrintWorkspace() {
     stepRef.current = step;
   }, [step]);
 
-  // The reader is kept WARM by useReaderWake (below) for as long as this page
-  // is open. `sessionActive` simply mirrors "is the .15 reader resolved &
-  // being warmed" so the SSE subscription + status pill light up. No
-  // scan-session start/end is issued from this page anymore.
+  // No auto-start: the reader is warmed only while the operator has explicitly
+  // STARTED it via the Start/Stop button. `sessionActive` = started AND resolved,
+  // so the SSE subscription + status pill only light up on demand.
   const [readerErr] = useState<string | null>(null);
+  const [readerOn, setReaderOn] = useState(false);
 
-  // Warm .15 the moment we land on the page (ready before the operator brings
-  // a tag to the antenna). Capturing/encoding is still driven by the flow's
-  // Encode button + SSE re-read interlock — only the WAKE changed.
-  useReaderWake({ active: true, kind: "encode-items", networkAddresses: [READER_IP] });
-  const sessionActive = readerId !== null;
+  // Warm .87 ONLY while started. Capturing/encoding is still driven by the flow's
+  // Encode button + the SSE re-read interlock.
+  useReaderWake({ active: readerOn, kind: "encode-items", networkAddresses: [READER_IP] });
+  const sessionActive = readerOn && readerId !== null;
 
   const [threshold, setThreshold] = useRssiThreshold("wms.encode-print.rssi");
   const thresholdRef = useRef(threshold);
@@ -118,10 +119,10 @@ export function EncodePrintWorkspace() {
   const verifiedGuardRef = useRef(false);
   const printStartedRef = useRef(false);
 
-  const [statusMsg, setStatusMsg] = useState("Bring a tag to the .15 antenna to begin.");
+  const [statusMsg, setStatusMsg] = useState("Press Start reader, then bring a tag to the .87 antenna.");
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
-  // ── SSE: stream EPCs from .15; in verify, watch for the new EPC ──────
+  // ── SSE: stream EPCs from .87; in verify, watch for the new EPC ──────
   useEffect(() => {
     if (!sessionActive || !readerId) return;
     const es = new EventSource("/api/edge/stream");
@@ -316,7 +317,7 @@ export function EncodePrintWorkspace() {
       }
       setNewEpc(j.epc);
       if (j.jobId) {
-        setStatusMsg("Writing chip via .15…");
+        setStatusMsg("Writing chip via .87…");
         const ok = await pollJob(j.jobId);
         if (!ok) {
           setStep("error");
@@ -329,7 +330,7 @@ export function EncodePrintWorkspace() {
       verifiedGuardRef.current = false;
       setSeen(new Map());
       setSelectedEpc(null);
-      setStatusMsg(`Wrote ✓ → ${j.epc}. Bring the tag back to .15 to confirm…`);
+      setStatusMsg(`Wrote ✓ → ${j.epc}. Bring the tag back to .87 to confirm…`);
       setStep("verify");
     } catch (e) {
       setErrMsg(e instanceof Error ? e.message : "network error");
@@ -384,7 +385,7 @@ export function EncodePrintWorkspace() {
     verifiedGuardRef.current = false;
     printStartedRef.current = false;
     setErrMsg(null);
-    setStatusMsg("Bring a tag to the .15 antenna to begin.");
+    setStatusMsg("Press Start reader, then bring a tag to the .87 antenna.");
     setStep("scan");
   }, []);
 
@@ -393,8 +394,29 @@ export function EncodePrintWorkspace() {
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      {/* Top bar: reader status + proximity slider */}
+      {/* Top bar: start/stop + reader status + proximity slider */}
       <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            if (readerOn) {
+              setReaderOn(false);
+              setSeen(new Map());
+              setSelectedEpc(null);
+            } else {
+              setReaderOn(true);
+            }
+          }}
+          className={
+            "inline-flex items-center gap-2 rounded-md border px-4 py-1.5 text-xs font-semibold " +
+            (readerOn
+              ? "border-red-400/50 bg-red-500/12 text-red-300 hover:bg-red-500/20"
+              : "border-emerald-400/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25")
+          }
+        >
+          {readerOn ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          {readerOn ? "Stop reader" : "Start reader"}
+        </button>
         <span
           className={
             "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold " +
@@ -406,13 +428,13 @@ export function EncodePrintWorkspace() {
           }
         >
           <Radio className="h-3.5 w-3.5" />
-          Reader .15 · {readerErr ? "error" : sessionActive ? "on" : readerId ? "starting…" : "not found"}
+          Reader .87 · {readerErr ? "error" : !readerOn ? "off" : sessionActive ? "on" : readerId ? "starting…" : "not found"}
         </span>
         <div className="min-w-[320px] flex-1">
           <RssiProximitySlider
             value={threshold}
             onChange={setThreshold}
-            hint=".15 proximity filter"
+            hint=".87 proximity filter"
           />
         </div>
       </div>
@@ -458,14 +480,14 @@ export function EncodePrintWorkspace() {
           {step === "scan" ? (
             <>
               <h2 className="mb-3 text-[11px] uppercase tracking-wider text-[var(--wms-muted)]">
-                1 · Scan a tag near .15
+                1 · Scan a tag near .87
               </h2>
               {/* reading list */}
               <div className="overflow-hidden rounded-lg border border-[var(--wms-border)]">
                 {visible.length === 0 ? (
                   <div className="px-4 py-6 text-center font-mono text-xs text-[var(--wms-muted)]">
                     {seen.size === 0
-                      ? "Listening… wave a tag in front of .15."
+                      ? "Listening… wave a tag in front of .87."
                       : `All ${seen.size} tag(s) are below the proximity threshold — bring one closer.`}
                   </div>
                 ) : (
@@ -570,7 +592,7 @@ export function EncodePrintWorkspace() {
                 </button>
                 <span className="font-mono text-[11px] text-[var(--wms-muted)]">
                   {!effectiveEpc
-                    ? "select the tag in front of .15"
+                    ? "select the tag in front of .87"
                     : !target
                       ? "pick a target SKU"
                       : `ready: ${effectiveEpc.slice(0, 8)}… → ${target.sku}`}
@@ -609,7 +631,7 @@ export function EncodePrintWorkspace() {
                 {step === "verify" ? (
                   <p className="text-[var(--wms-muted)]">
                     Reading section refreshed. The label prints <b className="text-[var(--wms-fg)]">only</b>{" "}
-                    when .15 re-reads the new tag above.
+                    when .87 re-reads the new tag above.
                   </p>
                 ) : null}
 
