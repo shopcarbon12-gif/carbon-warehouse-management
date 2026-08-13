@@ -29,20 +29,27 @@ type Row = {
 };
 
 async function selectRows(pool: Pool, full: boolean): Promise<Row[]> {
-  // WMS on-hand = in-stock EPC count per variant. Single-location store.
+  // WMS on-hand: RFID items = live in-stock EPC count; MANUAL (non-RFID) items =
+  // their manual_item_qty set-up quantity. Single-location store.
   const r = await pool.query<{ id: string; inv: string; last: number | null; qty: number }>(
-    `SELECT cs.id::text AS id,
-            cs.shopify_inventory_item_id AS inv,
-            cs.shopify_qty_synced AS last,
-            COALESCE(cnt.q, 0)::int AS qty
-       FROM custom_skus cs
-       LEFT JOIN (
-         SELECT custom_sku_id, COUNT(*)::int AS q
-           FROM items WHERE status = 'in-stock' GROUP BY custom_sku_id
-       ) cnt ON cnt.custom_sku_id = cs.id
-      WHERE cs.archived = FALSE
-        AND cs.shopify_inventory_item_id IS NOT NULL
-        ${full ? "" : "AND COALESCE(cnt.q, 0) IS DISTINCT FROM cs.shopify_qty_synced"}`,
+    `SELECT id, inv, last, qty FROM (
+       SELECT cs.id::text AS id,
+              cs.shopify_inventory_item_id AS inv,
+              cs.shopify_qty_synced AS last,
+              CASE WHEN COALESCE(m.is_manual_only, FALSE)
+                   THEN COALESCE((SELECT SUM(q.current_qty)::int FROM manual_item_qty q WHERE q.custom_sku_id = cs.id), 0)
+                   ELSE COALESCE(cnt.q, 0)
+              END AS qty
+         FROM custom_skus cs
+         JOIN matrices m ON m.id = cs.matrix_id
+         LEFT JOIN (
+           SELECT custom_sku_id, COUNT(*)::int AS q
+             FROM items WHERE status = 'in-stock' GROUP BY custom_sku_id
+         ) cnt ON cnt.custom_sku_id = cs.id
+        WHERE cs.archived = FALSE
+          AND cs.shopify_inventory_item_id IS NOT NULL
+     ) t
+     ${full ? "" : "WHERE t.qty IS DISTINCT FROM t.last"}`,
   );
   return r.rows;
 }
