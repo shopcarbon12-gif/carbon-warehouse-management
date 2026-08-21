@@ -6,6 +6,7 @@ import {
   buildMasterPanelPrompt,
   getPanelPosePair,
   getPanelButtonLabel,
+  pickExpressionDirective,
   splitPanelToThreeByFour,
 } from "@/lib/panelGeneration";
 
@@ -274,6 +275,9 @@ export function CarbonStudioTab({
     const kept = crops.length > 0 ? crops.filter((c) => c.selected && c.b64) : [];
     const runTag = Date.now().toString(36);
     const chosen = [...panels].sort((a, b) => a - b);
+    // One facial expression per run so the model doesn't look robotic across
+    // products; kept consistent across this run's panels for set coherence.
+    const expressionDirective = pickExpressionDirective();
     setProgress(`Generating ${chosen.length} panel(s) in parallel…`);
 
     const genOnePanel = async (panel: number): Promise<Crop[]> => {
@@ -290,6 +294,7 @@ export function CarbonStudioTab({
         itemRefs: refUrls,
         itemType,
         itemStyleInstructions: instruction,
+        expressionDirective,
       });
       const resp = await fetch("/api/generate", {
         method: "POST",

@@ -379,6 +379,24 @@ export function extractPoseBlock(library: string, poseNumber: number) {
   return `POSE ${poseNumber}`;
 }
 
+/** Premium/editorial facial expressions. One is picked per generation run so the
+ *  same model doesn't wear an identical robotic expression across products. */
+export const EXPRESSION_DIRECTIVES = [
+  "a relaxed neutral look with soft, warm eyes and lips gently closed",
+  "a subtle closed-mouth smile, calm and quietly confident",
+  "a light, natural half-smile with relaxed brows",
+  "a composed, confident expression with a faint, easy smile",
+  "an approachable soft smile with no teeth, eyes softly engaged",
+  "a serene, premium expression with a gentle, self-assured gaze",
+  "a quiet confident look with a relaxed jaw and calm, steady eyes",
+  "a warm, friendly expression with softly smiling eyes",
+];
+
+/** Pick one expression cue at random (call once per generation run). */
+export function pickExpressionDirective(): string {
+  return EXPRESSION_DIRECTIVES[Math.floor(Math.random() * EXPRESSION_DIRECTIVES.length)];
+}
+
 export function buildMasterPanelPrompt(args: {
   panelNumber: number;
   panelNumberForLocks?: number;
@@ -394,6 +412,8 @@ export function buildMasterPanelPrompt(args: {
   itemStyleInstructions?: string;
   regenerationComments?: string;
   poseSafetySuggestions?: string[];
+  /** Per-generation facial-expression cue (varies run-to-run so models don't look robotic). */
+  expressionDirective?: string;
 }) {
   const poseLibrary = getPoseLibraryForGender(args.modelGender);
   const fullPoseLibraries = [
@@ -426,6 +446,9 @@ export function buildMasterPanelPrompt(args: {
     : "- CLOSE-UP SUBJECT LOCK: the close-up subject must match section 0.5 item type exactly.";
   const styleInstructions = normalizePromptInstruction(args.itemStyleInstructions);
   const regenNotes = normalizePromptInstruction(args.regenerationComments);
+  const expressionDirective =
+    normalizePromptInstruction(args.expressionDirective, 240) ||
+    "a natural, relaxed premium expression with soft, warm eyes";
 
   return [
     "CHATGPT-ONLY EXECUTION HARD LOCK (embedded by app)",
@@ -446,6 +469,14 @@ export function buildMasterPanelPrompt(args: {
     "- If a full-body outfit image is provided, treat it as a single full-look reference and preserve the whole look structure (top, bottom, shoes, accessories).",
     "- If full-look + separate item images are both provided, match each extra item to the corresponding part in the full look and replace only those matched parts.",
     "- Keep all non-replaced parts from the full-look reference unchanged.",
+    "FULL-OUTFIT REPRODUCTION HARD LOCK (all genders, EVERY panel, EVERY frame):",
+    "- If any item reference shows a complete outfit (worn on a person, on a mannequin, on a hanger, or flat-lay), reproduce that ENTIRE outfit exactly in every panel and every full-body frame: top, bottom, outerwear, EVERY visible accessory (belt, bag, hat/cap, jewelry, watch, sunglasses, scarf, socks) AND the exact shoes.",
+    "- Do NOT drop, omit, simplify, swap, recolor, or restyle any piece of the outfit between panels, frames, or poses. The same complete look — same accessories, same exact shoes — must appear consistently across the entire run.",
+    "- Accessories and shoes shown in the outfit reference are mandatory in all full-body frames; never remove them for a 'cleaner' shot.",
+    "NO-GUESS / NO-INVENTION HARD LOCK (all genders):",
+    "- Never invent, add, or hallucinate garments, accessories, prints, logos, branding, patterns, hardware, or styling that are not clearly shown in the item references or explicitly requested in the styling instructions. When unsure, do not add it.",
+    "- If only part of an outfit is provided (e.g. a single top), do NOT invent a designed or branded outfit around it. Any complementary basics needed to complete a clean full-body shot must be plain, neutral, solid-color, and unbranded, and must defer to the styling instructions whenever they are given.",
+    "- Footwear is the ONLY mandatory addition and the ONLY exception to no-guess: every full-body frame must ALWAYS show shoes — never barefoot, never socks-only. Use the exact shoes from the references or styling instructions; if no shoes are provided or instructed, use clean neutral unbranded studio sneakers, the same pair across the whole run.",
     "- CLOSE-UP LOCK: for MALE Pose 6 and FEMALE Pose 5, generate one close-up using section 0.5 item references.",
     closeUpSubjectLine,
     closeUpCategoryRule,
@@ -495,6 +526,11 @@ export function buildMasterPanelPrompt(args: {
     "Face-geometry lock: keep the same eye shape/spacing, nose bridge/tip, lip contour, jawline, cheek structure, and brow shape as model refs.",
     "Skin-tone lock: preserve the exact model skin tone and undertone from model refs. Never lighten, darken, recolor, or stylistically shift skin tone.",
     "Do not change age appearance, facial proportions, skin tone, hairline, or ethnicity between panels.",
+    "HUMAN EXPRESSION VARIATION (all genders — avoid robotic sameness):",
+    "- Keep the exact locked identity, but the face must look alive and human, never a frozen, mannequin-like, or repeated identical stare.",
+    "- Give a natural, believable premium/editorial facial expression, and allow subtle natural variation between the two frames so they never look duplicated.",
+    `- EXPRESSION FOR THIS GENERATION: ${expressionDirective}.`,
+    "- Expression changes ONLY the mouth, eye warmth, brow, and gaze. It must NEVER alter face geometry, bone structure, identity, age, skin tone, or hairline — those stay fully identity-locked.",
     "Item refs are product-only anchors; never copy identity from item photos.",
     "If an item photo shows a real person, treat that person as invisible except for clothing pixels.",
     "Item-photo human = mannequin/hanger only for product display. Never transfer face, hair, skin, body, age, tattoos, or jewelry traits.",
