@@ -224,19 +224,29 @@ export function CarbonStudioTab({
 
   const model = models.find((m) => m.model_id === modelId) || null;
 
-  const uploadItem = useCallback(async (file: File) => {
+  const uploadItems = useCallback(async (files: File[]) => {
+    const list = files.filter((f) => f.type.startsWith("image/"));
+    if (!list.length) return;
     setBusy("upload");
     setErr(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const preview = await readAsDataUrl(file);
-      const r = await fetch("/api/models/upload", { method: "POST", body: fd });
-      const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!r.ok || !j.url) throw new Error(j.error ?? "Upload failed");
-      setItemRefs((prev) => [...prev, { url: j.url as string, preview }]);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Upload failed");
+      const results = await Promise.allSettled(
+        list.map(async (file) => {
+          const fd = new FormData();
+          fd.append("file", file);
+          const preview = await readAsDataUrl(file);
+          const r = await fetch("/api/models/upload", { method: "POST", body: fd });
+          const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
+          if (!r.ok || !j.url) throw new Error(j.error ?? "Upload failed");
+          return { url: j.url as string, preview } as ItemRef;
+        }),
+      );
+      const ok = results
+        .filter((x): x is PromiseFulfilledResult<ItemRef> => x.status === "fulfilled")
+        .map((x) => x.value);
+      if (ok.length) setItemRefs((prev) => [...prev, ...ok]);
+      const failed = results.length - ok.length;
+      if (failed) setErr(`${failed} of ${results.length} photo upload(s) failed.`);
     } finally {
       setBusy(null);
     }
@@ -528,7 +538,13 @@ export function CarbonStudioTab({
           {itemRefs.map((ref, i) => (
             <div key={ref.url + i} className="relative">
               {ref.preview ? (
-                <img src={ref.preview} alt="item ref" className="h-16 w-14 rounded border border-[var(--wms-border)] object-cover" />
+                <img
+                  src={ref.preview}
+                  alt="item ref"
+                  title="Click to view full size"
+                  className="h-16 w-14 cursor-zoom-in rounded border border-[var(--wms-border)] object-cover"
+                  onClick={() => setZoom(ref.preview as string)}
+                />
               ) : (
                 <div className="flex h-16 w-14 items-center justify-center rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] text-center font-mono text-[0.5rem] text-[var(--wms-status-success-fg)]">
                   ✓ photo
@@ -547,10 +563,11 @@ export function CarbonStudioTab({
             ref={fileRef}
             type="file"
             accept="image/*"
+            multiple
             className="hidden"
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void uploadItem(f);
+              const files = e.target.files ? Array.from(e.target.files) : [];
+              if (files.length) void uploadItems(files);
               e.target.value = "";
             }}
           />
