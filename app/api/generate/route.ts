@@ -150,7 +150,7 @@ function isOpenAiImagesEditModelError(err: unknown) {
   );
 }
 
-// Modern image models (gpt-image-1.5 and similar) reject prompts longer than
+// Modern image models (gpt-image-2 and similar) reject prompts longer than
 // this many characters with a 400 "string too long" error. We keep a small
 // safety margin under the documented 32000 ceiling.
 const MODEL_PROMPT_MAX_CHARS = 31800;
@@ -878,7 +878,10 @@ export async function POST(req: NextRequest) {
 
     const openai = new OpenAI({ apiKey });
     const imageTimeoutMs = getImageTimeoutMs();
-    const imageModel = (process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5").trim() || "gpt-image-1.5";
+    const imageModel = (process.env.OPENAI_IMAGE_MODEL || "gpt-image-2").trim() || "gpt-image-2";
+    // Render quality for gpt-image-* edits (low | medium | high | auto). Pinned
+    // high; env-overridable without a redeploy.
+    const imageQuality = (process.env.OPENAI_IMAGE_QUALITY || "high").trim() || "high";
     const swimwearActive = isSwimwearItemType(normalizedPanelQa.itemType);
     const serverIdentityLockPrompt = buildServerIdentityLockPrompt(normalizedPanelQa);
     const poseVariationDirective = buildPoseVariationDirective({
@@ -979,6 +982,10 @@ export async function POST(req: NextRequest) {
           };
           if (params.inputFidelity && modelName !== "dall-e-2") {
             request.input_fidelity = params.inputFidelity;
+          }
+          // gpt-image-* supports an explicit render quality; dall-e-2 does not.
+          if (modelName !== "dall-e-2") {
+            request.quality = imageQuality;
           }
           const edited = await withTimeout(
             openai.images.edit(request),
