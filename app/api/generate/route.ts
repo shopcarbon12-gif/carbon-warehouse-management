@@ -850,6 +850,10 @@ export async function POST(req: NextRequest) {
     // Render quality for gpt-image-* edits (low | medium | high | auto). Pinned
     // high; env-overridable without a redeploy.
     const imageQuality = (process.env.OPENAI_IMAGE_QUALITY || "high").trim() || "high";
+    // Content-moderation strictness for gpt-image-* edits ("auto" | "low"). "low"
+    // is less restrictive — legitimate fashion reference photos (skin/swimwear)
+    // otherwise get false-positive "blocked by safety" refusals. Env-overridable.
+    const imageModeration = (process.env.OPENAI_IMAGE_MODERATION || "low").trim() || "low";
     const swimwearActive = isSwimwearItemType(normalizedPanelQa.itemType);
     const serverIdentityLockPrompt = buildServerIdentityLockPrompt(normalizedPanelQa);
     const poseVariationDirective = buildPoseVariationDirective({
@@ -959,9 +963,11 @@ export async function POST(req: NextRequest) {
           if (params.inputFidelity && supportsInputFidelity) {
             request.input_fidelity = params.inputFidelity;
           }
-          // gpt-image-* supports an explicit render quality; dall-e-2 does not.
+          // gpt-image-* supports an explicit render quality + moderation level;
+          // dall-e-2 supports neither.
           if (modelName !== "dall-e-2") {
             request.quality = imageQuality;
+            request.moderation = imageModeration;
           }
           const edited = await withTimeout(
             openai.images.edit(request),
