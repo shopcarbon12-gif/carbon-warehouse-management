@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CarbonStudioTab } from "./carbon-studio-tab";
 import { MetafieldsTab, type MetafieldsHandle } from "./metafields-tab";
+import { CategoryAttributesTab } from "./category-attributes-tab";
 import { CollectionsTab } from "./collections-tab";
 import { MediaManager } from "./media-manager";
 import useSWR from "swr";
@@ -1216,6 +1217,13 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       shopifyProductId={data.matrix.shopify_product_id ?? null}
                       canManage={canManage}
                       showActions={false}
+                    />
+                  </div>
+                  <div className="border-t border-[var(--wms-border)] pt-3">
+                    <CategoryAttributesTab
+                      matrixId={matrixId}
+                      shopifyProductId={data.matrix.shopify_product_id ?? null}
+                      canManage={canManage}
                     />
                   </div>
                 </div>
