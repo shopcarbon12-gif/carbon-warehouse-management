@@ -231,12 +231,12 @@ function compactPromptForDalle2(prompt: string, maxLen = 1000) {
 // allows. Appended to every generation regardless of item type.
 function buildNudityCeilingLock() {
   return [
-    "ABSOLUTE NO-NUDITY CEILING (SERVER — non-negotiable, all genders):",
+    "MODESTY + COVERAGE CEILING (SERVER — all genders):",
     "- Fashion ecommerce catalog for a clothing company; every model is an adult 25+.",
-    "- NEVER render nudity or partial nudity: no exposed genitals; no bare or see-through female breasts or nipples/areola; no exposed buttocks or butt-crack; no sheer/wet/transparent reveal of intimate areas; no underwear/lingerie/intimates shown as the outfit.",
-    "- MAXIMUM allowed exposure (hard ceiling, never exceed): WOMEN = standard commercial one-piece swimsuit or bikini with the top FULLY covering breasts + nipples and the bottom FULLY covering groin + buttocks (no thong, no exposed buttocks); MEN = swim shorts/trunks, shirtless allowed, trunks FULLY covering groin + buttocks.",
-    "- Any non-swimwear item must be fully clothed in opaque garments (no shirtless torso for non-swimwear).",
-    "- If the reference or prompt would exceed this coverage, clamp to the ceiling; if that is impossible, do not output an image.",
+    "- Keep every model fully and appropriately clothed in professional, storefront-safe styling. No nudity and no partial nudity.",
+    "- Most revealing styling allowed is standard commercial swimwear: women = a regular bikini or one-piece swimsuit with normal catalog coverage; men = swim shorts/trunks (bare chest allowed for swim only).",
+    "- Anything that is not swimwear must be fully clothed in normal opaque garments (no bare-chest styling for non-swimwear).",
+    "- Keep coverage consistent with a mainstream retail catalog. If an item cannot be shown within these limits, do not output an image.",
   ].join("\n");
 }
 
@@ -647,8 +647,8 @@ async function runPanelComplianceCheck(args: {
         "If back-view strict lock is active and back-facing design does not clearly match item refs, set pass=false.",
         "If either side appears significantly off-center such that a center 3:4 crop would cut key model/item content, set pass=false.",
         "If item type is non-swimwear bottom (jeans/pants/shorts) and output shows shirtless/bare torso styling, set pass=false.",
-        "If the output shows ANY nudity or partial nudity — exposed genitals, bare/visible/see-through female breasts or nipples/areola, exposed buttocks or butt-crack, or sheer/wet/transparent reveal of intimate areas — set pass=false.",
-        "If exposure exceeds the allowed ceiling — women more revealing than a fully-covering swimsuit/bikini (thong, exposed buttocks, or uncovered breasts), men more than swim trunks (exposed genitals/buttocks), or any NON-swimwear item shown shirtless or in underwear only — set pass=false.",
+        "If the output shows any nudity or partial nudity, set pass=false.",
+        "If exposure exceeds standard commercial swimwear coverage (women beyond a regular bikini/one-piece, men beyond swim trunks), or a non-swimwear item is shown without a proper top, set pass=false.",
         "If facial geometry or skin tone/undertone clearly drifts from MODEL refs, set pass=false.",
         "If background is not seamless pure white (any pink/warm/cream/gray tint, gradient, vignette, texture, or colored cast), set pass=false.",
         "Set pass=false only when you are clearly confident this output violates model/item/pose lock.",
@@ -872,8 +872,7 @@ export async function POST(req: NextRequest) {
             "SWIMWEAR SAFETY LOCK (SERVER):",
             "Professional ecommerce swimwear catalog image only.",
             "Adult model (25+), neutral posture, non-suggestive composition.",
-            "No erotic context, no intimate framing, no sexual emphasis.",
-            "Women swimwear: bikini/one-piece top fully covers breasts + nipples; bottom fully covers groin + buttocks (no thong). Men swimwear: trunks fully cover groin + buttocks, shirtless allowed.",
+            "Standard commercial swimwear coverage only (regular bikini/one-piece for women; swim trunks for men); keep it consistent with a mainstream retail catalog.",
             "Focus on garment fit, color, material, and product details.",
           ]
         : [buildNonSwimwearCoverageLock(normalizedPanelQa.itemType)]),
@@ -985,6 +984,9 @@ export async function POST(req: NextRequest) {
     try {
       const edited = await runImageEditWithFallback({
         prompt: lockedPrompt,
+        // Max reference fidelity so the model's face/identity stays locked to the
+        // uploaded model refs (was previously only set on the removed retries).
+        inputFidelity: "high",
         timeoutLabel: "OpenAI image generation",
       });
       b64 = edited.data?.[0]?.b64_json ?? null;

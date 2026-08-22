@@ -82,7 +82,7 @@ export function getSwimwearStyleLockLines(gender: string, itemTypeValue: string)
   const lines = [
     "SWIMWEAR SAFETY + STYLING LOCK (NON-NEGOTIABLE):",
     "- Keep the scene strictly ecommerce/catalog, neutral posture, and non-suggestive styling.",
-    "- No erotic framing, no provocative posing, and no intimate context.",
+    "- Keep the styling neutral, professional, and non-suggestive.",
     "- Use clean studio product-photography styling only.",
     "- Foot styling for swimwear: use clean flip-flops/sandals/water-shoes, or naturally uncovered feet when needed.",
   ];
@@ -233,7 +233,7 @@ export function getCloseUpCategoryRule(itemTypeValue: string) {
   if (category === "top") {
     return [
       "- Category lock: close-up must focus on TOP details only (not shorts/pants/shoes).",
-      "- Close-up safety lock: do not emphasize cleavage/breasts or sexualized framing.",
+      "- Close-up safety lock: keep the crop product-focused and non-suggestive.",
       "- Prefer safe conversion details: logo/patch/print edges, collar/neckline seam, shoulder seam, sleeve cuff, hem stitching, buttons/snaps/zips, fabric weave/texture in a non-revealing area.",
     ].join("\n");
   }
@@ -252,7 +252,7 @@ export function getCloseUpCategoryRule(itemTypeValue: string) {
   if (category === "full-look") {
     return [
       "- Category lock: choose the highest-detail hero component from the locked full look and keep the rest of the look unchanged.",
-      "- Close-up safety lock: keep the crop product-only (fabric/hardware/branding/seams) and avoid any nude-skin emphasis (no cleavage focus).",
+      "- Close-up safety lock: keep the crop product-only (fabric/hardware/branding/seams) and non-suggestive.",
     ].join("\n");
   }
   return "- Category lock: close-up must focus on the exact item type entered in section 0.5.";
@@ -543,19 +543,14 @@ export function buildMasterPanelPrompt(args: {
     "- If item references include a clear back design, reproduce that exact back design only.",
     "- If item references do not include a clear back design, keep the back fully solid/clean in item color only.",
     "Photorealism hard lock: realistic human anatomy and skin texture. No CGI, no mannequin-like skin, no plastic look, no uncanny facial structure.",
-    "NON-SEXUAL PRODUCT CATALOG HARD LOCK:",
+    "PROFESSIONAL FASHION CATALOG LOCK:",
     "- This is an ecommerce fashion catalog photo set for a clothing company. Every model is an adult 25+.",
-    "- Keep the scene strictly non-sexual: no lingerie/underwear-as-outfit context, no erotic framing, no suggestive mood or posture.",
-    "- No emphasis on breasts/cleavage/groin; no deliberate zoom on intimate body regions.",
-    "- Wardrobe presentation must be professional and storefront-safe (neutral posture, neutral camera angle).",
-    "ABSOLUTE NO-NUDITY HARD LOCK (all genders, every panel, every pose):",
-    "- NEVER generate nudity or partial nudity. No exposed genitals; no bare, visible, or see-through female breasts or nipples/areola; no exposed buttocks or butt-crack; no sheer, wet, or transparent fabric that reveals intimate areas.",
-    "- Never show underwear/lingerie/intimates as the outfit. If an item reference is underwear, lingerie, or intimates, do NOT output an image.",
-    "MAXIMUM ALLOWED EXPOSURE — this is the hard ceiling, never exceed it:",
-    "- WOMEN: the most revealing allowed is a standard commercial one-piece swimsuit or bikini. The swim/bikini top must FULLY cover the breasts and nipples; the bottom must FULLY cover the groin and the buttocks. No thong, no exposed buttocks, no micro/string styling that reveals intimate areas.",
-    "- MEN: the most revealing allowed is swim shorts/trunks, optionally shirtless (bare chest and torso are allowed). The trunks must FULLY cover the groin and the buttocks.",
-    "- Anything that is NOT swimwear must be shown fully clothed in normal opaque garments (no shirtless torso for non-swimwear, no bottoms-only).",
-    "- FAIL-CLOSED: if the references or styling instructions would require exceeding this coverage, clamp to the maximum coverage above; if that is impossible, do not output an image.",
+    "- Keep composition professional, neutral, and storefront-safe: no suggestive mood or posture, neutral camera angle.",
+    "MODESTY + COVERAGE LOCK (all genders, every panel):",
+    "- Keep every model fully and appropriately clothed in professional, storefront-safe styling. No nudity and no partial nudity.",
+    "- The most revealing styling allowed is standard commercial swimwear: for women, a regular bikini or one-piece swimsuit with normal catalog coverage; for men, swim shorts/trunks (a bare chest is allowed for swim only).",
+    "- Anything that is not swimwear must be shown fully clothed in normal opaque garments (no bare-chest styling for non-swimwear, no bottoms-only).",
+    "- Keep coverage consistent with a mainstream retail catalog. If an item cannot be shown within these limits, do not output an image.",
     ...(args.poseSafetySuggestions && args.poseSafetySuggestions.length
       ? [
           "POSE SAFETY MODIFICATIONS (from pre-generation scan — apply strictly):",
