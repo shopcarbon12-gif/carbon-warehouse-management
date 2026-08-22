@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const MAX_BYTES = Number.parseInt(process.env.MODEL_UPLOAD_MAX_FILE_BYTES || "", 10) || 12 * 1024 * 1024;
+const MAX_BYTES = Number.parseInt(process.env.MODEL_UPLOAD_MAX_FILE_BYTES || "", 10) || 25 * 1024 * 1024;
 
 /**
  * Upload an item/model reference image to R2 (Carbon Studio). Returns its

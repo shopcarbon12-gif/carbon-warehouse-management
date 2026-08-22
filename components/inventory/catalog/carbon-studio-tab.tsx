@@ -42,6 +42,50 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+/**
+ * Downscale + re-encode an image before upload. Pasted screenshots and raw phone
+ * photos are often 15-20MB (over the server's 12MB cap → 413 "file too large");
+ * a 2048px JPEG is well under the limit and is plenty of detail for a generation
+ * reference. Alpha is flattened onto white so PNGs don't go black. Falls back to
+ * the original file if the browser can't decode it.
+ */
+async function downscaleForUpload(
+  file: File,
+  maxDim = 2048,
+  quality = 0.9,
+): Promise<{ blob: Blob; dataUrl: string; name: string }> {
+  const srcUrl = await readAsDataUrl(file);
+  const passthrough = { blob: file as Blob, dataUrl: srcUrl, name: file.name || "image" };
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => rej(new Error("decode"));
+      im.src = srcUrl;
+    });
+    const longest = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+    const scale = Math.min(1, maxDim / longest);
+    // Already small in both pixels and bytes — no need to re-encode.
+    if (scale >= 1 && file.size <= 4 * 1024 * 1024) return passthrough;
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return passthrough;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", quality));
+    if (!blob) return passthrough;
+    const base = (file.name || "image").replace(/\.[^.]+$/, "");
+    return { blob, dataUrl: canvas.toDataURL("image/jpeg", quality), name: `${base}.jpg` };
+  } catch {
+    return passthrough;
+  }
+}
+
 /** Pull image files out of a drop or clipboard payload (drag-drop + paste). */
 function imageFilesFromTransfer(dt: DataTransfer | null): File[] {
   if (!dt) return [];
@@ -249,13 +293,13 @@ export function CarbonStudioTab({
     try {
       const results = await Promise.allSettled(
         list.map(async (file) => {
+          const { blob, dataUrl, name } = await downscaleForUpload(file);
           const fd = new FormData();
-          fd.append("file", file);
-          const preview = await readAsDataUrl(file);
+          fd.append("file", blob, name);
           const r = await fetch("/api/models/upload", { method: "POST", body: fd });
           const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
-          if (!r.ok || !j.url) throw new Error(j.error ?? "Upload failed");
-          return { url: j.url as string, preview } as ItemRef;
+          if (!r.ok || !j.url) throw new Error(j.error ?? `Upload failed (HTTP ${r.status})`);
+          return { url: j.url as string, preview: dataUrl } as ItemRef;
         }),
       );
       const ok = results
@@ -263,7 +307,11 @@ export function CarbonStudioTab({
         .map((x) => x.value);
       if (ok.length) setItemRefs((prev) => [...prev, ...ok]);
       const failed = results.length - ok.length;
-      if (failed) setErr(`${failed} of ${results.length} photo upload(s) failed.`);
+      if (failed) {
+        const firstErr = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+        const reason = firstErr?.reason instanceof Error ? firstErr.reason.message : String(firstErr?.reason ?? "");
+        setErr(`${failed} of ${results.length} photo upload(s) failed${reason ? `: ${reason}` : "."}`);
+      }
     } finally {
       setBusy(null);
     }
