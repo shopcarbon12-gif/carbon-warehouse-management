@@ -982,11 +982,13 @@ export async function POST(req: NextRequest) {
       throw lastErr || new Error("OpenAI image generation failed");
     }
     try {
+      // IMPORTANT: do NOT set input_fidelity here. On gpt-image edits it forces
+      // faithful reproduction of the faces in ALL input images — including any
+      // person wearing the garment in the ITEM references — which overrides the
+      // prompt's "item refs are product-only" rule and makes the output copy the
+      // wrong person. Identity is held by the prompt's model-ref identity locks.
       const edited = await runImageEditWithFallback({
         prompt: lockedPrompt,
-        // Max reference fidelity so the model's face/identity stays locked to the
-        // uploaded model refs (was previously only set on the removed retries).
-        inputFidelity: "high",
         timeoutLabel: "OpenAI image generation",
       });
       b64 = edited.data?.[0]?.b64_json ?? null;
