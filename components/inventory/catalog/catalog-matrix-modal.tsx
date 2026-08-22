@@ -727,6 +727,30 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [saveSeo]);
 
+  // "View online" — open the linked product's ShopCarbon storefront page in a new
+  // tab. Open the tab synchronously (avoids popup blocking), then navigate it once
+  // the storefront URL resolves.
+  const openOnline = useCallback(async () => {
+    if (!data?.matrix.shopify_product_id) return;
+    const tab = window.open("", "_blank", "noopener,noreferrer");
+    setErr(null);
+    try {
+      const r = await fetch(`/api/shopify/product-url?matrixId=${matrixId}`);
+      const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string; code?: string };
+      if (j.code === "STALE_LINK") {
+        await mutate();
+        onMutated?.();
+        throw new Error(j.error ?? "The Shopify link was cleared.");
+      }
+      if (!r.ok || !j.url) throw new Error(j.error ?? "Could not resolve the online URL.");
+      if (tab) tab.location.href = j.url;
+      else window.open(j.url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      if (tab) tab.close();
+      setErr(e instanceof Error ? e.message : "Could not open the item online.");
+    }
+  }, [data, matrixId, mutate, onMutated]);
+
   return (
     <>
       <button
@@ -759,6 +783,19 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy === "save" ? "Saving…" : "Save Changes"}
+              </button>
+              <button
+                type="button"
+                disabled={!data?.matrix.shopify_product_id}
+                onClick={() => void openOnline()}
+                title={
+                  data?.matrix.shopify_product_id
+                    ? "Open this item on the ShopCarbon website"
+                    : "Link this product to Shopify to view it online"
+                }
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {data?.matrix.shopify_product_id ? "🌐 View online" : "🔒 View online"}
               </button>
               {data && !data.matrix.shopify_product_id ? (
                 <button
