@@ -732,7 +732,17 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   // the storefront URL resolves.
   const openOnline = useCallback(async () => {
     if (!data?.matrix.shopify_product_id) return;
-    const tab = window.open("", "_blank", "noopener,noreferrer");
+    // NOTE: no "noopener" here — with noopener window.open returns null and we
+    // couldn't navigate the pre-opened tab. Open blank now (not popup-blocked),
+    // sever the opener link for safety, then point it at the storefront URL.
+    const tab = window.open("", "_blank");
+    if (tab) {
+      try {
+        tab.opener = null;
+      } catch {
+        /* ignore */
+      }
+    }
     setErr(null);
     try {
       const r = await fetch(`/api/shopify/product-url?matrixId=${matrixId}`);
@@ -744,7 +754,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
       }
       if (!r.ok || !j.url) throw new Error(j.error ?? "Could not resolve the online URL.");
       if (tab) tab.location.href = j.url;
-      else window.open(j.url, "_blank", "noopener,noreferrer");
+      else window.open(j.url, "_blank", "noopener");
     } catch (e) {
       if (tab) tab.close();
       setErr(e instanceof Error ? e.message : "Could not open the item online.");
