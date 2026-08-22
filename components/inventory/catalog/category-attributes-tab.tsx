@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react";
 
 /**
  * Shopify category attributes (taxonomy metafields) — Neckline, Dress style,
@@ -10,14 +10,28 @@ import { useCallback, useEffect, useState } from "react";
  */
 type Allowed = { name: string; gid: string };
 type Attr = { key: string; label: string; allowed: Allowed[]; current: string[] };
-type Props = { matrixId: string; shopifyProductId: string | null; canManage: boolean };
+type Props = {
+  matrixId: string;
+  shopifyProductId: string | null;
+  canManage: boolean;
+  /** Show this section's own AI-fill / push buttons. Off when the SEO tab drives them. */
+  showActions?: boolean;
+};
+
+export type CategoryAttributesHandle = {
+  aiFill: () => Promise<void>;
+  push: () => Promise<void>;
+};
 
 const chip =
   "inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/40 bg-[var(--wms-accent)]/10 px-1.5 py-0.5 font-mono text-[0.6rem] text-[var(--wms-fg)]";
 const selCls =
   "rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-0.5 font-mono text-[0.6rem] text-[var(--wms-fg)]";
 
-export function CategoryAttributesTab({ matrixId, shopifyProductId, canManage }: Props) {
+export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>(function CategoryAttributesTab(
+  { matrixId, shopifyProductId, canManage, showActions = true },
+  ref,
+) {
   const [category, setCategory] = useState<{ id: string; name: string } | null>(null);
   const [attrs, setAttrs] = useState<Attr[]>([]);
   const [sel, setSel] = useState<Record<string, string[]>>({});
@@ -123,6 +137,8 @@ export function CategoryAttributesTab({ matrixId, shopifyProductId, canManage }:
     }
   }, [matrixId, sel]);
 
+  useImperativeHandle(ref, () => ({ aiFill, push }), [aiFill, push]);
+
   const addVal = (key: string, gid: string) =>
     setSel((prev) => ({ ...prev, [key]: Array.from(new Set([...(prev[key] ?? []), gid])) }));
   const removeVal = (key: string, gid: string) =>
@@ -143,24 +159,33 @@ export function CategoryAttributesTab({ matrixId, shopifyProductId, canManage }:
         {category ? (
           <span className="rounded border border-[var(--wms-border)] px-1.5 py-0.5 font-mono text-[0.55rem] text-[var(--wms-fg)]">{category.name}</span>
         ) : null}
+        {busy === "ai" ? <span className="font-mono text-[0.55rem] text-[var(--wms-accent)]">Scanning…</span> : null}
         <div className="flex-1" />
-        <button
-          type="button"
-          disabled={!canManage || busy !== null}
-          onClick={() => void aiFill()}
-          title="Assign a Shopify category if missing, then scan the hero + title and fill attributes from the allowed values"
-          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
-        >
-          {busy === "ai" ? "Scanning…" : "✨ AI fill category attributes"}
-        </button>
-        <button
-          type="button"
-          disabled={!canManage || busy !== null || !attrs.length}
-          onClick={() => void push()}
-          className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
-        >
-          {busy === "push" ? "Pushing…" : "⤴ Push to Shopify"}
-        </button>
+        {showActions ? (
+          <>
+            <button
+              type="button"
+              disabled={!canManage || busy !== null}
+              onClick={() => void aiFill()}
+              title="Assign a Shopify category if missing, then scan the hero + title and fill attributes from the allowed values"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+            >
+              {busy === "ai" ? "Scanning…" : "✨ AI fill category attributes"}
+            </button>
+            <button
+              type="button"
+              disabled={!canManage || busy !== null || !attrs.length}
+              onClick={() => void push()}
+              className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
+            >
+              {busy === "push" ? "Pushing…" : "⤴ Push to Shopify"}
+            </button>
+          </>
+        ) : (
+          <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
+            filled by ✦ Optimize with AI · saved by ⤴ Push to Shopify (above)
+          </span>
+        )}
       </div>
 
       <div className="p-3">
@@ -227,4 +252,4 @@ export function CategoryAttributesTab({ matrixId, shopifyProductId, canManage }:
       </div>
     </div>
   );
-}
+});

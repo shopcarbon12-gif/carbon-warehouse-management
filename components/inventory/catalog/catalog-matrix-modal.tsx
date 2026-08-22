@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CarbonStudioTab } from "./carbon-studio-tab";
 import { MetafieldsTab, type MetafieldsHandle } from "./metafields-tab";
-import { CategoryAttributesTab } from "./category-attributes-tab";
+import { CategoryAttributesTab, type CategoryAttributesHandle } from "./category-attributes-tab";
 import { CollectionsTab } from "./collections-tab";
 import { MediaManager } from "./media-manager";
 import useSWR from "swr";
@@ -708,12 +708,17 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   // SEO tab combined actions: one button optimizes SEO + fills metafields from
   // the hero; one button pushes SEO + metafields to Shopify — all at once.
   const metaRef = useRef<MetafieldsHandle>(null);
+  const catAttrRef = useRef<CategoryAttributesHandle>(null);
   const [seoAllBusy, setSeoAllBusy] = useState<null | "opt" | "push">(null);
 
   const optimizeAll = useCallback(async () => {
     setSeoAllBusy("opt");
     try {
-      await Promise.allSettled([runSeo(), metaRef.current?.aiFill() ?? Promise.resolve()]);
+      await Promise.allSettled([
+        runSeo(),
+        metaRef.current?.aiFill() ?? Promise.resolve(),
+        catAttrRef.current?.aiFill() ?? Promise.resolve(),
+      ]);
     } finally {
       setSeoAllBusy(null);
     }
@@ -722,7 +727,11 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   const pushAll = useCallback(async () => {
     setSeoAllBusy("push");
     try {
-      await Promise.allSettled([saveSeo(), metaRef.current?.push() ?? Promise.resolve()]);
+      await Promise.allSettled([
+        saveSeo(),
+        metaRef.current?.push() ?? Promise.resolve(),
+        catAttrRef.current?.push() ?? Promise.resolve(),
+      ]);
     } finally {
       setSeoAllBusy(null);
     }
@@ -1094,7 +1103,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                           type="button"
                           disabled={!canManage || seoBusy !== null || seoAllBusy !== null}
                           onClick={() => void optimizeAll()}
-                          title="Optimize SEO with AI and fill metafields from the hero image — all at once"
+                          title="Optimize SEO, fill metafields, and fill category attributes with AI — all at once"
                           className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
                         >
                           {seoAllBusy === "opt" ? "Optimizing…" : "✦ Optimize with AI"}
@@ -1110,7 +1119,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                           type="button"
                           disabled={!canManage || seoBusy !== null || seoAllBusy !== null}
                           onClick={() => void pushAll()}
-                          title="Push SEO + metafields to Shopify — all at once"
+                          title="Push SEO, metafields, and category attributes to Shopify — all at once"
                           className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
                         >
                           {seoAllBusy === "push" ? "Pushing…" : "⤴ Push to Shopify"}
@@ -1221,9 +1230,11 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   </div>
                   <div className="border-t border-[var(--wms-border)] pt-3">
                     <CategoryAttributesTab
+                      ref={catAttrRef}
                       matrixId={matrixId}
                       shopifyProductId={data.matrix.shopify_product_id ?? null}
                       canManage={canManage}
+                      showActions={false}
                     />
                   </div>
                 </div>
