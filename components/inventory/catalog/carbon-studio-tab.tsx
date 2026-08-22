@@ -42,6 +42,22 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+/** Pull image files out of a drop or clipboard payload (drag-drop + paste). */
+function imageFilesFromTransfer(dt: DataTransfer | null): File[] {
+  if (!dt) return [];
+  const out: File[] = [];
+  if (dt.items && dt.items.length) {
+    for (const it of Array.from(dt.items)) {
+      if (it.kind === "file") {
+        const f = it.getAsFile();
+        if (f) out.push(f);
+      }
+    }
+  }
+  if (!out.length && dt.files && dt.files.length) out.push(...Array.from(dt.files));
+  return out.filter((f) => f.type.startsWith("image/"));
+}
+
 type Props = {
   matrixId: string;
   shopifyProductId: string | null;
@@ -113,6 +129,7 @@ export function CarbonStudioTab({
       return next;
     });
   const [qr, setQr] = useState<{ url: string; scanUrl: string; sessionId: string } | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const colors = useMemo(() => {
@@ -251,6 +268,21 @@ export function CarbonStudioTab({
       setBusy(null);
     }
   }, []);
+
+  // Paste an image from the clipboard (⌘/Ctrl+V) anywhere in Studio → item ref.
+  // Guarded to image payloads only, so pasting text into inputs is untouched.
+  useEffect(() => {
+    if (!canManage) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const imgs = imageFilesFromTransfer(e.clipboardData);
+      if (imgs.length) {
+        e.preventDefault();
+        void uploadItems(imgs);
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [canManage, uploadItems]);
 
   const startPhoneCamera = useCallback(async () => {
     setErr(null);
@@ -532,8 +564,32 @@ export function CarbonStudioTab({
   return (
     <div className="space-y-3">
       {/* Item photos */}
-      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-3">
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (canManage) setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (!canManage) return;
+          const imgs = imageFilesFromTransfer(e.dataTransfer);
+          if (imgs.length) void uploadItems(imgs);
+        }}
+        className={`rounded-md border p-3 transition-colors ${
+          dragOver
+            ? "border-2 border-dashed border-[var(--wms-accent)] bg-[var(--wms-accent)]/10"
+            : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40"
+        }`}
+      >
         <span className={label}>Item photo(s) — the garment reference</span>
+        <p className="mb-2 font-mono text-[0.55rem] text-[var(--wms-muted)]">
+          Drag &amp; drop images here, paste from clipboard (⌘/Ctrl+V), upload, or use the phone camera.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           {itemRefs.map((ref, i) => (
             <div key={ref.url + i} className="relative">
