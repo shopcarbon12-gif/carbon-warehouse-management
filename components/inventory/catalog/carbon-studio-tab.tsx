@@ -42,12 +42,19 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+/** Formats a browser can preview AND the OpenAI image API accepts as-is. */
+const SAFE_IMAGE_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
+
 /**
- * Downscale + re-encode an image before upload. Pasted screenshots and raw phone
- * photos are often 15-20MB (over the server's 12MB cap → 413 "file too large");
- * a 2048px JPEG is well under the limit and is plenty of detail for a generation
- * reference. Alpha is flattened onto white so PNGs don't go black. Falls back to
- * the original file if the browser can't decode it.
+ * Downscale + re-encode an image before upload. Two problems this solves:
+ *  1. Pasted screenshots / raw phone photos are 15-20MB (over the server cap →
+ *     413); a 2048px JPEG is well under it and plenty for a generation reference.
+ *  2. Exotic formats (HEIC from iPhone, BMP, TIFF, AVIF) either don't preview in
+ *     the browser or are rejected by OpenAI ("unsupported image mimetype"). We
+ *     re-encode anything the browser CAN decode to JPEG; anything it CANNOT
+ *     decode (e.g. HEIC on Chrome) is rejected up-front with a clear message
+ *     instead of silently uploading a file that won't preview or generate.
+ * Alpha is flattened onto white so PNGs don't go black.
  */
 async function downscaleForUpload(
   file: File,
@@ -55,35 +62,43 @@ async function downscaleForUpload(
   quality = 0.9,
 ): Promise<{ blob: Blob; dataUrl: string; name: string }> {
   const srcUrl = await readAsDataUrl(file);
-  const passthrough = { blob: file as Blob, dataUrl: srcUrl, name: file.name || "image" };
+  const type = (file.type || "").toLowerCase();
+  const label = file.name || "image";
+  let img: HTMLImageElement;
   try {
-    const img = await new Promise<HTMLImageElement>((res, rej) => {
+    img = await new Promise<HTMLImageElement>((res, rej) => {
       const im = new Image();
       im.onload = () => res(im);
       im.onerror = () => rej(new Error("decode"));
       im.src = srcUrl;
     });
-    const longest = Math.max(img.naturalWidth, img.naturalHeight) || 1;
-    const scale = Math.min(1, maxDim / longest);
-    // Already small in both pixels and bytes — no need to re-encode.
-    if (scale >= 1 && file.size <= 4 * 1024 * 1024) return passthrough;
-    const w = Math.max(1, Math.round(img.naturalWidth * scale));
-    const h = Math.max(1, Math.round(img.naturalHeight * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return passthrough;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(img, 0, 0, w, h);
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", quality));
-    if (!blob) return passthrough;
-    const base = (file.name || "image").replace(/\.[^.]+$/, "");
-    return { blob, dataUrl: canvas.toDataURL("image/jpeg", quality), name: `${base}.jpg` };
   } catch {
-    return passthrough;
+    throw new Error(
+      `${label}: this image format${type ? ` (${type})` : ""} isn't supported — please use JPG or PNG.`,
+    );
   }
+  const longest = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+  const scale = Math.min(1, maxDim / longest);
+  // Fast path: already a preview/OpenAI-safe type, small, and not oversized.
+  if (SAFE_IMAGE_TYPES.has(type) && scale >= 1 && file.size <= 4 * 1024 * 1024) {
+    return { blob: file, dataUrl: srcUrl, name: label };
+  }
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error(`${label}: could not process this image — please use JPG or PNG.`);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", quality));
+  if (!blob || blob.size === 0) {
+    throw new Error(`${label}: could not process this image — please use JPG or PNG.`);
+  }
+  const base = label.replace(/\.[^.]+$/, "");
+  return { blob, dataUrl: canvas.toDataURL("image/jpeg", quality), name: `${base}.jpg` };
 }
 
 /** Pull image files out of a drop or clipboard payload (drag-drop + paste). */
