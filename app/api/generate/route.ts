@@ -227,30 +227,6 @@ function compactPromptForDalle2(prompt: string, maxLen = 1000) {
   return merged.length <= maxLen ? merged : merged.slice(0, maxLen);
 }
 
-function buildSwimwearSafetyRetryPrompt(basePrompt: string) {
-  return [
-    basePrompt,
-    "",
-    "SWIMWEAR RETRY SAFETY MODE:",
-    "- Professional ecommerce catalog image only.",
-    "- Adult model (25+) in standard commercial swimwear presentation.",
-    "- Neutral pose, neutral expression, non-suggestive composition.",
-    "- No erotic intent, no intimate framing, no provocative posture.",
-    "- Focus on garment fit, color, and material details.",
-    "- Seamless pure white studio background only.",
-  ].join("\n");
-}
-
-function buildGeneralSafetyRetryPrompt(basePrompt: string) {
-  return [
-    basePrompt,
-    "",
-    "Safety clarification: professional ecommerce apparel photos only.",
-    "No nudity, no sexual context, neutral product-photography presentation.",
-    "Background lock: seamless pure white studio background only (#FFFFFF), no tint.",
-  ].join("\n");
-}
-
 // Always-on server ceiling: no nudity, and the exact max exposure the brand
 // allows. Appended to every generation regardless of item type.
 function buildNudityCeilingLock() {
@@ -284,25 +260,6 @@ function buildNonSwimwearCoverageLock(itemType: string) {
     );
   }
   return lines.join("\n");
-}
-
-function buildNonSwimwearSafetyRetryPrompt(basePrompt: string, itemType: string) {
-  const category = inferItemTypeCategory(itemType);
-  return [
-    basePrompt,
-    "",
-    "NON-SWIMWEAR RETRY SAFETY MODE:",
-    "- Professional ecommerce catalog photo only.",
-    "- Neutral standing fashion-product composition; no sensual framing.",
-    "- Keep model fully clothed and product-focused.",
-    "- Preserve all visible logos/labels/patches exactly as item references.",
-    ...(category === "bottom"
-      ? [
-          "- Locked item category is BOTTOM: keep a standard opaque top from model refs.",
-          "- Bare torso/shirtless presentation is forbidden.",
-        ]
-      : []),
-  ].join("\n");
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -977,7 +934,10 @@ export async function POST(req: NextRequest) {
     }
 
     let b64: string | null = null;
-    const modelCandidates = Array.from(new Set([imageModel, "dall-e-2"])).filter(Boolean);
+    // Only the configured model — never silently substitute a different (paid)
+    // model. If it can't generate, we surface an error rather than charge for and
+    // return an image the operator didn't ask for.
+    const modelCandidates = [imageModel];
     async function runImageEditWithFallback(params: {
       prompt: string;
       inputFidelity?: "high";
@@ -1045,71 +1005,52 @@ export async function POST(req: NextRequest) {
         code === "moderation_blocked" ||
         type === "image_generation_user_error" ||
         /safety_violations=\[sexual\]/i.test(message);
+      const requestId = err?.requestID || err?.headers?.get?.("x-request-id") || null;
 
-      if (!looksLikeSexualBlock) {
-        const reason = err instanceof Error ? err.message : "OpenAI image generation failed";
-        return fallbackGenerateResponse(reason);
-      }
-
-      // Safe retries: for swimwear use dedicated neutral catalog language.
-      const retryPrompts = swimwearActive
-        ? [
-            buildSwimwearSafetyRetryPrompt(lockedPrompt),
-            buildSwimwearSafetyRetryPrompt(
-              [
-                lockedPrompt,
-                "",
-                "Additional constraints:",
-                "- Keep camera farther and centered; avoid tight body framing.",
-                "- Use straightforward front/back/product-detail composition only.",
-              ].join("\n")
-            ),
-          ]
-        : [
-            buildGeneralSafetyRetryPrompt(lockedPrompt),
-            buildNonSwimwearSafetyRetryPrompt(lockedPrompt, normalizedPanelQa.itemType),
-          ];
-
-      let retryErr: any = null;
-      for (let i = 0; i < retryPrompts.length; i += 1) {
-        try {
-          const retry = await runImageEditWithFallback({
-            prompt: retryPrompts[i],
-            inputFidelity: "high",
-            timeoutLabel: i === 0 ? "OpenAI safe retry" : "OpenAI swimwear retry",
-          });
-          b64 = retry.data?.[0]?.b64_json ?? null;
-          if (b64) break;
-        } catch (e: any) {
-          retryErr = e;
-        }
-      }
-
-      if (!b64) {
-        const requestId =
-          retryErr?.requestID ||
-          err?.requestID ||
-          retryErr?.headers?.get?.("x-request-id") ||
-          err?.headers?.get?.("x-request-id") ||
-          null;
+      // FAIL CLOSED. Never auto-retry with a modified prompt and never substitute
+      // a different model — either would charge OpenAI for an image the operator
+      // did not ask for. Return a clear error; nothing was generated.
+      if (looksLikeSexualBlock) {
         return NextResponse.json(
           {
             error: {
               type: "policy_refusal",
-              code: retryErr?.code || err?.code || "moderation_blocked",
+              code: code || "moderation_blocked",
               message:
-                "Generation was blocked by safety moderation for this reference set. Try a less revealing crop/reference mix or use neutral front/back product shots.",
+                "Blocked by safety moderation for this reference set — nothing was generated. Adjust the crop / reference mix, or use neutral front/back product shots, and try again.",
               requestId,
             },
           },
           { status: 403 }
         );
       }
+      return NextResponse.json(
+        {
+          error: {
+            type: "generation_failed",
+            code: code || type || "unknown",
+            message:
+              (err instanceof Error ? err.message : "OpenAI image generation failed") +
+              " — nothing usable was generated.",
+            requestId,
+          },
+        },
+        { status: 502 }
+      );
     }
 
 
     if (!b64) {
-      return fallbackGenerateResponse("No image returned from provider.");
+      return NextResponse.json(
+        {
+          error: {
+            type: "generation_failed",
+            code: "no_image",
+            message: "The provider returned no image. Nothing usable was generated.",
+          },
+        },
+        { status: 502 }
+      );
     }
 
     const strictLocksEnabled =
