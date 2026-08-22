@@ -230,14 +230,10 @@ function compactPromptForDalle2(prompt: string, maxLen = 1000) {
 // Always-on server ceiling: no nudity, and the exact max exposure the brand
 // allows. Appended to every generation regardless of item type.
 function buildNudityCeilingLock() {
-  return [
-    "MODESTY + COVERAGE CEILING (SERVER — all genders):",
-    "- Fashion ecommerce catalog for a clothing company; every model is an adult 25+.",
-    "- Keep every model fully and appropriately clothed in professional, storefront-safe styling. No nudity and no partial nudity.",
-    "- Most revealing styling allowed is standard commercial swimwear: women = a regular bikini or one-piece swimsuit with normal catalog coverage; men = swim shorts/trunks (bare chest allowed for swim only).",
-    "- Anything that is not swimwear must be fully clothed in normal opaque garments (no bare-chest styling for non-swimwear).",
-    "- Keep coverage consistent with a mainstream retail catalog. If an item cannot be shown within these limits, do not output an image.",
-  ].join("\n");
+  // Minimal, always-on brand-safety line. Swimwear vs non-swimwear coverage
+  // specifics are added conditionally in serverLockBlock, so this stays free of
+  // terms that would raise the prompt's moderation score on normal apparel.
+  return "BRAND SAFETY (SERVER): professional fashion ecommerce catalog; adult model 25+; keep the model appropriately dressed with storefront-safe, non-suggestive styling.";
 }
 
 function buildNonSwimwearCoverageLock(itemType: string) {
@@ -850,7 +846,7 @@ export async function POST(req: NextRequest) {
 
     const openai = new OpenAI({ apiKey });
     const imageTimeoutMs = getImageTimeoutMs();
-    const imageModel = (process.env.OPENAI_IMAGE_MODEL || "gpt-image-2").trim() || "gpt-image-2";
+    const imageModel = (process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5").trim() || "gpt-image-1.5";
     // Render quality for gpt-image-* edits (low | medium | high | auto). Pinned
     // high; env-overridable without a redeploy.
     const imageQuality = (process.env.OPENAI_IMAGE_QUALITY || "high").trim() || "high";
@@ -956,7 +952,11 @@ export async function POST(req: NextRequest) {
             // dall-e-2 supports square edit sizes only.
             size: modelName === "dall-e-2" ? "1024x1024" : finalSize,
           };
-          if (params.inputFidelity && modelName !== "dall-e-2") {
+          // input_fidelity is supported by gpt-image-1 / gpt-image-1.5 only.
+          // dall-e-2 and gpt-image-2 hard-fail (400) if it's sent, so gate it.
+          const supportsInputFidelity =
+            modelName !== "dall-e-2" && !modelName.startsWith("gpt-image-2");
+          if (params.inputFidelity && supportsInputFidelity) {
             request.input_fidelity = params.inputFidelity;
           }
           // gpt-image-* supports an explicit render quality; dall-e-2 does not.

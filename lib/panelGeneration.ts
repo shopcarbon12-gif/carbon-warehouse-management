@@ -544,13 +544,15 @@ export function buildMasterPanelPrompt(args: {
     "- If item references do not include a clear back design, keep the back fully solid/clean in item color only.",
     "Photorealism hard lock: realistic human anatomy and skin texture. No CGI, no mannequin-like skin, no plastic look, no uncanny facial structure.",
     "PROFESSIONAL FASHION CATALOG LOCK:",
-    "- This is an ecommerce fashion catalog photo set for a clothing company. Every model is an adult 25+.",
-    "- Keep composition professional, neutral, and storefront-safe: no suggestive mood or posture, neutral camera angle.",
-    "MODESTY + COVERAGE LOCK (all genders, every panel):",
-    "- Keep every model fully and appropriately clothed in professional, storefront-safe styling. No nudity and no partial nudity.",
-    "- The most revealing styling allowed is standard commercial swimwear: for women, a regular bikini or one-piece swimsuit with normal catalog coverage; for men, swim shorts/trunks (a bare chest is allowed for swim only).",
-    "- Anything that is not swimwear must be shown fully clothed in normal opaque garments (no bare-chest styling for non-swimwear, no bottoms-only).",
-    "- Keep coverage consistent with a mainstream retail catalog. If an item cannot be shown within these limits, do not output an image.",
+    "- Ecommerce fashion catalog for a clothing company; the model is an adult 25+.",
+    "- Keep composition professional, neutral, and storefront-safe (no suggestive mood or posture, neutral camera angle).",
+    ...(swimwearActive
+      ? [
+          "- This item is swimwear: use standard commercial swimwear coverage only (a regular bikini or one-piece for women; swim shorts/trunks for men), consistent with a mainstream retail catalog.",
+        ]
+      : [
+          "- Keep the model fully and appropriately clothed in normal opaque garments; no bare-chest styling and no bottoms-only.",
+        ]),
     ...(args.poseSafetySuggestions && args.poseSafetySuggestions.length
       ? [
           "POSE SAFETY MODIFICATIONS (from pre-generation scan — apply strictly):",
