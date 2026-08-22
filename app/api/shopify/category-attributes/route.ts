@@ -151,6 +151,47 @@ function clearStaleLink(pool: ReturnType<typeof getPool>, matrixId: string) {
   ]);
 }
 
+/** AI-pick the single best Shopify taxonomy category from search candidates. */
+async function pickCategory(
+  openai: OpenAI,
+  title: string,
+  description: string,
+  dataUrl: string,
+  cands: Array<[string, string]>,
+): Promise<string | null> {
+  const list = cands.map((c, i) => `${i + 1}. ${c[1]}`).join("\n");
+  const content: any[] = [
+    {
+      type: "text",
+      text: [
+        `Product: "${title}".`,
+        description ? `Description: ${description}` : "",
+        "Pick the single best Shopify category for this product from the numbered list.",
+        "Prefer the standard adult apparel/accessory category — avoid Baby & Children's, Maternity, Costumes, and Sports-fan variants unless clearly correct.",
+        'Return STRICT JSON only: {"index": <the chosen number, or 0 if none fit>}.',
+        list,
+      ].filter(Boolean).join("\n"),
+    },
+  ];
+  if (dataUrl) content.push({ type: "image_url", image_url: { url: dataUrl, detail: "auto" } });
+  try {
+    const c: any = await openai.chat.completions.create({
+      model: (process.env.SEO_MODEL || "gpt-4o").trim(),
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: "You classify products into a fixed taxonomy list. Return only valid JSON." },
+        { role: "user", content },
+      ],
+    });
+    const idx = Number(JSON.parse(c?.choices?.[0]?.message?.content || "{}").index) || 0;
+    if (idx >= 1 && idx <= cands.length) return cands[idx - 1][0];
+  } catch {
+    /* fall through — leave category unset */
+  }
+  return null;
+}
+
 export async function GET(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -226,17 +267,22 @@ export async function POST(req: Request) {
   }
 
   // action === "suggest"
+  const apiKey = getOpenAiApiKey();
+  if (!apiKey) return NextResponse.json({ error: "OpenAI API key not configured." }, { status: 500 });
+  const openai = new OpenAI({ apiKey });
+  const gq = async <T,>(query: string, variables?: Record<string, unknown>): Promise<{ data: T | null }> => {
+    const rr = await runShopifyGraphql<T>({ shop: ctx.shop, token: ctx.token, apiVersion: ctx.apiVersion, query, variables });
+    return { data: (rr.data ?? null) as T | null };
+  };
+
   const res = await loadAttributes(ctx, productId);
   if ("stale" in res && res.stale) {
     await clearStaleLink(pool, matrixId);
     return NextResponse.json({ error: "This product no longer exists on Shopify — the link was cleared.", code: "STALE_LINK" }, { status: 404 });
   }
-  const r = res as Exclude<LoadResult, { stale: true }>;
-  if (!r.attributes.length) return NextResponse.json({ suggestions: {} });
+  let r = res as Exclude<LoadResult, { stale: true }>;
 
-  const apiKey = getOpenAiApiKey();
-  if (!apiKey) return NextResponse.json({ error: "OpenAI API key not configured." }, { status: 500 });
-
+  // Hero image — shared by category pick + attribute fill.
   let dataUrl = "";
   if (r.heroUrl) {
     try {
@@ -244,53 +290,83 @@ export async function POST(req: Request) {
       const { bytes, contentType } = await fetchRemoteImageBytes(safe, { timeoutMs: getImageFetchTimeoutMs() });
       dataUrl = `data:${contentType || "image/jpeg"};base64,${bytes.toString("base64")}`;
     } catch {
-      /* no hero — classify from title alone */
+      /* classify from title alone */
     }
   }
 
-  const attrSpec = r.attributes.map((a) => `- ${a.label} (key "${a.key}"): allowed = [${a.allowed.map((v) => v.name).join(", ")}]`).join("\n");
-  const openai = new OpenAI({ apiKey });
-  const content: any[] = [
-    {
-      type: "text",
-      text: [
-        `Product: "${r.title}"${r.category ? ` (category: ${r.category.name})` : ""}.`,
-        r.description ? `Description: ${r.description}` : "",
-        "You are classifying an apparel product for a Shopify catalog. For EACH attribute below, choose the value(s) from its allowed list that best match this product, based on the photo and the title/description.",
-        "Rules: use ONLY exact values from that attribute's allowed list; if you cannot tell confidently, omit that attribute. Most attributes take a single value; color and features can take several.",
-        "Return STRICT JSON only: an object mapping each attribute key to an array of chosen value names, e.g. {\"neckline\":[\"Round\"],\"dress-style\":[\"Sheath\"]}. Omit keys you are unsure about.",
-        attrSpec,
-      ].filter(Boolean).join("\n"),
-    },
-  ];
-  if (dataUrl) content.push({ type: "image_url", image_url: { url: dataUrl, detail: "auto" } });
-
-  let parsed: Record<string, string[]> = {};
-  try {
-    const c: any = await openai.chat.completions.create({
-      model: (process.env.SEO_MODEL || "gpt-4o").trim(),
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: "You classify apparel attributes strictly from provided allowed values. Return only valid JSON." },
-        { role: "user", content },
-      ],
-    });
-    parsed = JSON.parse(c?.choices?.[0]?.message?.content || "{}");
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "AI classification failed" }, { status: 500 });
+  // No Shopify category yet → AI-assign one so its attributes become fillable.
+  let assignedCategory = false;
+  if (!r.category) {
+    const wms = await pool.query<{ subcategory_1: string | null }>(`SELECT subcategory_1 FROM matrices WHERE id = $1::uuid`, [matrixId]);
+    const wsub = wms.rows[0]?.subcategory_1 || "";
+    const titleTail = r.title.split(/\s+/).filter((w) => w.length > 2).slice(-2);
+    const terms = Array.from(new Set([wsub, ...titleTail].map((s) => s.trim()).filter(Boolean))).slice(0, 3);
+    const candMap = new Map<string, string>();
+    for (const term of terms) {
+      const t = await gq<{ taxonomy?: { categories?: { nodes: { id: string; fullName: string; isLeaf: boolean; isArchived: boolean }[] } } }>(
+        `query($s:String!){ taxonomy{ categories(first:8, search:$s){ nodes{ id fullName isLeaf isArchived } } } }`,
+        { s: term },
+      );
+      for (const n of t.data?.taxonomy?.categories?.nodes ?? []) if (n.isLeaf && !n.isArchived) candMap.set(n.id, n.fullName);
+    }
+    const cands = Array.from(candMap.entries()).slice(0, 20);
+    if (cands.length) {
+      const picked = await pickCategory(openai, r.title, r.description, dataUrl, cands);
+      if (picked) {
+        const up = await gq<{ productUpdate?: { userErrors?: { message: string }[] } }>(
+          `mutation($id:ID!,$cat:ID!){ productUpdate(product:{ id:$id, category:$cat }){ userErrors{ message } } }`,
+          { id: gid, cat: picked },
+        );
+        if (!(up.data?.productUpdate?.userErrors?.length)) {
+          assignedCategory = true;
+          const res2 = await loadAttributes(ctx, productId);
+          if (!("stale" in res2 && res2.stale)) r = res2 as Exclude<LoadResult, { stale: true }>;
+        }
+      }
+    }
   }
 
-  // Map chosen value names → metaobject GIDs (case-insensitive), constrained to allowed.
+  // Fill attribute values from the (possibly newly-assigned) category.
   const suggestions: Record<string, string[]> = {};
-  for (const a of r.attributes) {
-    const chosen = parsed[a.key];
-    if (!Array.isArray(chosen) || !chosen.length) continue;
-    const byName = new Map(a.allowed.map((v) => [v.name.trim().toLowerCase(), v.gid]));
-    const gids = chosen
-      .map((n) => byName.get(String(n).trim().toLowerCase()))
-      .filter((x): x is string => !!x);
-    if (gids.length) suggestions[a.key] = Array.from(new Set(gids));
+  if (r.attributes.length) {
+    const attrSpec = r.attributes.map((a) => `- ${a.label} (key "${a.key}"): allowed = [${a.allowed.map((v) => v.name).join(", ")}]`).join("\n");
+    const content: any[] = [
+      {
+        type: "text",
+        text: [
+          `Product: "${r.title}"${r.category ? ` (category: ${r.category.name})` : ""}.`,
+          r.description ? `Description: ${r.description}` : "",
+          "You are classifying an apparel product for a Shopify catalog. For EACH attribute below, choose the value(s) from its allowed list that best match this product, based on the photo and the title/description.",
+          "Rules: use ONLY exact values from that attribute's allowed list; if you cannot tell confidently, omit that attribute. Most attributes take a single value; color and features can take several.",
+          "Return STRICT JSON only: an object mapping each attribute key to an array of chosen value names, e.g. {\"neckline\":[\"Round\"],\"dress-style\":[\"Sheath\"]}. Omit keys you are unsure about.",
+          attrSpec,
+        ].filter(Boolean).join("\n"),
+      },
+    ];
+    if (dataUrl) content.push({ type: "image_url", image_url: { url: dataUrl, detail: "auto" } });
+    let parsed: Record<string, string[]> = {};
+    try {
+      const c: any = await openai.chat.completions.create({
+        model: (process.env.SEO_MODEL || "gpt-4o").trim(),
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "You classify apparel attributes strictly from provided allowed values. Return only valid JSON." },
+          { role: "user", content },
+        ],
+      });
+      parsed = JSON.parse(c?.choices?.[0]?.message?.content || "{}");
+    } catch (e: any) {
+      return NextResponse.json({ error: e?.message || "AI classification failed" }, { status: 500 });
+    }
+    for (const a of r.attributes) {
+      const chosen = parsed[a.key];
+      if (!Array.isArray(chosen) || !chosen.length) continue;
+      const byName = new Map(a.allowed.map((v) => [v.name.trim().toLowerCase(), v.gid]));
+      const gids = chosen.map((n) => byName.get(String(n).trim().toLowerCase())).filter((x): x is string => !!x);
+      if (gids.length) suggestions[a.key] = Array.from(new Set(gids));
+    }
   }
-  return NextResponse.json({ suggestions });
+
+  return NextResponse.json({ category: r.category, attributes: r.attributes, suggestions, assignedCategory });
 }

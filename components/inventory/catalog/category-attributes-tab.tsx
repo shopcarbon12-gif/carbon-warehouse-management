@@ -64,16 +64,37 @@ export function CategoryAttributesTab({ matrixId, shopifyProductId, canManage }:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ matrixId, action: "suggest" }),
       });
-      const j = (await r.json().catch(() => ({}))) as { suggestions?: Record<string, string[]>; error?: string };
+      const j = (await r.json().catch(() => ({}))) as {
+        category?: { id: string; name: string } | null;
+        attributes?: Attr[];
+        suggestions?: Record<string, string[]>;
+        assignedCategory?: boolean;
+        error?: string;
+      };
       if (!r.ok) throw new Error(j.error ?? "AI fill failed");
       const sugg = j.suggestions ?? {};
-      setSel((prev) => {
-        const next = { ...prev };
-        for (const [k, v] of Object.entries(sugg)) next[k] = v;
-        return next;
-      });
+      if (j.category !== undefined) setCategory(j.category ?? null);
+      if (j.attributes) {
+        setAttrs(j.attributes);
+        // Rebuild selection: current values, overlaid with AI suggestions.
+        const init: Record<string, string[]> = {};
+        for (const a of j.attributes) init[a.key] = [...(a.current ?? [])];
+        for (const [k, v] of Object.entries(sugg)) init[k] = v;
+        setSel(init);
+      } else {
+        setSel((prev) => {
+          const next = { ...prev };
+          for (const [k, v] of Object.entries(sugg)) next[k] = v;
+          return next;
+        });
+      }
       const n = Object.keys(sugg).length;
-      setMsg(n ? `AI filled ${n} attribute(s) — review, then push.` : "AI couldn't confidently determine any attributes.");
+      const catNote = j.assignedCategory ? `Set category "${j.category?.name ?? ""}". ` : "";
+      setMsg(
+        n
+          ? `${catNote}AI filled ${n} attribute(s) — review, then push.`
+          : `${catNote}${j.attributes && j.attributes.length ? "No attributes could be confidently determined." : "No matching Shopify category found — set one in Shopify."}`,
+      );
     } catch (e) {
       setErr(e instanceof Error ? e.message : "AI fill failed");
     } finally {
@@ -125,9 +146,9 @@ export function CategoryAttributesTab({ matrixId, shopifyProductId, canManage }:
         <div className="flex-1" />
         <button
           type="button"
-          disabled={!canManage || busy !== null || !attrs.length}
+          disabled={!canManage || busy !== null}
           onClick={() => void aiFill()}
-          title="Scan the hero image + title and fill these from Shopify's allowed values"
+          title="Assign a Shopify category if missing, then scan the hero + title and fill attributes from the allowed values"
           className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
         >
           {busy === "ai" ? "Scanning…" : "✨ AI fill category attributes"}
@@ -147,7 +168,9 @@ export function CategoryAttributesTab({ matrixId, shopifyProductId, canManage }:
           <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">Loading category attributes…</p>
         ) : loaded && !category ? (
           <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
-            Set this product&apos;s category on Shopify to enable category attributes.
+            No Shopify category set. Click{" "}
+            <span className="text-[var(--wms-accent)]">✨ AI fill category attributes</span> to
+            auto-assign one and fill the fields.
           </p>
         ) : loaded && !attrs.length ? (
           <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">No fillable category attributes for this category.</p>
