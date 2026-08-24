@@ -197,6 +197,33 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
     return Array.from(new Set(t)).sort();
   }, [data, tree]);
 
+  // Suggested collections NOT yet assigned — shown as toggle buttons under the
+  // "Currently on Shopify" section. Once pushed they become current and drop off
+  // this list (they'll appear in the current chips above).
+  const suggestions = useMemo(() => {
+    const out: Array<{ kind: "node" | "direct"; key: string; title: string }> = [];
+    if (!data || !tree) return out;
+    const byKey = new Map(data.nodes.map((n) => [n.nodeKey, n] as const));
+    const currentNodes = new Set(data.row.checkedNodeKeys);
+    for (const k of tree.suggestedNodeKeys) {
+      if (currentNodes.has(k)) continue;
+      const n = byKey.get(k);
+      if (n) out.push({ kind: "node", key: k, title: n.collectionTitle || n.label });
+    }
+    const currentDirect = new Set(data.row.currentDirectCollections);
+    for (const h of tree.suggestedDirect) {
+      if (currentDirect.has(h) || !tree.handleToId.has(h)) continue;
+      out.push({ kind: "direct", key: h, title: tree.handleToTitle.get(h) || h });
+    }
+    const seen = new Set<string>();
+    return out.filter((s) => {
+      const t = s.title.toLowerCase();
+      if (seen.has(t)) return false;
+      seen.add(t);
+      return true;
+    });
+  }, [data, tree]);
+
   const toggleNode = (k: string) =>
     setSelNodes((prev) => {
       const next = new Set(prev);
@@ -403,6 +430,36 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
         ) : (
           <span className="font-mono text-[0.65rem] text-[var(--wms-muted)]">None yet — empty.</span>
         )}
+
+        {suggestions.length ? (
+          <div className="mt-3 border-t border-teal-400/20 pt-2.5">
+            <span className="mb-1.5 block font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+              Suggestions — click to add, then Push to Shopify
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((s) => {
+                const selected = s.kind === "node" ? selNodes.has(s.key) : selDirect.has(s.key);
+                return (
+                  <button
+                    key={`${s.kind}:${s.key}`}
+                    type="button"
+                    disabled={!canManage || busy !== null}
+                    onClick={() => (s.kind === "node" ? toggleNode(s.key) : toggleDirect(s.key))}
+                    title={selected ? "Will be added on next push" : "Click to add on next push"}
+                    className={
+                      selected
+                        ? "rounded-md border border-teal-400 bg-teal-500/15 px-2.5 py-1 font-mono text-[0.68rem] font-semibold text-teal-100 shadow-[0_0_10px_rgba(45,212,191,0.5)] transition disabled:opacity-50"
+                        : "rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2.5 py-1 font-mono text-[0.68rem] text-[var(--wms-fg)] transition hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                    }
+                  >
+                    {selected ? "✓ " : "+ "}
+                    {s.title}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* The tree */}

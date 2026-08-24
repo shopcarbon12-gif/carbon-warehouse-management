@@ -629,20 +629,67 @@ export async function splitPanelToThreeByFour(
   const halfH = img.height;
   const targetRatio = SPLIT_TARGET_WIDTH / SPLIT_TARGET_HEIGHT;
 
+  // The model draws a thin black divider between the two frames (and sometimes a
+  // black edge border), which otherwise lands on a crop margin. Detect near-black
+  // margin columns/rows for one half and return the region to keep. Capped at 8%
+  // so a dark-clothed model can never be trimmed away. No-op when there's no line.
+  function contentRegion(sideOffsetX: number): { x: number; y: number; w: number; h: number } {
+    const full = { x: 0, y: 0, w: halfW, h: halfH };
+    const probe = document.createElement("canvas");
+    probe.width = halfW;
+    probe.height = halfH;
+    const pctx = probe.getContext("2d", { willReadFrequently: true });
+    if (!pctx) return full;
+    pctx.drawImage(img, sideOffsetX, 0, halfW, halfH, 0, 0, halfW, halfH);
+    let data: Uint8ClampedArray;
+    try {
+      data = pctx.getImageData(0, 0, halfW, halfH).data;
+    } catch {
+      return full; // tainted canvas — skip trimming
+    }
+    const DARK = 20;
+    const colBlack = (x: number) => {
+      let dark = 0, n = 0;
+      for (let y = 0; y < halfH; y += 3, n++) {
+        const i = (y * halfW + x) * 4;
+        if (data[i] < DARK && data[i + 1] < DARK && data[i + 2] < DARK) dark++;
+      }
+      return n > 0 && dark >= n * 0.92;
+    };
+    const rowBlack = (y: number) => {
+      let dark = 0, n = 0;
+      for (let x = 0; x < halfW; x += 3, n++) {
+        const i = (y * halfW + x) * 4;
+        if (data[i] < DARK && data[i + 1] < DARK && data[i + 2] < DARK) dark++;
+      }
+      return n > 0 && dark >= n * 0.92;
+    };
+    const capX = Math.floor(halfW * 0.08);
+    const capY = Math.floor(halfH * 0.08);
+    let left = 0, right = halfW - 1, top = 0, bottom = halfH - 1;
+    while (left < capX && colBlack(left)) left++;
+    while (halfW - 1 - right < capX && right > left && colBlack(right)) right--;
+    while (top < capY && rowBlack(top)) top++;
+    while (halfH - 1 - bottom < capY && bottom > top && rowBlack(bottom)) bottom--;
+    return { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
+  }
+
   function cropForSide(side: "left" | "right") {
     const sideOffsetX = side === "left" ? 0 : img.width - halfW;
-    let srcX = sideOffsetX;
-    let srcY = 0;
-    let srcW = halfW;
-    let srcH = halfH;
-    const sourceRatio = halfW / halfH;
+    // Start from the black-trimmed content region, then center-crop it to 3:4.
+    const region = contentRegion(sideOffsetX);
+    let srcX = sideOffsetX + region.x;
+    let srcY = region.y;
+    let srcW = region.w;
+    let srcH = region.h;
+    const sourceRatio = region.w / region.h;
 
     if (sourceRatio > targetRatio) {
-      srcW = Math.max(1, Math.round(halfH * targetRatio));
-      srcX = sideOffsetX + Math.floor((halfW - srcW) / 2);
+      srcW = Math.max(1, Math.round(region.h * targetRatio));
+      srcX = sideOffsetX + region.x + Math.floor((region.w - srcW) / 2);
     } else if (sourceRatio < targetRatio) {
-      srcH = Math.max(1, Math.round(halfW / targetRatio));
-      srcY = Math.floor((halfH - srcH) / 2);
+      srcH = Math.max(1, Math.round(region.w / targetRatio));
+      srcY = region.y + Math.floor((region.h - srcH) / 2);
     }
 
     const canvas = document.createElement("canvas");
