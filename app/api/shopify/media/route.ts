@@ -35,6 +35,16 @@ type Item =
   | { kind: "existing"; mediaId: string; alt?: string; variantId?: string; variantIds?: string[] }
   | { kind: "new"; b64: string; alt?: string; variantId?: string; variantIds?: string[] };
 
+/** Detect the real image type from magic bytes so Shopify staging isn't told
+ * "image/png" for a JPEG/WebP (mislabeled uploads can fail to ingest). */
+function sniffImage(bytes: Uint8Array): { mime: string; ext: string } {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { mime: "image/jpeg", ext: "jpg" };
+  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return { mime: "image/png", ext: "png" };
+  if (bytes.length >= 12 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return { mime: "image/webp", ext: "webp" };
+  if (bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return { mime: "image/gif", ext: "gif" };
+  return { mime: "image/png", ext: "png" };
+}
+
 async function resolveProductId(pool: ReturnType<typeof getPool>, matrixId: string) {
   const r = await pool!.query<{ shopify_product_id: string | null }>(
     `SELECT shopify_product_id FROM matrices WHERE id = $1::uuid`,
@@ -97,7 +107,12 @@ export async function POST(req: Request) {
       keptExisting.add(it.mediaId);
     } else {
       const bytes = new Uint8Array(Buffer.from(it.b64, "base64"));
-      const staged = await stageImageUpload(ctx, `studio-${Date.now()}.png`, "image/png", bytes);
+      if (!bytes.byteLength) {
+        warnings.push("create: empty image data");
+        continue;
+      }
+      const sniff = sniffImage(bytes);
+      const staged = await stageImageUpload(ctx, `studio-${Date.now()}.${sniff.ext}`, sniff.mime, bytes);
       if (!staged.ok) {
         warnings.push(`stage: ${staged.error}`);
         continue;

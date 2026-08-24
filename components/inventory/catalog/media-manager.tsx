@@ -22,13 +22,6 @@ type MediaItem = {
 };
 type Props = { matrixId: string; shopifyProductId: string | null; variants: MVariant[]; canManage: boolean };
 
-function readB64(file: File): Promise<string> {
-  return new Promise((res) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result || "").split(",")[1] || "");
-    r.readAsDataURL(file);
-  });
-}
 function readDataUrl(file: File): Promise<string> {
   return new Promise((res) => {
     const r = new FileReader();
@@ -36,6 +29,53 @@ function readDataUrl(file: File): Promise<string> {
     r.readAsDataURL(file);
   });
 }
+/**
+ * Downscale + re-encode an upload to a clean JPEG before it's pushed to Shopify.
+ * Raw full-res / iPhone HEIC / mislabeled files can fail to ingest on Shopify;
+ * a 2048px JPEG the browser produced always ingests. Undecodable formats (e.g.
+ * HEIC on Chrome) throw a clear message instead of silently pushing a bad file.
+ * Returns { b64, dataUrl } — b64 (no prefix) is what /api/shopify/media wants.
+ */
+async function downscaleToParts(
+  file: File,
+  maxDim = 2048,
+  quality = 0.9,
+): Promise<{ b64: string; dataUrl: string }> {
+  const srcUrl = await readDataUrl(file);
+  const type = (file.type || "").toLowerCase();
+  let img: HTMLImageElement;
+  try {
+    img = await new Promise<HTMLImageElement>((res, rej) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.onerror = () => rej(new Error("decode"));
+      im.src = srcUrl;
+    });
+  } catch {
+    throw new Error(`${file.name || "image"}: this image format${type ? ` (${type})` : ""} isn't supported — please use JPG or PNG.`);
+  }
+  const safe = type === "image/jpeg" || type === "image/jpg" || type === "image/png" || type === "image/webp";
+  const longest = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+  const scale = Math.min(1, maxDim / longest);
+  if (safe && scale >= 1 && file.size <= 2 * 1024 * 1024) {
+    return { b64: srcUrl.split(",")[1] || "", dataUrl: srcUrl };
+  }
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { b64: srcUrl.split(",")[1] || "", dataUrl: srcUrl };
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  const dataUrl = canvas.toDataURL("image/jpeg", quality);
+  const b64 = dataUrl.split(",")[1] || "";
+  if (!b64) throw new Error(`${file.name || "image"}: could not process this image — please use JPG or PNG.`);
+  return { b64, dataUrl };
+}
+
 function download(src: string, name: string) {
   const a = document.createElement("a");
   a.href = src;
@@ -132,14 +172,21 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
   const addFiles = useCallback(async (files: FileList | null) => {
     if (!files?.length) return;
     setBusy("upload");
+    setErr(null);
     try {
       const added: MediaItem[] = [];
+      const failed: string[] = [];
       for (const f of Array.from(files)) {
         if (!f.type.startsWith("image/")) continue;
-        const [b64, dataUrl] = await Promise.all([readB64(f), readDataUrl(f)]);
-        added.push({ key: `new-${f.name}-${added.length}-${b64.length}`, kind: "new", b64, url: dataUrl, alt: "", color: "" });
+        try {
+          const { b64, dataUrl } = await downscaleToParts(f);
+          added.push({ key: `new-${f.name}-${added.length}-${b64.length}`, kind: "new", b64, url: dataUrl, alt: "", color: "" });
+        } catch (e) {
+          failed.push(e instanceof Error ? e.message : `${f.name}: unreadable image`);
+        }
       }
-      setItems((prev) => [...prev, ...added]);
+      if (added.length) setItems((prev) => [...prev, ...added]);
+      if (failed.length) setErr(failed.slice(0, 3).join(" · "));
     } finally {
       setBusy(null);
     }
@@ -264,13 +311,20 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       if (!r.ok) throw new Error(j.error ?? "Publish failed");
       setItems((j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })));
       setSel(new Set());
-      // HTTP 2xx = the push landed. Warnings are a non-fatal NOTE about individual
-      // steps, not a failure — surface them alongside success, never as an error.
+      // Distinguish images that FAILED to push (stage/create) from benign notes
+      // (reorder/writeback) — a failed image push must never read as success.
+      const allWarn = j.warnings ?? [];
+      const hardFails = allWarn.filter((w) => /^(stage|create)/.test(w));
       const wb = j.imageWriteback;
       const back = wb ? ` · synced ${wb.galleryCount} link(s) + ${wb.variantsMatched} colour image(s) back to WMS` : "";
-      const warn = j.warnings?.length ? ` · note: ${j.warnings.slice(0, 3).join(" · ")}` : "";
-      setErr(null);
-      setMsg(`Saved — ${(j.media || []).length} image(s) live on Shopify${back}${warn}.`);
+      if (hardFails.length) {
+        setMsg(null);
+        setErr(`${hardFails.length} image(s) could not be pushed: ${hardFails.slice(0, 2).join(" · ")}`);
+      } else {
+        const note = allWarn.length ? ` · note: ${allWarn.slice(0, 2).join(" · ")}` : "";
+        setErr(null);
+        setMsg(`Saved — ${(j.media || []).length} image(s) live on Shopify${back}${note}.`);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Publish failed");
     } finally {

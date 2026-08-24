@@ -675,13 +675,20 @@ export function CarbonStudioTab({
         (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })),
       );
       setMediaSel(new Set());
-      // The push succeeded (HTTP 2xx). Warnings are a non-fatal NOTE about
-      // individual steps, not a failure — keep the source crops so the operator
+      // Distinguish images that FAILED to push (stage/create) from benign notes
+      // (reorder/writeback). Keep the source crops on any failure so the operator
       // can retry the affected ones instead of losing them.
-      const warn = j.warnings?.length ? ` · note: ${j.warnings.slice(0, 3).join(" · ")}` : "";
-      if (!j.warnings?.length) setCrops((prev) => prev.filter((c) => !c.selected));
-      setErr(null);
-      setMsg(`Saved to Shopify — ${(j.media || []).length} image(s) live${newCount ? `, ${newCount} new` : ""}${warn}.`);
+      const allWarn = j.warnings ?? [];
+      const hardFails = allWarn.filter((w) => /^(stage|create)/.test(w));
+      if (hardFails.length) {
+        setMsg(null);
+        setErr(`${hardFails.length} image(s) could not be pushed: ${hardFails.slice(0, 2).join(" · ")}`);
+      } else {
+        setCrops((prev) => prev.filter((c) => !c.selected));
+        const note = allWarn.length ? ` · note: ${allWarn.slice(0, 2).join(" · ")}` : "";
+        setErr(null);
+        setMsg(`Saved to Shopify — ${(j.media || []).length} image(s) live${newCount ? `, ${newCount} new` : ""}${note}.`);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Publish failed");
     } finally {
