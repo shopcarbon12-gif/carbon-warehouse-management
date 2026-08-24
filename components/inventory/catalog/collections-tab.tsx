@@ -185,6 +185,7 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
     if (!data || !tree) return out;
     const byKey = new Map(data.nodes.map((n) => [n.nodeKey, n] as const));
     for (const k of data.row.checkedNodeKeys) {
+      if (!tree.assignableKeys.has(k)) continue; // only toggleable nodes (matches selNodes seeding)
       const n = byKey.get(k);
       if (n) out.push({ kind: "node", key: k, title: n.collectionTitle || n.label });
     }
