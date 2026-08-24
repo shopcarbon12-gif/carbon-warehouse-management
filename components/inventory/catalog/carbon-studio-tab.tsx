@@ -505,10 +505,23 @@ export function CarbonStudioTab({
         color: "",
       }));
       setShopifyExisting(existing);
-      // Only the SELECTED generated crops are shown by default. The Pose-2 crop
-      // (right frame, id "-r-") is always placed last so Pose 1 leads / is hero.
+      // Only the SELECTED generated crops are shown by default. Default ordering
+      // in Manage & publish depends on the model gender:
+      //  • MEN → Pose 4 LAST, Pose 7 second-to-last (rest keep their order).
+      //  • otherwise → the Pose-2 crop (right frame, id "-r-") goes last so Pose 1
+      //    leads / becomes hero.
       const picked = crops.filter((c) => c.selected && c.b64);
-      const ordered = [...picked.filter((c) => !c.id.includes("-r-")), ...picked.filter((c) => c.id.includes("-r-"))];
+      const poseNum = (c: Crop) => {
+        const m = c.label.match(/Pose (\d+)/);
+        return m ? Number(m[1]) : 0;
+      };
+      const isMale = (model?.gender || "").toLowerCase() === "male";
+      const ordered = isMale
+        ? [...picked].sort((a, b) => {
+            const rank = (c: Crop) => (poseNum(c) === 4 ? 2 : poseNum(c) === 7 ? 1 : 0);
+            return rank(a) - rank(b);
+          })
+        : [...picked.filter((c) => !c.id.includes("-r-")), ...picked.filter((c) => c.id.includes("-r-"))];
       const news: MediaItem[] = ordered.map((c) => ({
         key: `new-${c.id}`,
         kind: "new",
@@ -526,7 +539,7 @@ export function CarbonStudioTab({
     } finally {
       setMediaBusy(null);
     }
-  }, [matrixId, crops, includeShopify, autoAltMissing]);
+  }, [matrixId, crops, includeShopify, autoAltMissing, model]);
 
   // Toggle existing Shopify pictures in/out of the manager without losing edits
   // to the newly-generated ones.
