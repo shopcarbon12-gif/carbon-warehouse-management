@@ -181,6 +181,9 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   const [seoProposed, setSeoProposed] = useState<Record<string, unknown> | null>(null);
   const [seoScores, setSeoScores] = useState<{ cur: number; prop: number } | null>(null);
   const [seoAccept, setSeoAccept] = useState<Record<string, boolean>>({});
+  // Current Shopify collection titles, shown at the top of the SEO tab. Refreshed
+  // after a collections push.
+  const [seoCollections, setSeoCollections] = useState<string[] | null>(null);
 
   const [mForm, setMForm] = useState<MatrixForm | null>(null);
   const [rows, setRows] = useState<RowState[]>([]);
@@ -610,15 +613,41 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [data, matrixId, mutate, onMutated]);
 
-  // Auto-load current Shopify SEO the first time the SEO tab is opened.
-  useEffect(() => {
-    if (tab === "seo" && data?.matrix.shopify_product_id && !seoCurrent && !seoProposed && seoBusy === null) {
-      void loadSeoCurrent();
+  // Load the product's current Shopify collection titles (shown atop the SEO tab).
+  const loadSeoCollections = useCallback(async () => {
+    const u = data?.matrix.upc;
+    if (!u) {
+      setSeoCollections([]);
+      return;
     }
-  }, [tab, data?.matrix.shopify_product_id, seoCurrent, seoProposed, seoBusy, loadSeoCurrent]);
+    try {
+      const r = await fetch(`/api/shopify/collection-mapping?upc=${encodeURIComponent(u)}&pageSize=100`);
+      const j = (await r.json().catch(() => ({}))) as {
+        rows?: Array<{ upc: string; collectionIds: string[] }>;
+        collections?: Array<{ id: string; title: string }>;
+      };
+      const row = (j.rows || []).find((x) => x.upc === u) || (j.rows || [])[0];
+      const idToTitle = new Map((j.collections || []).map((c) => [c.id, c.title]));
+      const titles = Array.from(
+        new Set((row?.collectionIds || []).map((id) => idToTitle.get(id)).filter(Boolean) as string[]),
+      ).sort();
+      setSeoCollections(titles);
+    } catch {
+      setSeoCollections([]);
+    }
+  }, [data?.matrix.upc]);
 
-  // SEO tab (M3): audit current Shopify SEO, then AI-optimize.
-  const runSeo = useCallback(async () => {
+  // Auto-load current Shopify SEO + collections the first time the SEO tab opens.
+  useEffect(() => {
+    if (tab === "seo" && data?.matrix.shopify_product_id) {
+      if (!seoCurrent && !seoProposed && seoBusy === null) void loadSeoCurrent();
+      if (seoCollections === null) void loadSeoCollections();
+    }
+  }, [tab, data?.matrix.shopify_product_id, seoCurrent, seoProposed, seoBusy, seoCollections, loadSeoCurrent, loadSeoCollections]);
+
+  // SEO tab (M3): audit current Shopify SEO, then AI-optimize. Accepts an
+  // AbortSignal so an auto-run can be cancelled when the user leaves the tab.
+  const runSeo = useCallback(async (signal?: AbortSignal) => {
     const pid = data?.matrix.shopify_product_id;
     if (!pid) return;
     setSeoBusy("run");
@@ -629,6 +658,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productId: pid, matrixId }),
+        signal,
       });
       const aj = (await a.json().catch(() => ({}))) as {
         current?: Record<string, unknown>;
@@ -649,6 +679,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ context: aj.context, current: aj.current }),
+        signal,
       });
       const oj = (await o.json().catch(() => ({}))) as {
         proposed?: Record<string, unknown>;
@@ -709,17 +740,23 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   // the hero; one button pushes SEO + metafields to Shopify — all at once.
   const metaRef = useRef<MetafieldsHandle>(null);
   const catAttrRef = useRef<CategoryAttributesHandle>(null);
+  const seoAbortRef = useRef<AbortController | null>(null);
+  const autoOptedRef = useRef(false);
   const [seoAllBusy, setSeoAllBusy] = useState<null | "opt" | "push">(null);
 
   const optimizeAll = useCallback(async () => {
+    seoAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    seoAbortRef.current = ctrl;
     setSeoAllBusy("opt");
     try {
       await Promise.allSettled([
-        runSeo(),
-        metaRef.current?.aiFill() ?? Promise.resolve(),
-        catAttrRef.current?.aiFill() ?? Promise.resolve(),
+        runSeo(ctrl.signal),
+        metaRef.current?.aiFill(ctrl.signal) ?? Promise.resolve(),
+        catAttrRef.current?.aiFill(ctrl.signal) ?? Promise.resolve(),
       ]);
     } finally {
+      if (seoAbortRef.current === ctrl) seoAbortRef.current = null;
       setSeoAllBusy(null);
     }
   }, [runSeo]);
@@ -736,6 +773,54 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
       setSeoAllBusy(null);
     }
   }, [saveSeo]);
+
+  // Auto-run Optimize with AI the first time the SEO tab opens (per open). The
+  // "✦ Optimize with AI" button stays for manual re-runs / edits.
+  useEffect(() => {
+    if (tab !== "seo" || !data?.matrix.shopify_product_id) return;
+    if (autoOptedRef.current || seoProposed || seoAllBusy) return;
+    autoOptedRef.current = true;
+    void optimizeAll();
+  }, [tab, data?.matrix.shopify_product_id, seoProposed, seoAllBusy, optimizeAll]);
+
+  // Leaving the SEO tab cancels an in-flight auto-optimize (so OpenAI isn't
+  // charged for a run the operator navigated away from) and re-arms auto-run.
+  useEffect(() => {
+    if (tab !== "seo") {
+      seoAbortRef.current?.abort();
+      autoOptedRef.current = false;
+    }
+  }, [tab]);
+  useEffect(() => () => seoAbortRef.current?.abort(), []);
+
+  // Flip the whole matrix's Shopify product to ARCHIVED (hidden from storefront).
+  const archiveShopify = useCallback(async () => {
+    if (!data?.matrix.shopify_product_id) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        "Archive this product on Shopify? The whole matrix will be hidden from the storefront. You can reactivate it later with ✔ Check & Publish.",
+      )
+    )
+      return;
+    setBusy("archiveShopify");
+    setErr(null);
+    try {
+      const r = await fetch("/api/shopify/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrixId, status: "ARCHIVED" }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) throw new Error(j.error ?? "Archive on Shopify failed");
+      setOkMsg("Archived on Shopify — hidden from the storefront.");
+      onMutated?.();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Archive on Shopify failed");
+    } finally {
+      setBusy(null);
+    }
+  }, [data?.matrix.shopify_product_id, matrixId, onMutated]);
 
   // "View online" — open the linked product's ShopCarbon storefront page in a new
   // tab. Open the tab synchronously (avoids popup blocking), then navigate it once
@@ -816,6 +901,23 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {data?.matrix.shopify_product_id ? "🌐 View online" : "🔒 View online"}
+              </button>
+              <button
+                type="button"
+                disabled={!canManage || !data?.matrix.shopify_product_id || busy !== null}
+                onClick={() => void archiveShopify()}
+                title={
+                  data?.matrix.shopify_product_id
+                    ? "Archive this product on Shopify — hides the whole matrix from the storefront"
+                    : "Link this product to Shopify first"
+                }
+                className="rounded-md border border-amber-500/55 bg-amber-950/30 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-amber-200 hover:bg-amber-900/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy === "archiveShopify"
+                  ? "Archiving…"
+                  : data?.matrix.shopify_product_id
+                    ? "🗄 Archive in Shopify"
+                    : "🔒 Archive in Shopify"}
               </button>
               {data && !data.matrix.shopify_product_id ? (
                 <button
@@ -1125,6 +1227,30 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                           {seoAllBusy === "push" ? "Pushing…" : "⤴ Push to Shopify"}
                         </button>
                       </div>
+                      {/* Current collections for this item (refreshes after a Collections push). */}
+                      <div className="rounded-lg border border-teal-400/40 bg-teal-500/5 p-2.5">
+                        <span className="mb-1 block font-mono text-[0.6rem] font-bold uppercase tracking-wider text-teal-300">
+                          ★ Current collections
+                        </span>
+                        {seoCollections === null ? (
+                          <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">Loading…</span>
+                        ) : seoCollections.length ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {seoCollections.map((t) => (
+                              <span
+                                key={t}
+                                className="rounded-md border border-teal-400 bg-teal-500/15 px-2 py-0.5 font-mono text-[0.65rem] font-semibold text-teal-100 shadow-[0_0_8px_rgba(45,212,191,0.45)]"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                            None yet — assign some in the Collections tab.
+                          </span>
+                        )}
+                      </div>
                       {seoProposed ? (
                         <div className="overflow-hidden rounded-md border border-[var(--wms-border)]">
                           {(["seoTitle", "metaDescription", "bodyHtml", "tags"] as const).map((f) => {
@@ -1245,6 +1371,10 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   upc={data.matrix.upc ?? null}
                   shopifyProductId={data.matrix.shopify_product_id ?? null}
                   canManage={canManage}
+                  onCollectionsChanged={() => {
+                    void loadSeoCollections();
+                    onMutated?.();
+                  }}
                 />
                 ) : tab === "studio" ? (
                 /* Carbon Studio (M2) — the OpenAI V2 generator, product-scoped. */

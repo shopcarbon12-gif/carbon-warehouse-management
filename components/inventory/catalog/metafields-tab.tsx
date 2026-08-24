@@ -18,7 +18,7 @@ type Props = {
 };
 
 export type MetafieldsHandle = {
-  aiFill: () => Promise<void>;
+  aiFill: (signal?: AbortSignal) => Promise<void>;
   push: () => Promise<void>;
 };
 
@@ -59,7 +59,7 @@ export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function Metafi
     };
   }, [matrixId, shopifyProductId]);
 
-  const aiFill = useCallback(async () => {
+  const aiFill = useCallback(async (signal?: AbortSignal) => {
     setBusy("ai");
     setErr(null);
     setMsg(null);
@@ -68,12 +68,14 @@ export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function Metafi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ matrixId }),
+        signal,
       });
       const j = (await r.json().catch(() => ({}))) as { values?: Record<string, string>; error?: string };
       if (!r.ok || !j.values) throw new Error(j.error ?? "AI scan failed");
       setValues((v) => ({ ...v, ...j.values }));
       setMsg("Filled from the hero image — review, then push.");
     } catch (e) {
+      if ((e as Error)?.name === "AbortError") return; // cancelled — not an error
       setErr(e instanceof Error ? e.message : "AI scan failed");
     } finally {
       setBusy(null);

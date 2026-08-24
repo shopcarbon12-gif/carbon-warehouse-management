@@ -464,12 +464,18 @@ export type MetafieldInput = {
   value: string;
 };
 
-/** metafieldsSet in batches of 25 (Shopify's per-call limit). */
+/**
+ * metafieldsSet in batches of 25 (Shopify's per-call limit). metafieldsSet
+ * writes the VALID metafields even when some in the batch are rejected, so a
+ * per-item userError is a non-fatal WARNING (partial success), not a total
+ * failure. Only a transport/HTTP error (nothing written) sets ok:false.
+ */
 export async function setMetafields(
   ctx: ShopCtx,
   metafields: MetafieldInput[],
-): Promise<{ ok: boolean; error?: string }> {
-  const errors: string[] = [];
+): Promise<{ ok: boolean; error?: string; warnings?: string[] }> {
+  const transportErrors: string[] = [];
+  const userErrors: string[] = [];
   for (let i = 0; i < metafields.length; i += 25) {
     const batch = metafields.slice(i, i + 25);
     const res = await gql<{ metafieldsSet?: { userErrors?: Array<{ message: string }> } }>(
@@ -480,10 +486,13 @@ export async function setMetafields(
       { m: batch },
     );
     const errs = res.data?.metafieldsSet?.userErrors || [];
-    if (!res.ok) errors.push(JSON.stringify(res.errors));
-    else if (errs.length) errors.push(...errs.map((e) => e.message));
+    if (!res.ok) transportErrors.push(JSON.stringify(res.errors));
+    else if (errs.length) userErrors.push(...errs.map((e) => e.message));
   }
-  return errors.length ? { ok: false, error: errors.join("; ") } : { ok: true };
+  const warnings = userErrors.length ? userErrors : undefined;
+  return transportErrors.length
+    ? { ok: false, error: transportErrors.join("; "), warnings }
+    : { ok: true, warnings };
 }
 
 /** Create a manual Shopify collection (M4). */

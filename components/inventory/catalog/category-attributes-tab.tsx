@@ -19,7 +19,7 @@ type Props = {
 };
 
 export type CategoryAttributesHandle = {
-  aiFill: () => Promise<void>;
+  aiFill: (signal?: AbortSignal) => Promise<void>;
   push: () => Promise<void>;
 };
 
@@ -68,7 +68,7 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
     void load();
   }, [load]);
 
-  const aiFill = useCallback(async () => {
+  const aiFill = useCallback(async (signal?: AbortSignal) => {
     setBusy("ai");
     setErr(null);
     setMsg(null);
@@ -77,6 +77,7 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ matrixId, action: "suggest" }),
+        signal,
       });
       const j = (await r.json().catch(() => ({}))) as {
         category?: { id: string; name: string } | null;
@@ -110,6 +111,7 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
           : `${catNote}${j.attributes && j.attributes.length ? "No attributes could be confidently determined." : "No matching Shopify category found — set one in Shopify."}`,
       );
     } catch (e) {
+      if ((e as Error)?.name === "AbortError") return; // cancelled — not an error
       setErr(e instanceof Error ? e.message : "AI fill failed");
     } finally {
       setBusy(null);
@@ -128,8 +130,11 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
       });
       const j = (await r.json().catch(() => ({}))) as { pushed?: number; cleared?: number; warnings?: string[]; error?: string };
       if (!r.ok) throw new Error(j.error ?? "Push failed");
-      if (j.warnings?.length) setErr(`Some failed: ${j.warnings.slice(0, 3).join(" · ")}`);
-      else setMsg(`Pushed ${j.pushed ?? 0} attribute(s) to Shopify${j.cleared ? `, cleared ${j.cleared}` : ""}.`);
+      // The valid attributes were written even when some keys warn — surface the
+      // warning as a NOTE alongside success, not a red failure.
+      const note = j.warnings?.length ? ` · note: ${j.warnings.slice(0, 2).join(" · ")}` : "";
+      setErr(null);
+      setMsg(`Pushed ${j.pushed ?? 0} attribute(s) to Shopify${j.cleared ? `, cleared ${j.cleared}` : ""}${note}.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Push failed");
     } finally {
