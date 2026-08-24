@@ -630,55 +630,72 @@ export async function splitPanelToThreeByFour(
   const halfH = img.height;
   const targetRatio = SPLIT_TARGET_WIDTH / SPLIT_TARGET_HEIGHT;
 
-  // The model draws a thin black divider between the two frames (and sometimes a
-  // black edge border), which otherwise lands on a crop margin. Detect near-black
-  // margin columns/rows for one half and return the region to keep. Capped at 8%
-  // so a dark-clothed model can never be trimmed away. No-op when there's no line.
-  function contentRegion(sideOffsetX: number): { x: number; y: number; w: number; h: number } {
-    const full = { x: 0, y: 0, w: halfW, h: halfH };
+  const capX = Math.floor(halfW * 0.08);
+  const capY = Math.floor(halfH * 0.08);
+  // Small base inset on every edge (kills thin anti-aliased hairlines the detector
+  // might miss) and a larger GUARANTEED trim on the seam/inner edge, where the
+  // divider between the two frames always sits — removed even when it's a soft grey.
+  const baseInset = Math.max(3, Math.round(halfW * 0.006));
+  const seamTrim = Math.max(9, Math.round(halfW * 0.016));
+
+  // Depth of the contiguous dark band running inward from each edge (0 if none).
+  function darkEdgeDepths(sideOffsetX: number): { left: number; right: number; top: number; bottom: number } {
+    const zero = { left: 0, right: 0, top: 0, bottom: 0 };
     const probe = document.createElement("canvas");
     probe.width = halfW;
     probe.height = halfH;
     const pctx = probe.getContext("2d", { willReadFrequently: true });
-    if (!pctx) return full;
+    if (!pctx) return zero;
     pctx.drawImage(img, sideOffsetX, 0, halfW, halfH, 0, 0, halfW, halfH);
     let data: Uint8ClampedArray;
     try {
       data = pctx.getImageData(0, 0, halfW, halfH).data;
     } catch {
-      return full; // tainted canvas — skip trimming
+      return zero; // tainted canvas — skip detection
     }
-    const DARK = 20;
-    const colBlack = (x: number) => {
+    const LUM = 55; // average luminance below this = "dark" (catches grey dividers)
+    const COV = 0.72; // fraction of the line that must be dark
+    const darkCol = (x: number) => {
       let dark = 0, n = 0;
-      for (let y = 0; y < halfH; y += 3, n++) {
+      for (let y = 0; y < halfH; y += 2, n++) {
         const i = (y * halfW + x) * 4;
-        if (data[i] < DARK && data[i + 1] < DARK && data[i + 2] < DARK) dark++;
+        if ((data[i] + data[i + 1] + data[i + 2]) / 3 < LUM) dark++;
       }
-      return n > 0 && dark >= n * 0.92;
+      return n > 0 && dark >= n * COV;
     };
-    const rowBlack = (y: number) => {
+    const darkRow = (y: number) => {
       let dark = 0, n = 0;
-      for (let x = 0; x < halfW; x += 3, n++) {
+      for (let x = 0; x < halfW; x += 2, n++) {
         const i = (y * halfW + x) * 4;
-        if (data[i] < DARK && data[i + 1] < DARK && data[i + 2] < DARK) dark++;
+        if ((data[i] + data[i + 1] + data[i + 2]) / 3 < LUM) dark++;
       }
-      return n > 0 && dark >= n * 0.92;
+      return n > 0 && dark >= n * COV;
     };
-    const capX = Math.floor(halfW * 0.08);
-    const capY = Math.floor(halfH * 0.08);
-    let left = 0, right = halfW - 1, top = 0, bottom = halfH - 1;
-    while (left < capX && colBlack(left)) left++;
-    while (halfW - 1 - right < capX && right > left && colBlack(right)) right--;
-    while (top < capY && rowBlack(top)) top++;
-    while (halfH - 1 - bottom < capY && bottom > top && rowBlack(bottom)) bottom--;
-    return { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
+    const d = { left: 0, right: 0, top: 0, bottom: 0 };
+    while (d.left < capX && darkCol(d.left)) d.left++;
+    while (d.right < capX && darkCol(halfW - 1 - d.right)) d.right++;
+    while (d.top < capY && darkRow(d.top)) d.top++;
+    while (d.bottom < capY && darkRow(halfH - 1 - d.bottom)) d.bottom++;
+    return d;
   }
 
   function cropForSide(side: "left" | "right") {
     const sideOffsetX = side === "left" ? 0 : img.width - halfW;
-    // Start from the black-trimmed content region, then center-crop it to 3:4.
-    const region = contentRegion(sideOffsetX);
+    const d = darkEdgeDepths(sideOffsetX);
+    let tL = Math.max(baseInset, d.left);
+    let tR = Math.max(baseInset, d.right);
+    let tT = Math.max(baseInset, d.top);
+    let tB = Math.max(baseInset, d.bottom);
+    // Guarantee the divider seam is gone: left crop's seam is its RIGHT edge, the
+    // right crop's seam is its LEFT edge.
+    if (side === "left") tR = Math.max(tR, seamTrim);
+    else tL = Math.max(tL, seamTrim);
+    // Safety: never eat more than ~45% of a dimension (protects dark-clothed models).
+    if (tL + tR > halfW * 0.45) { tL = side === "left" ? baseInset : seamTrim; tR = side === "left" ? seamTrim : baseInset; }
+    if (tT + tB > halfH * 0.45) { tT = baseInset; tB = baseInset; }
+
+    const region = { x: tL, y: tT, w: halfW - tL - tR, h: halfH - tT - tB };
+    // Center-crop the trimmed region to the 3:4 target.
     let srcX = sideOffsetX + region.x;
     let srcY = region.y;
     let srcW = region.w;
