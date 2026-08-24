@@ -637,13 +637,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [data?.matrix.upc]);
 
-  // Auto-load current Shopify SEO + collections the first time the SEO tab opens.
+  // Auto-load current Shopify SEO the first time the SEO tab opens.
   useEffect(() => {
     if (tab === "seo" && data?.matrix.shopify_product_id) {
       if (!seoCurrent && !seoProposed && seoBusy === null) void loadSeoCurrent();
-      if (seoCollections === null) void loadSeoCollections();
     }
-  }, [tab, data?.matrix.shopify_product_id, seoCurrent, seoProposed, seoBusy, seoCollections, loadSeoCurrent, loadSeoCollections]);
+  }, [tab, data?.matrix.shopify_product_id, seoCurrent, seoProposed, seoBusy, loadSeoCurrent]);
 
   // SEO tab (M3): audit current Shopify SEO, then AI-optimize. Accepts an
   // AbortSignal so an auto-run can be cancelled when the user leaves the tab.
@@ -783,6 +782,22 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     void optimizeAll();
   }, [tab, data?.matrix.shopify_product_id, seoProposed, seoAllBusy, optimizeAll]);
 
+  // Load the "Current collections" list ONLY while the SEO tab is idle — never
+  // during an Optimize or Push. Its endpoint is heavy, so this keeps it off the
+  // critical path: Push to Shopify (SEO + metafields + categories) never waits
+  // for collections to load.
+  useEffect(() => {
+    if (
+      tab === "seo" &&
+      data?.matrix.shopify_product_id &&
+      seoCollections === null &&
+      seoAllBusy === null &&
+      seoBusy === null
+    ) {
+      void loadSeoCollections();
+    }
+  }, [tab, data?.matrix.shopify_product_id, seoCollections, seoAllBusy, seoBusy, loadSeoCollections]);
+
   // Leaving the SEO tab cancels an in-flight auto-optimize (so OpenAI isn't
   // charged for a run the operator navigated away from) and re-arms auto-run.
   useEffect(() => {
@@ -865,7 +880,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         onClick={onClose}
       />
       <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-2 sm:p-4">
-        <div className="my-4 w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8">
+        <div className="my-4 w-full max-w-7xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5">
             <div className="flex items-center gap-2">
               {onBack ? (

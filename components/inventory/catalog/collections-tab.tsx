@@ -157,62 +157,64 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
     return { children, assignableKeys, suggestedNodeKeys, suggestedDirect, handleToId, idToTitle, handleToTitle, directHandles };
   }, [data]);
 
-  // Auto path: pre-select current ∪ suggested whenever fresh data lands.
+  // On fresh data: pre-check only CURRENT collections (suggested stay unchecked),
+  // and auto-expand the branches that contain currently-assigned collections.
   useEffect(() => {
     if (!data || !tree) return;
-    // Pre-select current + suggested TREE nodes (mapped only). For "Other
-    // collections" pre-check ONLY the ones the product is already in — suggested
-    // ones are shown unchecked so the user opts in.
-    // Only CURRENT (already-assigned) collections are pre-checked. Suggested ones
-    // are shown (badge) but left unchecked so the operator opts in explicitly.
     setSelNodes(new Set(data.row.checkedNodeKeys.filter((k) => tree.assignableKeys.has(k))));
     setSelDirect(new Set(data.row.currentDirectCollections.filter((h) => tree.handleToId.has(h))));
-    setExpanded(new Set());
-    setShowAll(false);
-  }, [data, tree]);
-
-  // Nodes on a currently-relevant path (assigned/selected + their ancestors) —
-  // these stay visible when the tree is collapsed. Everything else is hidden
-  // until expanded or "Show all".
-  const visibleKeys = useMemo(() => {
-    const vis = new Set<string>();
-    if (!data) return vis;
     const byKey = new Map(data.nodes.map((n) => [n.nodeKey, n] as const));
-    const relevant = new Set<string>([...data.row.checkedNodeKeys, ...selNodes]);
-    for (const k of relevant) {
+    const exp = new Set<string>();
+    for (const k of data.row.checkedNodeKeys) {
       let cur = byKey.get(k);
       const seen = new Set<string>();
       while (cur && !seen.has(cur.nodeKey)) {
         seen.add(cur.nodeKey);
-        vis.add(cur.nodeKey);
+        exp.add(cur.nodeKey); // open this node (and, by walking up, all its ancestors)
         cur = cur.parentKey ? byKey.get(cur.parentKey) : undefined;
       }
     }
-    return vis;
-  }, [data, selNodes]);
-
-  const currentTitles = useMemo(() => {
-    if (!data || !tree) return [];
-    const t = data.row.collectionIds.map((id) => tree.idToTitle.get(id)).filter(Boolean) as string[];
-    return Array.from(new Set(t)).sort();
+    setExpanded(exp);
+    setShowAll(false);
   }, [data, tree]);
 
-  // Suggested collections NOT yet assigned — shown as toggle buttons under the
-  // "Currently on Shopify" section. Once pushed they become current and drop off
-  // this list (they'll appear in the current chips above).
+  // Currently-assigned collections as toggleable buttons, each linked to its tree
+  // node (or direct handle). Clicking one marks it for REMOVAL on the next push.
+  const currentButtons = useMemo(() => {
+    const out: Array<{ kind: "node" | "direct"; key: string; title: string }> = [];
+    if (!data || !tree) return out;
+    const byKey = new Map(data.nodes.map((n) => [n.nodeKey, n] as const));
+    for (const k of data.row.checkedNodeKeys) {
+      const n = byKey.get(k);
+      if (n) out.push({ kind: "node", key: k, title: n.collectionTitle || n.label });
+    }
+    for (const h of data.row.currentDirectCollections) {
+      out.push({ kind: "direct", key: h, title: tree.handleToTitle.get(h) || h });
+    }
+    const seen = new Set<string>();
+    return out
+      .filter((s) => {
+        const t = s.title.toLowerCase();
+        if (seen.has(t)) return false;
+        seen.add(t);
+        return true;
+      })
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [data, tree]);
+
+  // Suggested collections — shown as toggle buttons under the "Currently on
+  // Shopify" section. Suggestions that are ALREADY assigned stay in the list and
+  // are marked (glow), so the operator can see the suggestion is already applied.
   const suggestions = useMemo(() => {
     const out: Array<{ kind: "node" | "direct"; key: string; title: string }> = [];
     if (!data || !tree) return out;
     const byKey = new Map(data.nodes.map((n) => [n.nodeKey, n] as const));
-    const currentNodes = new Set(data.row.checkedNodeKeys);
     for (const k of tree.suggestedNodeKeys) {
-      if (currentNodes.has(k)) continue;
       const n = byKey.get(k);
       if (n) out.push({ kind: "node", key: k, title: n.collectionTitle || n.label });
     }
-    const currentDirect = new Set(data.row.currentDirectCollections);
     for (const h of tree.suggestedDirect) {
-      if (currentDirect.has(h) || !tree.handleToId.has(h)) continue;
+      if (!tree.handleToId.has(h)) continue; // skip collections that don't exist yet
       out.push({ kind: "direct", key: h, title: tree.handleToTitle.get(h) || h });
     }
     const seen = new Set<string>();
@@ -323,14 +325,11 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
     if (!data || !tree) return null;
     const kids = tree.children.get(parentKey) ?? [];
     if (!kids.length) return null;
-    // Collapsed: show only children on a currently-relevant path. Expanded parent
-    // (or Show all): show every child.
-    const shown =
-      showAll || expanded.has(parentKey) ? kids : kids.filter((n) => visibleKeys.has(n.nodeKey));
-    if (!shown.length) return null;
+    // Show EVERY collection (nothing hidden); a node's children render only when
+    // the node is expanded. Current branches start expanded (see the load effect).
     return (
       <ul className={parentKey === "__root__" ? "space-y-0.5" : "ml-4 space-y-0.5 border-l border-[var(--wms-border)]/60 pl-2"}>
-        {shown.map((n) => {
+        {kids.map((n) => {
           const assignable = n.enabled && !!n.collectionId;
           const checked = selNodes.has(n.nodeKey);
           const isSuggested = tree.suggestedNodeKeys.has(n.nodeKey);
@@ -372,7 +371,7 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
                   <span className="rounded border border-[var(--wms-accent)]/40 px-1 font-mono text-[0.62rem] uppercase text-[var(--wms-accent)]">suggested</span>
                 ) : null}
               </div>
-              {renderNodes(n.nodeKey)}
+              {hasKids && isOpen ? renderNodes(n.nodeKey) : null}
             </li>
           );
         })}
@@ -416,16 +415,31 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
         <span className="mb-2 block font-mono text-[0.84rem] font-bold uppercase tracking-wider text-teal-300">
           ★ Currently on Shopify
         </span>
-        {currentTitles.length ? (
+        {currentButtons.length ? (
           <div className="flex flex-wrap gap-2">
-            {currentTitles.map((t) => (
-              <span
-                key={t}
-                className="rounded-md border border-teal-400 bg-teal-500/15 px-2.5 py-1 font-mono text-[0.84rem] font-semibold text-teal-100 shadow-[0_0_10px_rgba(45,212,191,0.5)]"
-              >
-                {t}
-              </span>
-            ))}
+            {currentButtons.map((c) => {
+              const stillAssigned = c.kind === "node" ? selNodes.has(c.key) : selDirect.has(c.key);
+              return (
+                <button
+                  key={`${c.kind}:${c.key}`}
+                  type="button"
+                  disabled={!canManage || busy !== null}
+                  onClick={() => (c.kind === "node" ? toggleNode(c.key) : toggleDirect(c.key))}
+                  title={
+                    stillAssigned
+                      ? "Assigned — click to remove it on the next push"
+                      : "Marked for removal on the next push — click to keep it"
+                  }
+                  className={
+                    stillAssigned
+                      ? "rounded-md border border-teal-400 bg-teal-500/15 px-2.5 py-1 font-mono text-[0.84rem] font-semibold text-teal-100 shadow-[0_0_10px_rgba(45,212,191,0.5)] transition disabled:opacity-50"
+                      : "rounded-md border border-red-400/60 bg-red-500/10 px-2.5 py-1 font-mono text-[0.84rem] text-red-200 line-through transition disabled:opacity-50"
+                  }
+                >
+                  {c.title}
+                </button>
+              );
+            })}
           </div>
         ) : (
           <span className="font-mono text-[0.78rem] text-[var(--wms-muted)]">None yet — empty.</span>
@@ -469,17 +483,17 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
         <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">
-              Collection tree · <span className="text-teal-300">assigned shown</span>, others hidden — expand to add
+              Collection tree · all collections · <span className="text-teal-300">assigned branches expanded</span>
             </span>
             <button
               type="button"
               onClick={() => setShowAll((v) => !v)}
               className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface)]"
             >
-              {showAll ? "▾ Collapse to assigned" : "▸ Show all collections"}
+              {showAll ? "▾ Collapse all" : "▸ Expand all"}
             </button>
           </div>
-          <div className="max-h-[46vh] overflow-y-auto pr-2">{renderNodes("__root__")}</div>
+          <div className="max-h-[62vh] overflow-y-auto pr-2">{renderNodes("__root__")}</div>
 
           {tree.directHandles.length ? (
             <div className="mt-3 border-t border-[var(--wms-border)]/60 pt-2">
