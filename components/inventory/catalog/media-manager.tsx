@@ -83,6 +83,27 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       .map(([color, variantIds]) => ({ color, variantIds }));
   }, [variants]);
 
+  // Auto-fill alt text for any image missing it (silent background pass); the
+  // operator can still edit/regenerate per image afterwards.
+  const autoAltMissing = useCallback(async (list: MediaItem[]) => {
+    const missing = list.filter((m) => !m.alt.trim());
+    if (!missing.length) return;
+    const results = await Promise.allSettled(
+      missing.map(async (m) => {
+        const r = await fetch("/api/openai/image-alt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: m.url }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { alt?: string; altText?: string };
+        return { key: m.key, alt: (j.alt || j.altText || "").trim() };
+      }),
+    );
+    const alts = new Map<string, string>();
+    for (const res of results) if (res.status === "fulfilled" && res.value.alt) alts.set(res.value.key, res.value.alt);
+    if (alts.size) setItems((prev) => prev.map((m) => (alts.has(m.key) && !m.alt.trim() ? { ...m, alt: alts.get(m.key) as string } : m)));
+  }, []);
+
   const load = useCallback(async () => {
     if (!shopifyProductId) {
       setLoaded(true);
@@ -93,16 +114,16 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
     try {
       const r = await fetch(`/api/shopify/media?matrixId=${matrixId}`);
       const j = (await r.json().catch(() => ({}))) as { media?: Array<{ id: string; url: string; alt: string }> };
-      setItems(
-        (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })),
-      );
+      const mapped: MediaItem[] = (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" }));
+      setItems(mapped);
+      void autoAltMissing(mapped);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load images");
     } finally {
       setBusy(null);
       setLoaded(true);
     }
-  }, [matrixId, shopifyProductId]);
+  }, [matrixId, shopifyProductId, autoAltMissing]);
 
   useEffect(() => {
     void load();
@@ -201,6 +222,17 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       if (ti < 0 || moved.length === 0) return prev;
       return [...rest.slice(0, ti), ...moved, ...rest.slice(ti)];
     });
+  // Drop onto the tail zone → move to the very end (per-row drop always inserts
+  // BEFORE a row, so it can never reach the bottom).
+  const dropAtEnd = () =>
+    setItems((prev) => {
+      if (!dragKey) return prev;
+      const movingKeys = sel.has(dragKey) && sel.size > 0 ? new Set(sel) : new Set<string>([dragKey]);
+      const moved = prev.filter((m) => movingKeys.has(m.key));
+      if (moved.length === 0) return prev;
+      const rest = prev.filter((m) => !movingKeys.has(m.key));
+      return [...rest, ...moved];
+    });
   const remove = (key: string) => setItems((prev) => prev.filter((m) => m.key !== key));
 
   const publish = useCallback(async () => {
@@ -208,8 +240,12 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
     setErr(null);
     setMsg(null);
     try {
-      const payload = items.map((m) => {
-        const variantIds = m.color ? colorOpts.find((o) => o.color === m.color)?.variantIds : undefined;
+      // One colour → hero (index 0) auto-set as its main pic; many colours → the
+      // per-image colour the operator picked (each colour used at most once).
+      const single = colorOpts.length === 1 ? colorOpts[0] : null;
+      const payload = items.map((m, idx) => {
+        const colorName = single ? (idx === 0 ? single.color : "") : m.color;
+        const variantIds = colorName ? colorOpts.find((o) => o.color === colorName)?.variantIds : undefined;
         return m.kind === "existing"
           ? { kind: "existing", mediaId: m.mediaId, alt: m.alt, variantIds }
           : { kind: "new", b64: m.b64, alt: m.alt, variantIds };
@@ -228,12 +264,13 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       if (!r.ok) throw new Error(j.error ?? "Publish failed");
       setItems((j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })));
       setSel(new Set());
-      if (j.warnings?.length) setErr(`Some images failed: ${j.warnings.slice(0, 3).join(" · ")}`);
-      else {
-        const wb = j.imageWriteback;
-        const back = wb ? ` · synced ${wb.galleryCount} link(s) + ${wb.variantsMatched} colour image(s) back to WMS` : "";
-        setMsg(`Saved — ${(j.media || []).length} image(s) live on Shopify${back}.`);
-      }
+      // HTTP 2xx = the push landed. Warnings are a non-fatal NOTE about individual
+      // steps, not a failure — surface them alongside success, never as an error.
+      const wb = j.imageWriteback;
+      const back = wb ? ` · synced ${wb.galleryCount} link(s) + ${wb.variantsMatched} colour image(s) back to WMS` : "";
+      const warn = j.warnings?.length ? ` · note: ${j.warnings.slice(0, 3).join(" · ")}` : "";
+      setErr(null);
+      setMsg(`Saved — ${(j.media || []).length} image(s) live on Shopify${back}${warn}.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Publish failed");
     } finally {
@@ -243,6 +280,9 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
 
   const field =
     "rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.55rem] text-[var(--wms-fg)]";
+  // One colour → hero is auto-assigned as its main pic; many colours → one image
+  // per colour (each pick locks that colour out of the other images).
+  const singleColor = colorOpts.length === 1 ? colorOpts[0] : null;
 
   if (!shopifyProductId) {
     return (
@@ -257,17 +297,16 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)]">Images</span>
-        <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">first = hero · drag or ↑↓ order · ☑ select many + drag together · ★ hero · colour → all its sizes · ✨ alt</span>
+        <span className="font-mono text-[0.75rem] uppercase tracking-wide text-[var(--wms-fg)]">Images</span>
         <div className="flex-1" />
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { void addFiles(e.target.files); e.target.value = ""; }} />
-        <button type="button" disabled={!canManage || busy !== null} onClick={() => fileRef.current?.click()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
+        <button type="button" disabled={!canManage || busy !== null} onClick={() => fileRef.current?.click()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
           {busy === "upload" ? "…" : "＋ Upload"}
         </button>
-        <button type="button" disabled={!canManage || busy !== null || items.length === 0} onClick={() => void genAllAlts()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
+        <button type="button" disabled={!canManage || busy !== null || items.length === 0} onClick={() => void genAllAlts()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
           {busy === "alt-all" ? "…" : "✨ Alt all"}
         </button>
-        <button type="button" disabled={!canManage || busy !== null} onClick={() => void publish()} className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50">
+        <button type="button" disabled={!canManage || busy !== null} onClick={() => void publish()} className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50">
           {busy === "publish" ? "Publishing…" : "⤴ Publish to Shopify"}
         </button>
       </div>
@@ -300,23 +339,40 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
               <textarea className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.6rem] text-[var(--wms-fg)]" rows={2} placeholder="alt text" value={m.alt} onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, alt: v } : x))); }} />
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" disabled={busy !== null} onClick={() => void genAlt(m.key)} className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.55rem] text-[var(--wms-accent)] disabled:opacity-50">{busy === `alt-${m.key}` ? "…" : "✨ alt"}</button>
-                <label className="font-mono text-[0.55rem] text-[var(--wms-muted)]">colour:</label>
-                <select className={field} value={m.color} onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, color: v } : x))); }} title="Attaches this image to every size of the chosen colour">
-                  <option value="">— none —</option>
-                  {colorOpts.map((o) => (<option key={o.color} value={o.color}>{o.color} · all {o.variantIds.length} size{o.variantIds.length === 1 ? "" : "s"}</option>))}
-                </select>
+                {singleColor ? (
+                  idx === 0 ? (
+                    <span className="font-mono text-[0.55rem] text-[var(--wms-accent)]">★ main pic for {singleColor.color} (auto)</span>
+                  ) : null
+                ) : (
+                  <>
+                    <label className="font-mono text-[0.55rem] text-[var(--wms-muted)]">colour:</label>
+                    <select className={field} value={m.color} title="One image per colour — the chosen colour locks out of the other images" onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, color: v } : x))); }}>
+                      <option value="">— none —</option>
+                      {colorOpts.filter((o) => o.color === m.color || !items.some((x) => x.key !== m.key && x.color === o.color)).map((o) => (<option key={o.color} value={o.color}>{o.color} · all {o.variantIds.length} size{o.variantIds.length === 1 ? "" : "s"}</option>))}
+                    </select>
+                  </>
+                )}
               </div>
             </div>
             <div className="flex shrink-0 flex-col gap-1">
-              <div draggable onDragStart={() => setDragKey(m.key)} onDragEnd={() => setDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-1.5 text-center text-[0.7rem] text-[var(--wms-muted)]">⠿</div>
-              <button type="button" onClick={() => move(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↑</button>
-              <button type="button" onClick={() => move(m.key, 1)} disabled={idx === items.length - 1} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↓</button>
-              <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
-              <button type="button" onClick={() => download(m.url, `${m.kind === "new" ? "upload" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)]">⬇</button>
-              <button type="button" onClick={() => remove(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-status-danger-fg)]">✕</button>
+              <div draggable onDragStart={() => setDragKey(m.key)} onDragEnd={() => setDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-sm text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]">⠿</div>
+              <button type="button" onClick={() => move(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)] disabled:opacity-30">↑</button>
+              <button type="button" onClick={() => move(m.key, 1)} disabled={idx === items.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)] disabled:opacity-30">↓</button>
+              <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
+              <button type="button" onClick={() => download(m.url, `${m.kind === "new" ? "upload" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)]">⬇</button>
+              <button type="button" onClick={() => remove(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-status-danger-fg)]">✕</button>
             </div>
           </div>
         ))}
+        {items.length > 0 ? (
+          <div
+            onDragOver={(e) => { if (dragKey) e.preventDefault(); }}
+            onDrop={() => { dropAtEnd(); setDragKey(null); }}
+            className={`rounded border border-dashed py-3 text-center font-mono text-[0.55rem] transition-colors ${dragKey ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/10 text-[var(--wms-accent)]" : "border-transparent text-transparent"}`}
+          >
+            ⬇ drop here to move to the end
+          </div>
+        ) : null}
       </div>
 
       {err ? <p className="font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</p> : msg ? <p className="font-mono text-[0.6rem] text-[var(--wms-status-success-fg)]">{msg}</p> : null}

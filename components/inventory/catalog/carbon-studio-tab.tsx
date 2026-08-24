@@ -179,6 +179,10 @@ export function CarbonStudioTab({
   const [mediaBusy, setMediaBusy] = useState<string | null>(null);
   const [mediaDragKey, setMediaDragKey] = useState<string | null>(null);
   const [mediaSel, setMediaSel] = useState<Set<string>>(new Set());
+  // Existing Shopify images are hidden by default; the operator opts in via the
+  // "include current Shopify pictures" checkbox. We cache them so toggling is instant.
+  const [includeShopify, setIncludeShopify] = useState(false);
+  const [shopifyExisting, setShopifyExisting] = useState<MediaItem[]>([]);
 
   const toggleMediaSel = (key: string) =>
     setMediaSel((prev) => {
@@ -461,6 +465,31 @@ export function CarbonStudioTab({
   }, [model, itemRefs, panels, itemType, instruction, crops]);
 
   // ---- Media manager (matches carbon-gen's Publish step) ----
+  // Auto-fill alt text for any image that's missing it (silent background pass);
+  // the operator can still edit/regenerate per image afterwards.
+  const autoAltMissing = useCallback(
+    async (list: MediaItem[]) => {
+      const missing = list.filter((m) => !m.alt.trim());
+      if (!missing.length) return;
+      const results = await Promise.allSettled(
+        missing.map(async (m) => {
+          const r = await fetch("/api/openai/image-alt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageUrl: m.url, itemType }),
+          });
+          const j = (await r.json().catch(() => ({}))) as { alt?: string; altText?: string };
+          return { key: m.key, alt: (j.alt || j.altText || "").trim() };
+        }),
+      );
+      const alts = new Map<string, string>();
+      for (const res of results) if (res.status === "fulfilled" && res.value.alt) alts.set(res.value.key, res.value.alt);
+      if (alts.size)
+        setMediaItems((prev) => prev.map((m) => (alts.has(m.key) && !m.alt.trim() ? { ...m, alt: alts.get(m.key) as string } : m)));
+    },
+    [itemType],
+  );
+
   const openMediaManager = useCallback(async () => {
     setMediaBusy("load");
     setErr(null);
@@ -475,19 +504,45 @@ export function CarbonStudioTab({
         alt: m.alt || "",
         color: "",
       }));
-      // New crops were generated for the selected colour → pre-assign it (the
-      // user can still change or clear the colour per image before publishing).
-      const news: MediaItem[] = crops
-        .filter((c) => c.selected && c.b64)
-        .map((c) => ({ key: `new-${c.id}`, kind: "new", b64: c.b64, url: `data:image/png;base64,${c.b64}`, alt: "", color: color || "" }));
-      setMediaItems([...existing, ...news]);
+      setShopifyExisting(existing);
+      // Only the SELECTED generated crops are shown by default. The Pose-2 crop
+      // (right frame, id "-r-") is always placed last so Pose 1 leads / is hero.
+      const picked = crops.filter((c) => c.selected && c.b64);
+      const ordered = [...picked.filter((c) => !c.id.includes("-r-")), ...picked.filter((c) => c.id.includes("-r-"))];
+      const news: MediaItem[] = ordered.map((c) => ({
+        key: `new-${c.id}`,
+        kind: "new",
+        b64: c.b64,
+        url: `data:image/png;base64,${c.b64}`,
+        alt: "",
+        color: "",
+      }));
+      const seed = includeShopify ? [...existing, ...news] : news;
+      setMediaItems(seed);
       setShowMedia(true);
+      void autoAltMissing(seed);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load media");
     } finally {
       setMediaBusy(null);
     }
-  }, [matrixId, crops, color]);
+  }, [matrixId, crops, includeShopify, autoAltMissing]);
+
+  // Toggle existing Shopify pictures in/out of the manager without losing edits
+  // to the newly-generated ones.
+  const toggleIncludeShopify = useCallback(() => {
+    setIncludeShopify((v) => {
+      const next = !v;
+      setMediaItems((prev) => {
+        if (next) {
+          const have = new Set(prev.map((m) => m.key));
+          return [...shopifyExisting.filter((m) => !have.has(m.key)), ...prev];
+        }
+        return prev.filter((m) => m.kind !== "existing");
+      });
+      return next;
+    });
+  }, [shopifyExisting]);
 
   const genAlt = useCallback(
     async (key: string) => {
@@ -573,6 +628,18 @@ export function CarbonStudioTab({
       if (ti < 0 || moved.length === 0) return prev;
       return [...rest.slice(0, ti), ...moved, ...rest.slice(ti)];
     });
+  // Drop onto the tail zone → move the dragged row(s) to the very end. (The
+  // per-row drop always inserts BEFORE a row, so it can never reach the bottom.)
+  const dropAtEnd = () =>
+    setMediaItems((prev) => {
+      if (!mediaDragKey) return prev;
+      const movingKeys =
+        mediaSel.has(mediaDragKey) && mediaSel.size > 0 ? new Set(mediaSel) : new Set<string>([mediaDragKey]);
+      const moved = prev.filter((m) => movingKeys.has(m.key));
+      if (moved.length === 0) return prev;
+      const rest = prev.filter((m) => !movingKeys.has(m.key));
+      return [...rest, ...moved];
+    });
   const removeMedia = (key: string) => setMediaItems((prev) => prev.filter((m) => m.key !== key));
 
   const publishMedia = useCallback(async () => {
@@ -580,10 +647,14 @@ export function CarbonStudioTab({
     setErr(null);
     setMsg(null);
     try {
-      // Each image can be set as the MAIN pic for a variant colour → attach it
-      // to every size's variant of that colour (variantIds).
-      const items = mediaItems.map((m) => {
-        const variantIds = m.color ? colorOpts.find((o) => o.color === m.color)?.variantIds : undefined;
+      // Main-pic assignment: with ONE colour the hero (index 0) is auto-set as
+      // that colour's main pic; with MULTIPLE colours the operator assigns one
+      // image per colour (default none). Only images with a colour push as the
+      // variant main pic.
+      const single = colorOpts.length === 1 ? colorOpts[0] : null;
+      const items = mediaItems.map((m, idx) => {
+        const colorName = single ? (idx === 0 ? single.color : "") : m.color;
+        const variantIds = colorName ? colorOpts.find((o) => o.color === colorName)?.variantIds : undefined;
         return m.kind === "existing"
           ? { kind: "existing", mediaId: m.mediaId, alt: m.alt, variantIds }
           : { kind: "new", b64: m.b64, alt: m.alt, variantIds };
@@ -604,15 +675,13 @@ export function CarbonStudioTab({
         (j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })),
       );
       setMediaSel(new Set());
-      setCrops((prev) => prev.filter((c) => !c.selected)); // pushed crops consumed
-      if (j.warnings?.length) {
-        // Surface WHY images may not have pushed (e.g. staging/create failures).
-        setErr(`Some images failed: ${j.warnings.slice(0, 3).join(" · ")}`);
-        setMsg(null);
-      } else {
-        setErr(null);
-        setMsg(`Saved to Shopify — ${(j.media || []).length} image(s) live${newCount ? `, ${newCount} new` : ""}.`);
-      }
+      // The push succeeded (HTTP 2xx). Warnings are a non-fatal NOTE about
+      // individual steps, not a failure — keep the source crops so the operator
+      // can retry the affected ones instead of losing them.
+      const warn = j.warnings?.length ? ` · note: ${j.warnings.slice(0, 3).join(" · ")}` : "";
+      if (!j.warnings?.length) setCrops((prev) => prev.filter((c) => !c.selected));
+      setErr(null);
+      setMsg(`Saved to Shopify — ${(j.media || []).length} image(s) live${newCount ? `, ${newCount} new` : ""}${warn}.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Publish failed");
     } finally {
@@ -623,6 +692,9 @@ export function CarbonStudioTab({
   const label = "block text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
   const field =
     "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)]";
+  // One colour → the hero is auto-assigned as its main pic; many colours → the
+  // operator picks one image per colour (each pick locks that colour out of the rest).
+  const singleColor = colorOpts.length === 1 ? colorOpts[0] : null;
 
   return (
     <div className="space-y-3">
@@ -661,11 +733,11 @@ export function CarbonStudioTab({
                   src={ref.preview}
                   alt="item ref"
                   title="Click to view full size"
-                  className="h-16 w-14 cursor-zoom-in rounded border border-[var(--wms-border)] object-cover"
+                  className="h-28 w-24 cursor-zoom-in rounded border border-[var(--wms-border)] object-cover"
                   onClick={() => setZoom(ref.preview as string)}
                 />
               ) : (
-                <div className="flex h-16 w-14 items-center justify-center rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] text-center font-mono text-[0.5rem] text-[var(--wms-status-success-fg)]">
+                <div className="flex h-28 w-24 items-center justify-center rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] text-center font-mono text-[0.5rem] text-[var(--wms-status-success-fg)]">
                   ✓ photo
                 </div>
               )}
@@ -852,7 +924,8 @@ export function CarbonStudioTab({
                   onClick={() => setZoom(`data:image/png;base64,${c.b64}`)}
                 />
                 <label
-                  className="absolute left-1 top-1 flex cursor-pointer items-center gap-1 rounded bg-black/60 px-1 py-0.5 text-[0.6rem] text-white"
+                  className="absolute left-1 top-1 flex cursor-pointer items-center rounded bg-black/60 p-1"
+                  title={c.selected ? "Selected to keep / publish" : "Not selected"}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <input
@@ -861,9 +934,8 @@ export function CarbonStudioTab({
                     onChange={() =>
                       setCrops((prev) => prev.map((x) => (x.id === c.id ? { ...x, selected: !x.selected } : x)))
                     }
-                    className="h-3 w-3 accent-[var(--wms-accent)]"
+                    className="h-5 w-5 cursor-pointer accent-[var(--wms-accent)]"
                   />
-                  keep
                 </label>
                 <button
                   type="button"
@@ -872,7 +944,7 @@ export function CarbonStudioTab({
                     e.stopPropagation();
                     downloadImage(`data:image/png;base64,${c.b64}`, `carbon-studio-${c.id}.png`);
                   }}
-                  className="absolute right-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[0.7rem] leading-none text-white"
+                  className="absolute right-1 top-1 rounded bg-black/60 px-2 py-1 text-lg leading-none text-white hover:bg-black/80"
                 >
                   ⬇
                 </button>
@@ -892,17 +964,23 @@ export function CarbonStudioTab({
       {showMedia ? (
         <div className="rounded-md border border-[var(--wms-accent)]/40 bg-[var(--wms-surface-elevated)]/40 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)]">Manage images</span>
-            <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
-              first = hero · drag or ↑↓ reorder · ☑ select many + drag together · ★ hero · colour = variant main pic (all sizes) · ✨ alt · ✕ remove
-            </span>
+            <span className="font-mono text-[0.75rem] uppercase tracking-wide text-[var(--wms-fg)]">Manage images</span>
+            <label className="flex cursor-pointer items-center gap-1.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+              <input
+                type="checkbox"
+                checked={includeShopify}
+                onChange={toggleIncludeShopify}
+                className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)]"
+              />
+              include current Shopify pictures
+            </label>
             <div className="flex-1" />
             <button
               type="button"
               disabled={!canManage || mediaBusy !== null || mediaItems.length === 0}
               onClick={() => void genAllAlts()}
               title="Generate alt text for every image"
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
             >
               {mediaBusy === "alt-all" ? "Generating alt…" : "✨ Alt all"}
             </button>
@@ -910,14 +988,14 @@ export function CarbonStudioTab({
               type="button"
               disabled={!canManage || mediaBusy !== null}
               onClick={() => void publishMedia()}
-              className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
+              className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
             >
               {mediaBusy === "publish" ? "Publishing…" : "⤴ Publish to Shopify"}
             </button>
             <button
               type="button"
               onClick={() => setShowMedia(false)}
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-fg)]"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-fg)]"
             >
               Close
             </button>
@@ -984,35 +1062,54 @@ export function CarbonStudioTab({
                       >
                         {mediaBusy === `alt-${m.key}` ? "…" : "✨ Generate alt"}
                       </button>
-                      <label className="font-mono text-[0.55rem] text-[var(--wms-muted)]">main pic for colour:</label>
-                      <select
-                        className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.55rem] text-[var(--wms-fg)]"
-                        value={m.color}
-                        title="Sets this image as the main picture for every size of the chosen colour"
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setMediaItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, color: v } : x)));
-                        }}
-                      >
-                        <option value="">— none —</option>
-                        {colorOpts.map((o) => (
-                          <option key={o.color} value={o.color}>
-                            {o.color} · all {o.variantIds.length} size{o.variantIds.length === 1 ? "" : "s"}
-                          </option>
-                        ))}
-                      </select>
+                      {singleColor ? (
+                        idx === 0 ? (
+                          <span className="font-mono text-[0.55rem] text-[var(--wms-accent)]">
+                            ★ main pic for {singleColor.color} (auto)
+                          </span>
+                        ) : null
+                      ) : (
+                        <>
+                          <label className="font-mono text-[0.55rem] text-[var(--wms-muted)]">main pic for colour:</label>
+                          <select
+                            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.55rem] text-[var(--wms-fg)]"
+                            value={m.color}
+                            title="One image per colour — the chosen colour locks out of the other images"
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setMediaItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, color: v } : x)));
+                            }}
+                          >
+                            <option value="">— none —</option>
+                            {colorOpts
+                              .filter((o) => o.color === m.color || !mediaItems.some((x) => x.key !== m.key && x.color === o.color))
+                              .map((o) => (
+                                <option key={o.color} value={o.color}>
+                                  {o.color} · all {o.variantIds.length} size{o.variantIds.length === 1 ? "" : "s"}
+                                </option>
+                              ))}
+                          </select>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col gap-1">
-                    <div draggable onDragStart={() => setMediaDragKey(m.key)} onDragEnd={() => setMediaDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-1.5 text-center text-[0.7rem] text-[var(--wms-muted)]">⠿</div>
-                    <button type="button" onClick={() => moveMedia(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↑</button>
-                    <button type="button" onClick={() => moveMedia(m.key, 1)} disabled={idx === mediaItems.length - 1} className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)] disabled:opacity-30">↓</button>
-                    <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
-                    <button type="button" onClick={() => downloadImage(m.url, `${m.kind === "new" ? "carbon-studio" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-fg)]">⬇</button>
-                    <button type="button" onClick={() => removeMedia(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-1.5 text-[0.7rem] text-[var(--wms-status-danger-fg)]">✕</button>
+                    <div draggable onDragStart={() => setMediaDragKey(m.key)} onDragEnd={() => setMediaDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-sm text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]">⠿</div>
+                    <button type="button" onClick={() => moveMedia(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)] disabled:opacity-30">↑</button>
+                    <button type="button" onClick={() => moveMedia(m.key, 1)} disabled={idx === mediaItems.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)] disabled:opacity-30">↓</button>
+                    <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
+                    <button type="button" onClick={() => downloadImage(m.url, `${m.kind === "new" ? "carbon-studio" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)]">⬇</button>
+                    <button type="button" onClick={() => removeMedia(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-status-danger-fg)]">✕</button>
                   </div>
                 </div>
               ))}
+              <div
+                onDragOver={(e) => { if (mediaDragKey) e.preventDefault(); }}
+                onDrop={() => { dropAtEnd(); setMediaDragKey(null); }}
+                className={`rounded border border-dashed py-3 text-center font-mono text-[0.55rem] transition-colors ${mediaDragKey ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/10 text-[var(--wms-accent)]" : "border-transparent text-transparent"}`}
+              >
+                ⬇ drop here to move to the end
+              </div>
             </div>
           )}
           {err ? (
