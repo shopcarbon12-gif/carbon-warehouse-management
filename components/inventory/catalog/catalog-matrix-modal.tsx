@@ -873,7 +873,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   type="button"
                   onClick={onBack}
                   title="Back to item card"
-                  className="flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                  className="flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" /> Back
                 </button>
@@ -885,7 +885,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 disabled={!canManage || !dirty || busy !== null}
                 onClick={() => void save()}
                 title={canManage ? "Save matrix + variant edits" : "Admin scope required"}
-                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy === "save" ? "Saving…" : "Save Changes"}
               </button>
@@ -898,7 +898,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     ? "Open this item on the ShopCarbon website"
                     : "Link this product to Shopify to view it online"
                 }
-                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {data?.matrix.shopify_product_id ? "🌐 View online" : "🔒 View online"}
               </button>
@@ -911,7 +911,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     ? "Archive this product on Shopify — hides the whole matrix from the storefront"
                     : "Link this product to Shopify first"
                 }
-                className="rounded-md border border-amber-500/55 bg-amber-950/30 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-amber-200 hover:bg-amber-900/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-amber-500/55 bg-amber-950/30 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-amber-200 hover:bg-amber-900/40 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy === "archiveShopify"
                   ? "Archiving…"
@@ -925,7 +925,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   disabled={!canManage || busy !== null}
                   onClick={() => void linkShopify()}
                   title="This product already exists on Shopify — match it by SKU and link it (no duplicate)."
-                  className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                  className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
                 >
                   {busy === "link" ? "Linking…" : "🔗 Link to Shopify"}
                 </button>
@@ -941,7 +941,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       ? "Validate, then create/update this product on Shopify"
                       : "Admin scope required"
                 }
-                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/25 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/25 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/40 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {busy === "publish" ? "Publishing…" : "✔ Check & Publish"}
               </button>
@@ -949,7 +949,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 type="button"
                 disabled={!canManage || busy !== null || !data}
                 onClick={() => void archiveAll()}
-                className="rounded-md border border-red-500/55 bg-red-950/40 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-red-200 hover:bg-red-900/40 disabled:opacity-50"
+                className="rounded-md border border-red-500/55 bg-red-950/40 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-red-200 hover:bg-red-900/40 disabled:opacity-50"
                 title={
                   canManage
                     ? data?.matrix.archived
@@ -976,23 +976,23 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
           </div>
 
           {error ? (
-            <p className="border-b border-red-500/30 bg-red-950/30 px-4 py-2 font-mono text-xs text-red-200">
+            <p className="border-b border-red-500/30 bg-red-950/30 px-4 py-2 font-mono text-[0.85rem] text-red-200">
               {(error as Error).message}
             </p>
           ) : null}
           {err ? (
-            <p className="border-b border-red-500/30 bg-red-950/30 px-4 py-2 font-mono text-xs text-red-200">
+            <p className="border-b border-red-500/30 bg-red-950/30 px-4 py-2 font-mono text-[0.85rem] text-red-200">
               {err}
             </p>
           ) : null}
           {okMsg ? (
-            <p className="border-b border-emerald-500/30 bg-emerald-950/30 px-4 py-2 font-mono text-xs text-emerald-200">
+            <p className="border-b border-emerald-500/30 bg-emerald-950/30 px-4 py-2 font-mono text-[0.85rem] text-emerald-200">
               {okMsg}
             </p>
           ) : null}
 
           {isLoading || !data || !mForm ? (
-            <p className="p-6 text-center font-mono text-xs text-[var(--wms-muted)]">
+            <p className="p-6 text-center font-mono text-[0.85rem] text-[var(--wms-muted)]">
               Loading matrix…
             </p>
           ) : (
@@ -1003,7 +1003,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     <button
                       type="button"
                       onClick={() => setTab(t)}
-                      className={`block w-full whitespace-nowrap px-4 py-1.5 text-left font-mono text-xs capitalize sm:border-l-2 ${
+                      className={`block w-full whitespace-nowrap px-4 py-1.5 text-left font-mono text-[0.85rem] capitalize sm:border-l-2 ${
                         tab === t
                           ? "border-[var(--wms-accent)] bg-[var(--wms-surface)] font-semibold text-[var(--wms-fg)]"
                           : "border-transparent text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
@@ -1024,7 +1024,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                               type="button"
                               title={`View item ${v.sku}`}
                               onClick={() => onOpenSku({ id: v.id, sku: v.sku })}
-                              className={`block w-full truncate px-4 py-0.5 pl-7 text-left font-mono text-[0.6rem] text-[var(--wms-accent)] underline-offset-2 hover:underline ${
+                              className={`block w-full truncate px-4 py-0.5 pl-7 text-left font-mono text-[0.74rem] text-[var(--wms-accent)] underline-offset-2 hover:underline ${
                                 v.archived ? "opacity-50" : ""
                               }`}
                             >
@@ -1034,7 +1034,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                             <div
                               key={v.id}
                               title={v.sku}
-                              className={`truncate px-4 py-0.5 pl-7 text-left font-mono text-[0.6rem] text-[var(--wms-muted)] ${
+                              className={`truncate px-4 py-0.5 pl-7 text-left font-mono text-[0.74rem] text-[var(--wms-muted)] ${
                                 v.archived ? "opacity-50" : ""
                               }`}
                             >
@@ -1100,20 +1100,20 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       <Row label="Attributes" value="Color / Size" />
                     </Section>
                     <Section title="Default Values · fill every variant">
-                      <div className="space-y-2 px-3 py-2 font-mono text-xs">
+                      <div className="space-y-2 px-3 py-2 font-mono text-[0.85rem]">
                         <div>
-                          <span className="block text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                          <span className="block text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
                             Default Price
                           </span>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
                             <MoneyInput value={defPrice} onChange={cascadePrice} editable={canManage} wide />
-                            <span className="text-[0.6rem] text-[var(--wms-muted)]">
+                            <span className="text-[0.74rem] text-[var(--wms-muted)]">
                               MU {fmtPct(markup)} · MG {fmtPct(margin)}
                             </span>
                           </div>
                         </div>
                         <div>
-                          <span className="block text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                          <span className="block text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
                             Default Cost
                           </span>
                           <div className="mt-1">
@@ -1127,12 +1127,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   {/* Color list + add */}
                   <Section title="Color">
                     {colors.length === 0 ? (
-                      <p className="px-3 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">(none)</p>
+                      <p className="px-3 py-2 font-mono text-[0.78rem] text-[var(--wms-muted)]">(none)</p>
                     ) : (
                       colors.map((c) => (
                         <div
                           key={c}
-                          className="border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-xs text-[var(--wms-fg)] last:border-b-0"
+                          className="border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.85rem] text-[var(--wms-fg)] last:border-b-0"
                         >
                           {c}
                         </div>
@@ -1151,12 +1151,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   {/* Size list + add */}
                   <Section title="Size">
                     {sizes.length === 0 ? (
-                      <p className="px-3 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">(none)</p>
+                      <p className="px-3 py-2 font-mono text-[0.78rem] text-[var(--wms-muted)]">(none)</p>
                     ) : (
                       sizes.map((s) => (
                         <div
                           key={s}
-                          className="border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-xs text-[var(--wms-fg)] last:border-b-0"
+                          className="border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.85rem] text-[var(--wms-fg)] last:border-b-0"
                         >
                           {s}
                         </div>
@@ -1193,7 +1193,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 /* SEO tab (M3) — read current Shopify SEO, AI-optimize, save. */
                 <div className="space-y-3">
                   {!data.matrix.shopify_product_id ? (
-                    <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-xs text-[var(--wms-muted)]">
+                    <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-[0.85rem] text-[var(--wms-muted)]">
                       Publish this product to Shopify first (use{" "}
                       <span className="text-[var(--wms-accent)]">✔ Check &amp; Publish</span>), then
                       optimize its SEO here.
@@ -1206,12 +1206,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                           disabled={!canManage || seoBusy !== null || seoAllBusy !== null}
                           onClick={() => void optimizeAll()}
                           title="Optimize SEO, fill metafields, and fill category attributes with AI — all at once"
-                          className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
+                          className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
                         >
                           {seoAllBusy === "opt" ? "Optimizing…" : "✦ Optimize with AI"}
                         </button>
                         {seoScores ? (
-                          <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                          <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">
                             score {seoScores.cur} →{" "}
                             <span className="text-[var(--wms-status-success-fg)]">{seoScores.prop}</span>
                           </span>
@@ -1222,31 +1222,31 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                           disabled={!canManage || seoBusy !== null || seoAllBusy !== null}
                           onClick={() => void pushAll()}
                           title="Push SEO, metafields, and category attributes to Shopify — all at once"
-                          className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
+                          className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
                         >
                           {seoAllBusy === "push" ? "Pushing…" : "⤴ Push to Shopify"}
                         </button>
                       </div>
                       {/* Current collections for this item (refreshes after a Collections push). */}
                       <div className="rounded-lg border border-teal-400/40 bg-teal-500/5 p-2.5">
-                        <span className="mb-1 block font-mono text-[0.6rem] font-bold uppercase tracking-wider text-teal-300">
+                        <span className="mb-1 block font-mono text-[0.74rem] font-bold uppercase tracking-wider text-teal-300">
                           ★ Current collections
                         </span>
                         {seoCollections === null ? (
-                          <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">Loading…</span>
+                          <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">Loading…</span>
                         ) : seoCollections.length ? (
                           <div className="flex flex-wrap gap-1.5">
                             {seoCollections.map((t) => (
                               <span
                                 key={t}
-                                className="rounded-md border border-teal-400 bg-teal-500/15 px-2 py-0.5 font-mono text-[0.65rem] font-semibold text-teal-100 shadow-[0_0_8px_rgba(45,212,191,0.45)]"
+                                className="rounded-md border border-teal-400 bg-teal-500/15 px-2 py-0.5 font-mono text-[0.78rem] font-semibold text-teal-100 shadow-[0_0_8px_rgba(45,212,191,0.45)]"
                               >
                                 {t}
                               </span>
                             ))}
                           </div>
                         ) : (
-                          <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                          <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">
                             None yet — assign some in the Collections tab.
                           </span>
                         )}
@@ -1269,7 +1269,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                             return (
                               <div
                                 key={f}
-                                className="grid grid-cols-[110px_1fr_1fr_46px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-2 text-[0.7rem] last:border-b-0"
+                                className="grid grid-cols-[110px_1fr_1fr_46px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-2 text-[0.82rem] last:border-b-0"
                               >
                                 <span className="font-mono uppercase tracking-wide text-[var(--wms-muted)]">
                                   {label}
@@ -1306,7 +1306,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       ) : (
                         <div className="space-y-2">
                           <div className="overflow-hidden rounded-md border border-[var(--wms-border)]">
-                            <div className="border-b border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/60 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                            <div className="border-b border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/60 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
                               {seoBusy === "current" ? "Reading current Shopify SEO…" : "Current on Shopify"}
                             </div>
                             {(["seoTitle", "metaDescription", "bodyHtml", "tags"] as const).map((f) => {
@@ -1324,7 +1324,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                               return (
                                 <div
                                   key={f}
-                                  className="grid grid-cols-[110px_1fr] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-2 text-[0.7rem] last:border-b-0"
+                                  className="grid grid-cols-[110px_1fr] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-2 text-[0.82rem] last:border-b-0"
                                 >
                                   <span className="font-mono uppercase tracking-wide text-[var(--wms-muted)]">
                                     {label}
@@ -1336,7 +1336,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                               );
                             })}
                           </div>
-                          <p className="font-mono text-xs text-[var(--wms-muted)]">
+                          <p className="font-mono text-[0.85rem] text-[var(--wms-muted)]">
                             Click <span className="text-[var(--wms-accent)]">Optimize with AI</span> to
                             propose improvements. Existing values are never overwritten unless you keep
                             the toggle on.
@@ -1395,12 +1395,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 /* Setup tab — Group Items (color/size added on the Matrix tab
                    show up here as new rows because the state is shared). */
                 <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
-                  <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                  <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
                     Group Items
                   </div>
                   <div className="overflow-x-auto">
                     <div className="min-w-[760px]">
-                      <div className="grid grid-cols-[64px_150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                      <div className="grid grid-cols-[64px_150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">
                         <span />
                         <span>Color</span>
                         <span>Size</span>
@@ -1412,7 +1412,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       {rows.map((r) => (
                         <div
                           key={r.key}
-                          className={`grid grid-cols-[64px_150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-xs last:border-b-0 ${
+                          className={`grid grid-cols-[64px_150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-[0.85rem] last:border-b-0 ${
                             r.markedDelete ? "opacity-40" : ""
                           } ${r.isNew ? "bg-[var(--wms-accent)]/5" : ""}`}
                         >
@@ -1454,7 +1454,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                               className="flex h-6 w-6 items-center justify-center rounded border border-[var(--wms-border)] text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)] disabled:opacity-40"
                             >
                               {printingId === r.id ? (
-                                <span className="text-[0.6rem]">…</span>
+                                <span className="text-[0.74rem]">…</span>
                               ) : (
                                 <Printer className="h-3.5 w-3.5" />
                               )}
@@ -1505,7 +1505,7 @@ function AddInput({
             onAdd();
           }
         }}
-        className="min-w-0 flex-1 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
+        className="min-w-0 flex-1 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-[0.85rem] text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
       />
       <button
         type="button"
@@ -1549,7 +1549,7 @@ function Cell({
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
       onBlur={money ? () => onChange(money2(value)) : undefined}
-      className="w-full min-w-0 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-1 text-left text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
+      className="w-full min-w-0 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-1 text-left text-[0.85rem] text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
     />
   );
 }
@@ -1567,7 +1567,7 @@ function MoneyInput({
 }) {
   if (!editable) {
     return (
-      <span className="text-left font-mono text-xs text-[var(--wms-fg)]">
+      <span className="text-left font-mono text-[0.85rem] text-[var(--wms-fg)]">
         {value.trim() === "" ? "—" : `$${money2(value)}`}
       </span>
     );
@@ -1579,7 +1579,7 @@ function MoneyInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onBlur={() => onChange(money2(value))}
-      className={`${wide ? "w-28" : "w-full"} rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-left font-mono text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none`}
+      className={`${wide ? "w-28" : "w-full"} rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-left font-mono text-[0.85rem] text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none`}
     />
   );
 }
@@ -1595,7 +1595,7 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
   const [zoomIdx, setZoomIdx] = useState<number | null>(null);
   if (!urls || urls.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 px-3 py-4 text-center font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <div className="rounded-md border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 px-3 py-4 text-center font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
         No Shopify pictures synced for this matrix
       </div>
     );
@@ -1604,10 +1604,10 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
   return (
     <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
       <div className="flex items-center justify-between border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5">
-        <span className="font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+        <span className="font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
           Pictures · from Shopify
         </span>
-        <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">{urls.length}</span>
+        <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">{urls.length}</span>
       </div>
       <div className="flex gap-3 p-3">
         {/* FROZEN main picture — stays put while the thumbnails scroll. */}
@@ -1663,7 +1663,7 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
-      <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
         {title}
       </div>
       <div className="divide-y divide-[var(--wms-border)]/60">{children}</div>
@@ -1674,10 +1674,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-1.5">
-      <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <span className="font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-muted)]">
         {label}
       </span>
-      <span className={`${mono ? "font-mono" : ""} text-xs text-[var(--wms-fg)]`}>{value}</span>
+      <span className={`${mono ? "font-mono" : ""} text-[0.85rem] text-[var(--wms-fg)]`}>{value}</span>
     </div>
   );
 }
@@ -1703,7 +1703,7 @@ function EditRow({
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-1.5">
       <span
-        className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]"
+        className="font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-muted)]"
         title={hint}
       >
         {label}
@@ -1712,7 +1712,7 @@ function EditRow({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-left text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-44 ${
+        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-left text-[0.85rem] text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-44 ${
           mono ? "font-mono" : ""
         }`}
       />

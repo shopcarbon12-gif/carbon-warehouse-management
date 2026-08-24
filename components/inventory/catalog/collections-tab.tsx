@@ -303,7 +303,7 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
 
   if (!shopifyProductId) {
     return (
-      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-xs text-[var(--wms-muted)]">
+      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-[0.85rem] text-[var(--wms-muted)]">
         Publish this product to Shopify first (use{" "}
         <span className="text-[var(--wms-accent)]">✔ Check &amp; Publish</span>), then map its
         collections here.
@@ -344,7 +344,7 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
                     type="button"
                     onClick={() => toggleExpand(n.nodeKey)}
                     title={isOpen ? "Collapse" : "Expand"}
-                    className="w-4 shrink-0 font-mono text-[0.75rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                    className="w-4 shrink-0 font-mono text-[0.9rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
                   >
                     {isOpen ? "▾" : "▸"}
                   </button>
@@ -359,17 +359,17 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
                     title={checked ? "Assigned — click to unassign on next push" : "Click to assign on next push"}
                     className={
                       checked
-                        ? "rounded-md border border-teal-400 bg-teal-500/15 px-2 py-0.5 font-mono text-[0.7rem] font-semibold text-teal-200 shadow-[0_0_10px_rgba(45,212,191,0.55)] transition disabled:opacity-50"
-                        : "rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-0.5 font-mono text-[0.7rem] text-[var(--wms-fg)] transition hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                        ? "rounded-md border border-teal-400 bg-teal-500/15 px-2 py-0.5 font-mono text-[0.82rem] font-semibold text-teal-200 shadow-[0_0_10px_rgba(45,212,191,0.55)] transition disabled:opacity-50"
+                        : "rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-0.5 font-mono text-[0.82rem] text-[var(--wms-fg)] transition hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
                     }
                   >
                     {n.label}
                   </button>
                 ) : (
-                  <span className="font-mono text-[0.7rem] font-semibold text-[var(--wms-muted)]">{n.label}</span>
+                  <span className="font-mono text-[0.82rem] font-semibold text-[var(--wms-muted)]">{n.label}</span>
                 )}
                 {isSuggested && !checked ? (
-                  <span className="rounded border border-[var(--wms-accent)]/40 px-1 font-mono text-[0.5rem] uppercase text-[var(--wms-accent)]">suggested</span>
+                  <span className="rounded border border-[var(--wms-accent)]/40 px-1 font-mono text-[0.62rem] uppercase text-[var(--wms-accent)]">suggested</span>
                 ) : null}
               </div>
               {renderNodes(n.nodeKey)}
@@ -384,20 +384,20 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
     <div className="space-y-3">
       {/* Header + push */}
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)]">Collections</span>
+        <span className="font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)]">Collections</span>
         {data ? (
-          <span className={`rounded border px-1.5 py-0.5 font-mono text-[0.55rem] uppercase ${decisionChip(data.row.mappingDecision)}`}>
+          <span className={`rounded border px-1.5 py-0.5 font-mono text-[0.68rem] uppercase ${decisionChip(data.row.mappingDecision)}`}>
             {data.row.mappingDecision.replace("_", " ").toLowerCase()}
           </span>
         ) : null}
-        <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">UPC {upc ?? "—"}</span>
+        <span className="font-mono text-[0.68rem] text-[var(--wms-muted)]">UPC {upc ?? "—"}</span>
         <div className="flex-1" />
         <button
           type="button"
           disabled={!canManage || busy !== null}
           onClick={() => void load(true)}
           title="Refresh from Shopify and re-run the auto suggestions"
-          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
         >
           {busy === "load" ? "…" : "↻ Re-run auto"}
         </button>
@@ -405,7 +405,7 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
           type="button"
           disabled={!canManage || busy !== null || !data}
           onClick={() => void push()}
-          className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
+          className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
         >
           {busy === "push" ? "Pushing…" : "⤴ Push to Shopify"}
         </button>
@@ -413,7 +413,7 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
 
       {/* Currently on Shopify */}
       <div className="rounded-lg border border-teal-400/50 bg-teal-500/5 p-3 shadow-[0_0_18px_rgba(45,212,191,0.18)]">
-        <span className="mb-2 block font-mono text-[0.72rem] font-bold uppercase tracking-wider text-teal-300">
+        <span className="mb-2 block font-mono text-[0.84rem] font-bold uppercase tracking-wider text-teal-300">
           ★ Currently on Shopify
         </span>
         {currentTitles.length ? (
@@ -421,19 +421,19 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
             {currentTitles.map((t) => (
               <span
                 key={t}
-                className="rounded-md border border-teal-400 bg-teal-500/15 px-2.5 py-1 font-mono text-[0.72rem] font-semibold text-teal-100 shadow-[0_0_10px_rgba(45,212,191,0.5)]"
+                className="rounded-md border border-teal-400 bg-teal-500/15 px-2.5 py-1 font-mono text-[0.84rem] font-semibold text-teal-100 shadow-[0_0_10px_rgba(45,212,191,0.5)]"
               >
                 {t}
               </span>
             ))}
           </div>
         ) : (
-          <span className="font-mono text-[0.65rem] text-[var(--wms-muted)]">None yet — empty.</span>
+          <span className="font-mono text-[0.78rem] text-[var(--wms-muted)]">None yet — empty.</span>
         )}
 
         {suggestions.length ? (
           <div className="mt-3 border-t border-teal-400/20 pt-2.5">
-            <span className="mb-1.5 block font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+            <span className="mb-1.5 block font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
               Suggestions — click to add, then Push to Shopify
             </span>
             <div className="flex flex-wrap gap-2">
@@ -464,17 +464,17 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
 
       {/* The tree */}
       {busy === "load" && !data ? (
-        <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">Loading collections & suggestions…</p>
+        <p className="font-mono text-[0.74rem] text-[var(--wms-muted)]">Loading collections & suggestions…</p>
       ) : data && tree ? (
         <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+            <span className="font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">
               Collection tree · <span className="text-teal-300">assigned shown</span>, others hidden — expand to add
             </span>
             <button
               type="button"
               onClick={() => setShowAll((v) => !v)}
-              className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface)]"
+              className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface)]"
             >
               {showAll ? "▾ Collapse to assigned" : "▸ Show all collections"}
             </button>
@@ -483,7 +483,7 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
 
           {tree.directHandles.length ? (
             <div className="mt-3 border-t border-[var(--wms-border)]/60 pt-2">
-              <span className="mb-1 block font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+              <span className="mb-1 block font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">
                 Other collections (not in menu tree)
               </span>
               {tree.directHandles.map((h) => (
@@ -495,14 +495,14 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
                     onChange={() => toggleDirect(h)}
                     className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
                   />
-                  <span className="font-mono text-[0.7rem] text-[var(--wms-fg)]">{tree.handleToTitle.get(h) ?? h}</span>
+                  <span className="font-mono text-[0.82rem] text-[var(--wms-fg)]">{tree.handleToTitle.get(h) ?? h}</span>
                   {data.row.currentDirectCollections.includes(h) ? (
-                    <span className="rounded border border-[var(--wms-status-success-fg)]/40 px-1 font-mono text-[0.5rem] uppercase text-[var(--wms-status-success-fg)]">current</span>
+                    <span className="rounded border border-[var(--wms-status-success-fg)]/40 px-1 font-mono text-[0.62rem] uppercase text-[var(--wms-status-success-fg)]">current</span>
                   ) : (
-                    <span className="rounded border border-[var(--wms-accent)]/40 px-1 font-mono text-[0.5rem] uppercase text-[var(--wms-accent)]">suggested</span>
+                    <span className="rounded border border-[var(--wms-accent)]/40 px-1 font-mono text-[0.62rem] uppercase text-[var(--wms-accent)]">suggested</span>
                   )}
                   {!tree.handleToId.has(h) ? (
-                    <span className="font-mono text-[0.5rem] text-[var(--wms-muted)]">(collection not created)</span>
+                    <span className="font-mono text-[0.62rem] text-[var(--wms-muted)]">(collection not created)</span>
                   ) : null}
                 </label>
               ))}
@@ -511,8 +511,8 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
         </div>
       ) : null}
 
-      {err ? <p className="font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</p> : null}
-      {msg ? <p className="font-mono text-[0.6rem] text-[var(--wms-status-success-fg)]">{msg}</p> : null}
+      {err ? <p className="font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</p> : null}
+      {msg ? <p className="font-mono text-[0.74rem] text-[var(--wms-status-success-fg)]">{msg}</p> : null}
     </div>
   );
 }

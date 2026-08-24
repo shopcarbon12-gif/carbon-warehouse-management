@@ -24,9 +24,9 @@ export type CategoryAttributesHandle = {
 };
 
 const chip =
-  "inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/40 bg-[var(--wms-accent)]/10 px-1.5 py-0.5 font-mono text-[0.6rem] text-[var(--wms-fg)]";
+  "inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/40 bg-[var(--wms-accent)]/10 px-1.5 py-0.5 font-mono text-[0.74rem] text-[var(--wms-fg)]";
 const selCls =
-  "rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-0.5 font-mono text-[0.6rem] text-[var(--wms-fg)]";
+  "rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-0.5 font-mono text-[0.74rem] text-[var(--wms-fg)]";
 
 export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>(function CategoryAttributesTab(
   { matrixId, shopifyProductId, canManage, showActions = true },
@@ -151,7 +151,7 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
 
   if (!shopifyProductId) {
     return (
-      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-xs text-[var(--wms-muted)]">
+      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-[0.85rem] text-[var(--wms-muted)]">
         Publish or link this product to Shopify first, then fill its category attributes here.
       </div>
     );
@@ -160,11 +160,11 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
   return (
     <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5">
-        <span className="font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">Category attributes</span>
+        <span className="font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">Category attributes</span>
         {category ? (
-          <span className="rounded border border-[var(--wms-border)] px-1.5 py-0.5 font-mono text-[0.55rem] text-[var(--wms-fg)]">{category.name}</span>
+          <span className="rounded border border-[var(--wms-border)] px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--wms-fg)]">{category.name}</span>
         ) : null}
-        {busy === "ai" ? <span className="font-mono text-[0.55rem] text-[var(--wms-accent)]">Scanning…</span> : null}
+        {busy === "ai" ? <span className="font-mono text-[0.68rem] text-[var(--wms-accent)]">Scanning…</span> : null}
         <div className="flex-1" />
         {showActions ? (
           <>
@@ -173,7 +173,7 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
               disabled={!canManage || busy !== null}
               onClick={() => void aiFill()}
               title="Assign a Shopify category if missing, then scan the hero + title and fill attributes from the allowed values"
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
             >
               {busy === "ai" ? "Scanning…" : "✨ AI fill category attributes"}
             </button>
@@ -181,13 +181,13 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
               type="button"
               disabled={!canManage || busy !== null || !attrs.length}
               onClick={() => void push()}
-              className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
+              className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
             >
               {busy === "push" ? "Pushing…" : "⤴ Push to Shopify"}
             </button>
           </>
         ) : (
-          <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
+          <span className="font-mono text-[0.68rem] text-[var(--wms-muted)]">
             filled by ✦ Optimize with AI · saved by ⤴ Push to Shopify (above)
           </span>
         )}
@@ -195,15 +195,15 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
 
       <div className="p-3">
         {busy === "load" && !loaded ? (
-          <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">Loading category attributes…</p>
+          <p className="font-mono text-[0.74rem] text-[var(--wms-muted)]">Loading category attributes…</p>
         ) : loaded && !category ? (
-          <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+          <p className="font-mono text-[0.74rem] text-[var(--wms-muted)]">
             No Shopify category set. Click{" "}
             <span className="text-[var(--wms-accent)]">✨ AI fill category attributes</span> to
             auto-assign one and fill the fields.
           </p>
         ) : loaded && !attrs.length ? (
-          <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">No fillable category attributes for this category.</p>
+          <p className="font-mono text-[0.74rem] text-[var(--wms-muted)]">No fillable category attributes for this category.</p>
         ) : (
           <div className="space-y-2">
             {attrs.map((a) => {
@@ -212,7 +212,7 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
               const remaining = a.allowed.filter((v) => !selected.includes(v.gid));
               return (
                 <div key={a.key} className="grid grid-cols-[130px_1fr] items-start gap-2">
-                  <span className="pt-1 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">{a.label}</span>
+                  <span className="pt-1 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">{a.label}</span>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {selected.map((gid) => (
                       <span key={gid} className={chip}>
@@ -250,9 +250,9 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
           </div>
         )}
         {err ? (
-          <p className="mt-2 font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</p>
+          <p className="mt-2 font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</p>
         ) : msg ? (
-          <p className="mt-2 font-mono text-[0.6rem] text-[var(--wms-status-success-fg)]">{msg}</p>
+          <p className="mt-2 font-mono text-[0.74rem] text-[var(--wms-status-success-fg)]">{msg}</p>
         ) : null}
       </div>
     </div>

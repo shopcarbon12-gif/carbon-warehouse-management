@@ -22,9 +22,9 @@ export type MetafieldsHandle = {
   push: () => Promise<void>;
 };
 
-const label = "block text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
+const label = "block text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
 const field =
-  "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)]";
+  "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-[0.85rem] text-[var(--wms-fg)]";
 
 export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function MetafieldsTab(
   { matrixId, shopifyProductId, canManage, showActions = true },
@@ -106,7 +106,7 @@ export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function Metafi
 
   if (!shopifyProductId) {
     return (
-      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-xs text-[var(--wms-muted)]">
+      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-[0.85rem] text-[var(--wms-muted)]">
         Publish this product to Shopify first (use{" "}
         <span className="text-[var(--wms-accent)]">✔ Check &amp; Publish</span>), then set metafields
         here.
@@ -117,7 +117,7 @@ export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function Metafi
   return (
     <div className="space-y-4">
       <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
-        <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+        <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
           Metafields · custom + Google feed
         </div>
         <div className="space-y-3 p-3">
@@ -180,7 +180,7 @@ export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function Metafi
                 disabled={!canManage || busy !== null}
                 onClick={() => void aiFill()}
                 title="Scan the product's hero image and fill these fields"
-                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
               >
                 {busy === "ai" ? "Scanning…" : "✨ AI fill from hero"}
               </button>
@@ -188,16 +188,16 @@ export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function Metafi
                 type="button"
                 disabled={!canManage || busy !== null}
                 onClick={() => void push()}
-                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
               >
                 {busy === "push" ? "Pushing…" : "⤴ Push metafields"}
               </button>
-              <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
+              <span className="font-mono text-[0.68rem] text-[var(--wms-muted)]">
                 Google fields apply to every variant.
               </span>
             </div>
           ) : (
-            <span className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
+            <span className="font-mono text-[0.68rem] text-[var(--wms-muted)]">
               Filled by ✦ Optimize with AI · saved by ⤴ Push to Shopify (above). Google fields apply
               to every variant.
             </span>
@@ -205,8 +205,8 @@ export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function Metafi
         </div>
       </div>
 
-      {msg ? <p className="font-mono text-[0.6rem] text-[var(--wms-status-success-fg)]">{msg}</p> : null}
-      {err ? <p className="font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</p> : null}
+      {msg ? <p className="font-mono text-[0.74rem] text-[var(--wms-status-success-fg)]">{msg}</p> : null}
+      {err ? <p className="font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</p> : null}
     </div>
   );
 });

@@ -709,9 +709,9 @@ export function CarbonStudioTab({
     }
   }, [matrixId, mediaItems, colorOpts]);
 
-  const label = "block text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
+  const label = "block text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
   const field =
-    "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)]";
+    "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-[0.85rem] text-[var(--wms-fg)]";
   // One colour → the hero is auto-assigned as its main pic; many colours → the
   // operator picks one image per colour (each pick locks that colour out of the rest).
   const singleColor = colorOpts.length === 1 ? colorOpts[0] : null;
@@ -742,7 +742,7 @@ export function CarbonStudioTab({
         }`}
       >
         <span className={label}>Item photo(s) — the garment reference</span>
-        <p className="mb-2 font-mono text-[0.55rem] text-[var(--wms-muted)]">
+        <p className="mb-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
           Drag &amp; drop images here, paste from clipboard (⌘/Ctrl+V), upload, or use the phone camera.
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -757,14 +757,14 @@ export function CarbonStudioTab({
                   onClick={() => setZoom(ref.preview as string)}
                 />
               ) : (
-                <div className="flex h-28 w-24 items-center justify-center rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] text-center font-mono text-[0.5rem] text-[var(--wms-status-success-fg)]">
+                <div className="flex h-28 w-24 items-center justify-center rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] text-center font-mono text-[0.62rem] text-[var(--wms-status-success-fg)]">
                   ✓ photo
                 </div>
               )}
               <button
                 type="button"
                 onClick={() => setItemRefs((p) => p.filter((x) => x.url !== ref.url))}
-                className="absolute -right-1 -top-1 rounded-full bg-[var(--wms-surface)] px-1 text-[0.6rem] text-[var(--wms-status-danger-fg)]"
+                className="absolute -right-1 -top-1 rounded-full bg-[var(--wms-surface)] px-1 text-[0.74rem] text-[var(--wms-status-danger-fg)]"
               >
                 ✕
               </button>
@@ -786,7 +786,7 @@ export function CarbonStudioTab({
             type="button"
             disabled={!canManage || busy === "upload"}
             onClick={() => fileRef.current?.click()}
-            className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
+            className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
           >
             {busy === "upload" ? "…" : "＋ Upload"}
           </button>
@@ -794,7 +794,7 @@ export function CarbonStudioTab({
             type="button"
             disabled={!canManage}
             onClick={() => void startPhoneCamera()}
-            className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
+            className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
           >
             📱 Phone camera (QR)
           </button>
@@ -802,7 +802,7 @@ export function CarbonStudioTab({
         {qr ? (
           <div className="mt-3 flex items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
             <img src={qr.url} alt="Scan with your phone" className="h-32 w-32 rounded bg-white p-1" />
-            <div className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+            <div className="font-mono text-[0.74rem] text-[var(--wms-muted)]">
               Scan with your phone to take product photos. Each photo you send appears here — send as
               many as you like, then click Done.
               <button
@@ -867,7 +867,7 @@ export function CarbonStudioTab({
           {PANELS.map((p) => (
             <label
               key={p}
-              className={`cursor-pointer rounded-md border px-2 py-1 font-mono text-[0.6rem] ${
+              className={`cursor-pointer rounded-md border px-2 py-1 font-mono text-[0.74rem] ${
                 panels.includes(p)
                   ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/15 text-[var(--wms-fg)]"
                   : "border-[var(--wms-border)] text-[var(--wms-muted)]"
@@ -885,7 +885,7 @@ export function CarbonStudioTab({
           <button
             type="button"
             onClick={() => setPanels(panels.length === PANELS.length ? [] : [...PANELS])}
-            className="rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.6rem] text-[var(--wms-muted)]"
+            className="rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.74rem] text-[var(--wms-muted)]"
           >
             {panels.length === PANELS.length ? "Clear" : "All"}
           </button>
@@ -897,7 +897,7 @@ export function CarbonStudioTab({
           type="button"
           disabled={!canManage || busy !== null || !model || !itemRefs.length || !panels.length}
           onClick={() => void generate()}
-          className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
+          className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
         >
           {busy === "generate"
             ? "Generating…"
@@ -910,17 +910,17 @@ export function CarbonStudioTab({
           disabled={!canManage || mediaBusy !== null}
           onClick={() => void openMediaManager()}
           title="Arrange images, set the hero, alt text, delete, and publish to Shopify"
-          className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
+          className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
         >
           {mediaBusy === "load" ? "Loading…" : "🖼 Manage & publish images"}
         </button>
-        {progress ? <span className="font-mono text-[0.6rem] text-[var(--wms-accent)]">{progress}</span> : null}
-        {msg ? <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">{msg}</span> : null}
-        {err ? <span className="font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}
+        {progress ? <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">{progress}</span> : null}
+        {msg ? <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">{msg}</span> : null}
+        {err ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}
       </div>
 
       {!shopifyProductId ? (
-        <p className="font-mono text-[0.55rem] text-[var(--wms-muted)]">
+        <p className="font-mono text-[0.68rem] text-[var(--wms-muted)]">
           Generation &amp; download work here without Shopify. To <b>push</b> images, link this
           product (🔗 Link to Shopify) or ✔ Check &amp; Publish it first.
         </p>
@@ -968,12 +968,12 @@ export function CarbonStudioTab({
                 >
                   ⬇
                 </button>
-                <span className="block px-1 py-0.5 text-center font-mono text-[0.55rem] text-[var(--wms-muted)]">
+                <span className="block px-1 py-0.5 text-center font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   {c.label} {c.selected ? "✓" : ""}
                 </span>
               </div>
             ) : (
-              <span key={c.id} className="max-w-[240px] font-mono text-[0.55rem] text-[var(--wms-status-danger-fg)]">
+              <span key={c.id} className="max-w-[240px] font-mono text-[0.68rem] text-[var(--wms-status-danger-fg)]">
                 {c.label}
               </span>
             ),
@@ -984,8 +984,9 @@ export function CarbonStudioTab({
       {showMedia ? (
         <div className="rounded-md border border-[var(--wms-accent)]/40 bg-[var(--wms-surface-elevated)]/40 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[0.75rem] uppercase tracking-wide text-[var(--wms-fg)]">Manage images</span>
-            <label className="flex cursor-pointer items-center gap-1.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+            <span className="font-mono text-[0.9rem] uppercase tracking-wide text-[var(--wms-fg)]">Manage images</span>
+            <div className="flex-1" />
+            <label className="flex cursor-pointer items-center gap-1.5 font-mono text-[0.74rem] text-[var(--wms-muted)]">
               <input
                 type="checkbox"
                 checked={includeShopify}
@@ -994,13 +995,12 @@ export function CarbonStudioTab({
               />
               include current Shopify pictures
             </label>
-            <div className="flex-1" />
             <button
               type="button"
               disabled={!canManage || mediaBusy !== null || mediaItems.length === 0}
               onClick={() => void genAllAlts()}
               title="Generate alt text for every image"
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.82rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
             >
               {mediaBusy === "alt-all" ? "Generating alt…" : "✨ Alt all"}
             </button>
@@ -1008,26 +1008,26 @@ export function CarbonStudioTab({
               type="button"
               disabled={!canManage || mediaBusy !== null}
               onClick={() => void publishMedia()}
-              className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
+              className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-4 py-2 font-mono text-[0.82rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50"
             >
               {mediaBusy === "publish" ? "Publishing…" : "⤴ Publish to Shopify"}
             </button>
             <button
               type="button"
               onClick={() => setShowMedia(false)}
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-fg)]"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.82rem] uppercase tracking-wide text-[var(--wms-fg)]"
             >
               Close
             </button>
           </div>
           {!shopifyProductId ? (
-            <p className="mb-2 rounded border border-[var(--wms-table-clean-border)] bg-[var(--wms-table-clean-bg)] p-2 font-mono text-[0.55rem] text-[var(--wms-table-clean-fg)]">
+            <p className="mb-2 rounded border border-[var(--wms-table-clean-border)] bg-[var(--wms-table-clean-bg)] p-2 font-mono text-[0.68rem] text-[var(--wms-table-clean-fg)]">
               This product isn&apos;t on Shopify yet — arrange &amp; download here, but to PUSH images
               you must Link it (🔗 Link to Shopify) or ✔ Check &amp; Publish first.
             </p>
           ) : null}
           {mediaItems.length === 0 ? (
-            <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+            <p className="font-mono text-[0.74rem] text-[var(--wms-muted)]">
               No images yet — generate or upload, then manage here.
             </p>
           ) : (
@@ -1050,21 +1050,21 @@ export function CarbonStudioTab({
                     <img
                       src={m.url}
                       alt={m.alt}
-                      className="h-20 w-16 cursor-pointer rounded border border-[var(--wms-border)] object-cover"
+                      className="h-32 w-24 cursor-pointer rounded border border-[var(--wms-border)] object-cover"
                       onClick={() => setZoom(m.url)}
                     />
                     {idx === 0 ? (
-                      <span className="absolute left-0 top-0 rounded-br bg-[var(--wms-accent)] px-1 text-[0.5rem] font-bold text-[var(--wms-accent-fg)]">
+                      <span className="absolute left-0 top-0 rounded-br bg-[var(--wms-accent)] px-1 text-[0.62rem] font-bold text-[var(--wms-accent-fg)]">
                         HERO
                       </span>
                     ) : null}
-                    <span className="absolute bottom-0 right-0 rounded-tl bg-black/60 px-1 text-[0.5rem] text-white">
+                    <span className="absolute bottom-0 right-0 rounded-tl bg-black/60 px-1 text-[0.62rem] text-white">
                       {m.kind === "new" ? "NEW" : "◆"}
                     </span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <textarea
-                      className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.6rem] text-[var(--wms-fg)]"
+                      className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.74rem] text-[var(--wms-fg)]"
                       rows={2}
                       placeholder="alt text"
                       value={m.alt}
@@ -1078,21 +1078,21 @@ export function CarbonStudioTab({
                         type="button"
                         disabled={mediaBusy !== null}
                         onClick={() => void genAlt(m.key)}
-                        className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.55rem] text-[var(--wms-accent)] disabled:opacity-50"
+                        className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.68rem] text-[var(--wms-accent)] disabled:opacity-50"
                       >
                         {mediaBusy === `alt-${m.key}` ? "…" : "✨ Generate alt"}
                       </button>
                       {singleColor ? (
                         idx === 0 ? (
-                          <span className="font-mono text-[0.55rem] text-[var(--wms-accent)]">
+                          <span className="font-mono text-[0.68rem] text-[var(--wms-accent)]">
                             ★ main pic for {singleColor.color} (auto)
                           </span>
                         ) : null
                       ) : (
                         <>
-                          <label className="font-mono text-[0.55rem] text-[var(--wms-muted)]">main pic for colour:</label>
+                          <label className="font-mono text-[0.68rem] text-[var(--wms-muted)]">main pic for colour:</label>
                           <select
-                            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.55rem] text-[var(--wms-fg)]"
+                            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--wms-fg)]"
                             value={m.color}
                             title="One image per colour — the chosen colour locks out of the other images"
                             onChange={(e) => {
@@ -1114,28 +1114,28 @@ export function CarbonStudioTab({
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col gap-1">
-                    <div draggable onDragStart={() => setMediaDragKey(m.key)} onDragEnd={() => setMediaDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-sm text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]">⠿</div>
-                    <button type="button" onClick={() => moveMedia(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)] disabled:opacity-30">↑</button>
-                    <button type="button" onClick={() => moveMedia(m.key, 1)} disabled={idx === mediaItems.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)] disabled:opacity-30">↓</button>
-                    <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
-                    <button type="button" onClick={() => downloadImage(m.url, `${m.kind === "new" ? "carbon-studio" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)]">⬇</button>
-                    <button type="button" onClick={() => removeMedia(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-status-danger-fg)]">✕</button>
+                    <div draggable onDragStart={() => setMediaDragKey(m.key)} onDragEnd={() => setMediaDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-base text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]">⠿</div>
+                    <button type="button" onClick={() => moveMedia(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30">↑</button>
+                    <button type="button" onClick={() => moveMedia(m.key, 1)} disabled={idx === mediaItems.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30">↓</button>
+                    <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
+                    <button type="button" onClick={() => downloadImage(m.url, `${m.kind === "new" ? "carbon-studio" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)]">⬇</button>
+                    <button type="button" onClick={() => removeMedia(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-status-danger-fg)]">✕</button>
                   </div>
                 </div>
               ))}
               <div
                 onDragOver={(e) => { if (mediaDragKey) e.preventDefault(); }}
                 onDrop={() => { dropAtEnd(); setMediaDragKey(null); }}
-                className={`rounded border border-dashed py-3 text-center font-mono text-[0.55rem] transition-colors ${mediaDragKey ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/10 text-[var(--wms-accent)]" : "border-transparent text-transparent"}`}
+                className={`rounded border border-dashed py-3 text-center font-mono text-[0.68rem] transition-colors ${mediaDragKey ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/10 text-[var(--wms-accent)]" : "border-transparent text-transparent"}`}
               >
                 ⬇ drop here to move to the end
               </div>
             </div>
           )}
           {err ? (
-            <p className="mt-2 font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</p>
+            <p className="mt-2 font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</p>
           ) : msg ? (
-            <p className="mt-2 font-mono text-[0.6rem] text-[var(--wms-status-success-fg)]">{msg}</p>
+            <p className="mt-2 font-mono text-[0.74rem] text-[var(--wms-status-success-fg)]">{msg}</p>
           ) : null}
         </div>
       ) : null}
@@ -1149,7 +1149,7 @@ export function CarbonStudioTab({
           <button
             type="button"
             onClick={() => setZoom(null)}
-            className="absolute right-4 top-4 rounded-md bg-white/10 px-3 py-1.5 font-mono text-xs text-white"
+            className="absolute right-4 top-4 rounded-md bg-white/10 px-3 py-1.5 font-mono text-[0.85rem] text-white"
           >
             ✕ Close
           </button>

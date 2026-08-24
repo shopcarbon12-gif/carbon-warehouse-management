@@ -333,14 +333,14 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
   }, [items, matrixId, colorOpts]);
 
   const field =
-    "rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.55rem] text-[var(--wms-fg)]";
+    "rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--wms-fg)]";
   // One colour → hero is auto-assigned as its main pic; many colours → one image
   // per colour (each pick locks that colour out of the other images).
   const singleColor = colorOpts.length === 1 ? colorOpts[0] : null;
 
   if (!shopifyProductId) {
     return (
-      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-xs text-[var(--wms-muted)]">
+      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 font-mono text-[0.85rem] text-[var(--wms-muted)]">
         This product isn&apos;t on Shopify yet. Use <span className="text-[var(--wms-accent)]">🔗 Link to Shopify</span>{" "}
         (if it already exists there) or <span className="text-[var(--wms-accent)]">✔ Check &amp; Publish</span> first, then
         manage its images here.
@@ -351,22 +351,22 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[0.75rem] uppercase tracking-wide text-[var(--wms-fg)]">Images</span>
+        <span className="font-mono text-[0.9rem] uppercase tracking-wide text-[var(--wms-fg)]">Images</span>
         <div className="flex-1" />
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { void addFiles(e.target.files); e.target.value = ""; }} />
-        <button type="button" disabled={!canManage || busy !== null} onClick={() => fileRef.current?.click()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
+        <button type="button" disabled={!canManage || busy !== null} onClick={() => fileRef.current?.click()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.82rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
           {busy === "upload" ? "…" : "＋ Upload"}
         </button>
-        <button type="button" disabled={!canManage || busy !== null || items.length === 0} onClick={() => void genAllAlts()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
+        <button type="button" disabled={!canManage || busy !== null || items.length === 0} onClick={() => void genAllAlts()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.82rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
           {busy === "alt-all" ? "…" : "✨ Alt all"}
         </button>
-        <button type="button" disabled={!canManage || busy !== null} onClick={() => void publish()} className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-4 py-2 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50">
+        <button type="button" disabled={!canManage || busy !== null} onClick={() => void publish()} className="rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-4 py-2 font-mono text-[0.82rem] uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-50">
           {busy === "publish" ? "Publishing…" : "⤴ Publish to Shopify"}
         </button>
       </div>
 
       {loaded && items.length === 0 ? (
-        <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">No images. Upload one (＋ Upload) or generate on-model shots in Carbon Studio.</p>
+        <p className="font-mono text-[0.74rem] text-[var(--wms-muted)]">No images. Upload one (＋ Upload) or generate on-model shots in Carbon Studio.</p>
       ) : null}
 
       <div className="space-y-2">
@@ -382,24 +382,24 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
               checked={sel.has(m.key)}
               onChange={() => toggleSel(m.key)}
               title="Select for multi-drag (drag any selected row to move them all)"
-              className="mt-1 h-3.5 w-3.5 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
+              className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
             />
             <div className="relative shrink-0">
-              <img src={m.url} alt={m.alt} className="h-24 w-20 cursor-pointer rounded border border-[var(--wms-border)] object-cover" onClick={() => setZoom(m.url)} />
-              {idx === 0 ? <span className="absolute left-0 top-0 rounded-br bg-[var(--wms-accent)] px-1 text-[0.5rem] font-bold text-[var(--wms-accent-fg)]">HERO</span> : null}
-              {m.kind === "new" ? <span className="absolute bottom-0 right-0 rounded-tl bg-black/60 px-1 text-[0.5rem] text-white">NEW</span> : null}
+              <img src={m.url} alt={m.alt} className="h-40 w-32 cursor-pointer rounded border border-[var(--wms-border)] object-cover" onClick={() => setZoom(m.url)} />
+              {idx === 0 ? <span className="absolute left-0 top-0 rounded-br bg-[var(--wms-accent)] px-1 text-[0.62rem] font-bold text-[var(--wms-accent-fg)]">HERO</span> : null}
+              {m.kind === "new" ? <span className="absolute bottom-0 right-0 rounded-tl bg-black/60 px-1 text-[0.62rem] text-white">NEW</span> : null}
             </div>
             <div className="min-w-0 flex-1 space-y-1">
-              <textarea className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.6rem] text-[var(--wms-fg)]" rows={2} placeholder="alt text" value={m.alt} onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, alt: v } : x))); }} />
+              <textarea className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.74rem] text-[var(--wms-fg)]" rows={2} placeholder="alt text" value={m.alt} onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, alt: v } : x))); }} />
               <div className="flex flex-wrap items-center gap-2">
-                <button type="button" disabled={busy !== null} onClick={() => void genAlt(m.key)} className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.55rem] text-[var(--wms-accent)] disabled:opacity-50">{busy === `alt-${m.key}` ? "…" : "✨ alt"}</button>
+                <button type="button" disabled={busy !== null} onClick={() => void genAlt(m.key)} className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.68rem] text-[var(--wms-accent)] disabled:opacity-50">{busy === `alt-${m.key}` ? "…" : "✨ alt"}</button>
                 {singleColor ? (
                   idx === 0 ? (
-                    <span className="font-mono text-[0.55rem] text-[var(--wms-accent)]">★ main pic for {singleColor.color} (auto)</span>
+                    <span className="font-mono text-[0.68rem] text-[var(--wms-accent)]">★ main pic for {singleColor.color} (auto)</span>
                   ) : null
                 ) : (
                   <>
-                    <label className="font-mono text-[0.55rem] text-[var(--wms-muted)]">colour:</label>
+                    <label className="font-mono text-[0.68rem] text-[var(--wms-muted)]">colour:</label>
                     <select className={field} value={m.color} title="One image per colour — the chosen colour locks out of the other images" onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, color: v } : x))); }}>
                       <option value="">— none —</option>
                       {colorOpts.filter((o) => o.color === m.color || !items.some((x) => x.key !== m.key && x.color === o.color)).map((o) => (<option key={o.color} value={o.color}>{o.color} · all {o.variantIds.length} size{o.variantIds.length === 1 ? "" : "s"}</option>))}
@@ -409,12 +409,12 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
               </div>
             </div>
             <div className="flex shrink-0 flex-col gap-1">
-              <div draggable onDragStart={() => setDragKey(m.key)} onDragEnd={() => setDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-sm text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]">⠿</div>
-              <button type="button" onClick={() => move(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)] disabled:opacity-30">↑</button>
-              <button type="button" onClick={() => move(m.key, 1)} disabled={idx === items.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)] disabled:opacity-30">↓</button>
-              <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
-              <button type="button" onClick={() => download(m.url, `${m.kind === "new" ? "upload" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-fg)]">⬇</button>
-              <button type="button" onClick={() => remove(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-sm text-[var(--wms-status-danger-fg)]">✕</button>
+              <div draggable onDragStart={() => setDragKey(m.key)} onDragEnd={() => setDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-base text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]">⠿</div>
+              <button type="button" onClick={() => move(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30">↑</button>
+              <button type="button" onClick={() => move(m.key, 1)} disabled={idx === items.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30">↓</button>
+              <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
+              <button type="button" onClick={() => download(m.url, `${m.kind === "new" ? "upload" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)]">⬇</button>
+              <button type="button" onClick={() => remove(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-status-danger-fg)]">✕</button>
             </div>
           </div>
         ))}
@@ -422,19 +422,19 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
           <div
             onDragOver={(e) => { if (dragKey) e.preventDefault(); }}
             onDrop={() => { dropAtEnd(); setDragKey(null); }}
-            className={`rounded border border-dashed py-3 text-center font-mono text-[0.55rem] transition-colors ${dragKey ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/10 text-[var(--wms-accent)]" : "border-transparent text-transparent"}`}
+            className={`rounded border border-dashed py-3 text-center font-mono text-[0.68rem] transition-colors ${dragKey ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/10 text-[var(--wms-accent)]" : "border-transparent text-transparent"}`}
           >
             ⬇ drop here to move to the end
           </div>
         ) : null}
       </div>
 
-      {err ? <p className="font-mono text-[0.6rem] text-[var(--wms-status-danger-fg)]">{err}</p> : msg ? <p className="font-mono text-[0.6rem] text-[var(--wms-status-success-fg)]">{msg}</p> : null}
+      {err ? <p className="font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</p> : msg ? <p className="font-mono text-[0.74rem] text-[var(--wms-status-success-fg)]">{msg}</p> : null}
 
       {zoom ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-6" onClick={() => setZoom(null)}>
           <img src={zoom} alt="Full size" className="max-h-full max-w-full rounded-lg" />
-          <button type="button" onClick={() => setZoom(null)} className="absolute right-4 top-4 rounded-md bg-white/10 px-3 py-1.5 font-mono text-xs text-white">✕ Close</button>
+          <button type="button" onClick={() => setZoom(null)} className="absolute right-4 top-4 rounded-md bg-white/10 px-3 py-1.5 font-mono text-[0.85rem] text-white">✕ Close</button>
         </div>
       ) : null}
     </div>
