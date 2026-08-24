@@ -301,7 +301,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
       return [
         "FEMALE PANEL 3 CRITICAL LOCK (Pose 7 + Pose 5):",
         panelAdultLock,
-        "- LEFT Pose 7 must show lower body from the same exact selected look (same bottom/color/fabric/details).",
+        "- LEFT Pose 7 is a LEGS-ONLY crop (waist to feet), NOT a full body, showing the same exact selected bottom (same color/fabric/details). HARD CROP LOCK: the head, face, chest, and upper torso MUST be entirely OUT of frame — the frame starts at the waistband and ends at the feet. Fill the frame with the lower body (waistband + closure, front rise, pockets, thighs, hem) and keep the shoes/feet visible at the very bottom. If a full standing body — or the head/torso — appears, it is WRONG and must be re-framed as a waist-to-feet crop.",
         "- RIGHT Pose 5 must be a close-up of the most detailed item from that same selected look.",
         closeUpSubjectLine,
         closeUpCategoryRule,
@@ -344,7 +344,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
     return [
       "MALE PANEL 3 CRITICAL LOCK (Pose 5 + Pose 6):",
       panelAdultLock,
-      "- LEFT Pose 5 must be lower body/legs crop (waist to feet).",
+      "- LEFT Pose 5 is a LEGS-ONLY crop (waist to feet), NOT a full body. HARD CROP LOCK: the head, face, chest, and upper torso MUST be entirely OUT of frame — the frame starts at the waistband and ends at the feet. Fill the frame with the lower body (waistband, hips, thighs, knees, hem) and keep the shoes/feet visible at the very bottom. If a full standing body — or the head/torso — appears, it is WRONG and must be re-framed as a waist-to-feet crop.",
       "- RIGHT Pose 6 must be one close-up detail from the same selected item/look.",
       closeUpSubjectLine,
       closeUpCategoryRule,
@@ -354,7 +354,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
   return [
     "MALE PANEL 4 CRITICAL LOCK (Pose 7 + Pose 8):",
     panelAdultLock,
-    "- LEFT Pose 7 must be torso-back crop with over-shoulder head turn.",
+    "- LEFT Pose 7 is a TORSO-BACK crop (mid-thigh to head), back-facing, with an over-the-shoulder head turn — NOT a full body. HARD CROP LOCK: crop the frame at mid-thigh; the lower legs and feet MUST be OUT of frame. If a full head-to-toe standing body appears, it is WRONG and must be re-framed as a mid-thigh-to-head crop.",
     "- LEFT Pose 7 back-surface lock: keep the back clean. Do not invent or add any back print/graphic/logo design.",
     "- Only show a back design if that exact design is clearly present in the locked item references.",
     "- RIGHT Pose 8 must be a single controlled creative pose from the same selected look.",
@@ -583,6 +583,7 @@ export function buildMasterPanelPrompt(args: {
     "All non-active poses are reference only and must not execute in this image.",
     "Full-body framing lock (male + female): whenever an active pose is full-body, include full head and both feet entirely in frame. No cropping of head, hair, chin, toes, or shoes.",
     "Full-body no-crop applies to: Male poses 1,2,4 and Female poses 1,2,3,6.",
+    "CROP-ONLY LOCK (these poses are NEVER a full standing body): Male Pose 5 = LEGS ONLY (waist to feet), Male Pose 3 = mid-thigh to head, Male Pose 7 = torso-back mid-thigh to head, Female Pose 7 = LEGS ONLY (waist to feet), Female Pose 4 = upper body, Female Pose 5 = close-up. For each of these, the out-of-frame body parts (head/torso for legs crops; lower legs/feet for torso crops) MUST be cropped OUT of the frame. Rendering a full head-to-toe standing body for any of these is WRONG.",
     "3:4 split centering hard lock: each panel half is center-cropped to a final 3:4 portrait. Keep each active pose centered in its own half.",
     "3:4 safe-zone math lock (for 1536x1024 panel output): each half is 768x1024 (already 3:4). Keep head/body/garment details inside this center-safe zone.",
     swimwearActive
