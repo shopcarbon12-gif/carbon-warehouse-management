@@ -1121,14 +1121,17 @@ export function CatalogWorkspace({
                 {rows.map((r) => {
                   const isArchived = r.archived || r.matrix_archived;
                   return (
-                    <li key={r.custom_sku_id}>
+                    <li
+                      key={r.custom_sku_id}
+                      className={`overflow-hidden rounded-lg border border-[var(--wms-border)] ${
+                        isArchived ? "bg-amber-500/15" : "bg-[var(--wms-surface-elevated)]"
+                      }`}
+                    >
                       <button
                         type="button"
                         onClick={() => setDetailsRow(r)}
                         title={isArchived ? "Archived in Lightspeed" : "View item details"}
-                        className={`flex min-h-11 w-full items-center gap-3 rounded-lg border border-[var(--wms-border)] p-3 text-left active:opacity-80 ${
-                          isArchived ? "bg-amber-500/15" : "bg-[var(--wms-surface-elevated)]"
-                        }`}
+                        className="flex min-h-11 w-full items-center gap-3 p-3 text-left active:opacity-80"
                       >
                         {r.shopify_image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -1181,6 +1184,27 @@ export function CatalogWorkspace({
                           />
                         </span>
                       </button>
+                      {/* UPC row — same behaviour as the desktop UPC cell: tap opens the matrix. */}
+                      {displayUpc(r) === "—" ? (
+                        <div className="border-t border-[var(--wms-border)]/60 px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">
+                          UPC —
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setMatrixModalId(r.matrix_id)}
+                          title="Open matrix (pictures + all sizes/colors)"
+                          className="flex min-h-11 w-full items-center justify-between gap-2 border-t border-[var(--wms-border)]/60 px-3 py-2 text-left font-mono text-xs active:bg-[var(--wms-surface)]"
+                        >
+                          <span className="min-w-0 truncate text-[var(--wms-muted)]">
+                            UPC{" "}
+                            <span className="text-[var(--wms-accent)] underline-offset-2">
+                              {displayUpc(r)}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-[var(--wms-accent)]">Matrix ›</span>
+                        </button>
+                      )}
                     </li>
                   );
                 })}
