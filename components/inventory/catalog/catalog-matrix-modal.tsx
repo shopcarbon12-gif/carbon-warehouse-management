@@ -7,7 +7,20 @@ import { CategoryAttributesTab, type CategoryAttributesHandle } from "./category
 import { CollectionsTab } from "./collections-tab";
 import { MediaManager } from "./media-manager";
 import useSWR from "swr";
-import { Plus, Printer, X as XIcon, RotateCcw, ChevronLeft } from "lucide-react";
+import {
+  Plus,
+  Printer,
+  X as XIcon,
+  RotateCcw,
+  ChevronLeft,
+  MoreHorizontal,
+  Settings2,
+  LayoutGrid,
+  Image as ImageTabIcon,
+  Search,
+  FolderTree,
+  Sparkles,
+} from "lucide-react";
 import { printRfidLabel } from "./print-label";
 import { CatalogImageLightbox } from "./catalog-image-lightbox";
 
@@ -162,6 +175,23 @@ let tempSeq = 0;
 const nextTempKey = () => `new-${(tempSeq += 1)}`;
 
 
+type MatrixTabKey = "setup" | "matrix" | "images" | "seo" | "collections" | "studio";
+
+/** Phone tab-strip icons (sm:hidden — the desktop rail is text only). */
+const TAB_ICONS: Record<MatrixTabKey, typeof LayoutGrid> = {
+  setup: Settings2,
+  matrix: LayoutGrid,
+  images: ImageTabIcon,
+  seo: Search,
+  collections: FolderTree,
+  studio: Sparkles,
+};
+
+function TabIcon({ t }: { t: MatrixTabKey }) {
+  const Icon = TAB_ICONS[t];
+  return <Icon className="h-3.5 w-3.5 shrink-0 sm:hidden" aria-hidden />;
+}
+
 export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, onBack, onOpenSku }: Props) {
   const { data, error, mutate, isLoading } = useSWR<MatrixDetailResp>(
     `/api/inventory/catalog/matrices/${matrixId}`,
@@ -169,12 +199,25 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     { revalidateOnFocus: false },
   );
   const [busy, setBusy] = useState<string | null>(null);
+  // Phone-only chrome: "More actions" sheet + tab strip ref for keeping the
+  // active tab scrolled into view. Desktop never renders either surface.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const tabNavRef = useRef<HTMLElement | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   // Two real tabs: "matrix" (pictures, shared values, color/size, variant tree)
   // and "setup" (the Group Items grid). State below is shared, so adding a
   // color/size on the Matrix tab shows up as new Group-Item rows in Setup.
   const [tab, setTab] = useState<"matrix" | "setup" | "images" | "seo" | "collections" | "studio">("matrix");
+
+  useEffect(() => {
+    // Keep the active tab visible in the phone tab strip (behavior only —
+    // gated on the same <sm breakpoint as the strip; no render branching).
+    if (!window.matchMedia("(max-width: 639px)").matches) return;
+    tabNavRef.current
+      ?.querySelector<HTMLElement>(`[data-tab="${tab}"]`)
+      ?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [tab]);
   // SEO tab (M3) state.
   const [seoBusy, setSeoBusy] = useState<string | null>(null);
   const [seoCurrent, setSeoCurrent] = useState<Record<string, unknown> | null>(null);
@@ -879,8 +922,11 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         className="fixed inset-0 z-[80] bg-black/75"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-2 sm:p-4 max-sm:p-0 max-md:overscroll-contain">
-        <div className="my-4 w-full max-w-7xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8 max-sm:my-0 max-sm:min-h-dvh max-sm:rounded-none">
+      <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-2 sm:p-4 max-sm:p-0 max-md:overscroll-contain max-md:p-0">
+        {/* Below md the panel is a bounded flex column (header · scrolling body ·
+            in-flow action bar) so the primary actions stay in the thumb zone
+            without position:fixed. md+ keeps the flowing document layout. */}
+        <div className="my-4 w-full max-w-7xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8 max-sm:my-0 max-sm:min-h-dvh max-sm:rounded-none max-md:my-0 max-md:flex max-md:h-dvh max-md:flex-col max-md:overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5 max-md:flex-nowrap max-md:overflow-x-auto">
             <div className="flex items-center gap-2 max-md:shrink-0">
               {onBack ? (
@@ -894,13 +940,23 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 </button>
               ) : null}
             </div>
+            {/* Phone header identity (md+ shows the product inside the body). */}
+            <span
+              className="min-w-0 flex-1 truncate px-1 font-mono text-[0.8rem] font-semibold text-[var(--wms-fg)] md:hidden"
+              title={data?.matrix.description}
+            >
+              {data?.matrix.description ?? "Matrix"}
+              {data?.matrix.upc ? (
+                <span className="ml-1 font-normal text-[var(--wms-muted)]">· {data.matrix.upc}</span>
+              ) : null}
+            </span>
             <div className="flex items-center gap-2 max-md:shrink-0">
               <button
                 type="button"
                 disabled={!canManage || !dirty || busy !== null}
                 onClick={() => void save()}
                 title={canManage ? "Save matrix + variant edits" : "Admin scope required"}
-                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2 max-md:hidden"
               >
                 {busy === "save" ? "Saving…" : "Save Changes"}
               </button>
@@ -913,7 +969,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     ? "Open this item on the ShopCarbon website"
                     : "Link this product to Shopify to view it online"
                 }
-                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2 max-md:hidden"
               >
                 {data?.matrix.shopify_product_id ? "🌐 View online" : "🔒 View online"}
               </button>
@@ -926,7 +982,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     ? "Archive this product on Shopify — hides the whole matrix from the storefront"
                     : "Link this product to Shopify first"
                 }
-                className="rounded-md border border-amber-500/55 bg-amber-950/30 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-amber-200 hover:bg-amber-900/40 disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
+                className="rounded-md border border-amber-500/55 bg-amber-950/30 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-amber-200 hover:bg-amber-900/40 disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2 max-md:hidden"
               >
                 {busy === "archiveShopify"
                   ? "Archiving…"
@@ -940,7 +996,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   disabled={!canManage || busy !== null}
                   onClick={() => void linkShopify()}
                   title="This product already exists on Shopify — match it by SKU and link it (no duplicate)."
-                  className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
+                  className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2 max-md:hidden"
                 >
                   {busy === "link" ? "Linking…" : "🔗 Link to Shopify"}
                 </button>
@@ -956,7 +1012,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       ? "Validate, then create/update this product on Shopify"
                       : "Admin scope required"
                 }
-                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/25 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/40 disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/25 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/40 disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2 max-md:hidden"
               >
                 {busy === "publish" ? "Publishing…" : "✔ Check & Publish"}
               </button>
@@ -964,7 +1020,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 type="button"
                 disabled={!canManage || busy !== null || !data}
                 onClick={() => void archiveAll()}
-                className="rounded-md border border-red-500/55 bg-red-950/40 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-red-200 hover:bg-red-900/40 disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
+                className="rounded-md border border-red-500/55 bg-red-950/40 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-red-200 hover:bg-red-900/40 disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2 max-md:hidden"
                 title={
                   canManage
                     ? data?.matrix.archived
@@ -979,6 +1035,17 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     ? "Unarchive matrix"
                     : "Archive matrix"}
               </button>
+              {/* Phone-only "More actions" — secondary/destructive actions live in a sheet. */}
+              <button
+                type="button"
+                aria-label="More actions"
+                aria-haspopup="dialog"
+                aria-expanded={moreOpen}
+                onClick={() => setMoreOpen(true)}
+                className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] text-[var(--wms-fg)] active:bg-[var(--wms-surface-elevated)] md:hidden"
+              >
+                <MoreHorizontal className="h-5 w-5" />
+              </button>
               <button
                 type="button"
                 aria-label="Close"
@@ -989,6 +1056,113 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
               </button>
             </div>
           </div>
+
+          {/* Phone-only primary action bar. In-flow, pushed to the bottom of the
+              mobile flex column via order-last (never position:fixed — the iOS
+              keyboard would float it). Same handlers/state as the desktop header. */}
+          <div className="flex shrink-0 items-center gap-2 border-t border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] max-md:order-last md:hidden">
+            <button
+              type="button"
+              disabled={!canManage || !dirty || busy !== null}
+              onClick={() => void save()}
+              className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 font-mono text-[0.8rem] uppercase tracking-wide text-[var(--wms-fg)] active:bg-[var(--wms-accent)]/30 disabled:opacity-50"
+            >
+              {dirty && busy !== "save" ? (
+                <span className="h-2 w-2 rounded-full bg-[var(--wms-accent)]" aria-label="Unsaved changes" />
+              ) : null}
+              {busy === "save" ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              disabled={!canManage || busy !== null || !data || dirty}
+              onClick={() => void publish()}
+              title={dirty ? "Save your changes first" : undefined}
+              className="flex min-h-12 flex-1 items-center justify-center rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/25 font-mono text-[0.8rem] uppercase tracking-wide text-[var(--wms-fg)] active:bg-[var(--wms-accent)]/40 disabled:opacity-50"
+            >
+              {busy === "publish" ? "Publishing…" : "Check & Publish"}
+            </button>
+          </div>
+
+          {/* Phone-only "More actions" bottom sheet (secondary + destructive). */}
+          {moreOpen ? (
+            <div className="md:hidden">
+              <button
+                type="button"
+                aria-label="Close actions"
+                className="fixed inset-0 z-[95] bg-black/60"
+                onClick={() => setMoreOpen(false)}
+              />
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="More actions"
+                className="fixed inset-x-0 bottom-0 z-[96] rounded-t-xl border-t border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl"
+              >
+                <p className="mb-2 px-1 font-mono text-[0.7rem] uppercase tracking-wider text-[var(--wms-muted)]">
+                  More actions
+                </p>
+                <div className="flex flex-col gap-2 font-mono text-[0.8rem] uppercase tracking-wide">
+                  <button
+                    type="button"
+                    disabled={!data?.matrix.shopify_product_id}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      void openOnline();
+                    }}
+                    className="flex min-h-12 items-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 text-left text-[var(--wms-fg)] active:opacity-80 disabled:opacity-50"
+                  >
+                    {data?.matrix.shopify_product_id ? "🌐 View online" : "🔒 View online (not linked)"}
+                  </button>
+                  {data && !data.matrix.shopify_product_id ? (
+                    <button
+                      type="button"
+                      disabled={!canManage || busy !== null}
+                      onClick={() => {
+                        setMoreOpen(false);
+                        void linkShopify();
+                      }}
+                      className="flex min-h-12 items-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 text-left text-[var(--wms-fg)] active:opacity-80 disabled:opacity-50"
+                    >
+                      {busy === "link" ? "Linking…" : "🔗 Link to Shopify"}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={!canManage || !data?.matrix.shopify_product_id || busy !== null}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      void archiveShopify();
+                    }}
+                    className="flex min-h-12 items-center rounded-md border border-amber-500/55 bg-amber-950/30 px-4 text-left text-amber-200 active:opacity-80 disabled:opacity-50"
+                  >
+                    {busy === "archiveShopify" ? "Archiving…" : "🗄 Archive in Shopify"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canManage || busy !== null || !data}
+                    onClick={() => {
+                      setMoreOpen(false);
+                      void archiveAll();
+                    }}
+                    className="flex min-h-12 items-center rounded-md border border-red-500/55 bg-red-950/40 px-4 text-left text-red-200 active:opacity-80 disabled:opacity-50"
+                  >
+                    {busy === "archive"
+                      ? "Working…"
+                      : data?.matrix.archived
+                        ? "Unarchive matrix"
+                        : "Archive matrix"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMoreOpen(false)}
+                    className="mt-1 flex min-h-12 items-center justify-center rounded-md border border-[var(--wms-border)] px-4 text-[var(--wms-muted)] active:opacity-80"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {error ? (
             <p className="border-b border-red-500/30 bg-red-950/30 px-4 py-2 font-mono text-[0.85rem] text-red-200">
@@ -1011,19 +1185,24 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
               Loading matrix…
             </p>
           ) : (
-            <div className="flex flex-col sm:flex-row">
-              <nav className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3">
+            <div className="flex flex-col sm:flex-row max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto max-md:overscroll-contain">
+              <nav
+                ref={tabNavRef}
+                className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3 max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:bg-[var(--wms-surface)]"
+              >
                 {(["setup", "matrix", "images", "seo", "collections", "studio"] as const).map((t) => (
                   <div key={t}>
                     <button
                       type="button"
+                      data-tab={t}
                       onClick={() => setTab(t)}
-                      className={`block w-full whitespace-nowrap px-4 py-1.5 text-left font-mono text-[0.85rem] capitalize sm:border-l-2 ${
+                      className={`block w-full whitespace-nowrap px-4 py-1.5 text-left font-mono text-[0.85rem] capitalize sm:border-l-2 max-sm:flex max-sm:min-h-11 max-sm:items-center max-sm:gap-1.5 max-sm:border-b-2 ${
                         tab === t
                           ? "border-[var(--wms-accent)] bg-[var(--wms-surface)] font-semibold text-[var(--wms-fg)]"
                           : "border-transparent text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
                       }`}
                     >
+                      <TabIcon t={t} />
                       {t}
                     </button>
                     {/* Bare custom-SKU numbers listed under the Matrix menu item
